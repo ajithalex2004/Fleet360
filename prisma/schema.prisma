@@ -4494,6 +4494,7 @@ model Tenant {
   offboardings       TenantOffboarding[]
   featureOverrides   TenantFeatureOverride[]
   attachments        TenantAttachment[]
+  departments        Department[]
   ssoConfigs         SsoConfig[]
   scimTokens         ScimToken[]
   ipAllowlists       IpAllowlist[]
@@ -4638,11 +4639,18 @@ model UserTenant {
   /// Department Head workflow approvers.
   managerUserId        String? @map("manager_user_id")
   departmentHeadUserId String? @map("department_head_user_id")
+  /// Narrows what the role grants in this company, e.g. {"logistics":["view"]};
+  /// null = the role as is (src/lib/authz/access-mask.ts).
+  moduleAccess Json?   @map("module_access")
+  /// The user's department in this company (Admin > Departments).
+  departmentId String? @map("department_id") @db.Uuid
   user      User      @relation(fields: [userId], references: [id])
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   role      Role      @relation(fields: [roleId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   @@unique([userId, tenantId])
+  @@index([departmentId], map: "idx_user_tenants_department")
   @@map("user_tenants")
   @@schema("public")
 }
@@ -7578,4 +7586,23 @@ model BusRiderDelivery {
  @@index([tenantId,status,nextAttemptAt],map:"bus_rider_deliveries_due")
  @@map("bus_rider_deliveries")
  @@schema("public")
+}
+
+// --- Departments (20261027090000_membership_access_departments) ---
+/// A company's Department master (Admin > Departments). Tenant-scoped (RLS);
+/// unique per company on lower(name) (index departments_tenant_name_key).
+model Department {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String       @map("tenant_id")
+  name      String
+  code      String?
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members   UserTenant[]
+
+  @@index([tenantId], map: "idx_departments_tenant")
+  @@map("departments")
+  @@schema("public")
 }

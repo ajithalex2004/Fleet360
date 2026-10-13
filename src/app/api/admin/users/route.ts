@@ -21,6 +21,7 @@ import type { PlanCode } from '@/lib/billing';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { withAuditedAction } from '@/lib/audited-action';
+import { storedAccessMask } from '@/lib/authz/access-mask';
 const CACHE_TAG = 'users:list';
 
 // Platform admin dashboard's stat card calls this on every page load.
@@ -63,6 +64,9 @@ interface UserMembership {
   roleName: string;
   roleCode: string;
   isActive: boolean;
+  departmentName: string | null;
+  /** Modules whose access is narrowed below the role here (empty: the role as is). */
+  narrowedModules: string[];
 }
 
 type Tx = Parameters<Parameters<typeof withPlatformAdmin>[1]>[0];
@@ -74,9 +78,10 @@ async function membershipsByUser(tx: Tx, userIds: string[], onlyTenantId?: strin
   const rows = await tx.userTenant.findMany({
     where: { userId: { in: userIds }, ...(onlyTenantId ? { tenantId: onlyTenantId } : {}) },
     select: {
-      userId: true, tenantId: true, roleId: true, isActive: true,
+      userId: true, tenantId: true, roleId: true, isActive: true, moduleAccess: true,
       tenant: { select: { name: true } },
       role: { select: { name: true, code: true } },
+      department: { select: { name: true } },
     },
   });
   for (const r of rows) {
@@ -84,6 +89,8 @@ async function membershipsByUser(tx: Tx, userIds: string[], onlyTenantId?: strin
     list.push({
       tenantId: r.tenantId, tenantName: r.tenant.name, roleId: r.roleId,
       roleName: r.role.name, roleCode: r.role.code, isActive: r.isActive !== false,
+      departmentName: r.department?.name ?? null,
+      narrowedModules: Object.keys(storedAccessMask(r.moduleAccess) ?? {}),
     });
     byUser.set(r.userId, list);
   }
