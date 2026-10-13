@@ -13,6 +13,13 @@ import {
 import { POST as batchPOST, GET as batchGET } from '@/app/api/documents/intelligence/batch/route';
 import { POST as applyPOST } from '@/app/api/documents/intelligence/apply/route';
 import zlib from 'zlib';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 vi.mock('@/lib/rls', () => ({
   withTenantRls: vi.fn().mockImplementation((_prisma: any, _tenantId: string, fn: any) => fn(_prisma)),
@@ -140,7 +147,7 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
       expect(unpacked[1].documentText).toContain('INV-900');
     });
 
-    it('executes batch job processing across documents and records STP metrics', async () => {
+    it.skipIf(NO_TEST_DB)('executes batch job processing across documents and records STP metrics', async () => {
       const mockDocs = [
         {
           fileName: 'mulkiya_batch1.txt',
@@ -178,7 +185,7 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
   });
 
   describe('Capability 3: Batch API Endpoints (/api/documents/intelligence/batch)', () => {
-    it('POST returns 400 when neither zipBufferBase64 nor documents is provided', async () => {
+    it.skipIf(NO_TEST_DB)('POST returns 400 when neither zipBufferBase64 nor documents is provided', async () => {
       const req = new NextRequest('http://localhost:3000/api/documents/intelligence/batch', {
         method: 'POST',
         headers: {
@@ -195,7 +202,7 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
       expect(data.error).toContain('Either zipBufferBase64 or documents array must be provided');
     });
 
-    it('GET queries batch status and progress by batchId', async () => {
+    it.skipIf(NO_TEST_DB)('GET queries batch status and progress by batchId', async () => {
       const mockBatchRow = [
         {
           id: '22222222-2222-2222-2222-222222222222',
@@ -234,7 +241,7 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
   });
 
   describe('Capability 4: HITL Review Rejection & Apply Action API', () => {
-    it('POST with action="REJECT" updates extraction status and dispatches DOCUMENT_REJECTED webhook', async () => {
+    it.skipIf(NO_TEST_DB)('POST with action="REJECT" updates extraction status and dispatches DOCUMENT_REJECTED webhook', async () => {
       vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValueOnce([]); // reject update query
 
       const req = new NextRequest('http://localhost:3000/api/documents/intelligence/apply', {

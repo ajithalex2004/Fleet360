@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET } from '@/app/api/readyz/route';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003)', () => {
   const originalFetch = global.fetch;
@@ -81,7 +88,7 @@ describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003
     expect(JSON.stringify(body)).not.toContain('secret');
   });
 
-  it('returns strictly allowlisted fields on upstream 200 OK and strips arbitrary extra keys', async () => {
+  it.skipIf(NO_TEST_DB)('returns strictly allowlisted fields on upstream 200 OK and strips arbitrary extra keys', async () => {
     const upstreamSuccessPayload = {
       status: 'ready',
       version: 'v2.4.1-rc1',

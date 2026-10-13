@@ -5,6 +5,13 @@ import { extractDocumentIntelligence } from '@/lib/agents/document-intelligence/
 import { autoPopulateFleet360Record } from '@/lib/agents/document-intelligence/auto-populator';
 import { DocumentExtractionResult } from '@/lib/agents/types';
 import type { PipelineExecutionResult } from '@/lib/agents/document-intelligence/pipeline';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 describe('Document Intelligence Agent v1.0.0', () => {
   it('is properly registered in the Agent Registry', async () => {
@@ -228,7 +235,7 @@ Valid Until: 2027-09-04`;
   });
 
   describe('Auto-Population & Record Linking Engine', () => {
-    it('handles vehicle record linking gracefully when record does not exist in test db', async () => {
+    it.skipIf(NO_TEST_DB)('handles vehicle record linking gracefully when record does not exist in test db', async () => {
       const extraction: DocumentExtractionResult = {
         docCategory: 'REGISTRATION_CARD',
         suggestedTitle: 'Mulkiya',
@@ -253,7 +260,7 @@ Valid Until: 2027-09-04`;
       expect(typeof result.success).toBe('boolean');
     });
 
-    it('handles driver record linking gracefully when driver does not exist in test db', async () => {
+    it.skipIf(NO_TEST_DB)('handles driver record linking gracefully when driver does not exist in test db', async () => {
       const extraction: DocumentExtractionResult = {
         docCategory: 'DRIVER_LICENSE',
         suggestedTitle: 'UAE Driver License',
@@ -277,7 +284,7 @@ Valid Until: 2027-09-04`;
   });
 
   describe('End-to-End Agent Execution & Telemetry', () => {
-    it('executes agent run successfully with telemetry and time saved calculations', async () => {
+    it.skipIf(NO_TEST_DB)('executes agent run successfully with telemetry and time saved calculations', async () => {
       const runResult = await DOCUMENT_INTELLIGENCE_AGENT.run({
         agent_id: 'document-intelligence',
         tenant_id: 'default',

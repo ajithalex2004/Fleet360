@@ -21,6 +21,13 @@ import { extractContractObligations } from '@/lib/agents/document-intelligence/p
 import { processDocumentWithRouter } from '@/lib/agents/document-intelligence/pipeline/router';
 import { executeDocumentControlPipeline } from '@/lib/agents/document-intelligence/pipeline';
 import { DocumentExtractionResult } from '@/lib/agents/types';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 describe('Fleet360 Document Control & Intelligence Engine (25 Core Capabilities)', () => {
   describe('Capability 1: Field-Level Source Grounding', () => {
@@ -56,7 +63,7 @@ Total AED: 5,092.50`;
   });
 
   describe('Capability 2: Master Data Cross-Validation', () => {
-    it('flags CRITICAL mismatch when document VIN does not match vehicle master record', async () => {
+    it.skipIf(NO_TEST_DB)('flags CRITICAL mismatch when document VIN does not match vehicle master record', async () => {
       const extractionWithVinMismatch: DocumentExtractionResult = {
         docCategory: 'INSURANCE_POLICY',
         suggestedTitle: 'Commercial Fleet Insurance',
@@ -78,7 +85,7 @@ Total AED: 5,092.50`;
       expect(typeof result.passed).toBe('boolean');
     });
 
-    it('cross-validates driver license numbers against driver master roster', async () => {
+    it.skipIf(NO_TEST_DB)('cross-validates driver license numbers against driver master roster', async () => {
       const extractionDriver: DocumentExtractionResult = {
         docCategory: 'DRIVER_LICENSE',
         suggestedTitle: 'UAE Driver License',
@@ -282,7 +289,7 @@ Payment terms: Net 30 days.`;
   });
 
   describe('Capability 7: Tiered Router & End-to-End Pipeline Execution', () => {
-    it('executes full 8-stage specialist pipeline and returns grounded, risk-scored results', async () => {
+    it.skipIf(NO_TEST_DB)('executes full 8-stage specialist pipeline and returns grounded, risk-scored results', async () => {
       const mulkiyaScan = `UNITED ARAB EMIRATES - MINISTRY OF INTERIOR
 VEHICLE REGISTRATION CARD (MULKIYA)
 Traffic Plate: Dubai B 78219
@@ -498,7 +505,7 @@ Amount: AED 4,200.00`;
       vi.restoreAllMocks();
     });
 
-    it('processes GET requests with tenant parameter and triggers sweep', async () => {
+    it.skipIf(NO_TEST_DB)('processes GET requests with tenant parameter and triggers sweep', async () => {
       vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValue([]);
 
       const req = new NextRequest('http://localhost/api/documents/intelligence/cron/lifecycle-sweep?tenantId=tenant-corp', {
@@ -515,7 +522,7 @@ Amount: AED 4,200.00`;
       expect(json.sweptCount).toBe(0);
     });
 
-    it('processes POST requests and parses tenantId from request body', async () => {
+    it.skipIf(NO_TEST_DB)('processes POST requests and parses tenantId from request body', async () => {
       vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValue([]);
 
       const req = new NextRequest('http://localhost/api/documents/intelligence/cron/lifecycle-sweep', {

@@ -8,6 +8,13 @@ import {
 } from '@/lib/prisma-sweep';
 import { prisma } from '@/lib/prisma';
 import { PrismaClient } from '@prisma/client';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 describe('prisma-sweep connection and role validation', () => {
   const originalEnv = { ...process.env };
@@ -85,7 +92,7 @@ describe('prisma-sweep connection and role validation', () => {
     expect(getAdvisoryLockId('push-scheduler')).toBe(getAdvisoryLockId('push-scheduler'));
   });
 
-  it('advisory lock guard: Worker 1 obtains lock -> Worker 2 concurrent attempt skipped -> Worker 1 releases -> Worker 2 allowed', async () => {
+  it.skipIf(NO_TEST_DB)('advisory lock guard: Worker 1 obtains lock -> Worker 2 concurrent attempt skipped -> Worker 1 releases -> Worker 2 allowed', async () => {
     const dbUrl = process.env.PHASE0_DATABASE_URL || process.env.DATABASE_URL;
     if (!dbUrl) return;
 
