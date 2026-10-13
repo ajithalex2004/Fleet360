@@ -9,7 +9,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Mail, Send, Trash2, Copy, Check, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Mail, Send, Trash2, AlertCircle, ArrowLeft } from 'lucide-react';
+import NewUserDialog from '@/components/admin/NewUserDialog';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Invitation {
@@ -25,8 +26,6 @@ interface Invitation {
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
 }
 
-interface Role { id: string; name: string; code: string; scope?: 'tenant' | 'platform'; permissionCount?: number; }
-
 const STATUS_BADGE: Record<Invitation['status'], string> = {
   pending:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
   accepted: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
@@ -40,15 +39,11 @@ export default function TenantInvitationsPage() {
 
   const [tenantName, setTenantName] = useState('');
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [email, setEmail]   = useState('');
-  const [roleId, setRoleId] = useState('');
-  const [sending, setSending] = useState(false);
-  const [devLink, setDevLink] = useState<string | null>(null);
-  const [copied,  setCopied]  = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [notice, setNotice]   = useState('');
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -65,15 +60,6 @@ export default function TenantInvitationsPage() {
       const invData = await invRes.json();
       setInvitations(invData.invitations ?? []);
 
-      // Grantable roles: the tenant's own plus the platform roles.
-      const list: Role[] = invData.roles ?? [];
-      setRoles(list);
-      if (!roleId && list.length > 0) {
-        const adminRole = list.find(x => x.code === 'TENANT_ADMIN' && x.scope === 'platform')
-          ?? list.find(x => x.code === 'TENANT_ADMIN') ?? list[0];
-        setRoleId(adminRole.id);
-      }
-
       if (tenantRes.ok) {
         const t = await tenantRes.json();
         setTenantName(t?.name ?? '');
@@ -83,35 +69,9 @@ export default function TenantInvitationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, roleId]);
+  }, [tenantId]);
 
   useEffect(() => { void load(); }, [load]);
-
-  const send = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null); setDevLink(null);
-    if (!email.trim() || !roleId) { setError('Email and role are required.'); return; }
-    setSending(true);
-    try {
-      const res = await fetch(`/api/admin/tenants/${tenantId}/invitations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), roleId }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data?.error ?? 'Could not send invitation.'); return; }
-      // SMTP not configured → API returns acceptUrl so dev can copy/paste.
-      if (!data.emailed && data.acceptUrl) {
-        setDevLink(data.acceptUrl);
-      }
-      setEmail('');
-      await load();
-    } catch {
-      setError('Network error.');
-    } finally {
-      setSending(false);
-    }
-  };
 
   const revoke = async (inv: Invitation) => {
     if (!window.confirm(`Revoke invitation for ${inv.email}?`)) return;
@@ -122,12 +82,6 @@ export default function TenantInvitationsPage() {
       return;
     }
     await load();
-  };
-
-  const copy = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
 
   if (loading) {
@@ -157,56 +111,35 @@ export default function TenantInvitationsPage() {
         </div>
       )}
 
-      {devLink && (
-        <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl px-4 py-3 text-amber-200 text-sm space-y-2">
-          <div className="font-semibold">SMTP not configured — share this link manually:</div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded px-2 py-1 font-mono text-xs break-all">{devLink}</code>
-            <button onClick={() => copy(devLink)}
-              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-xs inline-flex items-center gap-1">
-              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
+      {notice && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-600 text-sm flex justify-between gap-4">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} aria-label="Dismiss">×</button>
         </div>
       )}
 
-      <form onSubmit={send} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-[var(--text-main)]">Invite a new member</h2>
-        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="person@company.com" required
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Role</label>
-            <select value={roleId} onChange={e => setRoleId(e.target.value)} required
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              {roles.length === 0 && <option value="">No roles found</option>}
-              {(['tenant', 'platform'] as const).map(scope => {
-                const group = roles.filter(r => (r.scope ?? 'tenant') === scope);
-                if (group.length === 0) return null;
-                return (
-                  <optgroup key={scope} label={scope === 'tenant' ? `${tenantName || 'Tenant'} roles` : 'Platform roles'}>
-                    {group.map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}{r.permissionCount !== undefined ? ` (${r.permissionCount} permissions)` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                );
-              })}
-            </select>
-          </div>
-          <button type="submit" disabled={sending || !roleId}
-            className="self-end px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-white font-semibold text-sm inline-flex items-center gap-2">
-            <Send className="w-4 h-4" /> {sending ? 'Sending…' : 'Send invitation'}
-          </button>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">Invite a new member</h2>
+          <p className="text-xs text-[var(--text-faint)] mt-1">
+            Choose their role, department and module access; they set their own password when they accept.
+            Invitations expire after 7 days, and a new one replaces any earlier pending invitation for the same email.
+          </p>
         </div>
-        <p className="text-xs text-[var(--text-faint)]">Invitations expire after 7 days. Each invite supersedes any earlier pending invite for the same email.</p>
-      </form>
+        <button onClick={() => setShowNew(true)}
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-semibold text-sm inline-flex items-center gap-2">
+          <Send className="w-4 h-4" /> New invitation
+        </button>
+      </div>
+      {showNew && (
+        <NewUserDialog
+          tenants={[{ id: tenantId, name: tenantName || 'This company' }]}
+          defaultTenantId={tenantId}
+          defaultOnboarding="invite"
+          onClose={() => setShowNew(false)}
+          onDone={(message) => { setShowNew(false); setNotice(message); void load(); }}
+        />
+      )}
 
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {invitations.length === 0 ? (

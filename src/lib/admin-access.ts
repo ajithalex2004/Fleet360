@@ -130,6 +130,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'tenants/[id]/branding/logo':                  { POST: 'admin' },
   'tenants/[id]/hard-delete':                    { POST: 'platform' },
   'tenants/[id]/invitations':                    { GET: 'admin', POST: 'admin' },
+  // New User form: create or invite a member of this company.
+  'tenants/[id]/members':                        { GET: 'admin', POST: 'admin' },
   'tenants/[id]/invitations/[id]/revoke':        { POST: 'admin' },
   // PUT would let a tenant switch on modules its plan doesn't include.
   'tenants/[id]/modules':                        { GET: 'admin', PUT: 'platform' },

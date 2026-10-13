@@ -107,6 +107,10 @@ const MIGRATED_COLUMNS: SchemaSpec = {
     // Per-company access (migration 20261027090000_membership_access_departments)
     ['user_tenants', 'module_access'],
     ['user_tenants', 'department_id'],
+    // New User form invitations (migration 20261028090000_invitation_member_profile)
+    ['tenant_invitations', 'department_id'],
+    ['tenant_invitations', 'module_access'],
+    ['tenant_invitations', 'first_name'],
   ],
 };
 

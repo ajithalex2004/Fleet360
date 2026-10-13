@@ -47,6 +47,9 @@ export default function InvitationAcceptPage() {
           return;
         }
         setInfo(data.invitation);
+        // Pre-filled from the New User form.
+        if (data.invitation?.firstName) setFirstName((v) => v || data.invitation.firstName);
+        if (data.invitation?.lastName) setLastName((v) => v || data.invitation.lastName);
         setExistingUser(!!data.existingUser);
       } catch {
         setLoadError('Network error — try again.');

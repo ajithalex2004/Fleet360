@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic';
  * GET   — list invitations for a tenant (active + used + revoked), plus the
  *         roles an invitation can grant: the tenant's own roles and the
  *         platform roles (Tenant Administrator, Fleet Manager, …).
- * POST  — invite a user. Body: { email, roleId }
+ * POST  — invite a user. Body: { email, roleId } and optionally firstName,
+ *         lastName, mobileNumber, position, departmentId, moduleAccess
+ *         (src/lib/admin/member-onboarding.ts)
  *
  * Authorization:
  *  - SUPER_ADMIN: may invite into any tenant
@@ -16,18 +18,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import {
-  generateInvitationToken, INVITATION_TTL_DAYS,
-} from '@/lib/invitations';
-import { requireUnderQuota } from '@/lib/plan-limits';
-import type { PlanCode } from '@/lib/billing';
-import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
 import { sessionUser } from '@/lib/session-user';
-import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { inviteMember, parseNewMember } from '@/lib/admin/member-onboarding';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { checkGrantableRole } from '@/lib/admin-scope';
 import { withAuditedAction } from '@/lib/audited-action';
 export const runtime = 'nodejs';
 
@@ -122,131 +117,28 @@ async function handlePOST(req: NextRequest, { params }: RouteParams) {
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
 
-  let body: { email?: string; roleId?: string };
-  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
-  const email  = String(body.email ?? '').trim().toLowerCase();
-  const roleId = String(body.roleId ?? '').trim();
+  // The same path as the New User form (src/lib/admin/member-onboarding.ts):
+  // { email, roleId } plus, optionally, the profile, department and module access.
+  let bodyRaw: unknown;
+  try { bodyRaw = stripTenantOwnershipFields(await req.json()); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  const parsed = parseNewMember(bodyRaw, { requireName: false });
+  if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: parsed.status });
 
-  if (!email || !/.+@.+\..+/.test(email)) {
-    return NextResponse.json({ ok: false, error: 'A valid email is required.' }, { status: 400 });
+  try {
+    const inviter = await sessionUser(req.headers).catch(() => null);
+    const r = await inviteMember(req.headers, tenantId, { userId: auth.userId, name: inviter?.name, email: inviter?.email }, parsed.value);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    return NextResponse.json({
+      ok: true,
+      emailed: r.emailed,
+      reason: r.reason,
+      // Caller may still need the URL when SMTP isn't configured (dev environments).
+      acceptUrl: r.acceptUrl,
+    });
+  } catch (err) {
+    captureException(err, { context: 'admin.invitations.post' });
+    return NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
   }
-  if (!roleId) {
-    return NextResponse.json({ ok: false, error: 'roleId is required.' }, { status: 400 });
-  }
-
-  // The invitation to email once it is saved (the email isn't sent while
-  // the transaction is open).
-  const created: { invite: { acceptUrl: string; roleName: string; tenantName: string } | null } = { invite: null };
-  const response = await withTenantRls(prisma, tenantId, async (tx) => {
-    // Verify the role belongs to this tenant (or is global with tenant_id NULL).
-    const role = await tx.role.findFirst({
-      where: { id: roleId, OR: [{ tenantId }, { tenantId: null }] },
-      select: { id: true, name: true, code: true, tenantId: true },
-    });
-    if (!role) return NextResponse.json({ ok: false, error: 'Role not found for this tenant.' }, { status: 400 });
-    const roleDenied = checkGrantableRole(req.headers, tenantId, role);
-    if (roleDenied) return roleDenied;
-
-    const tenant = await tx.tenant.findUnique({
-      where: { id: tenantId },
-      select: { id: true, name: true, isActive: true },
-    });
-    if (!tenant || !tenant.isActive) {
-      return NextResponse.json({ ok: false, error: 'Tenant not found or inactive.' }, { status: 400 });
-    }
-
-    // Block re-invitation when an active membership already exists.
-    const existing = await tx.userTenant.findFirst({
-      where: { tenantId, isActive: true, user: { email } },
-      select: { id: true },
-    });
-    if (existing) {
-      return NextResponse.json({ ok: false, error: `${email} is already a member of this organisation.` }, { status: 400 });
-    }
-
-    // Quota: count active members + outstanding pending invitations against maxUsers.
-    const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
-    const [activeCount, pendingRows] = await Promise.all([
-      tx.userTenant.count({ where: { tenantId, isActive: true } }),
-      tx.$queryRawUnsafe<{ c: bigint }[]>(
-        `SELECT COUNT(*)::bigint AS c FROM tenant_invitations
-         WHERE tenant_id = $1 AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
-        tenantId,
-      ).catch(() => []),
-    ]);
-    const pending = pendingRows[0] ? Number(pendingRows[0].c) : 0;
-    const quotaGate = requireUnderQuota({
-      plan: tenantPlan, resource: 'maxUsers', current: activeCount + pending,
-    });
-    if (quotaGate) return quotaGate;
-
-    try {
-    
-      // Single active invitation per email × tenant — revoke any prior live one.
-      await tx.$executeRawUnsafe(
-        `UPDATE tenant_invitations
-           SET revoked = TRUE
-         WHERE tenant_id = $1 AND LOWER(email) = $2
-           AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
-        tenantId, email,
-      ).catch(() => {});
-
-      const { token, hash } = generateInvitationToken();
-      const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000);
-
-      await tx.$executeRawUnsafe(
-        `INSERT INTO tenant_invitations
-           (tenant_id, email, role_id, token_hash, invited_by_user_id, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        tenantId, email, roleId, hash, auth.userId, expiresAt,
-      );
-
-      created.invite = {
-        acceptUrl: appUrl(`/invitation/${encodeURIComponent(token)}`),
-        roleName: role.name,
-        tenantName: tenant.name,
-      };
-      return null;
-      } catch (err) {
-      captureException(err, { context: 'admin.invitations.post' });
-      return NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
-    }
-  });
-  const invite = created.invite;
-  if (response || !invite) return response ?? NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
-
-  // In the tenant's wording, name and language (Admin > Email templates).
-  const inviter = await sessionUser(req.headers).catch(() => null);
-  const send = await sendTemplatedEmail({
-    tenantId,
-    key: 'account.user_invitation',
-    to: email,
-    ...(inviter?.email ? { replyTo: inviter.email } : {}),
-    values: {
-      roleName: invite.roleName,
-      invitedBy: inviter?.name ?? inviter?.email ?? '',
-      acceptUrl: invite.acceptUrl,
-      validDays: String(INVITATION_TTL_DAYS),
-    },
-  });
-
-  void logAudit({
-    tenantId, tenantName: invite.tenantName,
-    userId: auth.userId,
-    userRole: 'TENANT_ADMIN',
-    entityType: 'Invitation',
-    entityName: email,
-    action: 'CREATE',
-    details: `Invitation sent to ${email} as ${invite.roleName}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
-  });
-
-  return NextResponse.json({
-    ok: true,
-    emailed: send.sent,
-    reason:  send.sent ? undefined : send.reason,
-    // Caller may still need the URL when SMTP isn't configured (dev environments).
-    acceptUrl: send.sent ? undefined : invite.acceptUrl,
-  });
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).

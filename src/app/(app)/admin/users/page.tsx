@@ -4,6 +4,7 @@ import PasswordInput from '@/components/ui/PasswordInput';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import { SWITCH_OFF } from '@/lib/ui/toggle';
 import UserAccessDialog from '@/components/admin/UserAccessDialog';
+import NewUserDialog from '@/components/admin/NewUserDialog';
 
 interface User {
   id: string;
@@ -33,11 +34,6 @@ interface Tenant { id: string; name: string; code?: string }
 
 const USER_TYPES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'CUSTOMER', 'VIEWER'];
 
-const EMPTY_USER = {
-  username: '', email: '', firstName: '', lastName: '',
-  position: '', userType: 'STAFF', isActive: true,
-};
-
 export default function UsersPage() {
   const [users, setUsers]     = useState<User[]>([]);
   const [roles, setRoles]     = useState<Role[]>([]);
@@ -48,6 +44,7 @@ export default function UsersPage() {
   const [saving, setSaving]   = useState(false);
   const [lines, setLines]     = useState<{ managerUserId: string; departmentHeadUserId: string } | null>(null);
   const [error, setError]     = useState('');
+  const [notice, setNotice]   = useState('');
   const [formError, setFormError] = useState('');
 
   // Modals
@@ -57,7 +54,6 @@ export default function UsersPage() {
   const [showModules, setShowModules] = useState<User | null>(null);
   const [hardDeleteTarget, setHardDeleteTarget] = useState<User | null>(null);
 
-  const [userForm, setUserForm]   = useState(EMPTY_USER);
   const [editForm, setEditForm]   = useState<Partial<User & { newPassword: string }>>({});
   const [assignForm, setAssignForm] = useState({ tenantId: '', roleId: '' });
 
@@ -94,21 +90,6 @@ export default function UsersPage() {
       (u.memberships ?? []).some(m => (m.departmentName ?? '').toLowerCase().includes(q))
     );
   });
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true); setFormError('');
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...userForm, moduleAccess: {} }),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Failed'); }
-      setShowCreate(false); setUserForm(EMPTY_USER); load();
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : 'Failed to create user');
-    } finally { setSaving(false); }
-  };
 
   // Disabling blocks sign-in and ends the user's open sessions; enabling lets them sign in again.
   const handleToggleActive = async (u: User) => {
@@ -245,6 +226,12 @@ export default function UsersPage() {
       </div>
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
+      {notice && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-green-600 text-sm flex justify-between gap-4">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-green-600" aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -366,54 +353,13 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* ── Create User Modal ── */}
+      {/* ── New User (company, role, department, module access, sign-in) ── */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[var(--text-main)]">New User</h2>
-              <button onClick={() => setShowCreate(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
-            </div>
-            {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                {([
-                  { l: 'Username *',    k: 'username',   ph: 'ahmed.mansouri',   req: true },
-                  { l: 'Email *',       k: 'email',      ph: 'ahmed@company.com', req: true },
-                  { l: 'First Name',    k: 'firstName',  ph: 'Ahmed' },
-                  { l: 'Last Name',     k: 'lastName',   ph: 'Al-Mansouri' },
-                  { l: 'Position',      k: 'position',   ph: 'Fleet Manager' },
-                ] as Array<{ l: string; k: string; ph: string; req?: boolean }>).map(({ l, k, ph, req }) => (
-                  <div key={k}>
-                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{l}</label>
-                    <input
-                      type={k === 'email' ? 'email' : 'text'}
-                      value={(userForm as unknown as Record<string, string>)[k] ?? ''}
-                      onChange={e => setUserForm(p => ({ ...p, [k]: e.target.value }))}
-                      placeholder={ph} required={req}
-                      className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">User Type</label>
-                <select value={userForm.userType} onChange={e => setUserForm(p => ({ ...p, userType: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none text-sm">
-                  {USER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={() => setShowCreate(false)}
-                  className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
-                <button type="submit" disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
-                  {saving ? 'Creating…' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <NewUserDialog
+          tenants={tenants.map(t => ({ id: t.id, name: t.name }))}
+          onClose={() => setShowCreate(false)}
+          onDone={(message) => { setShowCreate(false); setNotice(message); load(); }}
+        />
       )}
 
       {/* ── Module Access (per company: department + access narrowing the role) ── */}
