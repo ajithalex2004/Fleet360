@@ -1,30 +1,14 @@
 name: Phase 0 — Cross-tenant isolation tests
 
-# Runs the phasegate package's full test suite (unit + integration)
-# against a live Postgres on every PR. The integration tests verify
-# that the GORM auth.WithTenant(c) scope actually scopes queries by
-# tenant_id — the foundational guarantee Phase 0 ships. If a future
-# commit breaks this isolation, this workflow fails the PR.
+# Runs the complete Phase 0 cross-tenant isolation and integration test suite
+# against ephemeral, throwaway PostgreSQL 16 service containers in CI.
 #
-# REQUIRED SECRET: PHASE0_DATABASE_URL
+# Each job builds the complete schema from 162 migrations via fresh-install-migrate.cjs,
+# creates a restricted `fleet360_app` role with NOSUPERUSER NOBYPASSRLS, and
+# verifies RLS enforcement via check-rls-enforcement.mjs before executing tests.
 #
-# This job used to gate the integration step on `if: env.NEON_DATABASE_URL
-# != ''` while no such secret was configured, so the step never ran and the
-# check reported SUCCESS having executed zero cross-tenant assertions. It was
-# green from 2026-04 onward while proving only that Go compiled.
-#
-# The secret is now mandatory: a missing one FAILS the job. No database, no app
-# role, no assertions = red. Not skipped, not a warning.
-#
-# The connection string must point at the fleet360_app role, NOT the
-# application's current DATABASE_URL. That one connects as neondb_owner, which
-# holds rolbypassrls, and under it every isolation assertion passes on
-# application WHERE clauses alone while RLS contributes nothing — a green run
-# that proves the opposite of what it claims. The suite's preflight rejects a
-# BYPASSRLS role for exactly this reason, so CI becomes the first place RLS is
-# genuinely exercised, before the application runtime is switched.
-#
-# Use a dedicated branch or schema so concurrent PRs don't trample each other.
+# Tests NEVER touch real or production databases (protected by tests/db-guard.ts
+# and tests/protected-database-hosts.json from PR #228).
 #
 # Failure mode: any test failure exits non-zero and GitHub renders a red ✗.
 
@@ -38,22 +22,239 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Phase 0 SQL Syntax Check ────────────────────────────────────────────────
+  sql-syntax:
+    name: Phase 0 SQL syntax check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Install postgresql-client (psql + pg_format)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      # Run a parser-only check via psql. We never apply the migrations
+      # here — that requires operator action. We just confirm Postgres
+      # can parse the file. The migration scripts are idempotent
+      # (every CREATE INDEX / ADD CONSTRAINT uses IF NOT EXISTS) so
+      # running them against an empty DB is safe IF the referenced
+      # tables don't exist — they wrap each statement in
+      # `to_regclass() IS NOT NULL` checks so missing tables are
+      # silently skipped, not errored.
+      - name: Parse-check Phase 0 migrations (against throwaway DB)
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: phase0_ci_parse_check
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: |
+          # Spin up a throwaway Postgres just to get a parser.
+          sudo apt-get install -yqq postgresql
+          sudo service postgresql start
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+          sudo -u postgres createdb phase0_ci_parse_check
+
+          # Parse each migration file that exists.
+          found_any=0
+          for f in \
+            prisma/migrations/tenant_isolation.sql \
+            prisma/migrations/20260625_dispatch_tenant_isolation.sql \
+            prisma/migrations/20260625_phase0_backfill_safety.sql \
+            prisma/migrations/20260625_multi_tenant_saas_layer2_5.sql ; do
+            if [ ! -f "$f" ]; then
+              echo "::notice file=$f::Phase 0 migration removed from tree — skipping"
+              continue
+            fi
+            found_any=1
+            echo "::group::Parse-check $f"
+            PGPASSWORD=postgres psql -h localhost -U postgres -d phase0_ci_parse_check -v ON_ERROR_STOP=1 \
+              --single-transaction --set AUTOCOMMIT=off \
+              -c "BEGIN;" -c "ROLLBACK;" < "$f" || {
+              echo "::error file=$f::SQL syntax error in migration"
+              exit 1
+            }
+            echo "::endgroup::"
+          done
+          if [ "$found_any" = "0" ]; then
+            echo "No Phase 0 SQL files remain in tree — this check is now a stub. Consider removing the sql-syntax job when the phase-0 SQL layer is fully retired."
+          fi
+
+  # ── The TypeScript RLS suite ────────────────────────────────────────────────
+  rls-isolation-ts:
+    name: RLS isolation (TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_rls_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PHASE0_EXPECTED_ROLE: fleet360_app
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_rls_ci?schema=public
+      APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_rls_ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      - name: Create the restricted runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_rls_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+
+      - name: Build the schema from the migrations
+        env:
+          DATABASE_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          DIRECT_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          BOOTSTRAP_RUNTIME_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          CONFIRM_FRESH_INSTALL: "1"
+        run: node scripts/fresh-install-migrate.cjs --fresh-install
+
+      # Proves the connection can actually enforce RLS BEFORE the suite runs.
+      - name: Assert the role enforces RLS
+        env:
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+        run: node scripts/check-rls-enforcement.mjs
+
+      - name: Cross-tenant isolation suite
+        env:
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+        run: npm run test:isolation:integration
+
+      - name: Record the evidence
+        if: always()
+        run: |
+          {
+            echo "### RLS isolation (TypeScript)"
+            echo ""
+            echo "| check | value |"
+            echo "|---|---|"
+            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
+            echo "| database | throwaway postgres:16 for this job only |"
+            echo "| enforcement asserted before the suite | yes |"
+            echo ""
+            echo "Assertions query BOTH tenants inside withTenantRls; only the"
+            echo "policy can exclude the other tenant's rows."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Go Cross-Tenant Isolation Suite ─────────────────────────────────────────
   phase0:
     name: Cross-tenant isolation
     needs: [rls-isolation-ts]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_phase0_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       GOFLAGS: -mod=readonly
-      # Turns every skip path in the suite into a hard failure. See
-      # requireDB() and TestMain() in backend/phasegate/phasegate_test.go.
       PHASE0_REQUIRE_DB: "1"
       PHASE0_EXPECTED_ROLE: fleet360_app
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_phase0_ci?schema=public
+      APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_phase0_ci?sslmode=disable
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      - name: Create the restricted runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_phase0_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+
+      - name: Build the schema from the migrations
+        env:
+          DATABASE_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          DIRECT_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          BOOTSTRAP_RUNTIME_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          CONFIRM_FRESH_INSTALL: "1"
+        run: node scripts/fresh-install-migrate.cjs --fresh-install
 
       - name: Setup Go 1.25
         uses: actions/setup-go@v5
@@ -70,11 +271,6 @@ jobs:
         working-directory: backend
         run: go build ./phasegate/...
 
-      # Unit tests run always — no DB required. These verify the gate
-      # state machine, middleware routing, escape hatch, and the
-      # recheckLoop logic with mocked check functions. Fast (~3s).
-      # Unit tests deliberately run OUTSIDE required mode: they need no
-      # database, and PHASE0_REQUIRE_DB would fail them for not having one.
       - name: Unit tests
         working-directory: backend
         env:
@@ -82,50 +278,15 @@ jobs:
           SKIP_DB_TESTS: "1"
         run: go test ./phasegate/... -count=1 -timeout 60s -v
 
-      # The secret is checked BEFORE the tests, so a missing one reads as
-      # "not configured" rather than surfacing later as a confusing Go
-      # failure. Deliberately not an `if:` — a conditional step that does not
-      # run is reported as success, which is the whole defect being removed.
-      - name: Require the database secret
-        env:
-          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-        run: |
-          if [ -z "$PHASE0_DATABASE_URL" ]; then
-            echo "::error title=PHASE0_DATABASE_URL is not configured::The cross-tenant isolation suite cannot run without it. This job fails rather than reporting a green tick for a suite that never executed."
-            echo "Set the repository secret PHASE0_DATABASE_URL to a connection string for the"
-            echo "fleet360_app role — NOT the application's DATABASE_URL, which connects as"
-            echo "neondb_owner and holds rolbypassrls. Under a BYPASSRLS role every isolation"
-            echo "assertion passes whether or not isolation actually works."
-            exit 1
-          fi
-          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
-
-      # Exercises the real auth.WithTenant(c) GORM scope against a live
-      # database as a non-BYPASSRLS role. TestMain fails the run if the role
-      # holds BYPASSRLS, or if zero cross-tenant assertions execute.
-      #
-      # PHASE0_SMOKE_SUFFIX implements the "use a dedicated branch or
-      # schema so concurrent PRs don't trample each other" note at the top
-      # of this file: without it, every PR's run shares the exact same
-      # phase0_smoke_a/phase0_smoke_b tenant rows in this one live
-      # database, so two runs racing ensureTestTenants collide on
-      # tenants_code_key, or one run's cleanup deletes rows a concurrent
-      # run is still using. run_id-run_attempt is unique per run,
-      # including reruns, so concurrent runs get their own never-shared
-      # tenant pair instead.
       - name: Integration tests (live DB, fleet360_app)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
           PHASE0_SMOKE_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
         run: go test ./phasegate/... -count=1 -timeout 480s -v -run Integration
 
-      # Re-assert the preflight facts in the job summary so the evidence is
-      # visible without opening the log.
       - name: Record the isolation evidence
         if: always()
-        env:
-          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
         run: |
           {
             echo "### Phase 0 — cross-tenant isolation"
@@ -133,18 +294,13 @@ jobs:
             echo "| check | value |"
             echo "|---|---|"
             echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
-            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| database | throwaway postgres:16 for this job only, schema built from the migrations |"
             echo "| skips permitted | no (PHASE0_REQUIRE_DB=1) |"
             echo ""
             echo "Assertion count and connected role are printed by the suite itself"
             echo "under PHASE 0 PREFLIGHT and PHASE 0 SUMMARY in the job log."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Smoke check on the run itself — catches the "tests were deleted by
-      # mistake" failure mode.
-      #
-      # Runs outside required mode: `go test -list` still executes TestMain,
-      # which would fail for having no DATABASE_URL of its own.
       - name: List phasegate tests (smoke check)
         working-directory: backend
         env:
@@ -152,125 +308,32 @@ jobs:
           SKIP_DB_TESTS: "1"
         run: go test ./phasegate/... -list '.*' | head -50
 
-  # ── The TypeScript RLS suite ────────────────────────────────────────────────
-  #
-  # tests/integration/tenant-isolation-rls.test.ts has existed for months with
-  # 22 correct assertions and was wired to NO workflow, so nothing ran it and
-  # nothing noticed when it rotted. When finally executed it failed in
-  # beforeAll on a renamed column — 22 assertions blocked by one stale field.
-  #
-  # It tests something the Go suite does not. The Go assertions carry an
-  # explicit tenant predicate, so they measure the application WHERE clause.
-  # These query BOTH tenants inside withTenantRls and assert the other's rows
-  # are absent, which only the policy can produce. Two different questions,
-  # both worth asking.
-  #
-  # EXPECT THIS JOB TO FAIL until the runtime role changes. Under neondb_owner
-  # 18 of 22 fail, because tenant A really can read and update tenant B's rows.
-  # That failure is the evidence, not a defect in the job.
-  rls-isolation-ts:
-    name: RLS isolation (TypeScript)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    env:
-      PHASE0_EXPECTED_ROLE: fleet360_app
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      # A real step with exit 1, deliberately not an `if:`. A conditional step
-      # that does not run reports success, which is the failure mode this whole
-      # workflow exists to remove.
-      - name: Require the database secret
-        env:
-          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-        run: |
-          if [ -z "$PHASE0_DATABASE_URL" ]; then
-            echo "::error title=PHASE0_DATABASE_URL is not configured::The RLS isolation suite cannot run without it. Failing rather than reporting green for a suite that never executed."
-            exit 1
-          fi
-          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
-
-      # Proves the connection can actually enforce RLS BEFORE the suite runs.
-      # Sets a bogus tenant and counts rows: if any come back, the role is
-      # bypassing policies and every assertion below would be meaningless.
-      # Exit 0 = enforced, 1 = bypassed.
-      - name: Assert the role enforces RLS
-        env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-        run: node scripts/check-rls-enforcement.mjs
-
-      # Deliberately test:isolation:integration, NOT the umbrella
-      # `npm run test:isolation`. That script chains three suites and the other
-      # two are broken for reasons unrelated to tenant isolation:
-      #
-      #   test:isolation:unit       13 of 17 fail. The mocks predate the
-      #                             set_config read-back added to withTenantRls
-      #                             and assert error messages it no longer
-      #                             emits. Verified identical before and after
-      #                             the withSystemJob change, so this is drift,
-      #                             not a regression from it.
-      #   test:isolation:tenant001  fails on a UUID type error - a `test-...`
-      #                             string bound to a uuid column.
-      #
-      # Including them would make this job red for two different reasons at
-      # once and nobody could tell which from the check name. Fix them, then
-      # add them here.
-      - name: Cross-tenant isolation suite
-        env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          ALLOW_REMOTE_TEST_DATABASE: "1"
-        run: npm run test:isolation:integration
-
-      - name: Record the evidence
-        if: always()
-        env:
-          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
-        run: |
-          {
-            echo "### RLS isolation (TypeScript)"
-            echo ""
-            echo "| check | value |"
-            echo "|---|---|"
-            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
-            echo "| secret configured | $SECRET_PRESENT |"
-            echo "| enforcement asserted before the suite | yes |"
-            echo ""
-            echo "Assertions query BOTH tenants inside withTenantRls; only the"
-            echo "policy can exclude the other tenant's rows."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # Leasing return/early-termination workflow (feat/leasing-return-workflow):
-  # runs the Postgres integration suites against the real, restricted
-  # fleet360_app role — same secret, same enforcement check, same reasoning
-  # as rls-isolation-ts above. ci.yml's ephemeral postgres:16 service can't
-  # be used here: its default POSTGRES_USER is a superuser, which silently
-  # bypasses RLS and would make a green run prove nothing about tenant
-  # isolation on the new lease_allocation_occurrences / lease_vehicle_returns
-  # / lease_deposit_applications / lease_contract_closures tables.
+  # ── Leasing Return Workflow Integration ─────────────────────────────────────
   leasing-return-workflow-integration:
     name: Leasing return workflow (Postgres)
     needs: [phase0]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_leasing_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       PHASE0_EXPECTED_ROLE: fleet360_app
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_leasing_ci?schema=public
+      APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_leasing_ci
 
     steps:
       - name: Checkout
@@ -288,46 +351,45 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Deliberately not an `if:` — a conditional step that does not run
-      # reports success, which is the failure mode this whole workflow
-      # exists to remove. See rls-isolation-ts above for the same pattern.
-      - name: Require the database secret
-        env:
-          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+      - name: Install postgresql-client
         run: |
-          if [ -z "$PHASE0_DATABASE_URL" ]; then
-            echo "::error title=PHASE0_DATABASE_URL is not configured::The leasing return-workflow integration suite cannot run without it. Failing rather than reporting green for a suite that never executed."
-            exit 1
-          fi
-          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
 
-      # Proves the connection can actually enforce RLS BEFORE the suite
-      # runs — same preflight rls-isolation-ts uses, run again here because
-      # each job gets a fresh runner/connection.
+      - name: Create the restricted runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_leasing_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+
+      - name: Build the schema from the migrations
+        env:
+          DATABASE_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          DIRECT_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          BOOTSTRAP_RUNTIME_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          CONFIRM_FRESH_INSTALL: "1"
+        run: node scripts/fresh-install-migrate.cjs --fresh-install
+
       - name: Assert the role enforces RLS
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: node scripts/check-rls-enforcement.mjs
 
-      # No separate `prisma migrate status` step here (rls-isolation-ts
-      # doesn't have one either) — schema.prisma's directUrl needs
-      # DIRECT_URL, which isn't set in this job, and a real drift would
-      # surface as a Prisma Client error in the suite run below anyway.
-      # Both suites seed their own randomly-generated (crypto.randomUUID())
-      # tenants/lessees/vehicles per run and clean up only what they
-      # created, so concurrent runs against the same shared database don't
-      # collide — no additional locking needed beyond that.
       - name: Leasing lifecycle + return-workflow integration suites
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          ALLOW_REMOTE_TEST_DATABASE: "1"
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: npx vitest run tests/integration/leasing-lifecycle-postgres.test.ts tests/integration/leasing-return-workflow-postgres.test.ts
 
       - name: Record the evidence
         if: always()
-        env:
-          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
         run: |
           {
             echo "### Leasing return workflow — PostgreSQL integration"
@@ -335,7 +397,7 @@ jobs:
             echo "| check | value |"
             echo "|---|---|"
             echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
-            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| database | throwaway postgres:16 for this job only |"
             echo "| enforcement asserted before the suite | yes |"
             echo ""
             echo "Covers: handover-triggered Phase 1/2 linking and its idempotency,"
@@ -346,17 +408,7 @@ jobs:
             echo "through the actual route handlers."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Runs on its own throwaway Postgres, not the shared PHASE0_DATABASE_URL:
-  # its claim/retry tests (attempt tokens, the send cap, reconciliation) read
-  # and change shared dispatch state, and on the shared database runs of other
-  # commits and PRs worked the same rows at the same time, so it failed on
-  # varying assertions while passing in isolation.
-  #
-  # Still proves RLS: the schema is built from the migrations by the same
-  # fresh-install runner as migration-safety.yml, and the suite connects as a
-  # fleet360_app role created NOSUPERUSER NOBYPASSRLS (the container's
-  # superuser is used only to build the schema). The preflight below fails
-  # the job if that role could bypass RLS.
+  # ── Dunning & Collections Integration ───────────────────────────────────────
   dunning-collections-integration:
     name: Dunning & collections dispatch (Postgres)
     runs-on: ubuntu-latest
@@ -379,9 +431,7 @@ jobs:
 
     env:
       PHASE0_EXPECTED_ROLE: fleet360_app
-      # Schema build only (superuser of the throwaway container).
       MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_dunning_ci?schema=public
-      # Everything the suite does: the restricted application role.
       APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_dunning_ci
 
     steps:
@@ -426,19 +476,11 @@ jobs:
           CONFIRM_FRESH_INSTALL: "1"
         run: node scripts/fresh-install-migrate.cjs --fresh-install
 
-      # Proves the connection the suite uses enforces RLS before it runs.
       - name: Assert the role enforces RLS
         env:
           DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: node scripts/check-rls-enforcement.mjs
 
-      # No production dispatch here or anywhere else in CI: the suite only
-      # ever sets DUNNING_DISPATCH_ENABLED=true on its own synthetic tenants
-      # inside the test process, and mocks the outermost sendEmail() call —
-      # no real SMTP transport is contacted. Proves the attempt-token claim
-      # protocol (the five decisive tests from the design plan), the sweep's
-      # stage transitions, RLS on the five new tables, and append-only
-      # enforcement on lease_dunning_stage_transitions against real Postgres.
       - name: Dunning & collections integration suite
         env:
           DATABASE_URL: ${{ env.APP_DATABASE_URL }}
@@ -468,14 +510,32 @@ jobs:
             echo "enforcement on lease_dunning_stage_transitions."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── Audit Log Race Integration ──────────────────────────────────────────────
   audit-log-race-integration:
     name: Audit log transaction race (Postgres)
     needs: [dunning-collections-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_audit_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       PHASE0_EXPECTED_ROLE: fleet360_app
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_audit_ci?schema=public
+      APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_audit_ci
 
     steps:
       - name: Checkout
@@ -493,46 +553,45 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Deliberately not an `if:` — a conditional step that does not run
-      # reports success, which is the failure mode this whole workflow
-      # exists to remove. See rls-isolation-ts above for the same pattern.
-      - name: Require the database secret
-        env:
-          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+      - name: Install postgresql-client
         run: |
-          if [ -z "$PHASE0_DATABASE_URL" ]; then
-            echo "::error title=PHASE0_DATABASE_URL is not configured::The audit-log transaction-race suite cannot run without it. Failing rather than reporting green for a suite that never executed."
-            exit 1
-          fi
-          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
 
-      # Proves the connection can actually enforce RLS BEFORE the suite
-      # runs — same preflight the other integration jobs use. This suite in
-      # particular depends on it: the cross-tenant-isolation test is a
-      # false pass under a bypassing role (caught locally while writing it —
-      # first run was against neondb_owner and tenant A could read tenant
-      # B's row).
+      - name: Create the restricted runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_audit_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+
+      - name: Build the schema from the migrations
+        env:
+          DATABASE_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          DIRECT_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          BOOTSTRAP_RUNTIME_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          CONFIRM_FRESH_INSTALL: "1"
+        run: node scripts/fresh-install-migrate.cjs --fresh-install
+
       - name: Assert the role enforces RLS
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: node scripts/check-rls-enforcement.mjs
 
-      # #72: logAudit's fire-and-forget callers used to race their own
-      # caller's transaction closing (P2028, "Transaction already closed").
-      # This suite reproduces the tightest version of that race against a
-      # real database with active RLS, plus cross-tenant isolation and the
-      # logAuditInTx same-transaction-atomicity counterpart.
       - name: Audit log transaction race suite
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-          ALLOW_REMOTE_TEST_DATABASE: "1"
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: npx vitest run tests/integration/audit-log-race.test.ts
 
       - name: Record the evidence
         if: always()
-        env:
-          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
         run: |
           {
             echo "### Audit log transaction race — PostgreSQL integration"
@@ -540,7 +599,7 @@ jobs:
             echo "| check | value |"
             echo "|---|---|"
             echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
-            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| database | throwaway postgres:16 for this job only |"
             echo "| enforcement asserted before the suite | yes |"
             echo ""
             echo "Covers: the tightest version of #72's original race (fire-and-"
@@ -550,79 +609,3 @@ jobs:
             echo "(caught, not thrown — see #83), and logAuditInTx's opposite,"
             echo "shares-the-caller's-transaction behavior in both directions."
           } >> "$GITHUB_STEP_SUMMARY"
-
-  # Companion job: verifies the dispatch migration + Phase 0 SQL
-  # scripts compile cleanly. Doesn't apply them — that's a separate
-  # one-time apply step done manually against staging. Catches syntax
-  # errors in the .sql files on every PR.
-  sql-syntax:
-    name: Phase 0 SQL syntax check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go 1.25
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: Install postgresql-client (psql + pg_format)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -yqq postgresql-client
-
-      # Run a parser-only check via psql. We never apply the migrations
-      # here — that requires operator action. We just confirm Postgres
-      # can parse the file. The migration scripts are idempotent
-      # (every CREATE INDEX / ADD CONSTRAINT uses IF NOT EXISTS) so
-      # running them against an empty DB is safe IF the referenced
-      # tables don't exist — they wrap each statement in
-      # `to_regclass() IS NOT NULL` checks so missing tables are
-      # silently skipped, not errored.
-      - name: Parse-check Phase 0 migrations (against throwaway DB)
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: phase0_ci_parse_check
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        run: |
-          # Spin up a throwaway Postgres just to get a parser.
-          sudo apt-get install -yqq postgresql
-          sudo service postgresql start
-          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
-          sudo -u postgres createdb phase0_ci_parse_check
-
-          # Parse each migration file that exists. The list historically
-          # included several top-level Phase 0 SQL scripts that have
-          # since been removed (see chore 7ca921d2 — legacy top-level
-          # scripts + superseded ops migrations). Skip missing files
-          # rather than fail — a removed migration isn't a syntax error.
-          # If ALL files are absent, the loop simply prints a note and
-          # the job passes.
-          found_any=0
-          for f in \
-            prisma/migrations/tenant_isolation.sql \
-            prisma/migrations/20260625_dispatch_tenant_isolation.sql \
-            prisma/migrations/20260625_phase0_backfill_safety.sql \
-            prisma/migrations/20260625_multi_tenant_saas_layer2_5.sql ; do
-            if [ ! -f "$f" ]; then
-              echo "::notice file=$f::Phase 0 migration removed from tree — skipping"
-              continue
-            fi
-            found_any=1
-            echo "::group::Parse-check $f"
-            PGPASSWORD=postgres psql -h localhost -U postgres -d phase0_ci_parse_check -v ON_ERROR_STOP=1 \
-              --single-transaction --set AUTOCOMMIT=off \
-              -c "BEGIN;" -c "ROLLBACK;" < "$f" || {
-              echo "::error file=$f::SQL syntax error in migration"
-              exit 1
-            }
-            echo "::endgroup::"
-          done
-          if [ "$found_any" = "0" ]; then
-            echo "No Phase 0 SQL files remain in tree — this check is now a stub. Consider removing the sql-syntax job when the phase-0 SQL layer is fully retired."
-          fi
