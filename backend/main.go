@@ -287,6 +287,13 @@ func registerV1Routes(r *gin.Engine) {
 		logistics.POST("/shipments", handlers.CreateLogisticsShipment)
 		logistics.GET("/stats", handlers.GetLogisticsStats)
 
+		// Shipping Requests — demand intake & conversion to shipment orders
+		logistics.GET("/shipping-requests", handlers.GetLogisticsShippingRequests)
+		logistics.POST("/shipping-requests", handlers.CreateLogisticsShippingRequest)
+		logistics.GET("/shipping-requests/:id", handlers.GetLogisticsShippingRequest)
+		logistics.PATCH("/shipping-requests/:id", handlers.PatchLogisticsShippingRequest)
+		logistics.POST("/shipping-requests/:id/convert", handlers.ConvertLogisticsShippingRequest)
+
 		// Phase L4a — KPI analytics. The Go-native replacement for the Next.js
 		// /api/logistics/analytics endpoint, which queries the legacy `bookings`
 		// table unscoped (a cross-tenant leak). This computes the same dashboard

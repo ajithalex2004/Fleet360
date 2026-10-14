@@ -161,6 +161,11 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     ['POST', '/api/files/upload'],
     ['HEAD', '/api/logistics/shipments/abc-123'],
     ['GET', '/api/logistics/sla'],
+    ['GET', '/api/logistics/shipping-requests'],
+    ['POST', '/api/logistics/shipping-requests'],
+    ['GET', '/api/logistics/shipping-requests/abc-123'],
+    ['PATCH', '/api/logistics/shipping-requests/abc-123'],
+    ['POST', '/api/logistics/shipping-requests/abc-123/convert'],
   ])('%s %s is proxied to the Go backend', async (method, path) => {
     const result = await proxyToGoBackend(
       new NextRequest(`http://localhost:3000${path}`, {
