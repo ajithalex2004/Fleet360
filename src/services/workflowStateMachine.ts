@@ -246,7 +246,7 @@ async function handleStatusChange(
  * Side effect handlers (to be implemented with actual email service)
  */
 
-async function notifyOperationsTeam(request: EnhancedMaintenanceRequest): Promise<void> {
+export async function notifyOperationsTeam(request: EnhancedMaintenanceRequest): Promise<void> {
     console.log(`[WORKFLOW] Notifying operations team for request ${request.id}`);
     // TODO: Implement email notification
 }
@@ -297,7 +297,7 @@ async function notifyInspectionRequired(
             vehicleId:     request.vehicleId,
             requestNumber: request.readableId ?? null,
             garageId:      request.garageId ?? null,
-            garageName:    (request as any).garageName ?? null,
+            garageName:    request.garageName ?? null,
             tenantId,
             occurredAt:    new Date().toISOString(),
         },
@@ -320,7 +320,7 @@ async function notifyQCInProgress(
             vehicleId:     request.vehicleId,
             requestNumber: request.readableId ?? null,
             garageId:      request.garageId ?? null,
-            garageName:    (request as any).garageName ?? null,
+            garageName:    request.garageName ?? null,
             tenantId,
             occurredAt:    new Date().toISOString(),
         },
@@ -343,7 +343,7 @@ async function notifyGarageInspectionFailed(
             vehicleId:     request.vehicleId,
             requestNumber: request.readableId ?? null,
             garageId:      request.garageId ?? null,
-            garageName:    (request as any).garageName ?? null,
+            garageName:    request.garageName ?? null,
             tenantId,
             occurredAt:    new Date().toISOString(),
         },
@@ -366,7 +366,7 @@ async function notifyVehicleReadyForService(
             vehicleId:     request.vehicleId,
             requestNumber: request.readableId ?? null,
             garageId:      request.garageId ?? null,
-            garageName:    (request as any).garageName ?? null,
+            garageName:    request.garageName ?? null,
             tenantId,
             occurredAt:    new Date().toISOString(),
         },
@@ -387,15 +387,15 @@ async function emitWorkOrderCompleted(
         payload: {
             requestId:          request.id,
             vehicleId:          request.vehicleId,
-            requestType:        (request as any).maintenanceType ?? 'SERVICE',
+            requestType:        request.maintenanceType ?? 'SERVICE',
             invoiceSubmittedAt: new Date().toISOString(),
-            totalCost:          Number((request as any).actualCost ?? (request as any).estimatedCost ?? 0),
-            estimatedCost:      (request as any).estimatedCost != null
-                                    ? Number((request as any).estimatedCost)
+            totalCost:          Number(request.actualCost ?? request.estimatedCost ?? 0),
+            estimatedCost:      request.estimatedCost != null
+                                    ? Number(request.estimatedCost)
                                     : null,
             currency:           'AED',
             garageId:           request.garageId ?? null,
-            garageName:         (request as any).garageName ?? null,
+            garageName:         request.garageName ?? null,
             requestNumber:      request.workOrderNo ?? null,
             tenantId,
         },

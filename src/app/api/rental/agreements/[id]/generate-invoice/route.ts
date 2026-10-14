@@ -17,9 +17,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
+import { calculateRate, type RateRequest, type PricingRuleRow } from '@/lib/rental-rate-engine';
 import { getEventBus }               from '@/events/event-bus';
 import { RENTAL_INVOICE_GENERATED }  from '@/events/registry';
+
+interface AgreementRow {
+  id: string;
+  status: string;
+  vehicle_id?: string | null;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  agreement_no?: string | null;
+  vehicle_category?: string | null;
+  registration_no?: string | null;
+  pickup_date?: string | null;
+  actual_return_date?: string | null;
+  dropoff_date?: string | null;
+  pickup_location_code?: string | null;
+  dropoff_location_code?: string | null;
+  customer_type?: string | null;
+  corporate_account_id?: string | null;
+  channel?: string | null;
+  promo_code?: string | null;
+  insurance_plan_code?: string | null;
+  currency?: string | null;
+  additional_charges?: string | null;
+  [key: string]: unknown;
+}
+
+interface InvoiceLineItemInput {
+  lineType: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  unitLabel: string;
+  discountPct: number;
+  taxable: boolean;
+  amount: number;
+}
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -42,7 +77,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const { invoiceType = 'STANDARD', autoSend = false, notes } = body;
 
         // ── 1. Load agreement ──────────────────────────────────────────────────
-        const agreements = await tx.$queryRawUnsafe<any[]>(
+        const agreements = await tx.$queryRawUnsafe<AgreementRow[]>(
           "SELECT ra.*, v.category AS vehicle_category, v.registration_no " +
           "FROM rental_agreements ra " +
           "LEFT JOIN vehicles v ON v.id = ra.vehicle_id " +
@@ -57,9 +92,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         }
 
         // ── 2. Fetch pricing rules and calculate base rental ──────────────────
-        const pricingRules = await (prisma as any).pricingRule.findMany({
-          where: { isActive: true }, orderBy: [{ priority: 'desc' }],
-        });
+        const pricingRules = await tx.$queryRawUnsafe<PricingRuleRow[]>(
+          "SELECT * FROM pricing_rules WHERE is_active = true ORDER BY priority DESC"
+        );
 
         const pickupDate  = agr.pickup_date  ? new Date(agr.pickup_date)  : new Date();
         const dropoffDate = agr.actual_return_date
@@ -92,14 +127,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         } catch { /* ignore */ }
 
         // ── 4. Load open damage-claim charges ────────────────────────────────
-        const damageClaims = await tx.$queryRawUnsafe<any[]>(
+        const damageClaims = await tx.$queryRawUnsafe<{ description: string; amount: number }[]>(
           "SELECT description, estimated_repair_cost AS amount FROM rental_damage_claims " +
           "WHERE agreement_id = $1 AND status NOT IN ('CLOSED','WAIVED') AND deleted_at IS NULL",
           params.id
         );
 
         // ── 5. Load unpaid traffic fines within rental period ────────────────
-        const trafficFines = await tx.$queryRawUnsafe<any[]>(
+        const trafficFines = await tx.$queryRawUnsafe<{ description: string; amount: number }[]>(
           "SELECT fine_number AS description, fine_amount AS amount FROM traffic_fines " +
           "WHERE vehicle_id = $1 AND fine_date >= $2 AND fine_date <= $3 " +
           "AND status = 'UNPAID' AND deleted_at IS NULL",
@@ -110,7 +145,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         // ── 6. Build line items ───────────────────────────────────────────────
         const TAX_RATE = 5; // UAE VAT
-        const lineItems: any[] = [];
+        const lineItems: InvoiceLineItemInput[] = [];
 
         // Base rental lines from rate engine breakdown
         for (const bl of rate.breakdown) {
@@ -221,7 +256,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           );
         }
 
-        const invoice = await tx.$queryRawUnsafe<any[]>(
+        const invoice = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           "SELECT * FROM rental_invoices WHERE id = $1", invoiceId
         );
 

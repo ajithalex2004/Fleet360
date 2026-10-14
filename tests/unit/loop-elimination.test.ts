@@ -16,8 +16,12 @@ vi.mock('@/lib/agents/schema', () => ({
 }));
 
 describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.$queryRaw).mockReset();
+    vi.mocked(prisma.$executeRawUnsafe).mockReset();
+    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
   });
 
   describe('Deterministic Template Fidelity', () => {
@@ -72,28 +76,19 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       const { prisma } = await import('@/lib/prisma');
       const chatSpy = vi.spyOn(aiGateway, 'chat');
 
-      (prisma.$queryRaw as any)
-        .mockResolvedValueOnce([
-          {
-            id: 'drv-1',
-            first_name: 'Rashid',
-            last_name: 'Khan',
-            employee_id: 'EMP-101',
-            rag_score: 90,
-            rag_status: 'GREEN',
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            driver_id: 'drv-1',
-            avg_speed_score: 88,
-            avg_fuel_score: 92,
-            avg_safety_score: 95,
-            violations_last_30d: 0,
-            incidents_last_30d: 0,
-            trips_last_30d: 45,
-          },
-        ]);
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+        {
+          id: 'drv-1',
+          first_name: 'Rashid',
+          last_name: 'Khan',
+          employee_id: 'EMP-101',
+          rag_score: 90,
+          rag_status: 'GREEN',
+          avg_fuel_score: 92,
+          incidents_last_30d: 0,
+          trips_last_30d: 45,
+        },
+      ]);
 
       const result = await DRIVER_COACHING_AGENT.run({
         agent_id: 'driver-coach',
@@ -103,10 +98,10 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
 
       expect(result.status).toBe('COMPLETED');
       expect(result.itemsProcessed).toBe(1);
-      const out = result.output as any;
+      const out = result.output as Record<string, unknown>;
       expect(out.deterministicCount).toBe(1);
       expect(out.aiCount).toBe(0);
-      expect(out.avoidedTokens).toBeGreaterThan(0);
+      expect(Number(out.avoidedTokens)).toBeGreaterThan(0);
       expect(chatSpy).not.toHaveBeenCalled();
     });
 
@@ -136,28 +131,19 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
         },
       });
 
-      (prisma.$queryRaw as any)
-        .mockResolvedValueOnce([
-          {
-            id: 'drv-2',
-            first_name: 'Vikram',
-            last_name: 'Singh',
-            employee_id: 'EMP-102',
-            rag_score: 55, // Low score
-            rag_status: 'RED',
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            driver_id: 'drv-2',
-            avg_speed_score: 50,
-            avg_fuel_score: 58,
-            avg_safety_score: 52,
-            violations_last_30d: 3, // Violations present
-            incidents_last_30d: 1,
-            trips_last_30d: 30,
-          },
-        ]);
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+        {
+          id: 'drv-2',
+          first_name: 'Vikram',
+          last_name: 'Singh',
+          employee_id: 'EMP-102',
+          rag_score: 55, // Low score
+          rag_status: 'RED',
+          avg_fuel_score: 58,
+          incidents_last_30d: 1,
+          trips_last_30d: 30,
+        },
+      ]);
 
       const result = await DRIVER_COACHING_AGENT.run({
         agent_id: 'driver-coach',
@@ -166,7 +152,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       });
 
       expect(result.status).toBe('COMPLETED');
-      const out = result.output as any;
+      const out = result.output as Record<string, unknown>;
       expect(out.aiCount).toBe(1);
       expect(chatSpy).toHaveBeenCalledTimes(1);
       expect(result.telemetry?.modelAlias).toBe('ECONOMY_TEXT');
@@ -212,7 +198,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
         { week: '2026-W13', vehicleType: 'SUV', branchId: 'AUH', count: 20 },
       ];
 
-      (prisma.$queryRaw as any).mockResolvedValueOnce(mockWeeklyRows);
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(mockWeeklyRows);
 
       const result = await DEMAND_FORECASTING_AGENT.run({
         agent_id: 'demand-forecasting',
@@ -221,7 +207,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       });
 
       expect(result.status).toBe('COMPLETED');
-      const out = result.output as any;
+      const out = result.output as Record<string, unknown>;
       expect(out.totalForecasts).toBe(2);
       expect(chatSpy).toHaveBeenCalledTimes(1); // 1 single macro summary, not 2 per-segment calls
       expect(out.avoidedLoopCalls).toBe(1);
@@ -233,7 +219,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       const { prisma } = await import('@/lib/prisma');
       const chatSpy = vi.spyOn(aiGateway, 'chat');
 
-      (prisma.$queryRaw as any)
+      vi.mocked(prisma.$queryRaw)
         .mockResolvedValueOnce([
           {
             id: 'inc-1',
@@ -255,7 +241,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       });
 
       expect(result.status).toBe('COMPLETED');
-      const out = result.output as any;
+      const out = result.output as Record<string, unknown>;
       expect(out.deterministicCount).toBe(1);
       expect(out.aiCount).toBe(0);
       expect(chatSpy).not.toHaveBeenCalled();
