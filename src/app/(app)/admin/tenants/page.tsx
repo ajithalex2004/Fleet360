@@ -573,7 +573,7 @@ export default function TenantsPage() {
                 <button
                   onClick={() => setDeletingTenant(t)}
                   className="text-xs px-3 py-1.5 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/10">
-                  Hard Delete
+                  Delete
                 </button>
               )}
             </div>
@@ -593,7 +593,7 @@ export default function TenantsPage() {
       {/* ── Hard Delete Tenant dialog ────────────────────────────────────── */}
       {deletingTenant && (
         <HardDeleteConfirm
-          title="Hard delete tenant"
+          title="Delete tenant"
           target={{
             kind:        'tenant',
             id:          deletingTenant.id,

@@ -16,7 +16,7 @@ import { signSession } from '@/lib/tenant-session';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
-import { permissionsForEffectiveRole } from '@/lib/authz/session-permissions';
+import { effectivePermissions } from '@/lib/authz/session-permissions';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { tenantModulesFor } from '@/lib/module-policies';
@@ -198,13 +198,17 @@ export async function POST(request: NextRequest) {
     // catalogue for a system role): signed into the session for the
     // authorization policy and returned to the UI, so both see the same set.
     // A failure grants nothing rather than falling back to a guess.
+    // The membership's module access then narrows them (access-mask.ts).
     let effectiveRole: Awaited<ReturnType<typeof getEffectiveRole>> = null;
+    let permissions: string[] = [];
     try {
-      effectiveRole = await withPlatformAdmin(prisma, (tx) => getEffectiveRole(tx as never, user.id, userTenant.tenantId));
+      ({ effectiveRole, permissions } = await withPlatformAdmin(prisma, async (tx) => {
+        const role = await getEffectiveRole(tx as never, user.id, userTenant.tenantId);
+        return { effectiveRole: role, permissions: await effectivePermissions(tx as never, user.id, userTenant.tenantId, role) };
+      }));
     } catch (e) {
       console.error('[auth/login] effective-role resolution failed; signing in with no permissions:', e);
     }
-    const permissions = permissionsForEffectiveRole(effectiveRole);
 
     // 4. Sign session cookie (include role + residency so middleware can inject
     //    x-user-role / x-data-residency without extra DB lookups per request)

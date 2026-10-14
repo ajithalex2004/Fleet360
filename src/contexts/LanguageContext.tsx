@@ -836,6 +836,7 @@ export const arabicLabels: Record<string, string> = {
   'Admin':                  'لوحة الإدارة',
   'Users':                  'المستخدمون',
   'Roles & permissions':    'الأدوار والصلاحيات',
+  'Departments':            'الأقسام',
   'Branches & regions':     'الفروع والمناطق',
   'Billing & subscriptions':'الاشتراكات والفوترة',
   'Tenants':                'حسابات المؤسسات المستأجرة',

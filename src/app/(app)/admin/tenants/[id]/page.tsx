@@ -8,6 +8,7 @@ import { MODULES, resolveModuleKey } from '@/lib/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
 import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
+import NewUserDialog from '@/components/admin/NewUserDialog';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import type { ModulePolicies } from '@/lib/module-policy-rules';
 
@@ -888,6 +889,8 @@ export default function TenantDetailPage() {
   const [dispatchOpConfigs, setDispatchOpConfigs] = useState<Record<string, Record<string, OpConfig>>>({});
 
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showNewUser, setShowNewUser] = useState(false);
+  const [newUserNotice, setNewUserNotice] = useState('');
   const [newUser, setNewUser]       = useState({ userId:'', roleId:'' });
 
   const set = <K extends keyof TSettings>(key: K, val: TSettings[K]) =>
@@ -961,7 +964,7 @@ export default function TenantDetailPage() {
       const [tRes, rRes, uRes, arRes, sRes, wRes, bRes, npRes] = await Promise.all([
         fetch(`/api/admin/tenants/${id}`),
         fetch(`/api/admin/roles?tenantId=${id}`),
-        fetch(`/api/admin/tenants/${id}/users`),
+        fetch(`/api/admin/tenants/${id}/users`, { cache: 'no-store' }), // fresh after add / remove
         fetch('/api/admin/roles?lite=true'),              // lite — skips full permissions include
         fetch(`/api/admin/tenants/${id}/settings`),
         fetch(`/api/dispatch/weights?tenantId=${id}`),
@@ -1063,11 +1066,16 @@ export default function TenantDetailPage() {
   const removeUser = async (userId: string) => {
     if (!confirm('Remove this user from the tenant?')) return;
     const ut = users.find(u => u.userId === userId || u.id === userId);
-    if (ut?.userTenantId) {
-      await fetch(`/api/admin/users/${ut.userTenantId}`, { method:'DELETE' });
-      _detailCache.delete(id);
-      load(true);
+    if (!ut) return;
+    // Removes the membership only; the user's account and other companies are untouched.
+    const res = await fetch(`/api/admin/tenants/${id}/users?userId=${encodeURIComponent(ut.userId ?? ut.id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error ?? `Failed to remove the user (${res.status})`);
+      return;
     }
+    _detailCache.delete(id);
+    load(true);
   };
 
   // Full-page loader only for the first load: a reload after a save keeps the
@@ -1485,8 +1493,25 @@ export default function TenantDetailPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-[var(--text-muted)] text-sm">Users assigned to this tenant with their roles</p>
-            <button onClick={openAddUser} className="px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 border border-violet-500/30 text-sm hover:bg-violet-500/30">+ Add User</button>
+            <div className="flex gap-2">
+              <button onClick={openAddUser} className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)]">Add existing user</button>
+              <button onClick={() => setShowNewUser(true)} className="px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 border border-violet-500/30 text-sm hover:bg-violet-500/30">+ New User</button>
+            </div>
           </div>
+          {newUserNotice && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-green-600 text-sm flex justify-between gap-4">
+              <span>{newUserNotice}</span>
+              <button onClick={() => setNewUserNotice('')} aria-label="Dismiss">×</button>
+            </div>
+          )}
+          {showNewUser && tenant && (
+            <NewUserDialog
+              tenants={[{ id, name: tenant.name }]}
+              defaultTenantId={id}
+              onClose={() => setShowNewUser(false)}
+              onDone={(message) => { setShowNewUser(false); setNewUserNotice(message); _detailCache.delete(id); load(true); }}
+            />
+          )}
           {users.length === 0 ? (
             <div className="text-center text-[var(--text-muted)] py-12 bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-xl">No users assigned. Add users above.</div>
           ) : (

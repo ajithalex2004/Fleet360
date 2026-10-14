@@ -23,6 +23,8 @@ import {
 } from '@/lib/password-policy';
 import { signSession } from '@/lib/tenant-session';
 import { withPlatformAdmin } from '@/lib/rls';
+import { Prisma } from '@prisma/client';
+import { storedAccessMask } from '@/lib/authz/access-mask';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { linkInvitedPartnerUser } from '@/lib/exchange/partner-onboarding';
@@ -58,11 +60,18 @@ export async function POST(req: NextRequest) {
     id: string; tenant_id: string; email: string; role_id: string;
     expires_at: string; used_at: string | null; revoked: boolean;
     partner_id: string | null; partner_role: string | null;
+    first_name: string | null; last_name: string | null; mobile_number: string | null; position: string | null;
+    department_id: string | null; module_access: unknown;
   }>>(
     // partner_id/partner_role read through to_jsonb so this still works
     // before migration 20260927090000 has added those columns.
+    // The profile, department and module access chosen in the New User form
+    // (migration 20261028090000), also read through to_jsonb.
     `SELECT id::text, tenant_id, email, role_id, expires_at::text, used_at::text, revoked,
-            to_jsonb(i) ->> 'partner_id' AS partner_id, to_jsonb(i) ->> 'partner_role' AS partner_role
+            to_jsonb(i) ->> 'partner_id' AS partner_id, to_jsonb(i) ->> 'partner_role' AS partner_role,
+            to_jsonb(i) ->> 'first_name' AS first_name, to_jsonb(i) ->> 'last_name' AS last_name,
+            to_jsonb(i) ->> 'mobile_number' AS mobile_number, to_jsonb(i) ->> 'position' AS position,
+            to_jsonb(i) ->> 'department_id' AS department_id, to_jsonb(i) -> 'module_access' AS module_access
      FROM tenant_invitations i
      WHERE token_hash = $1
      LIMIT 1`,
@@ -73,6 +82,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Invitation not found.' }, { status: 404 });
   }
   const inv = rows[0];
+  // Applied to the membership: department (if it still exists) and module access.
+  const memberAccess = {
+    departmentId: inv.department_id || null,
+    ...(inv.module_access ? { moduleAccess: storedAccessMask(inv.module_access) ?? Prisma.DbNull } : {}),
+  };
   if (inv.used_at) return NextResponse.json({ ok: false, error: 'Invitation already accepted.' }, { status: 400 });
   if (inv.revoked) return NextResponse.json({ ok: false, error: 'Invitation revoked.' }, { status: 400 });
   if (new Date(inv.expires_at) < new Date()) {
@@ -125,12 +139,12 @@ export async function POST(req: NextRequest) {
           if (!existingMembership.isActive) {
             await tx.userTenant.update({
               where: { id: existingMembership.id },
-              data:  { isActive: true, roleId: role.id },
+              data:  { isActive: true, roleId: role.id, ...(await stillValidAccess(tx, tenant.id, memberAccess)) },
             });
           }
         } else {
           await tx.userTenant.create({
-            data: { id: crypto.randomUUID(), userId: existing.id, tenantId: tenant.id, roleId: role.id, isActive: true },
+            data: { id: crypto.randomUUID(), userId: existing.id, tenantId: tenant.id, roleId: role.id, isActive: true, ...(await stillValidAccess(tx, tenant.id, memberAccess)) },
           });
         }
         await linkInvitedPartnerUser(tx, inv, existing.id);
@@ -171,7 +185,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Path B: new user — require firstName/lastName + valid policy.
-    if (!firstName || !lastName) {
+    // The names the admin entered, unless the invitee typed their own.
+    const first = firstName || inv.first_name?.trim() || '';
+    const last  = lastName  || inv.last_name?.trim()  || '';
+    if (!first || !last) {
       return NextResponse.json({ ok: false, error: 'First and last name are required.' }, { status: 400 });
     }
     const validation = validatePassword(password, { email: inv.email }, DEFAULT_PASSWORD_POLICY);
@@ -193,8 +210,10 @@ export async function POST(req: NextRequest) {
           id:        newUserId,
           username:  inv.email,
           email:     inv.email,
-          firstName,
-          lastName,
+          firstName: first,
+          lastName:  last,
+          mobileNumber: inv.mobile_number || null,
+          position:  inv.position || null,
           isActive:  true,
           updatedAt: new Date(),
         },
@@ -204,7 +223,7 @@ export async function POST(req: NextRequest) {
         pwHash, newUserId,
       );
       await tx.userTenant.create({
-        data: { id: crypto.randomUUID(), userId: newUserId, tenantId: tenant.id, roleId: role.id, isActive: true },
+        data: { id: crypto.randomUUID(), userId: newUserId, tenantId: tenant.id, roleId: role.id, isActive: true, ...(await stillValidAccess(tx, tenant.id, memberAccess)) },
       });
       await linkInvitedPartnerUser(tx, inv, newUserId);
       await tx.$executeRawUnsafe(
@@ -244,4 +263,23 @@ export async function POST(req: NextRequest) {
     captureException(err, { context: 'auth.invitation.accept' });
     return NextResponse.json({ ok: false, error: 'Could not accept invitation.' }, { status: 500 });
   }
+}
+
+/**
+ * The invitation's department, dropped if it was deleted since; and its
+ * module access. Narrowed at invitation time against the role; if the role
+ * changed since, the mask can still only narrow it (access-mask.ts).
+ */
+async function stillValidAccess(
+  tx: Parameters<Parameters<typeof withPlatformAdmin>[1]>[0],
+  tenantId: string,
+  access: { departmentId: string | null; moduleAccess?: Prisma.InputJsonValue | typeof Prisma.DbNull },
+) {
+  const dept = access.departmentId
+    ? await tx.department.findFirst({ where: { id: access.departmentId, tenantId }, select: { id: true } })
+    : null;
+  return {
+    departmentId: dept?.id ?? null,
+    ...(access.moduleAccess !== undefined ? { moduleAccess: access.moduleAccess } : {}),
+  };
 }

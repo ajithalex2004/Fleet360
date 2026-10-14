@@ -9,6 +9,7 @@
 
 import * as crypto from 'crypto';
 import * as dotenv from 'dotenv';
+import { guardTestDatabases } from './db-guard';
 
 // Load env so DATABASE_URL is available when this module is imported standalone.
 // Order matters: .env.test first (test overrides), then .env with override=true
@@ -18,7 +19,9 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.test' });
 dotenv.config({ path: '.env' });
 
-if (process.env.USE_STAGING_DB === 'true' || process.env.STAGING_DATABASE_URL) {
+// USE_STAGING_DB=true runs the suites against STAGING_DATABASE_URL — a
+// remote database, so it needs the explicit opt-in below.
+if (process.env.USE_STAGING_DB === 'true') {
   if (!process.env.STAGING_DATABASE_URL) {
     throw new Error(
       'USE_STAGING_DB is set but STAGING_DATABASE_URL is not. Set it in your ' +
@@ -26,8 +29,17 @@ if (process.env.USE_STAGING_DB === 'true' || process.env.STAGING_DATABASE_URL) {
         'built-in staging connection string.'
     );
   }
-  process.env.DATABASE_URL = process.env.STAGING_DATABASE_URL;
-  process.env.DIRECT_URL = process.env.DATABASE_URL;
+  process.env.TEST_DATABASE_URL = process.env.STAGING_DATABASE_URL;
+}
+
+// Never the databases .env points at: see tests/db-guard.ts.
+const guard = guardTestDatabases();
+if (guard.replaced.length > 0 && !process.env.__FLEET360_DB_GUARD_REPORTED) {
+  process.env.__FLEET360_DB_GUARD_REPORTED = '1';
+  console.warn(
+    `[test db-guard] ignoring non-local database settings (${guard.replaced.map((r) => `${r.name} → ${r.host}`).join(', ')}). `
+      + 'Tests that need a database are skipped or fail fast; set TEST_DATABASE_URL to a local database to run them.',
+  );
 }
 
 // Web Crypto polyfill (Node < 20)

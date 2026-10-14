@@ -26,3 +26,11 @@ export const BACK_BUTTON =
 /** BACK_BUTTON at full button size, for use next to large primary buttons. */
 export const BACK_BUTTON_LG =
   'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 text-white border border-slate-800 shadow-sm hover:from-slate-600 hover:to-slate-800 px-6 py-2.5 text-sm font-medium transition-all';
+
+/**
+ * Track of an on/off switch in its "off" state: a mid grey that stands out
+ * on both the light and the dark surface. The neutral surface colour used
+ * before (bg-[var(--bg-surface-hover)]) matched the card behind it, so an
+ * off switch was invisible.
+ */
+export const SWITCH_OFF = 'bg-slate-400 dark:bg-slate-500';

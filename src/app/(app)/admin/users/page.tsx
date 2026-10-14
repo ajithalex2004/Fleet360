@@ -2,28 +2,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
-
-const ALL_MODULES = [
-  'fleet', 'driver', 'rental', 'leasing', 'maintenance',
-  'finance', 'bus-ops', 'staff', 'logistics', 'booking',
-  'compliance', 'admin',
-] as const;
-type ModuleKey = typeof ALL_MODULES[number];
-
-const MODULE_META: Record<ModuleKey, { label: string; icon: string; color: string }> = {
-  fleet:       { label: 'Fleet',         icon: '🚗', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-  driver:      { label: 'Driver',        icon: '👤', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-  rental:      { label: 'Rental (RAC)',  icon: '🔑', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  leasing:     { label: 'Leasing',       icon: '📄', color: 'bg-violet-500/20 text-violet-400 border-violet-500/30' },
-  maintenance: { label: 'Maintenance',   icon: '🔧', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-  finance:     { label: 'Finance',       icon: '💰', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  'bus-ops':   { label: 'Bus Ops',       icon: '🚌', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-  staff:       { label: 'Staff Transp.', icon: '👥', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
-  logistics:   { label: 'Logistics',     icon: '📦', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-  booking:     { label: 'Booking',       icon: '📅', color: 'bg-pink-500/20 text-pink-400 border-pink-500/30' },
-  compliance:  { label: 'Compliance',    icon: '✅', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  admin:       { label: 'Admin',         icon: '⚙️', color: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30' },
-};
+import { SWITCH_OFF } from '@/lib/ui/toggle';
+import UserAccessDialog from '@/components/admin/UserAccessDialog';
+import NewUserDialog from '@/components/admin/NewUserDialog';
 
 interface User {
   id: string;
@@ -35,21 +16,23 @@ interface User {
   department?: string;
   position?: string;
   isActive: boolean;
-  moduleAccess: Partial<Record<ModuleKey, { role: string }>> | null;
   lastLoginAt?: string | null;
   createdAt: string;
+  /** The companies the user belongs to, with the role in each. */
+  memberships?: Membership[];
+}
+
+interface Membership {
+  tenantId: string; tenantName: string; roleId: string; roleName: string; roleCode: string; isActive: boolean;
+  departmentName: string | null;
+  /** Modules narrowed below the role in this company. */
+  narrowedModules: string[];
 }
 
 interface Role   { id: string; name: string; code: string; isSystem?: boolean; tenantId?: string | null }
 interface Tenant { id: string; name: string; code?: string }
 
 const USER_TYPES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'CUSTOMER', 'VIEWER'];
-const MODULE_ROLES = ['admin', 'manager', 'operator', 'viewer'];
-
-const EMPTY_USER = {
-  username: '', email: '', firstName: '', lastName: '', department: '',
-  position: '', userType: 'STAFF', isActive: true,
-};
 
 export default function UsersPage() {
   const [users, setUsers]     = useState<User[]>([]);
@@ -57,11 +40,11 @@ export default function UsersPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [search, setSearch]   = useState('');
   const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('');
-  const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [lines, setLines]     = useState<{ managerUserId: string; departmentHeadUserId: string } | null>(null);
   const [error, setError]     = useState('');
+  const [notice, setNotice]   = useState('');
   const [formError, setFormError] = useState('');
 
   // Modals
@@ -71,18 +54,13 @@ export default function UsersPage() {
   const [showModules, setShowModules] = useState<User | null>(null);
   const [hardDeleteTarget, setHardDeleteTarget] = useState<User | null>(null);
 
-  const [userForm, setUserForm]   = useState(EMPTY_USER);
   const [editForm, setEditForm]   = useState<Partial<User & { newPassword: string }>>({});
   const [assignForm, setAssignForm] = useState({ tenantId: '', roleId: '' });
-
-  // Module access editor state (for showModules modal)
-  const [moduleEdits, setModuleEdits] = useState<Partial<Record<ModuleKey, { role: string } | null>>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (activeFilter) params.set('isActive', activeFilter);
-    if (moduleFilter) params.set('module', moduleFilter);
     try {
       const [uRes, rRes, tRes] = await Promise.all([
         fetch('/api/admin/users?' + params),
@@ -98,7 +76,7 @@ export default function UsersPage() {
       setError('');
     } catch { setError('Failed to load users'); }
     finally { setLoading(false); }
-  }, [activeFilter, moduleFilter]);
+  }, [activeFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -109,32 +87,37 @@ export default function UsersPage() {
       u.username.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
       `${u.firstName ?? ''} ${u.lastName ?? ''}`.toLowerCase().includes(q) ||
-      (u.department ?? '').toLowerCase().includes(q)
+      (u.memberships ?? []).some(m => (m.departmentName ?? '').toLowerCase().includes(q))
     );
   });
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true); setFormError('');
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...userForm, moduleAccess: {} }),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Failed'); }
-      setShowCreate(false); setUserForm(EMPTY_USER); load();
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : 'Failed to create user');
-    } finally { setSaving(false); }
-  };
-
+  // Disabling blocks sign-in and ends the user's open sessions; enabling lets them sign in again.
   const handleToggleActive = async (u: User) => {
-    await fetch(`/api/admin/users/${u.id}`, {
+    const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.username;
+    const ask = u.isActive
+      ? `Disable ${name}? They will be signed out and unable to sign in until enabled again.`
+      : `Enable ${name}? They will be able to sign in again.`;
+    if (!confirm(ask)) return;
+    const res = await fetch(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !u.isActive }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error ?? `Failed to ${u.isActive ? 'disable' : 'enable'} the user (${res.status})`);
+      return;
+    }
+    setError('');
     load();
+  };
+
+  // The Tenant dialog opens on the user's current companies and roles;
+  // picking one of them pre-fills the form to change that role.
+  const openAssign = (u: User) => {
+    setShowAssign(u); setFormError('');
+    const only = u.memberships?.length === 1 ? u.memberships[0] : null;
+    setAssignForm(only ? { tenantId: only.tenantId, roleId: only.roleId } : { tenantId: '', roleId: '' });
   };
 
   const handleAssign = async (e: React.FormEvent) => {
@@ -161,7 +144,6 @@ export default function UsersPage() {
       lastName:   u.lastName   ?? '',
       email:      u.email,
       username:   u.username,
-      department: u.department ?? '',
       position:   u.position   ?? '',
       userType:   u.userType   ?? 'STAFF',
       newPassword: '',
@@ -190,7 +172,6 @@ export default function UsersPage() {
         lastName:   editForm.lastName,
         email:      editForm.email,
         username:   editForm.username,
-        department: editForm.department,
         position:   editForm.position,
         userType:   editForm.userType,
         // Sent once loaded: '' clears a line.
@@ -222,33 +203,6 @@ export default function UsersPage() {
     } finally { setSaving(false); }
   };
 
-  const openModuleEditor = (u: User) => {
-    setShowModules(u);
-    setModuleEdits(u.moduleAccess ?? {});
-    setFormError('');
-  };
-
-  const handleSaveModules = async () => {
-    if (!showModules) return;
-    setSaving(true); setFormError('');
-    // Filter out nulls (removed modules)
-    const access: Partial<Record<ModuleKey, { role: string }>> = {};
-    for (const [k, v] of Object.entries(moduleEdits)) {
-      if (v !== null && v !== undefined) access[k as ModuleKey] = v;
-    }
-    try {
-      const res = await fetch(`/api/admin/users/${showModules.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleAccess: access }),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Failed'); }
-      setShowModules(null); load();
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : 'Failed to save module access');
-    } finally { setSaving(false); }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -272,6 +226,12 @@ export default function UsersPage() {
       </div>
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
+      {notice && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-green-600 text-sm flex justify-between gap-4">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-green-600" aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -284,11 +244,6 @@ export default function UsersPage() {
           <option value="true">Active Only</option>
           <option value="false">Inactive Only</option>
         </select>
-        <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
-          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none">
-          <option value="">All Modules</option>
-          {ALL_MODULES.map(m => <option key={m} value={m}>{MODULE_META[m].label}</option>)}
-        </select>
       </div>
 
       {/* Table */}
@@ -300,14 +255,13 @@ export default function UsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                 <tr>
-                  {['Name', 'Username', 'Email', 'Dept / Type', 'Status', 'Module Access', 'Last Login', 'Actions'].map(h => (
+                  {['Name', 'Username', 'Email', 'Company & Role', 'Dept / Type', 'Status', 'Module Access', 'Last Login', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filtered.map(u => {
-                  const modules = u.moduleAccess ? Object.keys(u.moduleAccess) as ModuleKey[] : [];
                   return (
                     <tr key={u.id} className={`hover:bg-[var(--bg-surface-hover)] transition-colors ${!u.isActive ? 'opacity-60' : ''}`}>
                       <td className="px-4 py-3 font-medium text-[var(--text-main)] whitespace-nowrap">
@@ -316,34 +270,45 @@ export default function UsersPage() {
                       </td>
                       <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{u.username}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{u.email}</td>
+                      <td className="px-4 py-3 max-w-[260px]">
+                        <div className="flex flex-col gap-1">
+                          {(u.memberships ?? []).map(m => (
+                            <span key={m.tenantId} title={m.isActive ? undefined : 'Membership inactive'}
+                              className={`px-2 py-0.5 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-[var(--text-main)] ${m.isActive ? '' : 'line-through opacity-60'}`}>
+                              {m.tenantName} · <span className="text-[var(--text-muted)]">{m.roleName}</span>
+                            </span>
+                          ))}
+                          {(u.memberships ?? []).length === 0 && <span className="text-xs text-amber-500">No company</span>}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-[var(--text-muted)]">{u.department ?? '—'}</div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          {[...new Set((u.memberships ?? []).map(m => m.departmentName).filter(Boolean))].join(', ') || '—'}
+                        </div>
                         <span className="mt-0.5 px-2 py-0.5 rounded text-xs bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">{u.userType ?? 'STAFF'}</span>
                       </td>
                       <td className="px-4 py-3">
                         <button
                           onClick={() => handleToggleActive(u)}
-                          className={`relative w-10 h-5 rounded-full transition-colors ${u.isActive ? 'bg-green-500' : 'bg-[var(--bg-surface-hover)]'}`}
-                          title={u.isActive ? 'Click to deactivate' : 'Click to activate'}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${u.isActive ? 'bg-green-500' : SWITCH_OFF}`}
+                          title={u.isActive ? 'Click to disable' : 'Click to enable'}
                         >
                           <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${u.isActive ? 'translate-x-5' : ''}`} />
                         </button>
-                        <div className="text-xs text-[var(--text-faint)] mt-1">{u.isActive ? 'Active' : 'Inactive'}</div>
+                        <div className="text-xs text-[var(--text-faint)] mt-1">{u.isActive ? 'Enabled' : 'Disabled'}</div>
                       </td>
-                      <td className="px-4 py-3 max-w-[200px]">
-                        <div className="flex flex-wrap gap-1">
-                          {modules.slice(0, 3).map(m => {
-                            const meta = MODULE_META[m];
-                            return meta ? (
-                              <span key={m} className={`px-1.5 py-0.5 rounded text-xs border ${meta.color}`}>
-                                {meta.icon} {meta.label}
-                              </span>
-                            ) : null;
-                          })}
-                          {modules.length > 3 && (
-                            <span className="px-1.5 py-0.5 rounded text-xs bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">+{modules.length - 3}</span>
-                          )}
-                          {modules.length === 0 && <span className="text-xs text-[var(--text-faint)]">No access</span>}
+                      <td className="px-4 py-3 max-w-[220px]">
+                        <div className="flex flex-col gap-1">
+                          {(u.memberships ?? []).map(m => (
+                            <span key={m.tenantId} className="text-xs text-[var(--text-muted)]"
+                              title={m.narrowedModules.length ? `Narrowed: ${m.narrowedModules.join(', ')}` : undefined}>
+                              {(u.memberships ?? []).length > 1 ? `${m.tenantName}: ` : ''}
+                              {m.narrowedModules.length
+                                ? <span className="text-amber-500">Narrowed ({m.narrowedModules.length} module{m.narrowedModules.length === 1 ? '' : 's'})</span>
+                                : 'As role'}
+                            </span>
+                          ))}
+                          {(u.memberships ?? []).length === 0 && <span className="text-xs text-[var(--text-faint)]">—</span>}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-[var(--text-faint)]">
@@ -355,20 +320,26 @@ export default function UsersPage() {
                             className="px-2.5 py-1.5 text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg transition-colors whitespace-nowrap">
                             Edit
                           </button>
-                          <button onClick={() => openModuleEditor(u)}
+                          <button onClick={() => { setShowModules(u); setFormError(''); }}
                             className="px-2.5 py-1.5 text-xs bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 border border-violet-500/30 rounded-lg transition-colors whitespace-nowrap">
                             Modules
                           </button>
-                          <button onClick={() => setShowAssign(u)}
+                          <button onClick={() => openAssign(u)}
                             className="px-2.5 py-1.5 text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg transition-colors whitespace-nowrap">
                             Tenant
+                          </button>
+                          <button onClick={() => handleToggleActive(u)}
+                            className={`px-2.5 py-1.5 text-xs border rounded-lg transition-colors whitespace-nowrap ${u.isActive
+                              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border-amber-500/30'
+                              : 'bg-green-500/10 hover:bg-green-500/20 text-green-500 border-green-500/30'}`}>
+                            {u.isActive ? 'Disable' : 'Enable'}
                           </button>
                           {/* Hard delete — hidden for protected accounts. The server enforces the same whitelist. */}
                           {u.email !== 'admin@xl-mobility.com' && (
                             <button
                               onClick={() => setHardDeleteTarget(u)}
                               className="px-2.5 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap">
-                              Hard Delete
+                              Delete
                             </button>
                           )}
                         </div>
@@ -382,115 +353,23 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* ── Create User Modal ── */}
+      {/* ── New User (company, role, department, module access, sign-in) ── */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[var(--text-main)]">New User</h2>
-              <button onClick={() => setShowCreate(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
-            </div>
-            {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                {([
-                  { l: 'Username *',    k: 'username',   ph: 'ahmed.mansouri',   req: true },
-                  { l: 'Email *',       k: 'email',      ph: 'ahmed@company.com', req: true },
-                  { l: 'First Name',    k: 'firstName',  ph: 'Ahmed' },
-                  { l: 'Last Name',     k: 'lastName',   ph: 'Al-Mansouri' },
-                  { l: 'Department',    k: 'department', ph: 'Operations' },
-                  { l: 'Position',      k: 'position',   ph: 'Fleet Manager' },
-                ] as Array<{ l: string; k: string; ph: string; req?: boolean }>).map(({ l, k, ph, req }) => (
-                  <div key={k}>
-                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{l}</label>
-                    <input
-                      type={k === 'email' ? 'email' : 'text'}
-                      value={(userForm as unknown as Record<string, string>)[k] ?? ''}
-                      onChange={e => setUserForm(p => ({ ...p, [k]: e.target.value }))}
-                      placeholder={ph} required={req}
-                      className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">User Type</label>
-                <select value={userForm.userType} onChange={e => setUserForm(p => ({ ...p, userType: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none text-sm">
-                  {USER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={() => setShowCreate(false)}
-                  className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
-                <button type="submit" disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
-                  {saving ? 'Creating…' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <NewUserDialog
+          tenants={tenants.map(t => ({ id: t.id, name: t.name }))}
+          onClose={() => setShowCreate(false)}
+          onDone={(message) => { setShowCreate(false); setNotice(message); load(); }}
+        />
       )}
 
-      {/* ── Module Access Editor Modal ── */}
+      {/* ── Module Access (per company: department + access narrowing the role) ── */}
       {showModules && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl">
-            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-main)]">Module Access</h2>
-                <p className="text-sm text-[var(--text-muted)] mt-0.5">{showModules.username} — {showModules.email}</p>
-              </div>
-              <button onClick={() => setShowModules(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
-            </div>
-            <div className="p-6 space-y-3">
-              {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
-              <p className="text-xs text-[var(--text-faint)] mb-4">Toggle access to each module and set the user&apos;s role within it.</p>
-              {ALL_MODULES.map(mod => {
-                const meta    = MODULE_META[mod];
-                const current = moduleEdits[mod];
-                const enabled = current !== null && current !== undefined;
-                return (
-                  <div key={mod} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                    enabled ? 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] opacity-60'
-                  }`}>
-                    <button
-                      onClick={() => setModuleEdits(p => ({
-                        ...p,
-                        [mod]: enabled ? null : { role: 'viewer' },
-                      }))}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-violet-500' : 'bg-[var(--bg-surface-hover)]'}`}
-                    >
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${enabled ? 'translate-x-5' : ''}`} />
-                    </button>
-                    <span className="text-lg flex-shrink-0">{meta.icon}</span>
-                    <span className="text-sm font-medium text-[var(--text-main)] flex-1">{meta.label}</span>
-                    {enabled && (
-                      <select
-                        value={current?.role ?? 'viewer'}
-                        onChange={e => setModuleEdits(p => ({ ...p, [mod]: { role: e.target.value } }))}
-                        className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs focus:outline-none focus:border-violet-500"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {MODULE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    )}
-                    {!enabled && <span className="text-xs text-[var(--text-faint)]">No access</span>}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-3">
-              <button onClick={() => setShowModules(null)}
-                className="px-5 py-2.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
-              <button onClick={handleSaveModules} disabled={saving}
-                className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-50">
-                {saving ? 'Saving…' : 'Save Access'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <UserAccessDialog
+          user={showModules}
+          memberships={(showModules.memberships ?? []).map(m => ({ tenantId: m.tenantId, tenantName: m.tenantName, roleName: m.roleName }))}
+          onClose={() => setShowModules(null)}
+          onSaved={() => { setShowModules(null); load(); }}
+        />
       )}
 
       {/* ── Edit User Modal ── */}
@@ -536,13 +415,13 @@ export default function UsersPage() {
                     className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none" />
                 </div>
               </div>
-              {/* Department / Position */}
+              {/* Position (department is per company, in Modules) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Department</label>
-                  <input type="text" value={editForm.department ?? ''} onChange={e => setEditForm(p => ({ ...p, department: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none placeholder-[var(--text-faint)]"
-                    placeholder="Operations" />
+                  <div className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Department</div>
+                  <p className="text-xs text-[var(--text-faint)] pt-1">
+                    Set per company from its Department list in <strong>Modules</strong>.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Position</label>
@@ -602,7 +481,7 @@ export default function UsersPage() {
       {/* Hard Delete User dialog */}
       {hardDeleteTarget && (
         <HardDeleteConfirm
-          title="Hard delete user"
+          title="Delete user"
           target={{
             kind:        'user',
             id:          hardDeleteTarget.id,
@@ -619,12 +498,33 @@ export default function UsersPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[var(--text-main)]">Assign to Tenant</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Tenant &amp; Role</h2>
               <button onClick={() => setShowAssign(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
             </div>
-            <p className="text-[var(--text-muted)] text-sm mb-5">
-              Assigning <span className="text-[var(--text-main)] font-medium">{showAssign.username}</span> to a tenant with a specific role.
-            </p>
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">
+                {showAssign.username} currently belongs to
+              </p>
+              {(showAssign.memberships ?? []).length === 0 ? (
+                <p className="text-sm text-amber-500">No company yet: choose a tenant and role below.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {(showAssign.memberships ?? []).map(m => (
+                    <li key={m.tenantId}>
+                      <button type="button" onClick={() => setAssignForm({ tenantId: m.tenantId, roleId: m.roleId })}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl border text-left text-sm transition-colors ${
+                          assignForm.tenantId === m.tenantId ? 'border-violet-500 bg-violet-500/10' : 'border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'}`}>
+                        <span className="text-[var(--text-main)] font-medium">{m.tenantName}</span>
+                        <span className="text-[var(--text-muted)]">{m.roleName}{m.isActive ? '' : ' (inactive)'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-[var(--text-faint)] mt-3">
+                Choose a company above to change the role there, or pick another tenant to add the user to it.
+              </p>
+            </div>
             {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
             <form onSubmit={handleAssign} className="space-y-4">
               <div>
@@ -650,7 +550,7 @@ export default function UsersPage() {
                   className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
                 <button type="submit" disabled={saving}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
-                  {saving ? 'Assigning…' : 'Assign'}
+                  {saving ? 'Saving…' : (showAssign.memberships ?? []).some(m => m.tenantId === assignForm.tenantId) ? 'Change role' : 'Add to tenant'}
                 </button>
               </div>
             </form>

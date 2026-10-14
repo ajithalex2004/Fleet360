@@ -44,18 +44,28 @@ vi.mock('@/lib/audit', () => ({ logAudit: async () => {} }));
 vi.mock('@/lib/sentry', () => ({ captureException: () => {}, captureMessage: () => {} }));
 vi.mock('@/lib/audited-action', () => ({ withAuditedAction: <T>(h: T) => h }));
 vi.mock('@/lib/session-user', () => ({ sessionUser: async () => ({ email: 'sara@acme.test', name: 'Sara Khan' }) }));
-vi.mock('@/lib/plan-limits', () => ({ requireUnderQuota: () => null }));
+vi.mock('@/lib/plan-limits', () => ({ requireUnderQuota: () => null, getLimits: () => ({ maxUsers: 100 }) }));
 vi.mock('@/lib/admin-scope', () => ({ checkGrantableRole: () => null }));
 
 const tx = vi.hoisted(() => ({
-  role: { findFirst: async () => ({ id: 'r1', name: 'Fleet Manager', code: 'FLEET_MANAGER', tenantId: 'tenant-a' }) },
-  tenant: { findUnique: async () => ({ id: 'tenant-a', name: 'Acme Fleet', isActive: true }) },
+  role: {
+    findFirst: async () => ({ id: 'r1', name: 'Fleet Manager', code: 'FLEET_MANAGER', tenantId: 'tenant-a' }),
+    // The role's permissions, for narrowing module access (member-onboarding.ts).
+    findUnique: async () => ({ id: 'r1', name: 'Fleet Manager', code: 'FLEET_MANAGER', tenantId: 'tenant-a', permissions: [] }),
+  },
+  tenant: { findUnique: async () => ({ id: 'tenant-a', name: 'Acme Fleet', plan: 'ENTERPRISE', isActive: true }) },
+  department: { findFirst: async () => null },
   userTenant: { findFirst: async () => null, count: async () => 1 },
   $queryRawUnsafe: async () => [{ c: 0n }],
   $executeRawUnsafe: async (sql: string, ...args: unknown[]) => { state.sql.push({ sql, args }); return 1; },
 }));
 vi.mock('@/lib/rls', () => ({
   withTenantRls: async (_p: unknown, _t: string, fn: (t: unknown) => Promise<unknown>) => {
+    state.inTx = true;
+    try { return await fn(tx); } finally { state.inTx = false; }
+  },
+  // Invitations are written in platform context (src/lib/admin/member-onboarding.ts).
+  withPlatformAdmin: async (_p: unknown, fn: (t: unknown) => Promise<unknown>) => {
     state.inTx = true;
     try { return await fn(tx); } finally { state.inTx = false; }
   },

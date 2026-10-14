@@ -15,12 +15,13 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { requireUnderQuota } from '@/lib/plan-limits';
-import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
+import { cacheRead, revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { withAuditedAction } from '@/lib/audited-action';
+import { storedAccessMask } from '@/lib/authz/access-mask';
 const CACHE_TAG = 'users:list';
 
 // Platform admin dashboard's stat card calls this on every page load.
@@ -54,6 +55,48 @@ const getUsers = cacheRead(
   }),
   [CACHE_TAG],
 );
+
+/** A user's company memberships as the Users list shows them: company, role, active. */
+interface UserMembership {
+  tenantId: string;
+  tenantName: string;
+  roleId: string;
+  roleName: string;
+  roleCode: string;
+  isActive: boolean;
+  departmentName: string | null;
+  /** Modules whose access is narrowed below the role here (empty: the role as is). */
+  narrowedModules: string[];
+}
+
+type Tx = Parameters<Parameters<typeof withPlatformAdmin>[1]>[0];
+
+/** Memberships of `userIds`, limited to one company when `onlyTenantId` is set. */
+async function membershipsByUser(tx: Tx, userIds: string[], onlyTenantId?: string | null): Promise<Map<string, UserMembership[]>> {
+  const byUser = new Map<string, UserMembership[]>();
+  if (userIds.length === 0) return byUser;
+  const rows = await tx.userTenant.findMany({
+    where: { userId: { in: userIds }, ...(onlyTenantId ? { tenantId: onlyTenantId } : {}) },
+    select: {
+      userId: true, tenantId: true, roleId: true, isActive: true, moduleAccess: true,
+      tenant: { select: { name: true } },
+      role: { select: { name: true, code: true } },
+      department: { select: { name: true } },
+    },
+  });
+  for (const r of rows) {
+    const list = byUser.get(r.userId) ?? [];
+    list.push({
+      tenantId: r.tenantId, tenantName: r.tenant.name, roleId: r.roleId,
+      roleName: r.role.name, roleCode: r.role.code, isActive: r.isActive !== false,
+      departmentName: r.department?.name ?? null,
+      narrowedModules: Object.keys(storedAccessMask(r.moduleAccess) ?? {}),
+    });
+    byUser.set(r.userId, list);
+  }
+  for (const list of byUser.values()) list.sort((a, b) => a.tenantName.localeCompare(b.tenantName));
+  return byUser;
+}
 
 // All modules in the platform — used for moduleAccess validation
 const ALL_MODULES = [
@@ -110,6 +153,7 @@ export async function GET(req: NextRequest) {
         const userIds = uts.map(ut => ut.userId);
         const users   = await tx.user.findMany({ where: { ...where, id: { in: userIds } } });
         const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+        const memberships = await membershipsByUser(tx, users.map(u => u.id), tenantId);
         return NextResponse.json(
           uts
             .filter(ut => userMap[ut.userId])
@@ -120,8 +164,11 @@ export async function GET(req: NextRequest) {
               roleCode:     ut.role.code,
               userTenantId: ut.id,
               isTenantActive: ut.isActive,
+              memberships:  memberships.get(ut.userId) ?? [],
             })),
-          { headers: { 'Cache-Control': publicCacheControl(30) } }
+          // The same URL answers differently per caller (a company admin
+          // sees only their company), so no shared cache may keep it.
+          { headers: { 'Cache-Control': 'private, no-store' } }
         );
       }
 
@@ -142,9 +189,13 @@ export async function GET(req: NextRequest) {
           })
         : users;
 
-      return NextResponse.json(filtered, {
-        headers: { 'Cache-Control': publicCacheControl(60) },
-      });
+      // Every company each user belongs to, with the role there (platform
+      // administrators only reach this branch).
+      const memberships = await membershipsByUser(tx, filtered.map(u => u.id));
+      return NextResponse.json(
+        filtered.map(u => ({ ...u, memberships: memberships.get(u.id) ?? [] })),
+        { headers: { 'Cache-Control': 'private, no-store' } },
+      );
     });
     } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users error:', e);

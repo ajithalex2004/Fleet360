@@ -7,6 +7,17 @@ if (!phase0Url) {
   process.exit(1);
 }
 
+// The suite creates and deletes tenants: never against production. Point
+// PHASE0_DATABASE_URL at a dedicated test database (e.g. a Neon branch).
+const { hosts: protectedHosts } = require('../tests/protected-database-hosts.json');
+let phase0Host = '';
+try { phase0Host = new URL(phase0Url).hostname; } catch { /* reported below */ }
+if (!phase0Host || protectedHosts.some((h) => phase0Host.includes(h))) {
+  console.error(`❌ PHASE0_DATABASE_URL points at ${phase0Host || 'an unparseable URL'}, the production database.`);
+  console.error('   The isolation suite writes test tenants; point PHASE0_DATABASE_URL at a dedicated test database (e.g. a Neon branch).');
+  process.exit(1);
+}
+
 console.log('🚀 Running Complete Phase 1 Behavioral Isolation Suite as fleet360_app...\n');
 
 const testFiles = [
@@ -23,6 +34,9 @@ const res = spawnSync('npx', ['vitest', 'run', '--no-file-parallelism', ...testF
   stdio: 'inherit',
   env: {
     ...process.env,
+    // tests/db-guard.ts uses TEST_DATABASE_URL and keeps a remote one only on opt-in.
+    TEST_DATABASE_URL: phase0Url,
+    ALLOW_REMOTE_TEST_DATABASE: '1',
     DATABASE_URL: phase0Url,
     RUNTIME_DIRECT_DATABASE_URL: phase0Url,
     DB_CONNECT_TIMEOUT_MS: '30000',

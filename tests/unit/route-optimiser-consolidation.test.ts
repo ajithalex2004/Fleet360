@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { runRouteOptimiser } from '@/lib/agents/route-optimiser/agent';
 import { AgentEvent } from '@/lib/agents/types';
 import { haversineKm, optimiseRoute } from '@/lib/agents/route-optimiser/tsp';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 describe('Route Optimisation & Network Consolidation Agent', () => {
   it('1. Calculates TSP geometric distance savings on multi-stop route', () => {
@@ -17,7 +24,7 @@ describe('Route Optimisation & Network Consolidation Agent', () => {
     expect(result.optimisedSequence.length).toBe(4);
   });
 
-  it('2. Evaluates Network Design structure and dollarized cost savings', async () => {
+  it.skipIf(NO_TEST_DB)('2. Evaluates Network Design structure and dollarized cost savings', async () => {
     const mockEvent: AgentEvent = {
       tenant_id: 'test-tenant',
       agent_id: 'route-optimiser',

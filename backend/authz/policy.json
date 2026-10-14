@@ -1,5 +1,5 @@
 {
- "policyVersion": "2026-10-06.3",
+ "policyVersion": "2026-10-13.1",
  "catalogueVersion": "c9977e3a",
  "catalogue": [
   "leasing:view:*",
@@ -1263,6 +1263,20 @@
    }
   },
   {
+   "template": "departments",
+   "methods": {
+    "GET": "member",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "departments/[id]",
+   "methods": {
+    "PATCH": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
    "template": "corporate-clients",
    "methods": {
     "GET": "admin",
@@ -1679,6 +1693,13 @@
    }
   },
   {
+   "template": "tenants/[id]/members",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
    "template": "tenants/[id]/invitations/[id]/revoke",
    "methods": {
     "POST": "admin"
@@ -1719,6 +1740,13 @@
     "GET": "admin",
     "POST": "admin",
     "DELETE": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/users/[id]/access",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
    }
   },
   {

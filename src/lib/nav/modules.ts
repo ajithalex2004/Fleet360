@@ -636,6 +636,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Company profile',         href: '/admin/company-profile',       icon: Building2 },
       { label: 'Users',                   href: '/admin/users',                 icon: Users },
       { label: 'Roles & permissions',     href: '/admin/roles',                 icon: Shield },
+      { label: 'Departments',             href: '/admin/departments',           icon: Building2 },
       { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2 },
       { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard },
       { label: 'Tenants',                 href: '/admin/tenants',               icon: Building2, superOnly: true },

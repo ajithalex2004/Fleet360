@@ -1,0 +1,4 @@
+{
+  "comment": "Neon endpoints holding real data. Tests never connect to them: tests/db-guard.ts and scripts/run-phase0-isolation-tests.cjs read this list.",
+  "hosts": ["ep-calm-heart-a15voo2a"]
+}

@@ -404,5 +404,7 @@ export async function isServerRunning(): Promise<boolean> {
 // ── Global teardown ───────────────────────────────────────────────────────────
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  // Without a test database (tests/db-guard.ts) a failed connection attempt
+  // makes $disconnect throw; that is not a test failure.
+  await prisma.$disconnect().catch(() => undefined);
 }, 60_000);

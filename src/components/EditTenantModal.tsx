@@ -171,7 +171,7 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
             <input type="checkbox" checked={form.isActive}
               onChange={e => set('isActive', e.target.checked)} />
             Active
-            <span className="text-xs text-[var(--text-faint)] ml-2">(uncheck to soft-delete; can be hard-deleted later)</span>
+            <span className="text-xs text-[var(--text-faint)] ml-2">(uncheck to deactivate; can be deleted later)</span>
           </label>
         </div>
 
