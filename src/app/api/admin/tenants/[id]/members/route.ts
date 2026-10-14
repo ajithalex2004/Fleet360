@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { requireAuthorizedTenant, requireSuperAdminForTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { sessionUser } from '@/lib/session-user';
@@ -30,19 +30,12 @@ import { createMember, inviteMember, parseNewMember } from '@/lib/admin/member-o
 
 type Params = { params: Promise<{ id: string }> };
 
-function guard(req: NextRequest, tenantId: string) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) return { ok: false as const, res: NextResponse.json({ error: authz.error }, { status: authz.status }) };
-  const g = requireSuperAdminForTenant(authz, tenantId);
-  if (!g.ok) return { ok: false as const, res: NextResponse.json({ error: g.error }, { status: g.status }) };
-  if (!authz.userId) return { ok: false as const, res: NextResponse.json({ error: 'Authentication required' }, { status: 401 }) };
-  return { ok: true as const, userId: authz.userId };
-}
-
 export async function GET(req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { id: tenantId } = await params;
-  const g = guard(req, tenantId);
-  if (!g.ok) return g.res;
+  const g = requireSuperAdminForTenant(authz, tenantId);
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status });
   const roleId = req.nextUrl.searchParams.get('roleId');
 
   try {
@@ -90,12 +83,19 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 async function handlePOST(req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { id: tenantId } = await params;
-  const g = guard(req, tenantId);
-  if (!g.ok) return g.res;
+  const g = requireSuperAdminForTenant(authz, tenantId);
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status });
+  if (!authz.userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
-  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
-  const onboarding = body?.onboarding === 'password' ? 'password' : body?.onboarding === 'invite' ? 'invite' : null;
+  const raw = await req.json().catch(() => null);
+  if (!raw || typeof raw !== 'object') {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  const body = stripTenantOwnershipFields(raw as Record<string, unknown>);
+  const onboarding = body.onboarding === 'password' ? 'password' : body.onboarding === 'invite' ? 'invite' : null;
   if (!onboarding) return NextResponse.json({ error: 'Choose how the user signs in: invitation or password' }, { status: 400 });
 
   const parsed = parseNewMember(body, { requireName: onboarding === 'password' });
@@ -104,12 +104,12 @@ async function handlePOST(req: NextRequest, { params }: Params) {
   try {
     if (onboarding === 'invite') {
       const inviter = await sessionUser(req.headers).catch(() => null);
-      const r = await inviteMember(req.headers, tenantId, { userId: g.userId, name: inviter?.name, email: inviter?.email }, parsed.value);
+      const r = await inviteMember(req.headers, tenantId, { userId: authz.userId, name: inviter?.name, email: inviter?.email }, parsed.value);
       if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
       return NextResponse.json({ ok: true, outcome: 'invited', emailed: r.emailed, reason: r.reason, acceptUrl: r.acceptUrl }, { status: 201 });
     }
-    const password = typeof body?.password === 'string' ? body.password : '';
-    const r = await createMember(req.headers, tenantId, { userId: g.userId }, parsed.value, password);
+    const password = typeof body.password === 'string' ? body.password : '';
+    const r = await createMember(req.headers, tenantId, { userId: authz.userId }, parsed.value, password);
     if (!r.ok) return NextResponse.json({ error: r.error, errors: r.errors }, { status: r.status });
     return NextResponse.json({ ok: true, outcome: r.existingAccount ? 'added' : 'created', userId: r.userId }, { status: 201 });
   } catch (e) {

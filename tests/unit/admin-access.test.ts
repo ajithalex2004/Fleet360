@@ -168,7 +168,7 @@ describe('middleware admin gate', () => {
   });
 
   it('does not gate non-admin API paths', async () => {
-    const res = await adminRequest('/api/bus-ops/schedules', 'GET', 'DRIVER');
+    const res = await adminRequest('/api/notifications', 'GET', 'DRIVER');
     expect(res.status).toBe(200);
   });
 });

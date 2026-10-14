@@ -72,7 +72,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `places` | 2 | self | module `dispatch` |
 | `platform` | 1 | external | external |
 | `powerbi` | 1 | module `reports` | module `reports` |
-| `public` | 6 | external | external |
+| `public` | 8 | external | external |
 | `push` | 3 | self | self |
 | `push/run-scheduler` | 1 | external | external |
 | `quotations` | 2 | module `booking-portal` | module `booking-portal` |

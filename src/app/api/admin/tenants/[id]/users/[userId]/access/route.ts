@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { requireAuthorizedTenant, requireSuperAdminForTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
@@ -33,18 +33,12 @@ type Params = { params: Promise<{ id: string; userId: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function guard(req: NextRequest, tenantId: string) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) return { ok: false as const, res: NextResponse.json({ error: authz.error }, { status: authz.status }) };
-  const g = requireSuperAdminForTenant(authz, tenantId);
-  if (!g.ok) return { ok: false as const, res: NextResponse.json({ error: g.error }, { status: g.status }) };
-  return { ok: true as const, authz };
-}
-
 export async function GET(req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { id: tenantId, userId } = await params;
-  const g = guard(req, tenantId);
-  if (!g.ok) return g.res;
+  const g = requireSuperAdminForTenant(authz, tenantId);
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status });
 
   try {
     const data = await withPlatformAdmin(prisma, async (tx) => {
@@ -89,12 +83,15 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 async function handlePUT(req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { id: tenantId, userId } = await params;
-  const g = guard(req, tenantId);
-  if (!g.ok) return g.res;
+  const g = requireSuperAdminForTenant(authz, tenantId);
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status });
 
-  let body: { moduleAccess?: unknown; departmentId?: unknown };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
+  let rawBody: Record<string, unknown>;
+  try { rawBody = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
+  const body = stripTenantOwnershipFields(rawBody) as { moduleAccess?: unknown; departmentId?: unknown };
 
   const changeAccess = body.moduleAccess !== undefined;
   let requested: AccessMask | null = null;
@@ -144,7 +141,7 @@ async function handlePUT(req: NextRequest, { params }: Params) {
 
     // Sessions carry their permissions: end them so the new access applies now.
     if (result.accessChanged) {
-      await revokeSessionsSafely({ userId, tenantId, reason: 'module-access-changed', revokedBy: g.authz.userId });
+      await revokeSessionsSafely({ userId, tenantId, reason: 'module-access-changed', revokedBy: authz.userId });
     }
     return NextResponse.json({ ok: true, ...(changeAccess ? { moduleAccess: result.mask } : {}), ...(departmentId !== undefined ? { departmentId } : {}) });
   } catch (e) {

@@ -12,24 +12,18 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { departmentInput, isUniqueViolation } from '@/lib/admin/departments';
 
-/** The caller's company; a platform admin may name another with ?tenantId=. */
-function targetTenant(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
-  if (!authz.ok) return { ok: false as const, res: NextResponse.json({ error: authz.error }, { status: authz.status }) };
-  return { ok: true as const, tenantId: authz.tenantId };
-}
-
 export async function GET(req: NextRequest) {
-  const t = targetTenant(req);
-  if (!t.ok) return t.res;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const tenantId = authz.tenantId;
   const includeInactive = req.nextUrl.searchParams.get('includeInactive') === 'true';
   try {
-    const rows = await withTenantRls(prisma, t.tenantId, (tx) => tx.department.findMany({
-      where: { tenantId: t.tenantId, ...(includeInactive ? {} : { isActive: true }) },
+    const rows = await withTenantRls(prisma, tenantId, (tx) => tx.department.findMany({
+      where: { tenantId, ...(includeInactive ? {} : { isActive: true }) },
       select: { id: true, name: true, code: true, isActive: true, _count: { select: { members: true } } },
       orderBy: { name: 'asc' },
     }));
@@ -44,13 +38,16 @@ export async function GET(req: NextRequest) {
 }
 
 async function handlePOST(req: NextRequest) {
-  const t = targetTenant(req);
-  if (!t.ok) return t.res;
-  const input = departmentInput(await req.json().catch(() => null), { requireName: true });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const tenantId = authz.tenantId;
+  const rawBody = await req.json().catch(() => null);
+  const body = rawBody && typeof rawBody === 'object' ? stripTenantOwnershipFields(rawBody as Record<string, unknown>) : null;
+  const input = departmentInput(body, { requireName: true });
   if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
   try {
-    const dept = await withTenantRls(prisma, t.tenantId, (tx) => tx.department.create({
-      data: { tenantId: t.tenantId, name: input.value.name!, code: input.value.code ?? null },
+    const dept = await withTenantRls(prisma, tenantId, (tx) => tx.department.create({
+      data: { tenantId, name: input.value.name!, code: input.value.code ?? null },
       select: { id: true, name: true, code: true, isActive: true },
     }));
     return NextResponse.json(dept, { status: 201 });

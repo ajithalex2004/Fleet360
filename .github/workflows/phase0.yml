@@ -233,6 +233,8 @@ jobs:
       - name: Cross-tenant isolation suite
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          ALLOW_REMOTE_TEST_DATABASE: "1"
         run: npm run test:isolation:integration
 
       - name: Record the evidence
@@ -318,6 +320,8 @@ jobs:
       - name: Leasing lifecycle + return-workflow integration suites
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          ALLOW_REMOTE_TEST_DATABASE: "1"
         run: npx vitest run tests/integration/leasing-lifecycle-postgres.test.ts tests/integration/leasing-return-workflow-postgres.test.ts
 
       - name: Record the evidence
@@ -438,6 +442,7 @@ jobs:
       - name: Dunning & collections integration suite
         env:
           DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: npx vitest run tests/integration/dunning-collections-postgres.test.ts --testTimeout=120000
 
       - name: Record the evidence
@@ -520,6 +525,8 @@ jobs:
       - name: Audit log transaction race suite
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          ALLOW_REMOTE_TEST_DATABASE: "1"
         run: npx vitest run tests/integration/audit-log-race.test.ts
 
       - name: Record the evidence

@@ -10,28 +10,24 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { departmentInput, isUniqueViolation } from '@/lib/admin/departments';
 
 type Params = { params: Promise<{ id: string }> };
 
-/** The caller's company; a platform admin may name another with ?tenantId=. */
-function targetTenant(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
-  if (!authz.ok) return { ok: false as const, res: NextResponse.json({ error: authz.error }, { status: authz.status }) };
-  return { ok: true as const, tenantId: authz.tenantId };
-}
-
 async function handlePATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const t = targetTenant(req);
-  if (!t.ok) return t.res;
-  const input = departmentInput(await req.json().catch(() => null), { requireName: false });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const tenantId = authz.tenantId;
+  const rawBody = await req.json().catch(() => null);
+  const body = rawBody && typeof rawBody === 'object' ? stripTenantOwnershipFields(rawBody as Record<string, unknown>) : null;
+  const input = departmentInput(body, { requireName: false });
   if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
   try {
-    const updated = await withTenantRls(prisma, t.tenantId, async (tx) => {
-      const n = await tx.department.updateMany({ where: { id, tenantId: t.tenantId }, data: { ...input.value, updatedAt: new Date() } });
+    const updated = await withTenantRls(prisma, tenantId, async (tx) => {
+      const n = await tx.department.updateMany({ where: { id, tenantId }, data: { ...input.value, updatedAt: new Date() } });
       return n.count ? tx.department.findUnique({ where: { id }, select: { id: true, name: true, code: true, isActive: true } }) : null;
     });
     if (!updated) return NextResponse.json({ error: 'Department not found' }, { status: 404 });
@@ -45,10 +41,11 @@ async function handlePATCH(req: NextRequest, { params }: Params) {
 
 async function handleDELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const t = targetTenant(req);
-  if (!t.ok) return t.res;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const tenantId = authz.tenantId;
   try {
-    const n = await withTenantRls(prisma, t.tenantId, (tx) => tx.department.deleteMany({ where: { id, tenantId: t.tenantId } }));
+    const n = await withTenantRls(prisma, tenantId, (tx) => tx.department.deleteMany({ where: { id, tenantId } }));
     if (!n.count) return NextResponse.json({ error: 'Department not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
