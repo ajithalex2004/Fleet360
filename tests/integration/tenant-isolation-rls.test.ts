@@ -616,7 +616,7 @@ describe('RLS applies to every tenant-scoped table', () => {
     it(`${model}: tenant A finds 0 rows with no context`, async () => {
       // The "killer test" applied to each table — proves RLS is wired
       // and the policy fires for every model that has a tenant_id column.
-      const result = await (basePrisma as unknown as Record<string, { findMany: () => Promise<unknown[]> }>)[model].findMany();
+      const result = await (basePrisma as unknown as Record<string, { findMany: (args?: unknown) => Promise<unknown[]> }>)[model].findMany({ select: { id: true } });
       expect(result).toEqual([]);
     });
 
