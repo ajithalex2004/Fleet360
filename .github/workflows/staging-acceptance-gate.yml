@@ -62,8 +62,8 @@ jobs:
           # so after a main push staging still runs develop's commit and
           # the SHA check could never match (it failed on every main push,
           # e.g. 0fd58e8 against deployed 380a513). The isolation suite
-          # still runs against staging.
-          EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && github.sha || '' }}
+          # Only enforce candidate SHA check on push to develop, which Railway auto-deploys to staging.
+          EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && github.sha || '' }}
         run: |
           echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN${EXPECTED_CANDIDATE_SHA:+ for candidate $EXPECTED_CANDIDATE_SHA}..."
           npm run test:staging-acceptance

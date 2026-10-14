@@ -286,6 +286,26 @@ In earlier iterations (2026-09-12), 15 routes registered under `backend/main.go`
 * **Operational Rollback Rehearsal**:
   - Rollback rehearsed and validated in staging: flipping `LOGISTICS_GO_PROXY_ENABLED=false` immediately reverts 100% of canary traffic back to Next.js route handlers with zero dropped requests.
 
+---
+
+## 7. Shipping Requests Go Cutover (2026-10-14)
+
+Demand intake and conversion from shipping requests to shipment orders cut over to the Go backend cluster (`fleet360-backend`):
+
+* **Go Handlers & Routes (`backend/main.go` & `backend/handlers/logistics_shipping_requests.go`)**:
+  - `GET /api/v1/logistics/shipping-requests`: list tenant shipping requests with status, shipper, search filters, and limit pagination (joined with `customers` table for shipper metadata).
+  - `POST /api/v1/logistics/shipping-requests`: create new shipping request with customer validation, atomic document sequence generation (`SR-YY00001`), and server-side tenant isolation.
+  - `GET /api/v1/logistics/shipping-requests/:id`: load single request by ID behind `auth.WithTenant` and `deleted_at IS NULL`.
+  - `PATCH /api/v1/logistics/shipping-requests/:id`: state machine transitions (`DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `CANCELLED`) with review notes; blocks direct conversion to `CONVERTED`.
+  - `POST /api/v1/logistics/shipping-requests/:id/convert`: atomic conversion of `ACCEPTED` request into `logistics_shipment_orders` (`DRAFT`, `SPOT`, `PRIVATE`), automatically generating default pickup/delivery stops, cargo lines, `SHIPPING_REQUEST_CONVERTED` tracking events, and updating request status to `CONVERTED` in a single transaction.
+* **Unified Route Map Parity (`src/lib/go-routes.ts`)**:
+  - Total Go-forwarded routes expanded from 44 to 49.
+  - Verified 1:1 against `backend/main.go` via static parsing in `tests/unit/go-route-map.test.ts` (6/6 passing).
+  - Verified proxy routing and fail-closed / canary controls in `tests/unit/api-shim.test.ts` (50/50 passing).
+* **Cross-Language Atomic Sequences**:
+  - Go's `NextShippingRequestNo` and `NextShipmentOrderNo` utilize PostgreSQL atomic `INSERT INTO logistics_document_sequences ... ON CONFLICT (tenant_id, doc_type, year_key) DO UPDATE SET current_val = ... RETURNING current_val`, ensuring zero numbering drift or collisions across Go and Next.js runtimes.
+
+
 
 
 
