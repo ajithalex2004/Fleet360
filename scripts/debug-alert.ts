@@ -1,4 +1,3 @@
-// @ts-nocheck — one-off CLI script, types not maintained
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -58,10 +57,10 @@ async function debugVehicle() {
 
         let nextServiceMileage = 0;
         if (config.frequency === 'By Odometer') {
-            nextServiceMileage = (schedule.lastServiceMileage ?? 0) + (config.frequencyValue ?? 0);
+            nextServiceMileage = Number(schedule.lastServiceMileage ?? 0) + Number(config.frequencyValue ?? 0);
         }
 
-        const mileageDiff = nextServiceMileage - (vehicle.currentMileage ?? 0);
+        const mileageDiff = nextServiceMileage - Number(vehicle.currentMileage ?? 0);
 
         console.log('Calculation:');
         console.log(`Last Service Mileage: ${schedule.lastServiceMileage}`);
@@ -71,15 +70,9 @@ async function debugVehicle() {
         console.log(`Diff (Due - Current): ${mileageDiff}`);
         console.log(`Threshold: ${config.thresholdValue}`);
 
-        let isTriggered = false;
-        let isOverdue = false;
-
         if (mileageDiff <= (config.thresholdValue ?? 0) && mileageDiff > 0) {
-            isTriggered = true;
             console.log('RESULT: Triggered (Due Soon)');
         } else if (mileageDiff <= 0) {
-            isTriggered = true;
-            isOverdue = true;
             console.log('RESULT: Triggered (Overdue)');
         } else {
             console.log('RESULT: Not Triggered');

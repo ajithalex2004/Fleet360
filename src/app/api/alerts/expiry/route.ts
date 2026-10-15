@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
-      const module = (searchParams.get('module') || 'ALL').toUpperCase();
+      const moduleFilter = (searchParams.get('module') || 'ALL').toUpperCase();
       const daysParam = searchParams.get('days') || 'ALL';
       const maxDays = daysParam === 'ALL' ? 90 : Math.min(parseInt(daysParam) || 90, 90);
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       // ──────────────────────────────────────────────
       // 1. rental_documents — Emirates IDs, licenses, passports, visit visas
       // ──────────────────────────────────────────────
-      if (module === 'ALL' || module === 'RENTAL') {
+      if (moduleFilter === 'ALL' || moduleFilter === 'RENTAL') {
         try {
           const rows = await tx.$queryRawUnsafe<any[]>(`
             SELECT
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       // ──────────────────────────────────────────────
       // 2. rental_insurance_policies — RAC insurance expiry
       // ──────────────────────────────────────────────
-      if (module === 'ALL' || module === 'RENTAL') {
+      if (moduleFilter === 'ALL' || moduleFilter === 'RENTAL') {
         try {
           const rows = await tx.$queryRawUnsafe<any[]>(`
             SELECT
@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
       // ──────────────────────────────────────────────
       // 3. leasing_credit_assessments — lessee license expiry
       // ──────────────────────────────────────────────
-      if (module === 'ALL' || module === 'LEASING') {
+      if (moduleFilter === 'ALL' || moduleFilter === 'LEASING') {
         try {
           const rows = await tx.$queryRawUnsafe<any[]>(`
             SELECT
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
       // ──────────────────────────────────────────────
       // 4. leasing_insurance_policies — leasing insurance
       // ──────────────────────────────────────────────
-      if (module === 'ALL' || module === 'LEASING') {
+      if (moduleFilter === 'ALL' || moduleFilter === 'LEASING') {
         try {
           const rows = await tx.$queryRawUnsafe<any[]>(`
             SELECT

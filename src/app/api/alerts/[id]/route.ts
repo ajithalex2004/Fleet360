@@ -28,8 +28,7 @@ export async function PATCH(
             const body = await request.json();
 
             // Safety check for Prisma (Mock Fallback similar to other routes)
-            // @ts-ignore
-            if (!tx.alert) {
+            if (!('alert' in tx) || !tx.alert) {
                 console.warn('[Alerts] Prisma Client out of sync. Mocking success.');
                 return NextResponse.json({
                     id,

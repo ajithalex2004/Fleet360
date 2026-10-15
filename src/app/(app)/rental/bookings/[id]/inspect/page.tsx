@@ -250,7 +250,15 @@ export default function InspectionPage() {
   };
 
   const toggleZone = (zoneId: string) =>
-    setDamaged(prev => { const n = new Set(prev); n.has(zoneId) ? n.delete(zoneId) : n.add(zoneId); return n; });
+    setDamaged(prev => {
+      const n = new Set(prev);
+      if (n.has(zoneId)) {
+        n.delete(zoneId);
+      } else {
+        n.add(zoneId);
+      }
+      return n;
+    });
 
   const submit = async () => {
     setSaving(true); setError(''); setSuccess('');
