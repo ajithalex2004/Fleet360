@@ -1323,11 +1323,11 @@ export interface EnterpriseConnectionConfig {
   systemType: EnterpriseSystemType;
   baseUrl: string;
   authType: EnterpriseAuthType;
-  authCredentials?: Record<string, any>;
+  authCredentials?: Record<string, unknown>;
   headers?: Record<string, string>;
   fieldMappings?: Record<string, string>; // canonicalField -> externalField
   openApiSpecUrl?: string;
-  openApiSpecJson?: Record<string, any>;
+  openApiSpecJson?: Record<string, unknown>;
   isActive: boolean;
   rateLimitPerMin: number;
   lastSyncAt?: string;
@@ -1347,8 +1347,8 @@ export interface EnterpriseSyncRecord {
   direction: EnterpriseSyncDirection;
   entityId: string;
   status: EnterpriseSyncStatus;
-  requestPayload: any;
-  responsePayload?: any;
+  requestPayload: unknown;
+  responsePayload?: unknown;
   httpStatus?: number;
   durationMs: number;
   retryCount: number;
@@ -1407,7 +1407,7 @@ export interface BoundingBox {
 
 export interface FieldGroundingItem {
   fieldName: string;
-  extractedValue: any;
+  extractedValue: unknown;
   normalizedValue?: string;
   originalText?: string;
   originalValueArabic?: string;
@@ -1427,8 +1427,8 @@ export interface DocumentSourceGrounding {
 
 export interface MasterDataMismatch {
   field: string;
-  documentValue: any;
-  masterValue: any;
+  documentValue: unknown;
+  masterValue: unknown;
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
   description: string;
 }
@@ -1604,7 +1604,7 @@ export interface DocumentExtractionResult {
   crossDocRelationship?: CrossDocRelationshipResult;
   riskEvaluation?: DocumentRiskEvaluation;
   lifecycleStatus?: DocumentLifecycleStatus;
-  extractedKeyValues?: Record<string, any>;
+  extractedKeyValues?: Record<string, unknown>;
   summary: string;
   rawOcrText?: string;
   warnings?: string[];

@@ -2,8 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   evaluateMigrationFailure,
   extractFailureDetails,
-  shouldHaltOnForbiddenError,
-  hasExpectedGapSignature,
   verifyDatabasePreconditions,
   buildEffectiveMigrationState,
   validateResumptionState,
@@ -11,7 +9,6 @@ import {
   splitSqlStatements,
   extractPostgresErrorFromPrisma,
   probeCausalMigrationFailure,
-  FORBIDDEN_ERROR_PATTERNS,
   EXPECTED_GAP_SIGNATURES,
   DOCUMENTED_GAPS,
 } from '../../scripts/fresh-install-migrate.cjs';
@@ -443,8 +440,7 @@ describe('Database target resolution & preconditions', () => {
   });
 
   it('fails closed when querying _prisma_migrations returns permission denied (code 42501)', async () => {
-    const permError = new Error('permission denied for table _prisma_migrations');
-    (permError as any).code = '42501';
+    const permError = Object.assign(new Error('permission denied for table _prisma_migrations'), { code: '42501' });
 
     const mockPrisma = {
       $queryRaw: vi.fn()
@@ -465,8 +461,7 @@ describe('Database target resolution & preconditions', () => {
   });
 
   it('rejects database if objects exist in non-public managed schemas (e.g. finance or fleet)', async () => {
-    const missingTableError = new Error('relation "_prisma_migrations" does not exist');
-    (missingTableError as any).code = '42P01';
+    const missingTableError = Object.assign(new Error('relation "_prisma_migrations" does not exist'), { code: '42P01' });
 
     const mockPrisma = {
       $queryRaw: vi.fn()
@@ -541,8 +536,7 @@ describe('Database target resolution & preconditions', () => {
   });
 
   it('passes cleanly for a genuinely fresh empty database where _prisma_migrations does not exist and 0 app objects exist', async () => {
-    const missingTableError = new Error('relation "_prisma_migrations" does not exist');
-    (missingTableError as any).code = '42P01';
+    const missingTableError = Object.assign(new Error('relation "_prisma_migrations" does not exist'), { code: '42P01' });
 
     const mockPrisma = {
       $queryRaw: vi.fn()
@@ -656,8 +650,10 @@ describe('Lexical SQL splitter and root causal failure probe', () => {
     const mockTx = {
       $executeRawUnsafe: vi.fn().mockImplementation(async (stmt: string) => {
         if (stmt.includes('bus_routes')) {
-          const err = new Error('Raw query failed. Code: `42P01`. Message: `relation "public.bus_routes" does not exist`');
-          (err as any).meta = { code: '42P01', message: 'relation "public.bus_routes" does not exist' };
+          const err = Object.assign(
+            new Error('Raw query failed. Code: `42P01`. Message: `relation "public.bus_routes" does not exist`'),
+            { meta: { code: '42P01', message: 'relation "public.bus_routes" does not exist' } }
+          );
           throw err;
         }
         return 0;
@@ -665,19 +661,19 @@ describe('Lexical SQL splitter and root causal failure probe', () => {
     };
 
     const mockPrisma = {
-      $transaction: vi.fn().mockImplementation(async (callback: (tx: any) => Promise<any>) => {
+      $transaction: vi.fn().mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
         await callback(mockTx);
       }),
     };
 
     const rootError = (await probeCausalMigrationFailure(
-      mockPrisma as any,
+      mockPrisma as unknown as Parameters<typeof probeCausalMigrationFailure>[0],
       '20260816000000_route_consolidation_phase2_schema'
-    )) as any;
+    )) as { code?: string; message?: string } | null;
 
     expect(rootError).toBeTruthy();
-    expect(rootError.code).toBe('42P01');
-    expect(rootError.message).toBe('relation "public.bus_routes" does not exist');
+    expect(rootError?.code).toBe('42P01');
+    expect(rootError?.message).toBe('relation "public.bus_routes" does not exist');
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });

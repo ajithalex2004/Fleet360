@@ -63,7 +63,8 @@ export abstract class BaseEnterpriseAdapter {
    * Builds standardized authentication headers based on authType.
    */
   protected getAuthHeaders(): Record<string, string> {
-    const { authType, authCredentials = {}, headers = {} } = this.connection;
+    const { authType, headers = {} } = this.connection;
+    const authCredentials = (this.connection.authCredentials as Record<string, string> | undefined) || {};
     const baseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',

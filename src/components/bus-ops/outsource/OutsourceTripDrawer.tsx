@@ -6,19 +6,66 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   X,
   Briefcase,
   Award,
-  DollarSign,
   Send,
   CheckCircle2,
-  AlertCircle,
-  Copy,
-  ExternalLink,
-  Users,
 } from 'lucide-react';
+
+export interface Partner {
+  id: string;
+  legalName: string;
+  partnerCode?: string;
+  [key: string]: unknown;
+}
+
+export interface Quote {
+  id: string;
+  partner?: { legalName?: string };
+  totalAmount: number | string;
+  revisionNo?: number | string;
+  validUntil: string;
+}
+
+export interface AwardInfo {
+  partner?: { legalName?: string };
+  totalAwarded: number | string;
+  assignment?: {
+    vehiclePlate?: string;
+    driverName?: string;
+    driverPhone?: string;
+  };
+}
+
+export interface OutsourceRequest {
+  id?: string;
+  status: string;
+  quotes?: Quote[];
+  award?: AwardInfo;
+  [key: string]: unknown;
+}
+
+export interface RateData {
+  found?: boolean;
+  baseAmount: number;
+  totalAmount?: number | string;
+  vatAmount?: number | string;
+  title?: string;
+}
+
+interface ContractRatePricingSectionProps {
+  tripId: string;
+  originName?: string;
+  destinationName?: string;
+  serviceDate?: string;
+  departureTime?: string;
+  requiredCapacity?: number;
+  approvedPartners: Partner[];
+  onAwarded: () => void;
+}
 
 interface OutsourceTripDrawerProps {
   tripId: string;
@@ -47,8 +94,8 @@ export function OutsourceTripDrawer({
   onClose,
   onAwarded,
 }: OutsourceTripDrawerProps) {
-  const [approvedPartners, setApprovedPartners] = useState<any[]>([]);
-  const [outsourceRequest, setOutsourceRequest] = useState<any | null>(null);
+  const [approvedPartners, setApprovedPartners] = useState<Partner[]>([]);
+  const [outsourceRequest, setOutsourceRequest] = useState<OutsourceRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -58,7 +105,7 @@ export function OutsourceTripDrawer({
   const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([]);
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!tripId) return;
     setLoading(true);
     try {
@@ -72,13 +119,13 @@ export function OutsourceTripDrawer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [tripId]);
 
   useEffect(() => {
     if (isOpen) {
       void loadData();
     }
-  }, [isOpen, tripId]);
+  }, [isOpen, loadData]);
 
   if (!isOpen) return null;
 
@@ -162,6 +209,11 @@ export function OutsourceTripDrawer({
 
           {/* Body */}
           <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+            {loading && (
+              <div className="p-3 text-center text-slate-400 text-xs animate-pulse">
+                Loading partner network status...
+              </div>
+            )}
             {feedback && (
               <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -196,8 +248,8 @@ export function OutsourceTripDrawer({
                 {/* Quotes Received */}
                 <div className="space-y-2">
                   <span className="text-[11px] text-slate-400 font-semibold block">Partner Quotes ({outsourceRequest.quotes?.length || 0})</span>
-                  {outsourceRequest.quotes?.length > 0 ? (
-                    outsourceRequest.quotes.map((q: any) => (
+                  {(outsourceRequest.quotes ?? []).length > 0 ? (
+                    (outsourceRequest.quotes ?? []).map((q) => (
                       <div key={q.id} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-white">{q.partner?.legalName}</span>
@@ -254,7 +306,7 @@ export function OutsourceTripDrawer({
                   <label className="block text-slate-300 font-semibold mb-1">Pricing Method</label>
                   <select
                     value={pricingMethod}
-                    onChange={(e) => setPricingMethod(e.target.value as any)}
+                    onChange={(e) => setPricingMethod(e.target.value as 'RFQ' | 'CONTRACT_RATE' | 'MANUAL_PRICE')}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="RFQ">Request for Quotation (RFQ)</option>
@@ -346,9 +398,9 @@ function ContractRatePricingSection({
   requiredCapacity,
   approvedPartners,
   onAwarded,
-}: any) {
+}: ContractRatePricingSectionProps) {
   const [selectedPartnerId, setSelectedPartnerId] = useState(approvedPartners[0]?.id || '');
-  const [rateData, setRateData] = useState<any | null>(null);
+  const [rateData, setRateData] = useState<RateData | null>(null);
   const [loadingRate, setLoadingRate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -417,7 +469,7 @@ function ContractRatePricingSection({
           onChange={(e) => setSelectedPartnerId(e.target.value)}
           className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
         >
-          {approvedPartners.map((p: any) => (
+          {approvedPartners.map((p) => (
             <option key={p.id} value={p.id}>
               {p.legalName} ({p.partnerCode})
             </option>

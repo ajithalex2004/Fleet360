@@ -72,19 +72,19 @@ export default function KPIDashboard({ greeting }: Props) {
         },
         bookings: {
           total: books.length,
-          active: books.filter((b: any) => b.status === 'ACTIVE').length,
-          pending: books.filter((b: any) => b.status === 'PENDING').length,
-          confirmed: books.filter((b: any) => b.status === 'CONFIRMED').length,
+          active: books.filter((b: { status?: string }) => b.status === 'ACTIVE').length,
+          pending: books.filter((b: { status?: string }) => b.status === 'PENDING').length,
+          confirmed: books.filter((b: { status?: string }) => b.status === 'CONFIRMED').length,
         },
         maintenance: {
           total: maint.length,
-          critical: maint.filter((m: any) => m.priority === 'Critical').length,
-          high: maint.filter((m: any) => m.priority === 'High').length,
+          critical: maint.filter((m: { priority?: string }) => m.priority === 'Critical').length,
+          high: maint.filter((m: { priority?: string }) => m.priority === 'High').length,
         },
         alerts: {
           total: alerts.length,
-          critical: alerts.filter((a: any) => a.severity === 'CRITICAL').length,
-          high: alerts.filter((a: any) => a.severity === 'HIGH').length,
+          critical: alerts.filter((a: { severity?: string }) => a.severity === 'CRITICAL').length,
+          high: alerts.filter((a: { severity?: string }) => a.severity === 'HIGH').length,
         },
       });
       setLastUpdated(new Date());

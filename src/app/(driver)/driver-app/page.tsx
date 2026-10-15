@@ -88,7 +88,7 @@ export default function DriverAppLauncher() {
   const routeAfterLogin = useCallback(async () => {
     try {
       // Try to find an active shift. If none, start one.
-      let shiftRes = await fetch('/api/driver-app/shift/current', { credentials: 'include' });
+      const shiftRes = await fetch('/api/driver-app/shift/current', { credentials: 'include' });
       if (shiftRes.status === 401) {
         // Session lost mid-flow — bounce to launcher
         router.replace('/driver-app');

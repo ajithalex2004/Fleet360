@@ -1,4 +1,3 @@
-// @ts-nocheck — one-off CLI script, types not maintained
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -51,10 +50,10 @@ async function simulate() {
     }
 
     if (config.frequency === 'By Odometer') {
-        nextServiceMileage = lastServiceMileage + (config.frequencyValue || 0);
+        nextServiceMileage = Number(lastServiceMileage ?? 0) + Number(config.frequencyValue || 0);
     }
 
-    const mileageDiff = nextServiceMileage - vehicle.currentMileage;
+    const mileageDiff = nextServiceMileage - Number(vehicle.currentMileage ?? 0);
     console.log(`Calculated Diff: ${mileageDiff} (Next: ${nextServiceMileage} - Current: ${vehicle.currentMileage})`);
 
     let isTriggered = false;

@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     // Build a plate → activeContractId map up front (scoped to tenant).
     const plates = [...new Set(parsed.rows.map(r => r.licensePlate).filter(Boolean) as string[])]
       .map(p => p.toUpperCase().replace(/\s+/g, ''));
-    let plateMap = new Map<string, string>();
+    const plateMap = new Map<string, string>();
     if (plates.length > 0) {
       // LeaseContractVehicle is scoped via the parent contract, so we
       // join through contract.tenantId to filter by tenant.

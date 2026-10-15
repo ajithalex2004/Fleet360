@@ -44,22 +44,23 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       if (!contract) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
-      const vehicles = await (tx as any).leaseContractVehicle.findMany({
+      const vehicles = await tx.leaseContractVehicle.findMany({
         where: { tenantId, contractId: params.id },
       });
-      return NextResponse.json(vehicles.map((v: any) => ({
+      return NextResponse.json(vehicles.map((v) => ({
         id: v.id,
-        type: v.vehicleType ?? v.type ?? '',
+        type: v.vehicleType ?? '',
         make: v.make ?? '',
         model: v.model ?? '',
         year: v.year ?? null,
-        licensePlate: v.licensePlate ?? v.plateNumber ?? '',
-        driver: v.driverId ?? v.driverName ?? v.driver ?? '',
+        licensePlate: v.licensePlate ?? '',
+        driver: v.driverId ?? '',
         monthlyRate: v.monthlyRate != null ? Number(v.monthlyRate) : 0,
         status: v.status ?? 'ACTIVE',
       })));
-    } catch (e: any) {
-      console.error('GET vehicles error:', e?.message);
+    } catch (e: unknown) {
+      const err = e as Error;
+      console.error('GET vehicles error:', err?.message);
       return NextResponse.json([], { status: 200 });
     }
   });
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         vin,
         mileageStart,
         status,
-      } = body as Record<string, any>;
+      } = body as Record<string, unknown>;
 
       const contract = await tx.leaseContract2.findFirst({
         where: { id: params.id, tenantId, deletedAt: null },
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       }
 
       // Look up real fleet vehicle by vehicleId or licensePlate if provided
-      let realVehicle: any = null;
+      let realVehicle: Awaited<ReturnType<typeof tx.vehicle.findFirst>> = null;
       if (vehicleId || licensePlate) {
         realVehicle = await tx.vehicle.findFirst({
           where: {
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
             }
           }
 
-          const vehicle = await (tx as any).leaseContractVehicle.create({
+          const vehicle = await tx.leaseContractVehicle.create({
             data: {
               contractId: params.id,
               vehicleId: realVehicle?.id ?? (vehicleId ? String(vehicleId) : null),
@@ -230,12 +231,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           return NextResponse.json({
             id: vehicle.id,
             vehicleId: vehicle.vehicleId ?? null,
-            type: vehicle.vehicleType ?? vehicle.type ?? vehicleTypeVal,
-            make: vehicle.make ?? make ?? '',
-            model: vehicle.model ?? model ?? '',
-            year: vehicle.year ?? year ?? null,
+            type: vehicle.vehicleType ?? vehicleTypeVal,
+            make: vehicle.make ?? (make ? String(make) : ''),
+            model: vehicle.model ?? (model ? String(model) : ''),
+            year: vehicle.year ?? (year != null ? Number(year) : null),
             licensePlate: vehicle.licensePlate ?? plateVal,
-            driver: vehicle.driverId ?? driver ?? '',
+            driver: vehicle.driverId ?? (driver ? String(driver) : ''),
             monthlyRate: vehicle.monthlyRate != null ? Number(vehicle.monthlyRate) : finalMonthlyRate,
             status: vehicle.status ?? 'ACTIVE',
           }, { status: 201 });
@@ -243,9 +244,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       );
 
       return result;
-    } catch (e: any) {
-      console.error('POST /api/leasing/contracts-v2/[id]/vehicles error:', e?.message);
-      return NextResponse.json({ error: e?.message ?? 'Failed to add vehicle' }, { status: 500 });
+    } catch (e: unknown) {
+      const err = e as Error;
+      console.error('POST /api/leasing/contracts-v2/[id]/vehicles error:', err?.message);
+      return NextResponse.json({ error: err?.message ?? 'Failed to add vehicle' }, { status: 500 });
     }
   });
   return pendingId

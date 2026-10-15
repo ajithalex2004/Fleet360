@@ -19,7 +19,7 @@ const eslintConfig = [
     // on ESM import syntax; it's the wrong rule for this file type, not a
     // real problem with these files. Everything else (no-unused-vars,
     // no-explicit-any, etc.) still applies here.
-    files: ["scripts/**/*.{js,cjs}", "prisma/**/*.js"],
+    files: ["scripts/**/*.{js,cjs}", "tests/**/*.cjs", "prisma/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },
