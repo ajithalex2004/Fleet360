@@ -117,7 +117,7 @@ export default function FleetDiagnosticsPage() {
       setSimResultMsg('');
 
       let dtcCodes: string[] = [];
-      let sensors: Record<string, number> = {
+      const sensors: Record<string, number> = {
         coolantTempC: 90,
         engineRpm: 1500,
         oilPressureKpa: 340,

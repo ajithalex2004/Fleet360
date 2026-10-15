@@ -166,7 +166,7 @@ function InspectionCard({ insp }: { insp: Inspection }) {
           ))}
         </div>
       )}
-      {insp.notes && <p className="text-xs text-[var(--text-faint)] italic">"{insp.notes}"</p>}
+      {insp.notes && <p className="text-xs text-[var(--text-faint)] italic">&quot;{insp.notes}&quot;</p>}
     </div>
   );
 }

@@ -109,7 +109,7 @@ export default function VendorGaragesPage() {
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
           <Building2 className="mx-auto h-8 w-8 text-[var(--text-faint)]" />
           <p className="mt-3 font-medium text-[var(--text-main)]">No garages registered yet</p>
-          <p className="mt-1 text-sm text-[var(--text-faint)]">Click "+ Add Garage" to register your first repair centre.</p>
+          <p className="mt-1 text-sm text-[var(--text-faint)]">Click &quot;+ Add Garage&quot; to register your first repair centre.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

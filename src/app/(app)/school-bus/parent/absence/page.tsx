@@ -87,7 +87,7 @@ export default function ParentAbsencePage() {
       <Link href="/school-bus/parent" className="text-xs text-amber-400 hover:underline">← Today</Link>
       <div>
         <h1 className="text-2xl font-bold">Mark Absence</h1>
-        <p className="text-sm text-[var(--text-muted)]">The bus skips your child's stop for the selected sessions.</p>
+        <p className="text-sm text-[var(--text-muted)]">The bus skips your child&apos;s stop for the selected sessions.</p>
       </div>
 
       <form onSubmit={submit} className="space-y-4">
@@ -128,7 +128,7 @@ export default function ParentAbsencePage() {
             className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none">
             <option>Family commitment</option>
             <option>Sick</option>
-            <option>Doctor's appointment</option>
+            <option>Doctor&apos;s appointment</option>
             <option>School trip</option>
             <option>Picked up by parent</option>
             <option>Other</option>

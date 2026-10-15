@@ -251,7 +251,7 @@ export default function WhatsAppSimulatorPage() {
           {!result ? (
             <div className="h-64 flex flex-col items-center justify-center text-center text-slate-500 text-xs space-y-2">
               <MessageSquare className="w-8 h-8 text-slate-700" />
-              <p>Type or pick a preset scenario and click "Ingest" to test live NLP parsing.</p>
+              <p>Type or pick a preset scenario and click &quot;Ingest&quot; to test live NLP parsing.</p>
             </div>
           ) : (
             <div className="space-y-4 text-xs">
