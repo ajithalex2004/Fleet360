@@ -43,83 +43,122 @@ export interface RunResult {
   errors: number;
 }
 
+/**
+ * A subscription reminded within this many minutes is skipped: the reminder
+ * window is 4 minutes wide and the cron runs every minute, so without it
+ * each passenger was pushed on every run inside the window. (lastSentAt was
+ * written but never read.)
+ */
+const RESEND_GUARD_MINS = 5;
+
+/** One push to send: who, where, and what. */
+interface PlannedPush {
+  tenantId: string;
+  subscriptionId: string;
+  target: { endpoint: string; p256dh: string; auth: string };
+  payload: Parameters<typeof sendPush>[1];
+}
+
 export async function runTripReminders(tenantHeader?: string | null): Promise<RunResult> {
   const lead = DEFAULT_LEAD_MINS;
-  const windowStart = new Date(Date.now() + (lead - 2) * 60_000);
-  const windowEnd   = new Date(Date.now() + (lead + 2) * 60_000);
+  const now = Date.now();
+  const windowStart = new Date(now + (lead - 2) * 60_000);
+  const windowEnd   = new Date(now + (lead + 2) * 60_000);
+  const sentBefore  = new Date(now - RESEND_GUARD_MINS * 60_000);
 
-  const results = await runSweep<Omit<RunResult, 'tenantsScanned'>>(
-    async ({ tx, tenantId }) => {
-      return runForTenant(tx, tenantId, windowStart, windowEnd, lead);
-    },
+  // 1. Plan, per tenant, inside its RLS transaction: database reads only.
+  //    The pushes used to be sent from inside this transaction — up to 2,000
+  //    HTTPS calls holding it open against its 30 s timeout; a timeout rolled
+  //    back the lastSentAt updates of pushes already delivered.
+  const planned = await runSweep<{ tripsMatched: number; pushes: PlannedPush[] }>(
+    async ({ tx, tenantId }) => planForTenant(tx, tenantId, windowStart, windowEnd, sentBefore, lead),
     // Bump the per-tenant transaction timeout — the trip-passenger
     // findMany joins three tables and the default 5s times out even
     // on modest tables under cold caches.
     { tenantHeader, timeoutMs: 30_000 },
   );
 
-  return results.reduce<RunResult>((acc, { result }) => ({
-    tenantsScanned: acc.tenantsScanned + 1,
-    tripsMatched: acc.tripsMatched + result.tripsMatched,
-    pushesSent: acc.pushesSent + result.pushesSent,
-    pushesPruned: acc.pushesPruned + result.pushesPruned,
-    errors: acc.errors + result.errors,
-  }), { tenantsScanned: 0, tripsMatched: 0, pushesSent: 0, pushesPruned: 0, errors: 0 });
+  // 2. Send, outside any transaction; record each outcome in its own write.
+  let pushesSent = 0;
+  let pushesPruned = 0;
+  let errors = 0;
+  for (const { result } of planned) {
+    for (const push of result.pushes) {
+      const res = await sendPush(push.target, push.payload);
+      if (res.ok) {
+        pushesSent++;
+        await withTenantRls(prisma, push.tenantId, (tx) =>
+          tx.pushSubscription.update({ where: { id: push.subscriptionId }, data: { lastSentAt: new Date() } }),
+        );
+        continue;
+      }
+      errors++;
+      const gone = res.reason === 'gone';
+      if (gone) pushesPruned++;
+      await withTenantRls(prisma, push.tenantId, (tx) =>
+        tx.pushSubscription.update({
+          where: { id: push.subscriptionId },
+          data: gone
+            ? { revokedAt: new Date(), lastErrorAt: new Date(), lastErrorCode: res.statusCode }
+            : { lastErrorAt: new Date(), lastErrorCode: res.statusCode },
+        }),
+      );
+    }
+  }
+
+  return {
+    tenantsScanned: planned.length,
+    tripsMatched: planned.reduce((n, { result }) => n + result.tripsMatched, 0),
+    pushesSent,
+    pushesPruned,
+    errors,
+  };
 }
 
-async function runForTenant(
+async function planForTenant(
   tx: SystemJobContext['tx'],
   tenantId: string,
   windowStart: Date,
   windowEnd: Date,
+  sentBefore: Date,
   leadMins: number,
-): Promise<Omit<RunResult, 'tenantsScanned'>> {
+): Promise<{ tripsMatched: number; pushes: PlannedPush[] }> {
   // Find every TripPassenger on a trip in the reminder window.
   // TripPassenger doesn't carry a date — go through the related
   // TripSchedule.departureTime.
-  const passengers = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.tripPassenger.findMany({
-      where: {
-        status: 'CONFIRMED',
-        trip: {
-          deletedAt: null,
-          status: { not: 'CANCELLED' },
-          departureTime: { gte: windowStart, lte: windowEnd },
-        },
+  const passengers = await tx.tripPassenger.findMany({
+    where: {
+      status: 'CONFIRMED',
+      trip: {
+        deletedAt: null,
+        status: { not: 'CANCELLED' },
+        departureTime: { gte: windowStart, lte: windowEnd },
       },
-      include: {
-        trip: { include: { route: { select: { name: true, origin: true, destination: true } } } },
-      },
-      take: 2000, // safety cap — a single tenant rarely has more than a few hundred in flight
-    }),
-  );
-
-  if (passengers.length === 0) {
-    return { tripsMatched: 0, pushesSent: 0, pushesPruned: 0, errors: 0 };
-  }
+    },
+    include: {
+      trip: { include: { route: { select: { name: true, origin: true, destination: true } } } },
+    },
+    take: 2000, // safety cap — a single tenant rarely has more than a few hundred in flight
+  });
+  if (passengers.length === 0) return { tripsMatched: 0, pushes: [] };
 
   // TripPassenger doesn't have a relation to StaffMember (only staffMemberId),
   // so we look up the staff by id here.
   const staffIds = [...new Set(passengers.map((p) => p.staffMemberId).filter(Boolean) as string[])];
-  const staffRows = staffIds.length === 0 ? [] : await withTenantRls(prisma, tenantId, (tx) =>
-    tx.staffMember.findMany({
-      where: { id: { in: staffIds }, deletedAt: null },
-      select: { id: true, employeeId: true, name: true },
-    }),
-  );
-  const staffById = new Map(staffRows.map((s) => [s.id, s]));
+  if (staffIds.length === 0) return { tripsMatched: passengers.length, pushes: [] };
+  const staffRows = await tx.staffMember.findMany({
+    where: { id: { in: staffIds }, deletedAt: null },
+    select: { id: true },
+  });
+  const knownStaff = new Set(staffRows.map((s) => s.id));
 
-  const subs = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.pushSubscription.findMany({
-      where: { staffMemberId: { in: staffIds }, revokedAt: null, optInTripReminder: true },
-      select: { id: true, endpoint: true, p256dh: true, auth: true, staffMemberId: true },
-    }),
-  );
-
-  if (subs.length === 0) {
-    return { tripsMatched: passengers.length, pushesSent: 0, pushesPruned: 0, errors: 0 };
-  }
-
+  const subs = await tx.pushSubscription.findMany({
+    where: {
+      staffMemberId: { in: staffIds }, revokedAt: null, optInTripReminder: true,
+      OR: [{ lastSentAt: null }, { lastSentAt: { lt: sentBefore } }],
+    },
+    select: { id: true, endpoint: true, p256dh: true, auth: true, staffMemberId: true },
+  });
   const subsByStaff = new Map<string, typeof subs>();
   for (const s of subs) {
     const arr = subsByStaff.get(s.staffMemberId) ?? [];
@@ -127,30 +166,22 @@ async function runForTenant(
     subsByStaff.set(s.staffMemberId, arr);
   }
 
-  let sent = 0;
-  let pruned = 0;
-  let errors = 0;
-
+  const pushes: PlannedPush[] = [];
   for (const p of passengers) {
-    if (!p.staffMemberId) continue;
-    const staff = staffById.get(p.staffMemberId);
-    if (!staff) continue;
-    const staffSubs = subsByStaff.get(p.staffMemberId) ?? [];
-    if (staffSubs.length === 0) continue;
-
-    const tag = `${TICKET_TAG_PREFIX}:${p.tripId}:${p.staffMemberId}`;
+    if (!p.staffMemberId || !knownStaff.has(p.staffMemberId)) continue;
     const origin      = p.trip.route?.origin      ?? 'your stop';
     const destination = p.trip.route?.destination ?? 'the office';
     const routeName   = p.trip.route?.name        ?? `${origin} → ${destination}`;
-
-    for (const sub of staffSubs) {
-      const res = await sendPush(
-        { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-        {
+    for (const sub of subsByStaff.get(p.staffMemberId) ?? []) {
+      pushes.push({
+        tenantId,
+        subscriptionId: sub.id,
+        target: { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+        payload: {
           title: `Bus in ${leadMins} min`,
           body:  `${routeName} from ${origin} — boarding soon.`,
           url:   '/bus-ops/passenger/app',
-          tag,
+          tag:   `${TICKET_TAG_PREFIX}:${p.tripId}:${p.staffMemberId}`,
           sound: 'default',
           data: {
             type:    'trip-reminder',
@@ -158,37 +189,8 @@ async function runForTenant(
             staffId: p.staffMemberId,
           },
         },
-      );
-
-      if (res.ok) {
-        sent++;
-        await withTenantRls(prisma, tenantId, (tx) =>
-          tx.pushSubscription.update({
-            where: { id: sub.id },
-            data:  { lastSentAt: new Date() },
-          }),
-        );
-      } else {
-        errors++;
-        if (res.reason === 'gone') {
-          pruned++;
-          await withTenantRls(prisma, tenantId, (tx) =>
-            tx.pushSubscription.update({
-              where: { id: sub.id },
-              data:  { revokedAt: new Date(), lastErrorAt: new Date(), lastErrorCode: res.statusCode },
-            }),
-          );
-        } else {
-          await withTenantRls(prisma, tenantId, (tx) =>
-            tx.pushSubscription.update({
-              where: { id: sub.id },
-              data:  { lastErrorAt: new Date(), lastErrorCode: res.statusCode },
-            }),
-          );
-        }
-      }
+      });
     }
   }
-
-  return { tripsMatched: passengers.length, pushesSent: sent, pushesPruned: pruned, errors };
+  return { tripsMatched: passengers.length, pushes };
 }
