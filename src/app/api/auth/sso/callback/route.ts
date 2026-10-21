@@ -27,7 +27,6 @@ import { pickProvisioningRole } from '@/lib/sso-provisioning';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const COOKIE_NAME       = 'xl-session';

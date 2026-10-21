@@ -52,7 +52,7 @@ const EXEMPT_PATTERNS = [
 // a real violation it is reported as stale and fails the run — an exemption
 // that has quietly stopped applying is an exemption nobody is reviewing.
 const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
-const { unwrapAuditedHandlers } = require('./route-handler-source');
+const { unwrapAuditedHandlers, stripComments } = require('./route-handler-source');
 
 function ruleExemptionFor(relativePath, violation) {
   return RULE_EXEMPTIONS.find(
@@ -137,9 +137,12 @@ function getAllRouteFiles() {
 }
 
 function extractHandlerBody(content, method) {
-  // Match: export async function METHOD(req: NextRequest, ...) { ... }
+  // Match: export async function METHOD(req: NextRequest, ...)[: Promise<…>] { ... }
+  // The optional return type matters: without it a handler declared
+  // `GET(req): Promise<NextResponse> {` never matched, returned null, and was
+  // skipped by every rule.
   const handlerRegex = new RegExp(
-    `export\\s+async\\s+function\\s+${method}\\s*\\([^)]*\\)\\s*\\{`,
+    `export\\s+async\\s+function\\s+${method}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`,
     'g'
   );
 
@@ -243,8 +246,10 @@ function analyzeRouteFile(filePath, opts = {}) {
     return { exempt: true, violations: [] };
   }
 
-  // Check for imports
-  const hasAuthImport = /import\s+\{[^}]*requireAuthorizedTenant[^}]*\}\s+from\s+['"]@\/lib\/tenant-context['"]/.test(content);
+  // Check for imports. (requireAuthorizedTenant is checked per handler
+  // below, as a call: importing it proves nothing. Routes used to pass with
+  // an import they never called, including POST /api/auth/session, which
+  // signed a session for any user id in the body.)
   const hasBootstrapImport = /import\s+\{[^}]*tenantBootstrapHandler[^}]*\}\s+from\s+['"]@\/lib\/handlers\/tenant-bootstrap-handler['"]/.test(content);
   const hasRlsImport = new RegExp(
     `import\\s+\\{[^}]*(${RLS_WRAPPERS.join('|')})[^}]*\\}\\s+from\\s+['"]@/(lib/rls|lib/prisma-sweep|lib/handlers/tenant-bootstrap-handler)['"]`
@@ -280,7 +285,8 @@ function analyzeRouteFile(filePath, opts = {}) {
     const hasSanitization = hasBodySanitization(handlerBody);
 
     // Violation 1: Missing requireAuthorizedTenant (unless explicit tenantBootstrapHandler boundary)
-    if (!hasAuthImport && !(hasBootstrapImport && rlsWrapper === 'tenantBootstrapHandler')) {
+    const hasAuthCall = /requireAuthorizedTenant\s*\(/.test(stripComments(handlerBody));
+    if (!hasAuthCall && !(hasBootstrapImport && rlsWrapper === 'tenantBootstrapHandler')) {
       violations.push({
         method,
         type: 'missing_auth',
