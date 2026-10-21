@@ -28,7 +28,7 @@ import { sessionUser } from '@/lib/session-user';
 import {
   advanceWorkflow, cancelActiveInstancesForReference, getActiveInstanceForReference, getUserRoleCodes, getWorkflowInstanceWithHistory,
   latestInstanceStatusForReference,
-  hasTenantWorkflow, parseEmailList, triggerWorkflow, type AdvanceResult, type WorkflowInstanceStatus,
+  hasTenantWorkflow, parseEmailList, triggerWorkflow, WorkflowOutcomeError, type AdvanceResult, type WorkflowInstanceStatus,
 } from '@/lib/workflow-db';
 import { APPROVAL_SUBJECTS } from './subjects';
 
@@ -49,12 +49,23 @@ export async function startApproval(args: {
     if (!loaded) return { started: false };
     const procedure = loaded.procedure ?? subject.procedure;
     if (!(await hasTenantWorkflow(tenantId, subject.module, procedure))) return { started: false };
-    const result = await triggerWorkflow({
-      tenantId, module: subject.module, procedure, tenantOnly: true,
-      referenceType: args.referenceType, referenceId: args.referenceId, referenceNumber: loaded.referenceNumber,
-      initiatedByEmail: args.initiator?.email ?? 'system', initiatedByName: args.initiator?.name,
-      contextData: loaded.context,
-    });
+    let result: Awaited<ReturnType<typeof triggerWorkflow>>;
+    try {
+      result = await triggerWorkflow({
+        tenantId, module: subject.module, procedure, tenantOnly: true,
+        referenceType: args.referenceType, referenceId: args.referenceId, referenceNumber: loaded.referenceNumber,
+        initiatedByEmail: args.initiator?.email ?? 'system', initiatedByName: args.initiator?.name,
+        contextData: loaded.context,
+      });
+    } catch (e) {
+      // Every level passed automatically and the outcome could not be
+      // applied: the approval rolled back and did not start.
+      if (e instanceof WorkflowOutcomeError) {
+        console.warn(`[Workflow] ${subject.label} ${loaded.referenceNumber}: ${e.message}`);
+        return { started: false, error: e.message };
+      }
+      throw e;
+    }
     if ('error' in result) {
       console.warn(`[Workflow] ${subject.label} ${loaded.referenceNumber}: ${result.error}`);
       return { started: false, error: result.error };
@@ -167,7 +178,20 @@ export async function decideAs(args: {
 
     const comments = (args.comments ?? '').trim().slice(0, 2000);
     const override = !isApprover && admin;
-    const result = await advanceWorkflow(tenantId, args.instanceId, step.stepOrder, args.action, comments, me.email, { override });
+    let result: Awaited<ReturnType<typeof advanceWorkflow>>;
+    try {
+      result = await advanceWorkflow(tenantId, args.instanceId, step.stepOrder, args.action, comments, me.email, { override });
+    } catch (e) {
+      // The approval ended but the record could not take the outcome (a
+      // conflicting estimate, a refund that no longer validates, …). The
+      // whole decision rolled back, so the approver can fix the cause and
+      // decide again.
+      if (e instanceof WorkflowOutcomeError) {
+        const why = e.cause instanceof Error ? e.cause.message : String(e.cause);
+        return { ok: false, status: 409, error: `Could not apply this decision: ${why}. Nothing was changed; you can try again.` };
+      }
+      throw e;
+    }
     if (result.status === 'NOT_PENDING') return { ok: false, status: 409, error: 'This level has already been decided' };
     if (result.status === 'ALREADY_DECIDED') {
       return { ok: false, status: 409, error: 'You have already decided this level; it is waiting for the other approvers' };

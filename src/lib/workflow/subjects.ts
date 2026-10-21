@@ -640,10 +640,21 @@ export const SUBJECT_PROCEDURES = Object.values(APPROVAL_SUBJECTS).map((s) => ({
  * Applies a completed workflow's outcome to its record, as the tenant.
  * Reference types no module handles (approvals started by hand) are left alone.
  */
-export async function applyWorkflowOutcome(o: WorkflowOutcome): Promise<void> {
+/**
+ * Apply an approval's outcome to its record, in the caller's transaction
+ * (withTenantRls joins it), and return the subject's after-hook unrun: the
+ * workflow engine runs it once the decision has committed. Throws when the
+ * record cannot take the outcome; the caller's transaction then rolls back.
+ */
+export async function applyWorkflowOutcomeInTx(o: WorkflowOutcome): Promise<(() => Promise<void>) | void> {
   const subject = APPROVAL_SUBJECTS[o.referenceType];
   if (!subject) return;
-  const after = await runAsTenant(o.tenantId, () => withTenantRls(prisma, o.tenantId, (tx) => subject.apply(tx, o)));
+  return runAsTenant(o.tenantId, () => withTenantRls(prisma, o.tenantId, (tx) => subject.apply(tx, o)));
+}
+
+/** applyWorkflowOutcomeInTx, then its after-hook (logged on failure). */
+export async function applyWorkflowOutcome(o: WorkflowOutcome): Promise<void> {
+  const after = await applyWorkflowOutcomeInTx(o);
   if (after) {
     await after().catch((e) => console.warn(`[Workflow] After ${o.referenceType} ${o.status}:`, e instanceof Error ? e.message : e));
   }

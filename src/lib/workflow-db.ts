@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
-import { withPlatformAdmin } from '@/lib/rls';
+import { AsyncLocalStorage } from 'async_hooks';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
 import {
   conditionApplies, levelOutcome, parseDecisions, positiveHours,
@@ -466,7 +467,67 @@ export interface AdvanceResult {
   waitingFor?: string[];
 }
 
-export async function triggerWorkflow(params: {
+// ── One transaction per decision ────────────────────────────────────────────
+//
+// Starting or deciding an approval writes several rows (the decision, the
+// level, the instance) and, when it ends, applies the outcome to the
+// module's record. They run in one tenant transaction: all of it commits or
+// none of it does. Side effects outside the database — approver emails, a
+// module's after-hook — wait for the commit (afterCommit), so a decision
+// that rolls back sends nothing.
+
+const afterCommitQueue = new AsyncLocalStorage<Array<() => Promise<void>>>();
+
+/** Run `job` once the current decision's transaction has committed. */
+function afterCommit(job: () => Promise<void>): void {
+  const queue = afterCommitQueue.getStore();
+  if (queue) queue.push(job);
+  else void job().catch((e) => console.warn('[Workflow] side effect failed:', e instanceof Error ? e.message : e));
+}
+
+async function inDecisionTransaction<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  const queue: Array<() => Promise<void>> = [];
+  const result = await afterCommitQueue.run(queue, () => withTenantRls(prisma, tenantId, () => fn(), { timeoutMs: 60_000 }));
+  for (const job of queue) {
+    await job().catch((e) => console.warn('[Workflow] side effect failed:', e instanceof Error ? e.message : e));
+  }
+  return result;
+}
+
+/** The module could not apply an approval's outcome; nothing was changed. */
+export class WorkflowOutcomeError extends Error {
+  constructor(
+    readonly outcome: 'APPROVED' | 'REJECTED',
+    readonly referenceType: string,
+    readonly referenceId: string,
+    readonly cause: unknown,
+  ) {
+    super(`Could not apply the ${outcome.toLowerCase()} outcome to ${referenceType} ${referenceId}: `
+      + (cause instanceof Error ? cause.message : String(cause)));
+    this.name = 'WorkflowOutcomeError';
+  }
+}
+
+/** Start an approval for a record (see triggerWorkflowInTx). One transaction. */
+export async function triggerWorkflow(
+  params: Parameters<typeof triggerWorkflowInTx>[0],
+): ReturnType<typeof triggerWorkflowInTx> {
+  return inDecisionTransaction(params.tenantId, () => triggerWorkflowInTx(params));
+}
+
+/**
+ * Record a decision and move the approval on (see advanceWorkflowInTx).
+ * One transaction: when it ends the approval, a failure to apply the
+ * outcome throws WorkflowOutcomeError and nothing — not even the decision —
+ * is recorded.
+ */
+export async function advanceWorkflow(
+  ...args: Parameters<typeof advanceWorkflowInTx>
+): ReturnType<typeof advanceWorkflowInTx> {
+  return inDecisionTransaction(args[0], () => advanceWorkflowInTx(...args));
+}
+
+async function triggerWorkflowInTx(params: {
   // Canonical Phase 2 keying — preferred for new callers.
   serviceTypeId?: string;
   /** Tenant the approval runs in: always the caller's own (from the session). */
@@ -655,13 +716,13 @@ async function openNextLevel(
       if (!approvers.length) {
         console.warn(`[Workflow] Level "${step.stepName}" of ${head.referenceNumber} has no approver (assignee type ${step.assigneeType}); a tenant administrator can decide it.`);
       }
-      await notifyStepApprovers(notify);
+      afterCommit(() => notifyStepApprovers(notify));
       return { status: 'IN_PROGRESS', nextStep: step.stepName };
     }
     // A notification level emails only with its own wording: the default
     // email asks for an approval it doesn't need.
     if (step.stepType === 'NOTIFICATION' && step.emailSubject?.trim() && step.emailBody?.trim()) {
-      await notifyStepApprovers(notify);
+      afterCommit(() => notifyStepApprovers(notify));
     }
     await prisma.$executeRawUnsafe(
       `UPDATE "WorkflowStepInstance"
@@ -695,17 +756,26 @@ async function completeInstance(
   }
   const head = await loadInstanceHead(tenantId, instanceId);
   if (head) {
+    // In the same transaction as the status change above. This used to log
+    // and swallow a failure: the approval read APPROVED, the caller got a
+    // success, the record stayed in its old state, and a retry was refused
+    // as "already APPROVED". Now a failure rolls the whole decision back
+    // and reaches the caller, who can try again.
+    // Loaded on use: the module handlers pull in their modules' code.
+    const { applyWorkflowOutcomeInTx } = await import('@/lib/workflow/subjects');
+    let after: (() => Promise<void>) | void;
     try {
-      // Loaded on use: the module handlers pull in their modules' code.
-      const { applyWorkflowOutcome } = await import('@/lib/workflow/subjects');
-      await applyWorkflowOutcome({
+      after = await applyWorkflowOutcomeInTx({
         tenantId, instanceId, status, actorEmail: actor, comments,
         referenceType: head.referenceType, referenceId: head.referenceId,
         context: (head.contextJson && typeof head.contextJson === 'object' ? head.contextJson : {}) as WorkflowContext,
       });
     } catch (e) {
-      console.error(`[Workflow] Could not apply the ${status} outcome to ${head.referenceType} ${head.referenceId}:`,
-        e instanceof Error ? e.message : e);
+      throw new WorkflowOutcomeError(status, head.referenceType, head.referenceId, e);
+    }
+    if (after) {
+      const run = after;
+      afterCommit(() => run());
     }
   }
   return { status };
@@ -717,7 +787,7 @@ async function completeInstance(
  * administrator deciding the level for its approvers. 'AUTO' passes the
  * level (system use).
  */
-export async function advanceWorkflow(
+async function advanceWorkflowInTx(
   tenantId: string, instanceId: string, currentStepOrder: number,
   action: 'APPROVE' | 'REJECT' | 'AUTO', comments: string, actionedByEmail: string,
   opts: { override?: boolean } = {},
