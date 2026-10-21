@@ -13,6 +13,8 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { requireSsoEncryptionSecret } from '@/lib/session-secret';
 
 // ── Secret encryption & lifecycle ───────────────────────────────────────────
@@ -130,15 +132,28 @@ function rowToConfig(r: SsoRow): TenantSsoConfig {
   };
 }
 
+// tenant_sso_configs is under FORCE ROW LEVEL SECURITY and the SSO routes are
+// public (no request tenant), so these lookups ran with app.tenant_id unset
+// and found nothing: SSO always ended at "not configured". A config is read
+// in its tenant's scope when the tenant is known, and across tenants only to
+// find which tenant claims an email domain. A failed lookup is logged — the
+// silent empty result is what made this look like missing configuration.
+function logged(fn: string) {
+  return (err: unknown): SsoRow[] => {
+    console.error(`[sso] ${fn} failed:`, err);
+    return [];
+  };
+}
+
 export async function findSsoConfigByTenant(tenantId: string): Promise<TenantSsoConfig | null> {
-  const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
+  const rows = await withTenantRls(prisma, tenantId, (tx) => tx.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
             allowed_email_domains, default_role_id, jit_enabled, is_active
      FROM tenant_sso_configs
      WHERE tenant_id = $1
      LIMIT 1`,
     tenantId,
-  ).catch(() => []);
+  )).catch(logged('findSsoConfigByTenant'));
   return rows[0] ? rowToConfig(rows[0]) : null;
 }
 
@@ -151,7 +166,7 @@ export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConf
   const domain = email.split('@')[1]?.toLowerCase().trim();
   if (!domain) return null;
   // JSONB ?| array_text checks if the array contains any of the given keys.
-  const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
             allowed_email_domains, default_role_id, jit_enabled, is_active
      FROM tenant_sso_configs
@@ -159,7 +174,7 @@ export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConf
        AND allowed_email_domains ?| ARRAY[$1]::text[]
      LIMIT 1`,
     domain,
-  ).catch(() => []);
+  ))).catch(logged('findSsoConfigByEmail'));
   return rows[0] ? rowToConfig(rows[0]) : null;
 }
 
@@ -168,14 +183,14 @@ export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConf
  * Never includes the decrypted secret.
  */
 export async function getSsoConfigPublic(tenantId: string): Promise<Omit<TenantSsoConfig, 'clientSecret'> & { clientSecretSet: boolean } | null> {
-  const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
+  const rows = await withTenantRls(prisma, tenantId, (tx) => tx.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
             allowed_email_domains, default_role_id, jit_enabled, is_active
      FROM tenant_sso_configs
      WHERE tenant_id = $1
      LIMIT 1`,
     tenantId,
-  ).catch(() => []);
+  )).catch(logged('getSsoConfigPublic'));
   if (rows.length === 0) return null;
   const r = rows[0];
   return {

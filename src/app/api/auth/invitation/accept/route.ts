@@ -29,7 +29,6 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { linkInvitedPartnerUser } from '@/lib/exchange/partner-onboarding';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const COOKIE_NAME = 'xl-session';

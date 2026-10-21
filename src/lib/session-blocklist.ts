@@ -58,12 +58,24 @@ export async function revokeSession(token: string, expiresAt: number): Promise<v
   }
 }
 
+function unavailable(why: unknown): boolean {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[session-blocklist] isSessionRevoked failed (allowing outside production):', why);
+    return false;
+  }
+  console.error('[session-blocklist] isSessionRevoked failed; refusing the token (fail closed):', why);
+  return true;
+}
+
 /**
  * Returns true if the token has been explicitly revoked.
  *
  * Call this from the session verification path before trusting the token.
- * A Redis read error degrades to "not blocked" (allow) so a Redis outage
- * does not lock out all users.
+ * When Redis is configured but the read fails or times out, production
+ * treats the token as revoked (fail closed): allowing it meant a signed-out
+ * token stayed usable for as long as Redis was unreachable. Development
+ * still allows, with a warning. No Redis configured: no-op (see
+ * /api/health).
  */
 export async function isSessionRevoked(token: string): Promise<boolean> {
   const redis = getRedis();
@@ -72,11 +84,12 @@ export async function isSessionRevoked(token: string): Promise<boolean> {
   try {
     const key = PREFIX + (await fingerprint(token));
     const lookup = redis.get(key);
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));
+    // A timeout resolves to undefined, distinct from Redis's null (not set).
+    const timeout = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000));
     const val = await Promise.race([lookup, timeout]);
+    if (val === undefined) return unavailable('timed out');
     return val !== null;
   } catch (err) {
-    console.warn('[session-blocklist] isSessionRevoked failed (allowing):', err);
-    return false;
+    return unavailable(err);
   }
 }

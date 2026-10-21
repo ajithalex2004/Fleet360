@@ -62,3 +62,16 @@ export async function verifySsoState(token: string): Promise<SsoStatePayload | n
     return null;
   }
 }
+
+/**
+ * returnTo comes from the /initiate query string unchecked, and new URL()
+ * resolves an absolute or protocol-relative value ('https://x', '//x') to
+ * that other origin: a just-signed-in user could be sent anywhere. Only a
+ * path on this site is followed.
+ */
+export function safeReturnPath(returnTo: string | undefined): string {
+  if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//') || returnTo.includes('\\')) {
+    return '/platform';
+  }
+  return returnTo;
+}

@@ -64,6 +64,10 @@ export async function GET() {
     ssoEncryption: !!process.env.SSO_ENCRYPTION_KEY,
     appUrl:        !!process.env.NEXT_PUBLIC_APP_URL,
     sessionSecret: !!process.env.SESSION_SECRET,
+    // Session revocation (role change, deactivation, sign-out everywhere)
+    // reaches the edge middleware only through Redis; without it revoked
+    // sessions stay valid until they expire (24 h).
+    redis:         !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN,
   };
   const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
   const schema  = await schemaReport();

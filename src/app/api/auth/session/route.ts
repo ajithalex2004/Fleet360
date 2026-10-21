@@ -1,8 +1,17 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/auth/session  — Exchange userId + tenantId for an xl-session cookie
+ * POST /api/auth/session  — Re-issue the caller's own xl-session, optionally
+ *                           for another tenant they belong to (tenant switch)
  * DELETE /api/auth/session — Clear the xl-session cookie (sign out)
+ *
+ * This path is public in the middleware (auth-route-policies.ts), so the
+ * handler is its own authentication: it requires a valid xl-session and only
+ * re-issues it for the user that session belongs to. It used to sign a
+ * session for whatever { userId, tenantId } the body named, with no
+ * credential at all — any caller who knew a user's id became that user,
+ * SUPER_ADMIN included. Signing in as someone else is
+ * POST /api/admin/impersonate (SUPER_ADMIN only, audited, short-lived).
  */
 
 import { sessionPermissionsFor } from '@/lib/authz/session-permissions';
@@ -10,9 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { signSession } from '@/lib/tenant-session';
-
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { signSession, verifySession } from '@/lib/tenant-session';
 import { tenantModulesFor } from '@/lib/module-policies';
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 
@@ -46,6 +53,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Bad Request', message: 'userId and tenantId are required' },
         { status: 400 }
+      );
+    }
+
+    // The credential: the caller's own verified session. Revoked, expired
+    // and forged tokens all verify as null.
+    const token = request.cookies.get(COOKIE_NAME)?.value;
+    const session = token ? await verifySession(token) : null;
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Sign in first' },
+        { status: 401 }
+      );
+    }
+    if (userId !== session.userId) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'A session can only be re-issued for its own user. Use impersonation to act as another user.' },
+        { status: 403 }
+      );
+    }
+    // An impersonation session keeps its short lifetime and its
+    // impersonatedBy marker: re-signing it here would drop both. It stays in
+    // the tenant it was issued for.
+    if (session.impersonatedBy && tenantId !== session.tenantId) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Stop impersonating before switching tenant' },
+        { status: 403 }
       );
     }
 
@@ -109,8 +142,9 @@ export async function POST(request: NextRequest) {
 
     const plan = userTenant.tenant.plan ?? 'TRIAL';
 
-    // Sign the session token (include role)
-    const token = await signSession({
+    // Sign the session token (include role). Not for an impersonation
+    // session (see above): it keeps the cookie it has.
+    const newToken = session.impersonatedBy ? null : await signSession({
       userId, tenantId, plan, role: userTenant.role.code,
       permissions: await sessionPermissionsFor(userId, tenantId),
       ...(await residencyClaimForTenant(tenantId)),
@@ -145,7 +179,7 @@ export async function POST(request: NextRequest) {
     };
 
     const response = NextResponse.json(responseBody, { status: 200 });
-    response.cookies.set(COOKIE_NAME, token, sessionCookieOptions(86_400));
+    if (newToken) response.cookies.set(COOKIE_NAME, newToken, sessionCookieOptions(86_400));
 
     return response;
   } catch (err) {

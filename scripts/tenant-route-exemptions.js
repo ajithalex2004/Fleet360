@@ -643,6 +643,14 @@ const RULE_EXEMPTIONS = [
     owner: 'Carrier Portal Team',
     test: 'tests/unit/partner-portal-auth.test.ts',
   },
+  {
+    file: 'src/app/api/platform/plans/route.ts', method: 'GET', type: 'missing_auth',
+    reason: 'Public plan catalogue for the /onboarding pricing cards: active plans only, marketing copy and quotas. Read only; no tenant data.',
+    authMechanism: 'None — public by design (PUBLIC_EXACT); declared in the public route inventory',
+    dataScope: 'platform_plans rows marked active; no tenant-owned data',
+    owner: 'Identity & Security Engineering',
+    test: 'tests/unit/public-route-inventory.test.ts',
+  },
 ];
 
 module.exports = {
