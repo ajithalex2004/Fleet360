@@ -107,7 +107,14 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // No statement below swallows its error. A failed statement aborts the
+  // transaction, and a swallowed one used to let the handler carry on: every
+  // later line insert failed too, the 201 went out with the header row, and
+  // the COMMIT then ran as a ROLLBACK — an entry number for nothing saved.
+  // Recovering per line (a savepoint) would be worse: a header marked
+  // balanced over a partial set of lines. The whole entry succeeds or fails.
+  try {
+  return await withTenantRls(prisma, tenantId, async (tx) => {
       await ensureTenantChartOfAccounts(tx, tenantId);
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -152,7 +159,7 @@ export async function POST(req: NextRequest) {
            FROM finance_chart_of_accounts
           WHERE account_code = ANY($1::text[]) AND tenant_id = $2`,
         accountCodes, tenantId,
-      ).catch(() => []);
+      );
       const accMap = new Map(accounts.map(a => [a.account_code, a]));
 
       const jeNumber  = await nextJournalNumber(tx, tenantId);
@@ -182,7 +189,7 @@ export async function POST(req: NextRequest) {
         body.notes      ?? null,
         body.currency   ?? 'AED',
         tenantId,
-      ).catch(() => []);
+      );
 
       if (!je) {
         return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 });
@@ -206,7 +213,7 @@ export async function POST(req: NextRequest) {
           parseFloat(String(l.creditAmount)) || 0,
           acc?.normal_balance ?? 'DEBIT',
           l.costCentre ?? null,
-        ).catch(() => {});
+        );
       }
 
       const [result] = await tx.$queryRawUnsafe<JeRow[]>(
@@ -227,9 +234,13 @@ export async function POST(req: NextRequest) {
          LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
          WHERE je.id::text = $1 GROUP BY je.id`,
         jeId,
-      ).catch(() => []);
+      );
 
       return NextResponse.json(result ?? je, { status: 201 });
   });
+  } catch (err) {
+    console.error('[finance/journal-entries POST]', err);
+    return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 });
+  }
 }
 

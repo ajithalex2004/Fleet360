@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { logAuditInTx } from '@/lib/audit';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 import { runWithRlsScope, runWithTenantContext } from '@/lib/rls-scope';
 import { withPlatformAdmin } from '@/lib/rls';
 import { upsertFinanceInvoice } from '@/lib/finance/module-ledger';
@@ -1052,17 +1053,20 @@ async function logLogisticsAudit(args: {
   client?: DbClient;
 }) {
   const db = args.client ?? prisma;
-  await Promise.allSettled([
-    logAuditInTx({
-      tenantId: args.tenantId,
-      entityType: args.entityType,
-      entityId: args.entityId ?? undefined,
-      entityName: args.entityName ?? undefined,
-      userId: args.actorUserId ?? undefined,
-      userRole: args.actorRole ?? undefined,
-      action: args.action,
-      details: args.summary ?? undefined,
-    }, db),
+  // One after the other, each under its own savepoint: run together on one
+  // transaction, a failure in either aborted it (allSettled only hid that),
+  // and a savepoint rollback could undo the other's statement.
+  await logAuditInTx({
+    tenantId: args.tenantId,
+    entityType: args.entityType,
+    entityId: args.entityId ?? undefined,
+    entityName: args.entityName ?? undefined,
+    userId: args.actorUserId ?? undefined,
+    userRole: args.actorRole ?? undefined,
+    action: args.action,
+    details: args.summary ?? undefined,
+  }, db);
+  await bestEffortInTx(db, 'logistics change history', () =>
     db.$executeRawUnsafe(
       `INSERT INTO logistics_change_history
          (tenant_id, entity_type, entity_id, action, actor_user_id,
@@ -1078,7 +1082,7 @@ async function logLogisticsAudit(args: {
       args.summary ?? null,
       jsonParam(args.metadata ?? {}),
     ),
-  ]);
+  );
 }
 
 const DEFAULT_CUSTOMER_PROCUREMENT_MODE: LogisticsCustomerProcurementMode = 'RFQ_BIDDING';
