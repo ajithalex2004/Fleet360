@@ -122,10 +122,10 @@ export function backgroundTenantId(): string | undefined {
  * precedence over the request's own x-tenant-id (src/lib/prisma.ts,
  * requestTenantId). '*' is the platform context, for reads that span tenants.
  *
- * withTenantRls(prisma, tenantId, () => service()) is not a substitute: its
- * scope covers raw queries and the transaction client, but model operations
- * a service makes on the global client (prisma.x.findUnique) run outside that
- * transaction with no tenant set, so under RLS they see nothing.
+ * withTenantRls(prisma, tenantId, () => service()) also scopes a service's
+ * global-client calls (src/lib/prisma.ts forwards them to its transaction),
+ * but it holds one transaction open for the whole service call. runAsTenant
+ * keeps each operation in its own short transaction instead.
  *
  * Only for tenant ids the server derived from a verified record after an
  * authorization check (e.g. the award or request a verified partner may act

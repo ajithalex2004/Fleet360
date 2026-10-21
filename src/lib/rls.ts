@@ -24,7 +24,7 @@
 import { cpus } from 'node:os';
 
 import type { PrismaClient } from '@prisma/client';
-import { runWithRlsScope } from '@/lib/rls-scope';
+import { activeRlsScope, runWithRlsScope, type RlsScope } from '@/lib/rls-scope';
 
 /**
  * The transaction client the wrappers hand to their callbacks.
@@ -35,6 +35,79 @@ import { runWithRlsScope } from '@/lib/rls-scope';
  */
 export type TxClient = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
 
+// ── Nesting ──────────────────────────────────────────────────────────────────
+//
+// app.tenant_id is set with set_config(..., true): it holds until the
+// transaction ends, not until the helper that set it returns. A helper
+// called inside another's callback joins the outer transaction (opening a
+// second one would take a second pool connection while the first is held —
+// see src/lib/prisma.ts), so the setting it makes is the outer
+// transaction's setting from then on.
+//
+// It used to stay that way. withPlatformAdmin inside withTenantRls(T1) left
+// '*' in place when it returned: every later statement of the T1 request
+// ran with RLS open to every tenant. withTenantRls(T2) inside
+// withTenantRls(T1) switched the rest of the request to T2.
+//
+// So a nested call that changes the setting restores the outer one before it
+// returns. If the inner work failed with a SQL error the transaction is
+// aborted, the restore cannot run, and no further statement can run either —
+// the original error is what the caller sees.
+
+async function setTenantGuc(tx: TxClient, value: string, who: string): Promise<void> {
+  // Interpolated, not bound: callers validate tenant ids to [a-zA-Z0-9_-] or
+  // '*', and the quote escape covers anything else.
+  const safe = value.replace(/'/g, "''");
+  const rows = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
+    `SELECT set_config('app.tenant_id', '${safe}', true) AS v`,
+  );
+  if (rows[0]?.v !== value) {
+    throw new Error(
+      `${who}: set_config returned '${rows[0]?.v ?? 'null'}' (expected '${value}'). ` +
+        `The cause is a connection layer that does not keep a transaction pinned to one ` +
+        `backend: Prisma Accelerate / Data Proxy, or a pooler in statement or session mode. ` +
+        `Neon's transaction-mode pooler is NOT a cause — run scripts/prove-pooled-rls.ts.`,
+    );
+  }
+}
+
+async function runScoped<T>(
+  prisma: PrismaClient,
+  tenantId: string,
+  mode: RlsScope['mode'],
+  who: string,
+  fn: (tx: TxClient) => Promise<T>,
+  txOptions: { timeout: number; maxWait: number },
+): Promise<T> {
+  const outer = activeRlsScope();
+  if (outer?.tx) {
+    const tx = outer.tx as TxClient;
+    if (outer.tenantId === tenantId) return fn(tx);
+
+    await setTenantGuc(tx, tenantId, who);
+    let result: T;
+    try {
+      result = await runWithRlsScope({ tenantId, mode, tx: outer.tx }, () => fn(tx));
+    } catch (err) {
+      // Best effort only: on an aborted transaction this fails too, and
+      // nothing more can run on it, so the outer scope cannot be misused.
+      await setTenantGuc(tx, outer.tenantId, who).catch(() => {});
+      throw err;
+    }
+    await setTenantGuc(tx, outer.tenantId, who);
+    return result;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    return runWithRlsScope({ tenantId, mode, tx }, async () => {
+      // set_config returns the new value — use that as the source of truth.
+      // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
+      await setTenantGuc(tx, tenantId, who);
+      return fn(tx);
+    });
+  }, txOptions);
+}
+
 // ── withTenantRls ────────────────────────────────────────────────────────────
 //
 // Run `fn` inside a transaction with `app.tenant_id` set to `tenantId`.
@@ -44,6 +117,9 @@ export type TxClient = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0
 // Use this for: any request handler or job that operates on a known
 // single tenant. The middleware already verified the session; this is
 // the DB-layer enforcement.
+//
+// Called inside another RLS scope, it joins that transaction and restores
+// the outer tenant when it returns (see Nesting above).
 
 export async function withTenantRls<T>(
   prisma: PrismaClient,
@@ -57,26 +133,10 @@ export async function withTenantRls<T>(
   if (/[^a-zA-Z0-9_-]/.test(tenantId)) {
     throw new Error('withTenantRls: invalid tenantId format');
   }
-  const timeout = opts.timeoutMs ?? 30_000;
-  return prisma.$transaction(async (tx) => {
-    return runWithRlsScope({ tenantId, mode: 'tenant', tx }, async () => {
-      // set_config returns the new value — use that as the source of truth.
-      // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
-      const safeId = String(tenantId).replace(/'/g, "''");
-      const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
-        `SELECT set_config('app.tenant_id', '${safeId}', true) AS v`,
-      );
-      if (!_set[0]?.v || _set[0].v !== tenantId) {
-        throw new Error(
-          `withTenantRls: set_config returned '${_set[0]?.v ?? 'null'}' (expected '${tenantId}'). ` +
-            `The cause is a connection layer that does not keep a transaction pinned to one ` +
-            `backend: Prisma Accelerate / Data Proxy, or a pooler in statement or session mode. ` +
-            `Neon's transaction-mode pooler is NOT a cause — run scripts/prove-pooled-rls.ts.`,
-        );
-      }
-      return fn(tx);
-    });
-  }, { timeout, maxWait: 5_000 });
+  return runScoped(prisma, tenantId, 'tenant', 'withTenantRls', fn, {
+    timeout: opts.timeoutMs ?? 30_000,
+    maxWait: 5_000,
+  });
 }
 
 // ── withPlatformAdmin ────────────────────────────────────────────────────────
@@ -97,6 +157,10 @@ export async function withTenantRls<T>(
 // would let the request see every tenant's data. If you find yourself
 // reaching for it from a route, you almost certainly want withTenantRls
 // or withWebhookTenant instead.
+//
+// Called inside a tenant scope (e.g. a platform lookup from a helper), it
+// joins that transaction and puts the tenant back when it returns (see
+// Nesting above).
 
 export async function withPlatformAdmin<T>(
   prisma: PrismaClient,
@@ -105,17 +169,10 @@ export async function withPlatformAdmin<T>(
 ): Promise<T> {
   // Default 60s — Prisma's built-in 5s is too tight for multi-pass FK deletes
   // (161 tables) and bulk creates (hundreds of rows).
-  return prisma.$transaction(async (tx) => {
-    return runWithRlsScope({ tenantId: '*', mode: 'platform', tx }, async () => {
-      const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
-        `SELECT set_config('app.tenant_id', '*', true) AS v`,
-      );
-      if (!_set[0]?.v || _set[0].v !== '*') {
-        throw new Error(`withPlatformAdmin: set_config returned '${_set[0]?.v ?? 'null'}' (expected '*')`);
-      }
-      return fn(tx);
-    });
-  }, { timeout: opts.timeoutMs ?? 60_000, maxWait: 10_000 });
+  return runScoped(prisma, '*', 'platform', 'withPlatformAdmin', fn, {
+    timeout: opts.timeoutMs ?? 60_000,
+    maxWait: 10_000,
+  });
 }
 
 // ── withSystemJob ────────────────────────────────────────────────────────────

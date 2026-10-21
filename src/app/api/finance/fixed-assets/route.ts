@@ -24,7 +24,7 @@ async function nextAssetNo(tx: TxClient, tenantId: string, category: string): Pr
   };
   const [{ count }] = await tx.$queryRawUnsafe<{count: string}[]>(
     `SELECT COUNT(*)::text as count FROM finance_fixed_assets WHERE tenant_id=$1 AND asset_category=$2`, tenantId, category
-  ).catch(() => [{ count: '0' }]);
+  );
   const pfx = prefix[category] ?? 'AST';
   const seq = (parseInt(count) + 1).toString().padStart(4, '0');
   return `${pfx}-${seq}`;
@@ -101,7 +101,11 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // No statement in this transaction swallows its error: a failed statement
+  // aborts the transaction, so a swallowed one let a depreciation run count
+  // every asset as processed while the COMMIT rolled all of it back.
+  try {
+  return await withTenantRls(prisma, tenantId, async (tx) => {
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -118,7 +122,7 @@ export async function POST(req: NextRequest) {
         }[]>(
           `SELECT * FROM finance_fixed_assets WHERE tenant_id = $1 AND deleted_at IS NULL AND status = 'ACTIVE'`,
           tenantId,
-        ).catch(() => []);
+        );
 
         let processed = 0;
         for (const asset of assets) {
@@ -126,7 +130,7 @@ export async function POST(req: NextRequest) {
           const [existing] = await tx.$queryRawUnsafe<{id: string}[]>(
             `SELECT id FROM finance_depreciation_schedule WHERE tenant_id=$4 AND asset_id=$1 AND period_year=$2 AND period_month=$3`,
             asset.id, yr, mo, tenantId
-          ).catch(() => [] as {id: string}[]);
+          );
           if (existing) continue;
 
           const cost       = parseFloat(asset.acquisition_cost);
@@ -147,7 +151,7 @@ export async function POST(req: NextRequest) {
                (asset_id, period_year, period_month, opening_nbv, depreciation, closing_nbv, tenant_id)
              VALUES ($1,$2,$3,$4,$5,$6,$7)`,
             asset.id, yr, mo, nbv, actualDep, closingNBV, tenantId
-          ).catch(() => {});
+          );
 
           await tx.$executeRawUnsafe(
             `UPDATE finance_fixed_assets SET
@@ -155,13 +159,13 @@ export async function POST(req: NextRequest) {
              WHERE id::text=$1 AND tenant_id=$5`,
             asset.id, newAccDep, closingNBV,
             `${yr}-${String(mo).padStart(2,'0')}-${new Date(yr, mo, 0).getDate()}`, tenantId
-          ).catch(() => {});
+          );
 
           // Auto-set FULLY_DEPRECIATED if NBV <= residual
           if (closingNBV <= residual) {
             await tx.$executeRawUnsafe(
               `UPDATE finance_fixed_assets SET status='FULLY_DEPRECIATED', updated_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, asset.id, tenantId
-            ).catch(() => {});
+            );
           }
 
           processed++;
@@ -219,10 +223,14 @@ export async function POST(req: NextRequest) {
         body.depreciationRate ?? null,
         nbv, body.supplier ?? null, body.purchaseInvoiceNo ?? null,
         body.location ?? null, body.notes ?? null, tenantId,
-      ).catch(() => []);
+      );
 
       if (!row) return NextResponse.json({ error: 'Failed to create asset' }, { status: 500 });
       return NextResponse.json(row, { status: 201 });
   });
+  } catch (err) {
+    console.error('[finance/fixed-assets POST]', err);
+    return NextResponse.json({ error: 'Failed to update fixed assets' }, { status: 500 });
+  }
 }
 
