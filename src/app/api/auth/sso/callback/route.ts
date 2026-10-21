@@ -20,7 +20,7 @@ import crypto from 'crypto';
 import * as oidc from 'openid-client';
 import { prisma } from '@/lib/prisma';
 import { findSsoConfigByTenant } from '@/lib/sso';
-import { verifySsoState } from '@/lib/sso-state';
+import { safeReturnPath, verifySsoState } from '@/lib/sso-state';
 import { signSession } from '@/lib/tenant-session';
 import { withPlatformAdmin } from '@/lib/rls';
 import { pickProvisioningRole } from '@/lib/sso-provisioning';
@@ -60,8 +60,15 @@ export async function GET(req: NextRequest) {
     if (!claims) return redirectAndClear(req, '/login?sso=no-claims');
 
     const sub      = String(claims.sub);
-    const idEmail  = typeof claims.email === 'string' ? claims.email.toLowerCase() : '';
-    const email    = idEmail || state.email;
+    // Only the identity provider's own email claim identifies the user. This
+    // used to fall back to state.email — the address typed on the login page
+    // before the redirect, which nothing verifies — so anyone with an account
+    // at the tenant's IdP that issues no email claim could sign in as any user
+    // in an allowed domain. An email the IdP marks unverified is refused too.
+    // (email_verified is not required to be true: some IdPs, Entra ID among
+    // them, omit it for organisation accounts.)
+    if (claims.email_verified === false) return redirectAndClear(req, '/login?sso=email-unverified');
+    const email    = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
     const fullName = typeof claims.name === 'string' ? claims.name : '';
     const givenN   = typeof claims.given_name  === 'string' ? claims.given_name  : '';
     const familyN  = typeof claims.family_name === 'string' ? claims.family_name : '';
@@ -148,18 +155,18 @@ export async function GET(req: NextRequest) {
         const membership = await tx.userTenant.findUnique({
           where: { userId_tenantId: { userId: existingUser.id, tenantId: cfg.tenantId } },
           include: { role: { select: { code: true } } },
-        }).catch(() => null);
+        });
         if (!membership) {
-          if (!cfg.jitEnabled) return { redirect: '/login?sso-membership-missing' };
+          if (!cfg.jitEnabled) return { redirect: '/login?sso=membership-missing' };
           if (!provisioningRole) return { redirect: '/login?sso=no-role' };
           await tx.userTenant.create({
             data: { id: crypto.randomUUID(), userId: existingUser.id, tenantId: cfg.tenantId, roleId: provisioningRole.id, isActive: true },
           });
           return { roleCode: provisioningRole.code };
         }
-        if (!membership.isActive) {
-          await tx.userTenant.update({ where: { id: membership.id }, data: { isActive: true } });
-        }
+        // A membership an administrator disabled stays disabled: SSO used to
+        // reactivate it on the next sign-in, undoing the removal.
+        if (!membership.isActive) return { redirect: '/login?sso=membership-disabled' };
         return { roleCode: membership.role.code };
       });
       if ('redirect' in outcome) return redirectAndClear(req, outcome.redirect);
@@ -182,7 +189,7 @@ export async function GET(req: NextRequest) {
       ...(await residencyClaimForTenant(tenant.id)),
     });
 
-    const r = NextResponse.redirect(new URL(state.returnTo || '/platform', new URL(req.url).origin));
+    const r = NextResponse.redirect(new URL(safeReturnPath(state.returnTo), new URL(req.url).origin));
     r.cookies.set(COOKIE_NAME, sessionToken, {
       httpOnly: true, sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
