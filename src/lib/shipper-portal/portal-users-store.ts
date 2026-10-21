@@ -8,6 +8,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,24 @@ function rowToApi(r: Row): PortalUser {
   };
 }
 
+// ── RLS scope ──────────────────────────────────────────────────────────────
+//
+// customer_portal_users is under FORCE ROW LEVEL SECURITY, and the portal's routes are
+// public: the middleware sets no request tenant, so a bare prisma query ran
+// with app.tenant_id unset and RLS returned no rows. Every login, invitation
+// and session check failed. Each query now runs in a scope: the tenant's
+// when it is known, the platform's only for the lookups that establish who
+// the user is (by email, before any tenant is known), in a transaction of
+// their own so they never widen a caller's tenant transaction.
+
+function inTenant<T>(tenantId: string, fn: (tx: TxClient) => Promise<T>): Promise<T> {
+  return withTenantRls(prisma, tenantId, fn);
+}
+
+function acrossTenants<T>(fn: (tx: TxClient) => Promise<T>): Promise<T> {
+  return runOutsideRlsScope(() => withPlatformAdmin(prisma, fn));
+}
+
 // ── CRUD ───────────────────────────────────────────────────────────────────
 
 export async function createPortalUser(args: {
@@ -75,29 +95,29 @@ export async function createPortalUser(args: {
   phone?: string | null;
   role?: PortalRole;
 }): Promise<PortalUser> {
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `INSERT INTO customer_portal_users
-       (tenant_id, customer_id, email, full_name, phone, role)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING ${SELECT}`,
-    args.tenantId,
-    args.customerId,
-    args.email.toLowerCase().trim(),
-    args.fullName?.trim() ?? null,
-    args.phone?.trim() ?? null,
-    args.role ?? 'SHIPPER_USER',
-  );
+  const rows = await inTenant(args.tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
+      `INSERT INTO customer_portal_users
+         (tenant_id, customer_id, email, full_name, phone, role)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING ${SELECT}`,
+      args.tenantId,
+      args.customerId,
+      args.email.toLowerCase().trim(),
+      args.fullName?.trim() ?? null,
+      args.phone?.trim() ?? null,
+      args.role ?? 'SHIPPER_USER',
+  ));
   if (!rows[0]) throw new Error('createPortalUser returned no row');
   return rowToApi(rows[0]);
 }
 
 export async function getPortalUserById(tenantId: string, id: string): Promise<PortalUser | null> {
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT ${SELECT} FROM customer_portal_users
-      WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
-      LIMIT 1`,
-    id, tenantId,
-  );
+  const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+        LIMIT 1`,
+      id, tenantId,
+  ));
   return rows[0] ? rowToApi(rows[0]) : null;
 }
 
@@ -105,26 +125,26 @@ export async function getPortalUserById(tenantId: string, id: string): Promise<P
  *  on login when we don't yet know the tenant — caller must check that
  *  the returned user's tenant matches the requested tenant. */
 export async function findPortalUserByEmail(email: string): Promise<PortalUser | null> {
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT ${SELECT} FROM customer_portal_users
-      WHERE lower(email) = lower($1) AND deleted_at IS NULL
-      ORDER BY created_at DESC
-      LIMIT 1`,
-    email.trim(),
-  );
+  const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE lower(email) = lower($1) AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      email.trim(),
+  ));
   return rows[0] ? rowToApi(rows[0]) : null;
 }
 
 /** Returns the row INCLUDING the password hash. Internal only — never
  *  return the hash via API. */
 export async function _findUserWithHashByEmail(email: string): Promise<(PortalUser & { passwordHash: string | null }) | null> {
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT ${SELECT} FROM customer_portal_users
-      WHERE lower(email) = lower($1) AND deleted_at IS NULL
-      ORDER BY created_at DESC
-      LIMIT 1`,
-    email.trim(),
-  );
+  const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE lower(email) = lower($1) AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      email.trim(),
+  ));
   if (!rows[0]) return null;
   return { ...rowToApi(rows[0]), passwordHash: rows[0].password_hash };
 }
@@ -133,34 +153,35 @@ export async function listPortalUsersByCustomer(
   tenantId: string,
   customerId: string,
 ): Promise<PortalUser[]> {
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT ${SELECT} FROM customer_portal_users
-      WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL
-      ORDER BY created_at DESC`,
-    tenantId, customerId,
-  );
+  const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL
+        ORDER BY created_at DESC`,
+      tenantId, customerId,
+  ));
   return rows.map(rowToApi);
 }
 
 export async function setPortalUserPassword(
+  tenantId: string,
   userId: string,
   passwordHash: string,
 ): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `UPDATE customer_portal_users
-        SET password_hash = $1, updated_at = NOW()
-      WHERE id = $2::uuid`,
-    passwordHash, userId,
-  );
+  await inTenant(tenantId, (tx) => tx.$executeRawUnsafe(
+      `UPDATE customer_portal_users
+          SET password_hash = $1, updated_at = NOW()
+        WHERE id = $2::uuid AND tenant_id = $3`,
+      passwordHash, userId, tenantId,
+  ));
 }
 
-export async function markPortalUserLoggedIn(userId: string): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `UPDATE customer_portal_users
-        SET last_login_at = NOW(), updated_at = NOW()
-      WHERE id = $1::uuid`,
-    userId,
-  );
+export async function markPortalUserLoggedIn(tenantId: string, userId: string): Promise<void> {
+  await inTenant(tenantId, (tx) => tx.$executeRawUnsafe(
+      `UPDATE customer_portal_users
+          SET last_login_at = NOW(), updated_at = NOW()
+        WHERE id = $1::uuid AND tenant_id = $2`,
+      userId, tenantId,
+  ));
 }
 
 export async function setPortalUserActive(
@@ -168,12 +189,12 @@ export async function setPortalUserActive(
   userId: string,
   isActive: boolean,
 ): Promise<boolean> {
-  const result = await prisma.$executeRawUnsafe(
-    `UPDATE customer_portal_users
-        SET is_active = $1, updated_at = NOW()
-      WHERE id = $2::uuid AND tenant_id = $3 AND deleted_at IS NULL`,
-    isActive, userId, tenantId,
-  );
+  const result = await inTenant(tenantId, (tx) => tx.$executeRawUnsafe(
+      `UPDATE customer_portal_users
+          SET is_active = $1, updated_at = NOW()
+        WHERE id = $2::uuid AND tenant_id = $3 AND deleted_at IS NULL`,
+      isActive, userId, tenantId,
+  ));
   return Number(result) > 0;
 }
 
@@ -182,11 +203,11 @@ export async function deletePortalUser(
   tenantId: string,
   userId: string,
 ): Promise<boolean> {
-  const result = await prisma.$executeRawUnsafe(
-    `UPDATE customer_portal_users
-        SET deleted_at = NOW(), updated_at = NOW(), is_active = FALSE
-      WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    userId, tenantId,
-  );
+  const result = await inTenant(tenantId, (tx) => tx.$executeRawUnsafe(
+      `UPDATE customer_portal_users
+          SET deleted_at = NOW(), updated_at = NOW(), is_active = FALSE
+        WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+      userId, tenantId,
+  ));
   return Number(result) > 0;
 }
