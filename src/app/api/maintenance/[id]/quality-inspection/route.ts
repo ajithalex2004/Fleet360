@@ -111,11 +111,9 @@ export async function POST(
                         occurredAt:    inspectedAt,
                     };
                     if (overallResult === 'PASS') {
-                        publishInspectionPassed(id, tenantId, qcPayload)
-                            .catch(err => console.warn('[maintenance] inspection_passed publish failed:', err));
+                        await publishInspectionPassed(id, tenantId, qcPayload);
                     } else {
-                        publishInspectionFailed(id, tenantId, qcPayload)
-                            .catch(err => console.warn('[maintenance] inspection_failed publish failed:', err));
+                        await publishInspectionFailed(id, tenantId, qcPayload);
                     }
                 }
             }

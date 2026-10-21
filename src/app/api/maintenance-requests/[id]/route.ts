@@ -228,6 +228,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
             }
 
             // ── Publish domain events via outbox (Phase D lifecycle) ──────────────
+            // Awaited, in this transaction: the status change and its event
+            // commit together or not at all (transactional outbox). These were
+            // fire-and-forget with .catch: the insert raced the commit and,
+            // landing after it, failed with "transaction closed" and was
+            // dropped — the change committed with no event.
             const newStatus = (updated as any).status as string | undefined;
             if (newStatus) {
                 const req  = updated as any;
@@ -242,65 +247,65 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
                 switch (newStatus) {
                     case 'APPROVED':
-                        publishMaintenanceApproved(params.id, tenantId, {
+                        await publishMaintenanceApproved(params.id, tenantId, {
                             ...base, approvedBy: req.approvedBy ?? null, approvedAt: now,
-                        }).catch(err => console.warn('[maintenance] approved publish failed:', err));
+                        });
                         break;
 
                     case 'REJECTED':
-                        publishMaintenanceRejected(params.id, tenantId, {
+                        await publishMaintenanceRejected(params.id, tenantId, {
                             ...base, rejectedBy: req.rejectedBy ?? null, rejectedAt: now,
                             reason: req.rejectionReason ?? null,
-                        }).catch(err => console.warn('[maintenance] rejected publish failed:', err));
+                        });
                         break;
 
                     case 'QUOTATION_REQUESTED':
-                        publishQuotationRequested(params.id, tenantId, {
+                        await publishQuotationRequested(params.id, tenantId, {
                             ...base, requestedAt: now,
-                        }).catch(err => console.warn('[maintenance] quotation_requested publish failed:', err));
+                        });
                         break;
 
                     case 'QUOTATION_RECEIVED': {
                         const qid = req.quotations?.[0]?.id ?? params.id;
-                        publishQuotationReceived(qid, tenantId, {
+                        await publishQuotationReceived(qid, tenantId, {
                             ...base,
                             quotationId:  qid,
                             amount:       Number(req.estimatedCost ?? 0),
                             currency:     'AED',
                             receivedAt:   now,
-                        }).catch(err => console.warn('[maintenance] quotation_received publish failed:', err));
+                        });
                         break;
                     }
 
                     case 'ESTIMATION_APPROVED':
-                        publishEstimationApproved(params.id, tenantId, {
+                        await publishEstimationApproved(params.id, tenantId, {
                             ...base,
                             estimatedCost: Number(req.estimatedCost ?? 0),
                             currency:      'AED',
                             approvedBy:    req.approvedBy ?? null,
                             approvedAt:    now,
-                        }).catch(err => console.warn('[maintenance] estimation_approved publish failed:', err));
+                        });
                         break;
 
                     case 'WORK_ORDER_CREATED':
-                        publishWorkOrderCreated(params.id, tenantId, {
+                        await publishWorkOrderCreated(params.id, tenantId, {
                             ...base,
                             workOrderId:  req.WorkOrder?.id   ?? params.id,
                             workOrderNo:  req.workOrderNo      ?? null,
                             createdAt:    now,
-                        }).catch(err => console.warn('[maintenance] work_order_created publish failed:', err));
+                        });
                         break;
 
                     case 'IN_PROGRESS':
-                        publishWorkOrderStarted(params.id, tenantId, {
+                        await publishWorkOrderStarted(params.id, tenantId, {
                             ...base,
                             workOrderId: req.WorkOrder?.id ?? null,
                             startedAt:   now,
-                        }).catch(err => console.warn('[maintenance] work_order_started publish failed:', err));
+                        });
                         break;
 
                     case 'REPAIR_COMPLETED':
-                        publishRepairCompleted(params.id, tenantId, {
+                        await publishRepairCompleted(params.id, tenantId, {
                             requestId:     params.id,
                             vehicleId:     req.vehicleId       ?? '',
                             tenantId,
@@ -308,12 +313,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                             garageId:      req.garageId        ?? null,
                             garageName:    req.Garage?.name    ?? null,
                             occurredAt:    now,
-                        }).catch(err => console.warn('[maintenance] repair_completed publish failed:', err));
+                        });
                         break;
 
                     // INVOICE_SUBMITTED → Finance (AP payable + JE) + Fleet (vehicle available)
                     case 'INVOICE_SUBMITTED':
-                        publishWorkOrderCompleted(params.id, tenantId, {
+                        await publishWorkOrderCompleted(params.id, tenantId, {
                             requestId:          params.id,
                             vehicleId:          req.vehicleId          ?? '',
                             requestType:        req.maintenanceType     ?? 'SERVICE',
@@ -325,12 +330,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                             garageName:         req.Garage?.name         ?? null,
                             requestNumber:      req.workOrderNo          ?? null,
                             tenantId,
-                        }).catch(err => console.warn('[maintenance] work_order_completed publish failed:', err));
+                        });
                         break;
 
                     // CLOSED → audit trail, analytics
                     case 'CLOSED':
-                        publishMaintenanceClosed(params.id, tenantId, {
+                        await publishMaintenanceClosed(params.id, tenantId, {
                             requestId:     params.id,
                             vehicleId:     req.vehicleId          ?? '',
                             requestType:   req.maintenanceType     ?? 'SERVICE',
@@ -340,7 +345,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                             garageId:      req.garageId            ?? null,
                             garageName:    req.Garage?.name         ?? null,
                             requestNumber: req.workOrderNo          ?? null,
-                        }).catch(err => console.warn('[maintenance] maintenance.completed publish failed:', err));
+                        });
                         break;
 
                     default:
