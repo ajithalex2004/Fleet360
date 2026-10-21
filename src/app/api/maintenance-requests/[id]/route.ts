@@ -245,27 +245,31 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                     garageName: req.Garage?.name      ?? null,
                 };
 
-                switch (newStatus) {
-                    case 'APPROVED':
+                // Statuses are stored in Title Case ('Estimation Approved',
+                // MaintenanceStatus); this switch compared exact UPPER_SNAKE
+                // strings, so the events fired only when a client happened to
+                // send that form. statusKey() normalises both.
+                switch (statusKey(newStatus)) {
+                    case 'approved':
                         await publishMaintenanceApproved(params.id, tenantId, {
                             ...base, approvedBy: req.approvedBy ?? null, approvedAt: now,
                         });
                         break;
 
-                    case 'REJECTED':
+                    case 'rejected':
                         await publishMaintenanceRejected(params.id, tenantId, {
                             ...base, rejectedBy: req.rejectedBy ?? null, rejectedAt: now,
                             reason: req.rejectionReason ?? null,
                         });
                         break;
 
-                    case 'QUOTATION_REQUESTED':
+                    case 'quotation requested':
                         await publishQuotationRequested(params.id, tenantId, {
                             ...base, requestedAt: now,
                         });
                         break;
 
-                    case 'QUOTATION_RECEIVED': {
+                    case 'quotation received': {
                         const qid = req.quotations?.[0]?.id ?? params.id;
                         await publishQuotationReceived(qid, tenantId, {
                             ...base,
@@ -277,7 +281,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         break;
                     }
 
-                    case 'ESTIMATION_APPROVED':
+                    case 'estimation approved':
                         await publishEstimationApproved(params.id, tenantId, {
                             ...base,
                             estimatedCost: Number(req.estimatedCost ?? 0),
@@ -287,7 +291,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         });
                         break;
 
-                    case 'WORK_ORDER_CREATED':
+                    case 'work order created':
                         await publishWorkOrderCreated(params.id, tenantId, {
                             ...base,
                             workOrderId:  req.WorkOrder?.id   ?? params.id,
@@ -296,7 +300,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         });
                         break;
 
-                    case 'IN_PROGRESS':
+                    case 'in progress':
                         await publishWorkOrderStarted(params.id, tenantId, {
                             ...base,
                             workOrderId: req.WorkOrder?.id ?? null,
@@ -304,7 +308,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         });
                         break;
 
-                    case 'REPAIR_COMPLETED':
+                    case 'repair completed':
                         await publishRepairCompleted(params.id, tenantId, {
                             requestId:     params.id,
                             vehicleId:     req.vehicleId       ?? '',
@@ -317,7 +321,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         break;
 
                     // INVOICE_SUBMITTED → Finance (AP payable + JE) + Fleet (vehicle available)
-                    case 'INVOICE_SUBMITTED':
+                    case 'invoice submitted':
                         await publishWorkOrderCompleted(params.id, tenantId, {
                             requestId:          params.id,
                             vehicleId:          req.vehicleId          ?? '',
@@ -334,7 +338,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         break;
 
                     // CLOSED → audit trail, analytics
-                    case 'CLOSED':
+                    case 'closed':
                         await publishMaintenanceClosed(params.id, tenantId, {
                             requestId:     params.id,
                             vehicleId:     req.vehicleId          ?? '',
