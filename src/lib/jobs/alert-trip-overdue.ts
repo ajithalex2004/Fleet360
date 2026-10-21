@@ -13,7 +13,7 @@
  * scans the full trip history.
  */
 
-import { prisma } from '@/lib/prisma';
+import { runSweep } from '@/lib/prisma-sweep';
 import { raiseAlert } from '@/lib/alerts/raise';
 import type { JobContext, JobResult } from './registry';
 
@@ -35,18 +35,20 @@ interface OverdueTrip {
 }
 
 export async function runAlertTripOverdue(ctx: JobContext): Promise<JobResult> {
-  // Required by the JobHandler contract (registry.ts), but this sweep is
-  // self-contained — it queries its own bounded window directly rather
-  // than reading anything from the invocation context.
-  void ctx;
   const now = new Date();
   const cutoff = new Date(now.getTime() - OVERDUE_TOLERANCE_MIN * 60_000);
   const windowStart = new Date(now.getTime() - SCAN_WINDOW_HOURS * 3600_000);
 
+  // Read per tenant, in each tenant's RLS scope (runSweep). This queried
+  // trip_schedules on the bare client: a scheduled run has no request
+  // tenant, so RLS returned no rows and no alert was ever raised; a manual
+  // run only saw the caller's tenant. A manual run still covers just its
+  // own tenant (tenantHeader).
+  //
   // Raw SQL because we filter on both status IN (...) and
   // arrival_time < cutoff — cleaner than a large Prisma where clause,
   // and we only need a handful of scalar columns.
-  const rows = await prisma.$queryRaw<OverdueTrip[]>`
+  const perTenant = await runSweep(async ({ tx }) => tx.$queryRaw<OverdueTrip[]>`
     SELECT id, tenant_id, trip_number, vehicle_id, driver_id,
            departure_time, arrival_time, status, route_variant_version_id
       FROM trip_schedules
@@ -58,7 +60,10 @@ export async function runAlertTripOverdue(ctx: JobContext): Promise<JobResult> {
        AND tenant_id IS NOT NULL
      ORDER BY arrival_time ASC
      LIMIT 500
-  `;
+  `, { tenantHeader: ctx.tenantId ?? undefined });
+
+  // Alerts are raised after the reads, outside the per-tenant transactions.
+  const rows = perTenant.flatMap((r) => r.result);
 
   let raised = 0;
   const errors: string[] = [];
