@@ -57,6 +57,9 @@ BEGIN
          UPDATE %2$s
             SET paid_amount = v_paid,
                 payment_status = CASE
+                  -- A cancelled invoice stays cancelled; its paid_amount still
+                  -- follows its allocations.
+                  WHEN payment_status = ''CANCELLED'' THEN ''CANCELLED''
                   WHEN v_paid >= COALESCE(v_total, 0) AND v_paid > 0 THEN ''PAID''
                   WHEN v_paid > 0 THEN ''PARTIAL''
                   -- Nothing allocated: an invoice the allocations had marked

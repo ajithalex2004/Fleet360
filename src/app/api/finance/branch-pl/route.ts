@@ -104,7 +104,9 @@ export async function GET(req: NextRequest) {
         vat_collected: string | number;
         invoice_count: bigint;
       };
-      const unassigned = await tx.$queryRawUnsafe<NoBranchRow[]>(
+      // Only for all branches: with one branch selected, these invoices are
+      // not that branch's, and they were added to its rows and totals.
+      const unassigned = branchParam ? [] as NoBranchRow[] : await tx.$queryRawUnsafe<NoBranchRow[]>(
         `SELECT
            COALESCE(SUM(total_amount), 0) AS total_invoiced,
            COALESCE(SUM(paid_amount),  0) AS total_paid,

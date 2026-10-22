@@ -75,6 +75,14 @@ export async function computeAndInvoiceMileageOverage(
   const allowedKm = contract.mileageCap * monthsCovered;
   const actualKm = mileage - delivery.mileage;
 
+  // Serialise assessments of this contract (the key the other contract
+  // operations use; a caller already holding it in this transaction gets it
+  // again at once). Two concurrent readings both read the same prior
+  // assessments and both billed the same kilometres.
+  await tx.$executeRawUnsafe(
+    'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+    `lease-contract:${tenantId}:${contract.id}`,
+  );
   const prior = await tx.leaseMileageOverage.findMany({
     where: { tenantId, contractId: contract.id },
     select: { overageKm: true, periodTo: true },

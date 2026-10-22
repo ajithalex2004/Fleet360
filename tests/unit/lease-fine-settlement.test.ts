@@ -61,6 +61,13 @@ describe('evaluateContractSettlementLiabilities with invoiced fines', () => {
     expect(r.items.filter((i) => i.type === 'TRAFFIC_FINE').map((i) => i.amount)).toEqual([200, 50]);
   });
 
+  it('still counts what the fines leave on their invoice (e.g. VAT)', async () => {
+    st.balances.set('inv-fines', 315); // 300 fine + 5% VAT
+    const r = await evaluateContractSettlementLiabilities(txWith([fine('f1', 300)]), 't1', 'c1');
+    expect(r.outstandingTotal).toBe(315);
+    expect(r.items.find((i) => i.type === 'OTHER_INVOICE' && i.sourceId === 'inv-fines')).toMatchObject({ amount: 15 });
+  });
+
   it('still counts other contract invoices', async () => {
     st.balances.set('inv-rent', 1000);
     const r = await evaluateContractSettlementLiabilities(txWith([fine('f1', 300)]), 't1', 'c1');

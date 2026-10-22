@@ -114,8 +114,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         let excessKmFee = 0;
         // The pickup reading is recorded as mileage_out on activation;
         // pickup_odometer exists but nothing writes it.
+        // Present, not truthy: a pickup reading of 0 is a reading.
         const pickupOdometer = agr.pickup_odometer ?? agr.mileage_out;
-        if (returnOdometer && pickupOdometer && rate.includedKmPerDay > 0) {
+        if (returnOdometer != null && pickupOdometer != null && rate.includedKmPerDay > 0) {
           const totalKm      = Number(returnOdometer) - Number(pickupOdometer);
           const includedKm   = rate.includedKmPerDay * rate.totalDays;
           const excessKm     = Math.max(0, totalKm - includedKm);
@@ -167,8 +168,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           const TAX_RATE   = 5;
           const lineItems: any[] = [];
 
+          // Already invoiced (generate-invoice, or an earlier close): the rental
+          // itself is billed, so this invoice carries only the closing charges.
+          // Closing always billed the base rental again, so an agreement
+          // invoiced first and closed second was charged for it twice.
+          const existing = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            "SELECT id FROM rental_invoices WHERE agreement_id = $1 AND deleted_at IS NULL " +
+            "AND status NOT IN ('VOID','CANCELLED') LIMIT 1",
+            params.id
+          );
+          const alreadyInvoiced = existing.length > 0;
+
           // Rental charges from rate engine (exclude TAX line)
-          for (const bl of rate.breakdown) {
+          if (!alreadyInvoiced) for (const bl of rate.breakdown) {
             if (bl.type === 'TAX') continue;
             lineItems.push({
               lineType: bl.type, description: bl.label,
@@ -179,7 +191,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
           // Additional charges from agreement JSON
           try {
-            if (agr.additional_charges) {
+            if (!alreadyInvoiced && agr.additional_charges) {
               const ac = JSON.parse(agr.additional_charges);
               for (const c of (Array.isArray(ac) ? ac : [])) {
                 lineItems.push({ lineType: 'EXTRA', description: c.description, quantity: 1, unitPrice: c.amount, unitLabel: 'flat', discountPct: 0, taxable: true, amount: c.amount });
@@ -197,12 +209,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             lineItems.push({ lineType: 'FUEL', description: 'Fuel surcharge', quantity: 1, unitPrice: fuelSurcharge, unitLabel: 'flat', discountPct: 0, taxable: true, amount: fuelSurcharge });
           }
 
+          // Nothing left to bill (already invoiced, no closing charges): no invoice.
+          if (lineItems.length > 0) {
           // Totals
           // subtotal already includes the rate engine's negative DISCOUNT line.
           // The discount used to be subtracted from it again — the customer got
           // it twice and VAT was charged on the doubly discounted amount.
           const subtotal      = parseFloat(lineItems.reduce((s, l) => s + l.amount, 0).toFixed(2));
-          const discAmt       = rate.discountAmount;
+          const discAmt       = alreadyInvoiced ? 0 : rate.discountAmount;
           const taxableLines  = lineItems.filter((l) => l.taxable).reduce((s, l) => s + l.amount, 0);
           const taxableAmt    = parseFloat((taxableLines - discAmt).toFixed(2));
           const taxAmt        = parseFloat((taxableAmt * TAX_RATE / 100).toFixed(2));
@@ -247,6 +261,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             "SELECT * FROM rental_invoices WHERE id = $1", invoiceId
           );
           invoice = invRows[0];
+          }
         }
 
         const updatedAgr = await tx.$queryRawUnsafe<any[]>(

@@ -54,6 +54,16 @@ describe('GET /api/finance/branch-pl', () => {
     }
   });
 
+  it('leaves unassigned invoices out when one branch is selected', async () => {
+    await get(`branchId=${BRANCH}`);
+    expect(st.queries.some((q) => q.sql.includes('branch_id IS NULL'))).toBe(false);
+  });
+
+  it('includes unassigned invoices for all branches', async () => {
+    await get('');
+    expect(st.queries.some((q) => q.sql.includes('branch_id IS NULL'))).toBe(true);
+  });
+
   it('passes no branch (all branches) as a null parameter', async () => {
     await get('');
     const byBranch = st.queries.filter((q) => q.sql.includes('FROM tenant_branches b'));

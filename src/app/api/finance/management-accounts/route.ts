@@ -172,7 +172,8 @@ function computeIncomeSummary(revenues: RevLine[], expenses: ExpLine[]) {
   const grossProfit     = totalRevenue - totalCOGS;
   const totalOPEX       = opexExpenses.reduce((s, e) => s + e.amount, 0);
   const ebitda          = grossProfit - totalOPEX;
-  const depreciation    = expenses.filter(e => e.subtype === 'DEPRECIATION').reduce((s, e) => s + e.amount, 0);
+  const depreciationExpenses = expenses.filter(e => e.subtype === 'DEPRECIATION');
+  const depreciation    = depreciationExpenses.reduce((s, e) => s + e.amount, 0);
   const ebit            = ebitda - depreciation;
   const totalFinance    = financeExpenses.reduce((s, e) => s + e.amount, 0);
   const ebt             = ebit - totalFinance;
@@ -181,7 +182,8 @@ function computeIncomeSummary(revenues: RevLine[], expenses: ExpLine[]) {
   const r2 = (n: number) => Math.round(n * 100) / 100;
   const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
   return {
-    revenues, expenses: { cogs: cogsExpenses, opex: opexExpenses, finance: financeExpenses, tax: taxExpenses },
+    // depreciation: its own group, so the breakdown reconciles with EBIT.
+    revenues, expenses: { cogs: cogsExpenses, opex: opexExpenses, depreciation: depreciationExpenses, finance: financeExpenses, tax: taxExpenses },
     summary: {
       totalRevenue:      r2(totalRevenue),
       totalCOGS:         r2(totalCOGS),

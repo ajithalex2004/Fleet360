@@ -25,10 +25,12 @@ const contract: MileageOverageContract = {
 
 function makeTx(prior: Array<{ overageKm: number; periodTo: Date }>) {
   const created: Array<Record<string, unknown>> = [];
+  const order: string[] = [];
   const tx = {
+    $executeRawUnsafe: async (sql: string, key: string) => { order.push(`lock:${key}`); return 1; },
     leaseMileageReading: { findFirst: async () => ({ mileage: 10_000, readingDate: start }) },
     leaseMileageOverage: {
-      findMany: async () => [...prior].sort((a, b) => b.periodTo.getTime() - a.periodTo.getTime()),
+      findMany: async () => { order.push('read-prior'); return [...prior].sort((a, b) => b.periodTo.getTime() - a.periodTo.getTime()); },
       create: async ({ data }: { data: Record<string, unknown> }) => { created.push(data); return { id: 'o1', ...data }; },
       update: async ({ data }: { data: Record<string, unknown> }) => ({ id: 'o1', ...data }),
     },
@@ -38,7 +40,7 @@ function makeTx(prior: Array<{ overageKm: number; periodTo: Date }>) {
     },
     leaseInvoiceLine: { create: async ({ data }: { data: Record<string, unknown> }) => data },
   };
-  return { tx: tx as never, created };
+  return { tx: tx as never, created, order };
 }
 
 const monthly = (months: number, odometer: number) => ({
@@ -84,6 +86,12 @@ describe('computeAndInvoiceMileageOverage', () => {
       tenantId: 't1', contract, readingType: 'RETURN', mileage: 35_500, readingDate: contract.endDate,
     });
     expect(created[0]).toMatchObject({ allowedKm: 24_000, actualKm: 25_500, overageKm: 500 });
+  });
+
+  it('locks the contract before reading prior assessments', async () => {
+    const { tx, order } = makeTx([]);
+    await computeAndInvoiceMileageOverage(tx, monthly(3, 16_500));
+    expect(order.slice(0, 2)).toEqual(['lock:lease-contract:t1:c1', 'read-prior']);
   });
 
   it('does not re-raise a waived overage', async () => {

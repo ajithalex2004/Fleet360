@@ -476,6 +476,14 @@ export async function evaluateContractSettlementLiabilities(
     }
   }
 
+  // What the fines don't account for on their invoices — VAT (sweep-bill adds
+  // 5%), or fines on it outside this evaluation's scope — is still owed.
+  for (const onInvoice of fineInvoiceBalance.values()) {
+    if (onInvoice.remaining > 0.005) {
+      items.push({ type: 'OTHER_INVOICE', sourceId: onInvoice.invoiceId, state: 'INVOICED', amount: onInvoice.remaining });
+    }
+  }
+
   // Other outstanding invoices tied to this contract via LeaseInvoiceLine,
   // not already counted as damage/overage above (the double-counting fix).
   const lines = await tx.leaseInvoiceLine.findMany({
