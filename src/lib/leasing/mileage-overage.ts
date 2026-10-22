@@ -2,6 +2,7 @@ import type { TxClient } from '@/lib/rls';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.5;
+const MONTH_MS = 30.44 * 86400000;
 
 export type MileageOverageContract = {
   id: string;
@@ -60,19 +61,32 @@ export async function computeAndInvoiceMileageOverage(
     return { overage: null, invoice: null, deliveryMileage: null, reason: 'NO_DELIVERY_READING' };
   }
 
-  const monthsCovered =
-    readingType === 'RETURN'
-      ? Math.ceil((contract.endDate.getTime() - contract.startDate.getTime()) / (30.44 * 86400000))
-      : 1;
+  // Cumulative distance against the cumulative allowance to date, less the
+  // overage already assessed. A MONTHLY check used to compare the distance
+  // since delivery with ONE month's cap, so a lessee within the cap every
+  // month was billed (months - 1) x cap of "overage" in month N, and again
+  // the month after; the RETURN check then billed the whole term on top.
+  // Every earlier overage record counts as assessed, WAIVED included: a
+  // waiver is a decision, not a debt to re-raise.
+  const monthsCovered = readingType === 'RETURN'
+    ? Math.ceil((contract.endDate.getTime() - contract.startDate.getTime()) / MONTH_MS)
+    : Math.max(1, Math.round((readingDate.getTime() - contract.startDate.getTime()) / MONTH_MS));
 
   const allowedKm = contract.mileageCap * monthsCovered;
   const actualKm = mileage - delivery.mileage;
 
-  if (actualKm <= allowedKm) {
+  const prior = await tx.leaseMileageOverage.findMany({
+    where: { tenantId, contractId: contract.id },
+    select: { overageKm: true, periodTo: true },
+    orderBy: { periodTo: 'desc' },
+  });
+  const assessedKm = prior.reduce((sum, o) => sum + Number(o.overageKm ?? 0), 0);
+
+  if (actualKm - allowedKm <= assessedKm) {
     return { overage: null, invoice: null, deliveryMileage: delivery.mileage, reason: 'WITHIN_CAP' };
   }
 
-  const overageKm = actualKm - allowedKm;
+  const overageKm = actualKm - allowedKm - assessedKm;
   const ratePerKm = contract.mileageOverageRate ? Number(contract.mileageOverageRate) : DEFAULT_OVERAGE_RATE_AED_PER_KM;
   const overageAmount = overageKm * ratePerKm;
   const currency = contract.currency ?? 'AED';
@@ -87,7 +101,8 @@ export async function computeAndInvoiceMileageOverage(
       tenantId,
       contractId: contract.id,
       vehicleId: vehicleId ?? null,
-      periodFrom: contract.startDate,
+      // From the end of the last assessed period: this record is the increment.
+      periodFrom: prior[0]?.periodTo ?? contract.startDate,
       periodTo: new Date(readingDate),
       allowedKm,
       actualKm,
