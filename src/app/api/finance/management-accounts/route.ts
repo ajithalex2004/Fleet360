@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
@@ -99,7 +100,13 @@ async function getRevenue(
     enabled('LOGISTICS')
       ? q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+    // Mirrored invoices of the modules summed from their own tables above are
+    // left out here, or that revenue counted twice.
+    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${excludeMirrored([
+      ...(enabled('RAC') ? ['RENTAL' as const] : []),
+      ...(enabled('LEASING') ? ['LEASING' as const] : []),
+      ...(enabled('LOGISTICS') ? ['LOGISTICS' as const] : []),
+    ])}${tc(2)}`, ...tp([from, to])),
   ]);
 
   return [
@@ -245,7 +252,7 @@ export async function GET(req: NextRequest) {
           q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
           q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
           q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%'${excludeMirrored(['RENTAL', 'LEASING', 'LOGISTICS'])} AND COALESCE(module, '') <> 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
           q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
         ]);
 

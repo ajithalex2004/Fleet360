@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -18,11 +19,13 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
+// Rental and logistics revenue is summed from their own tables below; their
+// mirrored finance_invoices rows would count it twice and overstate the tax.
 async function computeRevenue(from: string, to: string, tenantId: string): Promise<number> {
   const [rev] = await prisma.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices
      WHERE tenant_id = $3 AND deleted_at IS NULL AND issue_date BETWEEN $1::date AND $2::date
-       AND payment_status NOT IN ('DRAFT','CANCELLED')`, from, to, tenantId
+       AND payment_status NOT IN ('DRAFT','CANCELLED')${excludeMirrored(['RENTAL', 'LOGISTICS'])}`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
   const [rac] = await prisma.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_amount),0)::text as t FROM rental_invoices
