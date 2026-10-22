@@ -7,7 +7,7 @@
  */
 
 import { Prisma, PrismaClient } from '@prisma/client';
-import { findGroundingBlocks } from '@/lib/fleet/grounding-blocks';
+import { findGroundingBlocks, ungroundIfClear } from '@/lib/fleet/grounding-blocks';
 
 export type DocumentComplianceStatus =
   | 'COMPLIANT'
@@ -349,15 +349,19 @@ export async function executeFleetExpirySweep(
         });
       }
     } else if (evaluation.actionTaken === 'UNGROUNDED') {
-      newlyRestoredCount++;
       if (!isDryRun) {
-        await tx.vehicle.updateMany({
-          where: { id: veh.id, status: 'GROUNDED' },
-          data: {
-            status: 'AVAILABLE',
-            isActive: true,
-          },
-        });
+        // Re-check under the vehicle row lock at the moment of release: the
+        // batch check above can be stale by the time the loop reaches this
+        // vehicle (a DVIR may have grounded it again since).
+        const outcome = await ungroundIfClear(tx, tenantId, veh.id, { skipDocuments: true, referenceDate: refDate });
+        if (!outcome.released && outcome.blocks.length > 0) {
+          evaluation.actionTaken = 'MAINTAINED';
+          evaluation.actionReason = `Documents are valid but the vehicle stays grounded: ${outcome.blocks.map((b) => b.reason).join('; ')}`;
+        } else {
+          newlyRestoredCount++;
+        }
+      } else {
+        newlyRestoredCount++;
       }
     }
 

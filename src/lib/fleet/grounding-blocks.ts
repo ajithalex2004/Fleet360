@@ -164,6 +164,16 @@ export async function ungroundIfClear(
   vehicleId: string,
   options: GroundingBlockOptions = {},
 ): Promise<{ released: boolean; blocks: GroundingBlock[] }> {
+  // Lock the vehicle row first. A concurrent grounding write (DVIR: ground
+  // the vehicle + insert the critical ticket in one transaction) holds this
+  // lock until it commits, so the block check below waits and then sees
+  // its ticket — instead of reading before the commit and releasing the
+  // vehicle the moment the lock frees.
+  await db.$queryRawUnsafe(
+    `SELECT id FROM vehicles WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`,
+    vehicleId,
+    tenantId,
+  );
   const blocks = (await findGroundingBlocks(db, tenantId, [vehicleId], options)).get(vehicleId) ?? [];
   if (blocks.length > 0) return { released: false, blocks };
   const res = await db.vehicle.updateMany({

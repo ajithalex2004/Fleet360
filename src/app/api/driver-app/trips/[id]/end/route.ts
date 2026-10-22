@@ -76,10 +76,13 @@ export async function POST(
           departure_time: Date;
           arrival_time: Date;
           actual_departure_at: Date | null;
+          actual_arrival_at: Date | null;
+          duration_minutes: number | null;
           driver_id: string;
         }>
       >`
-        SELECT id, status, departure_time, arrival_time, actual_departure_at, driver_id
+        SELECT id, status, departure_time, arrival_time, actual_departure_at,
+               actual_arrival_at, duration_minutes, driver_id
         FROM trip_schedules
         WHERE id = ${params.id}
           AND tenant_id = ${ctx.tenantId}::uuid
@@ -107,6 +110,22 @@ export async function POST(
           { error: 'invalid state transition', reason: decision.reason, currentStatus: trip.status },
           { status: 409 },
         );
+      }
+
+      // Already finished (re-tap after COMPLETED, or after the auto-close job
+      // set AUTO_CLOSED): a no-op. Report the stored completion, not this
+      // request's time and a recalculated duration.
+      if (!isTripInFlight(trip.status)) {
+        return NextResponse.json({
+          ok: true,
+          tripId: params.id,
+          status: decision.nextStatus,
+          actualArrivalAt: trip.actual_arrival_at?.toISOString() ?? null,
+          scheduledArrivalAt: trip.arrival_time.toISOString(),
+          durationMinutes: trip.duration_minutes,
+          location: null,
+          idempotent: true,
+        });
       }
 
       const now = body.at ?? new Date().toISOString();
@@ -166,7 +185,7 @@ export async function POST(
         scheduledArrivalAt: trip.arrival_time.toISOString(),
         durationMinutes,
         location,
-        idempotent: (trip.status ?? '').toUpperCase() === 'COMPLETED',
+        idempotent: false,
       });
   });
 }

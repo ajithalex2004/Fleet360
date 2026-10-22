@@ -54,8 +54,11 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
     try {
       // Each close runs in the trip's tenant: trip_schedules and
       // trip_state_transitions are under FORCE ROW LEVEL SECURITY.
-      await withTenantRls(prisma, t.tenant_id, async closeTx => {
-        await closeTx.$executeRaw`
+      const didClose = await withTenantRls(prisma, t.tenant_id, async closeTx => {
+        // Guarded update: if a driver or Bus Ops completed the trip after the
+        // scan, zero rows match — then record no AUTO_CLOSED transition and
+        // do not report the trip as closed.
+        const updated = await closeTx.$executeRaw`
           UPDATE trip_schedules
              SET status = 'AUTO_CLOSED',
                  actual_arrival_at = ${now.toISOString()}::timestamptz,
@@ -63,6 +66,7 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
                  updated_at        = NOW()
            WHERE id = ${t.id} AND status IN (${IN_FLIGHT})
         `;
+        if (updated === 0) return false;
         await closeTx.$executeRaw`
           INSERT INTO trip_state_transitions
             (id, tenant_id, trip_id, driver_id, transition, at, source, notes)
@@ -73,8 +77,9 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
             ${`Auto-closed: ${overdueHours}h past scheduled arrival`}
           )
         `;
+        return true;
       });
-      closed.push(t.id);
+      if (didClose) closed.push(t.id); else skipped.push(t.id);
     } catch (e) {
       console.warn(`[auto-close-trips] failed to close ${t.id}:`, e);
       skipped.push(t.id);

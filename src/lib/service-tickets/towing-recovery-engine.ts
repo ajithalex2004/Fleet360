@@ -13,6 +13,65 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { effectiveEndTime } from '@/lib/bus-ops/validate-assignment';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
+
+type TripWindow = { id: string; departureTime: Date; arrivalTime: Date | null; route: { estimatedDurationMins: number | null } | null };
+
+const tripWindowSelect = {
+  id: true,
+  departureTime: true,
+  arrivalTime: true,
+  route: { select: { estimatedDurationMins: true } },
+} as const;
+
+/** Upcoming scheduled trips of the broken vehicle — the ones a swap moves. */
+function upcomingScheduledTrips(tenantId: string, vehicleId: string, now: Date): Promise<TripWindow[]> {
+  return prisma.tripSchedule.findMany({
+    where: { tenantId, vehicleId, deletedAt: null, departureTime: { gte: now }, status: { in: ['SCHEDULED'] } },
+    select: tripWindowSelect,
+  });
+}
+
+/**
+ * Trips of `candidateIds` that overlap any of `trips`, keyed by vehicle —
+ * the same half-open window rule Bus Ops assignment validation uses
+ * (effectiveEndTime). A replacement left AVAILABLE for Bus Ops must not be
+ * double-booked onto two trips at once.
+ */
+async function overlappingTripsByVehicle(
+  tenantId: string,
+  candidateIds: string[],
+  trips: TripWindow[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (candidateIds.length === 0 || trips.length === 0) return out;
+  const windows = trips.map((t) => ({
+    start: t.departureTime.getTime(),
+    end: effectiveEndTime(t.departureTime, t.arrivalTime, t.route?.estimatedDurationMins ?? null).getTime(),
+  }));
+  const latestEnd = Math.max(...windows.map((w) => w.end));
+  const existing = await prisma.tripSchedule.findMany({
+    where: {
+      tenantId,
+      vehicleId: { in: candidateIds },
+      deletedAt: null,
+      status: { in: [...TRIP_OPEN_STATUSES] },
+      departureTime: { lt: new Date(latestEnd) },
+    },
+    select: { ...tripWindowSelect, vehicleId: true, tripNumber: true },
+  });
+  for (const e of existing) {
+    const start = e.departureTime.getTime();
+    const end = effectiveEndTime(e.departureTime, e.arrivalTime, e.route?.estimatedDurationMins ?? null).getTime();
+    if (windows.some((w) => start < w.end && end > w.start) && e.vehicleId) {
+      const list = out.get(e.vehicleId) ?? [];
+      list.push(e.tripNumber ?? e.id);
+      out.set(e.vehicleId, list);
+    }
+  }
+  return out;
+}
 
 export interface RecoveryVendorOption {
   id: string;
@@ -171,7 +230,7 @@ export async function getRecoveryAndReplacementOptions(
   }
 
   // 3. Query Available Replacement Vehicles from Pool
-  const availableVehicles = await prisma.vehicle.findMany({
+  const candidateVehicles = await prisma.vehicle.findMany({
     where: {
       tenantId,
       // INACTIVE vehicles are off fleet (or grounded) — never offer them.
@@ -180,7 +239,7 @@ export async function getRecoveryAndReplacementOptions(
       deletedAt: null,
       id: ticket.vehicle_id ? { not: ticket.vehicle_id } : undefined,
     },
-    take: 4,
+    take: 20,
     select: {
       id: true,
       licensePlate: true,
@@ -193,6 +252,12 @@ export async function getRecoveryAndReplacementOptions(
       currentMileage: true,
     },
   });
+
+  // Do not offer a vehicle already booked on a trip that overlaps the
+  // broken vehicle's upcoming trips it would take over.
+  const tripsToCover = ticket.vehicle_id ? await upcomingScheduledTrips(tenantId, ticket.vehicle_id, new Date()) : [];
+  const busy = await overlappingTripsByVehicle(tenantId, candidateVehicles.map((v) => v.id), tripsToCover);
+  const availableVehicles = candidateVehicles.filter((v) => !busy.has(v.id)).slice(0, 4);
 
   const formattedReplacements: AvailableReplacementVehicle[] = availableVehicles.map((v) => ({
     id: v.id,
@@ -393,6 +458,11 @@ export async function provisionReplacementVehicle(
 
   // 3. Ground the broken vehicle if linked and execute domain-specific adapters
   if (ticket?.vehicle_id) {
+    // The broken vehicle cannot replace itself: it would be grounded, then
+    // handed its own trips and bookings, then set back in service below.
+    if (ticket.vehicle_id === replacementVehicle.id) {
+      throw new Error('Replacement vehicle cannot be the vehicle the ticket is for');
+    }
     // Fetch grounded vehicle metadata
     const groundedVehicle = await prisma.vehicle.findFirst({
       where: { id: ticket.vehicle_id, tenantId: params.tenantId },
@@ -443,15 +513,15 @@ export async function provisionReplacementVehicle(
 
     // --- Domain Adapter 2: Staff Transport / Bus Operations ---
     // Do NOT modify past trips or the master schedule; reassign only upcoming scheduled trips
-    const upcomingTrips = await prisma.tripSchedule.findMany({
-      where: {
-        vehicleId: ticket.vehicle_id,
-        tenantId: params.tenantId,
-        departureTime: { gte: now },
-        status: { in: ['SCHEDULED'] },
-      },
-      select: { id: true },
-    });
+    const upcomingTrips = await upcomingScheduledTrips(params.tenantId, ticket.vehicle_id, now);
+    // The replacement stays AVAILABLE for Bus Ops, so the row lock above
+    // only guards concurrent swaps until commit: refuse a replacement that
+    // already runs a trip overlapping the ones it is about to take over.
+    const conflicts = (await overlappingTripsByVehicle(params.tenantId, [replacementVehicle.id], upcomingTrips))
+      .get(replacementVehicle.id);
+    if (conflicts?.length) {
+      throw new Error(`Replacement vehicle is already assigned to overlapping trip(s): ${conflicts.join(', ')}`);
+    }
 
     if (
       upcomingTrips.length > 0 ||

@@ -115,7 +115,8 @@ export async function GET(req: NextRequest) {
           shiftType: trip.shiftType,
           status: trip.status,
           departureTime: trip.departureTime.toISOString(),
-          estimatedArrival: trip.arrivalTime ? trip.arrivalTime.toISOString() : null,
+          // Live ETA from telematics when there is one; the schedule otherwise.
+          estimatedArrival: trip.estimatedArrivalTime?.toISOString() ?? trip.arrivalTime?.toISOString() ?? null,
           vehicle: tripVehicle
             ? {
                 id: tripVehicle.id,

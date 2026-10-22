@@ -541,6 +541,9 @@ export async function processTelemetryBatch(
             title: `EMERGENCY SOS: Vehicle ${vehicle.vehicleCode || vehicle.licensePlate}`,
             description: `Driver emergency panic switch triggered at Lat: ${ping.latitude.toFixed(5)}, Lng: ${ping.longitude.toFixed(5)}. Speed: ${ping.speedKmh.toFixed(0)} km/h.`,
             dedupeKey: `SOS_PANIC:${vehicle.id}:${Math.floor(ping.occurredAt.getTime() / 60000)}`,
+            // raiseAlert swallows publish errors by default — opt into
+            // strict mode so a failed SOS really fails the ping.
+            throwOnError: true,
           });
         }
 

@@ -51,8 +51,10 @@ describe('ungroundIfClear', () => {
     expect(r.released).toBe(false);
     expect(r.blocks.map((b) => b.source)).toEqual(['SERVICE_TICKET']);
     expect(db.vehicle.updateMany).not.toHaveBeenCalled();
-    // The ticket being closed is excluded from its own check.
-    expect(db.$queryRawUnsafe.mock.calls[0]).toContain('t1');
+    // The vehicle row is locked first, then the ticket being closed is
+    // excluded from its own check.
+    expect(db.$queryRawUnsafe.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(db.$queryRawUnsafe.mock.calls[1]).toContain('t1');
   });
 
   it('keeps the vehicle grounded while a workshop job is open', async () => {
@@ -174,5 +176,19 @@ describe('assignVehiclesToBlocks across a multi-day plan', () => {
     );
     expect(r.map((x) => x.vehicleId)).toEqual(['v1', 'v1', null]);
     expect(r[2].reason).toBe('NO_VEHICLES_AVAILABLE');
+  });
+});
+
+describe('assignVehiclesToBlocks with undated blocks', () => {
+  const undated = (blockId: string): BlockVehicleRequirement => ({ ...block(blockId, ''), date: null });
+
+  it('an undated block reserves its vehicle across every date', () => {
+    const r = assignVehiclesToBlocks([undated('u1'), block('mon-1', '2026-10-19')], [vehicle('v1')]);
+    expect(r.map((x) => x.vehicleId)).toEqual(['v1', null]);
+  });
+
+  it('a vehicle used on a dated block is not free for an undated one', () => {
+    const r = assignVehiclesToBlocks([block('mon-1', '2026-10-19'), undated('u1')], [vehicle('v1')]);
+    expect(r.map((x) => x.vehicleId)).toEqual(['v1', null]);
   });
 });

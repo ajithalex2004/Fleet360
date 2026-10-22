@@ -679,7 +679,7 @@ function aggregateVerdict(checks: AssignmentCheck[]): AssignmentValidationResult
  * Same formula applied to both the proposed and existing trips so
  * overlap comparison is symmetric.
  */
-function effectiveEndTime(
+export function effectiveEndTime(
   departureTime: Date,
   arrivalTime:   Date | null,
   routeMins:     number | null,

@@ -212,10 +212,15 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // The ticket mirror is optional: run it in a savepoint so a failure
-        // neither aborts the transaction (losing the DVIR and the grounding
-        // above) nor is silently committed as a rolled-back transaction.
-        await bestEffortInTx(tx, 'driver-app/dvir.service-ticket', async () => {
+        // For a critical defect the ticket is what keeps the vehicle grounded
+        // (findGroundingBlocks reads open critical tickets, not the dvir
+        // table), so it is mandatory: if it cannot be written the whole
+        // submission fails and the driver retries — never a grounded vehicle
+        // with nothing holding it that the next expiry sweep would release.
+        // For non-critical defects the mirror is optional and runs in a
+        // savepoint, so its failure neither aborts the transaction nor is
+        // silently committed as a rolled-back one.
+        const mirrorTicket = async () => {
           // Ticket priorities are Low / Medium / High (TicketPriority); a
           // 'Critical' string fell through the SLA matrix to Medium (24h).
           // Criticality itself is carried by custom_fields.hasCriticalDefect /
@@ -281,7 +286,12 @@ export async function POST(req: NextRequest) {
           );
           serviceTicketId = insertedTicket?.id ?? null;
           serviceTicketReadableId = readableId;
-        });
+        };
+        if (hasCritical) {
+          await mirrorTicket();
+        } else {
+          await bestEffortInTx(tx, 'driver-app/dvir.service-ticket', mirrorTicket);
+        }
       }
 
       return NextResponse.json({

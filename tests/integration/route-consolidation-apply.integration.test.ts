@@ -235,13 +235,18 @@ describe('scenario 1: apply is atomic', () => {
 
     // ...and point at stops ON the merged route, not at the retired
     // source routes' stops they were copied from.
-    const mergedStopIds = new Set(
-      (await prisma.routeStop.findMany({ where: { routeId: r.mergedRouteId }, select: { id: true } })).map((s) => s.id),
-    );
-    expect(rp?.pickupStopId).toBeTruthy();
-    for (const stopId of [rp?.pickupStopId, rp?.dropoffStopId, te?.defaultStopId]) {
-      if (stopId != null) expect(mergedStopIds.has(stopId)).toBe(true);
-    }
+    // Merged stops are copied in mergedRoute.stopIds order:
+    // [stopsA[0], stopsB[0], stopsA[1]] → sequence 1, 2, 3.
+    const mergedStopRows = await prisma.routeStop.findMany({
+      where: { routeId: r.mergedRouteId },
+      select: { id: true, sequence: true },
+      orderBy: { sequence: 'asc' },
+    });
+    const bySeq = new Map(mergedStopRows.map((s) => [s.sequence, s.id]));
+    expect(rp?.pickupStopId).toBe(bySeq.get(1));   // was stopsA[0]
+    expect(rp?.dropoffStopId).toBe(bySeq.get(3));  // was stopsA[1]
+    expect(te?.defaultStopId).toBe(bySeq.get(2));  // was stopsB[0]
+    expect(bySeq.get(1)).toBeTruthy();
 
     // Lineage rows exist
     const consolidation = await prisma.routeConsolidation.findUnique({
