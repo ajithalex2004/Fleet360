@@ -118,11 +118,13 @@ export async function GET(req: NextRequest) {
         if (hasGl) {
           const [eq]  = await glBalance('3%', 'CREDIT');
           const rows  = await glBalance('3%', 'CREDIT');
-          // Retained earnings = all income - all expense posted to date
+          // Retained earnings = all income - all expense posted to date, i.e.
+          // credits less debits across both: income is credit-normal (positive)
+          // and expense debit-normal (negative). This took debit - credit for
+          // expenses, which is positive too, so it ADDED expenses to income and
+          // the balance sheet was out by twice total expenses.
           const [pl] = await tx.$queryRawUnsafe<{net:string}[]>(
-            `SELECT COALESCE(SUM(CASE WHEN c.account_type='INCOME' THEN jl.credit_amount - jl.debit_amount
-                                   WHEN c.account_type='EXPENSE' THEN jl.debit_amount - jl.credit_amount
-                                   ELSE 0 END),0)::text as net
+            `SELECT COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)::text as net
              FROM finance_journal_lines jl
              JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
              JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id

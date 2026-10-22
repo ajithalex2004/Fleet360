@@ -152,7 +152,9 @@ async function getExpenses(
   return [
     { label: 'Fuel & Lubricants',            code: '5110', amount: fuelAmt,  subtype: 'COGS' },
     { label: 'Vehicle Maintenance & Repairs', code: '5120', amount: maintAmt, subtype: 'COGS' },
-    { label: 'Fleet Depreciation',            code: '5150', amount: depAmt,   subtype: 'COGS' },
+    // Its own subtype, below EBITDA: as COGS it was taken out of gross profit
+    // and EBITDA, then subtracted again for EBIT.
+    { label: 'Fleet Depreciation',            code: '5150', amount: depAmt,   subtype: 'DEPRECIATION' },
     { label: 'Operating Expenses',            code: '5300', amount: expAmt,   subtype: 'OPEX' },
   ].filter(r => r.amount > 0);
 }
@@ -170,7 +172,7 @@ function computeIncomeSummary(revenues: RevLine[], expenses: ExpLine[]) {
   const grossProfit     = totalRevenue - totalCOGS;
   const totalOPEX       = opexExpenses.reduce((s, e) => s + e.amount, 0);
   const ebitda          = grossProfit - totalOPEX;
-  const depreciation    = expenses.find(e => e.code === '5150')?.amount ?? 0;
+  const depreciation    = expenses.filter(e => e.subtype === 'DEPRECIATION').reduce((s, e) => s + e.amount, 0);
   const ebit            = ebitda - depreciation;
   const totalFinance    = financeExpenses.reduce((s, e) => s + e.amount, 0);
   const ebt             = ebit - totalFinance;
