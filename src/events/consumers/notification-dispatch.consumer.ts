@@ -5,18 +5,18 @@
  * notifications by reading the platform NotificationRule table.
  *
  * For each matching enabled rule it renders the template, resolves
- * recipients, and writes a NotificationLog row (status: Pending).
- * Actual channel delivery (email / SMS / WhatsApp) is the responsibility
- * of the platform notification infrastructure that reads those Pending rows.
+ * recipients, and delivers each message in the event's tenant
+ * (src/lib/notification-delivery.ts), which records the outcome in
+ * NotificationLog.
  *
  * One consumer instance per event type — all share the same class.
  */
 
-import { randomUUID }               from 'crypto';
 import { type NotificationEvent }   from '@prisma/client';
 import { BaseEventConsumer }        from '@/events/consumer-base';
 import type { DomainEventEnvelope } from '@/events/event-envelope';
 import type { MaintenanceQCEventPayload } from '@/events/contracts/maintenance.events';
+import { deliverNotification } from '@/lib/notification-delivery';
 import { prisma }                   from '@/lib/prisma';
 
 /**
@@ -89,22 +89,18 @@ export class NotificationDispatchConsumer extends BaseEventConsumer<MaintenanceQ
                 ? rule.specificRecipientIds
                 : rule.recipientTypes;
 
+            // Delivered now, in the event's tenant (src/lib/notification-delivery.ts).
+            // These used to be written as 'Pending' NotificationLog rows for a
+            // channel worker that does not exist: nothing was ever sent.
             for (const channel of rule.channels) {
                 for (const recipient of recipients) {
-                    await prisma.notificationLog.create({
-                        data: {
-                            id:            randomUUID(),
-                            recipient,
-                            type:          channel,
-                            subject,
-                            body,
-                            triggerReason: `${notifEvent} — ${data.requestId}`,
-                            status:        'Pending',
-                        },
+                    const outcomes = await deliverNotification({
+                        tenantId: envelope.tenantId,
+                        channel, recipient, subject, body,
+                        triggerReason: `${notifEvent} — ${data.requestId}`,
                     });
                     console.log(
-                        `[${this.consumerName}] queued ${channel} → ${recipient} ` +
-                        `for request ${data.requestId}`,
+                        `[${this.consumerName}] ${channel} → ${recipient} for request ${data.requestId}: ${outcomes.join(', ')}`,
                     );
                 }
             }

@@ -67,7 +67,9 @@ export async function POST(req: NextRequest) {
         // the first branch was always undefined, so every FUEL_FILLED event
         // was published with a VEHICLE id in its tenantId field, routing
         // Finance consumers to a tenant that does not exist.
-        getEventBus().publish({
+        // Awaited, in this transaction: the fuel log and its event commit
+        // together. Unawaited it raced the commit and could be lost.
+        await getEventBus().publish({
           eventType:     FUEL_FILLED,
           aggregateType: 'FuelLog',
           aggregateId:   fuelLog.id,
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
             totalCost:    fuelLog.totalCost    ?? null,
             station:      fuelLog.station      ?? null,
           },
-        }).catch(err => console.warn('[fuel-logs] outbox publish failed:', err));
+        });
 
         return NextResponse.json(fuelLog, { status: 201 });
         } catch (e) {

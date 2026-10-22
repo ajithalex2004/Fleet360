@@ -13,6 +13,7 @@
 import { prisma } from '@/lib/prisma';
 import { ensureLeaseContractTenantColumn } from '@/lib/leasing-governance';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
+import { nextPayableNumber } from '@/lib/finance/payable-number';
 
 // ── Status mapping (Leasing → Finance) ────────────────────────────────────────
 
@@ -318,24 +319,25 @@ export async function mirrorMaintenanceToFinance(
   const description = `Maintenance: ${req.maintenanceType ?? 'SERVICE'} — ${vehicleRef}`;
   const issueDate   = new Date().toISOString().slice(0, 10);
 
+  // Every failure propagates: the payable insert and the journal entry used
+  // to be caught and logged, so the work-order event was marked processed
+  // with nothing written. The consumer runs this in one transaction (the
+  // payable and the entry commit together) and retries on failure.
+
   // ── 1. AP Payable ─────────────────────────────────────────────────────────
   // Idempotent: skip if a payable already exists for this source_id.
   const [existingAP] = await prisma.$queryRawUnsafe<Array<{ id: string; payable_number: string }>>(
     `SELECT id::text, payable_number FROM finance.finance_payables
       WHERE source_type = 'MAINTENANCE_REQUEST' AND source_id = $1 LIMIT 1`,
     req.id,
-  ).catch(() => []);
+  );
 
   let financePayableId = existingAP?.id;
   let payableNumber    = existingAP?.payable_number;
 
   if (!financePayableId) {
     const ym  = issueDate.slice(0, 7).replace('-', '');
-    const [seqRow] = await prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*) AS count FROM finance.finance_payables WHERE payable_number LIKE $1`,
-      `AP-${ym}-%`,
-    ).catch(() => [{ count: 0 }]);
-    payableNumber = `AP-${ym}-${String(Number(seqRow?.count ?? 0) + 1).padStart(5, '0')}`;
+    payableNumber = await nextPayableNumber(prisma, tenantId, `AP-${ym}`);
 
     const [apRow] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `INSERT INTO finance.finance_payables
@@ -363,7 +365,7 @@ export async function mirrorMaintenanceToFinance(
       issueDate,
       actor,
       tenantId,
-    ).catch(() => []);
+    );
 
     financePayableId = apRow?.id;
   }
@@ -374,32 +376,28 @@ export async function mirrorMaintenanceToFinance(
     `SELECT id::text, je_number FROM finance_journal_entries
       WHERE source_type = 'MAINTENANCE_REQUEST' AND source_id::text = $1 LIMIT 1`,
     req.id,
-  ).catch(() => []);
+  );
 
   let journalEntryId = existingJE?.id;
   let journalEntryNo = existingJE?.je_number;
 
   if (!journalEntryId) {
-    try {
-      const je = await createDraftJournalEntry({
-        tenantId,
-        narration:   description,
-        reference:   workOrderNo,
-        sourceType:  'MAINTENANCE_REQUEST',
-        sourceId:    req.id,
-        amount:      cost,
-        currency:    'AED',
-        preparedBy:  actor,
-        costCentre:  'PC-MAINTENANCE',
-        notes:       `Auto-generated on MR ${workOrderNo} completion. Vehicle: ${vehicleRef}`,
-        debit:  { code: '5100', name: 'Maintenance Expense',             description },
-        credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual: ${workOrderNo}` },
-      });
-      journalEntryId = je.id;
-      journalEntryNo = je.number;
-    } catch (err) {
-      console.warn('[maintenance] createDraftJournalEntry failed:', err);
-    }
+    const je = await createDraftJournalEntry({
+      tenantId,
+      narration:   description,
+      reference:   workOrderNo,
+      sourceType:  'MAINTENANCE_REQUEST',
+      sourceId:    req.id,
+      amount:      cost,
+      currency:    'AED',
+      preparedBy:  actor,
+      costCentre:  'PC-MAINTENANCE',
+      notes:       `Auto-generated on MR ${workOrderNo} completion. Vehicle: ${vehicleRef}`,
+      debit:  { code: '5100', name: 'Maintenance Expense',             description },
+      credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual: ${workOrderNo}` },
+    });
+    journalEntryId = je.id;
+    journalEntryNo = je.number;
   }
 
   return {

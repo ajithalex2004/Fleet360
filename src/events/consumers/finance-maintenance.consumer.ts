@@ -16,6 +16,9 @@ import { mirrorMaintenanceToFinance }               from '@/lib/finance/module-l
 export class FinanceMaintenanceConsumer extends BaseEventConsumer<MaintenanceWorkOrderCompletedPayload> {
   readonly consumerName = 'finance-work-order-completed';
   readonly eventType    = MAINTENANCE_WORK_ORDER_COMPLETED;
+  // mirrorMaintenanceToFinance writes a payable and a journal entry; they
+  // commit together or the event is retried.
+  protected readonly transactional = true;
 
   protected async handle(
     envelope: DomainEventEnvelope<MaintenanceWorkOrderCompletedPayload>,

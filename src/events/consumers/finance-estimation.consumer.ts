@@ -23,10 +23,15 @@ import { MAINTENANCE_ESTIMATION_APPROVED }         from '@/events/contracts/main
 import type { EstimationApprovedPayload }          from '@/events/contracts/maintenance.events';
 import { prisma }                                  from '@/lib/prisma';
 import { createDraftJournalEntry }                 from '@/lib/finance/journal-service';
+import { nextPayableNumber }                       from '@/lib/finance/payable-number';
 
 export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationApprovedPayload> {
   readonly consumerName = 'finance-estimation-approved';
   readonly eventType    = MAINTENANCE_ESTIMATION_APPROVED;
+  // The payable and its journal entry commit together, or neither does and
+  // the event is retried. Every failure propagates: these used to be caught
+  // and logged, so the event was marked processed with nothing written.
+  protected readonly transactional = true;
 
   protected async handle(
     envelope: DomainEventEnvelope<EstimationApprovedPayload>,
@@ -53,17 +58,13 @@ export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationAppro
       `SELECT id::text FROM finance.finance_payables
         WHERE source_type = 'MAINTENANCE_ESTIMATE' AND source_id = $1 LIMIT 1`,
       requestId,
-    ).catch(() => [] as Array<{ id: string }>);
+    );
 
     let payableId = existingAP?.id;
 
     if (!payableId) {
       const ym = issueDate.slice(0, 7).replace('-', '');
-      const [seqRow] = await prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-        `SELECT COUNT(*) AS count FROM finance.finance_payables WHERE payable_number LIKE $1`,
-        `AP-EST-${ym}-%`,
-      ).catch(() => [{ count: 0 }]);
-      const payableNumber = `AP-EST-${ym}-${String(Number(seqRow?.count ?? 0) + 1).padStart(5, '0')}`;
+      const payableNumber = await nextPayableNumber(prisma, tenantId, `AP-EST-${ym}`);
 
       const [row] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
         `INSERT INTO finance.finance_payables
@@ -97,10 +98,7 @@ export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationAppro
         actor,
         tenantId,
         'Auto-generated accrual on estimation approval. Will be reconciled at invoice submission.',
-      ).catch((err) => {
-        console.warn(`[finance-estimation] AP insert failed for ${requestId}: ${err.message}`);
-        return [] as Array<{ id: string }>;
-      });
+      );
 
       payableId = row?.id;
     }
@@ -110,7 +108,7 @@ export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationAppro
       `SELECT id::text FROM finance_journal_entries
         WHERE source_type = 'MAINTENANCE_ESTIMATE' AND source_id::text = $1 LIMIT 1`,
       requestId,
-    ).catch(() => [] as Array<{ id: string }>);
+    );
 
     if (!existingJE?.id) {
       await createDraftJournalEntry({
@@ -126,9 +124,7 @@ export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationAppro
         notes:      `Accrual provision on estimation approval for MR ${requestId}.`,
         debit:  { code: '5100', name: 'Maintenance Expense',             description },
         credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual est. ${requestId}` },
-      }).catch(err =>
-        console.warn(`[finance-estimation] createDraftJournalEntry failed: ${err.message}`),
-      );
+      });
     }
 
     console.log(
