@@ -159,7 +159,7 @@ function Timeline({ events }: { events: TimelineEvent[] }) {
                 )}
               </div>
               {ev.note && (
-                <p className="text-xs text-slate-500 mt-1 italic">"{ev.note}"</p>
+                <p className="text-xs text-slate-500 mt-1 italic">&quot;{ev.note}&quot;</p>
               )}
             </div>
           </div>
@@ -379,7 +379,7 @@ export default function TrackPage() {
                   <p className="text-sm text-slate-300">Delivered: <span className="text-emerald-300">{fmt(data.pod.deliveredAt)}</span></p>
                 )}
                 {data.pod.note && (
-                  <p className="text-sm text-slate-400 italic">"{data.pod.note}"</p>
+                  <p className="text-sm text-slate-400 italic">&quot;{data.pod.note}&quot;</p>
                 )}
                 {data.pod.hasSignature && (
                   <div className="flex items-center gap-1.5 text-xs text-emerald-400">

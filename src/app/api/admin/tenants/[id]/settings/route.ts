@@ -25,30 +25,32 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let settings = await (tx as any).tenantSettings.findUnique({ where: { tenantId: params.id } });
+      const settings = await tx.tenantSettings.findUnique({ where: { tenantId: params.id } });
       if (!settings) {
         // Return defaults without creating record yet
-        settings = {
+        const defaults = {
           id: '', createdAt: null, updatedAt: null, tenantId: params.id,
           tripMergingEnabled: false, pickupMatchType: 'DISTANCE',
-          pickupDistanceKm: 7 as any, pickupTimeWindowMin: 30,
+          pickupDistanceKm: 7, pickupTimeWindowMin: 30,
           requireDropoffMatch: true, dropoffMatchType: 'DISTANCE',
-          dropoffDistanceKm: 25 as any, dropoffTimeWindowMin: 30,
-          maxPassengers: 5, travelSpeedKmh: 40 as any,
+          dropoffDistanceKm: 25, dropoffTimeWindowMin: 30,
+          maxPassengers: 5, travelSpeedKmh: 40,
           stopDurationMin: 10, maxPickupDelayMin: 30,
           autoMergeEnabled: false, triggerBeforePickupMin: 30, lookAheadHours: 24,
           autoDispatchEnabled: false, maxDriverAttempts: 3,
-          driverResponseTimeoutMin: 6, dispatchRadius: 10 as any,
+          driverResponseTimeoutMin: 6, dispatchRadius: 10,
           preferNearestDriver: true,
           routeOptimizationEnabled: false, routingEngine: 'GOOGLE_MAPS',
           googleMapsApiKey: null, maxApiCallsPerHour: 500, maxApiCallsPerDay: 5000,
-          roadDistanceMultiplier: 1.5 as any, fallbackToStraightLine: true,
+          roadDistanceMultiplier: 1.5, fallbackToStraightLine: true,
           emailNotificationsEnabled: false, smtpHost: null, smtpPort: '587',
           smtpUser: null, smtpPass: null, smtpFromEmail: null, smtpFromName: null,
           smsNotificationsEnabled: false, smsProvider: null, smsApiKey: null, smsFromNumber: null,
           pushNotificationsEnabled: true, notificationPreferences: null, tripReminderTimingMin: 60,
-        } as any;
+        };
+        return NextResponse.json(defaults, {
+          headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
+        });
       }
       return NextResponse.json(settings, {
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
@@ -73,11 +75,13 @@ async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
-      const body = await req.json();
-      const { id: _id, createdAt: _c, tenantId: _t, ...data } = body;
+      const body = stripTenantOwnershipFields(await req.json());
+      const data = { ...body };
+      delete (data as Record<string, unknown>).id;
+      delete (data as Record<string, unknown>).createdAt;
+      delete (data as Record<string, unknown>).tenantId;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const settings = await (tx as any).tenantSettings.upsert({
+      const settings = await tx.tenantSettings.upsert({
         where:  { tenantId: params.id },
         create: { id: randomUUID(), tenantId: params.id, ...data },
         update: { ...data, updatedAt: new Date() },

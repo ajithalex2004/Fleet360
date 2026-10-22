@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
 type Row = Record<string, unknown>;
@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
       let totalRevenue   = 0;
       let totalBookings  = 0;
       let avgRentalDays  = 0;
-      let byBranchMap: Record<string, { revenue: number; booking_count: number }> = {};
-      let byMonth: Record<string, { revenue: number; bookings: number }> = {};
-      let byVehicleType: Record<string, { count: number; revenue: number }> = {};
+      const byBranchMap: Record<string, { revenue: number; booking_count: number }> = {};
+      const byMonth: Record<string, { revenue: number; bookings: number }> = {};
+      const byVehicleType: Record<string, { count: number; revenue: number }> = {};
 
       try {
         const bookings = await tx.rentalBooking.findMany({
@@ -82,14 +82,14 @@ export async function GET(req: NextRequest) {
           byBranchMap[br].revenue       += safe(b.totalAmount);
           byBranchMap[br].booking_count += 1;
         }
-      } catch (e) {
+      } catch {
         // bookings table absent or schema mismatch — continue with zeros
       }
 
       // ── 2. Inquiries (raw table) ───────────────────────────────────────────────
       let totalInquiries = 0;
-      let bySourceMap: Record<string, number> = {};
-      let inquiryByBranchMap: Record<string, number> = {};
+      const bySourceMap: Record<string, number> = {};
+      const inquiryByBranchMap: Record<string, number> = {};
 
       try {
         const branchFilter = branchName
@@ -112,15 +112,15 @@ export async function GET(req: NextRequest) {
           const loc = String(r.pickup_location || 'Head Office');
           inquiryByBranchMap[loc] = (inquiryByBranchMap[loc] || 0) + cnt;
         }
-      } catch (e) {
+      } catch {
         // table absent
       }
 
       // ── 3. Quotations (raw table) ──────────────────────────────────────────────
       let totalQuotes    = 0;
       let acceptedQuotes = 0;
-      let quoteByBranchMap: Record<string, { count: number; accepted: number }> = {};
-      let quoteByMonth: Record<string, number> = {};
+      const quoteByBranchMap: Record<string, { count: number; accepted: number }> = {};
+      const quoteByMonth: Record<string, number> = {};
 
       try {
         const rows = await tx.$queryRawUnsafe<Row[]>(`
@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
             acceptedQuotes += cnt;
           }
         }
-      } catch (e) {
+      } catch {
         // table absent
       }
 
@@ -179,7 +179,7 @@ export async function GET(req: NextRequest) {
         }
         avgConditionScore = condCount > 0 ? condSum / condCount : 0;
         avgFuelAtReturn   = fuelCount > 0 ? fuelSum / fuelCount : 0;
-      } catch (e) {
+      } catch {
         // table absent
       }
 

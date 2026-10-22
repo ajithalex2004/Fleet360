@@ -96,12 +96,12 @@ export default function DriverTodayPage() {
     }
   };
 
-  if (loading) return <div className="text-slate-500">Loading today's trips…</div>;
+  if (loading) return <div className="text-slate-500">Loading today&apos;s trips…</div>;
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Today's Trips</h1>
+        <h1 className="text-2xl font-bold">Today&apos;s Trips</h1>
         <p className="text-sm text-slate-400">
           {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
           {driverCode ? ` · driver ${driverCode}` : ''}
@@ -110,7 +110,7 @@ export default function DriverTodayPage() {
 
       {!driverCode && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-amber-200">
-          No driver code set — showing all today's trips. Pin your code in <Link href="/bus-ops/driver/profile" className="underline">Me</Link> to filter.
+          No driver code set — showing all today&apos;s trips. Pin your code in <Link href="/bus-ops/driver/profile" className="underline">Me</Link> to filter.
         </div>
       )}
 

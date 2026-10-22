@@ -56,7 +56,7 @@ export interface SendEmailParams {
 export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
     const recipients = params.to.map(r => r.email).join(', ');
     const ccList = params.cc?.map(r => r.email).join(', ');
-    let transport: any;
+    let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
     let fromAddress = process.env.EMAIL_FROM || '"Fleet360" <noreply@fleet360.app>';
 
     // Try Database configuration first

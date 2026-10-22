@@ -78,7 +78,7 @@ function daysAndHours(from: Date, to: Date): { days: number; hours: number } {
 // driver's exact runtime representation isn't guaranteed; every numeric
 // field already goes through Number(...) below, and date fields through
 // new Date(...).
-interface PricingRuleRow {
+export interface PricingRuleRow {
   id: string;
   name?: string | null;
   vehicle_category: string;

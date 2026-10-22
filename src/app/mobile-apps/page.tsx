@@ -154,7 +154,7 @@ export default function MobileAppsPage() {
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         <section>
           <p className="text-slate-400 max-w-3xl text-sm leading-relaxed">
-            Installable progressive web apps. Open the link on your phone, then tap "Add to Home Screen" — the app installs scope-locked to its role,
+            Installable progressive web apps. Open the link on your phone, then tap &quot;Add to Home Screen&quot; — the app installs scope-locked to its role,
             works offline-cached, and is a single codebase across iOS and Android. No app-store submission, no native build pipeline, no separate auth realm.
           </p>
         </section>
@@ -222,13 +222,13 @@ export default function MobileAppsPage() {
             iOS Add to Home Screen
           </div>
           <ol className="list-decimal pl-5 space-y-1 text-xs">
-            <li>Open the app URL in <strong>Safari</strong> (Chrome on iOS won't trigger install).</li>
+            <li>Open the app URL in <strong>Safari</strong> (Chrome on iOS won&apos;t trigger install).</li>
             <li>Tap the Share button → <strong>Add to Home Screen</strong>.</li>
             <li>The app launches standalone (no Safari chrome) from the home-screen icon.</li>
           </ol>
           <div className="border-t border-white/5 pt-3">
             <div className="text-white font-semibold text-xs mb-1">Android</div>
-            <p className="text-xs">Chrome shows the install prompt automatically when the manifest is detected. Or use the menu → "Install app".</p>
+            <p className="text-xs">Chrome shows the install prompt automatically when the manifest is detected. Or use the menu → &quot;Install app&quot;.</p>
           </div>
           <div className="border-t border-white/5 pt-3 text-xs italic">
             Web Bluetooth + Web NFC are <strong>Android-only</strong> (Chrome). iOS staff can still use QR + manual boarding methods.

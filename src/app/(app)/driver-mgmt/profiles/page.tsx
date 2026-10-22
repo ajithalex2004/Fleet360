@@ -210,7 +210,7 @@ export default function DriverProfilesPage() {
               {loading ? (
                 <tr><td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading…</td></tr>
               ) : drivers.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">No drivers found. Click "Add Driver" to get started.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">No drivers found. Click &quot;Add Driver&quot; to get started.</td></tr>
               ) : drivers.map(d => (
                 <tr key={d.id} className={`hover:bg-[var(--bg-surface-hover)] transition-colors border-l-2 ${
                   d.compliance.alertLevel === 'critical'   ? 'border-red-500/50' :

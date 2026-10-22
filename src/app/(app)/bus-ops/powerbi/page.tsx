@@ -216,14 +216,14 @@ export default function PowerBiPage() {
           <Code2 className="w-4 h-4 text-cyan-400" /> Authentication
         </h3>
         <p className="text-sm text-[var(--text-main)] mb-3">
-          All endpoints read the <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">xl-session</code> cookie set by the Fleet360 login. Power BI's Web connector supports custom headers — set:
+          All endpoints read the <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">xl-session</code> cookie set by the Fleet360 login. Power BI&apos;s Web connector supports custom headers — set:
         </p>
         <pre className="text-xs font-mono text-cyan-300 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded px-3 py-2 mb-3">
 {`Cookie: xl-session=<your-session-cookie-value>`}
         </pre>
         <p className="text-xs text-[var(--text-muted)]">
           For production deployments, ask the Fleet360 team to provision a <em>Power BI service account</em> with an
-          API key, so the connector doesn't depend on a browser session. (See TENANT_ISOLATION_STANDARD.md for the
+          API key, so the connector doesn&apos;t depend on a browser session. (See TENANT_ISOLATION_STANDARD.md for the
           wider auth model.)
         </p>
       </div>

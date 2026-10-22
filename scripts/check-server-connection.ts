@@ -1,12 +1,6 @@
-// @ts-nocheck — one-off CLI script, types not maintained
-// `export {}` marks this file as an ES module rather than a global
-// script — without it, every top-level const/let here (e.g. `req`)
-// leaks into the ambient global scope for the whole project, since
-// tsconfig's `include` covers scripts/*.ts too.
-export {};
-const http = require('http');
+import http from 'http';
 
-const options = {
+const options: http.RequestOptions = {
     hostname: 'localhost',
     port: 3000,
     path: '/',
@@ -15,7 +9,7 @@ const options = {
 
 const req = http.request(options, (res) => {
     console.log(`STATUS: ${res.statusCode}`);
-    res.on('data', (chunk) => {
+    res.on('data', () => {
         // just consume
     });
     res.on('end', () => {

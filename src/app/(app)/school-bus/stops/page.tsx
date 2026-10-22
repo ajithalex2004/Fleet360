@@ -150,7 +150,7 @@ function StopModal({ stop, onClose, onSaved }: {
               {field('Geofence Radius (metres)', 'geofenceRadiusM', 'number', '100')}
               <div className="flex items-end">
                 <p className="text-xs text-[var(--text-faint)]">
-                  Geofence triggers boarding/alighting events when students' devices enter this radius around the stop.
+                  Geofence triggers boarding/alighting events when students&apos; devices enter this radius around the stop.
                 </p>
               </div>
             </div>

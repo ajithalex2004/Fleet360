@@ -195,7 +195,7 @@ export default function PeriodLocksPage() {
       {periods.length === 0 && !loading && (
         <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-12 text-center">
           <p className="text-[var(--text-muted)] text-base">No periods found for FY {selectedYear}</p>
-          <p className="text-[var(--text-faint)] text-sm mt-1">Click "Setup Fiscal Year" to create accounting periods</p>
+          <p className="text-[var(--text-faint)] text-sm mt-1">Click &quot;Setup Fiscal Year&quot; to create accounting periods</p>
         </div>
       )}
 

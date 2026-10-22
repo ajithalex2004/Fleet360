@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
       const status = searchParams.get('status') ?? '';
-      const module = searchParams.get('module') ?? '';
+      const moduleParam = searchParams.get('module') ?? '';
       const q      = searchParams.get('q') ?? '';
       const page   = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
       const limit  = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
@@ -48,8 +48,8 @@ export async function GET(req: NextRequest) {
         values.push(status);
         conditions.push(`payment_status = $${values.length}`);
       }
-      if (module) {
-        values.push(module);
+      if (moduleParam) {
+        values.push(moduleParam);
         conditions.push(`module = $${values.length}`);
       }
       if (q) {

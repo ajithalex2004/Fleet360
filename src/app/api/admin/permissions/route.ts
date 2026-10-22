@@ -2,11 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import { ensurePermissionCatalogSynced } from '@/lib/authz/permission-catalog-sync';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'permissions:all';
 
 /**
@@ -34,15 +34,14 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
     const { searchParams } = new URL(req.url);
-    const module = searchParams.get('module');
+    const moduleParam = searchParams.get('module');
     if (await ensurePermissionCatalogSynced()) await revalidateCache([CACHE_TAG, 'roles:all']);
-    const perms = await getPermissions(module);
+    const perms = await getPermissions(moduleParam);
     return NextResponse.json(perms, {
       headers: { 'Cache-Control': publicCacheControl() },
     });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

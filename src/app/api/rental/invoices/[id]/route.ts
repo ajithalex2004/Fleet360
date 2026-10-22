@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const [rows, lineItems, payments] = await Promise.all([
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<Record<string, unknown>[]>(
             "SELECT ri.*, ra.agreement_no, ra.customer_name, " +
             "COALESCE(ri.total_amount - ri.paid_amount, 0) AS balance_due " +
             "FROM rental_invoices ri " +
@@ -31,11 +31,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             "WHERE ri.id = $1 AND ri.deleted_at IS NULL",
             params.id
           ),
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<Record<string, unknown>[]>(
             "SELECT * FROM rental_invoice_line_items WHERE invoice_id = $1 ORDER BY sort_order ASC",
             params.id
           ),
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<Record<string, unknown>[]>(
             "SELECT * FROM rental_invoice_payments WHERE invoice_id = $1 ORDER BY payment_date DESC",
             params.id
           ),
@@ -68,22 +68,22 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         const now  = new Date().toISOString();
 
         // Build SET clause dynamically from allowed updatable fields
-        const allowed = [
+        const allowed: readonly string[] = [
           'invoice_type','invoice_date','due_date','period_from','period_to',
           'currency','subtotal','discount_amount','taxable_amount','tax_rate',
           'tax_amount','total_amount','paid_amount','status','is_corporate',
           'corporate_account_id','billing_mode','payment_terms_days','notes','internal_notes',
-        ] as const;
+        ];
 
         const toSnake = (s: string) => s.replace(/([A-Z])/g, '_$1').toLowerCase();
 
         const setClauses: string[] = ['updated_at = $1'];
-        const values: any[] = [now];
+        const values: unknown[] = [now];
         let idx = 2;
 
         for (const key of Object.keys(body)) {
           const snake = toSnake(key);
-          if (allowed.includes(snake as any)) {
+          if (allowed.includes(snake)) {
             setClauses.push(snake + ' = $' + idx);
             values.push(body[key]);
             idx++;
@@ -98,7 +98,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
           ...values
         );
 
-        const updated = await tx.$queryRawUnsafe<any[]>(
+        const updated = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           "SELECT * FROM rental_invoices WHERE id = $1", params.id
         );
         return NextResponse.json(updated[0]);
@@ -123,7 +123,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         // Only DRAFT or VOID invoices can be soft-deleted
-        const rows = await tx.$queryRawUnsafe<any[]>(
+        const rows = await tx.$queryRawUnsafe<{ status: string }[]>(
           "SELECT status FROM rental_invoices WHERE id = $1 AND deleted_at IS NULL", params.id
         );
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });

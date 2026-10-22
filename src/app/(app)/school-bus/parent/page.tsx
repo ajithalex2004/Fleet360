@@ -102,7 +102,7 @@ export default function ParentTodayPage() {
         <h1 className="text-2xl font-bold">Welcome</h1>
         <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-5">
           <p className="text-sm text-[var(--text-muted)] mb-3">
-            Pin your guardian phone number first so we can show your child's bus and attendance. Stored on this device only.
+            Pin your guardian phone number first so we can show your child&apos;s bus and attendance. Stored on this device only.
           </p>
           <Link href="/school-bus/parent/profile" className="block w-full text-center py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold">
             Set Phone Number →
@@ -131,7 +131,7 @@ export default function ParentTodayPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">My Children</h1>
         <div className="p-6 rounded-2xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] text-center">
-          No children found for {phone}. Confirm the number you're registered under matches the school's records, or contact transport ops.
+          No children found for {phone}. Confirm the number you&apos;re registered under matches the school&apos;s records, or contact transport ops.
         </div>
         <Link href="/school-bus/parent/profile" className="block text-center text-sm text-amber-400 underline">
           Update phone number
@@ -217,7 +217,7 @@ export default function ParentTodayPage() {
       ))}
 
       <div className="text-xs text-[var(--text-faint)] text-center pt-2">
-        Notifications go to the WhatsApp number above. <Link href="/school-bus/parent/absence" className="text-amber-400">Mark absence</Link> if your child won't ride.
+        Notifications go to the WhatsApp number above. <Link href="/school-bus/parent/absence" className="text-amber-400">Mark absence</Link> if your child won&apos;t ride.
       </div>
     </div>
   );

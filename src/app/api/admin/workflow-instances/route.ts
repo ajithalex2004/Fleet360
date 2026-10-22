@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const view = searchParams.get('view') ?? 'instances';
     const status = searchParams.get('status') ?? undefined;
-    const module = searchParams.get('module') ?? undefined;
+    const moduleParam = searchParams.get('module') ?? undefined;
 
     if (view === 'pending') {
       // With SLA status, most urgent first (src/lib/workflow/inbox.ts).
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rows);
     }
 
-    const rows = await getAllWorkflowInstances(tenantId, { status, module, limit: 200 });
+    const rows = await getAllWorkflowInstances(tenantId, { status, module: moduleParam, limit: 200 });
     return NextResponse.json(rows);
   } catch (e) {
     return NextResponse.json({ error: errorMessage(e, 'Failed to fetch workflow instances') }, { status: 500 });

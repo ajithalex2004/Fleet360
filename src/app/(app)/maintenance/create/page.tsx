@@ -422,7 +422,7 @@ export default function CreateRequestPage() {
                                     ))}
                                 </div>
                                 {getFilteredJobs().length === 0 && (
-                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No jobs found matching "{jobSearch}"</p>
+                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No jobs found matching &quot;{jobSearch}&quot;</p>
                                 )}
                             </div>
                             <p className="mt-2 text-xs text-[var(--text-faint)]">

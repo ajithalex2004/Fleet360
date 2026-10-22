@@ -126,7 +126,7 @@ describe('Auto-lifecycle (driver-controlled trip + geofences)', () => {
     expect(d).toBeGreaterThan(origin.radiusM);
 
     // Build the watcher and inject the position
-    let fired: { start: boolean; end: boolean } = { start: false, end: false };
+    const fired: { start: boolean; end: boolean } = { start: false, end: false };
     let firedDistance: number | null = null;
     const watcher = createAutoLifecycle({
       tripId,

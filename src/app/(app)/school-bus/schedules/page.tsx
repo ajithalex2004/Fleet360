@@ -250,7 +250,7 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
               onChange={e => set('exceptionDatesStr', e.target.value)}
               placeholder="e.g. 2025-12-02, 2026-01-01, 2026-04-02"
               className={inputClass} />
-            <p className="text-xs text-[var(--text-faint)] mt-1">UAE public holidays: National Day (Dec 2–3), Eid Al Fitr, Eid Al Adha, Islamic New Year, Prophet's Birthday</p>
+            <p className="text-xs text-[var(--text-faint)] mt-1">UAE public holidays: National Day (Dec 2–3), Eid Al Fitr, Eid Al Adha, Islamic New Year, Prophet&apos;s Birthday</p>
           </div>
 
           {/* Notes */}

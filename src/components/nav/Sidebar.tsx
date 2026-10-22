@@ -545,7 +545,7 @@ function SubRow({
 // Module-level prefetch helper — uses Next's router singleton. Captured
 // at module load to avoid a per-row closure. Non-fatal: if router is not
 // available (e.g. during a server render), the call is silently dropped.
-let _prefetch: ((href: string) => void) | null = null;
+const _prefetch: ((href: string) => void) | null = null;
 function prefetchHref(href: string) {
   if (!_prefetch) {
     try {

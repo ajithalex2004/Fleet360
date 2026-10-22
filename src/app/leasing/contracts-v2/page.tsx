@@ -40,6 +40,14 @@ interface Contract {
   vehicles?: Vehicle[];
 }
 
+interface PaymentPreviewItem {
+  month: number;
+  amount: number;
+  vat: number;
+  total: number;
+  dueDate: string;
+}
+
 interface NewContractForm {
   step: 1 | 2 | 3;
   lessee: string;
@@ -135,7 +143,7 @@ export default function ContractsV2Page() {
 
   const [paymentScheduleMonths, setPaymentScheduleMonths] = useState('12');
   const [paymentVatRate, setPaymentVatRate] = useState('5');
-  const [paymentPreview, setPaymentPreview] = useState<any[]>([]);
+  const [paymentPreview, setPaymentPreview] = useState<PaymentPreviewItem[]>([]);
 
   const loadContracts = useCallback(() => {
     fetch('/api/leasing/contracts-v2')
@@ -169,7 +177,7 @@ export default function ContractsV2Page() {
         // The lessee field is a <select> keyed by id — prefer the actual id
         // so the dropdown lands on the right option instead of showing blank.
         lessee: q.lesseeId ?? '',
-        leaseType: (filled.leaseType as any) ?? 'LONG_TERM',
+        leaseType: (filled.leaseType as 'LONG_TERM' | 'SHORT_TERM' | 'DAILY' | 'MONTHLY') ?? 'LONG_TERM',
         durationMonths: String(q.durationMonths ?? ''),
         startDate: filled.startDate,
         endDate: filled.endDate,
@@ -345,7 +353,11 @@ export default function ContractsV2Page() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('lease', c.leaseType)}`}>{c.leaseType.replace('_', ' ')}</span>
                   </td>
                   <td className="px-4 py-3.5">
-                    <button onClick={() => setExpandedVehicles(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })}
+                    <button onClick={() => setExpandedVehicles(prev => {
+                      const n = new Set(prev);
+                      if (n.has(c.id)) { n.delete(c.id); } else { n.add(c.id); }
+                      return n;
+                    })}
                       className="px-3 py-1 rounded-full bg-[var(--bg-surface-hover)]/60 text-[var(--text-main)] text-xs font-semibold hover:bg-[var(--bg-surface-hover)]/60 transition-colors">
                       {c.vehicleCount ?? (c.vehicles?.length ?? 0)} unit{(c.vehicleCount ?? 0) !== 1 ? 's' : ''} {expandedVehicles.has(c.id) ? '' : ''}
                     </button>
@@ -395,7 +407,7 @@ export default function ContractsV2Page() {
                       <div className="bg-[var(--bg-surface)]/50 rounded-xl p-4">
                         <p className="text-xs font-semibold text-[var(--text-muted)] mb-3">Vehicles in {c.contractNumber}:</p>
                         {(c.vehicles ?? []).length === 0 ? (
-                          <p className="text-[var(--text-faint)] text-sm">No vehicles linked yet. Use "Add Vehicle" to attach.</p>
+                          <p className="text-[var(--text-faint)] text-sm">No vehicles linked yet. Use &quot;Add Vehicle&quot; to attach.</p>
                         ) : (
                           <table className="w-full text-sm">
                             <thead>
@@ -605,7 +617,7 @@ export default function ContractsV2Page() {
                   <input
                     type={key === 'monthlyRate' ? 'number' : 'text'}
                     placeholder={placeholder}
-                    value={(newVehicleForm as any)[key]}
+                    value={newVehicleForm[key as keyof typeof newVehicleForm]}
                     onChange={e => setNewVehicleForm(p => ({ ...p, [key]: e.target.value }))}
                     className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500" />
                 </div>
@@ -790,7 +802,7 @@ export default function ContractsV2Page() {
                   <div>
                     <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Agreement Type</label>
                     <select value={newContractForm.agreementType}
-                      onChange={e => setNewContractForm(p => ({ ...p, agreementType: e.target.value as any }))}
+                      onChange={e => setNewContractForm(p => ({ ...p, agreementType: e.target.value as 'INDIVIDUAL' | 'MASTER' }))}
                       className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="INDIVIDUAL">Individual</option>
                       <option value="MASTER">Master</option>
@@ -799,7 +811,7 @@ export default function ContractsV2Page() {
                   <div>
                     <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Lease Type</label>
                     <select value={newContractForm.leaseType}
-                      onChange={e => setNewContractForm(p => ({ ...p, leaseType: e.target.value as any }))}
+                      onChange={e => setNewContractForm(p => ({ ...p, leaseType: e.target.value as 'LONG_TERM' | 'SHORT_TERM' | 'DAILY' | 'MONTHLY' }))}
                       className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="LONG_TERM">Long Term</option>
                       <option value="SHORT_TERM">Short Term</option>
@@ -890,7 +902,7 @@ export default function ContractsV2Page() {
                     <div className="grid grid-cols-2 gap-3">
                       {[['type', 'Type (SUV, Sedan...)'], ['make', 'Make'], ['model', 'Model'], ['licensePlate', 'License Plate'], ['driver', 'Driver ID'], ['monthlyRate', 'Monthly Rate']].map(([f, pl]) => (
                         <input key={f} type={f === 'monthlyRate' ? 'number' : 'text'} placeholder={pl}
-                          value={(v as any)[f]}
+                          value={v[f as keyof Vehicle]}
                           onChange={e => { const up = [...newContractForm.vehicles]; up[idx] = { ...up[idx], [f]: f === 'monthlyRate' ? parseFloat(e.target.value) : e.target.value }; setNewContractForm(p => ({ ...p, vehicles: up })); }}
                           className="px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                       ))}
@@ -907,17 +919,17 @@ export default function ContractsV2Page() {
               {newContractForm.step === 3 && (<>
                 <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Bundled Services &amp; Notes</h3>
                 <div className="space-y-3">
-                  {[
+                  {([
                     { key: 'insuranceIncluded', label: 'Insurance Included', desc: 'Full comprehensive insurance coverage' },
                     { key: 'maintenanceIncluded', label: 'Maintenance Included', desc: 'Scheduled service and repairs' },
                     { key: 'driverIncluded', label: 'Driver Included', desc: 'Professional driver assigned to vehicle' },
-                  ].map(({ key, label, desc }) => (
-                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${(newContractForm as any)[key] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
-                      <input type="checkbox" checked={(newContractForm as any)[key]}
+                  ] as const).map(({ key, label, desc }) => (
+                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${newContractForm[key] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
+                      <input type="checkbox" checked={newContractForm[key]}
                         onChange={e => setNewContractForm(p => ({ ...p, [key]: e.target.checked }))}
                         className="w-4 h-4 accent-emerald-500" />
                       <div>
-                        <p className={`text-sm font-semibold ${(newContractForm as any)[key] ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>{label}</p>
+                        <p className={`text-sm font-semibold ${newContractForm[key] ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>{label}</p>
                         <p className="text-xs text-[var(--text-faint)]">{desc}</p>
                       </div>
                     </label>
@@ -936,11 +948,11 @@ export default function ContractsV2Page() {
             {/* Footer nav */}
             <div className="px-6 pb-6 flex gap-3 justify-between">
               {newContractForm.step > 1 ? (
-                <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step - 1) as any }))}
+                <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step - 1) as 1 | 2 | 3 }))}
                   className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Back</button>
               ) : <span />}
               {newContractForm.step < 3 ? (
-                <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step + 1) as any }))}
+                <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step + 1) as 1 | 2 | 3 }))}
                   className="px-6 py-2.5 rounded-xl bg-blue-600 text-[var(--text-main)] font-bold hover:bg-blue-500 transition-all text-sm">Next</button>
               ) : (
                 <button onClick={handleCreateContract} disabled={saving || !newContractForm.lessee}
