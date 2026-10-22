@@ -27,6 +27,8 @@ function num(v: unknown): number {
   return v === null || v === undefined ? 0 : parseFloat(String(v));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -35,9 +37,17 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const branchId = new URL(req.url).searchParams.get('branchId') ?? '';
+  // Bound as a parameter below. It was interpolated into the SQL text
+  // unvalidated, so any caller with finance access could run arbitrary SQL in
+  // their tenant transaction (including resetting app.tenant_id).
+  if (branchId && !UUID_RE.test(branchId)) {
+    return NextResponse.json({ error: 'branchId must be a UUID' }, { status: 400 });
+  }
+
+  try {
+  return await withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
-      const branchId  = searchParams.get('branchId') ?? '';
       const startDate = searchParams.get('startDate') ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
       const endDate   = searchParams.get('endDate')   ?? new Date().toISOString().split('T')[0];
 
@@ -55,7 +65,11 @@ export async function GET(req: NextRequest) {
         invoice_count: bigint;
       };
 
-      const branchFilter = branchId ? `AND i.branch_id = '${branchId}'::uuid` : '';
+      // One branch, or every branch: filters the branch row itself (b), in
+      // both queries. It filtered i.branch_id, an alias the expenses query
+      // doesn't have — that query failed, the failure was swallowed, and
+      // branch expenses always read 0.
+      const branchParam = branchId || null;
 
       const revenueByBranch = await tx.$queryRawUnsafe<RevRow[]>(
         `SELECT
@@ -77,11 +91,11 @@ export async function GET(req: NextRequest) {
            AND i.issue_date BETWEEN $1::date AND $2::date
          WHERE b.tenant_id = $3
            AND b.deleted_at IS NULL
-           ${branchFilter}
+           AND ($4::uuid IS NULL OR b.id = $4::uuid)
          GROUP BY b.id, b.branch_name, b.emirate, b.cost_center_code, b.trade_license_no
          ORDER BY total_invoiced DESC`,
-        startDate, endDate, tenantId
-      ).catch(err => { console.error('[branch-pl revenue]', err); return [] as RevRow[]; });
+        startDate, endDate, tenantId, branchParam
+      );
 
       // Also include invoices not yet assigned to a branch (NULL branch_id)
       type NoBranchRow = {
@@ -103,7 +117,7 @@ export async function GET(req: NextRequest) {
            AND payment_status != 'DRAFT'
            AND issue_date BETWEEN $2::date AND $3::date`,
         tenantId, startDate, endDate
-      ).catch(() => [] as NoBranchRow[]);
+      );
 
       // ── Expenses by branch (from finance_expenses if table exists) ───────────
       type ExpRow = {
@@ -125,18 +139,18 @@ export async function GET(req: NextRequest) {
            AND e.expense_date BETWEEN $1::date AND $2::date
          WHERE b.tenant_id = $3
            AND b.deleted_at IS NULL
-           ${branchFilter}
+           AND ($4::uuid IS NULL OR b.id = $4::uuid)
          GROUP BY b.id, b.branch_name
          ORDER BY total_expenses DESC`,
-        startDate, endDate, tenantId
-      ).catch(() => [] as ExpRow[]);
+        startDate, endDate, tenantId, branchParam
+      );
 
       // ── Tenant info ──────────────────────────────────────────────────────────
       type TenantRow = { name: string; trn?: string; code?: string };
       const [tenant] = await tx.$queryRawUnsafe<TenantRow[]>(
         `SELECT name, trn, code FROM tenants WHERE id::text = $1`,
         tenantId
-      ).catch(() => [] as TenantRow[]);
+      );
 
       // ── Merge into branch P&L rows ───────────────────────────────────────────
       const expMap: Record<string, number> = {};
@@ -221,5 +235,8 @@ export async function GET(req: NextRequest) {
         },
       });
   });
+  } catch (err) {
+    console.error('[finance/branch-pl GET]', err);
+    return NextResponse.json({ error: 'Failed to build the branch P&L' }, { status: 500 });
+  }
 }
-
