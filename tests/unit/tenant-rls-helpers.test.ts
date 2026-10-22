@@ -533,3 +533,96 @@ describe('RLS helpers do not silently fall through on GUC failure', () => {
     ).rejects.toThrow('permission denied');
   });
 });
+
+// ── Nesting ───────────────────────────────────────────────────────────────
+//
+// A helper called inside another's callback joins the outer transaction, and
+// set_config(..., true) lasts until that transaction ends. Without a restore,
+// withPlatformAdmin inside withTenantRls left '*' set for the rest of the
+// tenant request (RLS open to every tenant), and withTenantRls(B) inside
+// withTenantRls(A) switched the rest of the request to tenant B.
+
+/** Every app.tenant_id value set, in order, including '*'. */
+function allSetConfigs(calls: RecordedCall[]): string[] {
+  return calls
+    .filter(c => c.method === '$queryRawUnsafe' && String(c.args[0]).includes("set_config('app.tenant_id'"))
+    .map(c => setConfigResult(c.args[0])[0]?.v ?? '');
+}
+
+describe('nested RLS helpers', () => {
+  it('restores the tenant after withPlatformAdmin runs inside withTenantRls', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    let innerTx: unknown;
+    let outerTx: unknown;
+
+    await withTenantRls(prisma as never, 'tenant-a', async (tx) => {
+      outerTx = tx;
+      await withPlatformAdmin(prisma as never, async (ptx) => { innerTx = ptx; });
+    });
+
+    // One transaction: the nested helper joined it rather than opening another.
+    expect(calls.filter(c => c.method === '$transaction')).toHaveLength(1);
+    expect(innerTx).toBe(outerTx);
+    expect(allSetConfigs(calls)).toEqual(['tenant-a', '*', 'tenant-a']);
+  });
+
+  it('restores the outer tenant after a nested withTenantRls for another tenant', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    await withTenantRls(prisma as never, 'tenant-a', async () => {
+      await withTenantRls(prisma as never, 'tenant-b', async () => 'inner');
+    });
+    expect(allSetConfigs(calls)).toEqual(['tenant-a', 'tenant-b', 'tenant-a']);
+  });
+
+  it('restores the platform scope after a nested withTenantRls', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    await withPlatformAdmin(prisma as never, async () => {
+      await withTenantRls(prisma as never, 'tenant-a', async () => 'inner');
+    });
+    expect(allSetConfigs(calls)).toEqual(['*', 'tenant-a', '*']);
+  });
+
+  it('issues no set_config for a nested call to the same tenant', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    await withTenantRls(prisma as never, 'tenant-a', async () => {
+      await withTenantRls(prisma as never, 'tenant-a', async () => 'inner');
+    });
+    expect(allSetConfigs(calls)).toEqual(['tenant-a']);
+  });
+
+  it('restores the tenant and rethrows when the nested callback throws', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    await expect(
+      withTenantRls(prisma as never, 'tenant-a', async () => {
+        await withPlatformAdmin(prisma as never, async () => { throw new Error('inner failed'); });
+      }),
+    ).rejects.toThrow('inner failed');
+    expect(allSetConfigs(calls)).toEqual(['tenant-a', '*', 'tenant-a']);
+  });
+
+  it('surfaces the inner error, not the failed restore, on an aborted transaction', async () => {
+    const { prisma } = makeMockPrisma();
+    await expect(
+      withTenantRls(prisma as never, 'tenant-a', async (tx) => {
+        await withPlatformAdmin(prisma as never, async () => {
+          // The inner statement failed and aborted the transaction: every
+          // later statement, the restore included, fails.
+          (tx.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>)
+            .mockRejectedValue(new Error('current transaction is aborted'));
+          throw new Error('inner SQL error');
+        });
+      }),
+    ).rejects.toThrow('inner SQL error');
+  });
+
+  it('exposes the inner scope to the callback and the outer scope after it', async () => {
+    const { activeRlsScope } = await import('@/lib/rls-scope');
+    const { prisma } = makeMockPrisma();
+    const seen: Array<string | undefined> = [];
+    await withTenantRls(prisma as never, 'tenant-a', async () => {
+      await withPlatformAdmin(prisma as never, async () => { seen.push(activeRlsScope()?.tenantId); });
+      seen.push(activeRlsScope()?.tenantId);
+    });
+    expect(seen).toEqual(['*', 'tenant-a']);
+  });
+});

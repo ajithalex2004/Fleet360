@@ -14,11 +14,14 @@ const SSO_MESSAGES: Record<string, string> = {
   'config-missing':           'SSO is not currently configured for your tenant.',
   'no-claims':                'Your identity provider returned no claims.',
   'no-email':                 'Your identity provider didn’t return an email address.',
+  'email-unverified':         'Your identity provider hasn’t verified your email address.',
   'domain-not-allowed':       'That email domain isn’t in this tenant’s allowed list.',
   'tenant-inactive':          'Your tenant is currently inactive.',
   'no-role':                  'No role available to assign you. Contact your administrator.',
   'user-not-provisioned':     'Your account isn’t set up yet, and JIT provisioning is disabled. Contact your administrator.',
   'account-disabled':         'Your account is disabled. Contact your administrator.',
+  'membership-missing':       'You’re not a member of this tenant, and JIT provisioning is disabled. Contact your administrator.',
+  'membership-disabled':      'Your access to this tenant has been removed. Contact your administrator.',
   'callback-failed':          'SSO sign-in failed. Try again or use password sign-in.',
 };
 

@@ -67,6 +67,13 @@ vi.mock('@/lib/prisma', () => ({
             const tokenArg = args[0];
             return mockServiceTickets.filter((t) => t.custom_fields?.trackingToken === tokenArg && !t.deleted_at);
           }
+          // Portal-user lookups run in a tenant transaction (RLS), not on the
+          // bare client.
+          if (typeof sql === 'string' && sql.includes('FROM lessee_portal_users')) {
+            const idArg = args[0];
+            const tenantArg = args[1];
+            return mockPortalUsers.filter((u) => u.id === idArg && u.tenant_id === tenantArg && !u.deleted_at);
+          }
           return [];
         }),
         leaseContract2: {

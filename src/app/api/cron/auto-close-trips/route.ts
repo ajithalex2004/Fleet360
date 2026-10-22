@@ -10,7 +10,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyJobAuthorization, JOB_MAP, type JobContext } from '@/lib/jobs/registry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 60;
 

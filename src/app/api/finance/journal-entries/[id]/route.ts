@@ -89,7 +89,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (busy) return busy;
   }
 
-  const response = await withTenantRls(prisma, tenantId, async (tx) => {
+  // No statement in this transaction swallows its error: a failed statement
+  // aborts the transaction, so a swallowed one let the handler answer
+  // success (a reversal with no lines, say) while the COMMIT rolled back.
+  let response: NextResponse;
+  try {
+  response = await withTenantRls(prisma, tenantId, async (tx) => {
       const now = new Date().toISOString();
 
       // Fetch current JE — enforce tenant ownership.
@@ -100,7 +105,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
            FROM finance_journal_entries
           WHERE id::text = $1 AND deleted_at IS NULL AND tenant_id = $2`,
         params.id, tenantId,
-      ).catch(() => []);
+      );
 
       if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -200,7 +205,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
               WHERE journal_entry_id::text = $1
               ORDER BY line_number`,
             params.id,
-          ).catch(() => []);
+          );
 
           const revJeNo = `${await nextJournalNumber(tx, tenantId)}-REV`;
 
@@ -226,7 +231,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             params.id,
             body.reversedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager',
             tenantId,
-          ).catch(() => []);
+          );
 
           if (!revJe) {
             return NextResponse.json({ error: 'Failed to create reversal JE' }, { status: 500 });
@@ -249,7 +254,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
               l.debit_amount,  // flip: debit → credit
               l.normal_balance,
               l.cost_centre,
-            ).catch(() => {});
+            );
           }
 
           await tx.$executeRawUnsafe(
@@ -266,10 +271,14 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
-      const [row] = await tx.$queryRawUnsafe<JeRow[]>(sql, ...sqlParams).catch(() => [] as JeRow[]);
+      const [row] = await tx.$queryRawUnsafe<JeRow[]>(sql, ...sqlParams);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
   });
+  } catch (err) {
+    console.error(`[finance/journal-entries PATCH ${action}]`, err);
+    return NextResponse.json({ error: 'Failed to update journal entry' }, { status: 500 });
+  }
   return action === 'submit'
     ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_journal', referenceId: params.id })
     : response;
@@ -287,11 +296,12 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+  return await withTenantRls(prisma, tenantId, async (tx) => {
       const [je] = await tx.$queryRawUnsafe<{ status: string }[]>(
         `SELECT status FROM finance_journal_entries WHERE id::text = $1 AND tenant_id = $2`,
         params.id, tenantId,
-      ).catch(() => [] as { status: string }[]);
+      );
 
       if (!je) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (je.status === 'POSTED') {
@@ -304,9 +314,13 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       await tx.$executeRawUnsafe(
         `UPDATE finance_journal_entries SET deleted_at = NOW() WHERE id::text = $1 AND tenant_id = $2`,
         params.id, tenantId,
-      ).catch(() => {});
+      );
 
       return NextResponse.json({ ok: true });
   });
+  } catch (err) {
+    console.error('[finance/journal-entries DELETE]', err);
+    return NextResponse.json({ error: 'Failed to delete journal entry' }, { status: 500 });
+  }
 }
 

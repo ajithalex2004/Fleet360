@@ -19,7 +19,6 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getBranding } from '@/lib/branding';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { tenantModulesFor } from '@/lib/module-policies';
 type PermRow   = { nav_key: string; enabled: boolean };
 type ModuleRow = { module: string };

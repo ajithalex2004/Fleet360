@@ -366,7 +366,8 @@ const prismaClientSingleton = () => {
     // authenticated request, pin each operation to a tenant-scoped
     // transaction. The inner call reaches this middleware again, sees the
     // scope marker, and executes `next` on the pinned transaction client.
-    if (params.model && !activeRlsScope()) {
+    const scope = activeRlsScope();
+    if (params.model && !scope) {
       const tenantId = await requestTenantId();
       if (tenantId) {
         return withRequestRls(async (tx) => {
@@ -374,6 +375,23 @@ const prismaClientSingleton = () => {
           return delegate[params.action](params.args);
         });
       }
+    }
+
+    // A model operation on the global client inside withTenantRls /
+    // withPlatformAdmin (a service helper that takes no tx). Raw queries were
+    // already forwarded to the scope's transaction below; model operations
+    // ran on a fresh pooled connection with app.tenant_id unset, so RLS
+    // returned only NULL-tenant rows and rejected tenant writes — and outside
+    // the caller's transaction, so they were not rolled back with it either.
+    // Re-issue it on the scope's tx: that call comes back through here with
+    // runInTransaction set and runs on the pinned connection.
+    //
+    // Consequence: such a call now lives and dies with the scope's
+    // transaction. Fire-and-forget work must use runOutsideRlsScope, or it
+    // can reach the transaction after it has closed (P2028).
+    if (params.model && scope?.tx && !params.runInTransaction) {
+      const delegate = (scope.tx as unknown as Record<string, Record<string, (args: unknown) => Promise<unknown>>>)[params.model];
+      return delegate[params.action](params.args);
     }
 
     // Execute on Neon first. Connection errors are retried; validation and

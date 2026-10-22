@@ -29,6 +29,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { syncStopPlace, syncStopPlaces } from '@/lib/places/sync-stop';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -117,7 +118,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
           where: { routeId: params.id, tenantId },
           orderBy: { sequence: 'asc' },
         });
-        void syncStopPlaces(newStops, tenantId).catch(() => { /* best-effort */ });
+        // Outside this transaction: the sync outlives it, and its own global-
+        // client writes each get a tenant-scoped transaction of their own.
+        void runOutsideRlsScope(() => syncStopPlaces(newStops, tenantId)).catch(() => { /* best-effort */ });
 
         return NextResponse.json(newStops);
       } catch {
@@ -170,7 +173,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           },
         });
 
-        void syncStopPlace(stop, tenantId).catch(() => { /* best-effort */ });
+        // Outside this transaction, as in PUT above.
+        void runOutsideRlsScope(() => syncStopPlace(stop, tenantId)).catch(() => { /* best-effort */ });
 
         return NextResponse.json(stop, { status: 201 });
       } catch {

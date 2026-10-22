@@ -26,6 +26,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { markAudited } from '@/lib/audited-action';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 
 export interface AuditPayload {
   tenantId?:    string;
@@ -114,14 +115,16 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
  * independent-transaction behavior above. Only use this when `tx` is a real
  * transaction client the caller owns and awaits; never pass a fire-and-
  * forget scope here, that's exactly the bug #72 fixed in `logAudit`.
+ *
+ * Still best-effort, but under a savepoint: catching the failed INSERT alone
+ * left the caller's transaction aborted, so its next statement failed with
+ * an unrelated-looking 25P02, or — when the audit row was the last write —
+ * the COMMIT silently rolled the caller's work back. Await it; don't run it
+ * alongside other statements on the same tx (src/lib/db/best-effort.ts).
  */
 export async function logAuditInTx(payload: AuditPayload, tx: AuditDb): Promise<void> {
   markAudited();
-  try {
-    await writeAuditRow(tx, payload);
-  } catch (err) {
-    console.error('[audit] logAuditInTx failed:', err);
-  }
+  await bestEffortInTx(tx, 'audit logAuditInTx', () => writeAuditRow(tx, payload));
 }
 
 /** Security-critical intent: caller must await in its business transaction; failure aborts it. */

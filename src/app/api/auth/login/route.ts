@@ -18,7 +18,6 @@ import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { effectivePermissions } from '@/lib/authz/session-permissions';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { tenantModulesFor } from '@/lib/module-policies';
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 

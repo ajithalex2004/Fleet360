@@ -1,8 +1,11 @@
 import 'server-only';
 
+import { randomUUID } from 'crypto';
+
 import { PrismaClient } from '@prisma/client';
 
 import { prisma } from '@/lib/prisma';
+import { claimRun, finishRun, leaseSecondsFor } from '@/lib/jobs/job-runs';
 import { withSystemJob, type SystemJobContext, type SystemJobOptions } from '@/lib/rls';
 
 /**
@@ -179,8 +182,13 @@ export function sweepConcurrency(): number {
 }
 
 export interface RunSweepOptions extends SystemJobOptions {
-  /** Optional 32-bit numeric or string key for PostgreSQL advisory lock to prevent overlapping crons */
+  /**
+   * Name under which the sweep claims a run in job_runs, so two runs never
+   * overlap: a second one starting while the first holds its lease is skipped.
+   */
   advisoryLockKey?: number | string;
+  /** Seconds before a claimed run counts as abandoned. Default 10 minutes. */
+  leaseSeconds?: number;
 }
 
 /**
@@ -199,55 +207,74 @@ export function getAdvisoryLockId(key: number | string): number {
 }
 
 /**
- * Run a per-tenant sweep on the verified sweep connection with optional advisory locking.
+ * Run a per-tenant sweep on the verified sweep connection, optionally claimed
+ * so that runs never overlap.
  *
  * Binds the verified non-bypass client AND the bounded concurrency together.
+ *
+ * Overlap used to be prevented with a session-level pg_try_advisory_lock.
+ * Prisma gives no way to keep one connection outside a transaction, so the
+ * unlock could run on a different pooled connection than the lock: it
+ * returned false (unchecked), the lock stayed on the first connection, and
+ * every later run of the sweep was skipped until that connection closed —
+ * through a transaction-mode pooler, possibly never. A failure to take the
+ * lock also ran the sweep anyway. The job_runs claim (src/lib/jobs/job-runs.ts)
+ * is a row with a lease: it does not depend on a connection, a crashed run's
+ * claim expires, and a claim that cannot be made stops the sweep.
  */
 export async function runSweep<T>(
   fn: (ctx: SystemJobContext) => Promise<T>,
   opts: RunSweepOptions = {},
 ): Promise<Array<{ tenantId: string; result: T }>> {
   const { client, concurrency } = await getVerifiedSweepPrisma();
+  const { advisoryLockKey, leaseSeconds, ...jobOpts } = opts;
 
-  let lockId: number | null = null;
-  if (opts.advisoryLockKey !== undefined) {
-    lockId = getAdvisoryLockId(opts.advisoryLockKey);
+  // Spread FIRST, then apply the resolved concurrency. The reverse order —
+  // which this was — lets `...opts` overwrite the computed value with
+  // `undefined` whenever a caller passes the key explicitly but unset, e.g.
+  // `runSweep(fn, { tenantHeader, concurrency: someMaybeUndefined })`.
+  // withSystemJob then falls back to its own default, discarding the
+  // concurrency getVerifiedSweepPrisma just decided. The dangerous case is
+  // the fallback path: verification failed, concurrency is 1 because we are
+  // on the POOLED client, and the spread throws that 1 away.
+  const run = () => withSystemJob(client, fn, {
+    ...jobOpts,
+    concurrency: jobOpts.concurrency ?? concurrency,
+  });
 
-    try {
-      const lockRes = await client.$queryRawUnsafe<Array<{ pg_try_advisory_lock: boolean }>>(
-        `SELECT pg_try_advisory_lock(${lockId})`,
-      );
-      if (!lockRes[0]?.pg_try_advisory_lock) {
-        console.warn(`[sweep] ⚠️ Cron sweep skipped: advisory lock "${opts.advisoryLockKey}" (${lockId}) held by active worker.`);
-        return [];
-      }
-    } catch (lockErr) {
-      console.warn(`[sweep] Could not acquire advisory lock (${lockErr instanceof Error ? lockErr.message : String(lockErr)}), proceeding.`);
-      lockId = null;
-    }
+  if (advisoryLockKey === undefined) return run();
+
+  // One claim per sweep whatever tenantHeader says, as with the lock it
+  // replaces: a single-tenant run and a full run do not overlap either.
+  const jobName = `sweep:${advisoryLockKey}`;
+  const claim = await claimRun({
+    jobName,
+    scope: '*',
+    occurrence: randomUUID(),
+    trigger: 'manual',
+    leaseSeconds: leaseSeconds ?? leaseSecondsFor(undefined),
+  });
+  if (!claim.claimed) {
+    console.warn(`[sweep] Sweep "${advisoryLockKey}" skipped: run ${claim.runId ?? '(unknown)'} is still in progress.`);
+    return [];
   }
 
+  const started = Date.now();
   try {
-    // Spread FIRST, then apply the resolved concurrency. The reverse order —
-    // which this was — lets `...opts` overwrite the computed value with
-    // `undefined` whenever a caller passes the key explicitly but unset, e.g.
-    // `runSweep(fn, { tenantHeader, concurrency: someMaybeUndefined })`.
-    // withSystemJob then falls back to its own default, discarding the
-    // concurrency getVerifiedSweepPrisma just decided. The dangerous case is
-    // the fallback path: verification failed, concurrency is 1 because we are
-    // on the POOLED client, and the spread throws that 1 away.
-    return await withSystemJob(client, fn, {
-      ...opts,
-      concurrency: opts.concurrency ?? concurrency,
+    const results = await run();
+    await finishRun(claim.runId, {
+      status: 'SUCCEEDED',
+      durationMs: Date.now() - started,
+      summary: `${results.length} tenant(s)`,
     });
-  } finally {
-    if (lockId !== null) {
-      try {
-        await client.$queryRawUnsafe(`SELECT pg_advisory_unlock(${lockId})`);
-      } catch {
-        // ignore unlock error
-      }
-    }
+    return results;
+  } catch (err) {
+    await finishRun(claim.runId, {
+      status: 'FAILED',
+      durationMs: Date.now() - started,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
   }
 }
 
