@@ -49,6 +49,7 @@ import { getEventBus } from '@/events/event-bus';
 import { BOARDING_MISSED } from '@/events/contracts/trip.events';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 export const runtime = 'nodejs';
 
 interface SinglePingBody {
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (rawPings.length > 100) return NextResponse.json({ error: 'Maximum 100 pings per request' }, { status: 413 });
       const scheduleId = body.scheduleId ?? rawPings[0]?.scheduleId ?? null;
       if (scheduleId) {
-        const ownedTrip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId, vehicleId, deletedAt: null, status: { in: ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'] } } });
+        const ownedTrip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId, vehicleId, deletedAt: null, status: { in: [...TRIP_OPEN_STATUSES] } } });
         if (!ownedTrip) return NextResponse.json({ error: 'Vehicle/trip assignment mismatch' }, { status: 404 });
       }
 
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // automation is paused.
         let disrupted = false;
         if (scheduleId) {
-          const current=await tx.tripSchedule.findFirst({where:{id:scheduleId,tenantId,vehicleId,deletedAt:null,status:{in:['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT']}}});
+          const current=await tx.tripSchedule.findFirst({where:{id:scheduleId,tenantId,vehicleId,deletedAt:null,status:{in:[...TRIP_OPEN_STATUSES]}}});
           if(!current) return NextResponse.json({error:'Vehicle/trip assignment changed'},{status:409});
           disrupted = await hasUnrecoveredDisruption(tx,tenantId,scheduleId);
         }

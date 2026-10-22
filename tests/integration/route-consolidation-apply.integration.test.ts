@@ -233,6 +233,16 @@ describe('scenario 1: apply is atomic', () => {
     const te = await prisma.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
     expect(te?.defaultRouteId).toBe(r.mergedRouteId);
 
+    // ...and point at stops ON the merged route, not at the retired
+    // source routes' stops they were copied from.
+    const mergedStopIds = new Set(
+      (await prisma.routeStop.findMany({ where: { routeId: r.mergedRouteId }, select: { id: true } })).map((s) => s.id),
+    );
+    expect(rp?.pickupStopId).toBeTruthy();
+    for (const stopId of [rp?.pickupStopId, rp?.dropoffStopId, te?.defaultStopId]) {
+      if (stopId != null) expect(mergedStopIds.has(stopId)).toBe(true);
+    }
+
     // Lineage rows exist
     const consolidation = await prisma.routeConsolidation.findUnique({
       where: { id: r.consolidationId },

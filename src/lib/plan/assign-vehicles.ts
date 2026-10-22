@@ -91,6 +91,10 @@ export interface BlockVehicleRequirement {
   /** The block's first trip's pickup — proximity is ranked against this,
    *  since that's where the vehicle needs to be to start the block. */
   pickupPoint: { lat: number | null; lng: number | null };
+  /** Service date (YYYY-MM-DD) of the block. Blocks are built per day, so a
+   *  vehicle is used at most once per date — not once per plan. Omitted /
+   *  null = treat as one shared day (a vehicle is used once overall). */
+  date?: string | null;
 }
 
 export type VehicleAssignmentReason =
@@ -142,11 +146,19 @@ export function assignVehiclesToBlocks(
   blocks: BlockVehicleRequirement[],
   vehicles: VehicleCandidate[],
 ): VehicleAssignmentResult[] {
-  const used = new Set<string>();
+  // One set per service date: a plan spans dateFrom..dateTo and every
+  // block belongs to one day. A single plan-wide set let each vehicle drive
+  // one block for the whole range, so a 7-day plan left most blocks with
+  // NO_VEHICLES_AVAILABLE.
+  const usedByDate = new Map<string, Set<string>>();
   const results: VehicleAssignmentResult[] = [];
 
   for (const req of blocks) {
-    const unusedVehicles = vehicles.filter((v) => !used.has(v.id));
+    const dayKey = req.date ?? '';
+    let used = usedByDate.get(dayKey);
+    if (!used) { used = new Set<string>(); usedByDate.set(dayKey, used); }
+    const usedToday = used;
+    const unusedVehicles = vehicles.filter((v) => !usedToday.has(v.id));
     if (unusedVehicles.length === 0) {
       results.push({ blockId: req.blockId, vehicleId: null, vehicleLicensePlate: null, distanceKm: null, zoneMatched: false, reason: 'NO_VEHICLES_AVAILABLE' });
       continue;

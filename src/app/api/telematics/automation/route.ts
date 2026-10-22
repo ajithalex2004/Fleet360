@@ -9,6 +9,7 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { evaluatePmOdometerThresholdSync } from '@/lib/telematics/pm-odometer-sync';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
       const activeTrips = await tx.tripSchedule.findMany({
         where: {
           tenantId,
-          status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
+          status: { in: [...TRIP_OPEN_STATUSES] },
         },
         include: {
           route: {

@@ -7,6 +7,7 @@
  */
 
 import { Prisma, PrismaClient } from '@prisma/client';
+import { findGroundingBlocks } from '@/lib/fleet/grounding-blocks';
 
 export type DocumentComplianceStatus =
   | 'COMPLIANT'
@@ -313,10 +314,27 @@ export async function executeFleetExpirySweep(
   let newlyGroundedCount = 0;
   let newlyRestoredCount = 0;
 
+  // Documents are only one reason a vehicle is grounded. Before restoring a
+  // vehicle whose documents are now valid, check nothing else still holds
+  // it (open critical DVIR ticket, workshop job, breakdown).
+  const evaluations = vehicles.map((veh) =>
+    evaluateVehicleCompliance(veh, docsByVehicle.get(veh.id) || [], refDate, gracePeriod),
+  );
+  const otherBlocks = await findGroundingBlocks(
+    tx,
+    tenantId,
+    evaluations.filter((e) => e.actionTaken === 'UNGROUNDED').map((e) => e.vehicleId),
+    { skipDocuments: true, referenceDate: refDate },
+  );
+
   // 3. Evaluate each vehicle
-  for (const veh of vehicles) {
-    const vehDocs = docsByVehicle.get(veh.id) || [];
-    const evaluation = evaluateVehicleCompliance(veh, vehDocs, refDate, gracePeriod);
+  for (const [i, veh] of vehicles.entries()) {
+    const evaluation = evaluations[i];
+    const blocks = otherBlocks.get(veh.id);
+    if (evaluation.actionTaken === 'UNGROUNDED' && blocks?.length) {
+      evaluation.actionTaken = 'MAINTAINED';
+      evaluation.actionReason = `Documents are valid but the vehicle stays grounded: ${blocks.map((b) => b.reason).join('; ')}`;
+    }
     vehicleRecords.push(evaluation);
 
     if (evaluation.actionTaken === 'GROUNDED') {
@@ -333,8 +351,8 @@ export async function executeFleetExpirySweep(
     } else if (evaluation.actionTaken === 'UNGROUNDED') {
       newlyRestoredCount++;
       if (!isDryRun) {
-        await tx.vehicle.update({
-          where: { id: veh.id },
+        await tx.vehicle.updateMany({
+          where: { id: veh.id, status: 'GROUNDED' },
           data: {
             status: 'AVAILABLE',
             isActive: true,

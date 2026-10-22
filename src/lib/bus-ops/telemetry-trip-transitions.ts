@@ -19,6 +19,7 @@
 
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { haversineM, DEFAULT_ARRIVAL_RADIUS_M } from '@/lib/bus-gps';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
 import { inspectionAllowsDeparture } from '@/lib/bus-ops/safety';
 import {
@@ -607,6 +608,9 @@ export function decideTelemetryTransition(
 ): TelemetryDecision {
   const speed = ping.speedKmh ?? 0;
   const status = normalizeTripStatus(schedule.status);
+  if (status === null) {
+    return { action: 'NONE', reason: `unrecognised trip status ${schedule.status}` };
+  }
 
   if (schedule.vehicleId && schedule.vehicleId !== ping.vehicleId) {
     return { action: 'NONE', reason: 'gps vehicle does not match schedule.vehicleId' };
@@ -807,7 +811,7 @@ async function applyDecision(
   });
 
   if (action === 'STARTED') {
-    await db.tripLog
+    await bestEffortInTx(db, 'telemetry-trip-transitions.tripLog', () => db.tripLog
       .create({
         data: {
           tenantId,
@@ -816,20 +820,18 @@ async function applyDecision(
           driverNotes: `Auto-started by telemetry (${TELEMETRY_SOURCE}): ${reason}`,
           loggedBy: TELEMETRY_SOURCE,
         },
-      })
-      .catch(() => undefined);
+      }));
     // As the depart command: riders with a later boarding stop stay
     // CONFIRMED until that stop is passed.
-    await db.tripPassenger
+    await bestEffortInTx(db, 'telemetry-trip-transitions.tripPassenger', () => db.tripPassenger
       .updateMany({
         where: { tenantId, tripId: scheduleId, status: 'CONFIRMED', deletedAt: null, boardingStopId: null },
         data: { status: 'NO_SHOW', updatedAt: now },
-      })
-      .catch(() => undefined);
+      }));
   }
 
   if (action === 'COMPLETED') {
-    await db.tripLog
+    await bestEffortInTx(db, 'telemetry-trip-transitions.tripLog', () => db.tripLog
       .create({
         data: {
           tenantId,
@@ -838,8 +840,7 @@ async function applyDecision(
           driverNotes: `Auto-completed by telemetry (${TELEMETRY_SOURCE}): ${reason}`,
           loggedBy: TELEMETRY_SOURCE,
         },
-      })
-      .catch(() => undefined);
+      }));
   }
 }
 

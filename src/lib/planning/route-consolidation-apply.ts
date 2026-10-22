@@ -277,12 +277,18 @@ export async function applyConsolidation(
         const sourceStopsById = new Map<string, (typeof sourceRoutes)[number]['stops'][number]>();
         for (const r of sourceRoutes) for (const s of r.stops) sourceStopsById.set(s.id, s);
 
+        // Source stop id → the new RouteStop copied onto the merged route.
+        // The check phase maps enrollments onto *source* stop ids (the
+        // merged route's stops don't exist yet then); step 7 translates
+        // through this map so passengers point at stops on the merged
+        // route, not at stops of the routes being retired.
+        const mergedStopIdBySourceId = new Map<string, string>();
         for (let i = 0; i < input.mergedRoute.stopIds.length; i++) {
           const srcStop = sourceStopsById.get(input.mergedRoute.stopIds[i]);
           if (!srcStop) {
             throw new Error(`stop ${input.mergedRoute.stopIds[i]} not found on any source route`);
           }
-          await tx.routeStop.create({
+          const createdStop = await tx.routeStop.create({
             data: {
               tenantId: input.tenantId,
               routeId: mergedRoute.id,
@@ -294,8 +300,16 @@ export async function applyConsolidation(
               estimatedArrivalMins: srcStop.estimatedArrivalMins,
               placeId: srcStop.placeId,
             },
+            select: { id: true },
           });
+          mergedStopIdBySourceId.set(srcStop.id, createdStop.id);
         }
+        const toMergedStopId = (sourceStopId: string | null): string | null => {
+          if (sourceStopId == null) return null;
+          const mapped = mergedStopIdBySourceId.get(sourceStopId);
+          if (!mapped) throw new Error(`enrollment stop ${sourceStopId} is not on the merged route`);
+          return mapped;
+        };
 
         // 6. Pre-generate the consolidation.id so every child row we
         //    write next can reference it — cleaner than a placeholder
@@ -338,13 +352,16 @@ export async function applyConsolidation(
           });
         }
 
-        // 7. Migrate enrollments. The check-phase plan carries
-        //    newPickupStopId / newDropoffStopId values computed from
-        //    the source-route stops we just copied onto the merged
-        //    route, so we don't need to re-lookup — the ids are
-        //    already correct.
+        // 7. Migrate enrollments. The check-phase plan's newPickupStopId /
+        //    newDropoffStopId are ids of the *source* stops that were
+        //    copied; translate them to the copies on the merged route.
         let migrationCount = 0;
-        for (const plan of checkPhase.enrollmentMigrations) {
+        for (const checked of checkPhase.enrollmentMigrations) {
+          const plan = {
+            ...checked,
+            newPickupStopId: toMergedStopId(checked.newPickupStopId),
+            newDropoffStopId: toMergedStopId(checked.newDropoffStopId),
+          };
           if (plan.enrollmentType === 'ROUTE_PASSENGER') {
             await tx.routePassenger.update({
               where: { id: plan.enrollmentId },

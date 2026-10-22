@@ -35,6 +35,7 @@ import { getTenantContextOrNull } from '@/lib/tenant-session';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { nextReadableId } from '@/lib/service-tickets/schema';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 import { requireActiveDriver } from '@/lib/driver-app-actor';
 const ItemSchema = z.object({
   ok: z.boolean(),
@@ -197,10 +198,30 @@ export async function POST(req: NextRequest) {
       let serviceTicketId: string | null = null;
       let serviceTicketReadableId: string | null = null;
       if (body.dvir.defects && body.dvir.defects.length > 0) {
-        try {
-          const hasCritical = body.dvir.defects.some((d) => d.severity === 'CRITICAL');
-          const priority = hasCritical ? 'Critical' : 'Medium';
-          serviceTicketReadableId = await nextReadableId(ctx.tenantId, 'MAINTENANCE', 'MNT');
+        const hasCritical = body.dvir.defects.some((d) => d.severity === 'CRITICAL');
+        // P0 Safety Rule: Auto-ground vehicle if inspection has CRITICAL defect (e.g. brakes, steering, tires)
+        if (hasCritical && trip.vehicleId) {
+          // No catch: a failed grounding must fail the submission (the
+          // driver retries) rather than let an unsafe vehicle depart.
+          await tx.vehicle.update({
+            where: { id: trip.vehicleId },
+            data: {
+              status: 'GROUNDED',
+              isActive: false,
+            },
+          });
+        }
+
+        // The ticket mirror is optional: run it in a savepoint so a failure
+        // neither aborts the transaction (losing the DVIR and the grounding
+        // above) nor is silently committed as a rolled-back transaction.
+        await bestEffortInTx(tx, 'driver-app/dvir.service-ticket', async () => {
+          // Ticket priorities are Low / Medium / High (TicketPriority); a
+          // 'Critical' string fell through the SLA matrix to Medium (24h).
+          // Criticality itself is carried by custom_fields.hasCriticalDefect /
+          // isGrounded, which the grounding check reads.
+          const priority = hasCritical ? 'High' : 'Medium';
+          const readableId = await nextReadableId(ctx.tenantId, 'MAINTENANCE', 'MNT');
 
           // trip.vehicleId can be null (no vehicle allocated yet) — passing
           // that straight through would make the `id` filter `undefined`
@@ -211,19 +232,6 @@ export async function POST(req: NextRequest) {
                 select: { licensePlate: true, make: true, model: true },
               }).catch(() => null)
             : null;
-
-          // P0 Safety Rule: Auto-ground vehicle if inspection has CRITICAL defect (e.g. brakes, steering, tires)
-          if (hasCritical && trip.vehicleId) {
-            await tx.vehicle.update({
-              where: { id: trip.vehicleId },
-              data: {
-                status: 'GROUNDED',
-                isActive: false,
-              },
-            }).catch((err) => {
-              console.warn('[dvir] Failed to auto-ground vehicle:', err);
-            });
-          }
 
           const defectSummaries = body.dvir.defects.map(d => `${d.category} (${d.severity}): ${d.description}`).join('; ');
           const title = `[DVIR Defect${hasCritical ? ' - CRITICAL GROUNDED' : ''}] ${vehicle?.licensePlate || 'Vehicle'} - ${body.dvir.defects[0]?.category || 'Inspection Defect'}`;
@@ -260,7 +268,7 @@ export async function POST(req: NextRequest) {
                $10::jsonb, $11::jsonb
              ) RETURNING id::text`,
             ctx.tenantId,
-            serviceTicketReadableId,
+            readableId,
             ctx.userId,
             `Driver (${ctx.userId})`,
             trip.vehicleId,
@@ -272,9 +280,8 @@ export async function POST(req: NextRequest) {
             JSON.stringify(customFields),
           );
           serviceTicketId = insertedTicket?.id ?? null;
-        } catch (mirrorErr) {
-          console.warn('[driver-app/dvir] Failed to mirror defect to service_tickets:', mirrorErr);
-        }
+          serviceTicketReadableId = readableId;
+        });
       }
 
       return NextResponse.json({

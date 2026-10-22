@@ -6,6 +6,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { TRIP_IN_FLIGHT_SQL } from '@/lib/trip-status';
 /**
  * GET /api/bus-ops/analytics
  * Staff Transport KPIs and chart data for the analytics dashboard.
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id::text = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'COMPLETED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'CANCELLED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
-          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status IN ('STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT') AND tenant_id = $1`, tenantId).catch(zero),
+          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status IN (${TRIP_IN_FLIGHT_SQL}) AND tenant_id::text = $1`, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_passengers tp JOIN trip_schedules ts ON ts.id = tp.trip_id WHERE ts.departure_time >= $1 AND ts.deleted_at IS NULL AND ts.tenant_id::text = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM bus_routes WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM workforce.employees WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),

@@ -6,6 +6,12 @@ import type { JobContext, JobResult } from '@/lib/jobs/registry';
 import { prisma } from '@/lib/prisma';
 import { runSweep } from '@/lib/prisma-sweep';
 import { withTenantRls } from '@/lib/rls';
+import { Prisma } from '@prisma/client';
+import { TRIP_IN_FLIGHT_STATUSES, isTripInFlight } from '@/lib/trip-status';
+
+// Every spelling of "under way" — a trip started from Bus Ops (STARTED /
+// EN_ROUTE) is just as stale as one started from the driver app.
+const IN_FLIGHT = Prisma.join([...TRIP_IN_FLIGHT_STATUSES]);
 
 
 const STALE_HOURS = 4;
@@ -28,7 +34,7 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
       SELECT id, status, departure_time, arrival_time,
              actual_departure_at, driver_id, tenant_id
         FROM trip_schedules
-       WHERE status = 'IN_PROGRESS'
+       WHERE status IN (${IN_FLIGHT})
          AND deleted_at IS NULL
          AND tenant_id = ${tenantId}::uuid
          AND arrival_time < NOW() - (${STALE_HOURS} || ' hours')::interval
@@ -40,7 +46,7 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
   const skipped: string[] = [];
 
   for (const t of allStale) {
-    if (t.status !== 'IN_PROGRESS') { skipped.push(t.id); continue; }
+    if (!isTripInFlight(t.status)) { skipped.push(t.id); continue; }
     const now = new Date();
     const startIso = t.actual_departure_at?.toISOString() ?? t.departure_time.toISOString();
     const durationMin = Math.max(0, Math.round((now.getTime() - new Date(startIso).getTime()) / 60_000));
@@ -55,7 +61,7 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
                  actual_arrival_at = ${now.toISOString()}::timestamptz,
                  duration_minutes  = ${durationMin},
                  updated_at        = NOW()
-           WHERE id = ${t.id} AND status = 'IN_PROGRESS'
+           WHERE id = ${t.id} AND status IN (${IN_FLIGHT})
         `;
         await closeTx.$executeRaw`
           INSERT INTO trip_state_transitions

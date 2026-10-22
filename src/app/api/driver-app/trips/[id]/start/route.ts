@@ -30,6 +30,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { requireActiveDriver } from '@/lib/driver-app-actor';
 import { evaluateTransition, classifyTiming, type TripStatus } from '@/lib/trip-state';
+import { isTripInFlight } from '@/lib/trip-status';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const BodySchema = z.object({
@@ -163,7 +164,7 @@ export async function POST(
         scheduledDepartureAt: trip.departure_time.toISOString(),
         timing: { type: timing.timing, label: timing.label, deltaMinutes: timing.deltaMinutes },
         location,
-        idempotent: trip.status === 'IN_PROGRESS',
+        idempotent: isTripInFlight(trip.status),
       });
   });
 }

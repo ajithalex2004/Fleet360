@@ -174,7 +174,9 @@ export async function getRecoveryAndReplacementOptions(
   const availableVehicles = await prisma.vehicle.findMany({
     where: {
       tenantId,
-      status: { in: ['AVAILABLE', 'INACTIVE'] },
+      // INACTIVE vehicles are off fleet (or grounded) — never offer them.
+      status: 'AVAILABLE',
+      isActive: true,
       deletedAt: null,
       id: ticket.vehicle_id ? { not: ticket.vehicle_id } : undefined,
     },
@@ -350,17 +352,30 @@ export async function provisionReplacementVehicle(
   domainAction?: string;
   reassignedTripsCount?: number;
   reassignedBookingsCount?: number;
+  /** True when bus trips moved to the replacement: their earlier pre-trip
+   *  inspection was of the broken vehicle and does not count for it. */
+  preTripInspectionRequired?: boolean;
 }> {
   const now = new Date();
 
-  // 1. Fetch Replacement Vehicle
+  // 1. Fetch Replacement Vehicle — it must be available right now. Lock
+  //    the row so two dispatchers cannot hand the same spare to two
+  //    breakdowns.
+  await prisma.$queryRawUnsafe(
+    `SELECT id FROM vehicles WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`,
+    params.replacementVehicleId,
+    params.tenantId,
+  );
   const replacementVehicle = await prisma.vehicle.findFirst({
     where: { id: params.replacementVehicleId, tenantId: params.tenantId, deletedAt: null },
-    select: { id: true, licensePlate: true, make: true, model: true, vehicleGroup: true, vehicleUsage: true },
+    select: { id: true, licensePlate: true, make: true, model: true, vehicleGroup: true, vehicleUsage: true, status: true, isActive: true },
   });
 
   if (!replacementVehicle) {
     throw new Error('Selected replacement vehicle was not found or is unavailable');
+  }
+  if ((replacementVehicle.status ?? '').toUpperCase() !== 'AVAILABLE' || replacementVehicle.isActive === false) {
+    throw new Error(`Selected replacement vehicle is not available (status ${replacementVehicle.status ?? 'unknown'})`);
   }
 
   // 2. Fetch Ticket to find Grounded Vehicle
@@ -384,13 +399,21 @@ export async function provisionReplacementVehicle(
       select: { id: true, licensePlate: true, vehicleUsage: true, vehicleGroup: true },
     });
 
-    // P0 Safety: Ground the broken vehicle
-    await prisma.vehicle
-      .update({
-        where: { id: ticket.vehicle_id },
-        data: { status: 'MAINTENANCE', isActive: false },
-      })
-      .catch(() => {});
+    // P0 Safety: Ground the broken vehicle. No .catch anywhere below: this
+    // runs on the request's RLS transaction, where a caught failure leaves
+    // the transaction aborted and the COMMIT silently rolls everything back
+    // while the dispatcher is told the swap succeeded.
+    // A vehicle already GROUNDED (critical DVIR defect, expired documents)
+    // keeps that status: overwriting it with MAINTENANCE would drop it out
+    // of the grounding checks that decide when it may be released.
+    await prisma.vehicle.updateMany({
+      where: {
+        id: ticket.vehicle_id,
+        tenantId: params.tenantId,
+        OR: [{ status: null }, { status: { not: 'GROUNDED' } }],
+      },
+      data: { status: 'MAINTENANCE', isActive: false },
+    });
 
     // --- Domain Adapter 1: Rent-a-car (RAC) ---
     const activeBookings = await prisma.booking.findMany({
@@ -400,7 +423,7 @@ export async function provisionReplacementVehicle(
         status: { in: ['ACTIVE', 'CONFIRMED'] },
       },
       select: { id: true },
-    }).catch(() => []);
+    });
 
     if (activeBookings.length > 0 || groundedVehicle?.vehicleUsage === 'RENTAL') {
       const bookingUpdate = await prisma.booking
@@ -411,8 +434,7 @@ export async function provisionReplacementVehicle(
             status: { in: ['ACTIVE', 'CONFIRMED'] },
           },
           data: { vehicleId: replacementVehicle.id },
-        })
-        .catch(() => ({ count: 0 }));
+        });
 
       reassignedBookingsCount = bookingUpdate.count;
       domainAction = 'RENTAL_BOOKING_REASSIGNED';
@@ -429,7 +451,7 @@ export async function provisionReplacementVehicle(
         status: { in: ['SCHEDULED'] },
       },
       select: { id: true },
-    }).catch(() => []);
+    });
 
     if (
       upcomingTrips.length > 0 ||
@@ -445,13 +467,16 @@ export async function provisionReplacementVehicle(
             status: { in: ['SCHEDULED'] },
           },
           data: { vehicleId: replacementVehicle.id },
-        })
-        .catch(() => ({ count: 0 }));
+        });
 
       reassignedTripsCount = tripUpdate.count;
       if (domainAction === 'GENERAL_FLEET_SWAP') {
         domainAction = 'STAFF_TRANSPORT_TRIPS_REASSIGNED';
-        replacementStatus = 'RESERVED';
+        // Bus Ops holds a vehicle through its trip assignments, and its
+        // dispatch validation refuses RESERVED / RENTED vehicles — so a
+        // replacement marked RESERVED could not run the very trips it was
+        // given. It stays AVAILABLE; the reassigned trips are its booking.
+        replacementStatus = 'AVAILABLE';
       }
     }
 
@@ -463,7 +488,7 @@ export async function provisionReplacementVehicle(
         status: 'ACTIVE',
       },
       select: { id: true, contractId: true },
-    }).catch(() => null);
+    });
 
     if (activeLease || groundedVehicle?.vehicleUsage === 'LEASING') {
       if (activeLease?.contractId) {
@@ -482,8 +507,7 @@ export async function provisionReplacementVehicle(
           })
           .then(() => {
             leaseExchangeCreated = true;
-          })
-          .catch(() => {});
+          });
       }
       if (domainAction === 'GENERAL_FLEET_SWAP') {
         domainAction = 'LEASE_SUBSTITUTE_RECORDED';
@@ -493,12 +517,10 @@ export async function provisionReplacementVehicle(
   }
 
   // 4. Mark Replacement Vehicle as Active/Reserved
-  await prisma.vehicle
-    .update({
-      where: { id: replacementVehicle.id },
-      data: { status: replacementStatus, isActive: true },
-    })
-    .catch(() => {});
+  await prisma.vehicle.update({
+    where: { id: replacementVehicle.id },
+    data: { status: replacementStatus, isActive: true },
+  });
 
   const replacementProvisionDetails = {
     replacementVehicleId: replacementVehicle.id,
@@ -512,12 +534,16 @@ export async function provisionReplacementVehicle(
       reassignedBookingsCount,
       reassignedTripsCount,
       leaseExchangeCreated,
+      preTripInspectionRequired: reassignedTripsCount > 0,
     },
   };
 
   let domainSummary = 'Active lease contract billing continuity maintained.';
   if (domainAction === 'STAFF_TRANSPORT_TRIPS_REASSIGNED') {
-    domainSummary = `Reassigned ${reassignedTripsCount} upcoming staff/bus trip(s).`;
+    // The pre-trip inspection on file was for the broken-down vehicle and
+    // does not carry over (inspectionAllowsDeparture matches on vehicle):
+    // the replacement must be inspected before each reassigned trip departs.
+    domainSummary = `Reassigned ${reassignedTripsCount} upcoming staff/bus trip(s). A new pre-trip inspection of the replacement is required before departure.`;
   } else if (domainAction === 'RENTAL_BOOKING_REASSIGNED') {
     domainSummary = `Reassigned ${reassignedBookingsCount} active rental booking(s).`;
   } else if (domainAction === 'LEASE_SUBSTITUTE_RECORDED') {
@@ -550,5 +576,6 @@ export async function provisionReplacementVehicle(
     domainAction,
     reassignedTripsCount,
     reassignedBookingsCount,
+    preTripInspectionRequired: reassignedTripsCount > 0,
   };
 }
