@@ -61,6 +61,11 @@ vi.mock('@/lib/sms', () => ({
 vi.mock('@/lib/sentry', () => ({ captureException: () => {}, captureMessage: () => {} }));
 vi.mock('@/lib/audit', () => ({ logAudit: async () => {} }));
 vi.mock('@/lib/session-user', () => ({ sessionUser: async () => ({ email: 'disp@acme.test', name: 'Dana Dispatcher' }) }));
+// The Bus Ops access policy (verified session, tenant, module, permission)
+// has its own tests; here the caller is allowed, as in the other Bus Ops
+// route tests. Without this the notify route answered 401: these requests
+// carry identity headers but no signed session cookie.
+vi.mock('@/lib/bus-ops/access', () => ({ requireBusOpsRequest: async () => null }));
 vi.mock('@/lib/staff-recipients', () => ({ staffRecipients: async () => state.managers }));
 
 // The catalogue's built-in wording, rendered as the tenant "Acme".
