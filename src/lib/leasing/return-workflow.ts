@@ -438,15 +438,37 @@ export async function evaluateContractSettlementLiabilities(
     ? { tenantId, contractId, vehicleId: returns[0]?.vehicleId ?? undefined, billedToLessee: true }
     : { tenantId, contractId, billedToLessee: true };
   const fines = await tx.leaseTrafficFine.findMany({ where: fineWhere });
+
+  // An invoiced fine's invoice is the one sweep-bill recorded in paymentRef
+  // (its invoice number). The fine is judged on that invoice's live balance,
+  // and the invoice is not counted again below as OTHER_INVOICE. It used to be
+  // both: the raw fine amount as TRAFFIC_FINE (outstanding until paidDate was
+  // set, which paying the invoice never did) and the invoice as OTHER_INVOICE
+  // — counted twice while unpaid, and blocking closure for good once paid.
+  // One invoice can carry several fines; its outstanding balance is shared
+  // across them in order, each capped at its own amount.
+  const fineInvoiceBalance = new Map<string, { invoiceId: string; remaining: number }>();
+  for (const ref of new Set(fines.filter((f) => f.billingStatus === 'INVOICED' && f.paymentRef).map((f) => f.paymentRef as string))) {
+    const invoice = await tx.leaseInvoice.findFirst({ where: { tenantId, invoiceNo: ref }, select: { id: true, status: true } });
+    if (!invoice || invoice.status === 'CANCELLED') continue;
+    const balance = await getInvoiceOutstandingBalance(tx, tenantId, invoice.id);
+    fineInvoiceBalance.set(ref, { invoiceId: invoice.id, remaining: Math.max(0, balance) });
+    countedInvoiceIds.add(invoice.id);
+  }
+
   for (const fine of fines) {
     const amount = Number(fine.finalAmount ?? fine.fineAmount);
+    const onInvoice = fine.billingStatus === 'INVOICED' && fine.paymentRef ? fineInvoiceBalance.get(fine.paymentRef) : undefined;
     if (fine.billingStatus === 'DISPUTED') {
       items.push({ type: 'TRAFFIC_FINE', sourceId: fine.id, state: 'DISPUTED', amount });
     } else if (fine.billingStatus === 'PAID' || fine.billingStatus === 'ABSORBED') {
       items.push({ type: 'TRAFFIC_FINE', sourceId: fine.id, state: fine.billingStatus === 'PAID' ? 'PAID' : 'WAIVED', amount: 0 });
+    } else if (onInvoice) {
+      const owed = Math.min(amount, onInvoice.remaining);
+      onInvoice.remaining -= owed;
+      items.push({ type: 'TRAFFIC_FINE', sourceId: fine.id, state: owed <= 0.005 ? 'PAID' : 'INVOICED', amount: owed <= 0.005 ? 0 : owed });
     } else if (fine.billingStatus === 'INVOICED') {
-      // LeaseTrafficFine has no invoiceId to look up a live balance —
-      // treat the raw amount as outstanding unless paidDate is set.
+      // No invoice found for it: the raw amount, unless paidDate is set.
       items.push({ type: 'TRAFFIC_FINE', sourceId: fine.id, state: fine.paidDate ? 'PAID' : 'INVOICED', amount: fine.paidDate ? 0 : amount });
     } else {
       // PENDING — approved/known fine, not yet posted to an invoice.
