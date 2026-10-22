@@ -65,13 +65,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!agreements.length) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 });
         const agr = agreements[0];
 
-        if (agr.status !== 'ACTIVE') {
-          return NextResponse.json({ error: 'Only ACTIVE agreements can be closed. Current status: ' + agr.status }, { status: 422 });
+        // COMPLETED is what POST /api/rental/bookings/[id]/complete leaves on
+        // vehicle return: the agreement still needs closing (fees, final
+        // invoice). Only ACTIVE was accepted, so a completed rental could
+        // never be closed or invoiced.
+        if (agr.status !== 'ACTIVE' && agr.status !== 'COMPLETED') {
+          return NextResponse.json({ error: 'Only ACTIVE or COMPLETED agreements can be closed. Current status: ' + agr.status }, { status: 422 });
         }
 
         const now        = new Date().toISOString();
         const returnDate = new Date(actualReturnDate);
-        const dropoff    = agr.dropoff_date ? new Date(agr.dropoff_date) : returnDate;
+        // rental_agreements has start_date / end_date; pickup_date and
+        // dropoff_date never existed, so the scheduled return fell back to the
+        // actual one (no late fee, ever) and the pickup to now.
+        const dropoff    = agr.end_date ? new Date(agr.end_date) : returnDate;
 
         // ── 2. Load rate rule for late fees / excess KM ───────────────────────
         const pricingRules = await (prisma as any).pricingRule.findMany({
@@ -80,7 +87,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         const rateReq: RateRequest = {
           vehicleCategory:    agr.vehicle_category ?? 'ECONOMY',
-          pickupDate:         agr.pickup_date ? new Date(agr.pickup_date) : new Date(),
+          pickupDate:         agr.start_date ? new Date(agr.start_date) : new Date(),
           dropoffDate:        returnDate,
           pickupLocationCode: agr.pickup_location_code ?? undefined,
           dropoffLocationCode: agr.dropoff_location_code ?? undefined,
@@ -105,8 +112,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         // ── 4. Compute excess KM fee ──────────────────────────────────────────
         let excessKmFee = 0;
-        if (returnOdometer && agr.pickup_odometer && rate.includedKmPerDay > 0) {
-          const totalKm      = Number(returnOdometer) - Number(agr.pickup_odometer);
+        // The pickup reading is recorded as mileage_out on activation;
+        // pickup_odometer exists but nothing writes it.
+        const pickupOdometer = agr.pickup_odometer ?? agr.mileage_out;
+        if (returnOdometer && pickupOdometer && rate.includedKmPerDay > 0) {
+          const totalKm      = Number(returnOdometer) - Number(pickupOdometer);
           const includedKm   = rate.includedKmPerDay * rate.totalDays;
           const excessKm     = Math.max(0, totalKm - includedKm);
           if (excessKm > 0 && rate.excessKmRate > 0) {
@@ -188,11 +198,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           }
 
           // Totals
+          // subtotal already includes the rate engine's negative DISCOUNT line.
+          // The discount used to be subtracted from it again — the customer got
+          // it twice and VAT was charged on the doubly discounted amount.
           const subtotal      = parseFloat(lineItems.reduce((s, l) => s + l.amount, 0).toFixed(2));
           const discAmt       = rate.discountAmount;
-          const taxableAmt    = parseFloat((subtotal - discAmt).toFixed(2));
+          const taxableLines  = lineItems.filter((l) => l.taxable).reduce((s, l) => s + l.amount, 0);
+          const taxableAmt    = parseFloat((taxableLines - discAmt).toFixed(2));
           const taxAmt        = parseFloat((taxableAmt * TAX_RATE / 100).toFixed(2));
-          const totalAmt      = parseFloat((taxableAmt + taxAmt).toFixed(2));
+          const totalAmt      = parseFloat((subtotal + taxAmt).toFixed(2));
 
           const countRows = await tx.$queryRawUnsafe<{ count: bigint }[]>(
             "SELECT COUNT(*) AS count FROM rental_invoices"
@@ -211,7 +225,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             invoiceId, now, now, invoiceNo,
             params.id, agr.customer_id,
             now, dueDate,
-            agr.pickup_date, returnDate.toISOString(),
+            agr.start_date, returnDate.toISOString(),
             agr.currency ?? 'AED',
             subtotal, discAmt, taxableAmt, TAX_RATE, taxAmt, totalAmt,
             notes ?? 'Closing invoice for agreement ' + agr.agreement_no,

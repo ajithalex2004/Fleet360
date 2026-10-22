@@ -52,8 +52,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!agreements.length) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 });
         const agr = agreements[0];
 
-        if (!['ACTIVE', 'CLOSED'].includes(agr.status)) {
-          return NextResponse.json({ error: 'Invoice can only be generated for ACTIVE or CLOSED agreements' }, { status: 422 });
+        // COMPLETED: returned through POST /api/rental/bookings/[id]/complete.
+        if (!['ACTIVE', 'COMPLETED', 'CLOSED'].includes(agr.status)) {
+          return NextResponse.json({ error: 'Invoice can only be generated for ACTIVE, COMPLETED or CLOSED agreements' }, { status: 422 });
         }
 
         // ── 2. Fetch pricing rules and calculate base rental ──────────────────
@@ -61,10 +62,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           where: { isActive: true }, orderBy: [{ priority: 'desc' }],
         });
 
-        const pickupDate  = agr.pickup_date  ? new Date(agr.pickup_date)  : new Date();
+        // start_date / end_date: pickup_date and dropoff_date never existed,
+        // so every invoice priced the rental from "now".
+        const pickupDate  = agr.start_date ? new Date(agr.start_date) : new Date();
         const dropoffDate = agr.actual_return_date
           ? new Date(agr.actual_return_date)
-          : agr.dropoff_date ? new Date(agr.dropoff_date) : new Date();
+          : agr.end_date ? new Date(agr.end_date) : new Date();
 
         const rateReq: RateRequest = {
           vehicleCategory:    agr.vehicle_category ?? 'ECONOMY',
@@ -162,7 +165,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const discountAmount    = rate.discountAmount;
         const taxableAmount     = parseFloat((taxableSubtotal - discountAmount).toFixed(2));
         const taxAmount         = parseFloat((taxableAmount * TAX_RATE / 100).toFixed(2));
-        const totalAmount       = parseFloat((subtotal - discountAmount + taxAmount).toFixed(2));
+        // subtotal already includes the negative DISCOUNT line; subtracting
+        // discountAmount again gave the customer the discount twice.
+        const totalAmount       = parseFloat((subtotal + taxAmount).toFixed(2));
 
         // ── 8. Generate invoice number ────────────────────────────────────────
         const countRows = await tx.$queryRawUnsafe<{ count: bigint }[]>(
