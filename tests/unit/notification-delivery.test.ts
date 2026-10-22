@@ -33,6 +33,9 @@ vi.mock('@/lib/workflow-db', () => ({
     st.roleQueries.push([tenantId, role]);
     return role === 'TENANT_ADMIN' ? [{ email: 'ann@t.example' }, { email: 'bob@t.example' }] : [];
   },
+  // Only user-1 is an active member of tenant-a.
+  getMemberEmailById: async (tenantId: string, userId: string) =>
+    tenantId === 'tenant-a' && userId === 'user-0000001' ? 'carol@t.example' : null,
 }));
 
 import { deliverNotification } from '@/lib/notification-delivery';
@@ -82,5 +85,15 @@ describe('deliverNotification', () => {
       for (const channel of ['EMAIL', 'SMS', 'WHATSAPP']) await deliverNotification({ ...base, channel, recipient });
     }
     expect(st.logged.some((l) => l.status === 'Pending')).toBe(false);
+  });
+
+  it('resolves a specific-recipient user id to that member of the event’s tenant', async () => {
+    expect(await deliverNotification({ ...base, channel: 'EMAIL', recipient: 'user-0000001' })).toEqual(['Sent']);
+    expect(st.sent).toEqual(['carol@t.example']);
+  });
+
+  it('records an unknown or other-tenant user id as Undeliverable', async () => {
+    expect(await deliverNotification({ ...base, tenantId: 'tenant-b', channel: 'EMAIL', recipient: 'user-0000001' })).toEqual(['Undeliverable']);
+    expect(st.sent).toEqual([]);
   });
 });

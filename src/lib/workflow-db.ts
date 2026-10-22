@@ -486,12 +486,36 @@ function afterCommit(job: () => Promise<void>): void {
 }
 
 async function inDecisionTransaction<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
-  const queue: Array<() => Promise<void>> = [];
-  const result = await afterCommitQueue.run(queue, () => withTenantRls(prisma, tenantId, () => fn(), { timeoutMs: 60_000 }));
-  for (const job of queue) {
+  // A fresh queue per transaction attempt: the transaction wrapper can retry
+  // on a connection failure, and a queue shared across attempts would run
+  // the failed attempt's emails / after-hooks too (duplicates or stale).
+  // Only the attempt that returned — the one that committed — is kept.
+  let committedQueue: Array<() => Promise<void>> = [];
+  const result = await withTenantRls(prisma, tenantId, () => {
+    const attemptQueue: Array<() => Promise<void>> = [];
+    return afterCommitQueue.run(attemptQueue, async () => {
+      const value = await fn();
+      committedQueue = attemptQueue;
+      return value;
+    });
+  }, { timeoutMs: 60_000 });
+  for (const job of committedQueue) {
     await job().catch((e) => console.warn('[Workflow] side effect failed:', e instanceof Error ? e.message : e));
   }
   return result;
+}
+
+/**
+ * Thrown by a subject's apply when the outcome conflicts with the record in
+ * a way the approver can act on ("the estimate changed since it was
+ * submitted"). Its message is written for users and is shown to them; any
+ * other cause (Prisma / driver errors carry table and column names) is not.
+ */
+export class OutcomeConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OutcomeConflictError';
+  }
 }
 
 /** The module could not apply an approval's outcome; nothing was changed. */
@@ -505,6 +529,14 @@ export class WorkflowOutcomeError extends Error {
     super(`Could not apply the ${outcome.toLowerCase()} outcome to ${referenceType} ${referenceId}: `
       + (cause instanceof Error ? cause.message : String(cause)));
     this.name = 'WorkflowOutcomeError';
+  }
+
+  /** Safe to return to the client: the cause's text only when it was
+   *  written for users (OutcomeConflictError), a generic line otherwise. */
+  get publicMessage(): string {
+    return this.cause instanceof OutcomeConflictError
+      ? `Could not apply this decision: ${this.cause.message}. Nothing was changed; you can try again.`
+      : 'Could not apply this decision to the record. Nothing was changed; you can try again or contact an administrator.';
   }
 }
 
@@ -1119,6 +1151,21 @@ export async function getRoleHolders(tenantId: string, roleCode: string, limit =
       email: r.user.email.toLowerCase(),
       name: [r.user.firstName, r.user.lastName].filter(Boolean).join(' ') || undefined,
     }));
+}
+
+/**
+ * Email of the user `userId` if they hold an active membership in
+ * `tenantId`; null otherwise (unknown id, another tenant's user, or a
+ * deactivated membership) — an id never reaches someone outside the tenant.
+ */
+export async function getMemberEmailById(tenantId: string, userId: string): Promise<string | null> {
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.userTenant.findMany({
+    where: { tenantId, userId, isActive: { not: false } },
+    select: { user: { select: { email: true } } },
+    take: 1,
+  })));
+  const email = rows[0]?.user.email;
+  return email && EMAIL_RE.test(email) ? email.toLowerCase() : null;
 }
 
 /**

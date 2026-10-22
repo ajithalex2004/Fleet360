@@ -61,8 +61,9 @@ export async function startApproval(args: {
       // Every level passed automatically and the outcome could not be
       // applied: the approval rolled back and did not start.
       if (e instanceof WorkflowOutcomeError) {
+        // Full detail to the log; only a user-safe message to the caller.
         console.warn(`[Workflow] ${subject.label} ${loaded.referenceNumber}: ${e.message}`);
-        return { started: false, error: e.message };
+        return { started: false, error: e.publicMessage };
       }
       throw e;
     }
@@ -187,8 +188,10 @@ export async function decideAs(args: {
       // whole decision rolled back, so the approver can fix the cause and
       // decide again.
       if (e instanceof WorkflowOutcomeError) {
-        const why = e.cause instanceof Error ? e.cause.message : String(e.cause);
-        return { ok: false, status: 409, error: `Could not apply this decision: ${why}. Nothing was changed; you can try again.` };
+        // Full detail to the log; the cause may be a Prisma / driver error
+        // naming tables and columns, so the client gets only publicMessage.
+        console.warn(`[Workflow] decision on ${args.instanceId} rolled back: ${e.message}`);
+        return { ok: false, status: 409, error: e.publicMessage };
       }
       throw e;
     }

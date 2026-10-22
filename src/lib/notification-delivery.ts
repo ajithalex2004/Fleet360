@@ -21,7 +21,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { sendServerEmail } from '@/lib/notifications';
-import { getRoleHolders } from '@/lib/workflow-db';
+import { getMemberEmailById, getRoleHolders } from '@/lib/workflow-db';
 
 /** Rule recipient types that name a tenant role, and the role's code. */
 const ROLE_RECIPIENTS: Record<string, string> = {
@@ -30,8 +30,10 @@ const ROLE_RECIPIENTS: Record<string, string> = {
 };
 
 const EMAIL_RE = /^[^\s@"'{}<>]+@[^\s@"'{}<>]+\.[^\s@"'{}<>]+$/;
+/** User ids (uuid / cuid-style): no '@', no spaces, no braces. */
+const USER_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
-/** Email addresses for one rule recipient: `{"email":…}`, an address, or a role. */
+/** Email addresses for one rule recipient: `{"email":…}`, an address, a role, or a user id. */
 export async function resolveRecipient(tenantId: string, recipient: string): Promise<string[]> {
   const r = recipient.trim();
   // JSON first: `{"email":"a@b.c"}` would otherwise pass as an address.
@@ -45,6 +47,13 @@ export async function resolveRecipient(tenantId: string, recipient: string): Pro
   if (EMAIL_RE.test(r)) return [r.toLowerCase()];
   const role = ROLE_RECIPIENTS[r.toUpperCase()];
   if (role) return (await getRoleHolders(tenantId, role)).map((h) => h.email);
+  // A rule's specificRecipientIds hold user ids: resolve each to the email
+  // of an active member of THIS tenant. An unknown or cross-tenant id
+  // resolves to nobody (recorded Undeliverable), never to another tenant.
+  if (USER_ID_RE.test(r)) {
+    const email = await getMemberEmailById(tenantId, r);
+    return email ? [email] : [];
+  }
   return [];
 }
 

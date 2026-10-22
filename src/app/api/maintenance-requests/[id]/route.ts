@@ -249,7 +249,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                 // MaintenanceStatus); this switch compared exact UPPER_SNAKE
                 // strings, so the events fired only when a client happened to
                 // send that form. statusKey() normalises both.
-                switch (statusKey(newStatus)) {
+                // Only on an actual status change: a PATCH that edits the
+                // description or attachments must not re-publish the current
+                // lifecycle event (analytics counts each work_order_completed).
+                const statusChanged = statusKey(newStatus) !== statusKey(before.status);
+                switch (statusChanged ? statusKey(newStatus) : '') {
                     case 'approved':
                         await publishMaintenanceApproved(params.id, tenantId, {
                             ...base, approvedBy: req.approvedBy ?? null, approvedAt: now,

@@ -58,7 +58,7 @@ vi.mock('@/lib/workflow/subjects', () => ({
   },
 }));
 
-import { advanceWorkflow, WorkflowOutcomeError } from '@/lib/workflow-db';
+import { advanceWorkflow, WorkflowOutcomeError, OutcomeConflictError } from '@/lib/workflow-db';
 
 beforeEach(() => {
   st.events.length = 0;
@@ -86,5 +86,13 @@ describe('ending an approval', () => {
     expect(st.events).toContain('ROLLBACK');
     expect(st.events).not.toContain('COMMIT');
     expect(st.events.some((e) => e.includes('after-hook'))).toBe(false);
+  });
+
+  it('shows the client only user-safe outcome text', () => {
+    const internal = new WorkflowOutcomeError('APPROVED', 'refund', 'r1', new Error('relation "finance_payables" column "x" does not exist'));
+    expect(internal.publicMessage).not.toContain('finance_payables');
+    expect(internal.publicMessage).toContain('Nothing was changed');
+    const conflict = new WorkflowOutcomeError('APPROVED', 'estimate', 'e1', new OutcomeConflictError('the estimate changed since it was submitted'));
+    expect(conflict.publicMessage).toContain('the estimate changed since it was submitted');
   });
 });

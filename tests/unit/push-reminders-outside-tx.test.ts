@@ -43,7 +43,7 @@ vi.mock('@/lib/prisma-sweep', () => ({
 }));
 vi.mock('@/lib/rls', () => ({
   withTenantRls: async (_p: unknown, _t: string, fn: (tx: unknown) => Promise<unknown>) => fn({
-    pushSubscription: { update: async (a: { data: Record<string, unknown> }) => {
+    pushSubscription: { updateMany: async (a: { data: Record<string, unknown> }) => {
       st.log.push(`update:${Object.keys(a.data).join(',')}`);
       return {};
     } },

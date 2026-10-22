@@ -27,6 +27,7 @@
  *     (useful for manual testing).
  */
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, type SystemJobContext } from '@/lib/rls';
 import { runSweep } from '@/lib/prisma-sweep';
@@ -82,27 +83,33 @@ export async function runTripReminders(tenantHeader?: string | null): Promise<Ru
   let pushesSent = 0;
   let pushesPruned = 0;
   let errors = 0;
+  // Record one push's outcome without stopping the run: updateMany does not
+  // throw when the subscription was deleted since planning, and any other
+  // failure is counted, so every remaining planned push is still sent.
+  const recordOutcome = async (push: PlannedPush, data: Prisma.PushSubscriptionUpdateManyMutationInput) => {
+    try {
+      await withTenantRls(prisma, push.tenantId, (tx) =>
+        tx.pushSubscription.updateMany({ where: { id: push.subscriptionId }, data }),
+      );
+    } catch (e) {
+      errors++;
+      console.error('[push-scheduler] could not record push outcome:', push.subscriptionId, e instanceof Error ? e.message : e);
+    }
+  };
   for (const { result } of planned) {
     for (const push of result.pushes) {
       const res = await sendPush(push.target, push.payload);
       if (res.ok) {
         pushesSent++;
-        await withTenantRls(prisma, push.tenantId, (tx) =>
-          tx.pushSubscription.update({ where: { id: push.subscriptionId }, data: { lastSentAt: new Date() } }),
-        );
+        await recordOutcome(push, { lastSentAt: new Date() });
         continue;
       }
       errors++;
       const gone = res.reason === 'gone';
       if (gone) pushesPruned++;
-      await withTenantRls(prisma, push.tenantId, (tx) =>
-        tx.pushSubscription.update({
-          where: { id: push.subscriptionId },
-          data: gone
-            ? { revokedAt: new Date(), lastErrorAt: new Date(), lastErrorCode: res.statusCode }
-            : { lastErrorAt: new Date(), lastErrorCode: res.statusCode },
-        }),
-      );
+      await recordOutcome(push, gone
+        ? { revokedAt: new Date(), lastErrorAt: new Date(), lastErrorCode: res.statusCode }
+        : { lastErrorAt: new Date(), lastErrorCode: res.statusCode });
     }
   }
 
