@@ -220,15 +220,16 @@ export async function evaluateAndRecordStopVisits(
     const remainingMinutes = Math.round((distKm / avgSpeed) * 60) + 2;
     const estimatedArrival = new Date(ping.occurredAt.getTime() + remainingMinutes * 60 * 1000);
 
-    // TripSchedule's estimate field is `arrivalTime` (per its schema
-    // comment: "arrivalTime is an estimate" vs. the separate hard-deadline
-    // `latestArrivalTime`) — there is no `estimatedArrival` column.
+    // The live ETA has its own column. Writing it into `arrivalTime` (the
+    // scheduled arrival) made the SLA monitor compare the prediction with
+    // itself, so delays always read ~0. No .catch: a failure here inside
+    // the ingest transaction must surface, not leave it silently aborted.
     await tx.tripSchedule.update({
       where: { id: scheduleId },
       data: {
-        arrivalTime: estimatedArrival,
+        estimatedArrivalTime: estimatedArrival,
       },
-    }).catch(() => {});
+    });
   }
 
   return evaluated;

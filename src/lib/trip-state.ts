@@ -27,12 +27,31 @@
  * tighter rules later.
  */
 
+import { isTripInFlight } from '@/lib/trip-status';
+
 export type TripStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+/**
+ * Map a stored trip_schedules.status onto the driver-facing vocabulary.
+ * Bus Ops writes STARTED / EN_ROUTE (and legacy rows DEPARTED /
+ * IN_TRANSIT) for a trip under way; to the driver all of those are
+ * IN_PROGRESS — otherwise a trip started from Bus Ops or moved along by
+ * telematics could never be ended from the driver app. Returns null for a
+ * value it does not recognise, so callers refuse rather than guess.
+ */
+export function toDriverTripStatus(raw: string | null | undefined): TripStatus | null {
+  const s = (raw ?? '').trim().toUpperCase();
+  if (isTripInFlight(s)) return 'IN_PROGRESS';
+  if (s === 'AUTO_CLOSED') return 'COMPLETED';
+  if (s === 'SCHEDULED' || s === 'COMPLETED' || s === 'CANCELLED') return s;
+  return null;
+}
 
 export type TripTransition = 'START' | 'END' | 'RESTART' | 'CANCEL';
 
 export interface TransitionInput {
-  currentStatus: TripStatus;
+  /** Stored status; Bus Ops spellings are accepted and normalised. */
+  currentStatus: TripStatus | string;
   transition: TripTransition;
 }
 
@@ -43,7 +62,11 @@ export interface TransitionResult {
 }
 
 export function evaluateTransition(input: TransitionInput): TransitionResult {
-  const { currentStatus, transition } = input;
+  const { transition } = input;
+  const currentStatus = toDriverTripStatus(input.currentStatus);
+  if (currentStatus === null) {
+    return { allowed: false, reason: `Trip is in an unrecognised state (${String(input.currentStatus)})` };
+  }
 
   if (transition === 'START') {
     if (currentStatus === 'SCHEDULED') return { allowed: true, nextStatus: 'IN_PROGRESS' };
@@ -144,14 +167,15 @@ export interface StartButtonState {
 }
 
 export function startButtonState(input: {
-  status: TripStatus;
+  status: TripStatus | string;
   scheduledDeparture: string;
   actualDeparture: string | null;
   actualArrival: string | null;
   durationMinutes: number | null;
   windowMinutes?: number;
 }): StartButtonState {
-  const { status, scheduledDeparture, actualDeparture, actualArrival, durationMinutes } = input;
+  const { scheduledDeparture, actualDeparture, actualArrival, durationMinutes } = input;
+  const status = toDriverTripStatus(input.status);
   const w = input.windowMinutes ?? DEFAULT_WINDOW_MINUTES;
 
   if (status === 'SCHEDULED') {

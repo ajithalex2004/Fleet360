@@ -80,6 +80,7 @@
 
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -178,7 +179,8 @@ const VEHICLE_UNAVAILABLE_STATUSES = new Set([
  * carry the legacy values, and dropping them here would let a vehicle or
  * driver already on an active trip be double-booked onto a second one.
  */
-const ACTIVE_SCHEDULE_STATUSES = ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] as const;
+// Shared set: also covers IN_PROGRESS, which the driver app writes.
+const ACTIVE_SCHEDULE_STATUSES = TRIP_OPEN_STATUSES;
 
 /** V6 GPS_STALE only fires when departure is within this many minutes of now.
  *  Long-lead scheduling ("next week's trip") shouldn't warn on today's
@@ -677,7 +679,7 @@ function aggregateVerdict(checks: AssignmentCheck[]): AssignmentValidationResult
  * Same formula applied to both the proposed and existing trips so
  * overlap comparison is symmetric.
  */
-function effectiveEndTime(
+export function effectiveEndTime(
   departureTime: Date,
   arrivalTime:   Date | null,
   routeMins:     number | null,

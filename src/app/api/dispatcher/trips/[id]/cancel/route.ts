@@ -37,6 +37,7 @@ import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/tenant-session';
 import { withTenantRls } from '@/lib/rls';
 import { evaluateTransition, type TripStatus } from '@/lib/trip-state';
+import { isTripInFlight } from '@/lib/trip-status';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const BodySchema = z.object({
@@ -176,7 +177,7 @@ export async function POST(
   // For IN_PROGRESS trips, compute duration_minutes against
   // actual_departure_at. For SCHEDULED trips, no duration yet.
   const durationMin = (() => {
-    if (trip.status !== 'IN_PROGRESS' || !trip.actual_departure_at) return null;
+    if (!isTripInFlight(trip.status) || !trip.actual_departure_at) return null;
     return Math.max(0, Math.round(
       (new Date(now).getTime() - trip.actual_departure_at.getTime()) / 60_000,
     ));
