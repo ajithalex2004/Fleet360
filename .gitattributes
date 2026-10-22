@@ -1,0 +1,8 @@
+# Node ES-module scripts are checked out with LF on every platform.
+#
+# With core.autocrlf=true (the Windows default) they were checked out with
+# CRLF, and Vitest could not load two of them (scripts/
+# check-no-hardcoded-credentials.mjs, scripts/security-harness/run.mjs):
+# importing them in a test failed with "SyntaxError: Invalid or unexpected
+# token", while the same files load fine with LF (as on Linux CI).
+*.mjs text eol=lf
