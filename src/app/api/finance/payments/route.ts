@@ -184,26 +184,26 @@ export async function POST(req: NextRequest) {
         tenantId
       );
 
-      // Reconcile against invoice if provided
+      // Reconcile against the invoice through an allocation: the trigger on
+      // finance_payment_allocations sets the invoice's paid_amount (sum of its
+      // allocations) and payment_status. This added the payment to
+      // paid_amount directly, writing no allocation, and the next allocation
+      // on the invoice — which recomputes from allocations only — erased it.
       let newStatus: string | null = null;
       if (invoiceId) {
-        type InvRow = { total_amount: number; paid_amount: number };
-        const [inv] = await tx.$queryRawUnsafe<InvRow[]>(
-          `SELECT total_amount, paid_amount FROM finance_invoices
-            WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-          invoiceId, tenantId
+        await tx.$executeRawUnsafe(
+          `INSERT INTO finance_payment_allocations
+             (payment_id, invoice_id, allocated_amount, allocation_date, notes, allocated_by, tenant_id)
+           VALUES ($1::uuid, $2::uuid, $3::numeric, $4::date, $5, $6, $7)`,
+          row.id, invoiceId, Number(amount),
+          paymentDate ?? new Date().toISOString().split('T')[0],
+          'Payment recorded against the invoice', req.headers.get('x-user-id'), tenantId,
         );
-
-        if (inv) {
-          const newPaid = Math.round((Number(inv.paid_amount) + Number(amount)) * 100) / 100;
-          newStatus = newPaid >= Number(inv.total_amount) ? 'PAID' : 'PARTIAL';
-          await tx.$executeRawUnsafe(
-            `UPDATE finance_invoices
-                SET paid_amount = $2, payment_status = $3, updated_at = NOW()
-              WHERE id = $1::uuid AND tenant_id = $4`,
-            invoiceId, newPaid, newStatus, tenantId
-          );
-        }
+        const [inv] = await tx.$queryRawUnsafe<Array<{ payment_status: string }>>(
+          `SELECT payment_status FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2`,
+          invoiceId, tenantId,
+        );
+        newStatus = inv?.payment_status ?? null;
       }
 
       return { notFound: false as const, id: row.id, newStatus };

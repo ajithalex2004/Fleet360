@@ -78,31 +78,36 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           const { amount, paymentDate, paymentMethod = 'BANK_TRANSFER', reference, notes } = body;
           if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
-          // Get current invoice
-          type InvRow = { total_amount: number; paid_amount: number; payment_status: string };
-          const [inv] = await tx.$queryRawUnsafe<InvRow[]>(
-            `SELECT total_amount, paid_amount, payment_status FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+          const [inv] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
             params.id, tenantId
           );
           if (!inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
-          const newPaid = Math.round((Number(inv.paid_amount) + Number(amount)) * 100) / 100;
-          const newStatus = newPaid >= Number(inv.total_amount) ? 'PAID' : 'PARTIAL';
-
-          await tx.$executeRawUnsafe(
+          const date = paymentDate ?? new Date().toISOString().split('T')[0];
+          const [payment] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
             `INSERT INTO finance_payments (tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
-             VALUES ($1, $2::uuid, $3, $4::date, $5, $6, $7)`,
-            tenantId, params.id, Number(amount),
-            paymentDate ?? new Date().toISOString().split('T')[0],
+             VALUES ($1, $2::uuid, $3, $4::date, $5, $6, $7) RETURNING id`,
+            tenantId, params.id, Number(amount), date,
             paymentMethod, reference ?? null, notes ?? null
           );
 
+          // Through an allocation: the trigger on finance_payment_allocations
+          // sets paid_amount (sum of allocations) and payment_status. Setting
+          // paid_amount here directly was erased by the next allocation.
           await tx.$executeRawUnsafe(
-            `UPDATE finance_invoices SET paid_amount = $2, payment_status = $3, updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $4`,
-            params.id, newPaid, newStatus, tenantId
+            `INSERT INTO finance_payment_allocations
+               (payment_id, invoice_id, allocated_amount, allocation_date, notes, allocated_by, tenant_id)
+             VALUES ($1::uuid, $2::uuid, $3::numeric, $4::date, $5, $6, $7)`,
+            payment.id, params.id, Number(amount), date,
+            'Payment recorded against the invoice', req.headers.get('x-user-id'), tenantId,
           );
 
-          return NextResponse.json({ success: true, newPaidAmount: newPaid, newStatus });
+          const [after] = await tx.$queryRawUnsafe<Array<{ paid_amount: string | number; payment_status: string }>>(
+            `SELECT paid_amount, payment_status FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2`,
+            params.id, tenantId
+          );
+          return NextResponse.json({ success: true, newPaidAmount: Number(after?.paid_amount ?? 0), newStatus: after?.payment_status });
         }
 
         // ── Update status ─────────────────────────────────────────────────────
