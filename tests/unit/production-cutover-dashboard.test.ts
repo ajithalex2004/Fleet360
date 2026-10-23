@@ -176,6 +176,10 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
         method: 'POST',
         headers: {
           'x-tenant-id': tenantId,
+          // The reviewer is the signed-in user (not a body field), and
+          // deciding needs the agents approve permission.
+          'x-user-id': 'operations_director_01',
+          'x-user-role': 'TENANT_ADMIN',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

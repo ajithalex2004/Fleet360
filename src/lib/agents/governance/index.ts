@@ -421,25 +421,64 @@ export class PolicyService {
 
   /**
    * Human review action: Approve or Reject an approval item.
+   *
+   * Only a PENDING item can be decided (a second click, or two reviewers at
+   * once, used to re-decide it), and with `tenantId` only an item of that
+   * tenant. Approving a gated agent action (gated-actions.ts) runs it here,
+   * in the caller's transaction: if it fails the decision rolls back with
+   * it; if it no longer applies (the queue can be hours old) the item is
+   * marked EXPIRED with the reason and nothing is changed.
    */
   async reviewApprovalItem(
     approvalId: string,
     reviewerId: string,
     decision: 'APPROVED' | 'REJECTED',
     notes?: string,
-  ): Promise<ApprovalItem> {
+    tenantId?: string,
+  ): Promise<ApprovalItem & { execution?: Record<string, unknown> }> {
     await ensureAgentSchema();
 
-    await prisma.$executeRawUnsafe(
+    const updated = await prisma.$executeRawUnsafe(
       `UPDATE agent_approvals
        SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_notes = $3
-       WHERE id = $4::uuid`,
+       WHERE id = $4::uuid AND status = 'PENDING' AND ($5::text IS NULL OR tenant_id = $5)`,
       decision,
       reviewerId,
       notes ?? null,
       approvalId,
+      tenantId ?? null,
     );
+    if (!updated) {
+      throw new ApprovalNotPendingError(approvalId);
+    }
 
+    let item = await this.loadApprovalItem(approvalId);
+
+    let execution: Record<string, unknown> | undefined;
+    if (decision === 'APPROVED') {
+      const { isGatedAction, executeGatedAction } = await import('./gated-actions');
+      if (isGatedAction(item.actionType)) {
+        const result = await executeGatedAction(item.tenantId, item.actionType, item.proposedPayload);
+        if (result.ok) {
+          execution = { executed: true, ...result.detail };
+        } else {
+          await prisma.$executeRawUnsafe(
+            `UPDATE agent_approvals SET status = 'EXPIRED',
+                    review_notes = concat_ws(' | ', review_notes, $2::text)
+              WHERE id = $1::uuid`,
+            approvalId,
+            `Not applied: ${result.reason}`,
+          );
+          item = await this.loadApprovalItem(approvalId);
+          execution = { executed: false, reason: result.reason };
+        }
+      }
+    }
+
+    return execution ? { ...item, execution } : item;
+  }
+
+  private async loadApprovalItem(approvalId: string): Promise<ApprovalItem> {
     const rows = await prisma.$queryRawUnsafe<ApprovalItemRow[]>(
       `SELECT id::text, tenant_id AS "tenantId", agent_id AS "agentId", entity_type AS "entityType",
               entity_id AS "entityId", action_type AS "actionType", title, description,
@@ -461,6 +500,14 @@ export class PolicyService {
       financialImpactAed: Number(r.financialImpactAed || 0),
       proposedPayload: (r.proposedPayload ?? {}) as Record<string, unknown>,
     };
+  }
+}
+
+/** The approval item is missing, already decided, or belongs to another tenant. */
+export class ApprovalNotPendingError extends Error {
+  constructor(readonly approvalId: string) {
+    super(`Approval item '${approvalId}' is not pending (already decided, or not found).`);
+    this.name = 'ApprovalNotPendingError';
   }
 }
 
