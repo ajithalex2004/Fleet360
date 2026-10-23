@@ -14,6 +14,8 @@ import { prisma } from '@/lib/prisma';
 import { AgentDefinition, AgentEvent, AgentRunResult, AgentRunTelemetry } from '../types';
 import { classifyIncident } from './classifier';
 import { aiGateway } from '../gateway';
+import { submitGatedAction } from '@/lib/agents/governance/gated-actions';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 
 interface IncidentRow {
   id: string;
@@ -101,6 +103,7 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
 
   let assessed = 0;
   let escalated = 0;
+  let escalationsProposed = 0;
   let deterministicCount = 0;
   let aiCount = 0;
   let totalInputTokens = 0;
@@ -226,12 +229,25 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
         JSON.stringify(triage.actionsSuggested),
       );
 
-      // 7. Escalate on the live incident if severity upgraded
+      // 7. Propose escalating the live incident if severity upgraded. The
+      //    change goes through the governance gate (gated-actions.ts): it is
+      //    applied now only when the tenant's policy allows L4, otherwise it
+      //    waits in the approval queue. It used to be written directly, with
+      //    its failure swallowed.
       if (triage.severityChanged && (triage.aiSeverity === 'CRITICAL' || triage.aiSeverity === 'HIGH')) {
-        await prisma.$executeRawUnsafe(`
-          UPDATE operations.incidents SET severity = $1, updated_at = NOW() WHERE id = $2
-        `, triage.aiSeverity, inc.id).catch(() => {});
-        escalated++;
+        const gate = await bestEffortInTx(prisma, 'incident-triage.propose-escalation', () =>
+          submitGatedAction(event.tenant_id, {
+            agentId:     'incident-triage',
+            entityType:  'INCIDENT',
+            entityId:    String(inc.id),
+            actionType:  'ESCALATE_INCIDENT_SEVERITY',
+            title:       `Escalate incident ${inc.incident_no ?? inc.id} to ${triage.aiSeverity}`,
+            description: `Reported as ${inc.severity}; AI triage assesses ${triage.aiSeverity}. ` +
+                         `Risk factors: ${triage.riskFactors.join(', ') || 'none listed'}.`,
+            payload:     { incidentId: String(inc.id), fromSeverity: inc.severity, toSeverity: triage.aiSeverity },
+          }));
+        if (gate?.outcome === 'EXECUTED' && gate.result.ok) escalated++;
+        else if (gate?.outcome === 'QUEUED') escalationsProposed++;
       }
 
       assessments.push({
@@ -268,9 +284,10 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
     itemsProcessed: incidents.length, actionsCreated: assessed,
     telemetry,
     output: {
-      summary: `Assessed ${assessed} incidents (${deterministicCount} deterministic, ${aiCount} emergency AI advisories); ${escalated} escalated to critical/high.`,
+      summary: `Assessed ${assessed} incidents (${deterministicCount} deterministic, ${aiCount} emergency AI advisories); ${escalated} escalated to critical/high; ${escalationsProposed} escalation(s) awaiting approval.`,
       assessed,
       escalated,
+      escalationsProposed,
       deterministicCount,
       aiCount,
       avoidedTokens,

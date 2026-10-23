@@ -176,10 +176,15 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
         method: 'POST',
         headers: {
           'x-tenant-id': tenantId,
+          // The reviewer is the signed-in user (not a body field), and
+          // deciding needs the agents approve permission.
+          'x-user-id': 'operations_director_01',
+          'x-user-role': 'TENANT_ADMIN',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          approvalId: approvalItem.id,
+          // The route validates the id as a UUID (the mocked insert has no real one).
+          approvalId: '5b0f8a1e-2c3d-4e5f-8a9b-0c1d2e3f4a5b',
           decision: 'APPROVED',
           reviewerId: 'operations_director_01',
           notes: 'Approved after supplier verification',
