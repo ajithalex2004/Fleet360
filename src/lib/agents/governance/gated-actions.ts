@@ -22,6 +22,7 @@
  * longer waiting for a driver — each returns `stale` and changes nothing.
  */
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import type { ActionProposal } from './index';
 import { policyService } from './index';
 
@@ -55,6 +56,10 @@ export interface GatedProposal extends Omit<ActionProposal, 'actionType' | 'payl
 
 const SEVERITY_RANK: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 const DISPATCHABLE_STATUSES = ['PENDING', 'SEARCHING', 'RETRYING'];
+/** A driver holding a job in one of these states is busy. */
+const DRIVER_BUSY_STATUSES = ['OFFERED', 'ACCEPTED', 'IN_PROGRESS'];
+/** Driver statuses the optimiser considers available (dispatch-optimiser/agent.ts). */
+const DRIVER_AVAILABLE_STATUSES = ['ACTIVE', 'AVAILABLE', 'ON_SHIFT'];
 const OPEN_WO_STATUSES = ['OPEN', 'IN_PROGRESS', 'PENDING_PARTS'];
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -65,7 +70,10 @@ async function createPredictiveWorkOrder(tenantId: string, p: Record<string, unk
   if (!vehicleId) throw new Error('CREATE_PREDICTIVE_WORK_ORDER payload is missing vehicleId');
 
   // Number allocation and the open-order check under one per-tenant lock:
-  // wo_number was COUNT(*)+1 with no lock, so concurrent creators collided.
+  // wo_number was COUNT(*)+1 with no lock, so concurrent creators in a tenant
+  // could take the same number. COUNT(*) runs under RLS, so numbers are
+  // tenant-local (as the Fleet Work Orders API allocates them); wo_number
+  // has no global unique constraint.
   await prisma.$executeRawUnsafe(
     `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
     `fleet-work-order-number:${tenantId}`,
@@ -140,6 +148,30 @@ async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): 
   if (!jobId || !driverId || !vehicleId) {
     throw new Error('OFFER_DISPATCH_JOB payload needs jobId, driverId and vehicleId');
   }
+  // A queued offer can be hours old: the proposed driver may since have
+  // taken another job, gone off shift or been removed. Lock the driver row
+  // so two approvals cannot hand the same driver two jobs.
+  const driver = await prisma.$queryRawUnsafe<Array<{ status: string | null }>>(
+    `SELECT status FROM drivers WHERE id::text = $1 AND deleted_at IS NULL FOR UPDATE`,
+    driverId,
+  );
+  if (driver.length === 0) return { ok: false, stale: true, reason: 'Proposed driver no longer exists.' };
+  const driverStatus = (driver[0].status ?? '').toUpperCase();
+  if (driverStatus && !DRIVER_AVAILABLE_STATUSES.includes(driverStatus)) {
+    return { ok: false, stale: true, reason: `Proposed driver is ${driverStatus}, not available.` };
+  }
+  const busy = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id::text FROM dispatch_jobs
+      WHERE assigned_driver_id::text = $1 AND id <> $2::uuid AND status = ANY($3::text[])
+      LIMIT 1`,
+    driverId,
+    jobId,
+    DRIVER_BUSY_STATUSES,
+  );
+  if (busy.length > 0) {
+    return { ok: false, stale: true, reason: `Proposed driver already holds job ${busy[0].id}.` };
+  }
+
   // Guarded on the job still waiting for a driver: approved late, a job
   // someone else already offered or that was cancelled is left alone.
   const updated = await prisma.$queryRawUnsafe<Array<{ current_attempt: number }>>(
@@ -185,13 +217,18 @@ const EXECUTORS: Record<GatedActionType, (tenantId: string, payload: Record<stri
   OFFER_DISPATCH_JOB: offerDispatchJob,
 };
 
-/** Run a gated action. Throws on real errors; returns `stale` when it no longer applies. */
+/**
+ * Run a gated action. Throws on real errors; returns `stale` when it no
+ * longer applies. Always in a tenant transaction: it joins the caller's
+ * (the approval route, an agent already in scope) or opens one, so the
+ * row locks hold until the writes commit and the writes commit together.
+ */
 export function executeGatedAction(
   tenantId: string,
   actionType: GatedActionType,
   payload: Record<string, unknown>,
 ): Promise<ExecutionResult> {
-  return EXECUTORS[actionType](tenantId, payload);
+  return withTenantRls(prisma, tenantId, () => EXECUTORS[actionType](tenantId, payload));
 }
 
 // ── The gate ─────────────────────────────────────────────────────────────────
@@ -227,7 +264,20 @@ export async function submitGatedAction(tenantId: string, proposal: GatedProposa
     proposal.actionType,
     proposal.entityId,
   );
-  if (existing.length > 0) return { outcome: 'ALREADY_QUEUED', approvalId: existing[0].id };
+  if (existing.length > 0) {
+    // Keep the pending item current: a later run may propose a different
+    // driver, severity or description, and the approver must see — and
+    // approving must apply — the agent's latest proposal, not its first.
+    await prisma.$executeRawUnsafe(
+      `UPDATE agent_approvals SET title = $2, description = $3, proposed_payload = $4::jsonb
+        WHERE id = $1::uuid AND status = 'PENDING'`,
+      existing[0].id,
+      proposal.title,
+      proposal.description,
+      JSON.stringify(proposal.payload),
+    );
+    return { outcome: 'ALREADY_QUEUED', approvalId: existing[0].id };
+  }
 
   const item = await policyService.createApprovalItem(tenantId, proposal, 'L3');
   return { outcome: 'QUEUED', approvalId: item.id };

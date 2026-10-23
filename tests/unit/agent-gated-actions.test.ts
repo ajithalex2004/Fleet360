@@ -19,6 +19,13 @@ const st = vi.hoisted(() => ({
   openWo: false,
   approvalRow: null as null | Record<string, unknown>,
   approvalUpdateCount: 1,
+  driverStatus: 'ACTIVE' as string | null,
+  driverExists: true,
+  driverBusy: false,
+}));
+
+vi.mock('@/lib/rls', () => ({
+  withTenantRls: vi.fn(async (p: unknown, _t: string, fn: (tx: unknown) => unknown) => { st.sql.push('TENANT_TX'); return fn(p); }),
 }));
 
 vi.mock('@/lib/agents/schema', () => ({ ensureAgentSchema: vi.fn().mockResolvedValue(undefined) }));
@@ -41,6 +48,8 @@ vi.mock('@/lib/prisma', () => ({
       if (q.includes('FROM agent_approvals WHERE id')) return st.approvalRow ? [st.approvalRow] : [];
       if (q.includes('FROM operations.incidents')) return st.incidentSeverity === null ? [] : [{ severity: st.incidentSeverity }];
       if (q.startsWith('UPDATE dispatch_jobs')) return st.jobDispatchable ? [{ current_attempt: 2 }] : [];
+      if (q.includes('FROM drivers')) return st.driverExists ? [{ status: st.driverStatus }] : [];
+      if (q.includes('FROM dispatch_jobs WHERE assigned_driver_id')) return st.driverBusy ? [{ id: 'job-other' }] : [];
       if (q.includes("requested_by = 'Predictive Maintenance Agent'")) return st.openWo ? [{ id: 'wo-old' }] : [];
       if (q.includes('COUNT(*) AS count FROM fleet_work_orders')) return [{ count: 41n }];
       if (q.startsWith('INSERT INTO fleet_work_orders')) return [{ id: 'wo-new' }];
@@ -73,7 +82,16 @@ beforeEach(() => {
   st.openWo = false;
   st.approvalRow = null;
   st.approvalUpdateCount = 1;
+  st.driverStatus = 'ACTIVE';
+  st.driverExists = true;
+  st.driverBusy = false;
 });
+
+const offer = {
+  agentId: 'dispatch-optimiser', entityType: 'DISPATCH_JOB', entityId: 'job-1',
+  actionType: 'OFFER_DISPATCH_JOB' as const, title: 't', description: 'd',
+  payload: { jobId: 'job-1', driverId: 'd1', vehicleId: 'v1', score: 0.9 },
+};
 
 describe('submitGatedAction', () => {
   it('queues the action for approval under the default L3 ceiling and changes nothing', async () => {
@@ -83,10 +101,11 @@ describe('submitGatedAction', () => {
     expect(wrote('UPDATE operations.incidents')).toBe(false);
   });
 
-  it('does not queue a second proposal for the same entity', async () => {
+  it('does not queue a second proposal for the same entity, but refreshes the pending one', async () => {
     st.pending = [{ id: 'appr-0' }];
     expect(await submitGatedAction('t1', escalation)).toEqual({ outcome: 'ALREADY_QUEUED', approvalId: 'appr-0' });
     expect(wrote('INSERT INTO agent_approvals')).toBe(false);
+    expect(wrote('UPDATE agent_approvals SET title = $2, description = $3, proposed_payload')).toBe(true);
   });
 
   it('blocks a disabled agent: no queue item, no change', async () => {
@@ -118,13 +137,28 @@ describe('executors re-check that the action still applies', () => {
 
   it('offers a dispatch job only while it still waits for a driver', async () => {
     st.jobDispatchable = false;
-    const r = await submitGatedAction('t1', {
-      agentId: 'dispatch-optimiser', entityType: 'DISPATCH_JOB', entityId: 'job-1',
-      actionType: 'OFFER_DISPATCH_JOB', title: 't', description: 'd',
-      payload: { jobId: 'job-1', driverId: 'd1', vehicleId: 'v1', score: 0.9 },
-    });
+    const r = await submitGatedAction('t1', offer);
     expect(r).toMatchObject({ result: { ok: false, stale: true } });
     expect(wrote('INSERT INTO dispatch_attempts')).toBe(false);
+  });
+
+  it('does not offer a job to a driver who is now busy or unavailable', async () => {
+    st.driverBusy = true;
+    expect(await submitGatedAction('t1', offer)).toMatchObject({ result: { ok: false, stale: true } });
+    st.driverBusy = false;
+    st.driverStatus = 'SUSPENDED';
+    expect(await submitGatedAction('t1', offer)).toMatchObject({ result: { ok: false, stale: true } });
+    expect(wrote('UPDATE dispatch_jobs')).toBe(false);
+    st.driverStatus = 'ACTIVE';
+    expect(await submitGatedAction('t1', offer)).toMatchObject({ result: { ok: true } });
+    expect(wrote('INSERT INTO dispatch_attempts')).toBe(true);
+  });
+
+  it('runs every executor inside a tenant transaction', async () => {
+    await submitGatedAction('t1', escalation);
+    const tx = st.sql.indexOf('TENANT_TX');
+    expect(tx).toBeGreaterThanOrEqual(0);
+    expect(st.sql.findIndex((s) => s.includes('FROM operations.incidents'))).toBeGreaterThan(tx);
   });
 
   it('creates a numbered work order under a per-tenant lock, once per vehicle', async () => {
