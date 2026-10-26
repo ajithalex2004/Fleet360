@@ -141,8 +141,11 @@ export async function initEventConsumers(): Promise<void> {
     new FleetMaintenanceConsumer(),
     new FinanceEstimationConsumer(),
     // Analytics — one instance per event type tracked
+    // Counted once per job, on work_order_completed — the one completion event
+    // both the PATCH route and the state machine emit. It was also registered
+    // for maintenance.completed (Closed, PATCH only), so a job closed through
+    // PATCH added to vehicles.maintenance_count and total_maintenance_cost twice.
     new AnalyticsMaintenanceConsumer('maintenance.work_order_completed', 'analytics-work-order-completed'),
-    new AnalyticsMaintenanceConsumer('maintenance.completed',            'analytics-maintenance-closed'),
     // Dunning & Collections — attempt-token claim protocol dispatcher.
     new DunningNoticeConsumer(),
   ];
