@@ -71,17 +71,16 @@ describe('Phase 8: Multi-Tenant Policy, Autonomy Levels & Human-in-the-Loop Gove
 
     it('ignores a tenantId in the updates and writes only the caller tenant row', async () => {
       const { prisma } = await import('@/lib/prisma');
-      (prisma.$queryRawUnsafe as any).mockResolvedValueOnce([]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValueOnce([]);
 
-      const updated = await policyService.updateTenantPolicy('tenant-attacker', {
-        tenantId: 'tenant-victim',
-        circuitBreakerTriggered: true,
-        disabledAgents: ['*'],
-      } as any);
+      // A non-literal object, as a parsed request body would be: the extra
+      // tenantId passes the type check, just as it would at runtime.
+      const hostile = { tenantId: 'tenant-victim', circuitBreakerTriggered: true, disabledAgents: ['*'] };
+      const updated = await policyService.updateTenantPolicy('tenant-attacker', hostile);
 
       expect(updated.tenantId).toBe('tenant-attacker');
-      const call = (prisma.$executeRawUnsafe as any).mock.calls.at(-1);
-      expect(call[1]).toBe('tenant-attacker');
+      const call = vi.mocked(prisma.$executeRawUnsafe).mock.calls.at(-1);
+      expect(call?.[1]).toBe('tenant-attacker');
     });
   });
 
