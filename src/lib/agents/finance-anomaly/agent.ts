@@ -574,7 +574,7 @@ async function persistFlags(flags: AnomalyFlag[], runId: string, tenantId: strin
            expected_value, actual_value, variance_pct, likely_cause,
            financial_exposure_aed, recommended_action, status, agent_run_id
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,'OPEN',$17::uuid)
-         ON CONFLICT (entity_id, detector_id) WHERE status = 'OPEN'
+         ON CONFLICT (tenant_id, entity_id, detector_id) WHERE status = 'OPEN'
          DO UPDATE SET
            severity               = EXCLUDED.severity,
            confidence             = EXCLUDED.confidence,

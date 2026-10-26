@@ -20,6 +20,16 @@ export interface TenantPolicy {
   circuitBreakerTriggered: boolean;
 }
 
+/** The TenantPolicy fields updateTenantPolicy accepts. */
+export const TENANT_POLICY_FIELDS = [
+  'maxAutonomyLevel',
+  'dailyBudgetAed',
+  'monthlyBudgetAed',
+  'requireHumanApprovalThresholdAed',
+  'disabledAgents',
+  'circuitBreakerTriggered',
+] as const satisfies ReadonlyArray<Exclude<keyof TenantPolicy, 'tenantId'>>;
+
 export interface ActionProposal {
   agentId: AgentId | string;
   entityType: string;
@@ -167,10 +177,19 @@ export class PolicyService {
   /**
    * Update or upsert tenant policy.
    */
-  async updateTenantPolicy(tenantId: string, updates: Partial<TenantPolicy>): Promise<TenantPolicy> {
+  async updateTenantPolicy(
+    tenantId: string,
+    updates: Partial<Omit<TenantPolicy, 'tenantId'>>,
+  ): Promise<TenantPolicy> {
     await ensureAgentSchema();
     const current = await this.getTenantPolicy(tenantId);
-    const updated: TenantPolicy = { ...current, ...updates };
+    // Only the policy fields are taken from `updates`, and tenantId always
+    // comes from the argument: a stray tenantId in `updates` (e.g. a request
+    // body) must never retarget the upsert at another tenant's row.
+    const updated: TenantPolicy = { ...current, tenantId };
+    for (const key of TENANT_POLICY_FIELDS) {
+      if (updates[key] !== undefined) (updated as unknown as Record<string, unknown>)[key] = updates[key];
+    }
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO tenant_ai_policies (

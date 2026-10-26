@@ -40,7 +40,7 @@ export async function POST(
         const rows = await tx.$queryRaw<ResultRow[]>`
           SELECT id::text, route_id::text, optimised_sequence, status
           FROM route_optimisation_results
-          WHERE id = ${id}::uuid
+          WHERE id = ${id}::uuid AND tenant_id = ${tenantId}
           LIMIT 1
         `;
 
@@ -58,7 +58,7 @@ export async function POST(
           await tx.$executeRaw`
             UPDATE route_optimisation_results
             SET status = 'REJECTED', rejected_at = NOW(), rejected_by = ${rejectedBy}, updated_at = NOW()
-            WHERE id = ${id}::uuid
+            WHERE id = ${id}::uuid AND tenant_id = ${tenantId}
           `;
           return NextResponse.json({ ok: true, action: 'REJECTED' });
         }
@@ -75,7 +75,7 @@ export async function POST(
         await tx.$executeRaw`
           UPDATE route_optimisation_results
           SET status = 'APPLIED', applied_at = NOW(), updated_at = NOW()
-          WHERE id = ${id}::uuid
+          WHERE id = ${id}::uuid AND tenant_id = ${tenantId}
         `;
 
         return NextResponse.json({ ok: true, action: 'APPLIED', route_id: record.route_id });

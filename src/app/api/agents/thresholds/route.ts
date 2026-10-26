@@ -7,7 +7,10 @@ export const dynamic = 'force-dynamic';
  * Body (PATCH): { agentId: string; thresholds: Record<string, unknown> }
  *
  * Thresholds are stored in agent_configs.thresholds JSONB.
- * Table is created by /api/agents/ecosystem on first load.
+ * agent_configs is platform-global (one row per agent, no tenant_id — see
+ * prisma/migrations/20260910000023_agent_configs_table), so a PATCH changes
+ * the value for every tenant: it is SUPER_ADMIN only, and only the known
+ * threshold key of each agent, within its min/max or options, is accepted.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -81,6 +84,37 @@ export async function GET(req: NextRequest) {
   });
 }
 
+const META_KEYS = new Set(['label', 'min', 'max', 'step', 'unit', 'options']);
+
+/** Keep only the agent's own threshold keys, each within its bounds. */
+function validateThresholds(
+  defaults: Record<string, unknown>,
+  input: unknown,
+): { ok: true; thresholds: Record<string, unknown> } | { ok: false; error: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, error: 'thresholds must be an object' };
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (META_KEYS.has(key) || !(key in defaults)) {
+      return { ok: false, error: `Unknown threshold '${key}'` };
+    }
+    const options = defaults.options as unknown[] | undefined;
+    if (options) {
+      if (!options.includes(value)) return { ok: false, error: `${key} must be one of ${options.join(', ')}` };
+    } else {
+      const min = defaults.min as number;
+      const max = defaults.max as number;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+        return { ok: false, error: `${key} must be a number between ${min} and ${max}` };
+      }
+    }
+    out[key] = value;
+  }
+  if (Object.keys(out).length === 0) return { ok: false, error: 'No thresholds given' };
+  return { ok: true, thresholds: out };
+}
+
 export async function PATCH(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -88,6 +122,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  if (authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json(
+      { error: 'Agent thresholds are platform-wide; only a platform admin can change them' },
+      { status: 403 },
+    );
+  }
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const bodyRaw = await req.json() as {
@@ -95,11 +135,16 @@ export async function PATCH(req: NextRequest) {
         thresholds: Record<string, unknown>;
       };
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { agentId, thresholds } = body;
+    const { agentId } = body;
 
-      if (!agentId || !DEFAULTS[agentId]) {
+      if (!agentId || !Object.prototype.hasOwnProperty.call(DEFAULTS, agentId)) {
         return NextResponse.json({ error: 'Unknown agentId' }, { status: 400 });
       }
+      const checked = validateThresholds(DEFAULTS[agentId], body.thresholds);
+      if (!checked.ok) {
+        return NextResponse.json({ error: checked.error }, { status: 400 });
+      }
+      const { thresholds } = checked;
 
       // Upsert — merge incoming thresholds with existing
       await tx.$executeRawUnsafe(

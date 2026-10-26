@@ -32,21 +32,22 @@ export async function GET(req: NextRequest) {
         const limit     = Math.min(Number(sp.get('limit') ?? 100), 500);
         const offset    = Number(sp.get('offset') ?? 0);
 
-        const conditions: string[] = [];
-        const params: unknown[] = [];
+        // Explicit tenant filter on top of RLS (defence in depth).
+        const conditions: string[] = ['r.tenant_id = $1'];
+        const params: unknown[] = [tenantId];
 
         if (riskLevel) {
           params.push(riskLevel);
-          conditions.push(`risk_level = $${params.length}`);
+          conditions.push(`r.risk_level = $${params.length}`);
         }
 
-        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const where = `WHERE ${conditions.join(' AND ')}`;
         const countParams = [...params];
         params.push(limit, offset);
 
         const [countRows, rows] = await Promise.all([
           tx.$queryRawUnsafe<[{ count: bigint }]>(
-            `SELECT COUNT(*) AS count FROM fleet_risk_scores ${where}`,
+            `SELECT COUNT(*) AS count FROM fleet_risk_scores r ${where}`,
             ...countParams,
           ),
           tx.$queryRawUnsafe<Record<string, unknown>[]>(
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
         const summaryRows = await tx.$queryRawUnsafe<
           Array<{ risk_level: string; count: bigint; avg_score: string }>
         >(`SELECT risk_level, COUNT(*) AS count, ROUND(AVG(risk_score)::NUMERIC, 3) AS avg_score
-           FROM fleet_risk_scores GROUP BY risk_level`);
+           FROM fleet_risk_scores WHERE tenant_id = $1 GROUP BY risk_level`, tenantId);
 
         const summary = Object.fromEntries(
           summaryRows.map((r) => [r.risk_level.toLowerCase(), { count: Number(r.count), avgScore: Number(r.avg_score) }]),

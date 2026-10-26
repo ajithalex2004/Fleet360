@@ -32,7 +32,13 @@ export async function GET(req: NextRequest) {
         const limit  = Math.min(parseInt(searchParams.get('limit')  ?? '50', 10), 200);
         const offset = parseInt(searchParams.get('offset') ?? '0', 10);
 
-        const whereClause = status ? `WHERE status = '${status.replace(/'/g, "''")}'` : '';
+        // Explicit tenant filter on top of RLS (defence in depth).
+        const params: unknown[] = [tenantId];
+        let whereClause = 'WHERE tenant_id = $1';
+        if (status) {
+          params.push(status);
+          whereClause += ` AND status = $${params.length}`;
+        }
 
         const rows = await tx.$queryRawUnsafe<RouteResultRow[]>(`
           SELECT
@@ -61,12 +67,13 @@ export async function GET(req: NextRequest) {
           ${whereClause}
           ORDER BY distance_saved_pct DESC
           LIMIT ${limit} OFFSET ${offset}
-        `);
+        `, ...params);
 
         // Summary counts
         const counts = await tx.$queryRaw<CountRow[]>`
           SELECT status, COUNT(*)::int AS count
           FROM route_optimisation_results
+          WHERE tenant_id = ${tenantId}
           GROUP BY status
         `;
 
