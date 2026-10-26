@@ -3,7 +3,7 @@ import { applyInvoicePayment } from '@/lib/leasing/invoice-balance';
 
 export class SecurityDepositError extends Error {}
 
-type DepositRow = {
+export type DepositRow = {
   id: string;
   tenant_id: string;
   collected_amount: string;
@@ -29,8 +29,20 @@ export async function lockDepositRow(tx: TxClient, tenantId: string, depositId: 
   return row;
 }
 
-function availableBalance(row: DepositRow): number {
-  return Number(row.collected_amount) - Number(row.total_deducted) - Number(row.reserved_amount);
+/**
+ * What can still be deducted or refunded: collected, less deductions, less
+ * refunds reserved but not yet paid, less refunds already paid.
+ *
+ * Refunds paid were not subtracted. executeRefund moves an amount from
+ * reserved_amount to refunded_amount, so the moment a refund was paid it
+ * counted as available again: the same money could be refunded a second
+ * time or deducted after it had gone back to the customer.
+ */
+export function availableBalance(row: DepositRow): number {
+  return Number(row.collected_amount)
+    - Number(row.total_deducted)
+    - Number(row.reserved_amount)
+    - Number(row.refunded_amount ?? 0);
 }
 
 /**

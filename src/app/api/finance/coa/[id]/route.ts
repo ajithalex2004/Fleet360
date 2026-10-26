@@ -21,7 +21,11 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
     await ensureTenantChartOfAccounts(tx, tenantId);
     const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
         `SELECT c.*,
-           (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
+           -- By the ACCOUNT's normal balance. It used the line's normal_balance,
+           -- which createDraftJournalEntry sets to the line's side (DEBIT on the
+           -- debit line, CREDIT on the credit line), so every line counted as a
+           -- positive amount and the balance was debits + credits.
+           (SELECT COALESCE(SUM(CASE WHEN c.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
                                    ELSE jl.credit_amount - jl.debit_amount END),0)::text
               FROM finance_journal_lines jl
               JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text

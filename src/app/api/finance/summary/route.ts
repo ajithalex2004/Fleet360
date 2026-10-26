@@ -21,6 +21,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
+
+// Rental and lease revenue is summed from their own tables below; their
+// mirrored finance_invoices rows would count it twice.
+const SUMMARY_NOT_MIRRORED = excludeMirrored(['RENTAL', 'LEASING']);
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -103,7 +108,7 @@ const getFinanceSummary = cacheRead(
            FROM finance_invoices
           WHERE deleted_at IS NULL
             AND payment_status NOT IN ('DRAFT','CANCELLED')
-            AND issue_date BETWEEN $1::date AND $2::date`,
+            AND issue_date BETWEEN $1::date AND $2::date${SUMMARY_NOT_MIRRORED}`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
@@ -146,7 +151,7 @@ const getFinanceSummary = cacheRead(
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM finance_invoices
           WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-            AND issue_date BETWEEN $1::date AND $2::date
+            AND issue_date BETWEEN $1::date AND $2::date${SUMMARY_NOT_MIRRORED}
           GROUP BY DATE_TRUNC('month', issue_date) ORDER BY month`,
         fromTs, toTs,
       ).catch(zeroMonth),

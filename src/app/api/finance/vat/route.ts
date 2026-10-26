@@ -3,6 +3,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
+
+// Logistics, rental and lease revenue is taken from their own tables below;
+// their mirrored finance_invoices rows would count it (and its VAT) twice.
+const VAT_NOT_MIRRORED = excludeMirrored(['RENTAL', 'LOGISTICS', 'LEASING']);
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
@@ -65,7 +70,7 @@ export async function GET(req: NextRequest) {
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(total_amount - vat_amount),0) AS total FROM finance_invoices
            WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-             AND issue_date BETWEEN $1::date AND $2::date`, start, end, tenantId
+             AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
         ).catch(zero),
 
         // VAT collected
@@ -87,7 +92,7 @@ export async function GET(req: NextRequest) {
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(vat_amount),0) AS total FROM finance_invoices
            WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-             AND issue_date BETWEEN $1::date AND $2::date`, start, end, tenantId
+             AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
         ).catch(zero),
       ]);
 
