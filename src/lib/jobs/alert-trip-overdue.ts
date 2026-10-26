@@ -13,7 +13,9 @@
  * scans the full trip history.
  */
 
+import { Prisma } from '@prisma/client';
 import { runSweep } from '@/lib/prisma-sweep';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 import { raiseAlert } from '@/lib/alerts/raise';
 import type { JobContext, JobResult } from './registry';
 
@@ -53,7 +55,7 @@ export async function runAlertTripOverdue(ctx: JobContext): Promise<JobResult> {
            departure_time, arrival_time, status, route_variant_version_id
       FROM trip_schedules
      WHERE deleted_at IS NULL
-       AND status IN ('SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT')
+       AND status IN (${Prisma.join([...TRIP_OPEN_STATUSES])})
        AND arrival_time IS NOT NULL
        AND arrival_time < ${cutoff}
        AND departure_time > ${windowStart}

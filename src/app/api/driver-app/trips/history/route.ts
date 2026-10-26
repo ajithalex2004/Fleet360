@@ -30,6 +30,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { toDriverTripStatus } from '@/lib/trip-state';
 interface TripRow {
   id: string;
   trip_number: string | null;
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
           tripNumber: r.trip_number,
           departureTime: r.departure_time.toISOString(),
           arrivalTime: r.arrival_time.toISOString(),
-          status: r.status,
+          status: toDriverTripStatus(r.status) ?? r.status,
           shiftType: r.shift_type,
           direction: r.direction,
           capacity: r.capacity,

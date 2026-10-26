@@ -21,6 +21,8 @@ import {
   resolveTicketSlaMatrixBatch, pickSlaHours, type SlaMatrix,
 } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
+import { bestEffortInTx } from '@/lib/db/best-effort';
+import { isCriticalPriority, ungroundIfClear } from '@/lib/fleet/grounding-blocks';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -176,31 +178,27 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         }
       }
 
-      // P0 Safety: If ticket is resolved/completed and vehicle was linked, check if vehicle can be ungrounded
-      if ((body.status === 'Resolved' || body.status === 'Completed') && existing.vehicle_id) {
-        try {
-          const otherCritical = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-            `SELECT id FROM service_tickets
-             WHERE tenant_id = $1
-               AND vehicle_id = $2
-               AND id != $3::uuid
-               AND priority = 'CRITICAL'
-               AND status NOT IN ('Resolved', 'Completed', 'Closed', 'Rejected')
-               AND deleted_at IS NULL
-             LIMIT 1`,
-            tenantId,
-            existing.vehicle_id,
-            id
-          );
-
-          if (!otherCritical || otherCritical.length === 0) {
-            await tx.vehicle.updateMany({
-              where: { id: existing.vehicle_id, status: 'GROUNDED' },
-              data: { status: 'AVAILABLE', isActive: true },
-            });
-          }
-        } catch (unGroundErr) {
-          console.warn('[service-tickets] Failed to check/unground vehicle:', unGroundErr);
+      // P0 Safety: closing a ticket that grounded its vehicle may release
+      // the vehicle — but only when nothing else still holds it (another
+      // critical ticket, an open workshop job, expired documents). Closing
+      // an ordinary ticket never touches the vehicle's grounding.
+      const existingFields = (existing.custom_fields && typeof existing.custom_fields === 'object')
+        ? (existing.custom_fields as Record<string, unknown>)
+        : {};
+      const ticketGroundsVehicle = isCriticalPriority(existing.priority)
+        || existingFields.isGrounded === true
+        || existingFields.hasCriticalDefect === true;
+      // 'Rejected' deliberately does not release: rejecting a defect report
+      // is not a workshop sign-off.
+      if (['Resolved', 'Completed', 'Closed'].includes(body.status as string)
+          && existing.vehicle_id && ticketGroundsVehicle) {
+        // Best effort in a savepoint: if the check fails the vehicle simply
+        // stays grounded (the safe outcome) and the ticket update still saves.
+        const outcome = await bestEffortInTx(tx, 'service-tickets.unground', () =>
+          ungroundIfClear(tx, tenantId, existing.vehicle_id as string, { excludeTicketId: id }),
+        );
+        if (outcome && !outcome.released && outcome.blocks.length > 0) {
+          console.info(`[service-tickets] vehicle ${existing.vehicle_id} stays grounded:`, outcome.blocks.map((b) => b.reason));
         }
       }
 

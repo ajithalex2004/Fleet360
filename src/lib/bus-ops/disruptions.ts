@@ -7,7 +7,8 @@ import { writeRequiredAudit } from '@/lib/audit';
 import { withAssignmentLocks } from './assignment-txn';
 import { validateResourceAssignment } from './validate-assignment';
 import type { ReportDisruptionInput, DisruptionCommand } from './disruption-input';
-const OPERABLE = ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'];
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
+const OPERABLE: string[] = [...TRIP_OPEN_STATUSES];
 /** A time as riders read it (UAE local time), for the messages they receive. */
 const localTime=(d:Date)=>d.toLocaleString('en-AE',{timeZone:'Asia/Dubai',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 async function resourceLabels(tx:Prisma.TransactionClient,tenantId:string,vehicleId:string|null,driverId:string|null){

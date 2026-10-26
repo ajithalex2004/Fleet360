@@ -65,6 +65,7 @@ import {
   logAlightEvent,
   type AttendanceContext,
 } from '@/lib/bus-ops/passenger-attendance';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 
 export const runtime = 'nodejs';
 
@@ -227,7 +228,7 @@ async function ingest(
         tenantId,
         vehicleId,
         deletedAt: null,
-        status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
+        status: { in: [...TRIP_OPEN_STATUSES] },
         // Trip is "active" if it's within ±2h of departure, or currently in
         // transit. Simple heuristic — adjust if shifts are longer than 4h.
         departureTime: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },

@@ -2251,9 +2251,14 @@ model TripSchedule {
   vehicleId             String?                 @map("vehicle_id")
   driverId              String?                 @map("driver_id")
   departureTime         DateTime                @map("departure_time") @db.Timestamptz(6)
+  /// Scheduled arrival. Never overwritten by telematics — the live ETA
+  /// goes to `estimatedArrivalTime`.
   arrivalTime           DateTime?               @map("arrival_time") @db.Timestamptz(6)
+  /// Live ETA to the final stop, maintained by the telematics geofence
+  /// evaluator.
+  estimatedArrivalTime  DateTime?               @map("estimated_arrival_time") @db.Timestamptz(6)
   /// Hard "must-arrive-by" deadline used by MERGED_ARRIVAL_SLA in the
-  /// Planning Constraint Engine. `arrivalTime` is an estimate; this is
+  /// Planning Constraint Engine. `arrivalTime` is the planned time; this is
   /// the commitment. Nullable — trips without a stated SLA are treated
   /// as unconstrained.
   latestArrivalTime     DateTime?               @map("latest_arrival_time") @db.Timestamptz(6)

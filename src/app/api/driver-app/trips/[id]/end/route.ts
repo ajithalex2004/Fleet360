@@ -27,6 +27,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { requireActiveDriver } from '@/lib/driver-app-actor';
 import { evaluateTransition, type TripStatus } from '@/lib/trip-state';
+import { isTripInFlight } from '@/lib/trip-status';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const BodySchema = z.object({
@@ -75,10 +76,13 @@ export async function POST(
           departure_time: Date;
           arrival_time: Date;
           actual_departure_at: Date | null;
+          actual_arrival_at: Date | null;
+          duration_minutes: number | null;
           driver_id: string;
         }>
       >`
-        SELECT id, status, departure_time, arrival_time, actual_departure_at, driver_id
+        SELECT id, status, departure_time, arrival_time, actual_departure_at,
+               actual_arrival_at, duration_minutes, driver_id
         FROM trip_schedules
         WHERE id = ${params.id}
           AND tenant_id = ${ctx.tenantId}::uuid
@@ -108,6 +112,22 @@ export async function POST(
         );
       }
 
+      // Already finished (re-tap after COMPLETED, or after the auto-close job
+      // set AUTO_CLOSED): a no-op. Report the stored completion, not this
+      // request's time and a recalculated duration.
+      if (!isTripInFlight(trip.status)) {
+        return NextResponse.json({
+          ok: true,
+          tripId: params.id,
+          status: decision.nextStatus,
+          actualArrivalAt: trip.actual_arrival_at?.toISOString() ?? null,
+          scheduledArrivalAt: trip.arrival_time.toISOString(),
+          durationMinutes: trip.duration_minutes,
+          location: null,
+          idempotent: true,
+        });
+      }
+
       const now = body.at ?? new Date().toISOString();
       const location = body.lat != null && body.lng != null
         ? { lat: body.lat, lng: body.lng, accuracyM: body.accuracyM ?? null }
@@ -129,7 +149,9 @@ export async function POST(
       // callback's `tx` parameter so the body is unchanged; atomicity already
       // comes from the outer transaction.
       await (async (tx) => {
-        if (trip.status === 'IN_PROGRESS') {
+        // Any in-flight spelling (IN_PROGRESS from this app, STARTED /
+        // EN_ROUTE from Bus Ops or telematics) is ended the same way.
+        if (isTripInFlight(trip.status)) {
           await tx.$executeRaw`
             UPDATE trip_schedules
             SET status = 'COMPLETED',
@@ -163,7 +185,7 @@ export async function POST(
         scheduledArrivalAt: trip.arrival_time.toISOString(),
         durationMinutes,
         location,
-        idempotent: trip.status === 'COMPLETED',
+        idempotent: false,
       });
   });
 }

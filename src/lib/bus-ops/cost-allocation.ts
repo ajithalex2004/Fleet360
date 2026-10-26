@@ -13,6 +13,7 @@
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
+import { TRIP_IN_FLIGHT_STATUSES } from '@/lib/trip-status';
 
 export interface DepartmentUsage {
   departmentName: string;
@@ -230,7 +231,7 @@ export async function getTenantCostAllocation(
       where: {
         tenantId,
         departureTime: { gte: startDate, lte: endDate },
-        status: { in: ['COMPLETED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
+        status: { in: ['COMPLETED', ...TRIP_IN_FLIGHT_STATUSES] },
       },
       include: {
         route: { select: { totalDistanceKm: true } },

@@ -211,6 +211,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         requiredVehicleGroup,
         zoneId,
         pickupPoint: { lat: firstStop?.gpsLat ?? null, lng: firstStop?.gpsLng ?? null },
+        date: b.date ?? null,
       };
     });
 

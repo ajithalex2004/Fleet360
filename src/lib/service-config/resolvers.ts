@@ -55,7 +55,7 @@ export async function resolveTicketSlaHours(
   if (!cfg) return { hours: 24, source: 'defaults' };
   const matrix = cfg.rules.ticketing.priorityMatrix;
   return {
-    hours: matrix[priority] ?? matrix.Medium,
+    hours: matrix[normalizeTicketPriority(priority)] ?? matrix.Medium,
     source: cfg.configured.ticketing ? 'service_rules' : 'defaults',
   };
 }
@@ -101,8 +101,25 @@ export async function resolveTicketSlaMatrixBatch(
 }
 
 /** Pick the SLA hours for a single ticket given its priority. */
-export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority): number {
-  return matrix[priority] ?? matrix.Medium;
+export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority | string): number {
+  return matrix[normalizeTicketPriority(priority)] ?? matrix.Medium;
+}
+
+/**
+ * Map a stored priority string onto the Low / Medium / High matrix keys.
+ * Rows written before the DVIR fix carry 'Critical', and some writers use
+ * upper case; both used to miss the matrix and fall through to Medium —
+ * a critical safety defect got the most relaxed SLA. Critical / urgent
+ * now map to the tightest tier.
+ */
+export function normalizeTicketPriority(priority: string | null | undefined): TicketPriority {
+  switch ((priority ?? '').trim().toUpperCase()) {
+    case 'LOW': return 'Low';
+    case 'HIGH':
+    case 'CRITICAL':
+    case 'URGENT': return 'High';
+    default: return 'Medium';
+  }
 }
 
 /**

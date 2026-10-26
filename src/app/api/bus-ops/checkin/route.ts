@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyQrToken, normaliseNfcUid, normaliseBleUuid } from '@/lib/bus-checkin';
 import { recordBoarding, recordAlighting } from '@/lib/bus-ops/passenger-attendance';
 import { writeRequiredAudit } from '@/lib/audit';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 const input = z.object({
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       }
       if (!scheduleId) return NextResponse.json({ error: 'Trip is required' }, { status: 400 });
       await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE', scheduleId, auth.tenantId);
-      const trip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId: auth.tenantId, deletedAt: null, status: { in: ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'] } } });
+      const trip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId: auth.tenantId, deletedAt: null, status: { in: [...TRIP_OPEN_STATUSES] } } });
       if (!trip) return NextResponse.json({ error: 'Eligible trip not found' }, { status: 404 });
       if (b.method === 'NFC') {
         identifier = normaliseNfcUid(b.tagUid ?? '');
