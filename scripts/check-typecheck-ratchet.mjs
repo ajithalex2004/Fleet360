@@ -22,6 +22,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { exit, argv } from 'node:process';
@@ -38,16 +39,23 @@ const GLOBAL_ERROR_RE = /^error (TS\d+): (.*)$/;
  * Prevents broken/corrupted environments (e.g. missing next/package.json) from qualifying as clean or establishing a false baseline.
  */
 export function verifyDependencyPreflight(customRoot = root) {
-  const criticalDeps = [
-    { name: 'typescript', pkgPath: join(customRoot, 'node_modules', 'typescript', 'package.json') },
-    { name: 'next', pkgPath: join(customRoot, 'node_modules', 'next', 'package.json') },
-    { name: '@prisma/client', pkgPath: join(customRoot, 'node_modules', '@prisma', 'client', 'package.json') },
-  ];
+  // Resolved the way Node (and tsc / next) will load them: from customRoot
+  // up through every parent node_modules. Looking only in
+  // <root>/node_modules failed in a git worktree, whose packages come from
+  // the main checkout's node_modules one level up, though they resolve fine.
+  const requireFromRoot = createRequire(join(customRoot, 'package.json'));
+  const criticalDeps = ['typescript', 'next', '@prisma/client'];
 
   const missing = [];
-  for (const dep of criticalDeps) {
-    if (!existsSync(dep.pkgPath)) {
-      missing.push(dep.name);
+  for (const name of criticalDeps) {
+    let pkgPath = null;
+    try {
+      pkgPath = requireFromRoot.resolve(`${name}/package.json`);
+    } catch {
+      pkgPath = null;
+    }
+    if (!pkgPath || !existsSync(pkgPath)) {
+      missing.push(name);
     }
   }
 
@@ -180,7 +188,12 @@ export function isCompilerCrash(result) {
 }
 
 export function runTsc(customRoot = root) {
-  const bin = join(customRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+  // Resolved like verifyDependencyPreflight (a git worktree takes typescript
+  // from a parent node_modules); the plain path is kept for the error.
+  let bin = join(customRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+  try {
+    bin = createRequire(join(customRoot, 'package.json')).resolve('typescript/bin/tsc');
+  } catch { /* not resolvable: reported below */ }
   if (!existsSync(bin)) {
     console.error(`✗ Error: TypeScript binary not found at ${bin}`);
     return { exitCode: 1, signal: null, output: `TypeScript binary not found at ${bin}`, error: new Error('Binary not found') };

@@ -365,4 +365,6 @@ export const EVENTS_WITHOUT_CONSUMERS: ReadonlySet<string> = new Set([
   MAINTENANCE_BREAKDOWN_REPORTED,
   MAINTENANCE_RECOVERY_DISPATCHED,
   MAINTENANCE_RECOVERY_COMPLETED,
+  // Analytics counts a job on work_order_completed; counting this too doubled it.
+  MAINTENANCE_COMPLETED,
 ]);

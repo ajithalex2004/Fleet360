@@ -21,6 +21,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 import { expandRosterToTrip } from './expand-roster';
 
 export interface GenerateStats {
@@ -76,14 +77,17 @@ export async function generateScheduleTemplate({
   // WORKING_OVERRIDE entries force-generate even off day-of-week.
   const holidaySet  = new Set<string>();
   const overrideSet = new Set<string>();
-  const calendars = await prisma.transportCalendar.findMany({
+  // Optional read, in a savepoint when this runs inside a transaction (the
+  // scheduled job wraps each template in one): a swallowed failure would
+  // otherwise leave the transaction aborted for every insert below.
+  const calendars = (await bestEffortInTx(prisma, 'generateScheduleTemplate.calendars', () => prisma.transportCalendar.findMany({
     where: {
       tenantId, deletedAt: null, isActive: true,
       effectiveFrom: { lte: endUTC },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: startUTC } }],
     },
     include: { entries: { where: { entryDate: { gte: startUTC, lte: endUTC } } } },
-  }).catch(() => [] as Array<{ entries: Array<{ entryDate: Date; kind: string }> }>);
+  }))) ?? ([] as Array<{ entries: Array<{ entryDate: Date; kind: string }> }>);
   for (const cal of calendars) {
     for (const e of cal.entries) {
       const iso = new Date(Date.UTC(e.entryDate.getUTCFullYear(), e.entryDate.getUTCMonth(), e.entryDate.getUTCDate())).toISOString().slice(0, 10);
@@ -127,7 +131,11 @@ export async function generateScheduleTemplate({
     } else if (existingDates.has(isoDay)) {
       stats.skippedAlreadyExisted++;
     } else {
-      try {
+      // Each date in its own savepoint: inside the job's per-template
+      // transaction a failed insert would otherwise abort the transaction,
+      // every later date would fail too, and the commit would silently roll
+      // back the dates already counted as generated.
+      const created = await bestEffortInTx(prisma, 'generateScheduleTemplate.insert', async () => {
         const departureTs = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate(), hh, mm, 0));
         const arrivalTs = arrivalParts
           ? new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate(), arrivalParts[0], arrivalParts[1], 0))
@@ -150,14 +158,16 @@ export async function generateScheduleTemplate({
             status:        'SCHEDULED',
           },
         });
-        await expandRosterToTrip(tenantId, trip.id, tpl.routeId, departureTs)
-          .catch(err => console.warn('[generateScheduleTemplate] roster expansion failed', { tripId: trip.id, err }));
+        // Roster expansion stays optional: nested savepoint, so its failure
+        // keeps the trip.
+        await bestEffortInTx(prisma, 'generateScheduleTemplate.roster', () =>
+          expandRosterToTrip(tenantId, trip.id, tpl.routeId, departureTs));
+        return trip;
+      });
+      if (created) {
         stats.generated++;
-      } catch (err) {
-        console.error('[generateScheduleTemplate] insert failed', {
-          templateId: tpl.id, date: isoDay,
-          err: err instanceof Error ? err.message : err,
-        });
+      } else {
+        console.error('[generateScheduleTemplate] insert failed', { templateId: tpl.id, date: isoDay });
         stats.errors++;
       }
     }

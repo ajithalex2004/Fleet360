@@ -11,6 +11,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { runSweep } from '@/lib/prisma-sweep';
+import { withTenantRls } from '@/lib/rls';
 import {
   generateScheduleTemplate,
   type GenerateStats,
@@ -27,10 +29,17 @@ export async function runBusOpsGenerateScheduleTemplates(ctx: JobContext): Promi
   const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const to   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + horizonDays));
 
-  const templates = await prisma.busOpsScheduleTemplate.findMany({
+  // Templates are read per tenant, in each tenant's RLS scope (runSweep), and
+  // each is generated inside a transaction in its tenant (the generator's
+  // global-client queries join it, src/lib/prisma.ts). This ran on the bare
+  // client: a scheduled run has no request tenant, so RLS hid every template
+  // and no trip was ever generated; a manual run only covered the caller's
+  // tenant. A manual run still covers just its own tenant (tenantHeader).
+  const perTenant = await runSweep(async ({ tx }) => tx.busOpsScheduleTemplate.findMany({
     where: { deletedAt: null, status: 'ACTIVE' },
     select: { id: true, tenantId: true, name: true },
-  });
+  }), { tenantHeader: ctx.tenantId ?? undefined });
+  const templates = perTenant.flatMap((r) => r.result);
 
   const aggregate: GenerateStats = {
     generated: 0, skippedAlreadyExisted: 0, skippedOutOfWindow: 0,
@@ -40,9 +49,11 @@ export async function runBusOpsGenerateScheduleTemplates(ctx: JobContext): Promi
 
   for (const tpl of templates) {
     try {
-      const stats = await generateScheduleTemplate({
+      // One transaction per template: its trips are written together, and
+      // the generator skips dates that already have a trip, so a retry is safe.
+      const stats = await withTenantRls(prisma, tpl.tenantId, () => generateScheduleTemplate({
         templateId: tpl.id, tenantId: tpl.tenantId, from, to,
-      });
+      }), { timeoutMs: 120_000 });
       perTemplate.push({ templateId: tpl.id, tenantId: tpl.tenantId, name: tpl.name, ...stats });
       aggregate.generated                  += stats.generated;
       aggregate.skippedAlreadyExisted      += stats.skippedAlreadyExisted;

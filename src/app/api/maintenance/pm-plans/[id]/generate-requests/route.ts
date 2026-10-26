@@ -146,14 +146,14 @@ export async function POST(
                         .filter(i => created.includes(i.generatedRequestId ?? ''))
                         .map(i => i.vehicleId),
                 )];
-                publishPMScheduleTriggered(plan.id, plan.tenantId, {
+                await publishPMScheduleTriggered(plan.id, plan.tenantId, {
                     planId:       plan.id,
                     planName:     plan.name,
                     tenantId:     plan.tenantId,
                     vehicleIds:   vehiclesTriggered,
                     requestIds:   created,
                     triggeredAt:  new Date().toISOString(),
-                }).catch(err => console.warn('[maintenance] pm_schedule_triggered publish failed:', err));
+                });
             }
 
             return NextResponse.json({
