@@ -8,6 +8,7 @@ import {
   Sparkles, Key,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -545,52 +546,56 @@ export default function DrayageAssignmentPage() {
               {/* Select Prime Mover */}
               <div className="space-y-1.5">
                 <label className="font-semibold text-[var(--text-muted)]">Fleet360 Tractor / Prime Mover *</label>
-                <select
+                <SearchableSelect
                   value={selectedVehicleId}
-                  onChange={(e) => setSelectedVehicleId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                >
-                  <option value="">-- Choose Prime Mover --</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.plateNumber} · {v.make} {v.model} ({v.status})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedVehicleId(val)}
+                  options={vehicles.map((v) => ({
+                    value: v.id,
+                    label: `${v.plateNumber} · ${v.make} ${v.model}`,
+                    sublabel: `Status: ${v.status}`,
+                    badge: v.status,
+                  }))}
+                  placeholder="-- Search & Choose Prime Mover --"
+                  searchPlaceholder="Type plate number, make, model..."
+                  isClearable
+                />
               </div>
 
               {/* Select Driver */}
               <div className="space-y-1.5">
                 <label className="font-semibold text-[var(--text-muted)]">Fleet360 Heavy Duty Driver *</label>
-                <select
+                <SearchableSelect
                   value={selectedDriverId}
-                  onChange={(e) => setSelectedDriverId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                >
-                  <option value="">-- Choose Driver --</option>
-                  {drivers.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.fullName} ({d.phone || 'No phone'}) - {d.status}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedDriverId(val)}
+                  options={drivers.map((d) => ({
+                    value: d.id,
+                    label: d.fullName,
+                    sublabel: d.phone ? `Phone: ${d.phone} • ${d.status}` : `Status: ${d.status}`,
+                    badge: d.status,
+                  }))}
+                  placeholder="-- Search & Choose Driver --"
+                  searchPlaceholder="Type driver name, mobile number..."
+                  isClearable
+                />
               </div>
 
               {/* Select Chassis / Trailer */}
               <div className="space-y-1.5">
                 <label className="font-semibold text-[var(--text-muted)]">Skeletal / Flatbed Chassis *</label>
-                <select
+                <SearchableSelect
                   value={selectedTrailerId}
-                  onChange={(e) => setSelectedTrailerId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                >
-                  <option value="">-- Choose Chassis --</option>
-                  {trailers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.plateNumber} · {t.trailerType} ({t.masterStatus} - {t.operationalStatus})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedTrailerId(val)}
+                  options={trailers.map((t) => ({
+                    value: t.id,
+                    label: `${t.plateNumber} · ${t.trailerType}`,
+                    sublabel: `${t.masterStatus} • ${t.operationalStatus}`,
+                    badge: t.operationalStatus,
+                  }))}
+                  placeholder="-- Search & Choose Chassis --"
+                  searchPlaceholder="Type chassis plate, skeletal, flatbed..."
+                  accent="emerald"
+                  isClearable
+                />
               </div>
 
               {/* Port Gate Token */}

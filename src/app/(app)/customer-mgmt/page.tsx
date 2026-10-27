@@ -366,25 +366,48 @@ export default function CustomerPage() {
                           </select>
                         </Fld>
                         <Fld label="Region (Hierarchy Level 1)">
-                          <select className={sel} value={form.regionId??''} onChange={async e=>{set('regionId',e.target.value);set('departmentId','');set('unitId','');if(e.target.value)await loadDepts(e.target.value);else setDepts([]);}}>
-                            <option value="">Select region</option>
-                            {regions.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
-                          </select>
+                          <SearchableSelect
+                            value={form.regionId ?? ''}
+                            onChange={async (val) => {
+                              set('regionId', val);
+                              set('departmentId', '');
+                              set('unitId', '');
+                              if (val) await loadDepts(val);
+                              else setDepts([]);
+                            }}
+                            options={regions.map((r) => ({ value: r.id, label: r.name }))}
+                            placeholder="Select region..."
+                            searchPlaceholder="Type region name..."
+                            isClearable
+                          />
                         </Fld>
-                        {depts.length>0&&(
+                        {depts.length > 0 && (
                           <Fld label="Department (Level 2)">
-                            <select className={sel} value={form.departmentId??''} onChange={async e=>{set('departmentId',e.target.value);set('unitId','');if(e.target.value)await loadUnits(e.target.value);else setUnits([]);}}>
-                              <option value="">Select department</option>
-                              {depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
+                            <SearchableSelect
+                              value={form.departmentId ?? ''}
+                              onChange={async (val) => {
+                                set('departmentId', val);
+                                set('unitId', '');
+                                if (val) await loadUnits(val);
+                                else setUnits([]);
+                              }}
+                              options={depts.map((d) => ({ value: d.id, label: d.name }))}
+                              placeholder="Select department..."
+                              searchPlaceholder="Type department name..."
+                              isClearable
+                            />
                           </Fld>
                         )}
-                        {units.length>0&&(
+                        {units.length > 0 && (
                           <Fld label="Unit (Level 3)">
-                            <select className={sel} value={form.unitId??''} onChange={e=>set('unitId',e.target.value)}>
-                              <option value="">Select unit</option>
-                              {units.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
+                            <SearchableSelect
+                              value={form.unitId ?? ''}
+                              onChange={(val) => set('unitId', val)}
+                              options={units.map((u) => ({ value: u.id, label: u.name }))}
+                              placeholder="Select unit..."
+                              searchPlaceholder="Type unit name..."
+                              isClearable
+                            />
                           </Fld>
                         )}
                         <Fld label="Account Code" help="Accounting reference code">
