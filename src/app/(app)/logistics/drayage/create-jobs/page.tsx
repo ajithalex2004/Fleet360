@@ -73,6 +73,128 @@ export default function DrayageCreateJobsPage() {
   const [driverAllowanceAed, setDriverAllowanceAed] = useState<number>(150);
   const [notes, setNotes] = useState<string>('');
 
+  // Quick Customer Creation Modal State
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState('CORPORATE');
+  const [newCustomerContact, setNewCustomerContact] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
+  const [newCustomerTrn, setNewCustomerTrn] = useState('');
+  const [newCustomerLicense, setNewCustomerLicense] = useState('');
+  const [newCustomerCity, setNewCustomerCity] = useState('Dubai');
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
+  // Quick Warehouse / Destination Creation Modal State
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [newWarehouseZone, setNewWarehouseZone] = useState('JAFZA South');
+  const [newWarehouseAddress, setNewWarehouseAddress] = useState('');
+  const [newWarehouseContact, setNewWarehouseContact] = useState('');
+  const [newWarehousePhone, setNewWarehousePhone] = useState('');
+  const [newWarehouseRamps, setNewWarehouseRamps] = useState(4);
+  const [savingWarehouse, setSavingWarehouse] = useState(false);
+
+  const handleCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomerName.trim()) {
+      showToast('error', 'Please enter customer company name');
+      return;
+    }
+    try {
+      setSavingCustomer(true);
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nameEn: newCustomerName.trim(),
+          customerType: newCustomerType || 'CORPORATE',
+          contactPerson: newCustomerContact.trim() || undefined,
+          mobileNumber: newCustomerPhone.trim() || undefined,
+          email: newCustomerEmail.trim() || undefined,
+          city: newCustomerCity.trim() || 'Dubai',
+          taxRegistrationNumber: newCustomerTrn.trim() || undefined,
+          tradeLicense: newCustomerLicense.trim() || undefined,
+          country: 'UAE',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create customer');
+
+      const createdCustomer: CustomerOption = {
+        id: data.id,
+        name: data.name_en || data.nameEn || newCustomerName.trim(),
+      };
+      setCustomers((prev) => [createdCustomer, ...prev]);
+      setSelectedCustomerId(createdCustomer.id);
+      setShowCustomerModal(false);
+      setNewCustomerName('');
+      setNewCustomerContact('');
+      setNewCustomerPhone('');
+      setNewCustomerEmail('');
+      setNewCustomerTrn('');
+      setNewCustomerLicense('');
+      invalidateDrayageClientCache();
+      showToast('success', `Customer "${createdCustomer.name}" created and selected!`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error creating customer');
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
+
+  const handleCreateWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWarehouseName.trim()) {
+      showToast('error', 'Please enter destination warehouse name');
+      return;
+    }
+    const currentCustomer = customers.find((c) => c.id === selectedCustomerId);
+    try {
+      setSavingWarehouse(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_warehouse',
+          customerId: selectedCustomerId || null,
+          customerName: currentCustomer?.name || 'Enterprise Client',
+          name: newWarehouseName.trim(),
+          zone: newWarehouseZone.trim() || 'JAFZA South',
+          address: newWarehouseAddress.trim() || 'Dubai, UAE',
+          contactPerson: newWarehouseContact.trim() || undefined,
+          contactPhone: newWarehousePhone.trim() || undefined,
+          rampsCount: Number(newWarehouseRamps) || 4,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create warehouse destination');
+
+      const createdWh: WarehouseOption = {
+        id: data.id,
+        customerId: selectedCustomerId || null,
+        customerName: currentCustomer?.name || 'Enterprise Client',
+        name: newWarehouseName.trim(),
+        zone: newWarehouseZone.trim() || 'JAFZA South',
+      };
+      setWarehouses((prev) => [createdWh, ...prev]);
+      setSelectedWarehouseId(createdWh.id);
+      setShowWarehouseModal(false);
+      setNewWarehouseName('');
+      setNewWarehouseZone('JAFZA South');
+      setNewWarehouseAddress('');
+      setNewWarehouseContact('');
+      setNewWarehousePhone('');
+      setNewWarehouseRamps(4);
+      invalidateDrayageClientCache();
+      showToast('success', `Destination "${createdWh.name}" added and selected!`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error creating warehouse');
+    } finally {
+      setSavingWarehouse(false);
+    }
+  };
+
   // Bulk Paste State
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
@@ -666,6 +788,261 @@ export default function DrayageCreateJobsPage() {
           </div>
         </Panel>
       </form>
+
+      {/* Quick Create Customer Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-400" />
+                Create New Drayage Customer
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCustomerModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCustomer} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Customer / Company Name (English) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  placeholder="e.g. Al-Futtaim Logistics LLC, DHL Global Forwarding"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Customer Type</label>
+                  <select
+                    value={newCustomerType}
+                    onChange={(e) => setNewCustomerType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="CORPORATE">Corporate Shipper</option>
+                    <option value="INTERNAL">Internal Division</option>
+                    <option value="VIP">VIP Key Account</option>
+                    <option value="INDIVIDUAL">Individual Consignee</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Emirate / City</label>
+                  <select
+                    value={newCustomerCity}
+                    onChange={(e) => setNewCustomerCity(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Ajman">Ajman</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                    <option value="Fujairah">Fujairah</option>
+                    <option value="Umm Al Quwain">Umm Al Quwain</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Person</label>
+                  <input
+                    type="text"
+                    value={newCustomerContact}
+                    onChange={(e) => setNewCustomerContact(e.target.value)}
+                    placeholder="e.g. Ahmed Al-Mansoor"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Phone / Mobile</label>
+                  <input
+                    type="tel"
+                    value={newCustomerPhone}
+                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                    placeholder="+971 50 123 4567"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Email Address</label>
+                <input
+                  type="email"
+                  value={newCustomerEmail}
+                  onChange={(e) => setNewCustomerEmail(e.target.value)}
+                  placeholder="logistics@customer.ae"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">UAE TRN (Tax No.)</label>
+                  <input
+                    type="text"
+                    value={newCustomerTrn}
+                    onChange={(e) => setNewCustomerTrn(e.target.value)}
+                    placeholder="100XXXXXXXXX003"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Trade License</label>
+                  <input
+                    type="text"
+                    value={newCustomerLicense}
+                    onChange={(e) => setNewCustomerLicense(e.target.value)}
+                    placeholder="CN-1234567"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCustomer}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50"
+                >
+                  {savingCustomer ? 'Creating Customer...' : 'Save & Select Customer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Create Client Destination Warehouse Modal */}
+      {showWarehouseModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Warehouse className="w-4 h-4 text-blue-400" />
+                Add Client Destination Warehouse / Ramp
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowWarehouseModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateWarehouse} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Warehouse / Facility Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newWarehouseName}
+                  onChange={(e) => setNewWarehouseName(e.target.value)}
+                  placeholder="e.g. JAFZA North Automated DC, DIC Central Hub"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Industrial Zone / Area</label>
+                  <input
+                    type="text"
+                    value={newWarehouseZone}
+                    onChange={(e) => setNewWarehouseZone(e.target.value)}
+                    placeholder="e.g. JAFZA South, DIC, KEZAD, DIP"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Loading Ramps / Bays</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={newWarehouseRamps}
+                    onChange={(e) => setNewWarehouseRamps(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Physical Street Address</label>
+                <input
+                  type="text"
+                  value={newWarehouseAddress}
+                  onChange={(e) => setNewWarehouseAddress(e.target.value)}
+                  placeholder="Plot S-204, Road 4, Dubai, UAE"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person</label>
+                  <input
+                    type="text"
+                    value={newWarehouseContact}
+                    onChange={(e) => setNewWarehouseContact(e.target.value)}
+                    placeholder="e.g. Warehouse Supervisor"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Receiving Phone</label>
+                  <input
+                    type="tel"
+                    value={newWarehousePhone}
+                    onChange={(e) => setNewWarehousePhone(e.target.value)}
+                    placeholder="+971 4 888 1234"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowWarehouseModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingWarehouse}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50"
+                >
+                  {savingWarehouse ? 'Adding Destination...' : 'Save & Select Destination'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

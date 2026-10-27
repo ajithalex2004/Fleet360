@@ -28,6 +28,24 @@ interface DrayageTerminal {
   status: string;
 }
 
+interface DrayageWarehouse {
+  id: string;
+  customerId: string | null;
+  customerName: string;
+  name: string;
+  zone: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  rampsCount?: number;
+  contactPerson?: string;
+  contactPhone?: string;
+}
+
+interface CustomerOption {
+  id: string;
+  name: string;
+}
 interface DrayageGeofence {
   id: string;
   terminalId: string | null;
@@ -89,6 +107,50 @@ export default function DrayageTerminalMapPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleSaveWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWhName.trim()) {
+      showToast('error', 'Please enter warehouse / facility name');
+      return;
+    }
+    const cust = customers.find((c) => c.id === newWhCustomerId);
+    try {
+      setSubmittingWh(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_warehouse',
+          customerId: newWhCustomerId || null,
+          customerName: cust?.name || 'Enterprise Client',
+          name: newWhName.trim(),
+          zone: newWhZone.trim() || 'JAFZA South',
+          address: newWhAddress.trim() || 'Dubai, UAE',
+          contactPerson: newWhContact.trim() || undefined,
+          contactPhone: newWhPhone.trim() || undefined,
+          rampsCount: Number(newWhRamps) || 4,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create warehouse');
+
+      setShowWarehouseModal(false);
+      setNewWhName('');
+      setNewWhZone('JAFZA South');
+      setNewWhAddress('');
+      setNewWhContact('');
+      setNewWhPhone('');
+      setNewWhRamps(4);
+      invalidateDrayageClientCache();
+      await loadData(true);
+      showToast('success', 'Client destination warehouse created successfully');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error creating warehouse');
+    } finally {
+      setSubmittingWh(false);
+    }
+  };
 
   const handleOpenAddGeofence = () => {
     const term = selectedTerminal || terminals[0];
@@ -494,6 +556,206 @@ export default function DrayageTerminalMapPage() {
                   className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm disabled:opacity-50"
                 >
                   {submittingGf ? 'Saving Zone...' : 'Save Geofence'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Client Destination Warehouses & Consignee Hubs Section */}
+      <Panel
+        title="Client Destination Warehouses & Consignee Hubs"
+        subtitle="Manage receiving facilities, distribution centers, and private ramps linked to Customers"
+        icon={Warehouse}
+        accent="emerald"
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowWarehouseModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Destination Warehouse
+          </button>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] bg-[var(--bg-main)]/50">
+                <th className="py-2.5 px-3 font-semibold">Warehouse / Facility Name</th>
+                <th className="py-2.5 px-3 font-semibold">Mapped Customer</th>
+                <th className="py-2.5 px-3 font-semibold">Industrial Zone</th>
+                <th className="py-2.5 px-3 font-semibold">Address</th>
+                <th className="py-2.5 px-3 font-semibold text-center">Unloading Ramps</th>
+                <th className="py-2.5 px-3 font-semibold">Receiving Contact</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
+              {warehouses.map((w) => (
+                <tr key={w.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="py-3 px-3">
+                    <div className="font-bold text-[var(--text-main)] flex items-center gap-1.5">
+                      <Warehouse className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      {w.name}
+                    </div>
+                  </td>
+                  <td className="py-3 px-3">
+                    <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
+                      <Building2 className="w-3 h-3 text-blue-400" />
+                      {w.customerName || 'All Customers'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <span className="px-2 py-0.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[10px] font-medium text-emerald-400">
+                      {w.zone}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-[var(--text-muted)] max-w-[200px] truncate">
+                    {w.address || '—'}
+                  </td>
+                  <td className="py-3 px-3 text-center font-mono font-semibold">
+                    {w.rampsCount ?? 4}
+                  </td>
+                  <td className="py-3 px-3">
+                    {w.contactPerson || w.contactPhone ? (
+                      <div className="space-y-0.5">
+                        {w.contactPerson && <div className="font-medium text-[var(--text-main)]">{w.contactPerson}</div>}
+                        {w.contactPhone && <div className="text-[10px] font-mono text-[var(--text-muted)]">{w.contactPhone}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-[var(--text-faint)]">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {/* Add Client Destination Warehouse Modal */}
+      {showWarehouseModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Warehouse className="w-4 h-4 text-emerald-400" />
+                Add Client Destination Warehouse / Consignee Hub
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowWarehouseModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWarehouse} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Warehouse / Facility Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newWhName}
+                  onChange={(e) => setNewWhName(e.target.value)}
+                  placeholder="e.g. Landmark Distribution Center NIP, Chalhoub DWC Hub"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Linked Customer (Consignee / Client)</label>
+                <select
+                  value={newWhCustomerId}
+                  onChange={(e) => setNewWhCustomerId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                >
+                  <option value="">General / Shared Distribution Center</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Industrial Zone / Area</label>
+                  <input
+                    type="text"
+                    value={newWhZone}
+                    onChange={(e) => setNewWhZone(e.target.value)}
+                    placeholder="e.g. JAFZA South, DIC, KEZAD, DIP"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Loading Ramps / Bays</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={newWhRamps}
+                    onChange={(e) => setNewWhRamps(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Physical Street Address</label>
+                <input
+                  type="text"
+                  value={newWhAddress}
+                  onChange={(e) => setNewWhAddress(e.target.value)}
+                  placeholder="e.g. Plot S-204, Road 4, Dubai, UAE"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person</label>
+                  <input
+                    type="text"
+                    value={newWhContact}
+                    onChange={(e) => setNewWhContact(e.target.value)}
+                    placeholder="e.g. Warehouse Supervisor"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Phone</label>
+                  <input
+                    type="tel"
+                    value={newWhPhone}
+                    onChange={(e) => setNewWhPhone(e.target.value)}
+                    placeholder="+971 4 888 1234"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowWarehouseModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingWh}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                >
+                  {submittingWh ? 'Saving...' : 'Save Warehouse Destination'}
                 </button>
               </div>
             </form>
