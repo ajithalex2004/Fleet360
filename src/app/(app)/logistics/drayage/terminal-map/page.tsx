@@ -581,8 +581,8 @@ export default function DrayageTerminalMapPage() {
 
       {/* Client Destination Warehouses & Consignee Hubs Section */}
       <Panel
-        title="Client Destination Warehouses & Consignee Hubs"
-        subtitle="Manage receiving facilities, distribution centers, and private ramps linked to Customers"
+        title="Consignee Destinations & Client Warehouses"
+        subtitle="Manage receiving client facilities, distribution centers, and private ramps linked to Consignor Customers"
         icon={Warehouse}
         accent="emerald"
         actions={
@@ -592,7 +592,7 @@ export default function DrayageTerminalMapPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add Destination Warehouse
+            Add Consignee Destination
           </button>
         }
       >
@@ -600,12 +600,12 @@ export default function DrayageTerminalMapPage() {
           <table className="w-full text-xs text-left">
             <thead>
               <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] bg-[var(--bg-main)]/50">
-                <th className="py-2.5 px-3 font-semibold">Warehouse / Facility Name</th>
-                <th className="py-2.5 px-3 font-semibold">Mapped Customer</th>
+                <th className="py-2.5 px-3 font-semibold">Consignee Facility (Client)</th>
+                <th className="py-2.5 px-3 font-semibold">Consignor (Customer)</th>
                 <th className="py-2.5 px-3 font-semibold">Industrial Zone</th>
                 <th className="py-2.5 px-3 font-semibold">Address</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Unloading Ramps</th>
-                <th className="py-2.5 px-3 font-semibold">Receiving Contact</th>
+                <th className="py-2.5 px-3 font-semibold">Receiving Contact (Consignee Rep)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
@@ -658,7 +658,7 @@ export default function DrayageTerminalMapPage() {
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Warehouse className="w-4 h-4 text-emerald-400" />
-                Add Client Destination Warehouse / Consignee Hub
+                Add Consignee Destination (Client Facility / Ramp)
               </h3>
               <button
                 type="button"
@@ -672,7 +672,7 @@ export default function DrayageTerminalMapPage() {
             <form onSubmit={handleSaveWarehouse} className="space-y-3.5 text-xs">
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">
-                  Warehouse / Facility Name *
+                  Consignee Facility / Warehouse Name (Client) *
                 </label>
                 <input
                   type="text"
@@ -685,13 +685,13 @@ export default function DrayageTerminalMapPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Linked Customer (Consignee / Client)</label>
+                <label className="font-semibold text-[var(--text-muted)]">Linked Consignor (Customer / Shipper)</label>
                 <select
                   value={newWhCustomerId}
                   onChange={(e) => setNewWhCustomerId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
                 >
-                  <option value="">General / Shared Distribution Center</option>
+                  <option value="">General / Shared Facility (All Consignors)</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

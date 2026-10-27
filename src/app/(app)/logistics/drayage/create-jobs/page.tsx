@@ -486,13 +486,13 @@ export default function DrayageCreateJobsPage() {
             {/* Customer */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="font-semibold text-[var(--text-muted)]">Customer (Client)</label>
+                <label className="font-semibold text-[var(--text-muted)]">Consignor (Customer / Shipper)</label>
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
                   className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
                 >
-                  <Plus className="w-3 h-3" /> New Customer
+                  <Plus className="w-3 h-3" /> New Consignor
                 </button>
               </div>
               <select
@@ -534,7 +534,7 @@ export default function DrayageCreateJobsPage() {
             {/* Client Warehouse Destination */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="font-semibold text-[var(--text-muted)]">Client Destination Warehouse / Ramp</label>
+                <label className="font-semibold text-[var(--text-muted)]">Consignee (Client Destination Warehouse / Ramp)</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -543,7 +543,7 @@ export default function DrayageCreateJobsPage() {
                   }}
                   className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
                 >
-                  <Plus className="w-3 h-3" /> New Destination
+                  <Plus className="w-3 h-3" /> New Consignee Destination
                 </button>
               </div>
               <select
@@ -558,7 +558,7 @@ export default function DrayageCreateJobsPage() {
                   return (
                     <>
                       {mapped.length > 0 && (
-                        <optgroup label={`Mapped to ${selCustName}`}>
+                        <optgroup label={`Mapped Consignee Hubs for ${selCustName}`}>
                           {mapped.map((w) => (
                             <option key={w.id} value={w.id}>
                               📍 {w.name} ({w.zone})
@@ -566,7 +566,7 @@ export default function DrayageCreateJobsPage() {
                           ))}
                         </optgroup>
                       )}
-                      <optgroup label={mapped.length > 0 ? 'Other / Shared UAE Hubs' : 'All Facilities & Hubs'}>
+                      <optgroup label={mapped.length > 0 ? 'Other Consignee Facilities & Shared Hubs' : 'All Consignee Facilities & Hubs'}>
                         {others.map((w) => (
                           <option key={w.id} value={w.id}>
                             {w.name} ({w.zone}){w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub' ? ` [${w.customerName}]` : ''}
@@ -847,7 +847,7 @@ export default function DrayageCreateJobsPage() {
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-blue-400" />
-                Create New Drayage Customer
+                Create Consignor Customer (Shipper / Bill-To Party)
               </h3>
               <button
                 type="button"
@@ -861,7 +861,7 @@ export default function DrayageCreateJobsPage() {
             <form onSubmit={handleCreateCustomer} className="space-y-3.5 text-xs">
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">
-                  Customer / Company Name (English) *
+                  Consignor Company Name (Customer / Shipper) *
                 </label>
                 <input
                   type="text"
@@ -875,7 +875,7 @@ export default function DrayageCreateJobsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Customer Type</label>
+                  <label className="font-semibold text-[var(--text-muted)]">Consignor Type</label>
                   <select
                     value={newCustomerType}
                     onChange={(e) => setNewCustomerType(e.target.value)}
@@ -884,7 +884,7 @@ export default function DrayageCreateJobsPage() {
                     <option value="CORPORATE">Corporate Shipper</option>
                     <option value="INTERNAL">Internal Division</option>
                     <option value="VIP">VIP Key Account</option>
-                    <option value="INDIVIDUAL">Individual Consignee</option>
+                    <option value="INDIVIDUAL">Individual Consignor / Merchant</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -990,7 +990,7 @@ export default function DrayageCreateJobsPage() {
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Warehouse className="w-4 h-4 text-blue-400" />
-                Add Client Destination Warehouse / Ramp
+                Add Consignee Destination (Client Facility / Ramp)
               </h3>
               <button
                 type="button"
@@ -1004,14 +1004,14 @@ export default function DrayageCreateJobsPage() {
             <form onSubmit={handleCreateWarehouse} className="space-y-3.5 text-xs">
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">
-                  Linked Customer (Client / Consignee)
+                  Linked Consignor (Customer / Shipper)
                 </label>
                 <select
                   value={newWarehouseCustomerId}
                   onChange={(e) => setNewWarehouseCustomerId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 >
-                  <option value="">General / Shared Hub (All Customers)</option>
+                  <option value="">General / Shared Facility (All Consignors)</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -1025,7 +1025,7 @@ export default function DrayageCreateJobsPage() {
 
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">
-                  Warehouse / Facility Name *
+                  Consignee Facility / Warehouse Name (Client) *
                 </label>
                 <input
                   type="text"
@@ -1074,7 +1074,7 @@ export default function DrayageCreateJobsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person</label>
+                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person (Consignee Rep)</label>
                   <input
                     type="text"
                     value={newWarehouseContact}
