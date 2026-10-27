@@ -111,8 +111,8 @@ const NO_STATS: Stats7d = { runs: 0, items_processed: 0, actions_created: 0, avg
 
 // ── Conversational stats ───────────────────────────────────────────────────────
 // agent_runs schema for whatsapp-agent: one row per inbound message
-// (logInteraction), actions_created = resolved ? 1 : 0. There is NO
-// `direction` or `resolved` column — derive from what logInteraction() writes.
+// (recordChatTurn, src/lib/agents/chat-governance.ts), actions_created = resolved ? 1 : 0. There is NO
+// `direction` or `resolved` column — derive from what recordChatTurn() writes.
 function whatsAppStats(s: Stats7d) {
   return {
     sessions: s.runs,

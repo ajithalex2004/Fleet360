@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { TRIP_IN_FLIGHT_SQL } from '@/lib/trip-status';
 const CACHE_TAG = 'school-bus:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
@@ -60,7 +61,7 @@ const getSchoolBusStats = cacheRead(
       ).catch(zero),
 
       tx.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM trip_schedules WHERE status IN ('STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT') AND DATE(departure_time) = CURRENT_DATE`,
+        `SELECT COUNT(*) as count FROM trip_schedules WHERE status IN (${TRIP_IN_FLIGHT_SQL}) AND DATE(departure_time) = CURRENT_DATE`,
       ).catch(zero),
 
       tx.$queryRawUnsafe<Array<{ count: bigint }>>(

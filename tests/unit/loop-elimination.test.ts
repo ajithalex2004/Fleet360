@@ -18,10 +18,13 @@ vi.mock('@/lib/agents/schema', () => ({
 describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    // clearAllMocks keeps queued mockResolvedValueOnce values: one a test
+    // didn't consume was handed to the next test's query (the forecasting
+    // test received a driver row and produced no forecast).
     const { prisma } = await import('@/lib/prisma');
-    vi.mocked(prisma.$queryRaw).mockReset();
-    vi.mocked(prisma.$executeRawUnsafe).mockReset();
-    vi.mocked(prisma.$executeRawUnsafe).mockResolvedValue(1);
+    (prisma.$queryRaw as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (prisma.$executeRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (prisma.$executeRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(1);
   });
 
   describe('Deterministic Template Fidelity', () => {
@@ -131,7 +134,10 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
         },
       });
 
-      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+      // One query: each driver with their latest performance row
+      // (src/lib/agents/driver-coaching/agent.ts). It used to be two, and the
+      // second queued response leaked into the next test.
+      (prisma.$queryRaw as any).mockResolvedValueOnce([
         {
           id: 'drv-2',
           first_name: 'Vikram',

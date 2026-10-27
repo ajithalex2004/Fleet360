@@ -21,6 +21,8 @@ import { prisma } from '@/lib/prisma';
 import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 import { rankCandidatesWithRouting, DriverCandidate, JobRequirements } from './scoring';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
+import { submitGatedAction } from '@/lib/agents/governance/gated-actions';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 
 interface JobRow {
   id: string;
@@ -286,30 +288,31 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
 
     let recStatus = 'SUGGESTED';
 
+    // Offering the job to a driver changes live dispatch state, so it goes
+    // through the governance gate (gated-actions.ts) instead of being written
+    // here: applied now only when the tenant's policy allows L4 (the opt-in
+    // for hands-off emergency dispatch), otherwise queued for a dispatcher to
+    // approve. The recommendation below is recorded either way.
     if (shouldAutoDispatch) {
-      try {
-        await prisma.$executeRawUnsafe(`
-          UPDATE dispatch_jobs
-          SET status              = 'OFFERED',
-              assigned_driver_id  = $1,
-              assigned_vehicle_id = $2,
-              dispatch_score      = $3,
-              current_attempt     = current_attempt + 1,
-              updated_at          = NOW()
-          WHERE id = $4::uuid
-        `, top.driverId, top.vehicleId, top.compositeScore, job.id);
-
-        await prisma.$executeRawUnsafe(`
-          INSERT INTO dispatch_attempts (
-            dispatch_job_id, attempt_number, driver_id, vehicle_id,
-            score, distance_km, eta_minutes, offered_at, score_breakdown
-          ) VALUES ($1::uuid, 1, $2, $3, $4, $5, $6, NOW(), $7::jsonb)
-        `, job.id, top.driverId, top.vehicleId, top.compositeScore, top.distanceKm, top.etaMinutes, JSON.stringify(top.factors));
-
+      const gate = await bestEffortInTx(prisma, 'dispatch-optimiser.propose-offer', () =>
+        submitGatedAction(tenantId, {
+          agentId:     'dispatch-optimiser',
+          entityType:  'DISPATCH_JOB',
+          entityId:    job.id,
+          actionType:  'OFFER_DISPATCH_JOB',
+          title:       `Offer ${job.priority} ${job.service_type} job to driver ${top.driverId}`,
+          description: `Top match scored ${top.compositeScore.toFixed(3)} (threshold ${autoDispatchThreshold}). ${top.reason ?? ''}`.trim(),
+          payload: {
+            jobId: job.id, driverId: top.driverId, vehicleId: top.vehicleId,
+            score: top.compositeScore, distanceKm: top.distanceKm, etaMinutes: top.etaMinutes,
+            factors: top.factors,
+          },
+        }));
+      if (gate?.outcome === 'EXECUTED' && gate.result.ok) {
         recStatus = 'APPLIED';
         autoDispatchedCount++;
-      } catch (assignErr) {
-        console.error(`[dispatch-optimiser] Failed to auto-dispatch job ${job.id}:`, assignErr);
+      } else if (gate?.outcome === 'QUEUED' || gate?.outcome === 'ALREADY_QUEUED') {
+        recStatus = 'PENDING_APPROVAL';
       }
     }
 

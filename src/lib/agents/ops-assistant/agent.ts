@@ -6,35 +6,10 @@
  *
  * This wrapper:
  *   1. Returns 7-day query volume + tool usage stats when run() is called.
- *   2. logInteraction() is called by /api/operations/simple-chat after each stream.
+ *   2. Each chat turn is recorded by recordChatTurn() (src/lib/agents/chat-governance.ts).
  */
 import { prisma } from '@/lib/prisma';
 import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
-
-// ── Called by /api/operations/simple-chat after each stream completes ──────────
-export async function logInteraction(opts: {
-  threadId:     string;
-  toolsInvoked: string[];
-  messageCount: number;
-  durationMs:   number;
-  tenantId?:    string;
-}): Promise<void> {
-  prisma.$executeRawUnsafe(`
-    INSERT INTO agent_runs
-      (agent_id, tenant_id, event_type, entity_id, input, output,
-       items_processed, actions_created, duration_ms, status)
-    VALUES ('ops-assistant', $1, 'ops.query_received', $2,
-            $3::jsonb, $4::jsonb, $5, $6, $7, 'COMPLETED')
-  `,
-    opts.tenantId ?? 'default',
-    opts.threadId,
-    JSON.stringify({ threadId: opts.threadId, messageCount: opts.messageCount }),
-    JSON.stringify({ toolsInvoked: opts.toolsInvoked }),
-    opts.messageCount,
-    opts.toolsInvoked.length,
-    opts.durationMs,
-  ).catch(() => {});
-}
 
 // ── Stats runner ──────────────────────────────────────────────────────────────
 async function runOpsAssistantStats(event: AgentEvent): Promise<AgentRunResult> {

@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // vi.hoisted, because vi.mock factories are lifted above ordinary top-level
 // declarations — referencing a plain `const` from one is a TDZ error at collect
 // time, and the file reports "no tests" rather than a failure you can read.
-const { VERIFIED_ROLE, pooledClient, withSystemJobCalls } = vi.hoisted(() => ({
+const { VERIFIED_ROLE, pooledClient, withSystemJobCalls, jobRuns } = vi.hoisted(() => ({
   VERIFIED_ROLE: {
     current_user: 'fleet360_app',
     rolcanlogin: true,
@@ -20,6 +20,11 @@ const { VERIFIED_ROLE, pooledClient, withSystemJobCalls } = vi.hoisted(() => ({
   },
   pooledClient: { __pooled: true },
   withSystemJobCalls: [] as Array<{ client: unknown; opts: Record<string, unknown> }>,
+  jobRuns: {
+    claimed: true,
+    claims: [] as Array<Record<string, unknown>>,
+    finishes: [] as Array<{ runId: string; outcome: Record<string, unknown> }>,
+  },
 }));
 
 // Stands in for a direct connection that verifies as the non-bypass app role,
@@ -43,6 +48,21 @@ vi.mock('@/lib/rls', () => ({
   }),
 }));
 
+vi.mock('@/lib/jobs/job-runs', () => ({
+  leaseSecondsFor: () => 600,
+  claimRun: vi.fn(async (input: Record<string, unknown>) => {
+    jobRuns.claims.push(input);
+    return jobRuns.claimed
+      ? { claimed: true, runId: 'run-1' }
+      : { claimed: false, reason: 'running', runId: 'run-0' };
+  }),
+  finishRun: vi.fn(async (runId: string, outcome: Record<string, unknown>) => {
+    jobRuns.finishes.push({ runId, outcome });
+  }),
+}));
+
+import { withSystemJob } from '@/lib/rls';
+import { claimRun } from '@/lib/jobs/job-runs';
 import {
   getVerifiedSweepPrisma,
   sweepConcurrency,
@@ -157,5 +177,68 @@ describe('runSweep passes the resolved concurrency through to withSystemJob', ()
       timeoutMs: 45_000,
       concurrency: 2,
     });
+  });
+});
+
+// ── Overlap guard ───────────────────────────────────────────────────────────
+//
+// runSweep used a session-level pg_try_advisory_lock whose unlock could land
+// on a different pooled connection, stranding the lock and skipping the sweep
+// from then on. It now claims a run in job_runs, which has a lease.
+
+describe('runSweep overlap guard (job_runs claim)', () => {
+  beforeEach(() => {
+    withSystemJobCalls.length = 0;
+    jobRuns.claimed = true;
+    jobRuns.claims.length = 0;
+    jobRuns.finishes.length = 0;
+  });
+
+  it('claims no run when no key is given', async () => {
+    await runSweep(async () => 'ok');
+    expect(jobRuns.claims).toHaveLength(0);
+    expect(withSystemJobCalls).toHaveLength(1);
+  });
+
+  it('claims a platform-wide run, sweeps, and records success', async () => {
+    await runSweep(async () => 'ok', { advisoryLockKey: 'demo-sweep', tenantHeader: 'tenant-a' });
+
+    expect(jobRuns.claims).toEqual([expect.objectContaining({
+      jobName: 'sweep:demo-sweep', scope: '*', trigger: 'manual', leaseSeconds: 600,
+    })]);
+    expect(withSystemJobCalls).toHaveLength(1);
+    // The claim key is runSweep's business, not withSystemJob's.
+    expect(withSystemJobCalls[0].opts).not.toHaveProperty('advisoryLockKey');
+    expect(jobRuns.finishes).toEqual([
+      { runId: 'run-1', outcome: expect.objectContaining({ status: 'SUCCEEDED' }) },
+    ]);
+  });
+
+  it('skips the sweep while another run holds the claim', async () => {
+    jobRuns.claimed = false;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const out = await runSweep(async () => 'ok', { advisoryLockKey: 'demo-sweep' });
+
+    warn.mockRestore();
+    expect(out).toEqual([]);
+    expect(withSystemJobCalls).toHaveLength(0);
+    expect(jobRuns.finishes).toHaveLength(0);
+  });
+
+  it('records a failed run and rethrows', async () => {
+    vi.mocked(withSystemJob).mockRejectedValueOnce(new Error('tenant 7 failed'));
+
+    await expect(runSweep(async () => 'ok', { advisoryLockKey: 'demo-sweep' })).rejects.toThrow('tenant 7 failed');
+    expect(jobRuns.finishes).toEqual([
+      { runId: 'run-1', outcome: expect.objectContaining({ status: 'FAILED', error: 'tenant 7 failed' }) },
+    ]);
+  });
+
+  it('does not sweep when the claim itself cannot be made', async () => {
+    vi.mocked(claimRun).mockRejectedValueOnce(new Error('db unreachable'));
+
+    await expect(runSweep(async () => 'ok', { advisoryLockKey: 'demo-sweep' })).rejects.toThrow('db unreachable');
+    expect(withSystemJobCalls).toHaveLength(0);
   });
 });

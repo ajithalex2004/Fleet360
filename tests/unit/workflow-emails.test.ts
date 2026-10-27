@@ -56,6 +56,9 @@ vi.mock('@/lib/rls', () => ({
   withPlatformAdmin: async (_p: unknown, fn: (tx: unknown) => Promise<unknown>) => fn({
     userTenant: { findMany: async (args: unknown) => { state.roleQueries.push(args); return state.roleHolders; } },
   }),
+  // A decision runs in one tenant transaction; the statements here go
+  // through the mocked global client either way.
+  withTenantRls: async (_p: unknown, _t: string, fn: (tx: unknown) => Promise<unknown>) => fn({}),
 }));
 
 vi.mock('@/lib/prisma', () => ({

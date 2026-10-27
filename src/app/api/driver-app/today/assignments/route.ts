@@ -24,6 +24,7 @@ import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { toDriverTripStatus } from '@/lib/trip-state';
 interface TripRow {
   id: string;
   status: string;
@@ -165,7 +166,9 @@ export async function GET(req: NextRequest) {
         const breakdown = computeScore(tripEvents);
         return {
           id: t.id,
-          status: t.status,
+          // Driver-facing vocabulary: a trip started from Bus Ops (STARTED /
+          // EN_ROUTE) must show the End button, not an unknown state.
+          status: toDriverTripStatus(t.status) ?? t.status,
           departureTime: t.departure_time.toISOString(),
           arrivalTime: t.arrival_time.toISOString(),
           direction: t.direction,

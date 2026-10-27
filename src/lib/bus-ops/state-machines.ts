@@ -32,36 +32,50 @@ const TRIP_TRANSITIONS: Readonly<Record<TripScheduleStatus, readonly TripSchedul
   CANCELLED:  [],
 } as const;
 
-export function canTransitionTrip(from: TripScheduleStatus, to: TripScheduleStatus): boolean {
+export function canTransitionTrip(from: TripScheduleStatus | null, to: TripScheduleStatus): boolean {
+  if (from === null) return false;
   if (from === to) return true;
   return TRIP_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 export class TripTransitionError extends Error {
   constructor(
-    public readonly from: TripScheduleStatus,
+    public readonly from: TripScheduleStatus | 'UNRECOGNISED',
     public readonly to: TripScheduleStatus,
     public readonly allowed: readonly TripScheduleStatus[],
   ) {
     super(
-      `Illegal trip status transition ${from} → ${to}. ` +
-      (allowed.length ? `Allowed from ${from}: ${allowed.join(', ')}.` : `${from} is a terminal state.`),
+      from === 'UNRECOGNISED'
+        ? `Trip has an unrecognised status; refusing to move it to ${to}.`
+        : `Illegal trip status transition ${from} → ${to}. ` +
+          (allowed.length ? `Allowed from ${from}: ${allowed.join(', ')}.` : `${from} is a terminal state.`),
     );
     this.name = 'TripTransitionError';
   }
 }
 
-export function assertTripTransition(from: TripScheduleStatus, to: TripScheduleStatus): void {
+export function assertTripTransition(from: TripScheduleStatus | null, to: TripScheduleStatus): void {
+  if (from === null) throw new TripTransitionError('UNRECOGNISED', to, []);
   if (!canTransitionTrip(from, to)) {
     throw new TripTransitionError(from, to, TRIP_TRANSITIONS[from] ?? []);
   }
 }
 
-/** Map legacy DB values still present mid-migration. */
-export function normalizeTripStatus(raw: string | null | undefined): TripScheduleStatus {
-  const s = (raw ?? 'SCHEDULED').toUpperCase();
-  if (s === 'DEPARTED') return 'STARTED';
+/**
+ * Map a stored trip_schedules.status onto the Bus Ops vocabulary.
+ *
+ * The driver app writes IN_PROGRESS for a trip under way and the
+ * auto-close job writes AUTO_CLOSED; legacy rows carry DEPARTED /
+ * IN_TRANSIT. Anything else is unrecognised and returns null — it used to
+ * become SCHEDULED, which let a running (or closed) trip be started,
+ * cancelled or completed as if it had never left the depot.
+ */
+export function normalizeTripStatus(raw: string | null | undefined): TripScheduleStatus | null {
+  if (raw == null || raw.trim() === '') return 'SCHEDULED';
+  const s = raw.trim().toUpperCase();
+  if (s === 'DEPARTED' || s === 'IN_PROGRESS') return 'STARTED';
   if (s === 'IN_TRANSIT') return 'EN_ROUTE';
+  if (s === 'AUTO_CLOSED') return 'COMPLETED';
   if (
     s === 'SCHEDULED' ||
     s === 'STARTED' ||
@@ -71,7 +85,7 @@ export function normalizeTripStatus(raw: string | null | undefined): TripSchedul
   ) {
     return s;
   }
-  return 'SCHEDULED';
+  return null;
 }
 
 // ── Passenger lifecycle ─────────────────────────────────────────────

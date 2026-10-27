@@ -274,7 +274,6 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
     modelProvider: aiCount > 0 ? 'openai' : 'deterministic',
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
-    cachedTokens: avoidedTokens,
     costAed: totalCostAed,
     estimatedSavingsAed: (avoidedTokens / 1000) * 0.005 * 3.6725, // avoided cost
     businessOutcome: 'NO_ACTION_REQUIRED',

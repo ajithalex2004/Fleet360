@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
     }
 
-    await markPortalUserLoggedIn(user.id);
+    await markPortalUserLoggedIn(user.tenantId, user.id);
 
     const { token } = signPortalSession({
       userId: user.id,

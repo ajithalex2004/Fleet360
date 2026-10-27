@@ -20,7 +20,7 @@ const USER_CACHE_TTL = 5 * 60 * 1000;
 const tenantUserCache = new Map<string, { users: TenantUser[]; ts: number }>();
 
 export default function UserSwitcher() {
-  const { user, tenant, permissions, setCurrentUser, isAuthenticated } = usePermissions();
+  const { user, tenant, isAuthenticated } = usePermissions();
   const { tLabel } = useLanguage();
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
   const [open, setOpen] = useState(false);
@@ -28,11 +28,11 @@ export default function UserSwitcher() {
   const [switching, setSwitching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Only Tenant Admins and Super Admins can switch users
-  const canSwitch = permissions.includes('*:*:*') ||
-    permissions.includes('admin:view:users') ||
-    (user?.roleCode === 'TENANT_ADMIN') ||
-    (user?.roleCode === 'SUPER_ADMIN');
+  // Switching to another user is impersonation: SUPER_ADMIN only, enforced
+  // by /api/admin/impersonate. (This used to be offered to tenant admins and
+  // anyone with admin:view:users, through an endpoint that signed a session
+  // for any user id it was given.)
+  const canSwitch = user?.roleCode === 'SUPER_ADMIN';
 
   const loadTenantUsers = useCallback(async () => {
     if (!tenant?.id || !canSwitch) return;
@@ -76,9 +76,22 @@ export default function UserSwitcher() {
     if (!tenant?.id || targetUser.id === user?.id) { setOpen(false); return; }
     setSwitching(true);
     try {
-      await setCurrentUser(targetUser.id, tenant.id);
+      // Audited, short-lived, and shows the impersonation banner.
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: tenant.id, userId: targetUser.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error ?? 'Could not switch user.');
+        return;
+      }
       setOpen(false);
-    } catch { /* silently fail */ }
+      window.location.href = '/platform';
+    } catch {
+      alert('Network error — could not switch user.');
+    }
     finally { setSwitching(false); }
   };
 

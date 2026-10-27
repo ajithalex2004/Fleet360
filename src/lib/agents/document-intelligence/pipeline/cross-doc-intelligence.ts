@@ -290,7 +290,7 @@ export async function escalateToFinanceAnomaly(
          $11, $12, $13, $14,
          $15, $16::jsonb, 'OPEN'
        )
-       ON CONFLICT (entity_id, detector_id) WHERE status = 'OPEN'
+       ON CONFLICT (tenant_id, entity_id, detector_id) WHERE status = 'OPEN'
        DO UPDATE SET
          severity               = EXCLUDED.severity,
          confidence             = EXCLUDED.confidence,

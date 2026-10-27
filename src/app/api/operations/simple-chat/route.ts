@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { logInteraction } from '@/lib/agents/ops-assistant/agent';
+import { checkRunAllowed, recordChatTurn } from '@/lib/agents/chat-governance';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
@@ -302,6 +302,11 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  const refusal = await checkRunAllowed(tenantId, 'ops-assistant');
+  if (refusal) {
+    return NextResponse.json({ error: refusal }, { status: 403 });
+  }
+
   const t0 = Date.now();
   const { message, threadId } = await req.json() as { message: string; threadId: string };
 
@@ -385,10 +390,13 @@ export async function POST(req: NextRequest) {
           sessionStore.addMessage(tenantId, threadId, { role: 'assistant', content: textAccum });
         }
 
-        // Log to agent_runs for ecosystem visibility (fire-and-forget)
-        logInteraction({
+        // Record the turn for this tenant (agent_runs + daily ROI), fire-and-forget
+        recordChatTurn({
+          tenantId,
+          agentId:      'ops-assistant',
+          eventType:    'ops.query_received',
           threadId,
-          toolsInvoked: toolCalls.map(tc => tc.name),
+          toolsUsed:    toolCalls.map(tc => tc.name),
           messageCount: sessionStore.getMessages(tenantId, threadId).length,
           durationMs:   Date.now() - t0,
         });

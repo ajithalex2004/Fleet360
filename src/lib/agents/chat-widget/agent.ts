@@ -6,41 +6,16 @@
  *
  * This wrapper:
  *   1. Returns 7-day session + message stats when run() is called.
- *   2. logInteraction() is called by /api/chat after each stream completes.
+ *   2. Each chat turn is recorded by recordChatTurn() (src/lib/agents/chat-governance.ts).
  */
 import { prisma } from '@/lib/prisma';
 import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
-
-// ── Called by /api/chat/route.ts after each streaming completion ───────────────
-export async function logInteraction(opts: {
-  threadId:       string;
-  messageCount:   number;
-  toolsUsed:      string[];
-  durationMs:     number;
-  tenantId?:      string;
-}): Promise<void> {
-  prisma.$executeRawUnsafe(`
-    INSERT INTO agent_runs
-      (agent_id, tenant_id, event_type, entity_id, input, output,
-       items_processed, actions_created, duration_ms, status)
-    VALUES ('chat-widget', $1, 'chat.message_sent', $2,
-            $3::jsonb, $4::jsonb, $5, $6, $7, 'COMPLETED')
-  `,
-    opts.tenantId ?? 'default',
-    opts.threadId,
-    JSON.stringify({ threadId: opts.threadId }),
-    JSON.stringify({ toolsUsed: opts.toolsUsed }),
-    opts.messageCount,
-    opts.toolsUsed.length,
-    opts.durationMs,
-  ).catch(() => {});
-}
 
 // ── Stats runner ──────────────────────────────────────────────────────────────
 async function runChatWidgetStats(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
 
-  // Pull from agent_runs (populated by logInteraction)
+  // Pull from agent_runs (populated by recordChatTurn)
   const runs = await prisma.$queryRaw<{
     sessions: number;
     total_messages: number;

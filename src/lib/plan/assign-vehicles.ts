@@ -91,6 +91,11 @@ export interface BlockVehicleRequirement {
   /** The block's first trip's pickup — proximity is ranked against this,
    *  since that's where the vehicle needs to be to start the block. */
   pickupPoint: { lat: number | null; lng: number | null };
+  /** Service date (YYYY-MM-DD) of the block. Blocks are built per day, so a
+   *  vehicle is used at most once per date — not once per plan. Omitted /
+   *  null = the vehicle is reserved across every date (used once overall),
+   *  also when mixed with dated blocks. */
+  date?: string | null;
 }
 
 export type VehicleAssignmentReason =
@@ -142,11 +147,31 @@ export function assignVehiclesToBlocks(
   blocks: BlockVehicleRequirement[],
   vehicles: VehicleCandidate[],
 ): VehicleAssignmentResult[] {
-  const used = new Set<string>();
+  // One set per service date: a plan spans dateFrom..dateTo and every
+  // block belongs to one day. A single plan-wide set let each vehicle drive
+  // one block for the whole range, so a 7-day plan left most blocks with
+  // NO_VEHICLES_AVAILABLE.
+  //
+  // An undated block has no day to scope it to, so its vehicle is reserved
+  // across ALL dates (and a vehicle used on any dated block is not free for
+  // an undated one) — the documented "used once overall" behaviour, even
+  // when dated and undated blocks are mixed.
+  const usedByDate = new Map<string, Set<string>>();
+  const usedUndated = new Set<string>();
+  const usedOnAnyDate = new Set<string>();
   const results: VehicleAssignmentResult[] = [];
 
   for (const req of blocks) {
-    const unusedVehicles = vehicles.filter((v) => !used.has(v.id));
+    const dated = req.date != null && req.date !== '';
+    let used: Set<string> | undefined;
+    if (dated) {
+      used = usedByDate.get(req.date as string);
+      if (!used) { used = new Set<string>(); usedByDate.set(req.date as string, used); }
+    }
+    const usedToday = used;
+    const isTaken = (id: string) =>
+      usedUndated.has(id) || (dated ? usedToday!.has(id) : usedOnAnyDate.has(id));
+    const unusedVehicles = vehicles.filter((v) => !isTaken(v.id));
     if (unusedVehicles.length === 0) {
       results.push({ blockId: req.blockId, vehicleId: null, vehicleLicensePlate: null, distanceKm: null, zoneMatched: false, reason: 'NO_VEHICLES_AVAILABLE' });
       continue;
@@ -208,7 +233,8 @@ export function assignVehiclesToBlocks(
     });
     const chosen = ranked[0];
     const dist = distanceOrInfinity(chosen, req.pickupPoint);
-    used.add(chosen.id);
+    if (dated) { usedToday!.add(chosen.id); usedOnAnyDate.add(chosen.id); }
+    else usedUndated.add(chosen.id);
     results.push({
       blockId: req.blockId,
       vehicleId: chosen.id,

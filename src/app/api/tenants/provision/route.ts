@@ -196,6 +196,24 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // Sign-up creates a new account; it never takes over an existing one.
+        // This route is public, and it used to fall back to the existing user
+        // when the email was taken: it overwrote that user's password with the
+        // one in the request, made them admin of the new tenant and signed a
+        // session as them — anyone could become any user whose email domain
+        // was not yet a tenant domain. (Only the aborted transaction after the
+        // failed INSERT stopped it.)
+        const existingUser = await tx.user.findUnique({
+          where: { email: data.contactEmail },
+          select: { id: true },
+        });
+        if (existingUser) {
+          return NextResponse.json(
+            { error: 'Conflict', message: 'An account with this email already exists. Sign in instead.' },
+            { status: 409 },
+          );
+        }
+
         // ── Check pre-verification (if provided) ─────────────────────────────────
         let domainPreVerified = false;
         if (data.preVerificationId) {
@@ -285,28 +303,19 @@ export async function POST(request: NextRequest) {
           });
 
           // 3. Create User via Prisma ORM (handles table/column names correctly)
-          let user;
-          try {
-            user = await tx.user.create({
-              data: {
-                id:        userId,
-                username:  data.contactEmail,
-                email:     data.contactEmail,
-                firstName: data.adminFirstName,
-                lastName:  data.adminLastName,
-                isActive:  true,
-                updatedAt: new Date(),
-              },
-            });
-            } catch (e) {
-            // If email already exists, fetch the existing user
-            const msg = e instanceof Error ? e.message : '';
-            if (msg.includes('Unique constraint') || msg.includes('unique')) {
-              user = await tx.user.findUniqueOrThrow({ where: { email: data.contactEmail } });
-            } else {
-              throw e;
-            }
-          }
+          // The email was checked above; a concurrent sign-up with the same
+          // email fails here on the unique constraint, which is right.
+          const user = await tx.user.create({
+            data: {
+              id:        userId,
+              username:  data.contactEmail,
+              email:     data.contactEmail,
+              firstName: data.adminFirstName,
+              lastName:  data.adminLastName,
+              isActive:  true,
+              updatedAt: new Date(),
+            },
+          });
 
           // 4. Store password hash — use pre-detected table name (no try/catch inside tx)
           await tx.$executeRawUnsafe(

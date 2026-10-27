@@ -52,9 +52,16 @@ export function calculateTokenCost(
   cachedTokens = 0,
 ): { costUsd: number; costAed: number } {
   const pricing = CAPABILITY_PRICING[modelAlias] ?? CAPABILITY_PRICING.ECONOMY_TEXT;
-  const inCost = (inputTokens / 1_000_000) * pricing.inputPerMillion;
+  // inputTokens is the provider's prompt total, which already includes the
+  // cached tokens (OpenAI: usage.prompt_tokens includes
+  // prompt_tokens_details.cached_tokens). Charge the uncached part at the
+  // input rate and the cached part at the cached rate; charging the full
+  // input plus the cached tokens again billed cached tokens at 150%.
+  const cached = Math.min(Math.max(cachedTokens, 0), Math.max(inputTokens, 0));
+  const uncached = Math.max(inputTokens, 0) - cached;
+  const inCost = (uncached / 1_000_000) * pricing.inputPerMillion;
   const outCost = (outputTokens / 1_000_000) * pricing.outputPerMillion;
-  const cachedCost = (cachedTokens / 1_000_000) * pricing.cachedPerMillion;
+  const cachedCost = (cached / 1_000_000) * pricing.cachedPerMillion;
 
   const costUsd = Number((inCost + outCost + cachedCost).toFixed(6));
   const costAed = Number((costUsd * USD_TO_AED_RATE).toFixed(4));
@@ -150,13 +157,13 @@ export async function updateDailyRoiMetrics(opts: {
          tenant_id, agent_id, period_date,
          total_executions, total_cost_usd, total_cost_aed,
          total_savings_aed, net_value_aed, roi_multiplier,
-         acceptance_rate_pct, updated_at
+         accepted_executions, acceptance_rate_pct, updated_at
        ) VALUES (
          $1, $2, CURRENT_DATE,
          1, $3, $4,
          $5, $5 - $4,
          CASE WHEN $4 > 0 THEN ROUND($5 / $4, 2) ELSE 1.0 END,
-         CASE WHEN $6 = 1 THEN 100.0 ELSE 0.0 END,
+         $6, $6 * 100.0,
          NOW()
        )
        ON CONFLICT (tenant_id, agent_id, period_date) DO UPDATE SET
@@ -170,6 +177,11 @@ export async function updateDailyRoiMetrics(opts: {
            THEN ROUND((agent_roi_metrics.total_savings_aed + EXCLUDED.total_savings_aed) / (agent_roi_metrics.total_cost_aed + EXCLUDED.total_cost_aed), 2)
            ELSE 1.0
          END,
+         accepted_executions = agent_roi_metrics.accepted_executions + EXCLUDED.accepted_executions,
+         acceptance_rate_pct = ROUND(
+           100.0 * (agent_roi_metrics.accepted_executions + EXCLUDED.accepted_executions)
+                 / (agent_roi_metrics.total_executions + 1),
+           2),
          updated_at = NOW()`,
       opts.tenantId ?? 'default',
       opts.agentId,

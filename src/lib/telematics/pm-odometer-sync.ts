@@ -10,6 +10,7 @@
 
 import type { Prisma } from '@prisma/client';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { bestEffortInTx } from '@/lib/db/best-effort';
 
 export interface PmCheckResult {
   vehicleId: string;
@@ -89,7 +90,7 @@ export async function checkAndTriggerPmOdometerAlerts(
     const code = evalResult.status === 'OVERDUE' ? 'PM_SERVICE_OVERDUE' : 'PM_SERVICE_DUE_SOON';
     const vehicleLabel = vehicle.vehicleCode || vehicle.licensePlate || 'Vehicle';
 
-    await raiseAlert({
+    await bestEffortInTx(tx, 'pm-odometer-sync.alert', () => raiseAlert({
       tenantId,
       code,
       sourceModule: 'fleet',
@@ -99,7 +100,7 @@ export async function checkAndTriggerPmOdometerAlerts(
       title: `PM Service ${evalResult.status === 'OVERDUE' ? 'OVERDUE' : 'Due Soon'}: ${vehicleLabel}`,
       description: `Current Odometer: ${currentOdometerKm.toLocaleString()} km. Scheduled ${serviceIntervalKm.toLocaleString()} km service target is ${evalResult.nextDueKm.toLocaleString()} km (${evalResult.kmRemaining <= 0 ? `${Math.abs(evalResult.kmRemaining)} km overdue` : `${evalResult.kmRemaining} km remaining`}).`,
       dedupeKey: `${code}:${vehicle.id}:${evalResult.nextDueKm}`,
-    }).catch((err) => console.warn('[pm-odometer-sync] Alert failed:', err));
+    }));
   }
 
   return {

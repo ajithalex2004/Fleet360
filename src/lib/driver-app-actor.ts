@@ -25,6 +25,7 @@
 
 import { NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
+import { TRIP_OPEN_SQL } from '@/lib/trip-status';
 /** The parts of a Prisma transaction this module uses. */
 export type DriverActorTx = Pick<Prisma.TransactionClient, 'driver' | '$queryRawUnsafe'>;
 
@@ -273,7 +274,7 @@ export async function authorizeDriverReferences(
                           AND s.driver_id::text = $3 AND s.status = 'ACTIVE')
             OR EXISTS (SELECT 1 FROM trip_schedules t
                         WHERE t.vehicle_id::text = v.id::text AND t.tenant_id::text = $2
-                          AND t.driver_id::text = $3 AND t.status IN ('SCHEDULED', 'IN_PROGRESS'))
+                          AND t.driver_id::text = $3 AND t.status IN (${TRIP_OPEN_SQL}))
           )
         LIMIT 1`,
       refs.vehicleId, tenantId, userId, driverId,

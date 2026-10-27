@@ -13,8 +13,9 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 import crypto from 'crypto';
-import { setPortalUserPassword } from './portal-users-store';
 import { sendEmail } from '@/lib/email';
 import { renderEmail, tenantEmailContext } from '@/lib/email-templates';
 
@@ -47,13 +48,14 @@ export async function createInvitation(args: {
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000).toISOString();
 
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; expires_at: string }>>(
+  // Invitations are under RLS: written in the inviting tenant's scope.
+  const rows = await withTenantRls(prisma, args.tenantId, (tx) => tx.$queryRawUnsafe<Array<{ id: string; expires_at: string }>>(
     `INSERT INTO customer_portal_invitations
        (tenant_id, portal_user_id, token_hash, expires_at, invited_by_user_id)
      VALUES ($1, $2::uuid, $3, $4::timestamptz, $5)
      RETURNING id::text, expires_at::text`,
     args.tenantId, args.portalUserId, tokenHash, expiresAt, args.invitedByUserId,
-  );
+  ));
   if (!rows[0]) throw new Error('createInvitation returned no row');
   return { id: rows[0].id, rawToken, expiresAt: rows[0].expires_at };
 }
@@ -70,13 +72,15 @@ interface InvitationRow {
 
 export async function resolveInvitation(rawToken: string): Promise<InvitationRow | null> {
   const tokenHash = hashToken(rawToken);
-  const rows = await prisma.$queryRawUnsafe<InvitationRow[]>(
+  // The token is all the caller has: find it across tenants (RLS would
+  // otherwise hide every row from a public, tenant-less request).
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<InvitationRow[]>(
     `SELECT id::text, tenant_id, portal_user_id::text, expires_at::text, accepted_at::text
        FROM customer_portal_invitations
       WHERE token_hash = $1
       LIMIT 1`,
     tokenHash,
-  );
+  )));
   const row = rows[0];
   if (!row) return null;
   if (row.accepted_at) return null;             // already used
@@ -101,20 +105,31 @@ export async function acceptInvitation(
   const tokenHash = hashToken(rawToken);
 
   // Mark accepted only if still pending and not expired — atomic check.
-  const claimRows = await prisma.$queryRawUnsafe<Array<{ portal_user_id: string; tenant_id: string }>>(
-    `UPDATE customer_portal_invitations
-        SET accepted_at = NOW()
-      WHERE token_hash = $1
-        AND accepted_at IS NULL
-        AND expires_at > NOW()
-      RETURNING portal_user_id::text, tenant_id`,
-    tokenHash,
-  );
-  const claimed = claimRows[0];
-  if (!claimed) return null;
+  // One transaction: the claim and the password land together, or neither
+  // does (a failed password write used to leave the invitation spent). The
+  // token is all the caller has, so this runs across tenants; the password
+  // write is pinned to the tenant the invitation belongs to.
+  return runOutsideRlsScope(() => withPlatformAdmin(prisma, async (tx) => {
+    const claimRows = await tx.$queryRawUnsafe<Array<{ portal_user_id: string; tenant_id: string }>>(
+        `UPDATE customer_portal_invitations
+            SET accepted_at = NOW()
+          WHERE token_hash = $1
+            AND accepted_at IS NULL
+            AND expires_at > NOW()
+          RETURNING portal_user_id::text, tenant_id`,
+        tokenHash,
+    );
+    const claimed = claimRows[0];
+    if (!claimed) return null;
 
-  await setPortalUserPassword(claimed.portal_user_id, passwordHash);
-  return { portalUserId: claimed.portal_user_id, tenantId: claimed.tenant_id };
+    await tx.$executeRawUnsafe(
+      `UPDATE customer_portal_users
+          SET password_hash = $1, updated_at = NOW()
+        WHERE id = $2::uuid AND tenant_id = $3`,
+      passwordHash, claimed.portal_user_id, claimed.tenant_id,
+    );
+    return { portalUserId: claimed.portal_user_id, tenantId: claimed.tenant_id };
+  }));
 }
 
 // ── Email send ─────────────────────────────────────────────────────────

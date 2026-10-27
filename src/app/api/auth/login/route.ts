@@ -17,7 +17,6 @@ import { signJwtForBackend } from '@/lib/auth/jwt';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { effectivePermissions } from '@/lib/authz/session-permissions';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { tenantModulesFor } from '@/lib/module-policies';
 import { logAudit } from '@/lib/audit';
 

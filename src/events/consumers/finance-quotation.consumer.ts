@@ -16,10 +16,16 @@ import { QUOTATION_APPROVED }          from '@/events/registry';
 import type { QuotationApprovedPayload } from '@/events/contracts/quotation.events';
 import { prisma }                      from '@/lib/prisma';
 import { createDraftJournalEntry }     from '@/lib/finance/journal-service';
+import { nextPayableNumber }           from '@/lib/finance/payable-number';
 
 export class FinanceQuotationConsumer extends BaseEventConsumer<QuotationApprovedPayload> {
   readonly consumerName = 'finance-quotation';
   readonly eventType    = QUOTATION_APPROVED;
+  // The payable and its journal entry commit together, or neither does. The
+  // existing-payable check below used to skip a retry whose first attempt had
+  // written the payable but failed on the journal entry — losing the entry.
+  // In one transaction the payable exists only if the entry does too.
+  protected readonly transactional = true;
 
   protected async handle(
     envelope: DomainEventEnvelope<QuotationApprovedPayload>,
@@ -37,7 +43,7 @@ export class FinanceQuotationConsumer extends BaseEventConsumer<QuotationApprove
       `SELECT id FROM finance.finance_payables
         WHERE source_type = 'QUOTATION_APPROVAL' AND source_id = $1 LIMIT 1`,
       quotationId,
-    ).catch(() => [] as Array<{ id: string }>);
+    );
 
     if (existingAP?.id) {
       console.log(
@@ -55,11 +61,7 @@ export class FinanceQuotationConsumer extends BaseEventConsumer<QuotationApprove
     const ym          = issueDate.slice(0, 7).replace('-', '');
 
     // Generate AP number
-    const [seqRow] = await prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(
-      `SELECT COUNT(*) AS count FROM finance.finance_payables WHERE payable_number LIKE $1`,
-      `AP-${ym}-%`,
-    ).catch(() => [{ count: 0 }]);
-    const apNumber = `AP-${ym}-${String(Number(seqRow?.count ?? 0) + 1).padStart(5, '0')}`;
+    const apNumber = await nextPayableNumber(prisma, tenantId, `AP-${ym}`);
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO finance.finance_payables

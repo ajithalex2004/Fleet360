@@ -242,7 +242,8 @@ export class AIGatewayService {
     if (!options.forceFresh) {
       const cached = MEMORY_GATEWAY_CACHE.get(cacheKey);
       if (cached && Date.now() < cached.expiresAt) {
-        const avoided = calculateTokenCost(alias, cached.inputTokens, cached.outputTokens, cached.inputTokens);
+        // Served from our own cache: the whole call was avoided, at full price.
+        const avoided = calculateTokenCost(alias, cached.inputTokens, cached.outputTokens);
         const telemetry: AgentRunTelemetry = {
           modelAlias: alias,
           modelProvider: cached.provider,

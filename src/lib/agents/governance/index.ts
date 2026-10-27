@@ -20,6 +20,16 @@ export interface TenantPolicy {
   circuitBreakerTriggered: boolean;
 }
 
+/** The TenantPolicy fields updateTenantPolicy accepts. */
+export const TENANT_POLICY_FIELDS = [
+  'maxAutonomyLevel',
+  'dailyBudgetAed',
+  'monthlyBudgetAed',
+  'requireHumanApprovalThresholdAed',
+  'disabledAgents',
+  'circuitBreakerTriggered',
+] as const satisfies ReadonlyArray<Exclude<keyof TenantPolicy, 'tenantId'>>;
+
 export interface ActionProposal {
   agentId: AgentId | string;
   entityType: string;
@@ -51,7 +61,7 @@ export interface ApprovalItem {
   description: string;
   financialImpactAed: number;
   proposedPayload: Record<string, unknown>;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  status: 'PENDING' | 'APPROVED' | 'APPROVED_MANUAL' | 'REJECTED' | 'EXPIRED';
   requestedAutonomy: AgentAutonomyLevel;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
@@ -72,8 +82,9 @@ interface TenantPolicyRow {
 }
 
 // Row shape for the `agent_roi_metrics` daily-spend SELECT in checkBudgetQuota.
-interface TodayCostRow {
+interface SpendRow {
   todayCostAed: number;
+  monthCostAed: number;
 }
 
 // Row shape for the `gen_random_uuid()` SELECT in createApprovalItem.
@@ -94,7 +105,7 @@ interface ApprovalItemRow {
   description: string;
   financialImpactAed: number;
   proposedPayload: unknown;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  status: 'PENDING' | 'APPROVED' | 'APPROVED_MANUAL' | 'REJECTED' | 'EXPIRED';
   requestedAutonomy: AgentAutonomyLevel;
   reviewedBy: string | null;
   reviewedAt: string | null;
@@ -167,10 +178,19 @@ export class PolicyService {
   /**
    * Update or upsert tenant policy.
    */
-  async updateTenantPolicy(tenantId: string, updates: Partial<TenantPolicy>): Promise<TenantPolicy> {
+  async updateTenantPolicy(
+    tenantId: string,
+    updates: Partial<Omit<TenantPolicy, 'tenantId'>>,
+  ): Promise<TenantPolicy> {
     await ensureAgentSchema();
     const current = await this.getTenantPolicy(tenantId);
-    const updated: TenantPolicy = { ...current, ...updates };
+    // Only the policy fields are taken from `updates`, and tenantId always
+    // comes from the argument: a stray tenantId in `updates` (e.g. a request
+    // body) must never retarget the upsert at another tenant's row.
+    const updated: TenantPolicy = { ...current, tenantId };
+    for (const key of TENANT_POLICY_FIELDS) {
+      if (updates[key] !== undefined) (updated as unknown as Record<string, unknown>)[key] = updates[key];
+    }
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO tenant_ai_policies (
@@ -285,6 +305,18 @@ export class PolicyService {
 
   /**
    * Verifies tenant budget quota before executing an agent run.
+   *
+   * The daily and monthly caps are worked out from recorded spend
+   * (agent_roi_metrics) on every call, so they lift by themselves when the
+   * day or month rolls over. Nothing is persisted when a cap is hit: the
+   * breaker used to be written to tenant_ai_policies and never cleared, so
+   * one over-budget day locked a tenant out for good.
+   *
+   * circuitBreakerTriggered is now only a manual kill switch, set and
+   * cleared by a tenant admin through PUT /api/agents/policy.
+   *
+   * If spend can't be read the run is refused: a budget control that lets
+   * everything through whenever its query fails is not a control.
    */
   async checkBudgetQuota(
     tenantId: string,
@@ -295,30 +327,44 @@ export class PolicyService {
     if (policy.circuitBreakerTriggered) {
       return {
         allowed: false,
-        reason: 'Circuit breaker triggered: tenant daily/monthly AI budget cap reached.',
+        reason: 'AI agents are switched off for this tenant (circuit breaker). A tenant admin can switch them back on in the AI policy.',
       };
     }
 
+    let spend: SpendRow;
     try {
-      // Check today's aggregated cost from agent_roi_metrics
-      const rows = await prisma.$queryRawUnsafe<TodayCostRow[]>(
-        `SELECT COALESCE(SUM(total_cost_aed), 0)::float8 AS "todayCostAed"
+      const rows = await prisma.$queryRawUnsafe<SpendRow[]>(
+        `SELECT COALESCE(SUM(total_cost_aed) FILTER (WHERE period_date = CURRENT_DATE), 0)::float8 AS "todayCostAed",
+                COALESCE(SUM(total_cost_aed), 0)::float8 AS "monthCostAed"
          FROM agent_roi_metrics
-         WHERE tenant_id = $1 AND period_date = CURRENT_DATE`,
+         WHERE tenant_id = $1
+           AND period_date >= date_trunc('month', CURRENT_DATE)::date
+           AND period_date <= CURRENT_DATE`,
         policy.tenantId,
       );
+      spend = {
+        todayCostAed: Number(rows?.[0]?.todayCostAed ?? 0),
+        monthCostAed: Number(rows?.[0]?.monthCostAed ?? 0),
+      };
+    } catch (err) {
+      console.error('[governance] Budget check failed; refusing the run:', err);
+      return {
+        allowed: false,
+        reason: 'The AI budget could not be checked, so the run was not started. Try again shortly.',
+      };
+    }
 
-      const todayCost = rows?.[0]?.todayCostAed ?? 0;
-      if (todayCost + estimatedCostAed > policy.dailyBudgetAed) {
-        // Trigger circuit breaker automatically
-        await this.updateTenantPolicy(tenantId, { circuitBreakerTriggered: true });
-        return {
-          allowed: false,
-          reason: `Daily budget exceeded: today's spend (${todayCost.toFixed(2)} AED) reached cap (${policy.dailyBudgetAed.toFixed(2)} AED). Circuit breaker engaged.`,
-        };
-      }
-    } catch {
-      // Allow execution on metric query failure to avoid false-positive blocking
+    if (spend.todayCostAed + estimatedCostAed > policy.dailyBudgetAed) {
+      return {
+        allowed: false,
+        reason: `Daily budget exceeded: today's spend (${spend.todayCostAed.toFixed(2)} AED) reached the cap (${policy.dailyBudgetAed.toFixed(2)} AED). Agents resume tomorrow.`,
+      };
+    }
+    if (spend.monthCostAed + estimatedCostAed > policy.monthlyBudgetAed) {
+      return {
+        allowed: false,
+        reason: `Monthly budget exceeded: this month's spend (${spend.monthCostAed.toFixed(2)} AED) reached the cap (${policy.monthlyBudgetAed.toFixed(2)} AED). Agents resume next month.`,
+      };
     }
 
     return { allowed: true };
@@ -345,15 +391,26 @@ export class PolicyService {
     }
 
     const cleanTenant = (typeof tenantId === 'string' && tenantId.trim()) ? tenantId.trim() : 'default';
-    const id = (await prisma.$queryRawUnsafe<GenUuidRow[]>(`SELECT gen_random_uuid()::text AS id`))[0]?.id || `appr_${Date.now()}`;
 
-    await prisma.$executeRawUnsafe(
+    // One PENDING item per tenant/agent/action/entity
+    // (idx_agent_approvals_pending_dedup): a batch agent re-proposing the same
+    // action refreshes the pending item — the approver must see, and
+    // approving must apply, the latest proposal — instead of queueing a
+    // duplicate on every run.
+    const rows = await prisma.$queryRawUnsafe<GenUuidRow[]>(
       `INSERT INTO agent_approvals (
-         id, tenant_id, agent_id, entity_type, entity_id,
+         tenant_id, agent_id, entity_type, entity_id,
          action_type, title, description, financial_impact_aed,
          proposed_payload, status, requested_autonomy, created_at
-       ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'PENDING',$11,NOW())`,
-      id,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,'PENDING',$10,NOW())
+       ON CONFLICT (tenant_id, agent_id, action_type, entity_id) WHERE status = 'PENDING'
+       DO UPDATE SET
+         title                = EXCLUDED.title,
+         description          = EXCLUDED.description,
+         financial_impact_aed = EXCLUDED.financial_impact_aed,
+         proposed_payload     = EXCLUDED.proposed_payload,
+         requested_autonomy   = EXCLUDED.requested_autonomy
+       RETURNING id::text AS id`,
       cleanTenant,
       proposal.agentId,
       proposal.entityType,
@@ -365,6 +422,8 @@ export class PolicyService {
       JSON.stringify(proposal.payload ?? {}),
       requestedAutonomy,
     );
+    const id = rows[0]?.id;
+    if (!id) throw new Error('createApprovalItem: insert returned no id');
 
     return {
       id,
@@ -421,25 +480,81 @@ export class PolicyService {
 
   /**
    * Human review action: Approve or Reject an approval item.
+   *
+   * Only a PENDING item can be decided (a second click, or two reviewers at
+   * once, used to re-decide it), and with `tenantId` only an item of that
+   * tenant. Approving a gated agent action (gated-actions.ts) runs it here,
+   * in the caller's transaction: if it fails the decision rolls back with
+   * it; if it no longer applies (the queue can be hours old) the item is
+   * marked EXPIRED with the reason and nothing is changed.
    */
   async reviewApprovalItem(
     approvalId: string,
     reviewerId: string,
     decision: 'APPROVED' | 'REJECTED',
     notes?: string,
-  ): Promise<ApprovalItem> {
+    tenantId?: string,
+  ): Promise<ApprovalItem & { execution?: Record<string, unknown> }> {
     await ensureAgentSchema();
 
-    await prisma.$executeRawUnsafe(
+    const updated = await prisma.$executeRawUnsafe(
       `UPDATE agent_approvals
        SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_notes = $3
-       WHERE id = $4::uuid`,
+       WHERE id = $4::uuid AND status = 'PENDING' AND ($5::text IS NULL OR tenant_id = $5)`,
       decision,
       reviewerId,
       notes ?? null,
       approvalId,
+      tenantId ?? null,
     );
+    if (!updated) {
+      throw new ApprovalNotPendingError(approvalId);
+    }
 
+    let item = await this.loadApprovalItem(approvalId);
+
+    let execution: Record<string, unknown> | undefined;
+    if (decision === 'APPROVED') {
+      const { isGatedAction, executeGatedAction } = await import('./gated-actions');
+      if (isGatedAction(item.actionType)) {
+        const result = await executeGatedAction(item.tenantId, item.actionType, item.proposedPayload);
+        if (result.ok) {
+          execution = { executed: true, ...result.detail };
+        } else {
+          await prisma.$executeRawUnsafe(
+            `UPDATE agent_approvals SET status = 'EXPIRED',
+                    review_notes = concat_ws(' | ', review_notes, $2::text)
+              WHERE id = $1::uuid`,
+            approvalId,
+            `Not applied: ${result.reason}`,
+          );
+          item = await this.loadApprovalItem(approvalId);
+          execution = { executed: false, reason: result.reason };
+        }
+      } else {
+        // No executor exists for this action type: approving it changes
+        // nothing in the system. Record that honestly (APPROVED_MANUAL) and
+        // tell the reviewer, rather than showing APPROVED as if it ran.
+        await prisma.$executeRawUnsafe(
+          `UPDATE agent_approvals SET status = 'APPROVED_MANUAL',
+                  review_notes = concat_ws(' | ', review_notes, $2::text)
+            WHERE id = $1::uuid`,
+          approvalId,
+          'No automatic executor; carry out manually',
+        );
+        item = await this.loadApprovalItem(approvalId);
+        execution = {
+          executed: false,
+          manual: true,
+          reason: `'${item.actionType}' has no automatic executor. The approval is recorded; carry the action out manually.`,
+        };
+      }
+    }
+
+    return execution ? { ...item, execution } : item;
+  }
+
+  private async loadApprovalItem(approvalId: string): Promise<ApprovalItem> {
     const rows = await prisma.$queryRawUnsafe<ApprovalItemRow[]>(
       `SELECT id::text, tenant_id AS "tenantId", agent_id AS "agentId", entity_type AS "entityType",
               entity_id AS "entityId", action_type AS "actionType", title, description,
@@ -461,6 +576,14 @@ export class PolicyService {
       financialImpactAed: Number(r.financialImpactAed || 0),
       proposedPayload: (r.proposedPayload ?? {}) as Record<string, unknown>,
     };
+  }
+}
+
+/** The approval item is missing, already decided, or belongs to another tenant. */
+export class ApprovalNotPendingError extends Error {
+  constructor(readonly approvalId: string) {
+    super(`Approval item '${approvalId}' is not pending (already decided, or not found).`);
+    this.name = 'ApprovalNotPendingError';
   }
 }
 

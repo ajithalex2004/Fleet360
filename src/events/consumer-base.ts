@@ -12,6 +12,7 @@
 
 import { prisma }              from '@/lib/prisma';
 import { runWithTenantContext } from '@/lib/rls-scope';
+import { withTenantRls }        from '@/lib/rls';
 import type { DomainEventEnvelope } from '@/events/event-envelope';
 
 export abstract class BaseEventConsumer<T = unknown> {
@@ -25,6 +26,22 @@ export abstract class BaseEventConsumer<T = unknown> {
    * Throwing here marks the inbox entry as FAILED.
    */
   protected abstract handle(envelope: DomainEventEnvelope<T>): Promise<void>;
+
+  /**
+   * Run handle() and the PROCESSED mark in ONE tenant transaction.
+   *
+   * Without it each statement a handler makes commits on its own. A handler
+   * that writes two things (an AP payable, then its journal entry) and fails
+   * on the second leaves the first committed; the retry then sees the first,
+   * takes the event as done, and the second is never written. With it, a
+   * failure rolls every write back and the retry starts clean.
+   *
+   * Global-client calls inside handle() join the transaction
+   * (src/lib/prisma.ts), so handlers need no tx parameter. Don't set it for a
+   * handler that makes external calls (email, push, HTTP): it would hold the
+   * transaction open across them.
+   */
+  protected readonly transactional: boolean = false;
 
   /**
    * Entry point called by the outbox-publisher job.
@@ -91,16 +108,29 @@ export abstract class BaseEventConsumer<T = unknown> {
     }
 
     // ── Execute business logic ────────────────────────────────────────────
+    const markProcessed = () => prisma.$executeRawUnsafe(
+      `UPDATE event_consumer_inbox
+          SET status = 'PROCESSED', processed_at = NOW(), error_message = NULL
+        WHERE consumer_name = $1 AND event_id = $2::uuid`,
+      this.consumerName,
+      envelope.eventId,
+    );
     try {
-      await this.handle(envelope);
-
-      await prisma.$executeRawUnsafe(
-        `UPDATE event_consumer_inbox
-            SET status = 'PROCESSED', processed_at = NOW(), error_message = NULL
-          WHERE consumer_name = $1 AND event_id = $2::uuid`,
-        this.consumerName,
-        envelope.eventId,
-      );
+      if (this.transactional) {
+        const tenantId = envelope.tenantId;
+        if (!tenantId || !/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
+          throw new Error(`transactional consumer needs a tenant; event ${envelope.eventId} has none`);
+        }
+        // The handler's writes and the PROCESSED mark commit together, or
+        // not at all. FAILED is recorded below, after the rollback.
+        await withTenantRls(prisma, tenantId, async () => {
+          await this.handle(envelope);
+          await markProcessed();
+        }, { timeoutMs: 60_000 });
+      } else {
+        await this.handle(envelope);
+        await markProcessed();
+      }
 
       return true;
     } catch (err) {

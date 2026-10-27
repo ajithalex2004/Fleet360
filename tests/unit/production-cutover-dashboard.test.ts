@@ -46,12 +46,14 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
       expect(data.roiSummary.totalCostAed).toBeGreaterThanOrEqual(0);
       expect(data.roiSummary.totalAvoidedCostAed).toBeGreaterThanOrEqual(0);
       expect(data.roiSummary.roiMultiplier).toBeGreaterThanOrEqual(1.0);
-      expect(data.roiSummary.matrixCacheHitRatePct).toBeGreaterThanOrEqual(0);
+      // Routing cache savings are not measured (and the cache is not per
+      // tenant), so they are reported as null, not invented.
+      expect(data.roiSummary.matrixCacheHitRatePct).toBeNull();
+      expect(data.roiSummary.savedRoutingCostAed).toBeNull();
 
-      expect(data.capabilityBreakdown).toHaveLength(3);
-      expect(data.capabilityBreakdown.map((c) => c.tier)).toContain('ECONOMY_TEXT');
-      expect(data.capabilityBreakdown.map((c) => c.tier)).toContain('STANDARD_REASONING');
-      expect(data.capabilityBreakdown.map((c) => c.tier)).toContain('VISION_FAST');
+      // The capability breakdown is measured from agent_runs: no runs, no tiers
+      // (it used to be fixed 70/20/10 splits of the totals).
+      expect(data.capabilityBreakdown).toEqual([]);
 
       expect(data.approvalSummary).toBeDefined();
       expect(data.policy).toBeDefined();
@@ -105,6 +107,8 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
 
       expect(proposal.requiresApprovalQueue).toBe(true);
 
+      // INSERT ... RETURNING id
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValueOnce([{ id: '5b0f8a1e-2c3d-4e5f-8a9b-0c1d2e3f4a5b' }]);
       const approvalItem = await policyService.createApprovalItem(tenantId, {
         agentId: 'finance-anomaly',
         entityType: 'VENDOR_INVOICE',
@@ -169,17 +173,41 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
           reviewNotes: 'Approved after supplier verification',
           createdAt: new Date().toISOString(),
         },
-      ]);
+      ]).mockResolvedValueOnce([
+        {
+          id: approvalItem.id,
+          tenantId,
+          agentId: 'finance-anomaly',
+          entityType: 'VENDOR_INVOICE',
+          entityId: 'inv-cutover-999',
+          actionType: 'DISPUTE_INVOICE',
+          title: 'Dispute Overcharged Invoice',
+          description: 'Dispute AED 850 overcharge with parts supplier',
+          financialImpactAed: 850.0,
+          proposedPayload: {},
+          status: 'APPROVED_MANUAL',
+          requestedAutonomy: 'L4',
+          reviewedBy: 'operations_director_01',
+          reviewedAt: new Date().toISOString(),
+          reviewNotes: 'Approved after supplier verification | No automatic executor; carry out manually',
+          createdAt: new Date().toISOString(),
+        },
+      ]); // reloaded after DISPUTE_INVOICE (no executor) is marked APPROVED_MANUAL
 
       // 3. POST /api/agents/approvals (Approve)
       const postReq = new NextRequest('http://localhost/api/agents/approvals', {
         method: 'POST',
         headers: {
           'x-tenant-id': tenantId,
+          // The reviewer is the signed-in user (not a body field), and
+          // deciding needs the agents approve permission.
+          'x-user-id': 'operations_director_01',
+          'x-user-role': 'TENANT_ADMIN',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          approvalId: approvalItem.id,
+          // The route validates the id as a UUID (the mocked insert has no real one).
+          approvalId: '5b0f8a1e-2c3d-4e5f-8a9b-0c1d2e3f4a5b',
           decision: 'APPROVED',
           reviewerId: 'operations_director_01',
           notes: 'Approved after supplier verification',
@@ -191,7 +219,11 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
 
       expect(postRes.status).toBe(200);
       expect(postJson.ok).toBe(true);
-      expect(postJson.data.status).toBe('APPROVED');
+      // DISPUTE_INVOICE has no executor: approved, and the response says
+      // nothing was applied automatically.
+      expect(postJson.data.status).toBe('APPROVED_MANUAL');
+      expect(postJson.executed).toBe(false);
+      expect(postJson.message).toContain('not applied automatically');
       expect(postJson.data.reviewedBy).toBe('operations_director_01');
     });
   });
@@ -209,18 +241,27 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
       expect(getJson.ok).toBe(true);
       expect(getJson.data.tenantId).toBe(tenantId);
 
-      // 2. PUT updated policy
+      // 2. PUT updated policy — changing the AI policy needs a tenant admin
+      const policyBody = JSON.stringify({
+        dailyBudgetAed: 225.0,
+        requireHumanApprovalThresholdAed: 500.0,
+        disabledAgents: ['driver-coaching'],
+      });
+      const deniedRes = await putPolicy(new NextRequest('http://localhost/api/agents/policy', {
+        method: 'PUT',
+        headers: { 'x-tenant-id': tenantId, 'x-user-role': 'DRIVER', 'Content-Type': 'application/json' },
+        body: policyBody,
+      }));
+      expect(deniedRes.status).toBe(403);
+
       const putReq = new NextRequest('http://localhost/api/agents/policy', {
         method: 'PUT',
         headers: {
           'x-tenant-id': tenantId,
+          'x-user-role': 'TENANT_ADMIN',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          dailyBudgetAed: 225.0,
-          requireHumanApprovalThresholdAed: 500.0,
-          disabledAgents: ['driver-coaching'],
-        }),
+        body: policyBody,
       });
 
       const putRes = await putPolicy(putReq);

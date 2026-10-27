@@ -17,7 +17,6 @@ import { getTenantContext } from '@/lib/tenant-session';
 import { generateTotpSecret, provisioningUri } from '@/lib/totp';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

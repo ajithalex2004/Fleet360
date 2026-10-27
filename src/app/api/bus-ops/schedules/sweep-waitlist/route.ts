@@ -48,6 +48,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
 export const runtime = 'nodejs';
 
 interface Promotion {
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest) {
           where: {
             deletedAt: null,
             departureTime: { gte: target, lt: targetEnd },
-            status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
+            status: { in: [...TRIP_OPEN_STATUSES] },
             passengers: { some: { status: 'WAITLISTED' } },
             ...(tenantScope ? { tenantId: tenantScope } : {}),
           },

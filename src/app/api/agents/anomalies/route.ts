@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
       const limit      = Math.min(Number(sp.get('limit') ?? 100), 500);
       const offset     = Number(sp.get('offset') ?? 0);
 
-      const conditions: string[] = ['(tenant_id = $1 OR tenant_id = \'default\')'];
+      // Own tenant only. 'default' rows are legacy/unowned and must not be
+      // shown to every tenant (RLS hides them in tenant context anyway).
+      const conditions: string[] = ['tenant_id = $1'];
       const params: unknown[] = [tenantId];
 
       if (severity)   { params.push(severity);   conditions.push(`severity = $${params.length}`); }
@@ -64,14 +66,14 @@ export async function GET(req: NextRequest) {
         tx.$queryRawUnsafe<Array<{ severity: string; count: bigint; total_exposure: number }>>(
           `SELECT severity, COUNT(*) AS count, COALESCE(SUM(financial_exposure_aed), 0)::float8 AS total_exposure
            FROM ai.agent_anomaly_flags
-           WHERE (tenant_id = $1 OR tenant_id = 'default') AND status = 'OPEN'
+           WHERE tenant_id = $1 AND status = 'OPEN'
            GROUP BY severity`,
           tenantId,
         ),
         tx.$queryRawUnsafe<Array<{ stream_type: string; count: bigint; total_exposure: number }>>(
           `SELECT COALESCE(stream_type, 'VENDOR_INVOICE') AS stream_type, COUNT(*) AS count, COALESCE(SUM(financial_exposure_aed), 0)::float8 AS total_exposure
            FROM ai.agent_anomaly_flags
-           WHERE (tenant_id = $1 OR tenant_id = 'default') AND status = 'OPEN'
+           WHERE tenant_id = $1 AND status = 'OPEN'
            GROUP BY stream_type`,
           tenantId,
         ),
@@ -118,7 +120,6 @@ export async function PATCH(req: NextRequest) {
         status?: 'OPEN' | 'REVIEWED' | 'FALSE_POSITIVE' | 'CONFIRMED_ISSUE';
         actionType?: string;
         actionNote?: string;
-        reviewedBy?: string;
       };
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -129,7 +130,10 @@ export async function PATCH(req: NextRequest) {
       const newStatus = body.status ?? (body.actionType === 'DISMISS' ? 'FALSE_POSITIVE' : 'CONFIRMED_ISSUE');
       const actionTaken = body.actionType ? `${body.actionType}: ${body.actionNote ?? 'Action executed via Finance Control Layer'}` : undefined;
 
-      await tx.$executeRawUnsafe(
+      // The reviewer is the authenticated user, never a body field.
+      const reviewedBy = authz.userId ?? 'unknown-user';
+
+      const updated = await tx.$executeRawUnsafe(
         `UPDATE ai.agent_anomaly_flags
          SET status = $1,
              reviewed_by = $2,
@@ -137,12 +141,16 @@ export async function PATCH(req: NextRequest) {
              action_taken = COALESCE($3, action_taken),
              action_taken_at = CASE WHEN $3 IS NOT NULL THEN NOW() ELSE action_taken_at END,
              action_taken_by = CASE WHEN $3 IS NOT NULL THEN $2 ELSE action_taken_by END
-         WHERE id = $4::uuid`,
+         WHERE id = $4::uuid AND tenant_id = $5`,
         newStatus,
-        body.reviewedBy ?? 'Finance Controller',
+        reviewedBy,
         actionTaken ?? null,
         body.id,
+        tenantId,
       );
+      if (updated === 0) {
+        return NextResponse.json({ error: 'Anomaly flag not found' }, { status: 404 });
+      }
 
       return NextResponse.json({
         ok: true,

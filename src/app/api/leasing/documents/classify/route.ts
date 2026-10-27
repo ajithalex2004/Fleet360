@@ -23,6 +23,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { classifyDocument } from '@/lib/agents/doc-classifier/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { governCopilot } from '@/lib/agents/copilot-governance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -56,11 +57,20 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await classifyDocument({
+    const governed = await governCopilot({
+      tenantId,
+      agentId: 'doc-classifier',
+      eventType: 'leasing.document_classify_requested',
+      modelAlias: 'VISION_HIGH_ACCURACY',
+    }, () => classifyDocument({
       buffer,
       mimeType: file.type || 'image/jpeg',
       expectedDocType,
-    });
+    }));
+    if (!governed.ok) {
+      return NextResponse.json({ error: governed.reason }, { status: 403 });
+    }
+    const result = governed.value;
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error, detail: result.detail }, { status: 502 });

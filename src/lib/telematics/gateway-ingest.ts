@@ -16,6 +16,66 @@ import { raiseAlert } from '@/lib/alerts/raise';
 import { evaluateAndRecordStopVisits } from '@/lib/telematics/geofence-evaluator';
 import { checkAndTriggerPmOdometerAlerts } from '@/lib/telematics/pm-odometer-sync';
 import { evaluateTelemetryTripTransitions } from '@/lib/bus-ops/telemetry-trip-transitions';
+import { bestEffortInTx } from '@/lib/db/best-effort';
+import { TRIP_IN_FLIGHT_STATUSES } from '@/lib/trip-status';
+
+const PING_SAVEPOINT = 'telematics_ping';
+
+/** A scheduled trip is matched to a ping only this close to its departure. */
+const SCHEDULED_MATCH_BEFORE_MS = 2 * 60 * 60_000;
+const SCHEDULED_MATCH_AFTER_MS = 6 * 60 * 60_000;
+/** An in-flight trip older than this is stale, not the one being driven. */
+const IN_FLIGHT_MAX_AGE_MS = 24 * 60 * 60_000;
+
+/**
+ * The trip a ping belongs to. Prefers a trip already under way (any
+ * spelling — the driver app writes IN_PROGRESS, which the old lookup
+ * skipped), most recent departure first; otherwise the scheduled trip
+ * departing nearest the ping. The old lookup had no date window and no
+ * order, so a vehicle with a stale SCHEDULED row from last week could have
+ * today's pings — stop visits, ETA, auto-depart — applied to that trip.
+ */
+async function findActiveTripForPing(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  vehicleId: string,
+  occurredAt: Date,
+) {
+  const select = { id: true, routeId: true, status: true } as const;
+  const inFlight = await tx.tripSchedule.findFirst({
+    where: {
+      tenantId,
+      vehicleId,
+      deletedAt: null,
+      status: { in: [...TRIP_IN_FLIGHT_STATUSES] },
+      departureTime: { gte: new Date(occurredAt.getTime() - IN_FLIGHT_MAX_AGE_MS) },
+    },
+    orderBy: { departureTime: 'desc' },
+    select,
+  });
+  if (inFlight) return inFlight;
+  const candidates = await tx.tripSchedule.findMany({
+    where: {
+      tenantId,
+      vehicleId,
+      deletedAt: null,
+      status: 'SCHEDULED',
+      departureTime: {
+        gte: new Date(occurredAt.getTime() - SCHEDULED_MATCH_AFTER_MS),
+        lte: new Date(occurredAt.getTime() + SCHEDULED_MATCH_BEFORE_MS),
+      },
+    },
+    orderBy: { departureTime: 'asc' },
+    select: { ...select, departureTime: true },
+    take: 20,
+  });
+  let best: (typeof candidates)[number] | null = null;
+  for (const c of candidates) {
+    if (!best || Math.abs(c.departureTime.getTime() - occurredAt.getTime())
+        < Math.abs(best.departureTime.getTime() - occurredAt.getTime())) best = c;
+  }
+  return best;
+}
 
 export interface NormalizedTelemetryPing {
   imei: string;
@@ -361,14 +421,21 @@ export async function processTelemetryBatch(
     const unmatchedSet = new Set<string>();
 
     for (const ping of pings) {
-      try {
-        const key = ping.imei.trim().toLowerCase();
-        const vehicle = vehicleMap.get(key);
+      const key = ping.imei.trim().toLowerCase();
+      const vehicle = vehicleMap.get(key);
 
-        if (!vehicle) {
-          unmatchedSet.add(ping.imei);
-          continue;
-        }
+      if (!vehicle) {
+        unmatchedSet.add(ping.imei);
+        continue;
+      }
+
+      // Each ping runs in its own savepoint. A failed statement aborts the
+      // whole Postgres transaction (25P02); catching it without rolling back
+      // made every later ping fail and the COMMIT silently roll back the
+      // entire batch while the result still reported most pings processed.
+      const counters = { processed: result.processed, matched: result.matchedVehicles, alerts: result.alertsTriggered };
+      await tx.$executeRawUnsafe(`SAVEPOINT ${PING_SAVEPOINT}`);
+      try {
 
         // 2. Insert into BusGpsPing
         await tx.busGpsPing.create({
@@ -409,21 +476,14 @@ export async function processTelemetryBatch(
 
         // 4. Geofencing & Operational Automation (Phase 2)
         // A. Active Trip Stop Visits & Live Destination ETA
-        const activeTrip = await tx.tripSchedule.findFirst({
-          where: {
-            tenantId,
-            vehicleId: vehicle.id,
-            status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
-          },
-          select: {
-            id: true,
-            routeId: true,
-            status: true,
-          },
-        });
+        const activeTrip = await findActiveTripForPing(tx, tenantId, vehicle.id, ping.occurredAt);
 
         if (activeTrip && activeTrip.routeId) {
-          await evaluateAndRecordStopVisits(
+          // Optional enrichment, each in a nested savepoint: a failure is
+          // logged and undone without losing the ping itself. Awaited — a
+          // `void` call on `tx` could run after the commit ("Transaction
+          // already closed") and its writes were lost.
+          await bestEffortInTx(tx, 'telematics-ingest.stop-visits', () => evaluateAndRecordStopVisits(
             tx,
             tenantId,
             {
@@ -433,14 +493,14 @@ export async function processTelemetryBatch(
               occurredAt: ping.occurredAt,
             },
             activeTrip.id,
-            activeTrip.routeId,
-          ).catch((err) => console.warn('[telematics-ingest] Stop visit eval failed:', err));
+            activeTrip.routeId as string,
+          ));
 
           // Evaluate auto-depart and auto-complete transitions.
           // Note: TelemetryPing has no `headingDeg`/`source` fields (grep
           // confirms telemetry-trip-transitions.ts never reads either), so
           // they're omitted rather than passed and silently dropped.
-          void evaluateTelemetryTripTransitions(tx, {
+          await bestEffortInTx(tx, 'telematics-ingest.trip-transitions', () => evaluateTelemetryTripTransitions(tx, {
             tenantId,
             vehicleId: vehicle.id,
             scheduleId: activeTrip.id,
@@ -449,24 +509,29 @@ export async function processTelemetryBatch(
             speedKmh: ping.speedKmh,
             accuracyM: ping.accuracyM,
             occurredAt: ping.occurredAt,
-          }).catch((err) => console.warn('[telematics-ingest] Trip transition eval failed:', err));
+          }));
         }
 
         // B. Preventive Maintenance (PM) Odometer Threshold Alerts
         if (ping.odometerKm !== undefined && ping.odometerKm > 0) {
-          void checkAndTriggerPmOdometerAlerts(
+          const odometerKm = ping.odometerKm;
+          await bestEffortInTx(tx, 'telematics-ingest.pm-odometer', () => checkAndTriggerPmOdometerAlerts(
             tx,
             tenantId,
             vehicle,
-            ping.odometerKm,
-          ).catch((err) => console.warn('[telematics-ingest] PM alert check failed:', err));
+            odometerKm,
+          ));
         }
 
         // 5. Check & Trigger Event Alerts
         // A. SOS / Panic Button Alert
         if (ping.sosPanic) {
           result.alertsTriggered++;
-          void raiseAlert({
+          // Awaited and NOT best-effort: raiseAlert writes to the outbox on
+          // this transaction, so a `void` call was lost after the commit. If
+          // it fails, the ping fails with it and the gateway sees the error
+          // and retries, rather than an SOS vanishing.
+          await raiseAlert({
             tenantId,
             code: 'SOS_PANIC_TRIGGERED',
             sourceModule: 'telematics',
@@ -476,13 +541,16 @@ export async function processTelemetryBatch(
             title: `EMERGENCY SOS: Vehicle ${vehicle.vehicleCode || vehicle.licensePlate}`,
             description: `Driver emergency panic switch triggered at Lat: ${ping.latitude.toFixed(5)}, Lng: ${ping.longitude.toFixed(5)}. Speed: ${ping.speedKmh.toFixed(0)} km/h.`,
             dedupeKey: `SOS_PANIC:${vehicle.id}:${Math.floor(ping.occurredAt.getTime() / 60000)}`,
-          }).catch((err) => console.warn('[telematics-ingest] SOS alert error:', err));
+            // raiseAlert swallows publish errors by default — opt into
+            // strict mode so a failed SOS really fails the ping.
+            throwOnError: true,
+          });
         }
 
         // B. Excessive Speeding Alert (> 120 km/h)
         if (ping.speedKmh > 120) {
           result.alertsTriggered++;
-          void raiseAlert({
+          await bestEffortInTx(tx, 'telematics-ingest.speeding-alert', () => raiseAlert({
             tenantId,
             code: 'OVERSPEEDING_DETECTED',
             sourceModule: 'telematics',
@@ -492,9 +560,15 @@ export async function processTelemetryBatch(
             title: `Speeding Alert: ${vehicle.vehicleCode || vehicle.licensePlate} (${ping.speedKmh.toFixed(0)} km/h)`,
             description: `Vehicle exceeded commercial speed threshold (120 km/h) with measured speed of ${ping.speedKmh.toFixed(0)} km/h.`,
             dedupeKey: `OVERSPEEDING:${vehicle.id}:${Math.floor(ping.occurredAt.getTime() / 300000)}`,
-          }).catch((err) => console.warn('[telematics-ingest] Speeding alert error:', err));
+          }));
         }
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${PING_SAVEPOINT}`);
       } catch (err) {
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${PING_SAVEPOINT}`);
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${PING_SAVEPOINT}`);
+        result.processed = counters.processed;
+        result.matchedVehicles = counters.matched;
+        result.alertsTriggered = counters.alerts;
         result.errors.push(err instanceof Error ? err.message : 'Ping ingestion failed');
       }
     }

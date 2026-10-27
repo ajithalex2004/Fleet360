@@ -27,41 +27,7 @@ const EXEMPT_PATTERNS = [
 ];
 
 const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
-const { unwrapAuditedHandlers } = require('./route-handler-source');
-
-/**
- * `source` with its // and /* *\/ comments blanked out. String and template
- * literals are kept as they are, so a URL like 'https://…' is not mistaken
- * for a comment.
- */
-function stripComments(source) {
-  let out = '';
-  let quote = null;
-  for (let i = 0; i < source.length; i++) {
-    const c = source[i];
-    const next = source[i + 1];
-    if (quote) {
-      out += c;
-      if (c === '\\') { out += next ?? ''; i++; }
-      else if (c === quote) quote = null;
-      continue;
-    }
-    if (c === "'" || c === '"' || c === '`') { quote = c; out += c; continue; }
-    if (c === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i++;
-      out += '\n';
-      continue;
-    }
-    if (c === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2);
-      i = end === -1 ? source.length : end + 1;
-      out += ' ';
-      continue;
-    }
-    out += c;
-  }
-  return out;
-}
+const { unwrapAuditedHandlers, stripComments } = require('./route-handler-source');
 
 function ruleExemptionFor(relativePath, method) {
   return RULE_EXEMPTIONS.find(
@@ -142,8 +108,10 @@ function analyzeRouteFile(filePath) {
   // Check each handler for requireAuthorizedTenant call
   let unexemptedCount = 0;
   for (const method of exportedHandlers) {
-    // Extract the handler function body
-    const handlerRegex = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\([^)]*\\)\\s*\\{([^]*?)\\n\\}(?:\\s*(?:export|$))`, 'm');
+    // Extract the handler function body. The optional `: ReturnType` matters:
+    // without it `GET(req): Promise<NextResponse> {` never matched and the
+    // handler was silently not checked at all.
+    const handlerRegex = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{([^]*?)\\n\\}(?:\\s*(?:export|$))`, 'm');
     const match = content.match(handlerRegex);
 
     if (match) {

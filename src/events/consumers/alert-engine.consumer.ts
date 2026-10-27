@@ -21,17 +21,15 @@
  *   5. The escalation cron (docs/FOLLOWUP_ALERT_ENGINE.md) picks it up
  *      from there.
  *
- * Notification delivery is intentionally NOT this consumer's job — the
- * downstream channel workers (push / sms / whatsapp / email / in_app)
- * poll Alert rows with unshipped channel messages. Same separation as
- * NotificationLog. Alternative: this consumer could also write
- * NotificationLog rows so the existing send pipeline delivers — that's
- * the recommended follow-up (see doc) since it reuses infra.
+ * After raising the alert it delivers it on the rule's channels
+ * (enqueueNotifications → src/lib/notification-delivery.ts). There are no
+ * downstream channel workers: notifications are sent here or not at all.
  */
 
 import { randomUUID }               from 'crypto';
 import { BaseEventConsumer }        from '@/events/consumer-base';
 import type { DomainEventEnvelope } from '@/events/event-envelope';
+import { deliverNotification } from '@/lib/notification-delivery';
 import { prisma }                   from '@/lib/prisma';
 import type { AlertConditionDetectedPayload } from '@/events/contracts/alert.events';
 
@@ -125,13 +123,11 @@ export class AlertEngineConsumer extends BaseEventConsumer<AlertConditionDetecte
         },
       });
 
-      // Phase 2 addition — fan out to NotificationLog so the existing
-      // channel workers (push / sms / whatsapp / email / in-app) deliver
-      // the alert without a separate integration. One row per channel ×
-      // recipient. Kept best-effort — a delivery-log failure shouldn't
-      // roll back the alert creation (the alert is the source of truth;
-      // the notifications are the delivery artefact).
+      // Deliver on each channel × recipient. Best-effort: a delivery
+      // failure is recorded in NotificationLog and doesn't undo the alert
+      // (the alert is the source of truth; notifications are its delivery).
       await enqueueNotifications({
+        tenantId:   envelope.tenantId,
         alertId,
         code:       data.code,
         title:      data.title,
@@ -156,13 +152,13 @@ export class AlertEngineConsumer extends BaseEventConsumer<AlertConditionDetecte
 }
 
 /**
- * Fan out an alert to NotificationLog rows so the existing channel
- * workers (push / sms / whatsapp / email / in_app) deliver without an
- * alert-specific delivery pipeline. Same shape as
- * TripNotificationDispatchConsumer's fan-out — one row per channel ×
- * recipient, status 'Pending', triggerReason threading the alert id.
+ * Deliver an alert on its rule's channels to its recipients, in the alert's
+ * tenant (src/lib/notification-delivery.ts records each outcome). This used
+ * to write 'Pending' NotificationLog rows for channel workers that do not
+ * exist, so no alert notification was ever sent.
  */
 async function enqueueNotifications(args: {
+  tenantId: string;
   alertId: string;
   code: string;
   title: string;
@@ -174,16 +170,12 @@ async function enqueueNotifications(args: {
   if (args.channels.length === 0 || args.recipients.length === 0) return;
   for (const channel of args.channels) {
     for (const recipient of args.recipients) {
-      await prisma.notificationLog.create({
-        data: {
-          id:            randomUUID(),
-          recipient,
-          type:          channel,
-          subject:       args.title,
-          body:          args.body,
-          triggerReason: `${args.code} — alert:${args.alertId}`,
-          status:        'Pending',
-        },
+      await deliverNotification({
+        tenantId:      args.tenantId,
+        channel, recipient,
+        subject:       args.title,
+        body:          args.body,
+        triggerReason: `${args.code} — alert:${args.alertId}`,
       });
     }
   }

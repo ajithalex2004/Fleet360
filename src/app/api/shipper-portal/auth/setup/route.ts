@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'User not found after setup' }, { status: 500 });
     }
-    await markPortalUserLoggedIn(user.id);
+    await markPortalUserLoggedIn(user.tenantId, user.id);
 
     const { token: sessionToken } = signPortalSession({
       userId: user.id,
