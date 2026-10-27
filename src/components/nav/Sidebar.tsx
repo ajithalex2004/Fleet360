@@ -46,15 +46,28 @@ export default function Sidebar({ onTabsFull }: Props) {
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const canOpen = (id: string) =>
     !!user && canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
-  const visibleSubPages = (subs?: SubPage[]) =>
-    subs ? subs.filter(sp => !sp.superOnly || isSuperAdmin) : undefined;
+  const visibleSubPages = (subs?: SubPage[], moduleId?: string) => {
+    if (!subs) return undefined;
+    let list = subs.filter(sp => !sp.superOnly || isSuperAdmin);
+    if (
+      moduleId === 'logistics' &&
+      !isSuperAdmin &&
+      tenant?.enabledModules &&
+      tenant.enabledModules.length > 0 &&
+      !tenant.enabledModules.includes('logistics') &&
+      (tenant.enabledModules.includes('drayage') || tenant.enabledModules.includes('port-drayage') || tenant.enabledModules.includes('container-drayage'))
+    ) {
+      list = list.filter(sp => sp.href.startsWith('/logistics/drayage'));
+    }
+    return list;
+  };
 
   const [collapsed, setCollapsed] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<Set<string>>(new Set());
   const [collapsedCats, setCollapsedCats] = useState<Set<NavCategory>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['fleet', 'admin', 'finance', 'logistics', 'drayage']));
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['fleet', 'admin', 'finance', 'logistics']));
 
   useEffect(() => {
     if (activeModule?.id) {
@@ -267,9 +280,9 @@ export default function Sidebar({ onTabsFull }: Props) {
                           onHide={hideModule}
                           onHover={() => {}}
                         />
-                        {(isActive || expandedModules.has(m.id)) && visibleSubPages(m.subPages)?.length ? (
+                        {(isActive || expandedModules.has(m.id)) && visibleSubPages(m.subPages, m.id)?.length ? (
                           <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 rtl:pl-0 rtl:pr-2 border-l rtl:border-l-0 rtl:border-r border-[var(--border-subtle)] ml-4 rtl:ml-0 rtl:mr-4">
-                            {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
+                            {visibleSubPages(m.subPages, m.id)!.map((sp, idx, arr) => {
                               const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
                               const showHeader = sp.group && sp.group !== prevGroup;
                               return (
@@ -350,7 +363,7 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       {collapsed && flyoutFor && (() => {
         const m = MODULES.find(x => x.id === flyoutFor);
-        const visible = visibleSubPages(m?.subPages);
+        const visible = visibleSubPages(m?.subPages, m?.id);
         if (!m || !visible?.length) return null;
         const categoryDef = NAV_CATEGORIES.find(c => c.id === m.category);
         return (
@@ -545,7 +558,7 @@ function SubRow({
   const { tLabel } = useLanguage();
   const pathname = usePathname() ?? '';
   const hasChildren = Boolean(page.children && page.children.length > 0);
-  const isChildActive = hasChildren && page.children!.some(c => pathname === c.href);
+  const isChildActive = hasChildren && (pathname.startsWith(page.href) || page.children!.some(c => pathname === c.href || pathname.startsWith(c.href + '/')));
   const [expanded, setExpanded] = useState(true);
   const Icon = page.icon ?? parentIcon;
   const label = tLabel(page.label);

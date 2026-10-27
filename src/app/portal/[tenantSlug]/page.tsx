@@ -115,6 +115,7 @@ const PORTAL_ICONS: Readonly<Record<ModuleKey, string>> = {
   'assets':          '📦',
   'ai-platform':     '🧠',
   'vendors':         '🤝',
+  'drayage':         '🚢',
 };
 
 // Curated subset of modules the portal shows prominently. These are the

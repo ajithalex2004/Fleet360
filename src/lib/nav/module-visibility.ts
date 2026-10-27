@@ -37,12 +37,13 @@ function keysFor(module: string): string[] {
 /** Whether `permissions` hold any action on any resource of `module`. */
 export function holdsAnyPermissionIn(permissions: readonly string[], module: string): boolean {
   if (permissions.includes('*:*:*')) return true;
-  if (module === 'drayage' && permissions.some((p) => p.startsWith('logistics:') || p.startsWith('drayage:'))) return true;
+  if ((module === 'drayage' || module === 'logistics') && permissions.some((p) => p.startsWith('logistics:') || p.startsWith('drayage:'))) return true;
   return keysFor(module).some((m) => permissions.some((p) => p.startsWith(`${m}:`)));
 }
 
 function tenantHas(enabled: readonly string[] | null | undefined, module: string): boolean {
   if (!enabled || enabled.length === 0) return true;
+  if (module === 'logistics' && (enabled.includes('logistics') || enabled.includes('drayage') || enabled.includes('port-drayage') || enabled.includes('container-drayage'))) return true;
   return keysFor(module).some((m) => enabled.includes(m));
 }
 
