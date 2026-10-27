@@ -261,7 +261,7 @@ export const MODULES: ModuleDef[] = [
           { label: 'Payments',                href: '/logistics/drayage/payments',           icon: DollarSign },
           { label: 'Analytics',               href: '/logistics/drayage/analytics',          icon: BarChart3 },
           { label: 'Trailers',                href: '/logistics/drayage/trailers',           icon: Truck },
-          { label: 'Terminal Map',            href: '/logistics/drayage/terminal-map',       icon: MapPin },
+          { label: 'Terminal & Consignee',    href: '/logistics/drayage/terminal-map',       icon: MapPin },
           { label: 'Reports',                 href: '/logistics/drayage/reports',            icon: FileText },
         ],
       },

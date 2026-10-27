@@ -20,7 +20,7 @@ const DRAYAGE_TABS = [
   { href: '/logistics/drayage/payments', label: 'Payments', icon: Wallet },
   { href: '/logistics/drayage/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/logistics/drayage/trailers', label: 'Trailers', icon: Truck },
-  { href: '/logistics/drayage/terminal-map', label: 'Terminal Map', icon: MapPin },
+  { href: '/logistics/drayage/terminal-map', label: 'Terminal & Consignee', icon: MapPin },
   { href: '/logistics/drayage/reports', label: 'Reports', icon: FileSpreadsheet },
 ];
 
