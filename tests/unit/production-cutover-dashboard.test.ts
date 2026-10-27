@@ -241,18 +241,27 @@ describe('Phase 10: Production Cutover, Dashboard & Live Verification', () => {
       expect(getJson.ok).toBe(true);
       expect(getJson.data.tenantId).toBe(tenantId);
 
-      // 2. PUT updated policy
+      // 2. PUT updated policy — changing the AI policy needs a tenant admin
+      const policyBody = JSON.stringify({
+        dailyBudgetAed: 225.0,
+        requireHumanApprovalThresholdAed: 500.0,
+        disabledAgents: ['driver-coaching'],
+      });
+      const deniedRes = await putPolicy(new NextRequest('http://localhost/api/agents/policy', {
+        method: 'PUT',
+        headers: { 'x-tenant-id': tenantId, 'x-user-role': 'DRIVER', 'Content-Type': 'application/json' },
+        body: policyBody,
+      }));
+      expect(deniedRes.status).toBe(403);
+
       const putReq = new NextRequest('http://localhost/api/agents/policy', {
         method: 'PUT',
         headers: {
           'x-tenant-id': tenantId,
+          'x-user-role': 'TENANT_ADMIN',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          dailyBudgetAed: 225.0,
-          requireHumanApprovalThresholdAed: 500.0,
-          disabledAgents: ['driver-coaching'],
-        }),
+        body: policyBody,
       });
 
       const putRes = await putPolicy(putReq);
