@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { UserCog, UserPlus } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import PhoneCell from '@/components/ui/PhoneCell';
+import PhoneInput from '@/components/ui/PhoneInput';
 
 interface StaffMember {
   id: string; employeeId?: string; name: string; department?: string; designation?: string;

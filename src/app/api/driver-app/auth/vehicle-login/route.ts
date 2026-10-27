@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
           { licensePlate: { contains: vehicleIdentifier, mode: 'insensitive' } },
           { vehicleCode: { contains: vehicleIdentifier, mode: 'insensitive' } },
           ...(cleanQuery.length >= 3 ? [
-            { licensePlate: { contains: cleanQuery, mode: 'insensitive' } },
+            { licensePlate: { contains: cleanQuery, mode: 'insensitive' as const } },
           ] : []),
         ],
       },

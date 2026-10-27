@@ -701,7 +701,6 @@ export const arabicLabels: Record<string, string> = {
   'Seat availability':      'توفر المقاعد',
   'Allocations':            'التخصيصات',
   'Fleet Allocations':      'تخصيصات الأسطول',
-  'Fleet Operations':       'عمليات الأسطول',
   'Control tower':          'برج المراقبة والتحكم',
   'Dispatch board':         'لوحة الترحيل',
   'Freight marketplace':    'سوق الشحن',
