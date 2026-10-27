@@ -262,7 +262,6 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
     modelProvider: 'openai',
     inputTokens: aiTokensUsed,
     outputTokens: 0,
-    cachedTokens: avoidedTokens,
     costAed: aiCostAed,
     estimatedSavingsAed: (avoidedTokens / 1000) * 0.005 * 3.6725,
     businessOutcome: 'NO_ACTION_REQUIRED',

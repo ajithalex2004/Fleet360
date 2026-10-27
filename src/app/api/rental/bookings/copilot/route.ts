@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { generateRentalSuggestion } from '@/lib/agents/rental-copilot/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { governCopilot } from '@/lib/agents/copilot-governance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -44,7 +45,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await generateRentalSuggestion(parsed.data.brief);
+    const governed = await governCopilot({
+      tenantId,
+      agentId: 'rental-copilot',
+      eventType: 'rental.copilot_requested',
+      modelAlias: 'STANDARD_REASONING',
+    }, () => generateRentalSuggestion(parsed.data.brief));
+    if (!governed.ok) {
+      return NextResponse.json({ error: governed.reason }, { status: 403 });
+    }
+    const result = governed.value;
     if (!result.ok) {
       return NextResponse.json({ error: result.error, detail: result.detail }, { status: 502 });
     }

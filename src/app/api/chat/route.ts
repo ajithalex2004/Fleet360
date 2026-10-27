@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { transformStream } from "@crayonai/stream";
 import { DBMessage, getMessageStore } from "./messageStore";
-import { logInteraction } from "@/lib/agents/chat-widget/agent";
+import { checkRunAllowed, recordChatTurn } from "@/lib/agents/chat-governance";
 
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -12,6 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const refusal = await checkRunAllowed(tenantId, "chat-widget");
+  if (refusal) {
+    return NextResponse.json({ error: refusal }, { status: 403 });
+  }
 
   const t0 = Date.now();
   const { prompt, threadId, responseId } = (await req.json()) as {
@@ -69,9 +74,12 @@ export async function POST(req: NextRequest) {
           content: message,
           id: responseId,
         });
-        // Log to agent_runs for ecosystem visibility (fire-and-forget)
+        // Record the turn for this tenant (agent_runs + daily ROI), fire-and-forget
         const toolsUsed = message.includes('createBooking') ? ['createBooking'] : [];
-        logInteraction({
+        recordChatTurn({
+          tenantId,
+          agentId: "chat-widget",
+          eventType: "chat.message_sent",
           threadId,
           messageCount: messageStore.getOpenAICompatibleMessageList().length,
           toolsUsed,

@@ -146,6 +146,9 @@ async function _doInit(): Promise<void> {
         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CONSTRAINT uq_agent_roi_tenant_agent_date UNIQUE (tenant_id, agent_id, period_date)
       );
+      -- Accepted runs per day; acceptance_rate_pct = accepted / total
+      -- (prisma/migrations/20261101110000_agent_roi_accepted_executions).
+      ALTER TABLE agent_roi_metrics ADD COLUMN IF NOT EXISTS accepted_executions INT NOT NULL DEFAULT 0;
 
       CREATE INDEX IF NOT EXISTS idx_agent_roi_tenant ON agent_roi_metrics(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_agent_roi_agent  ON agent_roi_metrics(agent_id);
@@ -472,6 +475,11 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_tenant_status ON agent_approvals(tenant_id, status);
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_agent_id      ON agent_approvals(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_created_at    ON agent_approvals(created_at DESC);
+      -- One PENDING item per tenant/agent/action/entity; createApprovalItem
+      -- upserts against it (prisma/migrations/20261101090000_agent_approvals_pending_dedup).
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_approvals_pending_dedup
+        ON agent_approvals(tenant_id, agent_id, action_type, entity_id)
+        WHERE status = 'PENDING';
 
       -- ── whatsapp_messages ──────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS whatsapp_messages (

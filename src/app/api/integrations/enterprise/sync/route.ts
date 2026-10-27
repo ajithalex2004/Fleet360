@@ -10,7 +10,9 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
-import { ENTERPRISE_BRIDGE_AGENT } from '@/lib/agents/enterprise-bridge/agent';
+// dispatch(), not the agent's run(): the budget caps, circuit breaker and
+// disabledAgents apply, and the run is recorded in agent_runs.
+import { dispatch } from '@/lib/agents/orchestrator';
 import { CanonicalEntityType } from '@/lib/agents/types';
 import { withAuditedAction } from '@/lib/audited-action';
 
@@ -40,7 +42,7 @@ async function handlePOST(req: NextRequest) {
         );
       }
 
-      const runResult = await ENTERPRISE_BRIDGE_AGENT.run({
+      const runResult = await dispatch({
         agent_id: 'enterprise-bridge',
         tenant_id: tenantId,
         event_type: 'enterprise.sync',

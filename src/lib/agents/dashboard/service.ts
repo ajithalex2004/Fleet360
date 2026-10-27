@@ -9,7 +9,6 @@
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '../schema';
 import { policyService, TenantPolicy } from '../governance';
-import { routingIntelligence } from '@/lib/routing/intelligence-service';
 
 interface RunStatsRow {
   totalRuns: number;
@@ -38,6 +37,13 @@ interface ApprovalQueueRow {
   totalPendingFinancialImpactAed: number;
 }
 
+interface CapabilityTierRow {
+  tier: string;
+  callCount: number;
+  tokens: bigint | number;
+  costAed: number;
+}
+
 interface EvaluationMetricsRow {
   avgScore: number;
   totalEvaluations: number;
@@ -56,10 +62,11 @@ export interface DashboardRoiSummary {
   totalAvoidedCostUsd: number;
   netFinancialGainAed: number;
   roiMultiplier: number;
-  matrixCacheHits: number;
-  matrixCacheMisses: number;
-  matrixCacheHitRatePct: number;
-  savedRoutingCostAed: number;
+  /** Not measured yet (no hit/miss counters; the cache is not per tenant). */
+  matrixCacheHits: number | null;
+  matrixCacheMisses: number | null;
+  matrixCacheHitRatePct: number | null;
+  savedRoutingCostAed: number | null;
 }
 
 export interface AgentPerformanceMetric {
@@ -150,19 +157,13 @@ export class AIDashboardService {
       totalAvoidedCostUsd = totalAvoidedCostAed / 3.6725;
     }
 
-    // 3. Routing Matrix Intelligence Cache Stats
-    const matrixStats = routingIntelligence.getMatrixStats();
-    const totalMatrixRequests = matrixStats.l1Hits + matrixStats.l2Hits + matrixStats.misses;
-    const cacheHits = matrixStats.l1Hits + matrixStats.l2Hits;
-    const cacheHitRatePct = totalMatrixRequests > 0
-      ? parseFloat(((cacheHits / totalMatrixRequests) * 100).toFixed(2))
-      : 0;
-    // Estimated saved cost: 0.02 AED per matrix route call avoided
-    const savedRoutingCostAed = parseFloat((cacheHits * 0.02).toFixed(2));
-
-    const netFinancialGainAed = parseFloat(((totalAvoidedCostAed + savedRoutingCostAed) - totalCostAed).toFixed(2));
+    // 3. Routing matrix cache. Not reported: there are no hit/miss counters
+    // (getMatrixStats() used to report cache size x 3 as hits and no
+    // misses), and the cache is process-wide, not per tenant, so no saving
+    // derived from it can be attributed to this tenant's ROI.
+    const netFinancialGainAed = parseFloat((totalAvoidedCostAed - totalCostAed).toFixed(2));
     const roiMultiplier = totalCostAed > 0
-      ? parseFloat(((totalAvoidedCostAed + savedRoutingCostAed) / totalCostAed).toFixed(2))
+      ? parseFloat((totalAvoidedCostAed / totalCostAed).toFixed(2))
       : totalAvoidedCostAed > 0 ? 100.0 : 1.0;
 
     // 4. Per-Agent Breakdown
@@ -192,33 +193,32 @@ export class AIDashboardService {
       lastRunAt: r.lastRunAt ?? null,
     }));
 
-    // 5. Capability Tier Breakdown
-    const capabilityBreakdown: CapabilityBreakdown[] = [
-      {
-        tier: 'ECONOMY_TEXT',
-        callCount: Math.round(totalRuns * 0.7),
-        estimatedTokens: Math.round(totalTokens * 0.65),
-        costAed: parseFloat((totalCostAed * 0.3).toFixed(2)),
-      },
-      {
-        tier: 'STANDARD_REASONING',
-        callCount: Math.round(totalRuns * 0.2),
-        estimatedTokens: Math.round(totalTokens * 0.25),
-        costAed: parseFloat((totalCostAed * 0.5).toFixed(2)),
-      },
-      {
-        tier: 'VISION_FAST',
-        callCount: Math.round(totalRuns * 0.1),
-        estimatedTokens: Math.round(totalTokens * 0.1),
-        costAed: parseFloat((totalCostAed * 0.2).toFixed(2)),
-      },
-    ];
+    // 5. Capability Tier Breakdown — measured per model tier from agent_runs
+    // (it used to be fixed 70/20/10-style splits of the totals).
+    const tierRows = await prisma.$queryRawUnsafe<CapabilityTierRow[]>(
+      `SELECT COALESCE(model_alias, 'DETERMINISTIC_RULES') AS "tier",
+              COUNT(*)::int AS "callCount",
+              COALESCE(SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)), 0)::bigint AS "tokens",
+              COALESCE(SUM(cost_aed), 0)::float8 AS "costAed"
+         FROM agent_runs
+        WHERE tenant_id = $1
+        GROUP BY 1
+        ORDER BY "costAed" DESC, "callCount" DESC`,
+      tenantId,
+    ).catch(() => []);
+
+    const capabilityBreakdown: CapabilityBreakdown[] = (tierRows || []).map((r) => ({
+      tier: String(r.tier),
+      callCount: Number(r.callCount || 0),
+      estimatedTokens: Number(r.tokens || 0),
+      costAed: parseFloat(Number(r.costAed || 0).toFixed(2)),
+    }));
 
     // 6. Approval Queue Summary
     const approvalRows = await prisma.$queryRawUnsafe<ApprovalQueueRow[]>(
       `SELECT 
          COUNT(CASE WHEN status = 'PENDING' THEN 1 END)::int AS "pendingCount",
-         COUNT(CASE WHEN status = 'APPROVED' THEN 1 END)::int AS "approvedCount",
+         COUNT(CASE WHEN status IN ('APPROVED', 'APPROVED_MANUAL') THEN 1 END)::int AS "approvedCount",
          COUNT(CASE WHEN status = 'REJECTED' THEN 1 END)::int AS "rejectedCount",
          COALESCE(SUM(CASE WHEN status = 'PENDING' THEN financial_impact_aed ELSE 0 END), 0)::float8 AS "totalPendingFinancialImpactAed"
        FROM agent_approvals
@@ -286,10 +286,10 @@ export class AIDashboardService {
         totalAvoidedCostUsd: parseFloat(totalAvoidedCostUsd.toFixed(2)),
         netFinancialGainAed,
         roiMultiplier,
-        matrixCacheHits: cacheHits,
-        matrixCacheMisses: matrixStats.misses,
-        matrixCacheHitRatePct: cacheHitRatePct,
-        savedRoutingCostAed,
+        matrixCacheHits: null,
+        matrixCacheMisses: null,
+        matrixCacheHitRatePct: null,
+        savedRoutingCostAed: null,
       },
       agentBreakdown,
       capabilityBreakdown,

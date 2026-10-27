@@ -667,15 +667,11 @@ export class RoutingIntelligenceService {
   }
 
   /**
-   * Get In-Memory Matrix Cache Telemetry Stats
+   * In-memory matrix cache size. Hits and misses are not counted, so none are
+   * reported (this used to return size x 3 as "hits" and 0 misses).
    */
-  getMatrixStats(): { l1Hits: number; l2Hits: number; misses: number; totalEntries: number } {
-    return {
-      l1Hits: MEMORY_L1_CACHE.size > 0 ? MEMORY_L1_CACHE.size * 3 : 0,
-      l2Hits: 0,
-      misses: 0,
-      totalEntries: MEMORY_L1_CACHE.size,
-    };
+  getMatrixStats(): { totalEntries: number } {
+    return { totalEntries: MEMORY_L1_CACHE.size };
   }
 }
 

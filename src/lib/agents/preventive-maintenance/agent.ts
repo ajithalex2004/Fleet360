@@ -27,6 +27,7 @@ import {
 import { calculateVehicleBurnDown, VehiclePMInput } from './forecaster';
 import { recommendLowestImpactSlot, TripScheduleWindow } from './slot-optimizer';
 import { ensureAgentSchema } from '../schema';
+import { policyService } from '../governance';
 
 interface VehicleDbRow {
   id: string;
@@ -425,31 +426,24 @@ async function runForTenant(
     // Stage in agent_approvals if DUE_SOON (<= 7 days)
     if (forecast.urgencyLevel === 'DUE_SOON' || forecast.urgencyLevel === 'OVERDUE') {
       try {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO agent_approvals (
-            tenant_id, agent_id, entity_type, entity_id, action_type,
-            title, description, financial_impact_aed, proposed_payload,
-            status, requested_autonomy
-          ) VALUES (
-            $1, 'preventive-maintenance', 'VEHICLE', $2, 'SCHEDULE_PM_SLOT',
-            $3, $4, $5, $6::jsonb, 'PENDING', 'L3'
-          )
-          ON CONFLICT DO NOTHING
-        `,
-          tenantId,
-          forecast.vehicleId,
-          `Schedule PM for ${forecast.vehicleCode}: ${forecast.targetServiceThreshold}`,
-          `${forecast.forecastNarrative} Recommended slot: ${forecast.recommendedSlot.slotDate} ${forecast.recommendedSlot.startTime} (${forecast.recommendedSlot.reasoning}).`,
-          burnDown.estimatedCostAed,
-          JSON.stringify({
+        // Joins this run's transaction (withTenantRls scope).
+        await policyService.createApprovalItem(tenantId, {
+          agentId: 'preventive-maintenance',
+          entityType: 'VEHICLE',
+          entityId: forecast.vehicleId,
+          actionType: 'SCHEDULE_PM_SLOT',
+          title: `Schedule PM for ${forecast.vehicleCode}: ${forecast.targetServiceThreshold}`,
+          description: `${forecast.forecastNarrative} Recommended slot: ${forecast.recommendedSlot.slotDate} ${forecast.recommendedSlot.startTime} (${forecast.recommendedSlot.reasoning}).`,
+          financialImpactAed: burnDown.estimatedCostAed,
+          payload: {
             vehicleId: forecast.vehicleId,
             vehicleCode: forecast.vehicleCode,
             serviceThreshold: forecast.targetServiceThreshold,
             slot: forecast.recommendedSlot,
             operations: burnDown.operationsNeeded,
             estimatedCostAed: burnDown.estimatedCostAed,
-          })
-        );
+          },
+        }, 'L3');
         actionsCreated++;
       } catch {
         // ignore

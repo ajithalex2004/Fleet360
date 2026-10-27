@@ -36,10 +36,10 @@ interface RoiSummary {
   totalAvoidedCostUsd: number;
   netFinancialGainAed: number;
   roiMultiplier: number;
-  matrixCacheHits: number;
-  matrixCacheMisses: number;
-  matrixCacheHitRatePct: number;
-  savedRoutingCostAed: number;
+  matrixCacheHits: number | null;
+  matrixCacheMisses: number | null;
+  matrixCacheHitRatePct: number | null;
+  savedRoutingCostAed: number | null;
 }
 
 interface AgentMetric {
@@ -69,7 +69,7 @@ interface ApprovalItem {
   title: string;
   description: string;
   financialImpactAed: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  status: 'PENDING' | 'APPROVED' | 'APPROVED_MANUAL' | 'REJECTED' | 'EXPIRED';
   requestedAutonomy: string;
   createdAt: string;
 }
@@ -113,6 +113,9 @@ export default function AIPlatformDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Outcome of the last review that did not simply apply: approved without
+  // an executor (carry it out manually) or approved but no longer applicable.
+  const [reviewNotice, setReviewNotice] = useState<{ tone: 'warn' | 'error'; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'governance' | 'agents'>('overview');
 
   const fetchDashboard = useCallback(async () => {
@@ -154,13 +157,18 @@ export default function AIPlatformDashboardPage() {
         body: JSON.stringify({
           approvalId,
           decision,
-          reviewerId: 'executive_operator',
           notes: `Action ${decision.toLowerCase()} via AI Governance Hub.`,
         }),
       });
-      if (res.ok) {
-        await fetchDashboard();
+      const body = await res.json().catch(() => null) as { executed?: boolean; message?: string; error?: string } | null;
+      if (!res.ok) {
+        setReviewNotice({ tone: 'error', text: body?.error ?? 'The review could not be saved.' });
+      } else if (body?.executed === false) {
+        setReviewNotice({ tone: 'warn', text: body.message ?? 'Approved, but not applied automatically.' });
+      } else {
+        setReviewNotice(null);
       }
+      await fetchDashboard();
     } catch (err) {
       console.error('Failed to submit approval review:', err);
     } finally {
@@ -312,7 +320,9 @@ export default function AIPlatformDashboardPage() {
                 {roi?.matrixCacheHitRatePct != null ? `${roi.matrixCacheHitRatePct.toFixed(1)}%` : '—'}
               </div>
               <p className="mt-1 text-xs text-cyan-400">
-                Saved AED {(roi?.savedRoutingCostAed ?? 0).toFixed(2)} in matrix API calls
+                {roi?.savedRoutingCostAed != null
+                  ? `Saved AED ${roi.savedRoutingCostAed.toFixed(2)} in matrix API calls`
+                  : 'Not measured yet'}
               </p>
             </div>
 
@@ -531,6 +541,22 @@ export default function AIPlatformDashboardPage() {
               </p>
             </Link>
           </div>
+        </div>
+      )}
+
+      {reviewNotice && (
+        <div
+          role="status"
+          className={`rounded-lg border px-4 py-3 text-sm flex items-start justify-between gap-4 ${
+            reviewNotice.tone === 'error'
+              ? 'border-red-500/30 bg-red-500/10 text-red-300'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+          }`}
+        >
+          <span>{reviewNotice.text}</span>
+          <button type="button" onClick={() => setReviewNotice(null)} className="text-xs opacity-70 hover:opacity-100">
+            Dismiss
+          </button>
         </div>
       )}
 

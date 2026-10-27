@@ -10,7 +10,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-import { PREVENTIVE_MAINTENANCE_AGENT } from '@/lib/agents/preventive-maintenance/agent';
+// dispatch(), not the agent's run(): the budget caps, circuit breaker and
+// disabledAgents apply, and the run is recorded in agent_runs.
+import { dispatch } from '@/lib/agents/orchestrator';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
       const body = await req.json().catch(() => ({}));
       const vehicleId = body.vehicleId;
 
-      const result = await PREVENTIVE_MAINTENANCE_AGENT.run({
+      const result = await dispatch({
         agent_id: 'preventive-maintenance',
         event_type: 'manual.trigger',
         tenant_id: tenantId,

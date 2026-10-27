@@ -387,21 +387,15 @@ Provide a concise 2-sentence executive briefing highlighting immediate actions r
     const tenantPolicy = await policyService.getTenantPolicy(tenantId);
     for (const item of highRiskRows) {
       if (item.estimatedSavingsAed >= (tenantPolicy.requireHumanApprovalThresholdAed ?? 200)) {
-        await prisma.$executeRawUnsafe(`
-          INSERT INTO agent_approvals (
-            tenant_id, agent_id, entity_type, entity_id, action_type,
-            title, description, financial_impact_aed, proposed_payload, requested_autonomy
-          ) VALUES (
-            $1, 'staff-transport-demand', 'ROUTE_SHIFT', $2, 'SPAWN_EXTRA_TRIP',
-            $3, $4, $5, $6::jsonb, 'L2'
-          )
-        `,
-          tenantId,
-          `${item.routeId}-${item.shiftType}-${item.dayOfWeek}`,
-          `Spawn Supplemental Bus: ${item.routeName} (${item.shiftType})`,
-          `Capacity overload detected (${item.projectedPax} pax / ${item.vehicleCapacity} seats). Schedule an additional ${item.suggestedVehicleSize} trip.`,
-          item.estimatedSavingsAed,
-          JSON.stringify({
+        await policyService.createApprovalItem(tenantId, {
+          agentId: 'staff-transport-demand',
+          entityType: 'ROUTE_SHIFT',
+          entityId: `${item.routeId}-${item.shiftType}-${item.dayOfWeek}`,
+          actionType: 'SPAWN_EXTRA_TRIP',
+          title: `Spawn Supplemental Bus: ${item.routeName} (${item.shiftType})`,
+          description: `Capacity overload detected (${item.projectedPax} pax / ${item.vehicleCapacity} seats). Schedule an additional ${item.suggestedVehicleSize} trip.`,
+          financialImpactAed: item.estimatedSavingsAed,
+          payload: {
             routeId: item.routeId,
             routeName: item.routeName,
             shiftType: item.shiftType,
@@ -409,8 +403,8 @@ Provide a concise 2-sentence executive briefing highlighting immediate actions r
             departureTime: SHIFT_DEFAULT_TIMES[item.shiftType] || '07:00',
             suggestedVehicleSize: item.suggestedVehicleSize,
             projectedPax: item.projectedPax,
-          })
-        );
+          },
+        }, 'L2');
         actionsCreated++;
       }
     }
