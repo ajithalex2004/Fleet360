@@ -202,6 +202,10 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_risk_level  ON fleet_risk_scores(risk_level);
       CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_risk_score  ON fleet_risk_scores(risk_score DESC);
       CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_scored_at   ON fleet_risk_scores(scored_at DESC);
+      -- tenant_id + index mirror prisma/migrations/20261017090000 (and 20260905000000
+      -- for route_optimisation_results); the default stamps the RLS tenant.
+      ALTER TABLE fleet_risk_scores ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_tenant_id ON fleet_risk_scores(tenant_id);
 
       -- ── agent_anomaly_flags (ai schema) ───────────────────────────────────────
       CREATE TABLE IF NOT EXISTS ai.agent_anomaly_flags (
@@ -242,8 +246,13 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_stream      ON ai.agent_anomaly_flags(stream_type);
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON ai.agent_anomaly_flags(created_at DESC);
       
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup
-        ON ai.agent_anomaly_flags(entity_id, detector_id)
+      -- Open-flag dedup is per tenant: two tenants can share an entity_id.
+      -- The new index matches prisma/migrations/20261031090000_anomaly_flags_tenant_dedup.
+      -- Migrated databases still have the old index until the follow-up
+      -- migration drops it; a fresh database never needs it.
+      DROP INDEX IF EXISTS ai.idx_anomaly_flags_open_dedup;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup_tenant
+        ON ai.agent_anomaly_flags(tenant_id, entity_id, detector_id)
         WHERE status = 'OPEN';
 
       -- ── bus_ops_plan_recommendations ───────────────────────────────────────────
@@ -303,6 +312,10 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_route_opt_status     ON route_optimisation_results(status);
       CREATE INDEX IF NOT EXISTS idx_route_opt_saved_pct  ON route_optimisation_results(distance_saved_pct DESC);
       CREATE INDEX IF NOT EXISTS idx_route_opt_updated_at ON route_optimisation_results(updated_at DESC);
+      -- tenant_id + index mirror prisma/migrations/20261017090000 (and 20260905000000
+      -- for route_optimisation_results); the default stamps the RLS tenant.
+      ALTER TABLE route_optimisation_results ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE INDEX IF NOT EXISTS idx_route_optimisation_results_tenant_id ON route_optimisation_results(tenant_id);
 
       -- ── incident_triage_assessments ────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS incident_triage_assessments (
@@ -330,6 +343,10 @@ async function _doInit(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_incident_triage_incident_id ON incident_triage_assessments(incident_id);
       CREATE INDEX IF NOT EXISTS idx_incident_triage_ai_severity ON incident_triage_assessments(ai_severity);
       CREATE INDEX IF NOT EXISTS idx_incident_triage_assessed_at ON incident_triage_assessments(assessed_at DESC);
+      -- tenant_id + index mirror prisma/migrations/20261017090000 (and 20260905000000
+      -- for route_optimisation_results); the default stamps the RLS tenant.
+      ALTER TABLE incident_triage_assessments ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE INDEX IF NOT EXISTS idx_incident_triage_assessments_tenant_id ON incident_triage_assessments(tenant_id);
 
       -- ── dispatch_optimiser_recommendations ─────────────────────────────────────
       CREATE TABLE IF NOT EXISTS dispatch_optimiser_recommendations (
@@ -355,6 +372,10 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_dispatch_opt_status     ON dispatch_optimiser_recommendations(status);
       CREATE INDEX IF NOT EXISTS idx_dispatch_opt_score      ON dispatch_optimiser_recommendations(composite_score DESC);
       CREATE INDEX IF NOT EXISTS idx_dispatch_opt_created_at ON dispatch_optimiser_recommendations(created_at DESC);
+      -- tenant_id + index mirror prisma/migrations/20261017090000 (and 20260905000000
+      -- for route_optimisation_results); the default stamps the RLS tenant.
+      ALTER TABLE dispatch_optimiser_recommendations ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE INDEX IF NOT EXISTS idx_dispatch_optimiser_recommendations_tenant_id ON dispatch_optimiser_recommendations(tenant_id);
 
       -- ── driver_coaching_plans ──────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS driver_coaching_plans (
@@ -382,6 +403,10 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_coaching_driver_id  ON driver_coaching_plans(driver_id);
       CREATE INDEX IF NOT EXISTS idx_coaching_week_label ON driver_coaching_plans(week_label);
       CREATE INDEX IF NOT EXISTS idx_coaching_created_at ON driver_coaching_plans(created_at DESC);
+      -- tenant_id + index mirror prisma/migrations/20261017090000 (and 20260905000000
+      -- for route_optimisation_results); the default stamps the RLS tenant.
+      ALTER TABLE driver_coaching_plans ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE INDEX IF NOT EXISTS idx_driver_coaching_plans_tenant_id ON driver_coaching_plans(tenant_id);
 
       -- ── demand_forecasts ───────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS demand_forecasts (

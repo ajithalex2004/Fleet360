@@ -68,6 +68,20 @@ describe('Phase 8: Multi-Tenant Policy, Autonomy Levels & Human-in-the-Loop Gove
       expect(updated.disabledAgents).toContain('incident-triage');
       expect(prisma.$executeRawUnsafe).toHaveBeenCalled();
     });
+
+    it('ignores a tenantId in the updates and writes only the caller tenant row', async () => {
+      const { prisma } = await import('@/lib/prisma');
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValueOnce([]);
+
+      // A non-literal object, as a parsed request body would be: the extra
+      // tenantId passes the type check, just as it would at runtime.
+      const hostile = { tenantId: 'tenant-victim', circuitBreakerTriggered: true, disabledAgents: ['*'] };
+      const updated = await policyService.updateTenantPolicy('tenant-attacker', hostile);
+
+      expect(updated.tenantId).toBe('tenant-attacker');
+      const call = vi.mocked(prisma.$executeRawUnsafe).mock.calls.at(-1);
+      expect(call?.[1]).toBe('tenant-attacker');
+    });
   });
 
   describe('Autonomy Level Hierarchy & Demotion Logic', () => {
