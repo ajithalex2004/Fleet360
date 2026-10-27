@@ -88,6 +88,7 @@ export default function DrayageCreateJobsPage() {
 
   // Quick Warehouse / Destination Creation Modal State
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [newWarehouseCustomerId, setNewWarehouseCustomerId] = useState('');
   const [newWarehouseName, setNewWarehouseName] = useState('');
   const [newWarehouseZone, setNewWarehouseZone] = useState('JAFZA South');
   const [newWarehouseAddress, setNewWarehouseAddress] = useState('');
@@ -150,7 +151,8 @@ export default function DrayageCreateJobsPage() {
       showToast('error', 'Please enter destination warehouse name');
       return;
     }
-    const currentCustomer = customers.find((c) => c.id === selectedCustomerId);
+    const targetCustomerId = newWarehouseCustomerId || selectedCustomerId || null;
+    const currentCustomer = customers.find((c) => c.id === targetCustomerId);
     try {
       setSavingWarehouse(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -158,8 +160,8 @@ export default function DrayageCreateJobsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_warehouse',
-          customerId: selectedCustomerId || null,
-          customerName: currentCustomer?.name || 'Enterprise Client',
+          customerId: targetCustomerId,
+          customerName: currentCustomer?.name || (targetCustomerId ? 'Enterprise Client' : 'General / Shared Hub'),
           name: newWarehouseName.trim(),
           zone: newWarehouseZone.trim() || 'JAFZA South',
           address: newWarehouseAddress.trim() || 'Dubai, UAE',
@@ -173,8 +175,8 @@ export default function DrayageCreateJobsPage() {
 
       const createdWh: WarehouseOption = {
         id: data.id,
-        customerId: selectedCustomerId || null,
-        customerName: currentCustomer?.name || 'Enterprise Client',
+        customerId: targetCustomerId,
+        customerName: currentCustomer?.name || (targetCustomerId ? 'Enterprise Client' : 'General / Shared Hub'),
         name: newWarehouseName.trim(),
         zone: newWarehouseZone.trim() || 'JAFZA South',
       };
@@ -188,7 +190,7 @@ export default function DrayageCreateJobsPage() {
       setNewWarehousePhone('');
       setNewWarehouseRamps(4);
       invalidateDrayageClientCache();
-      showToast('success', `Destination "${createdWh.name}" added and selected!`);
+      showToast('success', `Destination "${createdWh.name}" added and mapped!`);
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error creating warehouse');
     } finally {
@@ -483,10 +485,26 @@ export default function DrayageCreateJobsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             {/* Customer */}
             <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Customer</label>
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-[var(--text-muted)]">Customer (Client)</label>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(true)}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
+                >
+                  <Plus className="w-3 h-3" /> New Customer
+                </button>
+              </div>
               <select
                 value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                onChange={(e) => {
+                  const newCustId = e.target.value;
+                  setSelectedCustomerId(newCustId);
+                  const firstMapped = warehouses.find((w) => w.customerId === newCustId);
+                  if (firstMapped) {
+                    setSelectedWarehouseId(firstMapped.id);
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
               >
                 {customers.map((c) => (
@@ -515,17 +533,49 @@ export default function DrayageCreateJobsPage() {
 
             {/* Client Warehouse Destination */}
             <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Client Destination Warehouse / Ramp</label>
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-[var(--text-muted)]">Client Destination Warehouse / Ramp</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewWarehouseCustomerId(selectedCustomerId);
+                    setShowWarehouseModal(true);
+                  }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
+                >
+                  <Plus className="w-3 h-3" /> New Destination
+                </button>
+              </div>
               <select
                 value={selectedWarehouseId}
                 onChange={(e) => setSelectedWarehouseId(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
               >
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} ({w.zone})
-                  </option>
-                ))}
+                {(() => {
+                  const mapped = warehouses.filter((w) => Boolean(w.customerId && w.customerId === selectedCustomerId));
+                  const others = warehouses.filter((w) => !w.customerId || w.customerId !== selectedCustomerId);
+                  const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Customer';
+                  return (
+                    <>
+                      {mapped.length > 0 && (
+                        <optgroup label={`Mapped to ${selCustName}`}>
+                          {mapped.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              📍 {w.name} ({w.zone})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label={mapped.length > 0 ? 'Other / Shared UAE Hubs' : 'All Facilities & Hubs'}>
+                        {others.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.zone}){w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub' ? ` [${w.customerName}]` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  );
+                })()}
               </select>
             </div>
 
@@ -952,6 +1002,27 @@ export default function DrayageCreateJobsPage() {
             </div>
 
             <form onSubmit={handleCreateWarehouse} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Linked Customer (Client / Consignee)
+                </label>
+                <select
+                  value={newWarehouseCustomerId}
+                  onChange={(e) => setNewWarehouseCustomerId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                >
+                  <option value="">General / Shared Hub (All Customers)</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[var(--text-muted)]">
+                  Mapping this facility to a specific client pins it automatically when booking containers for them.
+                </p>
+              </div>
+
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">
                   Warehouse / Facility Name *
