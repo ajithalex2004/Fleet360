@@ -261,10 +261,28 @@ export interface DrayageAlertItem {
 
 let schemaBootstrapped = false;
 
+async function safeDdl(db: DrayageDbClient, sql: string): Promise<void> {
+  try {
+    await db.$executeRawUnsafe(sql);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes('42501') ||
+      msg.includes('permission denied') ||
+      msg.includes('already exists') ||
+      msg.includes('duplicate key')
+    ) {
+      return;
+    }
+    console.warn('[Drayage] Schema DDL notice:', msg);
+  }
+}
+
 export async function ensureDrayageSchema(db: DrayageDbClient) {
   if (schemaBootstrapped) return;
+  schemaBootstrapped = true;
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_terminals (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -284,7 +302,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_warehouses (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -303,7 +321,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_trailers (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -321,7 +339,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_containers (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -352,7 +370,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_jobs (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -398,7 +416,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -421,7 +439,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_geofences (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -437,7 +455,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_status_logs (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -450,7 +468,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_messages (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -464,7 +482,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
-  await db.$executeRawUnsafe(`
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_alerts (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
