@@ -481,158 +481,201 @@ export default function DrayageCreateJobsPage() {
       {/* Main Creation Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Shipment Details Panel */}
-        <Panel title="Shipment & Commercial Parameters" icon={FileText} accent="blue">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-            {/* Customer */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="font-semibold text-[var(--text-muted)]">Consignor (Customer / Shipper)</label>
-                <button
-                  type="button"
-                  onClick={() => setShowCustomerModal(true)}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
-                >
-                  <Plus className="w-3 h-3" /> New Consignor
-                </button>
+        <Panel
+          title="Shipment & Commercial Parameters"
+          subtitle="Configure haulage route stakeholders, consignor billing account, consignee destination, and commercial rates"
+          icon={FileText}
+          accent="blue"
+        >
+          <div className="space-y-5 text-xs">
+            {/* ── Tier 1: Haulage Route & Stakeholders (3 Spacious Columns) ── */}
+            <div className="bg-[var(--bg-main)]/60 rounded-xl p-4 border border-[var(--border-subtle)] space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)]">
+                <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                <span>Haulage Stakeholders & Port Route</span>
               </div>
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => {
-                  const newCustId = e.target.value;
-                  setSelectedCustomerId(newCustId);
-                  const firstMapped = warehouses.find((w) => w.customerId === newCustId);
-                  if (firstMapped) {
-                    setSelectedWarehouseId(firstMapped.id);
-                  }
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-              >
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            {/* Port Terminal */}
-            <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Port Terminal of Origin/Return</label>
-              <select
-                value={selectedTerminalId}
-                onChange={(e) => setSelectedTerminalId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-              >
-                {terminals.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.portName})
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Consignor (Customer / Shipper) */}
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-[var(--text-main)] block">
+                    Consignor <span className="font-normal text-[var(--text-muted)]">(Customer / Shipper)</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={selectedCustomerId}
+                      onChange={(e) => {
+                        const newCustId = e.target.value;
+                        setSelectedCustomerId(newCustId);
+                        const firstMapped = warehouses.find((w) => w.customerId === newCustId);
+                        if (firstMapped) {
+                          setSelectedWarehouseId(firstMapped.id);
+                        }
+                      }}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
+                    >
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomerModal(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white font-semibold text-xs shrink-0 transition-all shadow-sm"
+                      title="Create New Consignor Customer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>New</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)]">Bill-to account & commercial haulage contractor</p>
+                </div>
 
-            {/* Client Warehouse Destination */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="font-semibold text-[var(--text-muted)]">Consignee (Client Destination Warehouse / Ramp)</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewWarehouseCustomerId(selectedCustomerId);
-                    setShowWarehouseModal(true);
-                  }}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 transition-colors hover:underline"
-                >
-                  <Plus className="w-3 h-3" /> New Consignee Destination
-                </button>
+                {/* 2. Port Terminal */}
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-[var(--text-main)] block">
+                    Port Terminal <span className="font-normal text-[var(--text-muted)]">(Origin / Return Gate)</span>
+                  </label>
+                  <select
+                    value={selectedTerminalId}
+                    onChange={(e) => setSelectedTerminalId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
+                  >
+                    {terminals.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.portName})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-[var(--text-muted)]">Primary container yard gate-in & discharge facility</p>
+                </div>
+
+                {/* 3. Consignee (Client Destination Warehouse / Ramp) */}
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-[var(--text-main)] block">
+                    Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination / Ramp)</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={selectedWarehouseId}
+                      onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
+                    >
+                      {(() => {
+                        const mapped = warehouses.filter((w) => Boolean(w.customerId && w.customerId === selectedCustomerId));
+                        const others = warehouses.filter((w) => !w.customerId || w.customerId !== selectedCustomerId);
+                        const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Customer';
+                        return (
+                          <>
+                            {mapped.length > 0 && (
+                              <optgroup label={`Mapped Consignee Hubs for ${selCustName}`}>
+                                {mapped.map((w) => (
+                                  <option key={w.id} value={w.id}>
+                                    📍 {w.name} ({w.zone})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            <optgroup label={mapped.length > 0 ? 'Other Consignee Facilities & Shared Hubs' : 'All Consignee Facilities & Hubs'}>
+                              {others.map((w) => (
+                                <option key={w.id} value={w.id}>
+                                  {w.name} ({w.zone}){w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub' ? ` [${w.customerName}]` : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </>
+                        );
+                      })()}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewWarehouseCustomerId(selectedCustomerId);
+                        setShowWarehouseModal(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600 hover:text-white font-semibold text-xs shrink-0 transition-all shadow-sm"
+                      title="Add New Consignee Destination"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>New</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)]">Consignee offload ramp & electronic POD delivery point</p>
+                </div>
               </div>
-              <select
-                value={selectedWarehouseId}
-                onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-              >
-                {(() => {
-                  const mapped = warehouses.filter((w) => Boolean(w.customerId && w.customerId === selectedCustomerId));
-                  const others = warehouses.filter((w) => !w.customerId || w.customerId !== selectedCustomerId);
-                  const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Customer';
-                  return (
-                    <>
-                      {mapped.length > 0 && (
-                        <optgroup label={`Mapped Consignee Hubs for ${selCustName}`}>
-                          {mapped.map((w) => (
-                            <option key={w.id} value={w.id}>
-                              📍 {w.name} ({w.zone})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      <optgroup label={mapped.length > 0 ? 'Other Consignee Facilities & Shared Hubs' : 'All Consignee Facilities & Hubs'}>
-                        {others.map((w) => (
-                          <option key={w.id} value={w.id}>
-                            {w.name} ({w.zone}){w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub' ? ` [${w.customerName}]` : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </>
-                  );
-                })()}
-              </select>
             </div>
 
-            {/* Shipment Type */}
-            <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Shipment Type & Priority</label>
-              <div className="grid grid-cols-2 gap-2">
+            {/* ── Tier 2: Commercial Terms & Dispatch Classification (4 Distinct Columns) ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Shipment Type */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-[var(--text-muted)] block">Shipment Direction (FCL)</label>
                 <select
                   value={shipmentType}
                   onChange={(e) => setShipmentType(e.target.value as 'IMPORT' | 'EXPORT')}
-                  className="px-2 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
                 >
-                  <option value="IMPORT">IMPORT (FCL)</option>
-                  <option value="EXPORT">EXPORT</option>
+                  <option value="IMPORT">IMPORT (Discharge → Delivery)</option>
+                  <option value="EXPORT">EXPORT (Stuffing → Gate-In)</option>
                 </select>
+              </div>
+
+              {/* Priority */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-[var(--text-muted)] block">Dispatch Priority</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as 'STANDARD' | 'HIGH' | 'URGENT')}
-                  className="px-2 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
                 >
-                  <option value="STANDARD">Standard</option>
+                  <option value="STANDARD">Standard Haulage</option>
                   <option value="HIGH">High Priority</option>
-                  <option value="URGENT">Urgent (DO/Demurrage)</option>
+                  <option value="URGENT">Urgent (Demurrage Risk)</option>
                 </select>
+              </div>
+
+              {/* Contract Rate */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-[var(--text-muted)] block">Contract Rate (AED / Container)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={rateAmountAed}
+                    onChange={(e) => setRateAmountAed(Number(e.target.value))}
+                    className="w-full pl-3 pr-12 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
+                  />
+                  <span className="absolute right-3 top-2 text-[10px] text-[var(--text-muted)] font-mono font-bold select-none">AED</span>
+                </div>
+              </div>
+
+              {/* Driver Trip Allowance */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-[var(--text-muted)] block">Driver Trip Allowance (AED)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={driverAllowanceAed}
+                    onChange={(e) => setDriverAllowanceAed(Number(e.target.value))}
+                    className="w-full pl-3 pr-12 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
+                  />
+                  <span className="absolute right-3 top-2 text-[10px] text-[var(--text-muted)] font-mono font-bold select-none">AED</span>
+                </div>
               </div>
             </div>
 
-            {/* Rates & Driver Allowance */}
+            {/* ── Tier 3: Special Instructions / Port Notes (Full Width) ── */}
             <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Trip Contract Rate (AED per container)</label>
-              <input
-                type="number"
-                value={rateAmountAed}
-                onChange={(e) => setRateAmountAed(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Driver Trip Allowance (AED)</label>
-              <input
-                type="number"
-                value={driverAllowanceAed}
-                onChange={(e) => setDriverAllowanceAed(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="font-semibold text-[var(--text-muted)]">Special Instructions / Port Notes</label>
+              <label className="font-semibold text-[var(--text-muted)] block">
+                Special Instructions, Gate Passes & Port Operational Notes
+              </label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Gate pass required at DPW Gate 3; weighbridge ticket required upon discharge"
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                placeholder="e.g. Gate pass required at DPW Gate 3; weighbridge ticket required upon discharge; consignee ramp 4"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
               />
             </div>
           </div>
