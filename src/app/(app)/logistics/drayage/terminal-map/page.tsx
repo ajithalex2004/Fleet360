@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   MapPin, Anchor, Plus, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
   Search, ShieldCheck, Compass, Layers, ExternalLink, X, Map, Clock,
+  Warehouse, Building2, User, Phone,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import {
@@ -64,7 +65,20 @@ export default function DrayageTerminalMapPage() {
   const [loading, setLoading] = useState(!cached?.terminals);
   const [terminals, setTerminals] = useState<DrayageTerminal[]>(cached?.terminals || []);
   const [geofences, setGeofences] = useState<DrayageGeofence[]>(cached?.geofences || []);
+  const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
+  const [customers, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
   const [selectedTerminal, setSelectedTerminal] = useState<DrayageTerminal | null>(cached?.terminals?.[0] || null);
+
+  // Warehouse Modal State
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [newWhName, setNewWhName] = useState('');
+  const [newWhZone, setNewWhZone] = useState('JAFZA South');
+  const [newWhAddress, setNewWhAddress] = useState('');
+  const [newWhContact, setNewWhContact] = useState('');
+  const [newWhPhone, setNewWhPhone] = useState('');
+  const [newWhRamps, setNewWhRamps] = useState(4);
+  const [newWhCustomerId, setNewWhCustomerId] = useState('');
+  const [submittingWh, setSubmittingWh] = useState(false);
 
   // Geofence Modal
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
@@ -92,6 +106,8 @@ export default function DrayageTerminalMapPage() {
       const terms: DrayageTerminal[] = data?.terminals || [];
       setTerminals(terms);
       setGeofences(data?.geofences || []);
+      setWarehouses(data?.warehouses || []);
+      setCustomers(data?.customers || []);
       if (terms.length > 0 && !selectedTerminal) {
         setSelectedTerminal(terms[0]);
       }

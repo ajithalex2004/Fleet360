@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   PlusCircle, Package, Trash2, Plus, CheckCircle2, AlertTriangle, RefreshCw,
   Building2, MapPin, ShieldCheck, DollarSign, ArrowRight, FileText, UploadCloud,
+  Warehouse, X, User, Phone, Mail,
 } from 'lucide-react';
 import { PageHeader, Panel, KpiCard } from '@/components/ui/page-theme';
 import {
