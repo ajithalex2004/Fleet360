@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -9,6 +9,7 @@ import {
   Warehouse, X, User, Phone, Mail,
 } from 'lucide-react';
 import { PageHeader, Panel, KpiCard } from '@/components/ui/page-theme';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/SearchableSelect';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -395,6 +396,39 @@ export default function DrayageCreateJobsPage() {
     }
   };
 
+  // Memoized Searchable Options
+  const customerOptions = useMemo<SearchableSelectOption[]>(() => {
+    return customers.map((c) => ({
+      value: c.id,
+      label: c.name,
+      sublabel: 'Consignor / Merchant Account',
+    }));
+  }, [customers]);
+
+  const terminalOptions = useMemo<SearchableSelectOption[]>(() => {
+    return terminals.map((t) => ({
+      value: t.id,
+      label: `${t.name} (${t.portName})`,
+      sublabel: `${t.portName} • Gate Operations`,
+    }));
+  }, [terminals]);
+
+  const warehouseOptions = useMemo<SearchableSelectOption[]>(() => {
+    const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Consignor';
+    return warehouses.map((w) => {
+      const isMapped = Boolean(w.customerId && w.customerId === selectedCustomerId);
+      return {
+        value: w.id,
+        label: `${w.name} (${w.zone})`,
+        group: isMapped ? `Mapped Consignee Hubs for ${selCustName}` : `Other Consignee Facilities & Shared Hubs`,
+        sublabel: w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub'
+          ? `Linked to ${w.customerName}`
+          : undefined,
+        badge: w.zone,
+      };
+    });
+  }, [warehouses, selectedCustomerId, customers]);
+
   return (
     <div className="space-y-6">
       {/* Toast Alert */}
@@ -486,6 +520,7 @@ export default function DrayageCreateJobsPage() {
           subtitle="Configure haulage route stakeholders, consignor billing account, consignee destination, and commercial rates"
           icon={FileText}
           accent="blue"
+          className="overflow-visible"
         >
           <div className="space-y-5 text-xs">
             {/* ── Tier 1: Haulage Route & Stakeholders (3 Spacious Columns) ── */}
@@ -501,36 +536,27 @@ export default function DrayageCreateJobsPage() {
                   <label className="font-semibold text-[var(--text-main)] block">
                     Consignor <span className="font-normal text-[var(--text-muted)]">(Customer / Shipper)</span>
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={selectedCustomerId}
-                      onChange={(e) => {
-                        const newCustId = e.target.value;
-                        setSelectedCustomerId(newCustId);
-                        const firstMapped = warehouses.find((w) => w.customerId === newCustId);
-                        if (firstMapped) {
-                          setSelectedWarehouseId(firstMapped.id);
-                        }
-                      }}
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
-                    >
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomerModal(true)}
-                      className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white font-semibold text-xs shrink-0 transition-all shadow-sm"
-                      title="Create New Consignor Customer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>New</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-[var(--text-muted)]">Bill-to account & commercial haulage contractor</p>
+                  <SearchableSelect
+                    value={selectedCustomerId}
+                    onChange={(newCustId) => {
+                      setSelectedCustomerId(newCustId);
+                      const firstMapped = warehouses.find((w) => w.customerId === newCustId);
+                      if (firstMapped) {
+                        setSelectedWarehouseId(firstMapped.id);
+                      }
+                    }}
+                    options={customerOptions}
+                    placeholder="Search or select consignor customer..."
+                    searchPlaceholder="Type customer name, code..."
+                    addonAction={{
+                      label: 'New',
+                      icon: Plus,
+                      title: 'Create New Consignor Customer',
+                      variant: 'blue',
+                      onClick: () => setShowCustomerModal(true),
+                    }}
+                  />
+                  <p className="text-[10px] text-[var(--text-muted)]">Type to search commercial haulage bill-to accounts</p>
                 </div>
 
                 {/* 2. Port Terminal */}
@@ -538,17 +564,13 @@ export default function DrayageCreateJobsPage() {
                   <label className="font-semibold text-[var(--text-main)] block">
                     Port Terminal <span className="font-normal text-[var(--text-muted)]">(Origin / Return Gate)</span>
                   </label>
-                  <select
+                  <SearchableSelect
                     value={selectedTerminalId}
-                    onChange={(e) => setSelectedTerminalId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
-                  >
-                    {terminals.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.portName})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(newTermId) => setSelectedTerminalId(newTermId)}
+                    options={terminalOptions}
+                    placeholder="Search port terminal..."
+                    searchPlaceholder="Type port, DP World, terminal name..."
+                  />
                   <p className="text-[10px] text-[var(--text-muted)]">Primary container yard gate-in & discharge facility</p>
                 </div>
 
@@ -557,51 +579,24 @@ export default function DrayageCreateJobsPage() {
                   <label className="font-semibold text-[var(--text-main)] block">
                     Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination / Ramp)</span>
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={selectedWarehouseId}
-                      onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-medium"
-                    >
-                      {(() => {
-                        const mapped = warehouses.filter((w) => Boolean(w.customerId && w.customerId === selectedCustomerId));
-                        const others = warehouses.filter((w) => !w.customerId || w.customerId !== selectedCustomerId);
-                        const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Customer';
-                        return (
-                          <>
-                            {mapped.length > 0 && (
-                              <optgroup label={`Mapped Consignee Hubs for ${selCustName}`}>
-                                {mapped.map((w) => (
-                                  <option key={w.id} value={w.id}>
-                                    📍 {w.name} ({w.zone})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                            <optgroup label={mapped.length > 0 ? 'Other Consignee Facilities & Shared Hubs' : 'All Consignee Facilities & Hubs'}>
-                              {others.map((w) => (
-                                <option key={w.id} value={w.id}>
-                                  {w.name} ({w.zone}){w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub' ? ` [${w.customerName}]` : ''}
-                                </option>
-                              ))}
-                            </optgroup>
-                          </>
-                        );
-                      })()}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => {
+                  <SearchableSelect
+                    value={selectedWarehouseId}
+                    onChange={(newWhId) => setSelectedWarehouseId(newWhId)}
+                    options={warehouseOptions}
+                    placeholder="Search destination warehouse or ramp..."
+                    searchPlaceholder="Type warehouse name, JAFZA, DIC..."
+                    accent="emerald"
+                    addonAction={{
+                      label: 'New',
+                      icon: Plus,
+                      title: 'Add New Consignee Destination',
+                      variant: 'emerald',
+                      onClick: () => {
                         setNewWarehouseCustomerId(selectedCustomerId);
                         setShowWarehouseModal(true);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600 hover:text-white font-semibold text-xs shrink-0 transition-all shadow-sm"
-                      title="Add New Consignee Destination"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>New</span>
-                    </button>
-                  </div>
+                      },
+                    }}
+                  />
                   <p className="text-[10px] text-[var(--text-muted)]">Consignee offload ramp & electronic POD delivery point</p>
                 </div>
               </div>
@@ -1049,18 +1044,16 @@ export default function DrayageCreateJobsPage() {
                 <label className="font-semibold text-[var(--text-muted)]">
                   Linked Consignor (Customer / Shipper)
                 </label>
-                <select
+                <SearchableSelect
                   value={newWarehouseCustomerId}
-                  onChange={(e) => setNewWarehouseCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                >
-                  <option value="">General / Shared Facility (All Consignors)</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setNewWarehouseCustomerId(val)}
+                  options={[
+                    { value: '', label: 'General / Shared Facility (All Consignors)' },
+                    ...customerOptions,
+                  ]}
+                  placeholder="Select or search consignor customer..."
+                  searchPlaceholder="Type to filter consignors..."
+                />
                 <p className="text-[10px] text-[var(--text-muted)]">
                   Mapping this facility to a specific client pins it automatically when booking containers for them.
                 </p>

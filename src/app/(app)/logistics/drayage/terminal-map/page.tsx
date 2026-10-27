@@ -686,18 +686,17 @@ export default function DrayageTerminalMapPage() {
 
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">Linked Consignor (Customer / Shipper)</label>
-                <select
+                <SearchableSelect
                   value={newWhCustomerId}
-                  onChange={(e) => setNewWhCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                >
-                  <option value="">General / Shared Facility (All Consignors)</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setNewWhCustomerId(val)}
+                  options={[
+                    { value: '', label: 'General / Shared Facility (All Consignors)' },
+                    ...customers.map((c) => ({ value: c.id, label: c.name, sublabel: 'Consignor Customer' })),
+                  ]}
+                  placeholder="Search or select linked consignor..."
+                  searchPlaceholder="Type customer name..."
+                  accent="emerald"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
