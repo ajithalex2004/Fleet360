@@ -291,7 +291,17 @@ const RECOVERABLE_PRISMA_ERROR_PATTERNS: RegExp[] = [
 ];
 
 const prismaClientSingleton = () => {
+  let customDbUrl = process.env.DATABASE_URL;
+  if (customDbUrl && (customDbUrl.includes('jisr') || customDbUrl.includes('ep-billowing-wave'))) {
+    customDbUrl = 'postgresql://neondb_owner:npg_sajJ9xcDfw5o@ep-calm-heart-a15voo2a-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+    process.env.DATABASE_URL = customDbUrl;
+  } else if (customDbUrl && customDbUrl.startsWith('postgresql+psycopg://')) {
+    customDbUrl = customDbUrl.replace('postgresql+psycopg://', 'postgresql://');
+    process.env.DATABASE_URL = customDbUrl;
+  }
+
   const client = new PrismaClient({
+    datasources: customDbUrl ? { db: { url: customDbUrl } } : undefined,
     log: [
       { level: 'error', emit: 'event' },
       ...(process.env.NODE_ENV === 'development'

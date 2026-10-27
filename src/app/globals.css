@@ -224,3 +224,40 @@ html.light .modern-card, html.light .obsidian-glass, html.light .glass-panel-obs
   .print\:hidden { display: none !important; }
   .print\:block  { display: block !important; }
 }
+
+
+/* ── Running Text / Marquee Animation for Lengthy Buttons & Labels ── */
+@keyframes running-text-scroll {
+  0%, 15% {
+    transform: translateX(0%);
+  }
+  50%, 65% {
+    transform: translateX(var(--marquee-distance, -45%));
+  }
+  85%, 100% {
+    transform: translateX(0%);
+  }
+}
+
+.running-label-wrap {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.running-label-inner {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* Run smoothly on hover of the parent button or row */
+.group:hover .running-label-inner.is-overflowing,
+.running-label-wrap:hover .running-label-inner.is-overflowing,
+button:hover .running-label-inner.is-overflowing,
+a:hover .running-label-inner.is-overflowing {
+  animation: running-text-scroll 5s ease-in-out infinite;
+}

@@ -89,6 +89,9 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // Called while impersonating, when the session carries the target's role.
   'impersonate/stop':                            { POST: 'member' },
   'info':                                        { GET: 'platform' },
+  'health':                                      { GET: 'platform' },
+  'health/ping':                                 { POST: 'platform' },
+  'health/self-test':                            { POST: 'platform' },
   'nav-permissions':                             { GET: 'admin', PUT: 'platform' },
   'notification-rules':                          { GET: 'platform', POST: 'platform', PUT: 'platform' },
   'notification-templates':                      { GET: 'platform', POST: 'platform', PUT: 'platform' },

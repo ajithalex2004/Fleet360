@@ -159,6 +159,18 @@ function partnerHomeRedirect(request: NextRequest): NextResponse {
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+  const origin = request.headers.get('origin');
+
+  // Handle CORS preflight (OPTIONS) for mobile app / web cross-origin requests
+  if (request.method === 'OPTIONS') {
+    const corsHeaders = new Headers();
+    corsHeaders.set('Access-Control-Allow-Origin', origin || '*');
+    corsHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Id, X-Requested-With, Cookie');
+    corsHeaders.set('Access-Control-Allow-Credentials', 'true');
+    corsHeaders.set('Access-Control-Max-Age', '86400');
+    return new NextResponse(null, { status: 204, headers: corsHeaders });
+  }
 
   // Identity headers (x-tenant-id, x-user-id, x-user-role, …) are only
   // trustworthy when middleware sets them from a verified credential. Every

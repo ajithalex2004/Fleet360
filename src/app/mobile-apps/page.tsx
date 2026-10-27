@@ -33,6 +33,27 @@ interface MobileApp {
 
 const APPS: MobileApp[] = [
   {
+    id: 'fleet360-driver',
+    name: 'Fleet360 Driver App',
+    audience: 'Chauffeur, Fleet & Logistics Drivers',
+    description: 'Real-time GPS telematics, live vehicle sign-in, shift pre-trip safety checklist, multi-language (English / Arabic / Hindi), turn-by-turn route dispatch, and dark/light UI mode.',
+    href: '/driver-app',
+    apkHref: '/api/mobile/download-driver-apk',
+    icon: BusFront,
+    gradient: 'from-blue-600 via-indigo-600 to-cyan-600',
+    ring: 'ring-blue-500/50',
+    tag: 'Fleet Telematics & Ops',
+    module: 'driver-app',
+    capabilities: [
+      'Live GPS Telematics',
+      'Pre-Trip Safety Check',
+      'Vehicle Sign-In & Odometer',
+      'EN / AR / HI Languages',
+      'Dark & Light Mode',
+      'Native Android APK',
+    ],
+  },
+  {
     id: 'fleet360-booking-app',
     name: 'Fleet360 Booking App',
     audience: 'Corporate Clients, Freight Shippers & Guests',
@@ -202,7 +223,7 @@ export default function MobileAppsPage() {
                     {app.apkHref && (
                       <a
                         href={app.apkHref}
-                        download="Fleet360 Booking App.apk"
+                        download={app.id === 'fleet360-driver' ? 'Fleet360-Driver.apk' : 'Fleet360 Booking App.apk'}
                         className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs sm:text-sm font-semibold border border-emerald-500/30 transition-all shadow-md"
                       >
                         <Download className="w-4 h-4 text-emerald-400" />

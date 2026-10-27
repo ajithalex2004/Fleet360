@@ -11,6 +11,7 @@ const TIMEZONE = 'Asia/Dubai';
 
 const DEFAULT_SCHEDULES: Record<string, string> = {
   // Frequent — near-real-time operational sweeps.
+  'health-watchdog': '*/5 * * * *',
   'bus-rider-notifications': '* * * * *',
   'outbox-publisher': '* * * * *',
   'auto-close-trips': '*/15 * * * *',
@@ -98,6 +99,46 @@ function isCronDue(cronExpr: string, date: Date): boolean {
 }
 
 let started = false;
+let startedAt: Date | null = null;
+let lastTickAt: Date | null = null;
+let tickCount = 0;
+
+export interface SchedulerState {
+  active: boolean;
+  started: boolean;
+  disabled: boolean;
+  startedAt: string | null;
+  lastTickAt: string | null;
+  secondsSinceLastTick: number | null;
+  isTicking: boolean;
+  tickCount: number;
+  jobCount: number;
+  timezone: string;
+  configuredJobs: Array<{ name: string; schedule: string }>;
+}
+
+export function getSchedulerState(): SchedulerState {
+  const now = Date.now();
+  const secondsSince = lastTickAt ? Math.round((now - lastTickAt.getTime()) / 1000) : null;
+  const disabled = process.env.DISABLE_JOB_SCHEDULER === 'true';
+  return {
+    active: started && !disabled,
+    started,
+    disabled,
+    startedAt: startedAt ? startedAt.toISOString() : null,
+    lastTickAt: lastTickAt ? lastTickAt.toISOString() : null,
+    secondsSinceLastTick: secondsSince,
+    // Consider ticking if checked within the last 60 seconds (loop runs every 15s)
+    isTicking: started && !disabled && secondsSince !== null && secondsSince <= 60,
+    tickCount,
+    jobCount: JOB_NAMES.length,
+    timezone: TIMEZONE,
+    configuredJobs: JOB_NAMES.map((name) => ({
+      name,
+      schedule: scheduleFor(name) ?? DEFAULT_SCHEDULES[name] ?? '* * * * *',
+    })),
+  };
+}
 
 /** Idempotent — starts an interval-based cron checker once on boot */
 export function startJobScheduler(): void {
@@ -107,6 +148,8 @@ export function startJobScheduler(): void {
     return;
   }
   started = true;
+  startedAt = new Date();
+  lastTickAt = new Date();
 
   console.log(`[job-scheduler] started — ${JOB_NAMES.length} jobs scheduled (tz ${TIMEZONE})`);
 
@@ -114,6 +157,8 @@ export function startJobScheduler(): void {
 
   setInterval(() => {
     const now = new Date();
+    lastTickAt = now;
+    tickCount++;
     const currentMinute = now.getMinutes();
 
     // Only evaluate once per minute

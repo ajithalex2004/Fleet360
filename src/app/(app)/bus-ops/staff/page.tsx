@@ -83,8 +83,8 @@ export default function StaffPage() {
     { key: 'contact', header: 'Contact', accessor: m => m.contactNumber,
       render: m => (
         <div>
-          <div>{m.contactNumber ?? '-'}</div>
-          <div className="text-xs text-[var(--text-muted)]">{m.email ?? ''}</div>
+          <PhoneCell value={m.contactNumber} />
+          <div className="text-xs text-[var(--text-muted)] mt-0.5">{m.email ?? ''}</div>
         </div>
       ) },
     { key: 'residenceArea', header: 'Residence', accessor: m => m.residenceArea },
@@ -182,8 +182,16 @@ export default function StaffPage() {
                 ].map(({label,key,type,ph,required})=>(
                   <div key={key}>
                     <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{label}</label>
-                    <input type={type} value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} placeholder={ph} required={required}
-                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
+                    {key === 'contactNumber' ? (
+                      <PhoneInput
+                        value={formData.contactNumber ?? ''}
+                        onChange={(val) => setFormData(p => ({ ...p, contactNumber: val }))}
+                        placeholder="50 123 4567"
+                      />
+                    ) : (
+                      <input type={type} value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} placeholder={ph} required={required}
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
+                    )}
                   </div>
                 ))}
                 <div>

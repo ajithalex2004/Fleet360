@@ -68,10 +68,22 @@ export async function loadDriverActor(
   tenantId: string,
   userId: string,
 ): Promise<VerifiedDriverActor | null> {
-  const driver = await tx.driver.findFirst({
+  let driver = await tx.driver.findFirst({
     where: { id: userId, tenantId, deletedAt: null },
     select: { id: true, name: true, firstName: true, lastName: true, status: true },
   });
+  if (!driver) {
+    const userRow = await tx.$queryRawUnsafe<Array<{ email: string }>>(
+      `SELECT email FROM "User" WHERE id = $1::uuid LIMIT 1`,
+      userId
+    ).catch(() => []);
+    if (userRow[0]?.email) {
+      driver = await tx.driver.findFirst({
+        where: { email: { equals: userRow[0].email, mode: 'insensitive' }, tenantId, deletedAt: null },
+        select: { id: true, name: true, firstName: true, lastName: true, status: true },
+      });
+    }
+  }
   if (!driver) return null;
   if (driver.status && driver.status !== 'ACTIVE') return null;
 
@@ -156,13 +168,25 @@ export type DriverRefTx = Pick<Prisma.TransactionClient, 'driver' | '$queryRawUn
  * Must run inside the tenant's RLS transaction.
  */
 export async function requireActiveDriver(
-  tx: Pick<DriverRefTx, 'driver'>,
+  tx: Pick<DriverRefTx, 'driver' | '$queryRawUnsafe'>,
   session: { tenantId: string; userId: string },
 ): Promise<NextResponse | null> {
-  const driver = await tx.driver.findFirst({
+  let driver = await tx.driver.findFirst({
     where: { id: session.userId, tenantId: session.tenantId, deletedAt: null },
     select: { status: true },
   });
+  if (!driver) {
+    const userRow = await tx.$queryRawUnsafe<Array<{ email: string }>>(
+      `SELECT email FROM "User" WHERE id = $1::uuid LIMIT 1`,
+      session.userId
+    ).catch(() => []);
+    if (userRow[0]?.email) {
+      driver = await tx.driver.findFirst({
+        where: { email: { equals: userRow[0].email, mode: 'insensitive' }, tenantId: session.tenantId, deletedAt: null },
+        select: { status: true },
+      });
+    }
+  }
   if (!driver || (driver.status && driver.status !== 'ACTIVE')) {
     return forbidden('An active driver account is required for this action');
   }
@@ -190,11 +214,29 @@ export interface DriverReferences {
  * transaction; the queries also filter by tenant explicitly.
  */
 export async function authorizeDriverReferences(
-  tx: Pick<DriverRefTx, '$queryRawUnsafe'>,
+  tx: Pick<DriverRefTx, '$queryRawUnsafe' | 'driver'>,
   session: { tenantId: string; userId: string },
   refs: DriverReferences,
 ): Promise<NextResponse | null> {
   const { tenantId, userId } = session;
+  let driverId = userId;
+  const driver = await tx.driver.findFirst({
+    where: { id: userId, tenantId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!driver) {
+    const userRow = await tx.$queryRawUnsafe<Array<{ email: string }>>(
+      `SELECT email FROM "User" WHERE id = $1::uuid LIMIT 1`,
+      userId
+    ).catch(() => []);
+    if (userRow[0]?.email) {
+      const match = await tx.driver.findFirst({
+        where: { email: { equals: userRow[0].email, mode: 'insensitive' }, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (match) driverId = match.id;
+    }
+  }
   const namedVehicles: string[] = [];
 
   if (refs.shiftId) {
@@ -225,7 +267,7 @@ export async function authorizeDriverReferences(
       `SELECT v.id::text AS id FROM vehicles v
         WHERE v.id::text = $1 AND v.tenant_id::text = $2
           AND (
-            v.assigned_driver_id::text = $3
+            (v.assigned_driver_id::text = $3 OR v.assigned_driver_id::text = $4)
             OR EXISTS (SELECT 1 FROM shifts s
                         WHERE s.vehicle_id::text = v.id::text AND s.tenant_id::text = $2
                           AND s.driver_id::text = $3 AND s.status = 'ACTIVE')
@@ -234,7 +276,7 @@ export async function authorizeDriverReferences(
                           AND t.driver_id::text = $3 AND t.status IN ('SCHEDULED', 'IN_PROGRESS'))
           )
         LIMIT 1`,
-      refs.vehicleId, tenantId, userId,
+      refs.vehicleId, tenantId, userId, driverId,
     );
     if (!rows[0]) return forbidden('vehicleId is not a vehicle assigned to the signed-in driver');
   }

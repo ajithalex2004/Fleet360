@@ -457,8 +457,8 @@ function DriverTodayContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lat: loc?.lat || 25.2048,
-          lng: loc?.lng || 55.2708,
+          lat: loc?.lat ?? null,
+          lng: loc?.lng ?? null,
           vehiclePlate: activeTrip?.vehiclePlate || 'Fleet Bus',
           emergencyType,
           notes,

@@ -40,6 +40,14 @@ export default function PlatformSessionSlot() {
   if (isLoading) return <SessionFallback label="Session..." />;
   if (isAuthenticated) return <UserSwitcher />;
 
+  // Prevent false-positive "Sign in" button if session is currently cached/validating
+  const hasLocalSession = typeof window !== 'undefined' && (
+    !!localStorage.getItem('xl_mobility_session') || !!localStorage.getItem('xl_mobility_session_snapshot')
+  );
+  if (hasLocalSession) {
+    return <SessionFallback label="Authenticating..." />;
+  }
+
   return (
     <Link
       href="/login"

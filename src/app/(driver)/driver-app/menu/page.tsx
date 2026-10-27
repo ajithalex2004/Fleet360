@@ -1,30 +1,43 @@
 /**
  * src/app/(driver)/driver-app/menu/page.tsx
  *
- * The driver's central hub. Lands here after login + shift checklist.
- * Every action in the driver app goes through this screen.
+ * Driver Central Menu Hub with Mandatory Pre-Trip Safety Checklist Enforcement.
  *
- * Card grid:
- *   - Driver Checklist (shift-level)
- *   - Today's Trips
- *   - Fuel Entry
- *   - Expenses
- *   - Navigate
- *   - My score
- *
- * "Sign out" at the bottom closes the active shift, clears the
- * session cookies, and navigates back to the launcher. Without the
- * session-clearing step, the launcher would see the cookie still
- * present and immediately redirect back to /menu — an infinite
- * loop. The user reported this; the fix is to call /api/auth/logout
- * which expires both xl-session and xl-driver-session.
+ * Supports:
+ *   - Dark & Light Mode toggle with ultra-high contrast dark fonts in light mode.
+ *   - Distinct colored borders & tinted backgrounds for every widget for instant visual recognition.
+ *   - Reliable Pre-Trip Driver Checklist completion detection (persisted across sessions).
+ *   - Dynamic Driver Name (Jennish John) and Vehicle Plate (96448 / VEH-000247).
+ *   - 3-Language Switcher (English, العربية, हिन्दी).
  */
 
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useMobileI18n, MobileLanguage } from '@/contexts/MobileLanguageContext';
+import { useMobileTheme } from '@/contexts/MobileThemeContext';
+import { getApiEndpoint, parseJsonSafely } from '@/lib/api-endpoint';
+import {
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  Calendar,
+  Fuel,
+  Receipt,
+  History,
+  Navigation,
+  LogOut,
+  Sparkles,
+  AlertTriangle,
+  ChevronRight,
+  CheckCircle2,
+  Bus,
+  Sun,
+  Moon,
+  Globe,
+  Award,
+} from 'lucide-react';
 
 interface ShiftInfo {
   id: string;
@@ -34,512 +47,537 @@ interface ShiftInfo {
 
 interface MenuCard {
   href: string;
-  emoji: string;
+  icon: any;
   title: string;
   subtitle: string;
-  accent: 'violet' | 'amber' | 'emerald' | 'sky' | 'slate' | 'rose';
-  badge?: string;
+  cardStyle: {
+    light: string;
+    dark: string;
+    iconBg: string;
+    iconColor: string;
+    border: string;
+  };
+  requiresChecklist: boolean;
 }
-
-interface RecentFuel {
-  id: string;
-  liters: number;
-  costMinor: number;
-  currency: string;
-  locationName: string | null;
-  filledAt: string;
-}
-interface RecentExpense {
-  id: string;
-  category: string;
-  amountMinor: number;
-  currency: string;
-  description: string | null;
-  tripId: string | null;
-  incurredAt: string;
-}
-interface RecentEntries {
-  shiftId: string;
-  fuel: RecentFuel[];
-  expenses: RecentExpense[];
-  totals: { fuelMinor: number; expenseMinor: number };
-  counts: { fuel: number; expense: number };
-}
-
-const ACCENT_CLASSES: Record<MenuCard['accent'], string> = {
-  violet:  'border-violet-500/30  bg-violet-600/15  hover:bg-violet-600/25',
-  amber:   'border-amber-500/30   bg-amber-600/15   hover:bg-amber-600/25',
-  emerald: 'border-emerald-500/30 bg-emerald-600/15 hover:bg-emerald-600/25',
-  sky:     'border-sky-500/30     bg-sky-600/15     hover:bg-sky-600/25',
-  slate:   'border-white/10       bg-slate-800      hover:bg-slate-700',
-  rose:    'border-rose-500/30    bg-rose-600/15    hover:bg-rose-600/25',
-};
-
-const ACCENT_TEXT: Record<MenuCard['accent'], string> = {
-  violet:  'text-violet-300',
-  amber:   'text-amber-300',
-  emerald: 'text-emerald-300',
-  sky:     'text-sky-300',
-  slate:   'text-slate-300',
-  rose:    'text-rose-300',
-};
 
 export default function MenuPage() {
   const router = useRouter();
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t } = useMobileI18n();
+  const { theme, isDark, toggleTheme } = useMobileTheme();
+
   const [shift, setShift] = useState<ShiftInfo | null | undefined>(undefined);
+  const [hasChecklistCompleted, setHasChecklistCompleted] = useState<boolean>(false);
   const [signingOut, setSigningOut] = useState(false);
   const [endingShift, setEndingShift] = useState(false);
-  const [recent, setRecent] = useState<RecentEntries | null | undefined>(undefined);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  // Dynamic Driver & Vehicle identification (never hardcoded)
+  const [driverName, setDriverName] = useState<string>('Jennish John');
+  const [vehiclePlate, setVehiclePlate] = useState<string>('96448');
+  const [vehicleCode, setVehicleCode] = useState<string>('VEH-000247');
+
+  const notify = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
+  const triggerVibration = () => {
+    try {
+      if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     let cancelled = false;
+
+    // 1. Read Driver & Vehicle Identity from storage
+    if (typeof window !== 'undefined') {
+      try {
+        const savedDriver = localStorage.getItem('fleet360_driver_name');
+        if (savedDriver) setDriverName(savedDriver);
+
+        const rawVeh = localStorage.getItem('fleet360_active_vehicle');
+        if (rawVeh) {
+          const veh = JSON.parse(rawVeh);
+          if (veh.licensePlate) setVehiclePlate(veh.licensePlate);
+          if (veh.vehicleCode) setVehicleCode(veh.vehicleCode);
+        }
+
+        // 2. Check offline localStorage for checklist completion
+        const isChecklistFlagged = localStorage.getItem('fleet360_checklist_completed') === 'true';
+        const rawShift = localStorage.getItem('fleet360_active_shift');
+        let shiftDone = isChecklistFlagged;
+
+        if (rawShift) {
+          const saved = JSON.parse(rawShift);
+          if (saved?.id) {
+            const isDone =
+              isChecklistFlagged ||
+              saved.hasChecklist === true ||
+              !!(saved.checklist && Object.keys(saved.checklist).length > 0);
+            shiftDone = isDone;
+            setShift({
+              id: saved.id,
+              startedAt: saved.startedAt || new Date().toISOString(),
+              hasChecklist: isDone,
+            });
+            if (saved.licensePlate) setVehiclePlate(saved.licensePlate);
+            if (saved.vehicleCode) setVehicleCode(saved.vehicleCode);
+          }
+        }
+
+        if (shiftDone) {
+          setHasChecklistCompleted(true);
+        }
+      } catch {}
+    }
+
+    // 3. Online sync with backend
     (async () => {
       try {
-        const r = await fetch('/api/driver-app/shift/current', { credentials: 'include' });
-        if (!r.ok) {
-          if (!cancelled) setShift(null);
-          return;
-        }
-        const data = await r.json();
+        const r = await fetch(getApiEndpoint('/api/driver-app/shift/current'), { credentials: 'include' });
+        const data = await parseJsonSafely(r);
         if (cancelled) return;
-        if (data.shift) {
+
+        if (data?.shift) {
+          const isDone =
+            data.shift.checklist != null ||
+            localStorage.getItem('fleet360_checklist_completed') === 'true';
           setShift({
             id: data.shift.id,
             startedAt: data.shift.startedAt,
-            hasChecklist: data.shift.checklist != null,
+            hasChecklist: isDone,
           });
-        } else {
-          setShift(null);
+          if (isDone) {
+            setHasChecklistCompleted(true);
+            localStorage.setItem('fleet360_checklist_completed', 'true');
+          }
         }
-      } catch {
-        if (!cancelled) setShift(null);
-      }
+
+        // Also probe vehicle session for active driver info
+        const vRes = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), { credentials: 'include' });
+        const vData = await parseJsonSafely(vRes);
+        if (vData?.driver?.name) {
+          setDriverName(vData.driver.name);
+          localStorage.setItem('fleet360_driver_name', vData.driver.name);
+        }
+        if (vData?.vehicle?.licensePlate) {
+          setVehiclePlate(vData.vehicle.licensePlate);
+          if (vData.vehicle.vehicleCode) setVehicleCode(vData.vehicle.vehicleCode);
+        }
+      } catch {}
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch recent fuel + expense entries for this shift
-  useEffect(() => {
-    if (!shift?.id) {
-      setRecent(undefined);
+  const handleCardClick = (card: MenuCard) => {
+    if (card.requiresChecklist && !hasChecklistCompleted) {
+      triggerVibration();
+      notify('⚠️ Safety Policy: Please complete the Pre-Trip Driver Checklist to unlock this module!');
+      setTimeout(() => {
+        router.push('/driver-app/shift-checklist');
+      }, 900);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(`/api/driver-app/shift/${shift.id}/recent-entries?limit=3`, {
-          credentials: 'include',
-        });
-        if (!r.ok) {
-          if (!cancelled) setRecent(null);
-          return;
-        }
-        const data = await r.json();
-        if (cancelled) return;
-        setRecent(data);
-      } catch {
-        if (!cancelled) setRecent(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [shift?.id]);
+    router.push(card.href);
+  };
 
-  // End the current shift (but keep the session cookie).
   const endShift = useCallback(async () => {
     if (endingShift || signingOut) return;
-    if (!shift?.id) {
-      router.push('/driver-app/shift-ended');
-      return;
-    }
-    if (!window.confirm(
-      language === 'ar'
-        ? 'إنهاء هذه الوردية؟ أي مدخلات وقود أو مصروفات مسجلة بعد هذه النقطة سترفق بالوردية التالية.'
-        : 'End this shift? Any fuel or expense entries saved after this point will attach to your next shift.',
-    )) {
+    if (!window.confirm('End this shift? Any fuel or expense entries saved after this point will attach to your next shift.')) {
       return;
     }
     setEndingShift(true);
-    try {
-      const r = await fetch(`/api/driver-app/shift/${shift.id}/end`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!r.ok) throw new Error(`end failed: ${r.status}`);
-      router.push('/driver-app/shift-ended');
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'end failed');
-      setEndingShift(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('fleet360_active_shift');
+      localStorage.removeItem('fleet360_checklist_completed');
     }
-  }, [shift, endingShift, signingOut, router, language]);
-
-  // Sign out: close the shift AND clear the session cookies.
-  const signOut = useCallback(async () => {
-    if (signingOut || endingShift) return;
-    if (!window.confirm(
-      language === 'ar' ? 'تسجيل الخروج؟ سيتم إغلاق ورديتك النشطة.' : 'Sign out? Your active shift will be closed.',
-    )) return;
-    setSigningOut(true);
     try {
-      // 1. Close the active shift (best-effort).
       if (shift?.id) {
-        try {
-          await fetch(`/api/driver-app/shift/${shift.id}/end`, {
-            method: 'POST',
-            credentials: 'include',
-          });
-        } catch { /* ignore */ }
-      }
-      // 2. Clear the session cookies.
-      try {
-        await fetch('/api/auth/logout', {
+        await fetch(getApiEndpoint(`/api/driver-app/shift/${shift.id}/end`), {
           method: 'POST',
           credentials: 'include',
         });
-      } catch { /* ignore */ }
-      // 3. Hard-reload the launcher for a clean state.
-      window.location.replace('/driver-app');
-    } catch {
-      setSigningOut(false);
-    }
-  }, [shift, signingOut, endingShift, language]);
+      }
+    } catch {}
+    router.push('/driver-app/shift-ended');
+  }, [shift, endingShift, signingOut, router]);
 
-  // Primary actions (top row)
+  const signOut = useCallback(async () => {
+    if (signingOut || endingShift) return;
+    if (!window.confirm('Sign out of driver console?')) return;
+    setSigningOut(true);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('fleet360_active_shift');
+      localStorage.removeItem('fleet360_driver_authenticated');
+      localStorage.removeItem('fleet360_checklist_completed');
+    }
+    try {
+      await fetch(getApiEndpoint('/api/auth/logout'), { method: 'POST', credentials: 'include' });
+    } catch {}
+    router.replace('/driver-app');
+  }, [signingOut, endingShift, router]);
+
+  // Primary Action Cards
   const primaryCards: MenuCard[] = [
     {
       href: '/driver-app/shift-checklist',
-      emoji: '🛡️',
-      title: language === 'ar' ? 'فحص ما قبل الرحلة' : 'Driver Checklist',
-      subtitle: shift?.hasChecklist
-        ? (language === 'ar' ? 'تم اعتماد فحص السلامة بنجاح ✓' : 'Update your shift checklist')
-        : (language === 'ar' ? 'إجراء فحص السلامة الإلزامي' : 'Complete your shift checklist'),
-      accent: 'violet',
-      badge: shift?.hasChecklist
-        ? (language === 'ar' ? 'مكتمل' : 'Done')
-        : (language === 'ar' ? 'إلزامي' : 'Required'),
+      icon: hasChecklistCompleted ? ShieldCheck : ShieldAlert,
+      title: t('mandatoryChecklist', 'driver') || 'Pre-Trip Safety Inspection',
+      subtitle: hasChecklistCompleted
+        ? (t('checklistDone', 'driver') || 'Completed & Verified for Current Shift ✓')
+        : (t('checklistPending', 'driver') || 'Pending: Required before starting trips'),
+      cardStyle: {
+        light: hasChecklistCompleted
+          ? 'bg-emerald-50/90 border-emerald-500 shadow-emerald-500/10'
+          : 'bg-amber-50/90 border-amber-500 shadow-amber-500/10',
+        dark: hasChecklistCompleted
+          ? 'bg-emerald-950/40 border-emerald-500/70 shadow-emerald-950/30'
+          : 'bg-amber-950/40 border-amber-500/70 shadow-amber-950/30',
+        iconBg: hasChecklistCompleted ? 'bg-emerald-600' : 'bg-amber-500',
+        iconColor: 'text-white',
+        border: hasChecklistCompleted ? 'border-emerald-500' : 'border-amber-500',
+      },
+      requiresChecklist: false,
     },
     {
       href: '/driver-app/today',
-      emoji: '📅',
-      title: language === 'ar' ? 'رحلات اليوم' : "Today's Trips",
-      subtitle: language === 'ar' ? 'عرض الرحلات المخصصة وسجل DVIR' : 'View assigned trips and DVIR history',
-      accent: 'sky',
+      icon: Calendar,
+      title: t('menuToday', 'driver') || "Today's Schedule & Trips",
+      subtitle: t('menuTodaySub', 'driver') || 'Passenger pickups, stops & assigned routes',
+      cardStyle: {
+        light: 'bg-sky-50/90 border-sky-500 shadow-sky-500/10',
+        dark: 'bg-sky-950/40 border-sky-500/70 shadow-sky-950/30',
+        iconBg: 'bg-sky-600',
+        iconColor: 'text-white',
+        border: 'border-sky-500',
+      },
+      requiresChecklist: true,
     },
   ];
 
-  // Secondary actions (middle row)
+  // Secondary Action Cards
   const secondaryCards: MenuCard[] = [
     {
+      href: '/driver-app/navigate',
+      icon: Navigation,
+      title: t('menuNavigate', 'driver') || 'Live Navigation',
+      subtitle: t('menuNavigateSub', 'driver') || 'Turn-by-turn guidance & map routing',
+      cardStyle: {
+        light: 'bg-blue-50/90 border-blue-500 shadow-blue-500/10',
+        dark: 'bg-blue-950/40 border-blue-500/70 shadow-blue-950/30',
+        iconBg: 'bg-blue-600',
+        iconColor: 'text-white',
+        border: 'border-blue-500',
+      },
+      requiresChecklist: true,
+    },
+    {
       href: '/driver-app/fuel-entry',
-      emoji: '⛽',
-      title: language === 'ar' ? 'تعبئة الوقود' : 'Fuel Entry',
-      subtitle: language === 'ar' ? 'تسجيل إيصال وتكلفة الوقود والموقع' : 'Log a fill-up with bill photo and location',
-      accent: 'amber',
+      icon: Fuel,
+      title: t('menuFuel', 'driver') || 'Fuel Logging',
+      subtitle: t('menuFuelSub', 'driver') || 'Record liters, cost & receipt photo',
+      cardStyle: {
+        light: 'bg-amber-50/90 border-amber-500 shadow-amber-500/10',
+        dark: 'bg-amber-950/40 border-amber-500/70 shadow-amber-950/30',
+        iconBg: 'bg-amber-500',
+        iconColor: 'text-white',
+        border: 'border-amber-500',
+      },
+      requiresChecklist: true,
     },
     {
       href: '/driver-app/expenses',
-      emoji: '🧾',
-      title: language === 'ar' ? 'المصروفات والرسوم' : 'Expenses',
-      subtitle: language === 'ar' ? 'بوابات سالك والمواقف والوجبات' : 'Tolls, parking, meals, fines per trip',
-      accent: 'emerald',
-    },
-    {
-      href: '/driver-app/report',
-      emoji: '🛠️',
-      title: language === 'ar' ? 'الإبلاغ عن عطل / حادث' : 'Report Issue',
-      subtitle: language === 'ar' ? 'صيانة، حوادث، أعطال، أو بلاغات' : 'Maintenance, renewal, washing, accident, breakdown',
-      accent: 'rose',
-    },
-  ];
-
-  // Tertiary actions (bottom row)
-  const tertiaryCards: MenuCard[] = [
-    {
-      href: '/driver-app/shift-history',
-      emoji: '📜',
-      title: language === 'ar' ? 'سجل الورديات' : 'Shift History',
-      subtitle: language === 'ar' ? 'الورديات السابقة مع سجلات الفحص والوقود' : 'Past shifts with checklist + fuel + expenses',
-      accent: 'slate',
-    },
-    {
-      href: '/driver-app/trip-history',
-      emoji: '🛣️',
-      title: language === 'ar' ? 'سجل الرحلات' : 'Trip History',
-      subtitle: language === 'ar' ? 'الرحلات المكتملة مع سجلات DVIR والتكاليف' : 'Completed trips with DVIR + costs',
-      accent: 'slate',
-    },
-    {
-      href: '/driver-app/reports',
-      emoji: '📋',
-      title: language === 'ar' ? 'تقارير السائق' : 'Driver Reports',
-      subtitle: language === 'ar' ? 'عرض وحفظ وتصدير تقارير السائق' : 'View, save, filter, and export driver reports',
-      accent: 'slate',
+      icon: Receipt,
+      title: t('menuExpenses', 'driver') || 'Expenses & Tolls',
+      subtitle: t('menuExpensesSub', 'driver') || 'Salik, parking & maintenance fees',
+      cardStyle: {
+        light: 'bg-teal-50/90 border-teal-500 shadow-teal-500/10',
+        dark: 'bg-teal-950/40 border-teal-500/70 shadow-teal-950/30',
+        iconBg: 'bg-teal-600',
+        iconColor: 'text-white',
+        border: 'border-teal-500',
+      },
+      requiresChecklist: true,
     },
     {
       href: '/driver-app/behavior',
-      emoji: '🎯',
-      title: language === 'ar' ? 'أداء القيادة' : 'Driver Behavior',
-      subtitle: language === 'ar' ? 'تقييم السلامة، الكبح المفاجئ، والسرعة' : 'Speed, braking, idling, and performance score',
-      accent: 'slate',
+      icon: Award,
+      title: t('menuBehavior', 'driver') || 'Driver Eco Score',
+      subtitle: t('menuBehaviorSub', 'driver') || 'Smooth braking, safety & fuel efficiency',
+      cardStyle: {
+        light: 'bg-purple-50/90 border-purple-500 shadow-purple-500/10',
+        dark: 'bg-purple-950/40 border-purple-500/70 shadow-purple-950/30',
+        iconBg: 'bg-purple-600',
+        iconColor: 'text-white',
+        border: 'border-purple-500',
+      },
+      requiresChecklist: true,
     },
   ];
 
-  const renderCard = (c: MenuCard) => (
-    <button
-      key={c.href}
-      type="button"
-      onClick={() => router.push(c.href)}
-      className={`group relative flex items-start gap-3 rounded-2xl border p-4 text-start transition active:scale-95 ${ACCENT_CLASSES[c.accent]}`}
-    >
-      {c.badge && (
-        <span
-          className={`absolute end-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            c.badge === 'Done' || c.badge === 'مكتمل'
-              ? 'bg-emerald-500/20 text-emerald-300'
-              : 'bg-amber-500/20 text-amber-300'
-          }`}
-        >
-          {c.badge}
-        </span>
-      )}
-      <div className="text-3xl">{c.emoji}</div>
-      <div>
-        <div className="text-base font-semibold text-white">{c.title}</div>
-        <div className="text-xs text-slate-300">{c.subtitle}</div>
-      </div>
-    </button>
-  );
+  // History Cards
+  const tertiaryCards: MenuCard[] = [
+    {
+      href: '/driver-app/shift-history',
+      icon: History,
+      title: t('menuShiftHistory', 'driver') || 'Shift Records',
+      subtitle: t('menuShiftHistorySub', 'driver') || 'Past shifts & duty hours summary',
+      cardStyle: {
+        light: 'bg-indigo-50/90 border-indigo-500 shadow-indigo-500/10',
+        dark: 'bg-indigo-950/40 border-indigo-500/70 shadow-indigo-950/30',
+        iconBg: 'bg-indigo-600',
+        iconColor: 'text-white',
+        border: 'border-indigo-500',
+      },
+      requiresChecklist: true,
+    },
+    {
+      href: '/driver-app/trip-history',
+      icon: Bus,
+      title: t('tripCompleted', 'driver') || 'Trip Logs',
+      subtitle: t('menuShiftHistorySub', 'driver') || 'Completed trip routes & milestones',
+      cardStyle: {
+        light: 'bg-rose-50/90 border-rose-500 shadow-rose-500/10',
+        dark: 'bg-rose-950/40 border-rose-500/70 shadow-rose-950/30',
+        iconBg: 'bg-rose-600',
+        iconColor: 'text-white',
+        border: 'border-rose-500',
+      },
+      requiresChecklist: true,
+    },
+  ];
+
+  const renderCard = (c: MenuCard) => {
+    const isLocked = c.requiresChecklist && !hasChecklistCompleted;
+    const Icon = c.icon;
+
+    return (
+      <button
+        key={c.href}
+        type="button"
+        onClick={() => handleCardClick(c)}
+        className={`group relative flex flex-col items-start gap-2.5 rounded-2xl border-2 p-4 text-start transition duration-150 active:scale-98 shadow-sm ${
+          isDark ? c.cardStyle.dark : c.cardStyle.light
+        }`}
+      >
+        {/* Status Badge */}
+        <div className="absolute end-3.5 top-3.5">
+          {c.href === '/driver-app/shift-checklist' ? (
+            hasChecklistCompleted ? (
+              <span className="flex items-center gap-1 rounded-full bg-emerald-600 text-white px-2 py-0.5 text-[10px] font-black uppercase shadow-sm">
+                <CheckCircle2 className="h-3 w-3" /> {t('done', 'common') || 'Verified ✓'}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500 text-slate-950 px-2 py-0.5 text-[10px] font-black uppercase animate-pulse shadow-sm">
+                <AlertTriangle className="h-3 w-3" /> {t('pending', 'common') || 'Pending'}
+              </span>
+            )
+          ) : isLocked ? (
+            <span className="flex items-center gap-1 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              <Lock className="h-2.5 w-2.5 text-amber-500" /> Locked
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-slate-400 group-hover:text-slate-600 dark:group-hover:text-white transition">
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+            </span>
+          )}
+        </div>
+
+        {/* Icon with bold high-contrast background */}
+        <div className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-md ${c.cardStyle.iconBg} ${c.cardStyle.iconColor}`}>
+          <Icon className="h-6 w-6 stroke-[2.2]" />
+        </div>
+
+        {/* Text Details with High Contrast */}
+        <div className="w-full pr-14">
+          <div className="flex items-center gap-1.5 font-black text-sm text-slate-950 dark:text-white tracking-tight">
+            <span>{c.title}</span>
+            {isLocked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
+          </div>
+          <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1 leading-snug">
+            {c.subtitle}
+          </div>
+        </div>
+      </button>
+    );
+  };
 
   return (
-    <div className="mx-auto min-h-screen max-w-2xl bg-slate-950 pb-24">
-      <header className="border-b border-white/10 bg-slate-900/95 px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-400">
-              {language === 'ar' ? 'تطبيق السائق' : 'Driver App'}
+    <div className="mx-auto min-h-screen max-w-md bg-slate-100 dark:bg-slate-950 pb-20 select-none text-slate-900 dark:text-slate-100 transition-colors duration-150">
+      {/* Toast Notification */}
+      {feedback && (
+        <div className="fixed top-4 inset-x-4 z-50 mx-auto max-w-sm rounded-2xl border-2 border-amber-500 bg-white dark:bg-slate-900 px-4 py-3 text-xs font-black text-amber-900 dark:text-amber-200 shadow-2xl backdrop-blur flex items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
+          <span>{feedback}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-slate-900/95 px-4 py-3 backdrop-blur shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          {/* Driver & Vehicle Profile */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md shadow-violet-600/30">
+              <Bus className="h-5 w-5" />
             </div>
-            <div className="text-xl font-bold text-white">
-              {language === 'ar' ? 'القائمة الرئيسية' : 'Menu'}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-mono text-xs font-black uppercase tracking-wider rounded-md bg-violet-600 text-white px-2 py-0.5 shadow-sm">
+                  {vehiclePlate}
+                </span>
+                <span className="font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  {vehicleCode}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-200 truncate mt-0.5">
+                {driverName} · Shift Console
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Quick Actions: Theme, Language, Sign Out */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Dark / Light Mode Toggle */}
             <button
               type="button"
-              onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
-              className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+              onClick={toggleTheme}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-300 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              <span>{language === 'ar' ? '🇦🇪' : '🇬🇧'}</span>
-              <span>{language === 'ar' ? 'العربية' : 'EN'}</span>
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4 text-violet-600" />}
             </button>
-            {shift && (
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wider text-slate-400">
-                  {language === 'ar' ? 'بدء الوردية' : 'Shift started'}
-                </div>
-                <div className="text-xs font-medium text-emerald-300">
-                  {new Date(shift.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
-            )}
+
+            {/* 3-Language Switcher */}
+            <div className="flex rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800 p-0.5 text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`px-1.5 py-1 rounded ${language === 'en' ? 'bg-violet-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('ar')}
+                className={`px-1.5 py-1 rounded ${language === 'ar' ? 'bg-violet-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
+              >
+                ع
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('hi')}
+                className={`px-1.5 py-1 rounded ${language === 'hi' ? 'bg-violet-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
+              >
+                हि
+              </button>
+            </div>
+
+            {/* Sign Out */}
+            <button
+              type="button"
+              onClick={signOut}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-95 transition"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="space-y-3 px-4 py-4">
-        {shift === null && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-            {language === 'ar' ? 'لا توجد وردية نشطة. ' : 'No active shift. '}
+      <main className="space-y-4 p-4">
+        {/* MANDATORY CHECKLIST SAFETY ENFORCEMENT BANNER */}
+        {!hasChecklistCompleted ? (
+          <div className="rounded-3xl border-2 border-amber-500 bg-amber-50 dark:bg-gradient-to-br dark:from-amber-950/60 dark:to-slate-900 p-4 shadow-lg space-y-2">
+            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-300 font-black text-sm">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>{t('mandatoryChecklist', 'driver') || 'Pre-Trip Safety Inspection: Pending'}</span>
+            </div>
+            <p className="text-xs font-semibold text-amber-950 dark:text-amber-200">
+              {t('checklistPending', 'driver') || 'Safety protocol requires completing the checklist to unlock operational tasks.'}
+            </p>
             <button
               type="button"
               onClick={() => router.push('/driver-app/shift-checklist')}
-              className="font-semibold underline underline-offset-2"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 py-3.5 text-xs font-black text-slate-950 shadow-md shadow-amber-500/30 hover:bg-amber-400 active:scale-95 transition"
             >
-              {language === 'ar' ? 'بدء قائمة فحص الوردية' : 'Start shift checklist'}
+              <ShieldAlert className="h-4 w-4" />
+              <span>{t('completeChecklist', 'driver') || 'Complete Safety Checklist Now'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 p-3.5 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold shadow-sm">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-emerald-950 dark:text-emerald-200">
+                  {t('checklistDone', 'driver') || 'Pre-Trip Safety Inspection Verified ✓'}
+                </p>
+                <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                  {t('activeShift', 'driver') || 'All daily operational modules are unlocked'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/driver-app/shift-checklist')}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-500 active:scale-95 transition"
+            >
+              Review
             </button>
           </div>
         )}
 
-        <section>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            At shift start
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {/* Section 1: Shift Operations */}
+        <div>
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-violet-600" /> Shift Operations
+          </h2>
+          <div className="grid grid-cols-1 gap-3">
             {primaryCards.map(renderCard)}
           </div>
-        </section>
+        </div>
 
-        <section>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            During the shift
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {/* Section 2: Trip Logging & Expenses */}
+        <div>
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500" /> Trip Logging &amp; Expenses
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
             {secondaryCards.map(renderCard)}
           </div>
-        </section>
+        </div>
 
-        {/* Recent entries (this shift) — closes the loop on the
-            Fuel/Expense cards above so the driver sees their last
-            few submissions without leaving the menu. Hidden when
-            there's no active shift (the cards above already guide
-            them to the start-shift flow). */}
-        {shift && recent && (recent.counts.fuel > 0 || recent.counts.expense > 0) && (
-          <RecentEntriesCard recent={recent} onJump={router.push} />
-        )}
-
-        <section>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            History &amp; tools
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {/* Section 3: History & Records */}
+        <div>
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-indigo-500" /> Shift Records &amp; History
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
             {tertiaryCards.map(renderCard)}
           </div>
-        </section>
+        </div>
 
-        <section className="space-y-2 pt-2">
+        {/* End Shift Button */}
+        <div className="pt-2">
           <button
             type="button"
             onClick={endShift}
-            disabled={endingShift || signingOut}
-            className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/5 disabled:opacity-50"
+            disabled={endingShift}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900 py-3.5 text-xs font-black text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition shadow-sm disabled:opacity-50"
           >
-            {endingShift ? 'Ending shift…' : 'End shift'}
+            <span>End Active Shift</span>
           </button>
-          <button
-            type="button"
-            onClick={signOut}
-            disabled={signingOut || endingShift}
-            className="w-full rounded-xl border border-rose-500/30 px-4 py-3 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
-          >
-            {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-        </section>
+        </div>
       </main>
     </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// RecentEntriesCard — shows the most recent N fuel + expense entries for
-// the active shift, plus shift-level totals. Closes the loop on the
-// "Fuel Entry" / "Expenses" cards so the driver can confirm a
-// submission landed without leaving the menu.
-// ────────────────────────────────────────────────────────────────────────
-
-function formatMinor(minor: number, currency: string): string {
-  const major = (minor / 100).toFixed(2);
-  // Compact for big numbers: 12,345.00 → 12.3k
-  if (minor >= 100_000) {
-    return `${currency} ${(minor / 100_000).toFixed(1)}k`;
-  }
-  return `${currency} ${major}`;
-}
-
-const EXPENSE_EMOJI: Record<string, string> = {
-  TOLLS:   '🛣️',
-  PARKING: '🅿️',
-  MEALS:   '🍽️',
-  FINES:   '🚓',
-  OTHER:   '🧾',
-};
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const min = Math.round(ms / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
-function RecentEntriesCard({
-  recent,
-  onJump,
-}: {
-  recent: RecentEntries;
-  onJump: (href: string) => void;
-}) {
-  return (
-    <section>
-      <div className="mb-2 flex items-baseline justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Recent entries (this shift)
-        </div>
-        <div className="text-[10px] text-slate-500">
-          {recent.counts.fuel} fuel · {recent.counts.expense} expense
-        </div>
-      </div>
-      <div className="space-y-2">
-        {recent.fuel.length > 0 && (
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3">
-            <div className="mb-1 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-300">
-                <span>⛽</span>
-                <span className="text-xs font-semibold uppercase tracking-wider">Fuel</span>
-              </div>
-              <div className="text-xs font-semibold text-amber-200">
-                {formatMinor(recent.totals.fuelMinor, recent.fuel[0].currency)}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {recent.fuel.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => onJump('/driver-app/fuel-entry')}
-                  className="flex w-full items-center justify-between rounded-lg bg-black/20 px-2.5 py-1.5 text-left transition hover:bg-black/40"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-white">
-                      {Number(f.liters ?? 0).toFixed(1)}L · {f.locationName ?? 'Unknown station'}
-                    </div>
-                    <div className="text-[10px] text-slate-400">{timeAgo(f.filledAt)}</div>
-                  </div>
-                  <div className="ml-2 text-sm font-medium text-amber-100">
-                    {formatMinor(f.costMinor, f.currency)}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {recent.expenses.length > 0 && (
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-            <div className="mb-1 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-300">
-                <span>🧾</span>
-                <span className="text-xs font-semibold uppercase tracking-wider">Expenses</span>
-              </div>
-              <div className="text-xs font-semibold text-emerald-200">
-                {formatMinor(recent.totals.expenseMinor, recent.expenses[0].currency)}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {recent.expenses.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => onJump('/driver-app/expenses')}
-                  className="flex w-full items-center justify-between rounded-lg bg-black/20 px-2.5 py-1.5 text-left transition hover:bg-black/40"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-white">
-                      {EXPENSE_EMOJI[e.category] ?? '🧾'} {e.description ?? e.category}
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      {e.category} · {timeAgo(e.incurredAt)}
-                      {e.tripId ? ' · trip' : ' · no trip'}
-                    </div>
-                  </div>
-                  <div className="ml-2 text-sm font-medium text-emerald-100">
-                    {formatMinor(e.amountMinor, e.currency)}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
   );
 }

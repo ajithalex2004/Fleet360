@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 /**
  * src/app/(app)/fleet/telematics/page.tsx
@@ -12,7 +13,8 @@
  *   - Gateway Configuration Guide & cURL generator
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 import {
   Radio,
@@ -29,6 +31,7 @@ import {
   AlertTriangle,
   Terminal,
   Navigation,
+  History as HistoryIcon,
   CheckCircle2,
   Wrench,
   ArrowRight,
@@ -36,7 +39,34 @@ import {
   Shield,
   Award,
   Flame,
+  LayoutGrid,
+  MapPin,
+  Loader2,
+  Gauge,
+  Fuel,
+  Smartphone,
+  User,
+  Phone,
+  MoreVertical,
+  Map,
+  ExternalLink,
 } from 'lucide-react';
+import type { VehiclePosition } from '@/components/shared/FleetLiveMap';
+
+const FleetLiveMap = dynamic(() => import('@/components/shared/FleetLiveMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[550px] w-full rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] text-sm">
+      <Loader2 className="w-6 h-6 animate-spin text-cyan-400 mr-2" />
+      Loading Google Maps & Live Telematics Fleet View…
+    </div>
+  ),
+});
+
+const VehicleTrackingHistoryModal = dynamic(
+  () => import('@/components/telematics/VehicleTrackingHistoryModal'),
+  { ssr: false }
+);
 
 interface DriverSafetyEntry {
   driverId: string;
@@ -135,6 +165,29 @@ interface SimWebhookResponse {
   data: { success?: boolean; error?: string } & Record<string, unknown>;
 }
 
+export interface TelematicsAlert {
+  id: string;
+  type: 'OVERSPEEDING' | 'HARSH_BRAKING' | 'HARSH_ACCELERATION' | 'EXCESS_IDLING' | 'GEOFENCE_ENTRY' | 'GEOFENCE_EXIT' | 'OTHER';
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  title: string;
+  description: string;
+  timestamp: string;
+}
+
+export interface DeviceLocation {
+  locationName: string;
+  district: string;
+  coordinatesFormatted: string;
+  latitude: number;
+  longitude: number;
+  dateFormatted: string;
+  timeFormatted: string;
+  relativeFreshness: string;
+  timestampIso: string;
+  geofenceZone?: string | null;
+  insideGeofence: boolean;
+}
+
 interface DeviceItem {
   vehicleId: string;
   vehicleCode: string | null;
@@ -146,27 +199,89 @@ interface DeviceItem {
   simCardNo: string | null;
   odometerKm: number;
   fuelLevelPercent: number | null;
-  connectionStatus: 'ONLINE' | 'IDLE' | 'OFFLINE' | 'UNPAIRED';
+  operationalStatus: 'MOVING' | 'IDLE' | 'STOP';
+  connectionStatus?: 'MOVING' | 'IDLE' | 'STOP' | string;
+  isMobileTracking?: boolean;
+  isDeviceBlank?: boolean;
+  driver?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  location?: DeviceLocation | null;
+  alerts?: TelematicsAlert[];
+  hasActiveAlerts?: boolean;
+  job?: {
+    id: string;
+    tripNumber: string;
+    status: string;
+    title: string;
+    routeId: string | null;
+  } | null;
+  isOnTrip?: boolean;
   lastPing: {
     latitude: number;
     longitude: number;
     speedKmh: number;
     headingDeg: number;
     occurredAt: string;
+    source?: string;
   } | null;
+}
+
+function getVehicleShareUrls(d: DeviceItem) {
+  const statusStr = (d.operationalStatus || d.connectionStatus || 'STOP').toUpperCase();
+  const statusLabel = statusStr === 'MOVING' ? '🟢 Moving' : statusStr === 'IDLE' ? '🟡 Idle' : '🔴 Stop';
+  const speedText = d.lastPing ? `${d.lastPing.speedKmh.toFixed(0)} km/h` : '0 km/h';
+  const locationText = d.location?.locationName || (d.lastPing ? `${d.lastPing.latitude.toFixed(5)}, ${d.lastPing.longitude.toFixed(5)}` : 'Location unknown');
+  const driverText = d.driver ? `Driver: ${d.driver.name} (${d.driver.phone || 'No phone'})` : 'Driver: Unassigned';
+  const jobText = d.job?.title ? `Trip: ${d.job.title}` : d.isOnTrip ? 'Active Trip' : '';
+  const lat = d.lastPing?.latitude || d.location?.latitude || 24.4539;
+  const lng = d.lastPing?.longitude || d.location?.longitude || 54.3773;
+  const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+  const now = new Date().toLocaleTimeString();
+
+  const msg = [
+    `*Fleet360 Live Vehicle Location*`,
+    `🚗 Vehicle: ${d.licensePlate || d.vehicleCode || 'Asset'}`,
+    `📊 Status: ${statusLabel} (${speedText})`,
+    `📍 Location: ${locationText}`,
+    `👤 ${driverText}`,
+    jobText ? `🚩 ${jobText}` : null,
+    `⏱ Time: ${now}`,
+    `🗺 Map: ${mapsUrl}`,
+  ].filter(Boolean).join('\n');
+
+  const encoded = encodeURIComponent(msg);
+  return {
+    whatsappUrl: `https://wa.me/?text=${encoded}`,
+    smsUrl: `sms:?body=${encoded}`,
+    mapsUrl,
+    message: msg,
+  };
 }
 
 export default function TelematicsPage() {
   const [loading, setLoading] = useState(true);
   const [devices, setDevices] = useState<DeviceItem[]>([]);
-  const [filter, setFilter] = useState<'ALL' | 'ONLINE' | 'IDLE' | 'OFFLINE' | 'UNPAIRED'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOP' | 'ALERTS'>('ALL');
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [historyModalVehicle, setHistoryModalVehicle] = useState<{ id: string; codeOrPlate?: string } | null>(null);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
 
-  // Device pairing modal
-  const [pairModal, setPairModal] = useState<DeviceItem | null>(null);
-  const [editImei, setEditImei] = useState('');
-  const [editSim, setEditSim] = useState('');
-  const [pairingSaving, setPairingSaving] = useState(false);
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-telematics-actions]')) {
+        setActiveActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   // Active Tab state
   const [activeTab, setActiveTab] = useState<'devices' | 'automation' | 'safety' | 'simulator' | 'guide'>('devices');
@@ -181,31 +296,56 @@ export default function TelematicsPage() {
   const [simResponse, setSimResponse] = useState<SimWebhookResponse | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const fetchDevices = useCallback(async () => {
-    setLoading(true);
+  const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const fetchDevices = useCallback(async (showSpinner = false) => {
+    // Avoid concurrent overlapping requests
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (showSpinner) setLoading(true);
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const res = await fetch('/api/telematics/devices');
+      const res = await fetch('/api/telematics/devices', {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store',
+      });
       if (res.ok) {
         const data = await res.json();
-        setDevices(data.devices || []);
+        if (Array.isArray(data.devices)) {
+          setDevices(data.devices);
+        }
       }
-    } catch (err) {
-      console.error('Failed to fetch devices', err);
+    } catch (err: unknown) {
+      // Ignore clean aborts
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (showSpinner) {
+        console.warn('[telematics] Initial device fetch warning:', err instanceof Error ? err.message : err);
+      }
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
+      if (showSpinner) setLoading(false);
     }
   }, []);
 
   const fetchAutomation = useCallback(async () => {
     setAutomationLoading(true);
     try {
-      const res = await fetch('/api/telematics/automation');
+      const res = await fetch('/api/telematics/automation', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setAutomationData(data);
       }
-    } catch (err) {
-      console.error('Failed to fetch automation data', err);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.warn('[telematics] Automation fetch warning:', err instanceof Error ? err.message : err);
     } finally {
       setAutomationLoading(false);
     }
@@ -214,26 +354,90 @@ export default function TelematicsPage() {
   const fetchAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
     try {
-      const res = await fetch('/api/telematics/analytics');
+      const res = await fetch('/api/telematics/analytics', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setAnalyticsData(data);
       }
-    } catch (err) {
-      console.error('Failed to fetch analytics data', err);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.warn('[telematics] Analytics fetch warning:', err instanceof Error ? err.message : err);
     } finally {
       setAnalyticsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchDevices();
+    let isMounted = true;
+    let pollTimer: NodeJS.Timeout | null = null;
+
+    // Initial load
+    void fetchDevices(true);
     if (activeTab === 'automation') {
-      fetchAutomation();
+      void fetchAutomation();
     } else if (activeTab === 'safety') {
-      fetchAnalytics();
+      void fetchAnalytics();
     }
+
+    // Realtime background sync: self-scheduling loop (polls 4s AFTER previous query finishes)
+    // Prevents request overlap, browser connection exhaustion, and transient fetch errors
+    const scheduleNextPoll = () => {
+      if (!isMounted) return;
+      pollTimer = setTimeout(async () => {
+        if (!isMounted) return;
+
+        // Only poll if document is visible (prevents timer throttle queue backlog when tab is hidden)
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          await fetchDevices(false);
+
+          if (activeTab === 'automation' && isMounted) {
+            try {
+              const r = await fetch('/api/telematics/automation', { cache: 'no-store' });
+              if (r.ok && isMounted) {
+                const d = await r.json();
+                if (d && isMounted) setAutomationData(d);
+              }
+            } catch {
+              // Ignore background errors
+            }
+          }
+        }
+
+        if (isMounted) {
+          scheduleNextPoll();
+        }
+      }, 4000);
+    };
+
+    scheduleNextPoll();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        void fetchDevices(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchDevices, fetchAutomation, fetchAnalytics, activeTab]);
+
+  // Check for ?history= query param on load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const hist = sp.get('history') || sp.get('historyVehicleId');
+      if (hist) {
+        setHistoryModalVehicle({ id: hist, codeOrPlate: hist });
+      }
+    }
+  }, []);
 
   // Load sample payloads for simulator
   useEffect(() => {
@@ -326,36 +530,6 @@ export default function TelematicsPage() {
     }
   }, [simVendor, devices]);
 
-  const handleSavePairing = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pairModal) return;
-
-    setPairingSaving(true);
-    try {
-      const res = await fetch('/api/telematics/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicleId: pairModal.vehicleId,
-          deviceId: editImei.trim() || null,
-          simCardNo: editSim.trim() || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to update pairing');
-      }
-
-      setPairModal(null);
-      fetchDevices();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error updating device');
-    } finally {
-      setPairingSaving(false);
-    }
-  };
-
   const handleSimulateWebhook = async () => {
     setSimSubmitting(true);
     setSimResponse(null);
@@ -398,22 +572,44 @@ export default function TelematicsPage() {
   };
 
   const filtered = devices.filter((d) => {
-    if (filter !== 'ALL' && d.connectionStatus !== filter) return false;
+    const status = d.operationalStatus || d.connectionStatus;
+    if (filter === 'ALERTS') {
+      if (!d.hasActiveAlerts && (!d.alerts || d.alerts.length === 0)) return false;
+    } else if (filter !== 'ALL' && status !== filter) {
+      return false;
+    }
+
     if (search) {
       const q = search.toLowerCase();
       const code = (d.vehicleCode || '').toLowerCase();
       const plate = (d.licensePlate || '').toLowerCase();
       const imei = (d.deviceId || '').toLowerCase();
       const make = (d.make || '').toLowerCase();
-      return code.includes(q) || plate.includes(q) || imei.includes(q) || make.includes(q);
+      const driverName = (d.driver?.name || '').toLowerCase();
+      const driverPhone = (d.driver?.phone || '').toLowerCase();
+      const locName = (d.location?.locationName || '').toLowerCase();
+      const district = (d.location?.district || '').toLowerCase();
+      const alertsText = (d.alerts || []).map((a) => `${a.title} ${a.description}`).join(' ').toLowerCase();
+
+      return (
+        code.includes(q) ||
+        plate.includes(q) ||
+        imei.includes(q) ||
+        make.includes(q) ||
+        driverName.includes(q) ||
+        driverPhone.includes(q) ||
+        locName.includes(q) ||
+        district.includes(q) ||
+        alertsText.includes(q)
+      );
     }
     return true;
   });
 
-  const onlineCount = devices.filter((d) => d.connectionStatus === 'ONLINE').length;
-  const idleCount = devices.filter((d) => d.connectionStatus === 'IDLE').length;
-  const offlineCount = devices.filter((d) => d.connectionStatus === 'OFFLINE').length;
-  const unpairedCount = devices.filter((d) => d.connectionStatus === 'UNPAIRED').length;
+  const movingCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'MOVING').length;
+  const idleCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'IDLE').length;
+  const stopCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'STOP').length;
+  const alertVehiclesCount = devices.filter((d) => d.hasActiveAlerts || (d.alerts && d.alerts.length > 0)).length;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -423,20 +619,31 @@ export default function TelematicsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Radio className="w-6 h-6 text-cyan-400" />
-              Live Telematics & IoT Gateways
+              Live Telematics &amp; Fleet Map
             </h1>
             <span className="px-2 py-0.5 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
-              Pattern A: HTTPS Webhook
+              Live Fleet Monitoring
             </span>
           </div>
           <p className="text-sm text-[var(--text-muted)] mt-1">
-            Real-time GPS tracking, CAN-bus telemetry, and multi-vendor gateway ingestion (Flespi, Teltonika, Geotab, Traccar).
+            Real-time GPS tracking and live operational status: Moving, Idle, and Stop.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/fleet/vehicles"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs font-semibold border border-cyan-500/30 transition shadow-sm"
+          >
+            <Cpu className="w-4 h-4 text-cyan-400" />
+            Manage Hardware in Fleet Master ↗
+          </Link>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-xs font-mono shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-semibold">Realtime Sync (3s)</span>
+          </div>
           <button
-            onClick={fetchDevices}
+            onClick={() => fetchDevices(true)}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm font-medium border border-[var(--border-subtle)] transition"
           >
@@ -446,39 +653,77 @@ export default function TelematicsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards: Operational Vehicle Status */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
-          <p className="text-xs text-[var(--text-muted)] font-medium">Total Vehicles</p>
+        <div 
+          onClick={() => setFilter('ALL')}
+          className={`p-4 rounded-2xl bg-[var(--bg-surface)]/60 border cursor-pointer transition ${
+            filter === 'ALL' ? 'border-cyan-500 shadow-md ring-1 ring-cyan-500/30' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
+          } space-y-1`}
+        >
+          <p className="text-xs text-[var(--text-muted)] font-medium">Total Fleet</p>
           <p className="text-2xl font-bold text-[var(--text-main)]">{devices.length}</p>
-          <p className="text-[11px] text-[var(--text-faint)]">Fleet asset registry</p>
+          <p className="text-[11px] text-[var(--text-faint)]">All registered vehicles</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-1">
+        <div 
+          onClick={() => setFilter('MOVING')}
+          className={`p-4 rounded-2xl bg-emerald-950/30 border cursor-pointer transition ${
+            filter === 'MOVING' ? 'border-emerald-500 shadow-md ring-1 ring-emerald-500/30' : 'border-emerald-500/30 hover:border-emerald-500/50'
+          } space-y-1`}
+        >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-emerald-400 font-medium">Online & Moving</p>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Moving (Green)</p>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
           </div>
-          <p className="text-2xl font-bold text-emerald-300">{onlineCount}</p>
-          <p className="text-[11px] text-emerald-500/80">Active GPS stream</p>
+          <p className="text-2xl font-bold text-emerald-300">{movingCount}</p>
+          <p className="text-[11px] text-emerald-500/80">Speed &gt; 0 km/h · On road</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-1">
-          <p className="text-xs text-amber-400 font-medium">Stationary / Idle</p>
-          <p className="text-2xl font-bold text-amber-300">{idleCount}</p>
-          <p className="text-[11px] text-amber-500/80">Ignition ON / Speed 0</p>
+        <div 
+          onClick={() => setFilter('IDLE')}
+          className={`p-4 rounded-2xl bg-yellow-950/30 border cursor-pointer transition ${
+            filter === 'IDLE' ? 'border-yellow-500 shadow-md ring-1 ring-yellow-500/30' : 'border-yellow-500/30 hover:border-yellow-500/50'
+          } space-y-1`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-yellow-400 font-bold uppercase tracking-wider">Idle (Dark Yellow)</p>
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+          </div>
+          <p className="text-2xl font-bold text-yellow-300">{idleCount}</p>
+          <p className="text-[11px] text-yellow-500/80">Ignition ON · Speed 0 km/h</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/20 space-y-1">
-          <p className="text-xs text-rose-400 font-medium">Offline (&gt; 2 hrs)</p>
-          <p className="text-2xl font-bold text-rose-300">{offlineCount}</p>
-          <p className="text-[11px] text-rose-500/80">No recent ping</p>
+        <div 
+          onClick={() => setFilter('STOP')}
+          className={`p-4 rounded-2xl bg-rose-950/30 border cursor-pointer transition ${
+            filter === 'STOP' ? 'border-rose-500 shadow-md ring-1 ring-rose-500/30' : 'border-rose-500/30 hover:border-rose-500/50'
+          } space-y-1`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">Stop (Red)</p>
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+          </div>
+          <p className="text-2xl font-bold text-rose-300">{stopCount}</p>
+          <p className="text-[11px] text-rose-500/80">Parked / Ignition OFF</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
-          <p className="text-xs text-[var(--text-muted)] font-medium">Unpaired Hardware</p>
-          <p className="text-2xl font-bold text-[var(--text-muted)]">{unpairedCount}</p>
-          <p className="text-[11px] text-[var(--text-faint)]">No IMEI bound</p>
+        <div 
+          onClick={() => setFilter('ALERTS')}
+          className={`p-4 rounded-2xl bg-rose-950/20 border cursor-pointer transition ${
+            filter === 'ALERTS' ? 'border-rose-500 shadow-md ring-1 ring-rose-500/40' : 'border-rose-500/30 hover:border-rose-500/50'
+          } space-y-1 col-span-2 sm:col-span-1`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">Alerts (Active)</p>
+            {alertVehiclesCount > 0 ? (
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-ping" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+          </div>
+          <p className="text-2xl font-bold text-rose-300">{alertVehiclesCount}</p>
+          <p className="text-[11px] text-rose-400/80">Overspeed, Idle, Harsh, Geofence</p>
         </div>
       </div>
 
@@ -545,141 +790,520 @@ export default function TelematicsPage() {
         </button>
       </div>
 
-      {/* TAB 1: Live Devices Grid */}
+      {/* TAB 1: Live Devices Grid & Map */}
       {activeTab === 'devices' && (
         <div className="space-y-4">
-          {/* Filter and Search Bar */}
+          {/* Filter, View Toggle, and Search Bar */}
           <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
             <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
-              {(['ALL', 'ONLINE', 'IDLE', 'OFFLINE', 'UNPAIRED'] as const).map((status) => (
+              {(['ALL', 'MOVING', 'IDLE', 'STOP', 'ALERTS'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition ${
                     filter === status
                       ? ACTIVE_TOGGLE_BORDERED
                       : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
                   }`}
                 >
-                  {status}
+                  {status === 'ALL'
+                    ? 'All Fleet'
+                    : status === 'MOVING'
+                    ? '🟢 Moving'
+                    : status === 'IDLE'
+                    ? '🟡 Idle'
+                    : status === 'STOP'
+                    ? '🔴 Stop'
+                    : '🚨 With Alerts'}
                 </button>
               ))}
             </div>
 
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-[var(--text-faint)]" />
-              <input
-                type="text"
-                placeholder="Search code, plate, IMEI..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-9 pr-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
-              />
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              {/* Grid / Map View Toggle Button */}
+              <div className="flex items-center bg-[var(--bg-surface)] p-1 rounded-xl border border-[var(--border-subtle)] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    viewMode === 'grid'
+                      ? 'bg-cyan-500 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  Grid View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('map')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    viewMode === 'map'
+                      ? 'bg-cyan-500 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  Map View
+                </button>
+              </div>
+
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[var(--text-faint)]" />
+                <input
+                  type="text"
+                  placeholder="Search code, plate, IMEI..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-9 pr-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Grid Table */}
+          {/* VIEW: Map View */}
+          {viewMode === 'map' && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl relative">
+                <FleetLiveMap
+                  positions={filtered.map((d, index) => {
+                    const isMoving = (d.operationalStatus || d.connectionStatus) === 'MOVING';
+                    const isIdle = (d.operationalStatus || d.connectionStatus) === 'IDLE';
+
+                    // Use reported coordinates or default clustered in UAE corridor
+                    const defaultBaseLat = 25.1972 + ((index * 7) % 20) * 0.015 - 0.1;
+                    const defaultBaseLng = 55.2744 + ((index * 11) % 20) * 0.015 - 0.1;
+
+                    const lat = d.lastPing?.latitude || defaultBaseLat;
+                    const lng = d.lastPing?.longitude || defaultBaseLng;
+
+                    const secondsSincePing = d.lastPing?.occurredAt 
+                      ? Math.max(0, Math.floor((Date.now() - new Date(d.lastPing.occurredAt).getTime()) / 1000))
+                      : isMoving ? 30 : 7200;
+
+                    return {
+                      id: d.vehicleId,
+                      vehicle_id: d.vehicleId,
+                      vehicle_plate: d.licensePlate || d.vehicleCode || 'Asset',
+                      lat,
+                      lng,
+                      status: isMoving ? 'EN_ROUTE' : isIdle ? 'IDLE' : 'OFFLINE',
+                      operationalStatus: isMoving ? 'MOVING' : isIdle ? 'IDLE' : 'STOP',
+                      is_online: isMoving || isIdle,
+                      seconds_since_ping: secondsSincePing,
+                      speed_kmh: d.lastPing?.speedKmh ?? 0,
+                      type: d.type,
+                      make: d.make,
+                      model: d.model,
+                      driverName: d.driver?.name || null,
+                      driverPhone: d.driver?.phone || null,
+                      jobTitle: d.job?.title || null,
+                      isOnTrip: Boolean(d.isOnTrip || d.job),
+                      locationName: d.location?.locationName || null,
+                      district: d.location?.district || null,
+                    };
+                  })}
+                  selectedId={selectedVehicleId}
+                  onSelect={(id) => setSelectedVehicleId(id)}
+                  className="h-[620px] w-full"
+                />
+              </div>
+
+              {/* Selected Vehicle Telemetry Card */}
+              {(() => {
+                const sel = devices.find(d => d.vehicleId === selectedVehicleId);
+                if (!sel) return (
+                  <div className="p-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl text-xs text-[var(--text-muted)] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-cyan-400" /> Click any vehicle pin on the map to inspect live telematics, speed, and GPS metrics.
+                    </span>
+                    <span className="text-[11px] font-mono text-[var(--text-muted)]">Showing {filtered.length} vehicles on map</span>
+                  </div>
+                );
+
+                const isMoving = (sel.operationalStatus || sel.connectionStatus) === 'MOVING';
+                const isIdle = (sel.operationalStatus || sel.connectionStatus) === 'IDLE';
+
+                return (
+                  <div className="p-4 bg-[var(--bg-surface)] border border-cyan-500/40 rounded-2xl shadow-lg space-y-3">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                          <Navigation className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-[var(--text-main)] font-mono">
+                              {sel.licensePlate || sel.vehicleCode || 'Asset'}
+                            </h4>
+                            {isMoving ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                Moving
+                              </span>
+                            ) : isIdle ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                                Idle
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                Stop
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-[var(--text-muted)] mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span>{sel.make} {sel.model} • Code: {sel.vehicleCode || '—'}</span>
+                            <span>•</span>
+                            <span>{sel.isMobileTracking ? '📱 Driver Mobile GPS' : `IMEI: ${sel.deviceId || 'Unpaired'}`}</span>
+                            {sel.driver && (
+                              <>
+                                <span>•</span>
+                                <span className="font-semibold text-cyan-300">👤 {sel.driver.name}</span>
+                                {sel.driver.phone && (
+                                  <a
+                                    href={`tel:${sel.driver.phone}`}
+                                    className="inline-flex items-center gap-0.5 text-emerald-400 hover:text-emerald-300 hover:underline font-mono"
+                                  >
+                                    <Phone className="w-3 h-3 shrink-0" />
+                                    <span>{sel.driver.phone}</span>
+                                  </a>
+                                )}
+                              </>
+                            )}
+                            {(sel.job || sel.isOnTrip) && (
+                              <>
+                                <span>•</span>
+                                <span className="font-bold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-2 py-0.5 rounded text-[10px]">
+                                  🚩 {sel.job?.title || 'On Trip'}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-4 text-xs font-mono">
+                        <div className="bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="text-[10px] text-[var(--text-muted)] font-sans uppercase">Speed</div>
+                          <div className="font-bold text-cyan-400 text-sm">{sel.lastPing?.speedKmh?.toFixed(1) ?? '0.0'} km/h</div>
+                        </div>
+                        <div className="bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="text-[10px] text-[var(--text-muted)] font-sans uppercase">Odometer</div>
+                          <div className="font-bold text-[var(--text-main)] text-sm">{sel.odometerKm?.toLocaleString() ?? 0} km</div>
+                        </div>
+                        <div className="bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="text-[10px] text-[var(--text-muted)] font-sans uppercase">Fuel Level</div>
+                          <div className="font-bold text-emerald-400 text-sm">{sel.fuelLevelPercent != null ? `${sel.fuelLevelPercent.toFixed(0)}%` : '—'}</div>
+                        </div>
+                        <div className="bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="text-[10px] text-[var(--text-muted)] font-sans uppercase">Last Ping</div>
+                          <div className="font-semibold text-[var(--text-main)] text-xs">
+                            {sel.lastPing ? new Date(sel.lastPing.occurredAt).toLocaleTimeString() : 'Never'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <a
+                          href={getVehicleShareUrls(sel).whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md active:scale-95"
+                          title="Share vehicle live location via WhatsApp"
+                        >
+                          💬 WhatsApp
+                        </a>
+                        <a
+                          href={getVehicleShareUrls(sel).smsUrl}
+                          className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md active:scale-95"
+                          title="Share vehicle live location via SMS"
+                        >
+                          📱 SMS
+                        </a>
+                        <button
+                          onClick={() => setHistoryModalVehicle({ id: sel.vehicleId, codeOrPlate: sel.licensePlate || sel.vehicleCode || undefined })}
+                          className="px-3.5 py-2 rounded-xl bg-cyan-500/25 hover:bg-cyan-500/35 text-cyan-200 text-xs font-bold border border-cyan-500/50 transition flex items-center gap-1.5 shadow-md active:scale-95"
+                          title="View full historical GPS tracking & route breadcrumb log"
+                        >
+                          <HistoryIcon className="w-4 h-4 text-cyan-400" /> History Tracking
+                        </button>
+                        <Link
+                          href={`/fleet/vehicles?search=${encodeURIComponent(sel.licensePlate || sel.vehicleCode || '')}`}
+                          className="px-3.5 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition flex items-center gap-1 shadow-sm"
+                          title="Open vehicle in Fleet Master to manage hardware pairing"
+                        >
+                          Fleet Master ↗
+                        </Link>
+                        <button
+                          onClick={() => setSelectedVehicleId(null)}
+                          className="px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Live Location and Alerts Detail Bar */}
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <span className="text-[var(--text-muted)]">Location:</span>
+                        <span className="font-semibold text-[var(--text-main)]">
+                          {sel.location?.locationName || 'Location Unknown'}
+                        </span>
+                        {sel.location?.coordinatesFormatted && (
+                          <span className="font-mono text-[10px] bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded">
+                            {sel.location.coordinatesFormatted}
+                          </span>
+                        )}
+                        {sel.location && (
+                          <span className="text-[11px] text-[var(--text-faint)] flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-[var(--text-muted)]" />
+                            {sel.location.dateFormatted} · {sel.location.timeFormatted} ({sel.location.relativeFreshness})
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] text-[var(--text-muted)] font-medium">Alerts:</span>
+                        {sel.alerts && sel.alerts.length > 0 ? (
+                          sel.alerts.map((alert) => (
+                            <span
+                              key={alert.id}
+                              title={alert.description}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 ${
+                                alert.type === 'OVERSPEEDING'
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                                  : alert.type === 'HARSH_BRAKING'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : alert.type === 'HARSH_ACCELERATION'
+                                  ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+                                  : alert.type === 'EXCESS_IDLING'
+                                  ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                                  : alert.type === 'GEOFENCE_ENTRY' || alert.type === 'GEOFENCE_EXIT'
+                                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                  : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                              }`}
+                            >
+                              {alert.type === 'OVERSPEEDING' && '🚨 '}
+                              {alert.type === 'HARSH_BRAKING' && '⚠️ '}
+                              {alert.type === 'HARSH_ACCELERATION' && '⚡ '}
+                              {alert.type === 'EXCESS_IDLING' && '⏳ '}
+                              {(alert.type === 'GEOFENCE_ENTRY' || alert.type === 'GEOFENCE_EXIT') && '📍 '}
+                              <span>{alert.title}</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            Normal (No Alerts)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* VIEW: Grid Table */}
+          {viewMode === 'grid' && (
           <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[var(--text-muted)]">
+              <table className="w-full text-left text-xs text-[var(--text-muted)] min-w-[1720px]">
                 <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
                   <tr>
-                    <th className="p-3.5">Vehicle</th>
-                    <th className="p-3.5">Hardware IMEI / Device</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5">Speed</th>
-                    <th className="p-3.5">Odometer</th>
-                    <th className="p-3.5">Fuel %</th>
-                    <th className="p-3.5">Last Communication</th>
-                    <th className="p-3.5 text-right">Actions</th>
+                    <th className="p-4 w-[210px] min-w-[210px]">Vehicle</th>
+                    <th className="p-4 w-[230px] min-w-[230px]">Driver &amp; Contact</th>
+                    <th className="p-4 w-[280px] min-w-[280px]">Current Location</th>
+                    <th className="p-4 w-[190px] min-w-[190px]">Location Date &amp; Time</th>
+                    <th className="p-4 w-[160px] min-w-[160px]">Status &amp; Speed</th>
+                    <th className="p-4 w-[230px] min-w-[230px]">Active Alerts</th>
+                    <th className="p-4 w-[170px] min-w-[170px]">Odometer &amp; Fuel</th>
+                    <th className="p-4 w-[190px] min-w-[190px]">Hardware / Device</th>
+                    <th className="p-4 w-[90px] min-w-[90px] text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-[var(--text-faint)]">
+                      <td colSpan={9} className="p-10 text-center text-[var(--text-faint)]">
                         No devices found matching filter criteria.
                       </td>
                     </tr>
                   ) : (
                     filtered.map((d) => {
-                      const isOnline = d.connectionStatus === 'ONLINE';
-                      const isIdle = d.connectionStatus === 'IDLE';
-                      const isOffline = d.connectionStatus === 'OFFLINE';
+                      const isMoving = (d.operationalStatus || d.connectionStatus) === 'MOVING';
+                      const isIdle = (d.operationalStatus || d.connectionStatus) === 'IDLE';
 
                       return (
                         <tr key={d.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
-                          <td className="p-3.5 font-medium">
-                            <div className="font-bold text-[var(--text-main)] text-sm">
-                              {d.vehicleCode || d.licensePlate || 'Unnamed Asset'}
+                          <td className="p-4 font-medium w-[210px] min-w-[210px]">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text-main)] text-sm">
+                                {d.vehicleCode || d.licensePlate || 'Unnamed Asset'}
+                              </span>
+                              {(d.job || d.isOnTrip) && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40" title={d.job?.title || 'Active Trip'}>
+                                  🚩 TRIP
+                                </span>
+                              )}
                             </div>
-                            <div className="text-[11px] text-[var(--text-faint)]">
+                            <div className="text-[11px] text-[var(--text-faint)] mt-0.5">
                               {d.licensePlate ? `Plate: ${d.licensePlate}` : ''}{' '}
                               {d.make ? `· ${d.make} ${d.model || ''}` : ''}
                             </div>
                           </td>
 
-                          <td className="p-3.5 font-mono">
-                            {d.deviceId ? (
-                              <div>
-                                <span className="font-bold text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-                                  {d.deviceId}
-                                </span>
-                                {d.simCardNo && (
-                                  <div className="text-[10px] text-[var(--text-faint)] mt-0.5">
-                                    SIM: {d.simCardNo}
+                          <td className="p-4 w-[230px] min-w-[230px]">
+                            {d.driver ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 font-bold text-[var(--text-main)] text-xs">
+                                  <span className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center justify-center text-[10px] font-black shrink-0">
+                                    {d.driver.name.charAt(0).toUpperCase()}
+                                  </span>
+                                  <span className="truncate max-w-[170px] font-semibold">{d.driver.name}</span>
+                                </div>
+                                {d.driver.phone ? (
+                                  <div className="pl-8">
+                                    <a
+                                      href={`tel:${d.driver.phone}`}
+                                      className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 hover:text-emerald-300 hover:underline"
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Click to call driver"
+                                    >
+                                      <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>{d.driver.phone}</span>
+                                    </a>
                                   </div>
+                                ) : (
+                                  <div className="text-[10px] text-[var(--text-faint)] pl-8">No phone</div>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-[var(--text-faint)] italic">Unpaired</span>
+                              <span className="text-[var(--text-faint)] italic">Unassigned</span>
                             )}
                           </td>
 
-                          <td className="p-3.5">
-                            {isOnline && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                ONLINE
-                              </span>
-                            )}
-                            {isIdle && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                IDLE
-                              </span>
-                            )}
-                            {isOffline && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                                <WifiOff className="w-3 h-3" />
-                                OFFLINE
-                              </span>
-                            )}
-                            {d.connectionStatus === 'UNPAIRED' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-[var(--bg-surface)] text-[var(--text-muted)]">
-                                NO DEVICE
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="p-3.5 font-mono">
-                            {d.lastPing ? (
-                              <span className={`font-bold ${d.lastPing.speedKmh > 100 ? 'text-amber-400' : 'text-[var(--text-main)]'}`}>
-                                {d.lastPing.speedKmh.toFixed(0)} km/h
-                              </span>
+                          <td className="p-4 w-[280px] min-w-[280px]">
+                            {d.location ? (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1.5 font-semibold text-[var(--text-main)] text-xs">
+                                  <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+                                  <span className="truncate max-w-[220px]" title={d.location.locationName}>
+                                    {d.location.district || d.location.locationName}
+                                  </span>
+                                </div>
+                                <div className="font-mono text-[10px] text-cyan-300/80 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/20 inline-block">
+                                  {d.location.coordinatesFormatted}
+                                </div>
+                              </div>
                             ) : (
-                              '—'
+                              <span className="text-[var(--text-faint)] italic flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-[var(--text-faint)]" /> No GPS fix yet
+                              </span>
                             )}
                           </td>
 
-                          <td className="p-3.5 font-mono text-[var(--text-main)]">
-                            {d.odometerKm > 0 ? `${d.odometerKm.toLocaleString()} km` : '—'}
+                          <td className="p-4 w-[190px] min-w-[190px] text-[var(--text-muted)]">
+                            {d.location || d.lastPing ? (
+                              <div className="space-y-0.5">
+                                <div className="font-mono text-xs font-medium text-[var(--text-main)]">
+                                  {d.location?.timeFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleTimeString() : '—')}
+                                </div>
+                                <div className="text-[10px] text-[var(--text-faint)] font-mono">
+                                  {d.location?.dateFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleDateString() : '')}
+                                </div>
+                                <div className="inline-flex items-center gap-1 text-[10px] text-cyan-400/90 font-medium">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>{d.location?.relativeFreshness || 'Recent'}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[var(--text-faint)] italic">Never</span>
+                            )}
                           </td>
 
-                          <td className="p-3.5">
+                          <td className="p-4 w-[160px] min-w-[160px]">
+                            <div className="space-y-1">
+                              <div>
+                                {isMoving ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    Moving
+                                  </span>
+                                ) : isIdle ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                                    Idle
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                    Stop
+                                  </span>
+                                )}
+                              </div>
+                              <div className="font-mono text-xs">
+                                {d.lastPing ? (
+                                  <span className={`font-bold ${d.lastPing.speedKmh > 100 ? 'text-rose-400 animate-pulse' : 'text-[var(--text-main)]'}`}>
+                                    {d.lastPing.speedKmh.toFixed(0)} km/h
+                                  </span>
+                                ) : (
+                                  <span className="text-[var(--text-faint)]">0 km/h</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4 w-[230px] min-w-[230px]">
+                            {d.alerts && d.alerts.length > 0 ? (
+                              <div className="flex flex-col gap-1 max-w-[220px]">
+                                {d.alerts.map((alert) => (
+                                  <span
+                                    key={alert.id}
+                                    title={alert.description}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border truncate flex items-center gap-1 ${
+                                      alert.type === 'OVERSPEEDING'
+                                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                                        : alert.type === 'HARSH_BRAKING'
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                        : alert.type === 'HARSH_ACCELERATION'
+                                        ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+                                        : alert.type === 'EXCESS_IDLING'
+                                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                                        : alert.type === 'GEOFENCE_ENTRY' || alert.type === 'GEOFENCE_EXIT'
+                                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                        : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                    }`}
+                                  >
+                                    {alert.type === 'OVERSPEEDING' && '🚨 '}
+                                    {alert.type === 'HARSH_BRAKING' && '⚠️ '}
+                                    {alert.type === 'HARSH_ACCELERATION' && '⚡ '}
+                                    {alert.type === 'EXCESS_IDLING' && '⏳ '}
+                                    {(alert.type === 'GEOFENCE_ENTRY' || alert.type === 'GEOFENCE_EXIT') && '📍 '}
+                                    <span className="truncate">{alert.title}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                Normal
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-4 w-[170px] min-w-[170px] font-mono">
+                            <div className="font-semibold text-[var(--text-main)] text-xs">
+                              {d.odometerKm > 0 ? `${d.odometerKm.toLocaleString()} km` : '—'}
+                            </div>
                             {d.fuelLevelPercent !== null ? (
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <div className="w-14 h-1.5 bg-[var(--bg-canvas)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
                                   <div
                                     className={`h-full ${
                                       d.fuelLevelPercent < 20
@@ -691,39 +1315,159 @@ export default function TelematicsPage() {
                                     style={{ width: `${d.fuelLevelPercent}%` }}
                                   />
                                 </div>
-                                <span className="font-mono text-[11px] text-[var(--text-muted)]">
-                                  {d.fuelLevelPercent.toFixed(0)}%
-                                </span>
+                                <span className="text-[10px] text-[var(--text-muted)]">{d.fuelLevelPercent.toFixed(0)}%</span>
                               </div>
-                            ) : (
-                              '—'
-                            )}
+                            ) : null}
                           </td>
 
-                          <td className="p-3.5 text-[var(--text-muted)]">
-                            {d.lastPing ? (
+                          <td className="p-4 w-[190px] min-w-[190px] font-mono">
+                            {d.deviceId ? (
                               <div>
-                                <div>{new Date(d.lastPing.occurredAt).toLocaleTimeString()}</div>
-                                <div className="text-[10px] text-[var(--text-faint)]">
-                                  {new Date(d.lastPing.occurredAt).toLocaleDateString()}
-                                </div>
+                                <span className="font-bold text-cyan-300 bg-cyan-950/60 px-2.5 py-0.5 rounded border border-cyan-500/30 text-[11px]">
+                                  {d.deviceId}
+                                </span>
+                                {d.simCardNo && (
+                                  <div className="text-[10px] text-[var(--text-faint)] mt-1">
+                                    SIM: {d.simCardNo}
+                                  </div>
+                                )}
                               </div>
+                            ) : d.isMobileTracking ? (
+                              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-500/30 text-xs shadow-sm">
+                                <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                                Driver Mobile GPS
+                              </span>
                             ) : (
-                              'Never'
+                              <span className="text-[var(--text-faint)] italic text-[11px]">Unpaired</span>
                             )}
                           </td>
 
-                          <td className="p-3.5 text-right">
-                            <button
-                              onClick={() => {
-                                setPairModal(d);
-                                setEditImei(d.deviceId || '');
-                                setEditSim(d.simCardNo || '');
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
-                            >
-                              {d.deviceId ? 'Edit Pairing' : 'Pair Device'}
-                            </button>
+                          <td className="p-4 w-[90px] min-w-[90px] text-center whitespace-nowrap relative" data-telematics-actions>
+                            <div className="inline-block text-left relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(prev => prev === d.vehicleId ? null : d.vehicleId);
+                                }}
+                                className={`p-2 rounded-xl border transition flex items-center justify-center ${
+                                  activeActionMenuId === d.vehicleId
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-md ring-2 ring-cyan-500/20'
+                                    : 'bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] border-[var(--border-subtle)]'
+                                }`}
+                                title="Actions Menu"
+                                aria-label="Asset Actions"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {activeActionMenuId === d.vehicleId && (
+                                <div
+                                  className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 shadow-2xl shadow-slate-900/25 z-50 py-1.5 text-left divide-y divide-slate-200 dark:divide-slate-800 animate-in fade-in zoom-in-95 duration-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80">
+                                    <div className="text-[11px] uppercase font-black tracking-wider text-cyan-700 dark:text-cyan-400">
+                                      {d.vehicleCode || d.licensePlate}
+                                    </div>
+                                    <div className="text-xs font-bold text-slate-950 dark:text-slate-200 truncate mt-0.5">
+                                      {d.make} {d.model} {d.licensePlate ? `(${d.licensePlate})` : ''}
+                                    </div>
+                                  </div>
+
+                                  <div className="py-1">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedVehicleId(d.vehicleId);
+                                        setViewMode('map');
+                                        setActiveActionMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-slate-950 dark:text-white hover:bg-cyan-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-400">
+                                        <Map className="w-4 h-4 shrink-0" />
+                                      </span>
+                                      <span>View on Live Map</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setHistoryModalVehicle({ id: d.vehicleId, codeOrPlate: d.licensePlate || d.vehicleCode || undefined });
+                                        setActiveActionMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-slate-950 dark:text-white hover:bg-indigo-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-400">
+                                        <HistoryIcon className="w-4 h-4 shrink-0" />
+                                      </span>
+                                      <span>GPS Tracking History</span>
+                                    </button>
+                                  </div>
+
+                                  <div className="py-1">
+                                    <a
+                                      href={getVehicleShareUrls(d).whatsappUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400">
+                                        💬
+                                      </span>
+                                      <span>Share via WhatsApp</span>
+                                    </a>
+
+                                    <a
+                                      href={getVehicleShareUrls(d).smsUrl}
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-sky-800 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-400">
+                                        📱
+                                      </span>
+                                      <span>Share via SMS</span>
+                                    </a>
+                                  </div>
+
+                                  <div className="py-1">
+                                    {d.driver?.phone && (
+                                      <a
+                                        href={`tel:${d.driver.phone}`}
+                                        className="w-full px-4 py-2.5 text-xs font-bold text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                        onClick={() => setActiveActionMenuId(null)}
+                                      >
+                                        <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400">
+                                          <Phone className="w-4 h-4 shrink-0" />
+                                        </span>
+                                        <span>Call Driver ({d.driver.name.split(' ')[0]})</span>
+                                      </a>
+                                    )}
+
+                                    <Link
+                                      href={`/fleet/vehicles?search=${encodeURIComponent(d.licensePlate || d.vehicleCode || '')}`}
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-slate-950 dark:text-white hover:bg-amber-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400">
+                                        <ExternalLink className="w-4 h-4 shrink-0" />
+                                      </span>
+                                      <span>Open in Fleet Master</span>
+                                    </Link>
+
+                                    <Link
+                                      href="/driver-mgmt/profiles"
+                                      className="w-full px-4 py-2.5 text-xs font-bold text-slate-950 dark:text-white hover:bg-violet-50 dark:hover:bg-slate-800 flex items-center gap-3 transition"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <span className="p-1.5 rounded-lg bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-400">
+                                        <User className="w-4 h-4 shrink-0" />
+                                      </span>
+                                      <span>Driver Profiles</span>
+                                    </Link>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -733,6 +1477,7 @@ export default function TelematicsPage() {
               </table>
             </div>
           </div>
+          )}
         </div>
       )}
 
@@ -1316,74 +2061,13 @@ export default function TelematicsPage() {
         </div>
       )}
 
-      {/* Device Pairing Modal */}
-      {pairModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
-                  Hardware Pairing
-                </span>
-                <h3 className="text-base font-bold text-[var(--text-main)] mt-0.5">
-                  {pairModal.vehicleCode || pairModal.licensePlate}
-                </h3>
-              </div>
-              <button
-                onClick={() => setPairModal(null)}
-                className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePairing} className="space-y-3">
-              <div>
-                <label className="block text-[var(--text-muted)] font-medium mb-1">
-                  Device Hardware IMEI / Tracker ID *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 864201047281920"
-                  value={editImei}
-                  onChange={(e) => setEditImei(e.target.value)}
-                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2 text-[var(--text-main)] focus:outline-none focus:border-cyan-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[var(--text-muted)] font-medium mb-1">
-                  SIM Card Phone Number / ICCID (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. +971501234567"
-                  value={editSim}
-                  onChange={(e) => setEditSim(e.target.value)}
-                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2 text-[var(--text-main)] focus:outline-none focus:border-cyan-500 font-mono"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setPairModal(null)}
-                  disabled={pairingSaving}
-                  className="px-3 py-1.5 text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={pairingSaving}
-                  className="px-4 py-2 font-bold text-white bg-cyan-400 hover:bg-cyan-300 rounded-xl shadow transition disabled:opacity-50"
-                >
-                  {pairingSaving ? 'Saving...' : 'Save Pairing'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Interactive Vehicle Tracking History Modal */}
+      {historyModalVehicle && (
+        <VehicleTrackingHistoryModal
+          vehicleId={historyModalVehicle.id}
+          vehicleCodeOrPlate={historyModalVehicle.codeOrPlate}
+          onClose={() => setHistoryModalVehicle(null)}
+        />
       )}
     </div>
   );

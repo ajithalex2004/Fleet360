@@ -853,14 +853,49 @@ export default function TenantDetailPage() {
   const [tab, setTab]               = useState<'modules'|'features'|'attachments'|'users'|'roles'|'branches'|'admin-access'>('modules');
 
   // Admin Access tab state
-  const TOGGLEABLE_NAV = [
-    { key: 'branches',   label: 'Branches & Regions',      desc: 'Manage branches and regional offices' },
-    { key: 'billing',    label: 'Billing & Subscriptions',  desc: 'View and manage subscription plan' },
-    { key: 'workflows',  label: 'Workflow Management',      desc: 'Configure automated workflows' },
-    { key: 'esign',      label: 'E-Signing Console',        desc: 'Monitor e-signing activity' },
-    { key: 'whatsapp',   label: 'WhatsApp Support',         desc: 'Manage WhatsApp bot and conversations' },
-    { key: 'dispatch',   label: 'Dispatch Monitor',         desc: 'View real-time dispatch dashboard' },
-    { key: 'audit-logs', label: 'Audit Log',                desc: 'View activity and change history' },
+  // Categorized toggleable navigation permissions for Tenant Admin
+  const TOGGLEABLE_NAV_GROUPS = [
+    {
+      category: 'Organization & Masters',
+      description: 'Foundational organizational structure, branches, and operational categories',
+      items: [
+        { key: 'hierarchy',       label: 'Region, Department & Section', desc: 'Manage 3-tier organizational hierarchy & Cost Centres' },
+        { key: 'branches',        label: 'Branches & Regions',           desc: 'Manage operational hubs, branch depots & regional offices' },
+        { key: 'nui-reasons',     label: 'NUI Reason Master',            desc: 'Configure vehicle off-road & non-utilization categories' },
+        { key: 'company-profile', label: 'Company Profile & Legal',      desc: 'Edit trade license, TRN tax number & corporate branding' },
+      ],
+    },
+    {
+      category: 'Operations & Workflows',
+      description: 'Operational dispatching, SLAs, approval routing, and client self-service',
+      items: [
+        { key: 'service-config',        label: 'Service Configuration',  desc: 'Configure operational SLAs, booking rules & service types' },
+        { key: 'workflows',             label: 'Workflow Management',    desc: 'Configure multi-step approvals and escalation rules' },
+        { key: 'dispatch',              label: 'Dispatch Monitor',       desc: 'View real-time dispatch dashboard & fleet radar' },
+        { key: 'shipper-portal-config', label: 'Shipper Portal Config',  desc: 'Configure client self-service portal settings' },
+        { key: 'partner-onboarding',    label: 'Partner Onboarding',     desc: 'Manage 3rd-party carrier and contractor onboarding' },
+      ],
+    },
+    {
+      category: 'Communications & Alerts',
+      description: 'Customer and driver communication channels and automated alert rules',
+      items: [
+        { key: 'notifications',   label: 'Email & SMS Notifications', desc: 'Automated alert rules for allocations and maintenance' },
+        { key: 'email-templates', label: 'Email Templates',           desc: 'Customize customer and corporate email notifications' },
+        { key: 'whatsapp',        label: 'WhatsApp Support',          desc: 'Manage WhatsApp bot, templates and booking chats' },
+        { key: 'esign',           label: 'E-Signing Console',         desc: 'Monitor digital handovers & contract signatures' },
+        { key: 'alerts',          label: 'Alert Engine',              desc: 'Configure rule-based alerts and triggers' },
+      ],
+    },
+    {
+      category: 'Subscription & Governance',
+      description: 'Audit trails, SaaS billing, and third-party integration controls',
+      items: [
+        { key: 'billing',      label: 'Billing & Subscriptions', desc: 'View and manage subscription plan & invoices' },
+        { key: 'audit-logs',   label: 'Audit Log',               desc: 'View security audit trail and change history' },
+        { key: 'integrations', label: 'API & Telematics Integrations', desc: 'Manage telematics API keys, webhooks and ERP connectors' },
+      ],
+    },
   ];
   const [navPerms, setNavPerms]         = useState<Record<string,boolean>>({});
   const [navPermsSaving, setNavPermsSaving] = useState(false);
@@ -1402,66 +1437,133 @@ export default function TenantDetailPage() {
 
       {/* ── ADMIN ACCESS ── */}
       {tab === 'admin-access' && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-3xl">
           <div>
-            <h3 className="text-[var(--text-main)] font-semibold text-lg">Tenant Admin — Admin Panel Access</h3>
+            <h3 className="text-[var(--text-main)] font-semibold text-lg flex items-center gap-2">
+              <span>Tenant Admin — Menu & Feature Assignment</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-normal">Super Admin Control</span>
+            </h3>
             <p className="text-[var(--text-muted)] text-sm mt-1">
-              Control which Admin Panel sections the Tenant Admin of this organisation can see.
-              <br/>
-              <span className="text-[var(--text-faint)]">Overview, Users, and Roles are always visible. Toggle optional sections below.</span>
+              Select which Admin menu items and capabilities this Tenant Admin can access. 
+              Changes take effect immediately on their next page load.
             </p>
           </div>
 
-          {/* Always-on items (read-only display) */}
-          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Always Enabled</p>
-            {['Overview', 'Users', 'Roles & Permissions'].map(label => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd"/></svg>
-                </div>
-                <span className="text-[var(--text-muted)] text-sm">{label}</span>
-                <span className="ml-auto text-xs text-emerald-500 font-medium">Always On</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Toggleable items */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl divide-y divide-white/5">
-            <div className="px-5 py-3">
-              <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Optional — Enable for this tenant</p>
+          {/* Always-on items (Core Essentials) */}
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">
+                Core Essentials — Always Enabled
+              </p>
+              <span className="text-[10px] text-emerald-400 font-mono">3 Mandatory Items</span>
             </div>
-            {TOGGLEABLE_NAV.map(item => (
-              <div key={item.key} className="flex items-center gap-4 px-5 py-4">
-                <button
-                  onClick={() => setNavPerms(p => ({ ...p, [item.key]: !p[item.key] }))}
-                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}
-                >
-                  <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[var(--text-main)] text-sm font-medium">{item.label}</p>
-                  <p className="text-[var(--text-faint)] text-xs">{item.desc}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                { label: 'Overview', desc: 'Administrative Dashboard' },
+                { label: 'Users', desc: 'Tenant User Directory' },
+                { label: 'Roles & Permissions', desc: 'Tenant RBAC Config' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+                  <div className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2.5 h-2.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[var(--text-main)] text-xs font-medium block truncate">{item.label}</span>
+                    <span className="text-[10px] text-[var(--text-faint)] block truncate">{item.desc}</span>
+                  </div>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)]'}`}>
-                  {navPerms[item.key] ? 'Enabled' : 'Hidden'}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* Super Admin only — informational */}
-          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Super Admin Only — Never Visible to Tenant Admin</p>
-            {['Tenants', 'Platform Info', 'Notifications', 'Integrations & ERP', 'Platform Settings'].map(label => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+          {/* Categorized Toggleable Groups */}
+          <div className="space-y-4">
+            {TOGGLEABLE_NAV_GROUPS.map((group) => {
+              const allKeys = group.items.map(i => i.key);
+              const allEnabled = allKeys.every(k => navPerms[k]);
+              const someEnabled = allKeys.some(k => navPerms[k]);
+
+              const toggleGroup = () => {
+                const targetState = !allEnabled;
+                setNavPerms(prev => {
+                  const next = { ...prev };
+                  allKeys.forEach(k => { next[k] = targetState; });
+                  return next;
+                });
+              };
+
+              return (
+                <div key={group.category} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 bg-[var(--bg-surface-hover)]/40 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wide">
+                        {group.category}
+                      </h4>
+                      <p className="text-[11px] text-[var(--text-faint)]">{group.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleGroup}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors border border-[var(--border-subtle)]"
+                    >
+                      {allEnabled ? 'Disable All' : 'Enable All'}
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]/50">
+                    {group.items.map((item) => (
+                      <div key={item.key} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[var(--bg-surface-hover)]/20 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => setNavPerms(p => ({ ...p, [item.key]: !p[item.key] }))}
+                          className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'}`}
+                        >
+                          <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[var(--text-main)] text-sm font-medium">{item.label}</p>
+                          <p className="text-[var(--text-faint)] text-xs mt-0.5">{item.desc}</p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}>
+                          {navPerms[item.key] ? 'Enabled' : 'Hidden'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <span className="text-[var(--text-muted)] text-sm">{label}</span>
-                <span className="ml-auto text-xs text-red-500 font-medium">Platform Only</span>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+
+          {/* Super Admin only — informational & protected */}
+          <div className="bg-[var(--bg-surface)]/40 border border-red-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-red-400 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                <span>Platform Super Admin Only — Locked & Protected</span>
+              </p>
+              <span className="text-[10px] text-red-400/80 font-mono">Restricted from Tenant Admins</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { label: 'Tenants Master', desc: 'Create, audit & manage SaaS tenants' },
+                { label: 'Module Policies', desc: 'Plan entitlement & licensing gates' },
+                { label: 'System Health', desc: 'Database pools, Redis & cron runs' },
+                { label: 'Platform Settings', desc: 'Root database timeouts & CORS origins' },
+                { label: 'Attachment Types', desc: 'Global document definitions' },
+                { label: 'Exchange Partners', desc: 'B2B global carrier network directory' },
+                { label: 'Brand Preview', desc: 'White-label SaaS theme customization' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2.5 p-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <div className="w-3.5 h-3.5 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2 h-2 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[var(--text-muted)] text-xs font-medium block truncate">{item.label}</span>
+                    <span className="text-[10px] text-[var(--text-faint)] block truncate">{item.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Save button */}

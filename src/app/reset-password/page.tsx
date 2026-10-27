@@ -5,11 +5,10 @@ import { useSearchParams } from 'next/navigation';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 const RULES = [
-  { test: (p: string) => p.length >= 10,           label: 'At least 10 characters' },
-  { test: (p: string) => /[A-Z]/.test(p),          label: 'One uppercase letter' },
-  { test: (p: string) => /[a-z]/.test(p),          label: 'One lowercase letter' },
-  { test: (p: string) => /\d/.test(p),             label: 'One digit' },
-  { test: (p: string) => /[^A-Za-z0-9]/.test(p),   label: 'One symbol' },
+  { test: (p: string) => p.length >= 8,          label: 'At least 8 characters' },
+  { test: (p: string) => /[a-zA-Z]/.test(p),     label: 'One alphabet letter' },
+  { test: (p: string) => /\d/.test(p),            label: 'One numeric digit' },
+  { test: (p: string) => /[^A-Za-z0-9]/.test(p),  label: 'One special character or symbol' },
 ];
 
 // Next.js 15 requires useSearchParams to live under a Suspense boundary

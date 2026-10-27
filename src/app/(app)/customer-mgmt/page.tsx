@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
 import { Building2, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 
@@ -279,7 +281,7 @@ export default function CustomerPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-[var(--text-main)] max-w-[140px] truncate">{c.email??'-'}</td>
-                    <td className="px-3 py-3 text-[var(--text-main)] whitespace-nowrap">{c.mobileCountryCode} {c.mobileNumber??'-'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap"><PhoneCell value={`${c.mobileCountryCode || ''}${c.mobileNumber || ''}`} /></td>
                     <td className="px-3 py-3 text-[var(--text-muted)]">{c.contactPerson??'-'}</td>
                     <td className="px-3 py-3 text-xs">
                       <div className="text-[var(--text-muted)]">{c.region?.name??'-'}</div>
@@ -400,12 +402,14 @@ export default function CustomerPage() {
                           <input type="email" className={inp} value={form.email??''} onChange={e=>set('email',e.target.value)} placeholder="Enter email address"/>
                         </Fld>
                         <Fld label="Mobile Number" req>
-                          <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.mobileCountryCode??'+971'} onChange={e=>set('mobileCountryCode',e.target.value)}>
-                              {['+971','+966','+965','+973','+968','+974','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <input className={`${inp} flex-1`} value={form.mobileNumber??''} onChange={e=>set('mobileNumber',e.target.value)} placeholder="Phone number"/>
-                          </div>
+                          <PhoneInput
+                            value={`${form.mobileCountryCode ?? '+971'}${form.mobileNumber ?? ''}`}
+                            onChange={(full, { country, nationalNumber }) => {
+                              set('mobileCountryCode', country.dialCode);
+                              set('mobileNumber', nationalNumber);
+                            }}
+                            placeholder="50 123 4567"
+                          />
                         </Fld>
                         <Fld label="Communication Language">
                           <select className={sel} value={form.communicationLanguage??'en'} onChange={e=>set('communicationLanguage',e.target.value)}>
@@ -577,12 +581,14 @@ export default function CustomerPage() {
                           <input type="email" className={inp} value={form.notificationEmail??''} onChange={e=>set('notificationEmail',e.target.value)} placeholder="Enter notification email"/>
                         </Fld>
                         <Fld label="Notification SMS">
-                          <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.notificationSmsCode??'+971'} onChange={e=>set('notificationSmsCode',e.target.value)}>
-                              {['+971','+966','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <input className={`${inp} flex-1`} value={form.notificationSms??''} onChange={e=>set('notificationSms',e.target.value)} placeholder="Phone number"/>
-                          </div>
+                          <PhoneInput
+                            value={`${form.notificationSmsCode ?? '+971'}${form.notificationSms ?? ''}`}
+                            onChange={(full, { country, nationalNumber }) => {
+                              set('notificationSmsCode', country.dialCode);
+                              set('notificationSms', nationalNumber);
+                            }}
+                            placeholder="50 123 4567"
+                          />
                         </Fld>
                       </div>
                       <div className="flex items-center gap-6 mt-2">

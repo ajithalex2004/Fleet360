@@ -37,6 +37,7 @@ function keysFor(module: string): string[] {
 /** Whether `permissions` hold any action on any resource of `module`. */
 export function holdsAnyPermissionIn(permissions: readonly string[], module: string): boolean {
   if (permissions.includes('*:*:*')) return true;
+  if (module === 'drayage' && permissions.some((p) => p.startsWith('logistics:') || p.startsWith('drayage:'))) return true;
   return keysFor(module).some((m) => permissions.some((p) => p.startsWith(`${m}:`)));
 }
 
@@ -48,7 +49,12 @@ function tenantHas(enabled: readonly string[] | null | undefined, module: string
 export function canOpenModule(module: string, viewer: ModuleViewer): boolean {
   const role = viewer.roleCode ?? '';
   if (role === SUPER_ADMIN) return true;
-  if (module === 'admin') return role === TENANT_ADMIN;
+  if (module === 'admin') {
+    if (viewer.enabledModules && viewer.enabledModules.length > 0 && !viewer.enabledModules.includes('admin')) {
+      return false;
+    }
+    return role === TENANT_ADMIN || role === SUPER_ADMIN || role === 'ADMIN' || role.includes('ADMIN') || holdsAnyPermissionIn(viewer.permissions, 'admin');
+  }
   if (module === 'exchange') return role === TENANT_ADMIN || role === PARTNER;
   if (module === 'locations') return canOpenModule('fleet', viewer);
   return tenantHas(viewer.enabledModules, module) && holdsAnyPermissionIn(viewer.permissions, module);

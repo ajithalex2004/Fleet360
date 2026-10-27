@@ -177,7 +177,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
     let stored = localStorage.getItem(SESSION_KEY);
     if (!stored) {
-      const meRes = await fetchWithTimeout('/api/auth/me', { cache: 'no-store' }, 5_000).catch(() => null);
+      const meRes = await fetchWithTimeout('/api/auth/me', { cache: 'no-store' }, 15_000).catch(() => null);
       if (meRes?.ok) {
         const me = await meRes.json().catch(() => null) as AuthMeResponse | null;
         if (me?.userId && me.tenantId) {
