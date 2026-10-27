@@ -53,8 +53,10 @@ export default function AdminOverview() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
+          { title: 'Customers & Consignors', desc: 'Customer directory, consignors, and 3-tier organizational hierarchy mappings', href: '/customer-mgmt', color: 'border-emerald-500/30 hover:border-emerald-500/50' },
+          { title: 'Vendors, Partners & Garages', desc: 'Exchange partners, outsource transporters, scorecards, and maintenance garages', href: '/vendors', color: 'border-cyan-500/30 hover:border-cyan-500/50' },
           { title: 'Region, Dept & Section', desc: 'Manage 3-tier organizational hierarchy (Region ➔ Department ➔ Section / Unit)', href: '/admin/hierarchy', color: 'border-blue-500/30 hover:border-blue-500/50' },
           { title: 'NUI Reason Master', desc: 'Non-utilization and operational reasons for transfers, maintenance, and allocations', href: '/admin/nui-reasons', color: 'border-amber-500/30 hover:border-amber-500/50' },
           { title: 'Corporate Clients & Rosters', desc: 'Manage B2B client accounts, authorized email domains, and coordinator rosters', href: '/admin/corporate-clients', color: 'border-orange-500/30 hover:border-orange-500/50' },

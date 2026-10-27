@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { lookupVehicle, KNOWN_MAKES, getModelsForMake, type VehicleKnowledge } from '@/lib/vehicle-knowledge-base';
 import SlideOverDrawer, { DrawerTab, DrawerAction } from '@/components/ui/SlideOverDrawer';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { 
   Car, 
   Cpu, 
@@ -2676,44 +2677,53 @@ export default function VehiclesPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Region</label>
-                        <select
+                        <SearchableSelect
                           value={form.regionId ?? ''}
-                          onChange={e => handleVehicleRegionChange(e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50"
-                        >
-                          <option value="">— Select Region —</option>
-                          {hierarchyRegions.map(r => (
-                            <option key={r.id} value={r.id}>{r.name} {r.code ? `(${r.code})` : ''}</option>
-                          ))}
-                        </select>
+                          onChange={val => handleVehicleRegionChange(val)}
+                          placeholder="— Select Region —"
+                          searchPlaceholder="Search region..."
+                          accent="amber"
+                          isClearable
+                          options={hierarchyRegions.map(r => ({
+                            value: r.id,
+                            label: r.name,
+                            sublabel: r.code ? `Code: ${r.code}` : undefined,
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Department</label>
-                        <select
+                        <SearchableSelect
                           value={form.departmentId ?? ''}
-                          onChange={e => handleVehicleDeptChange(e.target.value)}
+                          onChange={val => handleVehicleDeptChange(val)}
                           disabled={!form.regionId}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50 disabled:opacity-50"
-                        >
-                          <option value="">{!form.regionId ? 'Select Region First' : '— Select Department —'}</option>
-                          {vehicleDepts.map(d => (
-                            <option key={d.id} value={d.id}>{d.name} {d.code ? `(${d.code})` : ''}</option>
-                          ))}
-                        </select>
+                          placeholder={!form.regionId ? "Select Region First" : "— Select Department —"}
+                          searchPlaceholder="Search department..."
+                          accent="amber"
+                          isClearable
+                          options={vehicleDepts.map(d => ({
+                            value: d.id,
+                            label: d.name,
+                            sublabel: d.code ? `Code: ${d.code}` : undefined,
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Unit / Section</label>
-                        <select
+                        <SearchableSelect
                           value={form.unitId ?? ''}
-                          onChange={e => handleVehicleUnitChange(e.target.value)}
+                          onChange={val => handleVehicleUnitChange(val)}
                           disabled={!form.departmentId}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50 disabled:opacity-50"
-                        >
-                          <option value="">{!form.departmentId ? 'Select Department First' : '— Select Unit / Section —'}</option>
-                          {vehicleUnits.map(u => (
-                            <option key={u.id} value={u.id}>{u.name} {u.code ? `(${u.code})` : ''}</option>
-                          ))}
-                        </select>
+                          placeholder={!form.departmentId ? "Select Department First" : "— Select Unit / Section —"}
+                          searchPlaceholder="Search unit..."
+                          accent="amber"
+                          isClearable
+                          options={vehicleUnits.map(u => ({
+                            value: u.id,
+                            label: u.name,
+                            sublabel: u.code ? `Code: ${u.code}` : undefined,
+                          }))}
+                        />
                       </div>
                     </div>
                   </div>
@@ -2743,27 +2753,33 @@ export default function VehiclesPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Assigned Driver</label>
-                        <select
+                        <SearchableSelect
                           value={form.assignedDriverId ?? ''}
-                          onChange={e => f('assignedDriverId', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50"
-                        >
-                          <option value="">— Unassigned / Customer Rented —</option>
-                          {driverList.map(dr => (
-                            <option key={dr.id} value={dr.id}>{dr.name}</option>
-                          ))}
-                        </select>
+                          onChange={val => f('assignedDriverId', val)}
+                          placeholder="— Unassigned / Customer Rented —"
+                          searchPlaceholder="Search driver..."
+                          accent="amber"
+                          isClearable
+                          options={driverList.map(dr => ({
+                            value: dr.id,
+                            label: dr.name,
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Operational Zone</label>
-                        <select
+                        <SearchableSelect
                           value={form.zoneId ?? ''}
-                          onChange={e => f('zoneId', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50"
-                        >
-                          <option value="">All UAE Zones</option>
-                          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-                        </select>
+                          onChange={val => f('zoneId', val)}
+                          placeholder="All UAE Zones"
+                          searchPlaceholder="Search zone..."
+                          accent="amber"
+                          isClearable
+                          options={zones.map(z => ({
+                            value: z.id,
+                            label: z.name,
+                          }))}
+                        />
                       </div>
                     </div>
                   </div>

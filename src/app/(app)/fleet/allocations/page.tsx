@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { 
   Car, 
   Layers, 
@@ -788,24 +789,24 @@ export default function AllocationsPage() {
                   <label className={labelCls}>
                     Vehicle ID / Plate Number <span className="text-rose-400">*</span>
                   </label>
-                  <select
+                  <SearchableSelect
                     value={formData.vehicleId}
-                    onChange={e => handleVehicleChange(e.target.value)}
-                    className={inputCls}
-                    required
-                  >
-                    <option value="">— Select Vehicle from Fleet Master —</option>
-                    {vehicles.map(v => {
-                      const plate = v.plateNumber || v.licensePlate || v.vehicleCode || 'No Plate';
-                      const details = [v.make, v.model, v.year].filter(Boolean).join(' ');
-                      const isAvailable = v.status === 'AVAILABLE';
-                      return (
-                        <option key={v.id} value={v.id}>
-                          {plate} {details ? `• ${details}` : ''} ({v.status || 'UNKNOWN'}{v.odometerReading ? ` • ${v.odometerReading.toLocaleString()} km` : ''})
-                        </option>
-                      );
+                    onChange={val => handleVehicleChange(val)}
+                    placeholder="— Select Vehicle from Fleet Master —"
+                    searchPlaceholder="Type plate, make, model..."
+                    accent="amber"
+                    isClearable
+                    options={vehicles.map(v => {
+                      const plate = v.plateNumber || v.licensePlate || v.vehicleCode || "No Plate";
+                      const details = [v.make, v.model, v.year].filter(Boolean).join(" ");
+                      return {
+                        value: v.id,
+                        label: `${plate}${details ? ` • ${details}` : ""}`,
+                        sublabel: v.odometerReading ? `Odometer: ${v.odometerReading.toLocaleString()} km` : undefined,
+                        badge: v.status || "UNKNOWN",
+                      };
                     })}
-                  </select>
+                  />
                   <p className="text-[11px] text-[var(--text-muted)] mt-1">
                     Select the target vehicle to assign. Its current odometer reading will be automatically populated.
                   </p>
@@ -823,19 +824,19 @@ export default function AllocationsPage() {
                     <label className={labelCls}>
                       Region <span className="text-rose-400">*</span>
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.regionId}
-                      onChange={e => handleRegionChange(e.target.value)}
-                      className={inputCls}
-                      required
-                    >
-                      <option value="">— Select Region —</option>
-                      {regions.map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} {r.code ? `(${r.code})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={val => handleRegionChange(val)}
+                      placeholder="— Select Region —"
+                      searchPlaceholder="Search region..."
+                      accent="amber"
+                      isClearable
+                      options={regions.map(r => ({
+                        value: r.id,
+                        label: r.name,
+                        sublabel: r.code ? `Code: ${r.code}` : undefined,
+                      }))}
+                    />
                   </div>
 
                   {/* Department Dropdown */}
@@ -843,22 +844,20 @@ export default function AllocationsPage() {
                     <label className={labelCls}>
                       Department <span className="text-rose-400">*</span>
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.departmentId}
-                      onChange={e => handleDepartmentChange(e.target.value)}
+                      onChange={val => handleDepartmentChange(val)}
                       disabled={!formData.regionId || loadingDepts}
-                      className={`${inputCls} disabled:opacity-50`}
-                      required
-                    >
-                      <option value="">
-                        {!formData.regionId ? 'Select Region First' : loadingDepts ? 'Loading Departments...' : '— Select Department —'}
-                      </option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} {d.code ? `(${d.code})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={!formData.regionId ? "Select Region First" : loadingDepts ? "Loading Departments..." : "— Select Department —"}
+                      searchPlaceholder="Search department..."
+                      accent="amber"
+                      isClearable
+                      options={departments.map(d => ({
+                        value: d.id,
+                        label: d.name,
+                        sublabel: d.code ? `Code: ${d.code}` : undefined,
+                      }))}
+                    />
                   </div>
 
                   {/* Unit / Section Dropdown */}
@@ -866,21 +865,20 @@ export default function AllocationsPage() {
                     <label className={labelCls}>
                       Unit / Section <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.unitId}
-                      onChange={e => handleUnitChange(e.target.value)}
+                      onChange={val => handleUnitChange(val)}
                       disabled={!formData.departmentId || loadingUnits}
-                      className={`${inputCls} disabled:opacity-50`}
-                    >
-                      <option value="">
-                        {!formData.departmentId ? 'Select Department First' : loadingUnits ? 'Loading Units...' : '— Select Unit / Section —'}
-                      </option>
-                      {units.map(u => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} {u.code ? `(${u.code})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={!formData.departmentId ? "Select Department First" : loadingUnits ? "Loading Units..." : "— Select Unit / Section —"}
+                      searchPlaceholder="Search unit..."
+                      accent="amber"
+                      isClearable
+                      options={units.map(u => ({
+                        value: u.id,
+                        label: u.name,
+                        sublabel: u.code ? `Code: ${u.code}` : undefined,
+                      }))}
+                    />
                   </div>
                 </div>
 

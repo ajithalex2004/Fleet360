@@ -592,7 +592,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'vendors',
-    category: 'governance',
+    category: 'admin',
     label: 'Vendors & Partners',
     href: '/vendors',
     icon: Building2,
@@ -608,7 +608,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'customer-mgmt',
-    category: 'governance',
+    category: 'admin',
     label: 'Customers',
     href: '/customer-mgmt',
     icon: Building2,
