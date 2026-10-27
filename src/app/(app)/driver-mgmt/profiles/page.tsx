@@ -109,7 +109,7 @@ interface StaffOption {
 const STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'ON_LEAVE'];
 const DRIVER_TYPES = ['RENTAL', 'STAFF', 'SCHOOL_BUS', 'LOGISTICS', 'AMBULANCE', 'POOL'];
 
-export const DRIVER_CATEGORIES = [
+const DRIVER_CATEGORIES = [
   { key: 'LIGHT_DUTY',  label: 'Light Duty (Car / Light Vehicle)',       short: 'Light Duty',   icon: Car,   badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
   { key: 'HEAVY_DUTY',  label: 'Heavy Duty (Heavy Truck / Trailer)',      short: 'Heavy Duty',   icon: Truck, badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
   { key: 'HEAVY_BUS',   label: 'Heavy Bus (Coach / 50+ Seater)',         short: 'Heavy Bus',    icon: Bus,   badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' },
