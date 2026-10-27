@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  MapPin, Anchor, Plus, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
+  MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
   Search, ShieldCheck, Compass, Layers, ExternalLink, X, Map, Clock,
   Warehouse, Building2, User, Phone,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -88,6 +89,7 @@ export default function DrayageTerminalMapPage() {
   const [geofenceLat, setGeofenceLat] = useState(25.0112);
   const [geofenceLng, setGeofenceLng] = useState(55.0612);
   const [targetTerminalId, setTargetTerminalId] = useState('');
+  const [editingGeofenceId, setEditingGeofenceId] = useState<string | null>(null);
   const [submittingGf, setSubmittingGf] = useState(false);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -169,6 +171,7 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleOpenAddGeofence = () => {
+    setEditingGeofenceId(null);
     const term = selectedTerminal || terminals[0];
     setTargetTerminalId(term?.id || '');
     setGeofenceName(term ? `${term.name} OCR Gate Perimeter` : 'New Port Geofence');
@@ -176,6 +179,17 @@ export default function DrayageTerminalMapPage() {
     setGeofenceRadius(term?.geofenceRadiusMeters || 1500);
     setGeofenceLat(term?.lat || 25.0112);
     setGeofenceLng(term?.lng || 55.0612);
+    setShowGeofenceModal(true);
+  };
+
+  const handleOpenEditGeofence = (gf: DrayageGeofence) => {
+    setEditingGeofenceId(gf.id);
+    setTargetTerminalId(gf.terminalId || '');
+    setGeofenceName(gf.name);
+    setGeofenceType(gf.type);
+    setGeofenceRadius(gf.radiusMeters || 1500);
+    setGeofenceLat(gf.centerLat || 25.0112);
+    setGeofenceLng(gf.centerLng || 55.0612);
     setShowGeofenceModal(true);
   };
 
@@ -193,6 +207,7 @@ export default function DrayageTerminalMapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'save_geofence',
+          id: editingGeofenceId || undefined,
           terminalId: targetTerminalId || null,
           terminalName: term?.name || 'Port Terminal',
           name: geofenceName.trim(),
@@ -205,8 +220,14 @@ export default function DrayageTerminalMapPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save geofence');
-      showToast('success', `Geofence "${geofenceName}" saved successfully!`);
+      showToast(
+        'success',
+        editingGeofenceId
+          ? `Geofence "${geofenceName}" updated successfully!`
+          : `Geofence "${geofenceName}" saved successfully!`
+      );
       setShowGeofenceModal(false);
+      setEditingGeofenceId(null);
       invalidateDrayageClientCache();
       await loadData(true);
     } catch (err) {
@@ -387,7 +408,7 @@ export default function DrayageTerminalMapPage() {
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-xs font-semibold transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Zone
+                  Add Geofence
                 </button>
               </div>
 
@@ -451,13 +472,22 @@ export default function DrayageTerminalMapPage() {
                       </td>
                       <td className="py-3 px-3 font-mono font-semibold">{gf.radiusMeters}m</td>
                       <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleDeleteGeofence(gf.id, gf.name)}
-                          className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          title="Delete geofence"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditGeofence(gf)}
+                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                            title="Edit geofence"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGeofence(gf.id, gf.name)}
+                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                            title="Delete geofence"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -475,7 +505,7 @@ export default function DrayageTerminalMapPage() {
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Compass className="w-4 h-4 text-blue-400" />
-                Configure New Port / Warehouse Geofence
+                {editingGeofenceId ? 'Edit Port / Warehouse Geofence Zone' : 'Configure New Port / Warehouse Geofence'}
               </h3>
               <button
                 onClick={() => setShowGeofenceModal(false)}
@@ -571,7 +601,7 @@ export default function DrayageTerminalMapPage() {
                   disabled={submittingGf}
                   className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm disabled:opacity-50"
                 >
-                  {submittingGf ? 'Saving Zone...' : 'Save Geofence'}
+                  {submittingGf ? (editingGeofenceId ? 'Updating...' : 'Saving...') : (editingGeofenceId ? 'Update Geofence' : 'Save Geofence')}
                 </button>
               </div>
             </form>
