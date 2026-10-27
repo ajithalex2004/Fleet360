@@ -4,7 +4,9 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { captureException } from '@/lib/sentry';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-import { STAFF_TRANSPORT_DEMAND_AGENT } from '@/lib/agents/staff-transport-demand/agent';
+// dispatch(), not the agent's run(): the budget caps, circuit breaker and
+// disabledAgents apply, and the run is recorded in agent_runs.
+import { dispatch } from '@/lib/agents/orchestrator';
 import { StaffTransportDemandResult } from '@/lib/agents/types';
 
 export const runtime = 'nodejs';
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
     const weeks = Math.max(1, Math.min(12, Number(sp.get('weeks') ?? 4)));
 
     try {
-      const agentRun = await STAFF_TRANSPORT_DEMAND_AGENT.run({
+      const agentRun = await dispatch({
         agent_id: 'staff-transport-demand',
         tenant_id: tenantId,
         event_type: 'bus.demand.forecast',
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
           weeksOfHistory: weeks,
           runAt: new Date().toISOString(),
           rows: [],
-          warning: 'No forecast output generated.',
+          warning: agentRun.error ?? 'No forecast output generated.',
         });
       }
 

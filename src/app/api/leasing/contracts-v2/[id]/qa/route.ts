@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma';
 import { answerContractQuestion } from '@/lib/agents/contract-qa/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { governCopilot } from '@/lib/agents/copilot-governance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -66,7 +67,17 @@ export async function POST(
           );
         }
 
-        const result = await answerContractQuestion(id, parsed.data.question);
+        const governed = await governCopilot({
+          tenantId,
+          agentId: 'contract-qa',
+          eventType: 'leasing.contract_qa_requested',
+          entityId: id,
+          modelAlias: 'ECONOMY_TEXT',
+        }, () => answerContractQuestion(id, parsed.data.question));
+        if (!governed.ok) {
+          return NextResponse.json({ error: governed.reason }, { status: 403 });
+        }
+        const result = governed.value;
         if (!result.ok) {
           return NextResponse.json({ error: result.error, detail: result.detail }, { status: 502 });
         }

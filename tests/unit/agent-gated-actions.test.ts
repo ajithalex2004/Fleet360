@@ -44,7 +44,7 @@ vi.mock('@/lib/prisma', () => ({
         return [{ tenantId: 't1', dailyBudgetAed: 200, monthlyBudgetAed: 5000, ...st.policy }];
       }
       if (q.includes('FROM agent_approvals') && q.includes("status = 'PENDING' LIMIT 1")) return st.pending;
-      if (q.includes('gen_random_uuid()::text AS id')) return [{ id: 'appr-1' }];
+      if (q.startsWith('INSERT INTO agent_approvals')) return [{ id: 'appr-1' }];
       if (q.includes('FROM agent_approvals WHERE id')) return st.approvalRow ? [st.approvalRow] : [];
       if (q.includes('FROM operations.incidents')) return st.incidentSeverity === null ? [] : [{ severity: st.incidentSeverity }];
       if (q.startsWith('UPDATE dispatch_jobs')) return st.jobDispatchable ? [{ current_attempt: 2 }] : [];

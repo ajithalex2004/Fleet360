@@ -58,16 +58,10 @@ export async function startRun(event: AgentEvent): Promise<StartedRun> {
     },
   });
 
-  // 1. Governance & Budget Circuit Breaker Check
-  const quota = await policyService.checkBudgetQuota(event.tenant_id);
-  if (!quota.allowed) {
-    return rejected(quota.reason ?? 'Tenant AI budget exceeded.');
-  }
-
-  // 2. Disabled Agent Check
-  const policy = await policyService.getTenantPolicy(event.tenant_id);
-  if (policy.disabledAgents.includes(event.agent_id)) {
-    return rejected(`Agent '${event.agent_id}' is disabled by tenant policy.`);
+  // Governance: budget caps / circuit breaker, then disabled agents.
+  const refusal = await checkRunAllowed(event.tenant_id, event.agent_id);
+  if (refusal) {
+    return rejected(refusal);
   }
 
   // Always a fresh id: events can arrive from outside (/api/agents/ingest
@@ -114,6 +108,23 @@ async function executeAgent(event: AgentEvent, started: number): Promise<AgentRu
       error:           message,
     };
   }
+}
+
+/**
+ * agent_runs.input is an audit record, not a blob store: long strings (a
+ * base64 upload from /api/documents/intelligence/extract, a whole document's
+ * text) are replaced by their length.
+ */
+const MAX_INPUT_STRING = 2_000;
+function summariseInput(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') {
+    return value.length > MAX_INPUT_STRING ? `[omitted: ${value.length} chars]` : value;
+  }
+  if (depth > 8 || value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => summariseInput(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, summariseInput(v, depth + 1)]),
+  );
 }
 
 async function persistRun(event: AgentEvent, runId: string, result: AgentRunResult): Promise<void> {
@@ -210,7 +221,7 @@ async function persistRun(event: AgentEvent, runId: string, result: AgentRunResu
     result.tenantId,
     result.eventType,
     result.entityId ?? null,
-    JSON.stringify(event.payload ?? {}),
+    JSON.stringify(summariseInput(event.payload ?? {})),
     JSON.stringify(result.output ?? {}),
     result.itemsProcessed,
     result.actionsCreated,
@@ -243,8 +254,80 @@ async function persistRun(event: AgentEvent, runId: string, result: AgentRunResu
     costUsd,
     costAed,
     savingsAed: estimatedSavingsAed,
-    wasAccepted: t.humanFeedback === 'ACCEPTED' || t.humanFeedback === 'AUTO_EXECUTED' || result.status === 'COMPLETED',
+    // Accepted means a human (or a policy-allowed auto-execution) took the
+    // agent's output — not merely that the run completed.
+    wasAccepted: t.humanFeedback === 'ACCEPTED' || t.humanFeedback === 'AUTO_EXECUTED',
   });
+}
+
+// ── Governance for calls that don't go through dispatch() ─────────────────────
+//
+// The co-pilot REST routes and the streaming chat routes call the model
+// themselves (they need their own response shapes, or stream). They still
+// have to pass the same governance as dispatch() — budget caps, manual
+// circuit breaker, disabledAgents — and their spend has to land in
+// agent_runs / agent_roi_metrics, or the budget never sees it.
+
+/**
+ * The governance pre-check shared by dispatch() and direct calls.
+ * Returns null when the run may start, else the reason it may not.
+ */
+export async function checkRunAllowed(tenantId: string, agentId: string): Promise<string | null> {
+  const quota = await policyService.checkBudgetQuota(tenantId);
+  if (!quota.allowed) {
+    return quota.reason ?? 'Tenant AI budget exceeded.';
+  }
+  const policy = await policyService.getTenantPolicy(tenantId);
+  if (policy.disabledAgents.includes(agentId)) {
+    return `Agent '${agentId}' is disabled by tenant policy.`;
+  }
+  return null;
+}
+
+/** Record a finished run made outside dispatch(): agent_runs row + daily ROI/spend. */
+export async function recordRun(event: AgentEvent, result: AgentRunResult): Promise<void> {
+  await persistRun(event, crypto.randomUUID(), result);
+}
+
+export type GovernedOutcome<T> = { ok: true; value: T } | { ok: false; reason: string };
+
+/**
+ * Run `call` under governance: refuse it if checkRunAllowed says no,
+ * otherwise run it and record the run (toResult supplies status, output and
+ * token telemetry). A call that throws is recorded as FAILED and rethrown.
+ * Recording is best-effort: a logging failure never fails the caller.
+ */
+export async function runGoverned<T>(
+  event: AgentEvent,
+  call: () => Promise<T>,
+  toResult: (value: T, durationMs: number) => AgentRunResult,
+): Promise<GovernedOutcome<T>> {
+  await ensureAgentSchema();
+  const refusal = await checkRunAllowed(event.tenant_id, event.agent_id);
+  if (refusal) return { ok: false, reason: refusal };
+
+  const started = Date.now();
+  let value: T;
+  try {
+    value = await call();
+  } catch (err) {
+    await recordRun(event, {
+      agentId:        event.agent_id,
+      tenantId:       event.tenant_id,
+      eventType:      event.event_type,
+      entityId:       event.entity_id,
+      status:         'FAILED',
+      durationMs:     Date.now() - started,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output:         null,
+      error:          err instanceof Error ? err.message : String(err),
+    }).catch((e) => console.error('[orchestrator] Failed to record governed run:', e));
+    throw err;
+  }
+  await recordRun(event, toResult(value, Date.now() - started))
+    .catch((e) => console.error('[orchestrator] Failed to record governed run:', e));
+  return { ok: true, value };
 }
 
 /**

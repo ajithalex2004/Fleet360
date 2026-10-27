@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { generateQuotationSuggestion } from '@/lib/agents/quotation-copilot/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { governCopilot } from '@/lib/agents/copilot-governance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // OpenAI calls can take 10–30s
@@ -49,7 +50,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await generateQuotationSuggestion(parsed.data.brief);
+    const governed = await governCopilot({
+      tenantId,
+      agentId: 'quotation-copilot',
+      eventType: 'leasing.quotation_copilot_requested',
+      modelAlias: 'STANDARD_REASONING',
+    }, () => generateQuotationSuggestion(parsed.data.brief));
+    if (!governed.ok) {
+      return NextResponse.json({ error: governed.reason }, { status: 403 });
+    }
+    const result = governed.value;
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error, detail: result.detail }, { status: 502 });

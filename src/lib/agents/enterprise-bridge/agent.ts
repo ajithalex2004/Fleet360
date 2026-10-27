@@ -176,23 +176,16 @@ async function runEnterpriseBridge(event: AgentEvent): Promise<AgentRunResult> {
 
   if (financialImpactAed >= (tenantPolicy.requireHumanApprovalThresholdAed ?? 500)) {
     // Hold in approval queue
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO agent_approvals (
-        tenant_id, agent_id, entity_type, entity_id, action_type,
-        title, description, financial_impact_aed, proposed_payload, requested_autonomy
-      ) VALUES (
-        $1, 'enterprise-bridge', $2, $3, 'PUSH_TO_ERP',
-        $4, $5, $6, $7::jsonb, 'L3'
-      )
-    `,
-      tenantId,
+    await policyService.createApprovalItem(tenantId, {
+      agentId: 'enterprise-bridge',
       entityType,
       entityId,
-      `ERP Sync Approval: ${entityType} ${entityId}`,
-      `Outbound sync to ${rawConnections.length} enterprise system(s) for AED ${financialImpactAed.toLocaleString()}`,
+      actionType: 'PUSH_TO_ERP',
+      title: `ERP Sync Approval: ${entityType} ${entityId}`,
+      description: `Outbound sync to ${rawConnections.length} enterprise system(s) for AED ${financialImpactAed.toLocaleString()}`,
       financialImpactAed,
-      JSON.stringify({ entityType, entityId, payload, targetConnections: rawConnections.map((c) => c.id) })
-    ).catch((err) => console.warn('[EnterpriseBridge] Approval insertion warning:', err));
+      payload: { entityType, entityId, payload, targetConnections: rawConnections.map((c) => c.id) },
+    }, 'L3').catch((err) => console.warn('[EnterpriseBridge] Approval insertion warning:', err));
 
     return {
       agentId: 'enterprise-bridge',

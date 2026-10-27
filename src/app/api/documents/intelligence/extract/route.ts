@@ -14,7 +14,9 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
-import { DOCUMENT_INTELLIGENCE_AGENT } from '@/lib/agents/document-intelligence/agent';
+// dispatch(), not the agent's run(): the budget caps, circuit breaker and
+// disabledAgents apply, and the run is recorded in agent_runs.
+import { dispatch } from '@/lib/agents/orchestrator';
 
 export const runtime = 'nodejs';
 
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const runResult = await DOCUMENT_INTELLIGENCE_AGENT.run({
+      const runResult = await dispatch({
         agent_id: 'document-intelligence',
         tenant_id: tenantId,
         event_type: 'document.uploaded',

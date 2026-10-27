@@ -20,6 +20,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { classifyDamage } from '@/lib/agents/damage-classifier/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { governCopilot } from '@/lib/agents/copilot-governance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 90;
@@ -70,7 +71,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await classifyDamage({ images });
+    const governed = await governCopilot({
+      tenantId,
+      agentId: 'damage-classifier',
+      eventType: 'rental.damage_classify_requested',
+      modelAlias: 'VISION_HIGH_ACCURACY',
+    }, () => classifyDamage({ images }));
+    if (!governed.ok) {
+      return NextResponse.json({ error: governed.reason }, { status: 403 });
+    }
+    const result = governed.value;
     if (!result.ok) {
       return NextResponse.json({ error: result.error, detail: result.detail }, { status: 502 });
     }

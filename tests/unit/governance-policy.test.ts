@@ -194,7 +194,7 @@ describe('Phase 8: Multi-Tenant Policy, Autonomy Levels & Human-in-the-Loop Gove
       const service = new PolicyService();
 
       (prisma.$queryRawUnsafe as any)
-        .mockResolvedValueOnce([{ id: 'mock-uuid-1' }]) // For gen_random_uuid
+        .mockResolvedValueOnce([{ id: 'mock-uuid-1' }]) // INSERT ... RETURNING id
         .mockResolvedValueOnce([
           {
             id: 'mock-uuid-1',
@@ -231,7 +231,27 @@ describe('Phase 8: Multi-Tenant Policy, Autonomy Levels & Human-in-the-Loop Gove
             reviewNotes: 'Verified with vendor',
             createdAt: new Date().toISOString(),
           },
-        ]); // For reviewApprovalItem
+        ]) // For reviewApprovalItem
+        .mockResolvedValueOnce([
+          {
+            id: 'mock-uuid-1',
+            tenantId: 'tenant-test',
+            agentId: 'finance-anomaly',
+            entityType: 'INVOICE',
+            entityId: 'inv-123',
+            actionType: 'REVISE_PO',
+            title: 'Overcharge Correction',
+            description: 'Apply 350 AED credit',
+            financialImpactAed: 350.0,
+            proposedPayload: { discount: 350 },
+            status: 'APPROVED_MANUAL',
+            requestedAutonomy: 'L3',
+            reviewedBy: 'user-cfo-1',
+            reviewedAt: new Date().toISOString(),
+            reviewNotes: 'Verified with vendor | No automatic executor; carry out manually',
+            createdAt: new Date().toISOString(),
+          },
+        ]); // Reloaded after it is marked APPROVED_MANUAL
 
       const item = await service.createApprovalItem({
         agentId: 'finance-anomaly',
@@ -251,9 +271,14 @@ describe('Phase 8: Multi-Tenant Policy, Autonomy Levels & Human-in-the-Loop Gove
       expect(pendingList.length).toBe(1);
       expect(pendingList[0].actionType).toBe('REVISE_PO');
 
+      // REVISE_PO has no executor: approving it records APPROVED_MANUAL and
+      // says so, instead of reporting APPROVED as though something ran.
       const approved = await service.reviewApprovalItem('mock-uuid-1', 'user-cfo-1', 'APPROVED', 'Verified with vendor');
-      expect(approved.status).toBe('APPROVED');
+      expect(approved.status).toBe('APPROVED_MANUAL');
       expect(approved.reviewedBy).toBe('user-cfo-1');
+      expect(approved.execution).toMatchObject({ executed: false, manual: true });
+      const sqls = vi.mocked(prisma.$executeRawUnsafe).mock.calls.map((c) => String(c[0]));
+      expect(sqls.some((q) => q.includes("SET status = 'APPROVED_MANUAL'"))).toBe(true);
     });
   });
 

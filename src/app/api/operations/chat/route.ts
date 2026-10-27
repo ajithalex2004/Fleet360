@@ -4,6 +4,7 @@ import { transformStream } from '@crayonai/stream';
 import { DBMessage, getMessageStore } from '../../chat/messageStore';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { checkRunAllowed, recordChatTurn } from '@/lib/agents/chat-governance';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
 You have real-time access to the following live data via tools:
@@ -40,6 +41,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const refusal = await checkRunAllowed(tenantId, 'ops-assistant');
+  if (refusal) {
+    return NextResponse.json({ error: refusal }, { status: 403 });
+  }
+  const t0 = Date.now();
 
   try {
   const body = await req.json();
@@ -261,6 +268,16 @@ export async function POST(req: NextRequest) {
       onEnd: ({ accumulated }) => {
         const message = accumulated.filter(Boolean).join('');
         messageStore.addMessage({ role: 'assistant', content: message, id: responseId });
+        // Record the turn for this tenant (agent_runs + daily ROI), fire-and-forget
+        recordChatTurn({
+          tenantId,
+          agentId: 'ops-assistant',
+          eventType: 'ops.query_received',
+          threadId,
+          messageCount: messageStore.getOpenAICompatibleMessageList().length,
+          toolsUsed: [],
+          durationMs: Date.now() - t0,
+        });
       },
     },
   ) as ReadableStream<string>;

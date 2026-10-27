@@ -91,6 +91,15 @@ export async function POST(req: NextRequest) {
         tenantId,
       );
 
+      if (updatedItem.execution?.manual === true) {
+        return NextResponse.json({
+          ok: true,
+          executed: false,
+          message: `Approved, but not applied automatically: ${String(updatedItem.execution.reason)}`,
+          data: updatedItem,
+        });
+      }
+
       if (updatedItem.execution && updatedItem.execution.executed === false) {
         return NextResponse.json({
           ok: false,

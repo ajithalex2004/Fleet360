@@ -21,15 +21,24 @@ describe('Phase 1: Agent Telemetry, Cost Valuation & ROI Engine', () => {
     });
 
     it('accurately computes token cost for ECONOMY_TEXT alias (gpt-4o-mini / gemini-flash)', () => {
-      // 100,000 input tokens ($0.15/1M) + 20,000 output tokens ($0.60/1M) + 50,000 cached tokens ($0.075/1M)
-      // Input: (100000/1000000)*0.15 = 0.015
-      // Output: (20000/1000000)*0.60 = 0.012
-      // Cached: (50000/1000000)*0.075 = 0.00375
-      // Total USD = 0.03075 -> AED = 0.03075 * 3.6725 = 0.1129
+      // 100,000 prompt tokens, of which 50,000 were cached (the provider's prompt
+      // total includes its cached tokens), + 20,000 output tokens.
+      // Uncached input: (50000/1000000)*0.15 = 0.0075
+      // Cached input:   (50000/1000000)*0.075 = 0.00375
+      // Output:         (20000/1000000)*0.60 = 0.012
+      // Total USD = 0.02325 -> AED = 0.02325 * 3.6725
       const result = calculateTokenCost('ECONOMY_TEXT', 100_000, 20_000, 50_000);
 
-      expect(result.costUsd).toBe(0.03075);
-      expect(result.costAed).toBe(Number((0.03075 * USD_TO_AED_RATE).toFixed(4)));
+      expect(result.costUsd).toBe(0.02325);
+      expect(result.costAed).toBe(Number((0.02325 * USD_TO_AED_RATE).toFixed(4)));
+    });
+
+    it('never charges cached tokens above the cached rate, or for more than the prompt', () => {
+      const uncachedOnly = calculateTokenCost('ECONOMY_TEXT', 100_000, 0, 0);
+      const halfCached = calculateTokenCost('ECONOMY_TEXT', 100_000, 0, 50_000);
+      expect(halfCached.costUsd).toBeLessThan(uncachedOnly.costUsd);
+      // More cached than prompt tokens (bad input) is capped at the prompt.
+      expect(calculateTokenCost('ECONOMY_TEXT', 10_000, 0, 50_000).costUsd).toBe(0.00075);
     });
 
     it('computes higher cost for ADVANCED_REASONING compared to ECONOMY_TEXT', () => {
