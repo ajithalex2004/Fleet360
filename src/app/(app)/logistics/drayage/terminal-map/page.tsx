@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
@@ -14,6 +15,19 @@ import {
   getCachedDrayageData,
   invalidateDrayageClientCache,
 } from '@/lib/logistics/drayage-client-cache';
+
+const DrayageGeofenceMap = dynamic(
+  () => import('@/components/logistics/drayage/DrayageGeofenceMap'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-[420px] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col items-center justify-center gap-2 text-xs text-[var(--text-muted)] animate-pulse">
+        <Compass className="w-6 h-6 text-blue-400 animate-spin" />
+        <span>Loading Live Port & Geofence Map...</span>
+      </div>
+    ),
+  }
+);
 
 interface DrayageTerminal {
   id: string;
@@ -90,6 +104,7 @@ export default function DrayageTerminalMapPage() {
   const [geofenceLng, setGeofenceLng] = useState(55.0612);
   const [targetTerminalId, setTargetTerminalId] = useState('');
   const [editingGeofenceId, setEditingGeofenceId] = useState<string | null>(null);
+  const [mapEditGeofenceId, setMapEditGeofenceId] = useState<string | null>(null);
   const [submittingGf, setSubmittingGf] = useState(false);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -191,6 +206,49 @@ export default function DrayageTerminalMapPage() {
     setGeofenceLat(gf.centerLat || 25.0112);
     setGeofenceLng(gf.centerLng || 55.0612);
     setShowGeofenceModal(true);
+  };
+
+  const handleSaveGeofenceFromMap = async (gf: {
+    id?: string;
+    terminalId: string | null;
+    terminalName: string;
+    name: string;
+    type: 'CIRCLE' | 'POLYGON';
+    centerLat: number;
+    centerLng: number;
+    radiusMeters: number;
+  }) => {
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_geofence',
+          id: gf.id,
+          terminalId: gf.terminalId,
+          terminalName: gf.terminalName,
+          name: gf.name,
+          type: gf.type,
+          centerLat: gf.centerLat,
+          centerLng: gf.centerLng,
+          radiusMeters: gf.radiusMeters,
+          coordinates: [{ lat: gf.centerLat, lng: gf.centerLng }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save geofence');
+      showToast(
+        'success',
+        gf.id
+          ? `Geofence "${gf.name}" updated successfully via map!`
+          : `Geofence "${gf.name}" created successfully via map!`
+      );
+      invalidateDrayageClientCache();
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error saving geofence');
+      throw err;
+    }
   };
 
   const handleSaveGeofence = async (e: React.FormEvent) => {
@@ -330,6 +388,20 @@ export default function DrayageTerminalMapPage() {
           icon={ShieldCheck}
           accent="rose"
           sub="Refrigerated cargo standard"
+        />
+      </div>
+
+      {/* Live Interactive Drayage Geofence Map */}
+      <div id="geofence-map-view">
+        <DrayageGeofenceMap
+          terminals={terminals}
+          geofences={geofences}
+          selectedTerminalId={selectedTerminal?.id}
+          onSelectTerminal={(t) => setSelectedTerminal(t)}
+          onSaveGeofence={handleSaveGeofenceFromMap}
+          onDeleteGeofence={handleDeleteGeofence}
+          activeEditGeofenceId={mapEditGeofenceId}
+          onCloseEditMode={() => setMapEditGeofenceId(null)}
         />
       </div>
 
@@ -473,6 +545,17 @@ export default function DrayageTerminalMapPage() {
                       <td className="py-3 px-3 font-mono font-semibold">{gf.radiusMeters}m</td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setMapEditGeofenceId(gf.id);
+                              const el = document.getElementById('geofence-map-view');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            title="Edit on Live Map"
+                          >
+                            <Compass className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => handleOpenEditGeofence(gf)}
                             className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
