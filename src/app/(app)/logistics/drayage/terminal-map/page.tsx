@@ -75,6 +75,55 @@ interface DrayageGeofence {
   createdAt: string;
 }
 
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class GeofenceMapErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.warn('GeofenceMapErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-[320px] rounded-2xl bg-[var(--bg-surface)] border border-amber-500/30 p-6 flex flex-col items-center justify-center text-center gap-3">
+          <AlertTriangle className="w-8 h-8 text-amber-400" />
+          <div className="text-sm font-bold text-[var(--text-main)]">
+            Interactive Geofence Map Recovered
+          </div>
+          <p className="text-xs text-[var(--text-muted)] max-w-md">
+            WebGL or map styling encountered an issue in this browser session. You can still manage all ports, geofences, and warehouse destinations below without interruption.
+          </p>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false })}
+            className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
+          >
+            Retry Map Load
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function DrayageTerminalMapPage() {
   const cached = getCachedDrayageData();
   const [loading, setLoading] = useState(!cached?.terminals);
@@ -393,16 +442,21 @@ export default function DrayageTerminalMapPage() {
 
       {/* Live Interactive Drayage Geofence Map */}
       <div id="geofence-map-view">
-        <DrayageGeofenceMap
-          terminals={terminals}
-          geofences={geofences}
-          selectedTerminalId={selectedTerminal?.id}
-          onSelectTerminal={(t) => setSelectedTerminal(t)}
-          onSaveGeofence={handleSaveGeofenceFromMap}
-          onDeleteGeofence={handleDeleteGeofence}
-          activeEditGeofenceId={mapEditGeofenceId}
-          onCloseEditMode={() => setMapEditGeofenceId(null)}
-        />
+        <GeofenceMapErrorBoundary>
+          <DrayageGeofenceMap
+            terminals={terminals}
+            geofences={geofences}
+            selectedTerminalId={selectedTerminal?.id}
+            onSelectTerminal={(t) => {
+              const matched = terminals.find((item) => item.id === t.id);
+              if (matched) setSelectedTerminal(matched);
+            }}
+            onSaveGeofence={handleSaveGeofenceFromMap}
+            onDeleteGeofence={handleDeleteGeofence}
+            activeEditGeofenceId={mapEditGeofenceId}
+            onCloseEditMode={() => setMapEditGeofenceId(null)}
+          />
+        </GeofenceMapErrorBoundary>
       </div>
 
       {/* Split Map View: Left Terminal Cards / Right Geofence Radar Details */}

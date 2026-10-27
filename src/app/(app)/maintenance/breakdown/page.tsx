@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
     AlertTriangle, Plus, Truck, CheckCircle2, Clock,
     MapPin, Wrench, X, ChevronRight, Radio,
