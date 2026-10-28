@@ -141,7 +141,19 @@ export async function POST(req: NextRequest) {
 
         case 'create_bogie_trip': {
           const jobIds: string[] = Array.isArray(body.jobIds) ? body.jobIds.map(String) : [];
-          if (jobIds.length < 2) throw new Error('Select at least 2 twenty-foot jobs for a Bogie double-container dispatch');
+          if (jobIds.length !== 2) {
+            throw new Error('A Bogie trip can only carry exactly two (2) twenty-foot containers on a single prime mover & chassis');
+          }
+          // Validate that both containers are 20FT
+          const containers = (await tx.$queryRawUnsafe(
+            `SELECT id, container_size, container_number FROM logistics_drayage_jobs WHERE id = ANY($1::text[]) AND tenant_id = $2`,
+            jobIds,
+            tenantId,
+          )) as Array<{ id: string; container_size: string | null; container_number: string }>;
+          const non20 = containers.find((c) => c.container_size && c.container_size.trim().toUpperCase() !== '20FT');
+          if (non20) {
+            throw new Error(`Container ${non20.container_number} is ${non20.container_size}. A Bogie setup only accommodates two 20FT containers.`);
+          }
           const bogieRef = `BOGIE-${Math.floor(1000 + Math.random() * 9000)}`;
           for (const jId of jobIds) {
             await tx.$executeRawUnsafe(

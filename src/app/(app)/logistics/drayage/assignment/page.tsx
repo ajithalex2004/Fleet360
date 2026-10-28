@@ -212,8 +212,22 @@ export default function DrayageAssignmentPage() {
     loadData();
   }, [loadData]);
 
+  // Heavy Commercial Prime Movers / Tractors only (exclude light passenger cars like Honda Pilot, Sedans, SUVs)
+  const isPrimeMover = useCallback((v: MappedVehicle) => {
+    const text = `${v.make} ${v.model}`.toLowerCase();
+    const lightPatterns = [
+      'pilot', 'civic', 'corolla', 'camry', 'sunny', 'yaris', 'sedan', 'suv',
+      'hatchback', 'patrol', 'land cruiser', 'prado', 'pajero', 'accord', 'altima', 'van'
+    ];
+    return !lightPatterns.some((pattern) => text.includes(pattern));
+  }, []);
+
   // Asset availability
-  const availableVehicles = useMemo(() => vehicles.filter((v) => v.status !== 'ON_DRAYAGE_TRIP'), [vehicles]);
+  const primeMovers = useMemo(() => vehicles.filter(isPrimeMover), [vehicles, isPrimeMover]);
+  const availableVehicles = useMemo(
+    () => primeMovers.filter((v) => v.status !== 'ON_DRAYAGE_TRIP'),
+    [primeMovers],
+  );
   const availableDrivers = useMemo(() => drivers.filter((d) => d.status === 'ACTIVE' && d.complianceOk), [drivers]);
   const availableTrailers = useMemo(() => trailers.filter((t) => t.masterStatus === 'AVAILABLE'), [trailers]);
 
@@ -643,13 +657,19 @@ export default function DrayageAssignmentPage() {
     setTokenInput(job.tokenNumber || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
-  // Open modal for bogie merge (multi-select)
+  // Open modal for bogie merge (strictly exactly 2 twenty-foot containers)
   const handleOpenBogieModal = () => {
-    if (selectedJobIds.length < 2) {
-      showToast('error', 'Select at least 2 twenty-foot jobs to assign as a Bogie trip');
+    if (selectedJobIds.length !== 2) {
+      showToast('error', 'A Bogie trip can only carry exactly two (2) 20FT containers on a single prime mover & chassis.');
       return;
     }
-    const firstJob = jobs.find((j) => j.id === selectedJobIds[0]);
+    const selectedJobs = jobs.filter((j) => selectedJobIds.includes(j.id));
+    const non20Ft = selectedJobs.find((j) => j.containerSize !== '20FT');
+    if (non20Ft) {
+      showToast('error', `Container ${non20Ft.containerNumber} is ${non20Ft.containerSize}. A Bogie setup only accommodates two 20FT containers.`);
+      return;
+    }
+    const firstJob = selectedJobs[0];
     if (!firstJob) return;
     setAssigningJob(firstJob);
     setIsBogieAssign(true);
@@ -753,9 +773,14 @@ export default function DrayageAssignmentPage() {
   // =========================================================================
   // FEATURE 7: GLOBAL "AUTO-PILOT" BATCH DISPATCH ENGINE
   // =========================================================================
-  const handleRunAutoPilot = () => {
-    if (unassignedJobs.length === 0) {
-      showToast('error', 'No pending unassigned jobs to optimize');
+  const handleRunAutoPilot = (jobIdsToOptimize?: string[]) => {
+    const candidateJobs =
+      jobIdsToOptimize && jobIdsToOptimize.length > 0
+        ? jobs.filter((j) => jobIdsToOptimize.includes(j.id))
+        : unassignedJobs;
+
+    if (candidateJobs.length === 0) {
+      showToast('error', 'No jobs selected or available to optimize');
       return;
     }
 
@@ -765,10 +790,12 @@ export default function DrayageAssignmentPage() {
 
     const plan: AutoPilotDispatchItem[] = [];
     const assignedIds = new Set<string>();
+    const candidateIdSet = new Set(candidateJobs.map((j) => j.id));
 
     // 1. First Pass: Street Turn Pairs
     for (const st of streetTurnPairs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
+      if (!candidateIdSet.has(st.inboundJob.id) || !candidateIdSet.has(st.outboundJob.id)) continue;
       if (assignedIds.has(st.inboundJob.id) || assignedIds.has(st.outboundJob.id)) continue;
 
       const veh = availV.shift()!;
@@ -805,6 +832,7 @@ export default function DrayageAssignmentPage() {
     // 2. Second Pass: Dual-20FT Bogie Combos
     for (const bg of bogieCombos) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
+      if (!candidateIdSet.has(bg.job1.id) || !candidateIdSet.has(bg.job2.id)) continue;
       if (assignedIds.has(bg.job1.id) || assignedIds.has(bg.job2.id)) continue;
 
       const veh = availV.shift()!;
@@ -839,7 +867,7 @@ export default function DrayageAssignmentPage() {
     }
 
     // 3. Third Pass: Remaining Single Jobs
-    const remainingJobs = unassignedJobs.filter((j) => !assignedIds.has(j.id));
+    const remainingJobs = candidateJobs.filter((j) => !assignedIds.has(j.id));
     for (const job of remainingJobs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
 
@@ -873,6 +901,11 @@ export default function DrayageAssignmentPage() {
         demurrageRescue: risk.level === 'CRITICAL' || risk.level === 'EXPIRED',
         tasSlot: tas.slotTime,
       });
+    }
+
+    if (plan.length === 0 && candidateJobs.length > 0) {
+      showToast('error', 'Insufficient available Prime Movers, Drivers, or Chassis in fleet to dispatch these jobs');
+      return;
     }
 
     setAutoPilotPlan(plan);
@@ -998,7 +1031,7 @@ export default function DrayageAssignmentPage() {
             </button>
 
             <button
-              onClick={handleRunAutoPilot}
+              onClick={() => handleRunAutoPilot()}
               disabled={unassignedJobs.length === 0}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-500/20 disabled:opacity-50"
             >
@@ -1358,13 +1391,36 @@ export default function DrayageAssignmentPage() {
           exportName: 'drayage_job_assignment',
           actions: (
             <div className="flex items-center gap-2">
-              {selectedJobIds.length >= 2 && (
+              {selectedJobIds.length === 2 && (
                 <button
                   onClick={handleOpenBogieModal}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors shadow-sm"
+                  title="Pair exactly two 20FT containers onto a single prime mover & chassis"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  Assign Selected ({selectedJobIds.length}) as Bogie Trip
+                  Pair 2x20FT as Bogie Trip
+                </button>
+              )}
+              {selectedJobIds.length > 2 && (
+                <button
+                  onClick={() => handleRunAutoPilot(selectedJobIds)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-500/20"
+                  title="Batch dispatch selected jobs across multiple prime movers & drivers via Auto-Pilot"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  Batch Dispatch ({selectedJobIds.length} Jobs across Fleet)
+                </button>
+              )}
+              {selectedJobIds.length === 1 && (
+                <button
+                  onClick={() => {
+                    const job = jobs.find((j) => j.id === selectedJobIds[0]);
+                    if (job) handleOpenAssign(job);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold hover:bg-[var(--bg-surface)] transition-colors"
+                >
+                  <Truck className="w-3.5 h-3.5 text-blue-400" />
+                  Assign Single Job
                 </button>
               )}
             </div>
@@ -1544,7 +1600,7 @@ export default function DrayageAssignmentPage() {
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
                   {isBogieAssign
-                    ? `Assigning ${selectedJobIds.length} containers (2x20FT) to a single prime mover and chassis`
+                    ? `Assigning 2x20FT containers to a single prime mover and bogie chassis`
                     : selectedJobIds.length > 1
                     ? `Assigning Inbound Drop + Outbound Pickup pair to a single prime mover`
                     : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize})`}
@@ -1565,7 +1621,7 @@ export default function DrayageAssignmentPage() {
                 <SearchableSelect
                   value={selectedVehicleId}
                   onChange={(val) => setSelectedVehicleId(val)}
-                  options={vehicles.map((v) => ({
+                  options={primeMovers.map((v) => ({
                     value: v.id,
                     label: `${v.plateNumber} · ${v.make} ${v.model}`,
                     sublabel: `Status: ${v.status}`,
