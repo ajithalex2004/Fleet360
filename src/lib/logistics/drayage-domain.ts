@@ -908,6 +908,40 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
+  // Ensure dedicated Heavy Prime Movers / Tractors exist for Drayage logistics
+  const primeMoverCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
+    `SELECT COUNT(*) AS cnt
+       FROM vehicles
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND (
+          vehicle_usage = 'LOGISTICS'
+          OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR')
+          OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
+        )`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
+
+  if (Number(primeMoverCountRows[0]?.cnt ?? 0) === 0) {
+    const defaultPrimeMovers = [
+      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4011', make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024 },
+      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4012', make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024 },
+      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4013', make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023 },
+      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4014', make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024 },
+      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: 'AUH-PR-3021', make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023 },
+    ];
+    for (const pm of defaultPrimeMovers) {
+      await db.$executeRawUnsafe(
+        `INSERT INTO vehicles (
+          id, tenant_id, plate_number, license_plate, registration_no,
+          make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active, created_at, updated_at
+        ) VALUES ($1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,NOW(),NOW())
+        ON CONFLICT (id) DO NOTHING`,
+        pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
+      );
+    }
+  }
+
   // Seed initial realistic drayage containers & jobs if none exist yet
   const jobCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_jobs WHERE tenant_id = $1`,
@@ -1389,8 +1423,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(make, 'Mercedes-Benz') AS make,
               COALESCE(model, 'Actros 2645 Prime Mover') AS model,
               year,
+              type,
               COALESCE(status, 'AVAILABLE') AS status,
               COALESCE(vehicle_usage, 'LOGISTICS') AS vehicle_usage,
+              vehicle_group,
               fuel_type,
               current_mileage,
               registration_expiry,
@@ -1398,7 +1434,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
          FROM vehicles
         WHERE tenant_id = $1
           AND deleted_at IS NULL
-        ORDER BY CASE WHEN vehicle_usage = 'LOGISTICS' THEN 0 ELSE 1 END, plate_number ASC
+          AND (
+            vehicle_usage = 'LOGISTICS'
+            OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
+            OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
+          )
+        ORDER BY CASE WHEN status = 'AVAILABLE' THEN 0 ELSE 1 END, plate_number ASC
         LIMIT 60`,
       tenantId,
     ).catch(() => []),

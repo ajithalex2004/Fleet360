@@ -51,6 +51,8 @@ interface MappedVehicle {
   plateNumber: string;
   make: string;
   model: string;
+  type?: string | null;
+  vehicleUsage?: string | null;
   status: string;
 }
 
@@ -624,15 +626,76 @@ export default function DrayageAssignmentPage() {
   ], [getDemurrageRisk]);
 
   // =========================================================================
+  // SMART ASSET SHORTLISTING ENGINE (WEIGHTAGE & COMPATIBILITY)
+  // =========================================================================
+  const getSmartRecommendedAssets = useCallback(
+    (job: DrayageJob | null, isBogie = false) => {
+      // 1. Prime Mover Shortlisting:
+      // Heavy commercial prime mover with status AVAILABLE and vehicle_usage LOGISTICS
+      const bestVehicle =
+        availableVehicles.find((v) => v.status === 'AVAILABLE') ||
+        availableVehicles[0] ||
+        primeMovers[0];
+
+      // 2. Chassis / Trailer Shortlisting based on container specs & cargo type
+      let bestTrailer: DrayageTrailer | undefined;
+
+      if (isBogie) {
+        // Dual-20FT Bogie requires 40FT/45FT Skeletal or Flatbed multi-axle chassis
+        bestTrailer =
+          availableTrailers.find((t) => t.trailerType.includes('40FT_FLATBED') || t.trailerType.includes('FLATBED')) ||
+          availableTrailers.find((t) => t.trailerType.includes('40FT_SKELETAL') || t.trailerType.includes('SKELETAL')) ||
+          availableTrailers.find((t) => !t.trailerType.includes('20FT')) ||
+          availableTrailers[0];
+      } else if (job) {
+        const isReefer = job.containerType?.toUpperCase().includes('REEFER') || job.containerSize?.includes('RF');
+        const is20Ft = job.containerSize?.trim() === '20FT';
+
+        if (isReefer) {
+          bestTrailer =
+            availableTrailers.find((t) => t.trailerType.includes('REEFER')) ||
+            availableTrailers[0];
+        } else if (is20Ft) {
+          bestTrailer =
+            availableTrailers.find((t) => t.trailerType.includes('20FT') && !t.trailerType.includes('REEFER')) ||
+            availableTrailers.find((t) => t.trailerType.includes('SKELETAL') && !t.trailerType.includes('REEFER')) ||
+            availableTrailers[0];
+        } else {
+          bestTrailer =
+            availableTrailers.find((t) => (t.trailerType.includes('40FT') || t.trailerType.includes('45FT')) && !t.trailerType.includes('REEFER')) ||
+            availableTrailers.find((t) => !t.trailerType.includes('REEFER')) ||
+            availableTrailers[0];
+        }
+      } else {
+        bestTrailer = availableTrailers[0];
+      }
+
+      // 3. Driver Shortlisting (active & compliance passed)
+      const bestDriver =
+        availableDrivers.find((d) => d.status === 'ACTIVE' && d.complianceOk) ||
+        availableDrivers[0] ||
+        drivers[0];
+
+      return {
+        vehicleId: bestVehicle?.id ?? '',
+        trailerId: bestTrailer?.id ?? '',
+        driverId: bestDriver?.id ?? '',
+      };
+    },
+    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers],
+  );
+
+  // =========================================================================
   // ACTIONS: USE THIS PAIR (MANUAL 1-CLICK ASSIGNMENT)
   // =========================================================================
   const handleUseBogiePair = (combo: BogieComboRecommendation) => {
     setSelectedJobIds([combo.job1.id, combo.job2.id]);
     setAssigningJob(combo.job1);
     setIsBogieAssign(true);
-    setSelectedVehicleId(availableVehicles[0]?.id ?? '');
-    setSelectedDriverId(availableDrivers[0]?.id ?? '');
-    setSelectedTrailerId(availableTrailers[0]?.id ?? '');
+    const rec = getSmartRecommendedAssets(combo.job1, true);
+    setSelectedVehicleId(rec.vehicleId);
+    setSelectedDriverId(rec.driverId);
+    setSelectedTrailerId(rec.trailerId);
     setTokenInput(`DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
@@ -640,9 +703,10 @@ export default function DrayageAssignmentPage() {
     setSelectedJobIds([pair.inboundJob.id, pair.outboundJob.id]);
     setAssigningJob(pair.inboundJob);
     setIsBogieAssign(false);
-    setSelectedVehicleId(availableVehicles[0]?.id ?? '');
-    setSelectedDriverId(availableDrivers[0]?.id ?? '');
-    setSelectedTrailerId(availableTrailers[0]?.id ?? '');
+    const rec = getSmartRecommendedAssets(pair.inboundJob, false);
+    setSelectedVehicleId(rec.vehicleId);
+    setSelectedDriverId(rec.driverId);
+    setSelectedTrailerId(rec.trailerId);
     setTokenInput(`DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
@@ -651,9 +715,10 @@ export default function DrayageAssignmentPage() {
     setAssigningJob(job);
     setIsBogieAssign(false);
     setSelectedJobIds([job.id]);
-    setSelectedVehicleId(job.assignedVehicleId || (availableVehicles[0]?.id ?? ''));
-    setSelectedDriverId(job.assignedDriverId || (availableDrivers[0]?.id ?? ''));
-    setSelectedTrailerId(job.assignedTrailerId || (availableTrailers[0]?.id ?? ''));
+    const rec = getSmartRecommendedAssets(job, false);
+    setSelectedVehicleId(job.assignedVehicleId || rec.vehicleId);
+    setSelectedDriverId(job.assignedDriverId || rec.driverId);
+    setSelectedTrailerId(job.assignedTrailerId || rec.trailerId);
     setTokenInput(job.tokenNumber || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
@@ -673,9 +738,10 @@ export default function DrayageAssignmentPage() {
     if (!firstJob) return;
     setAssigningJob(firstJob);
     setIsBogieAssign(true);
-    setSelectedVehicleId(availableVehicles[0]?.id ?? '');
-    setSelectedDriverId(availableDrivers[0]?.id ?? '');
-    setSelectedTrailerId(availableTrailers[0]?.id ?? '');
+    const rec = getSmartRecommendedAssets(firstJob, true);
+    setSelectedVehicleId(rec.vehicleId);
+    setSelectedDriverId(rec.driverId);
+    setSelectedTrailerId(rec.trailerId);
     setTokenInput(`DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
@@ -837,7 +903,9 @@ export default function DrayageAssignmentPage() {
 
       const veh = availV.shift()!;
       const drv = availD.shift()!;
-      const tr = availT.shift()!;
+      // For 2x20FT Bogie, match 40FT/45FT Flatbed or Skeletal chassis
+      const trIdx = availT.findIndex((t) => t.trailerType.includes('FLATBED') || t.trailerType.includes('40FT') || !t.trailerType.includes('20FT'));
+      const tr = trIdx >= 0 ? availT.splice(trIdx, 1)[0] : availT.shift()!;
       const token = `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`;
 
       assignedIds.add(bg.job1.id);
@@ -873,7 +941,17 @@ export default function DrayageAssignmentPage() {
 
       const veh = availV.shift()!;
       const drv = availD.shift()!;
-      const tr = availT.shift()!;
+      const isReefer = job.containerType?.toUpperCase().includes('REEFER');
+      const is20 = job.containerSize?.trim() === '20FT';
+      let trIdx = -1;
+      if (isReefer) {
+        trIdx = availT.findIndex((t) => t.trailerType.includes('REEFER'));
+      } else if (is20) {
+        trIdx = availT.findIndex((t) => t.trailerType.includes('20FT') && !t.trailerType.includes('REEFER'));
+      } else {
+        trIdx = availT.findIndex((t) => (t.trailerType.includes('40FT') || t.trailerType.includes('45FT')) && !t.trailerType.includes('REEFER'));
+      }
+      const tr = trIdx >= 0 ? availT.splice(trIdx, 1)[0] : availT.shift()!;
       const token = `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
       const risk = getDemurrageRisk(job);
       const tas = getTasSlotWindow(job);
@@ -1617,14 +1695,17 @@ export default function DrayageAssignmentPage() {
             <div className="space-y-4 text-xs">
               {/* Select Prime Mover */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-[var(--text-muted)]">Fleet360 Tractor / Prime Mover *</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-muted)]">Fleet360 Tractor / Prime Mover *</label>
+                  <span className="text-[10px] text-blue-400 font-semibold">Usage: LOGISTICS • Type: PRIME_MOVER</span>
+                </div>
                 <SearchableSelect
                   value={selectedVehicleId}
                   onChange={(val) => setSelectedVehicleId(val)}
                   options={primeMovers.map((v) => ({
                     value: v.id,
                     label: `${v.plateNumber} · ${v.make} ${v.model}`,
-                    sublabel: `Status: ${v.status}`,
+                    sublabel: `Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
                     badge: v.status,
                   }))}
                   placeholder="-- Search & Choose Prime Mover --"
@@ -1653,14 +1734,25 @@ export default function DrayageAssignmentPage() {
 
               {/* Select Chassis / Trailer */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-[var(--text-muted)]">Skeletal / Flatbed Chassis *</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-muted)]">Skeletal / Flatbed Chassis *</label>
+                  {isBogieAssign ? (
+                    <span className="text-[10px] text-indigo-400 font-semibold">✨ Recommended: 40FT/45FT Flatbed or Bogie Chassis (2x20FT)</span>
+                  ) : assigningJob?.containerType === 'REEFER' ? (
+                    <span className="text-[10px] text-cyan-400 font-semibold">✨ Recommended: Reefer Chassis with Genset</span>
+                  ) : assigningJob?.containerSize === '20FT' ? (
+                    <span className="text-[10px] text-emerald-400 font-semibold">✨ Recommended: 20FT Skeletal Chassis</span>
+                  ) : (
+                    <span className="text-[10px] text-blue-400 font-semibold">✨ Recommended: 40FT/45FT Skeletal Chassis</span>
+                  )}
+                </div>
                 <SearchableSelect
                   value={selectedTrailerId}
                   onChange={(val) => setSelectedTrailerId(val)}
                   options={trailers.map((t) => ({
                     value: t.id,
                     label: `${t.plateNumber} · ${t.trailerType}`,
-                    sublabel: `${t.masterStatus} • ${t.operationalStatus}`,
+                    sublabel: `Capacity: ${t.capacityTons}T • Loc: ${t.currentLocation || 'Depot'} • Master: ${t.masterStatus}`,
                     badge: t.operationalStatus,
                   }))}
                   placeholder="-- Search & Choose Chassis --"
