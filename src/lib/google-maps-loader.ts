@@ -28,7 +28,7 @@ export interface GMapsMap {
 }
 export interface GMapsMarker {
   setPosition(pos: GMapsLatLngLiteral): void;
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: any) => void): void;
   getPosition(): GMapsLatLng | null;
   setMap(map: GMapsMap | null): void;
 }
@@ -47,14 +47,14 @@ export interface GMapsCircle {
   setCenter(pos: GMapsLatLngLiteral): void;
   setRadius(r: number): void;
   setOptions(opts: object): void;
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: any) => void): void;
 }
 export interface GMapsPolygon {
   setMap(map: GMapsMap | null): void;
   getPath(): { getArray(): GMapsLatLng[]; getLength(): number };
   setPath(path: GMapsLatLngLiteral[]): void;
   setOptions(opts: object): void;
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: any) => void): void;
 }
 export interface GMapsDrawingManager {
   setMap(map: GMapsMap | null): void;
@@ -62,8 +62,15 @@ export interface GMapsDrawingManager {
   setOptions(opts: object): void;
   addListener(event: string, cb: (payload: unknown) => void): void;
 }
+export interface GMapsInfoWindow {
+  open(opts?: { map?: GMapsMap; anchor?: GMapsMarker }): void;
+  close(): void;
+  setContent(content: string | Node): void;
+  setPosition(pos: GMapsLatLngLiteral | GMapsLatLng): void;
+}
+
 export interface GMapsAutocomplete {
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: any) => void): void;
   getPlace(): {
     geometry?: { location?: GMapsLatLng };
     name?: string;
@@ -105,6 +112,7 @@ export interface GoogleCtors {
   Circle: new (opts: object) => GMapsCircle;
   Polygon: new (opts: object) => GMapsPolygon;
   DrawingManager: new (opts?: object) => GMapsDrawingManager;
+  InfoWindow: new (opts?: object) => GMapsInfoWindow;
   /** google.maps.drawing.OverlayType enum — 'circle' | 'polygon' | null etc. */
   OverlayType: { CIRCLE: string; POLYGON: string; MARKER: string; POLYLINE: string; RECTANGLE: string };
 }
@@ -115,7 +123,7 @@ interface GoogleMapsBootstrap {
   // it from 'maps' (which we used to do) throws
   // `google.maps.LatLngBounds is not a constructor`.
   importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds']; LatLng: GoogleCtors['LatLng']; SymbolPath: GoogleCtors['SymbolPath'] }>;
-  importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon'] }>;
+  importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon']; InfoWindow: GoogleCtors['InfoWindow'] }>;
   importLibrary(name: 'marker'):    Promise<{ Marker: GoogleCtors['Marker'] }>;
   importLibrary(name: 'geocoding'): Promise<{ Geocoder: GoogleCtors['Geocoder'] }>;
   importLibrary(name: 'places'):    Promise<{ Autocomplete: GoogleCtors['Autocomplete'] }>;
@@ -210,6 +218,7 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       Polyline:       mapsLib.Polyline,
       Circle:         mapsLib.Circle,
       Polygon:        mapsLib.Polygon,
+      InfoWindow:     mapsLib.InfoWindow,
       LatLngBounds:   coreLib.LatLngBounds,   // ← 'core', not 'maps'
       LatLng:         coreLib.LatLng,
       SymbolPath:     coreLib.SymbolPath,

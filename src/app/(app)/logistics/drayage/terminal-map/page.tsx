@@ -23,7 +23,7 @@ const DrayageGeofenceMap = dynamic(
     loading: () => (
       <div className="w-full h-[450px] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col items-center justify-center gap-2 text-xs text-[var(--text-muted)] animate-pulse">
         <Compass className="w-6 h-6 text-blue-400 animate-spin" />
-        <span>Loading Live Port & Geofence Map...</span>
+        <span>Loading Live Google Maps Drayage Radar...</span>
       </div>
     ),
   }
@@ -341,6 +341,8 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleStartPlotTerminal = () => {
+    // Hide modal overlay so the operator sees the Google Map directly!
+    setShowTerminalModal(false);
     setPlotMode({
       active: true,
       type: 'TERMINAL',
@@ -351,9 +353,13 @@ export default function DrayageTerminalMapPage() {
         setTermLat(Number(lat.toFixed(6)));
         setTermLng(Number(lng.toFixed(6)));
       },
-      onClose: () => setPlotMode(null),
+      onClose: () => {
+        setPlotMode(null);
+        // Re-open modal with updated coordinates!
+        setShowTerminalModal(true);
+      },
     });
-    setFocusMapLocation({ lat: termLat, lng: termLng, zoom: 14.5, title: termName || 'Terminal' });
+    setFocusMapLocation({ lat: termLat, lng: termLng, zoom: 15, title: termName || 'Terminal' });
     scrollToMap();
   };
 
@@ -453,6 +459,8 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleStartPlotWarehouse = () => {
+    // Hide modal overlay so the operator sees the Google Map directly!
+    setShowWarehouseModal(false);
     setPlotMode({
       active: true,
       type: 'CONSIGNEE',
@@ -463,9 +471,13 @@ export default function DrayageTerminalMapPage() {
         setNewWhLat(Number(lat.toFixed(6)));
         setNewWhLng(Number(lng.toFixed(6)));
       },
-      onClose: () => setPlotMode(null),
+      onClose: () => {
+        setPlotMode(null);
+        // Re-open modal with updated coordinates!
+        setShowWarehouseModal(true);
+      },
     });
-    setFocusMapLocation({ lat: newWhLat, lng: newWhLng, zoom: 14.5, title: newWhName || 'Warehouse' });
+    setFocusMapLocation({ lat: newWhLat, lng: newWhLng, zoom: 15, title: newWhName || 'Warehouse' });
     scrollToMap();
   };
 
@@ -627,6 +639,35 @@ export default function DrayageTerminalMapPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* Floating Action Bar when Plot on Map is Active */}
+      {plotMode?.active && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md border border-emerald-500/60 rounded-2xl p-4 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-white animate-in slide-in-from-bottom-4 max-w-xl w-[92vw]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-emerald-300">
+                📍 Plotting Location: {plotMode.title}
+              </div>
+              <div className="text-[11px] text-slate-300">
+                Click Google Maps or drag the green pin to set location
+              </div>
+            </div>
+            <span className="text-xs font-mono text-emerald-100 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shrink-0">
+              {plotMode.lat.toFixed(5)}, {plotMode.lng.toFixed(5)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={plotMode.onClose}
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 shrink-0"
+          >
+            <Check className="w-4 h-4" />
+            Done Plotting & Return to Form
+          </button>
+        </div>
+      )}
+
       {/* Toast Alert */}
       {toast && (
         <div

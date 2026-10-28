@@ -576,9 +576,19 @@ export default function DrayageCreateJobsPage() {
 
                 {/* 3. Consignee (Client Destination Warehouse / Ramp) */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-[var(--text-main)] block">
-                    Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination / Ramp)</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-[var(--text-main)] block">
+                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination / Ramp)</span>
+                    </label>
+                    <Link
+                      href="/logistics/drayage/terminal-map"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                      title="Open Terminal & Consignee Map directly"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      Plot on Map Page
+                    </Link>
+                  </div>
                   <SearchableSelect
                     value={selectedWarehouseId}
                     onChange={(newWhId) => setSelectedWarehouseId(newWhId)}
