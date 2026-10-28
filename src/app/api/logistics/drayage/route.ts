@@ -469,31 +469,6 @@ export async function POST(req: NextRequest) {
             notes,
           );
 
-          // Sync to platform customers table for cross-module consistency
-          await tx.$executeRawUnsafe(
-            `INSERT INTO customers (
-              id, tenant_id, customer_code, name_en, mobile_number, address, city, trn, trade_license, customer_type, is_active, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'CORPORATE',true,NOW(),NOW())
-            ON CONFLICT (id) DO UPDATE
-               SET customer_code = EXCLUDED.customer_code,
-                   name_en = EXCLUDED.name_en,
-                   mobile_number = EXCLUDED.mobile_number,
-                   address = EXCLUDED.address,
-                   city = EXCLUDED.city,
-                   trn = EXCLUDED.trn,
-                   trade_license = EXCLUDED.trade_license,
-                   updated_at = NOW()`,
-            id,
-            tenantId,
-            code,
-            name,
-            contactNo,
-            streetAddress,
-            city,
-            trn,
-            tradeLicense,
-          ).catch(() => {});
-
           return { ok: true, id };
         }
 
@@ -603,7 +578,7 @@ export async function POST(req: NextRequest) {
             `DELETE FROM logistics_drayage_geofences WHERE id = $1 AND tenant_id = $2`,
             `gf-wh-${String(body.id)}`,
             tenantId,
-          ).catch(() => {});
+          );
           return { ok: true };
         }
 

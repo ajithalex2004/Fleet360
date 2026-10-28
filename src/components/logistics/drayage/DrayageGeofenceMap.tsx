@@ -55,6 +55,24 @@ export interface WarehouseLocation {
   rampsCount?: number;
 }
 
+export interface PlotContext {
+  title: string;
+  type: 'TERMINAL' | 'CONSIGNEE' | 'WAREHOUSE';
+  lat: number;
+  lng: number;
+  radiusMeters?: number;
+  geofenceType?: 'CIRCLE' | 'POLYGON';
+  coordinates?: Array<{ lat: number; lng: number }>;
+  onApply: (result: {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+    geofenceType: 'CIRCLE' | 'POLYGON';
+    coordinates?: Array<{ lat: number; lng: number }>;
+  }) => void;
+  onCancel: () => void;
+}
+
 export interface PlotModeState {
   active: boolean;
   type: 'TERMINAL' | 'CONSIGNEE';
@@ -88,6 +106,7 @@ interface DrayageGeofenceMapProps {
   onCloseEditMode?: () => void;
   focusLocation?: { lat: number; lng: number; zoom?: number; title?: string } | null;
   plotMode?: PlotModeState | null;
+  plotContext?: PlotContext | null;
 }
 
 const DEFAULT_CENTER = { lat: 24.9960, lng: 55.0350 }; // Jebel Ali Port Corridor
@@ -128,6 +147,7 @@ export default function DrayageGeofenceMap({
   onCloseEditMode,
   focusLocation,
   plotMode,
+  plotContext,
 }: DrayageGeofenceMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GMapsMap | null>(null);
@@ -250,29 +270,31 @@ export default function DrayageGeofenceMap({
   const handleSetMapType = useCallback((type: 'roadmap' | 'satellite' | 'hybrid' | 'terrain') => {
     setMapTypeId(type);
     if (!mapRef.current) return;
-    mapRef.current.setMapTypeId(type);
+    mapRef.current.setMapTypeId?.(type);
     // If roadmap, reapply custom dark styles; for satellite/hybrid/terrain, clear custom styles
     if (type === 'roadmap') {
-      mapRef.current.setOptions({ styles: DARK_MAP_STYLES });
+      mapRef.current.setOptions?.({ styles: DARK_MAP_STYLES });
     } else {
-      mapRef.current.setOptions({ styles: null });
+      mapRef.current.setOptions?.({ styles: null });
     }
   }, []);
 
   // Native Circle Click Handler (Circle with vertex stretching handles)
-  const handleMapClickCircle = useCallback((lat: number, lng: number) => {
+  const handleMapClickCircle = useCallback((lat: number, lng: number, customRadius?: number) => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
     if (!ctors || !map) return;
 
     if (draftCircleRef.current) {
       draftCircleRef.current.setCenter({ lat, lng });
+      if (customRadius) {
+        draftCircleRef.current.setRadius(customRadius);
+      }
       const r = Math.round(draftCircleRef.current.getRadius());
       setCircleDraft({ centerLat: lat, centerLng: lng, radiusMeters: r });
       return;
     }
-
-    const initialRadius = 500;
+    const initialRadius = customRadius || 1000;
     const circle = new ctors.Circle({
       map,
       center: { lat, lng },
@@ -486,8 +508,8 @@ export default function DrayageGeofenceMap({
             gestureHandling: 'greedy',
             mapTypeControl: true,
             mapTypeControlOptions: {
-              style: ctors.MapTypeControlStyle.HORIZONTAL_BAR,
-              position: ctors.ControlPosition.TOP_RIGHT,
+              style: (ctors as any).MapTypeControlStyle?.HORIZONTAL_BAR ?? 1,
+              position: (ctors as any).ControlPosition?.TOP_RIGHT ?? 3,
               mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain'],
             },
             streetViewControl: false,
@@ -505,16 +527,7 @@ export default function DrayageGeofenceMap({
             const lat = Number(e.latLng.lat().toFixed(6));
             const lng = Number(e.latLng.lng().toFixed(6));
 
-            // Case A: Plot Mode (Target Pin Relocation)
-            if (plotModeRef.current?.active) {
-              if (plotMarkerRef.current) {
-                plotMarkerRef.current.setPosition({ lat, lng });
-              }
-              plotModeRef.current.onPlotSelect(lat, lng);
-              return;
-            }
-
-            // Case B: Native Circle Drawing Mode
+            // Case A: Native Circle Drawing Mode
             if (drawModeRef.current === 'CIRCLE') {
               handleMapClickCircle(lat, lng);
               return;
@@ -842,6 +855,138 @@ export default function DrayageGeofenceMap({
     }
   }, [plotMode]);
 
+  
+  // Switch drawing mode seamlessly
+  const handleSelectDrawMode = useCallback((mode: 'CIRCLE' | 'POLYGON' | null) => {
+    setDrawMode(mode);
+    if (mode === 'CIRCLE' && plotContext) {
+      const lat = plotContext.lat || DEFAULT_CENTER.lat;
+      const lng = plotContext.lng || DEFAULT_CENTER.lng;
+      handleMapClickCircle(lat, lng, plotContext.radiusMeters || 1000);
+    }
+  }, [plotContext, handleMapClickCircle]);
+
+  // Handle Plot on Map Mode (Defaults to Circle Drawing with live stretch handles)
+  useEffect(() => {
+    if (!plotContext) return;
+    const initialMode = plotContext.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
+    setDrawMode(initialMode);
+
+    const map = mapRef.current;
+    const ctors = ctorsRef.current;
+    if (!map || !ctors) return;
+
+    const targetLat = Number(plotContext.lat || DEFAULT_CENTER.lat);
+    const targetLng = Number(plotContext.lng || DEFAULT_CENTER.lng);
+    map.panTo({ lat: targetLat, lng: targetLng });
+    map.setZoom(15);
+
+    if (initialMode === 'CIRCLE') {
+      handleMapClickCircle(targetLat, targetLng, plotContext.radiusMeters || 1000);
+    } else if (initialMode === 'POLYGON' && plotContext.coordinates && plotContext.coordinates.length >= 3) {
+      polygonVerticesRef.current = plotContext.coordinates;
+      setPolygonCount(plotContext.coordinates.length);
+      if (draftPolygonRef.current) draftPolygonRef.current.setMap(null);
+      const poly = new ctors.Polygon({
+        map,
+        paths: plotContext.coordinates,
+        strokeColor: '#c084fc',
+        strokeWeight: 2.5,
+        strokeOpacity: 0.9,
+        fillColor: '#9333ea',
+        fillOpacity: 0.25,
+        clickable: true,
+        editable: true,
+        draggable: true,
+        zIndex: 100,
+      });
+      const path = poly.getPath();
+      const syncPathChanges = () => {
+        const len = path.getLength();
+        const pts: Array<{ lat: number; lng: number }> = [];
+        for (let i = 0; i < len; i++) {
+          const pt = path.getAt(i);
+          pts.push({ lat: Number(pt.lat().toFixed(6)), lng: Number(pt.lng().toFixed(6)) });
+        }
+        polygonVerticesRef.current = pts;
+        setPolygonCount(pts.length);
+      };
+      path.addListener('set_at', syncPathChanges);
+      path.addListener('insert_at', syncPathChanges);
+      path.addListener('remove_at', syncPathChanges);
+      draftPolygonRef.current = poly;
+    }
+  }, [plotContext, handleMapClickCircle]);
+
+  // Apply Plot Geofence directly back to Form modal
+  const handleApplyPlotGeofence = useCallback(() => {
+    if (!plotContext) return;
+
+    if (drawMode === 'CIRCLE') {
+      let lat = plotContext.lat;
+      let lng = plotContext.lng;
+      let radius = plotContext.radiusMeters || 1000;
+
+      if (circleDraft) {
+        lat = circleDraft.centerLat;
+        lng = circleDraft.centerLng;
+        radius = circleDraft.radiusMeters;
+      } else if (draftCircleRef.current) {
+        const c = draftCircleRef.current.getCenter();
+        if (c) {
+          lat = Number(c.lat().toFixed(6));
+          lng = Number(c.lng().toFixed(6));
+        }
+        radius = Math.round(draftCircleRef.current.getRadius());
+      }
+
+      cleanupDraftCircle();
+      setDrawMode(null);
+      plotContext.onApply({
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6)),
+        radiusMeters: radius,
+        geofenceType: 'CIRCLE',
+      });
+      return;
+    }
+
+    if (drawMode === 'POLYGON') {
+      let points = polygonVerticesRef.current;
+      if (draftPolygonRef.current) {
+        const path = draftPolygonRef.current.getPath();
+        const len = path.getLength();
+        if (len >= 3) {
+          const pts: Array<{ lat: number; lng: number }> = [];
+          for (let i = 0; i < len; i++) {
+            const pt = path.getAt(i);
+            pts.push({
+              lat: Number(pt.lat().toFixed(6)),
+              lng: Number(pt.lng().toFixed(6)),
+            });
+          }
+          points = pts;
+        }
+      }
+
+      if (points.length < 3) return;
+
+      const avgLat = Number((points.reduce((sum, p) => sum + p.lat, 0) / points.length).toFixed(6));
+      const avgLng = Number((points.reduce((sum, p) => sum + p.lng, 0) / points.length).toFixed(6));
+
+      cleanupDraftPolygon();
+      setDrawMode(null);
+      plotContext.onApply({
+        lat: avgLat,
+        lng: avgLng,
+        radiusMeters: 1000,
+        geofenceType: 'POLYGON',
+        coordinates: points,
+      });
+      return;
+    }
+  }, [plotContext, drawMode, circleDraft, cleanupDraftCircle, cleanupDraftPolygon]);
+
   // Quick Save Geofence from Map Draft
   const handleSaveDraft = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -969,7 +1114,7 @@ export default function DrayageGeofenceMap({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setDrawMode((prev) => (prev === 'CIRCLE' ? null : 'CIRCLE'))}
+            onClick={() => handleSelectDrawMode(drawMode === 'CIRCLE' && !plotContext ? null : 'CIRCLE')}
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
               drawMode === 'CIRCLE'
                 ? 'bg-blue-600 border-blue-400 text-white shadow-lg animate-pulse'
@@ -983,7 +1128,7 @@ export default function DrayageGeofenceMap({
 
           <button
             type="button"
-            onClick={() => setDrawMode((prev) => (prev === 'POLYGON' ? null : 'POLYGON'))}
+            onClick={() => handleSelectDrawMode(drawMode === 'POLYGON' && !plotContext ? null : 'POLYGON')}
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
               drawMode === 'POLYGON'
                 ? 'bg-purple-600 border-purple-400 text-white shadow-lg animate-pulse'
@@ -1007,58 +1152,99 @@ export default function DrayageGeofenceMap({
         </div>
       </div>
 
-      {/* Active Circle Drawing Banner */}
+      {/* Active Circle Drawing / Plot Banner */}
       {drawMode === 'CIRCLE' && (
-        <div className="absolute top-16 left-3 right-3 z-30 bg-blue-950/95 backdrop-blur-md border border-blue-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-16 left-3 right-3 z-30 bg-blue-950/95 backdrop-blur-md border border-blue-500/70 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-            <span className="text-xs font-bold text-blue-200">
-              {circleDraft
-                ? `⚪ Drag edge handles to stretch radius (${circleDraft.radiusMeters}m), or drag center to move`
-                : '⚪ Click anywhere on Google Maps to place circular perimeter'}
-            </span>
-            {circleDraft && (
-              <span className="text-[11px] font-mono text-blue-300">
-                ({circleDraft.centerLat.toFixed(5)}, {circleDraft.centerLng.toFixed(5)}) · {circleDraft.radiusMeters}m
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping shrink-0" />
+            <div>
+              <span className="text-xs font-bold text-blue-200">
+                {plotContext
+                  ? `📍 Plotting Geofence: ${plotContext.title}`
+                  : circleDraft
+                  ? `⚪ Drag edge handles to stretch radius (${circleDraft.radiusMeters}m), or drag center to move`
+                  : '⚪ Click anywhere on Google Maps to place circular perimeter'}
               </span>
-            )}
+              <div className="text-[11px] text-blue-300 font-mono">
+                {circleDraft
+                  ? `(${circleDraft.centerLat.toFixed(5)}, ${circleDraft.centerLng.toFixed(5)}) · ${circleDraft.radiusMeters}m radius`
+                  : plotContext
+                  ? `(${plotContext.lat.toFixed(5)}, ${plotContext.lng.toFixed(5)}) · ${plotContext.radiusMeters || 1000}m radius`
+                  : '⚪ Drag edge stretch handles to expand radius'}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {circleDraft && (
-              <button
-                type="button"
-                onClick={handleConfirmCircleDraft}
-                className="px-3.5 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Confirm & Save Geofence
-              </button>
+            {plotContext ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDrawMode('POLYGON')}
+                  className="px-2.5 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-xs font-semibold border border-purple-500/50 flex items-center gap-1 transition-all"
+                  title="Switch to Draw Polygon mode"
+                >
+                  <Hexagon className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Draw Polygon</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyPlotGeofence}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg transition-all flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>✓ Apply Geofence & Return to Form</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={plotContext.onCancel}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-600"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {circleDraft && (
+                  <button
+                    type="button"
+                    onClick={handleConfirmCircleDraft}
+                    className="px-3.5 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Confirm & Save Geofence
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrawMode(null)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
+                >
+                  Cancel
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => setDrawMode(null)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
 
       {/* Active Polygon Drawing Banner with Vertex Stretching Info */}
       {drawMode === 'POLYGON' && (
-        <div className="absolute top-16 left-3 right-3 z-30 bg-purple-950/95 backdrop-blur-md border border-purple-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-16 left-3 right-3 z-30 bg-purple-950/95 backdrop-blur-md border border-purple-500/70 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
-            <span className="text-xs font-bold text-purple-200">
-              {polygonCount >= 3
-                ? '⬡ Stretch points active! Drag any white corner vertex to stretch, drag edge midpoints to add corners'
-                : '⬡ Click on Google Maps to add polygon corners:'}
-            </span>
-            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/40 text-purple-200">
-              {polygonCount} {polygonCount === 1 ? 'vertex' : 'vertices'} {polygonCount < 3 ? '(min 3 required)' : '✓'}
-            </span>
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping shrink-0" />
+            <div>
+              <span className="text-xs font-bold text-purple-200">
+                {plotContext
+                  ? `📍 Plotting Polygon Geofence: ${plotContext.title}`
+                  : polygonCount >= 3
+                  ? '⬡ Stretch points active! Drag corner vertices to stretch, drag midpoints to add corners'
+                  : '⬡ Click on Google Maps to add polygon corners:'}
+              </span>
+              <div className="text-[11px] text-purple-300 font-mono">
+                {polygonCount} {polygonCount === 1 ? 'vertex' : 'vertices'} {polygonCount < 3 ? '(min 3 required)' : '✓ (drag white corner handles to stretch)'}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1072,23 +1258,55 @@ export default function DrayageGeofenceMap({
                 Undo Point
               </button>
             )}
-            {polygonCount >= 3 && (
-              <button
-                type="button"
-                onClick={handleCompletePolygonDraft}
-                className="px-3.5 py-1 rounded-lg bg-purple-500 hover:bg-purple-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Complete & Save Polygon
-              </button>
+            {plotContext ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDrawMode('CIRCLE')}
+                  className="px-2.5 py-1 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-200 text-xs font-semibold border border-blue-500/50 flex items-center gap-1 transition-all"
+                  title="Switch to Draw Circle mode"
+                >
+                  <CircleIcon className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Draw Circle</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={polygonCount < 3}
+                  onClick={handleApplyPlotGeofence}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>✓ Apply Geofence & Return to Form</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={plotContext.onCancel}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-600"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {polygonCount >= 3 && (
+                  <button
+                    type="button"
+                    onClick={handleCompletePolygonDraft}
+                    className="px-3.5 py-1 rounded-lg bg-purple-500 hover:bg-purple-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Complete & Save Polygon
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrawMode(null)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
+                >
+                  Cancel
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => setDrawMode(null)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
@@ -1133,33 +1351,7 @@ export default function DrayageGeofenceMap({
         </div>
       )}
 
-      {/* Active Plot on Map Mode Banner */}
-      {plotMode?.active && (
-        <div className="absolute top-16 left-3 right-3 z-30 bg-emerald-950/95 backdrop-blur-md border border-emerald-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-bold text-emerald-300">
-              📍 Google Maps Plotter: {plotMode.title}
-            </span>
-            <span className="text-[11px] text-emerald-100/90 font-mono">
-              ({plotMode.lat.toFixed(5)}, {plotMode.lng.toFixed(5)})
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-emerald-300 hidden md:inline">
-              Click anywhere on Google Maps or drag the green pin to set location
-            </span>
-            <button
-              type="button"
-              onClick={plotMode.onClose}
-              className="px-3.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
-            >
-              <Check className="w-3.5 h-3.5" />
-              Done Plotting
-            </button>
-          </div>
-        </div>
-      )}
+      
 
       {/* Main Google Maps Viewport */}
       <div ref={containerRef} className="w-full h-[520px] bg-slate-950" />

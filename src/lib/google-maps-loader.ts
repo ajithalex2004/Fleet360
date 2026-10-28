@@ -20,11 +20,26 @@
 export interface GMapsLatLng { lat(): number; lng(): number }
 interface GMapsLatLngLiteral { lat: number; lng: number }
 
+export interface GMapsMVCArray<T = any> {
+  getArray(): T[];
+  getLength(): number;
+  getAt(i: number): T;
+  setAt(i: number, elem: T): void;
+  insertAt(i: number, elem: T): void;
+  removeAt(i: number): T;
+  addListener(event: string, cb: (e?: any) => void): void;
+  [key: string]: any;
+}
+
 export interface GMapsMap {
   addListener(event: string, cb: (e: { latLng?: GMapsLatLng }) => void): void;
   panTo(pos: GMapsLatLngLiteral): void;
   setZoom(z: number): void;
+  setCenter?(pos: GMapsLatLngLiteral): void;
   fitBounds(bounds: GMapsLatLngBounds, padding?: number | { top: number; right: number; bottom: number; left: number }): void;
+  setMapTypeId?(type: string): void;
+  setOptions?(opts: object | null): void;
+  [key: string]: any;
 }
 export interface GMapsMarker {
   setPosition(pos: GMapsLatLngLiteral): void;
@@ -51,10 +66,13 @@ export interface GMapsCircle {
 }
 export interface GMapsPolygon {
   setMap(map: GMapsMap | null): void;
-  getPath(): { getArray(): GMapsLatLng[]; getLength(): number };
+  getPath(): GMapsMVCArray<GMapsLatLng>;
   setPath(path: GMapsLatLngLiteral[]): void;
   setOptions(opts: object): void;
+  setEditable(editable: boolean): void;
+  setDraggable(draggable: boolean): void;
   addListener(event: string, cb: (e?: any) => void): void;
+  [key: string]: any;
 }
 export interface GMapsDrawingManager {
   setMap(map: GMapsMap | null): void;

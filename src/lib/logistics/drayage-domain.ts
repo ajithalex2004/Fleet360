@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 export interface DrayageDbClient {
@@ -288,9 +289,9 @@ export interface DrayageAlertItem {
 
 let schemaBootstrapped = false;
 
-async function safeDdl(db: DrayageDbClient, sql: string): Promise<void> {
+async function safeDdl(_db: DrayageDbClient | null, sql: string): Promise<void> {
   try {
-    await db.$executeRawUnsafe(sql);
+    await prisma.$executeRawUnsafe(sql);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (
@@ -331,11 +332,16 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
 
   
   await safeDdl(db, `
-    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T1' WHERE code = 'AEJEA-T1';
-    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T2' WHERE code = 'AEJEA-T2';
-    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T3' WHERE code = 'AEJEA-T3';
-    UPDATE logistics_drayage_terminals SET code = 'ADP-KP-T1' WHERE code = 'AEKHL-T1';
-    UPDATE logistics_drayage_terminals SET code = 'DPW-PR-T1' WHERE code = 'AEDXB-PR';
+    UPDATE logistics_drayage_terminals
+    SET code = CASE code
+      WHEN 'AEJEA-T1' THEN 'DPW-JA-T1'
+      WHEN 'AEJEA-T2' THEN 'DPW-JA-T2'
+      WHEN 'AEJEA-T3' THEN 'DPW-JA-T3'
+      WHEN 'AEKHL-T1' THEN 'ADP-KP-T1'
+      WHEN 'AEDXB-PR' THEN 'DPW-PR-T1'
+      ELSE code
+    END
+    WHERE code IN ('AEJEA-T1', 'AEJEA-T2', 'AEJEA-T3', 'AEKHL-T1', 'AEDXB-PR');
   `);
 
   await safeDdl(db, `
@@ -374,13 +380,14 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS code TEXT;
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_configured BOOLEAN DEFAULT false;
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_type TEXT DEFAULT 'CIRCLE';
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER DEFAULT 800;
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_coordinates_json TEXT DEFAULT '[]';
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS trip_amount_aed DOUBLE PRECISION DEFAULT 1550;
-    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150;
+    ALTER TABLE logistics_drayage_warehouses
+      ADD COLUMN IF NOT EXISTS code TEXT,
+      ADD COLUMN IF NOT EXISTS geofence_configured BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS geofence_type TEXT DEFAULT 'CIRCLE',
+      ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER DEFAULT 800,
+      ADD COLUMN IF NOT EXISTS geofence_coordinates_json TEXT DEFAULT '[]',
+      ADD COLUMN IF NOT EXISTS trip_amount_aed DOUBLE PRECISION DEFAULT 1550,
+      ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150;
   `);
 
   await safeDdl(db, `

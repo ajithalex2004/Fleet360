@@ -8,6 +8,7 @@ import {
   Search, ShieldCheck, Compass, Layers, ExternalLink, X, Map, Clock,
   Warehouse, Building2, User, Phone, Check, Navigation,
 } from 'lucide-react';
+import type { PlotContext } from '@/components/logistics/drayage/DrayageGeofenceMap';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
@@ -141,15 +142,7 @@ export default function DrayageTerminalMapPage() {
     title?: string;
   } | null>(null);
 
-  const [plotMode, setPlotMode] = useState<{
-    active: boolean;
-    type: 'TERMINAL' | 'CONSIGNEE';
-    title: string;
-    lat: number;
-    lng: number;
-    onPlotSelect: (lat: number, lng: number) => void;
-    onClose: () => void;
-  } | null>(null);
+  const [plotContext, setPlotContext] = useState<PlotContext | null>(null);
 
   // Terminal Modal State (Add / Edit)
   const [showTerminalModal, setShowTerminalModal] = useState(false);
@@ -309,7 +302,7 @@ export default function DrayageTerminalMapPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to save terminal');
 
       setShowTerminalModal(false);
-      setPlotMode(null);
+      setPlotContext(null);
       invalidateDrayageClientCache();
       await loadData(true);
       showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created`);
@@ -341,21 +334,24 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleStartPlotTerminal = () => {
-    // Hide modal overlay so the operator sees the Google Map directly!
     setShowTerminalModal(false);
-    setPlotMode({
-      active: true,
+    setPlotContext({
       type: 'TERMINAL',
       title: termName || 'Terminal Location',
       lat: termLat,
       lng: termLng,
-      onPlotSelect: (lat, lng) => {
-        setTermLat(Number(lat.toFixed(6)));
-        setTermLng(Number(lng.toFixed(6)));
+      radiusMeters: termRadius || 1500,
+      geofenceType: 'CIRCLE',
+      onApply: (res: { lat: number; lng: number; radiusMeters: number; geofenceType: 'CIRCLE' | 'POLYGON' }) => {
+        setTermLat(Number(res.lat.toFixed(6)));
+        setTermLng(Number(res.lng.toFixed(6)));
+        setTermRadius(res.radiusMeters || 1500);
+        setPlotContext(null);
+        setShowTerminalModal(true);
+        showToast('success', `Geofence coordinates applied: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)} (${res.radiusMeters}m)`);
       },
-      onClose: () => {
-        setPlotMode(null);
-        // Re-open modal with updated coordinates!
+      onCancel: () => {
+        setPlotContext(null);
         setShowTerminalModal(true);
       },
     });
@@ -430,7 +426,7 @@ export default function DrayageTerminalMapPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to save warehouse');
 
       setShowWarehouseModal(false);
-      setPlotMode(null);
+      setPlotContext(null);
       invalidateDrayageClientCache();
       await loadData(true);
       showToast('success', editingWarehouseId ? 'Consignee destination updated successfully' : 'Consignee destination warehouse created successfully');
@@ -459,21 +455,23 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleStartPlotWarehouse = () => {
-    // Hide modal overlay so the operator sees the Google Map directly!
     setShowWarehouseModal(false);
-    setPlotMode({
-      active: true,
-      type: 'CONSIGNEE',
+    setPlotContext({
+      type: 'WAREHOUSE',
       title: newWhName || 'Consignee Warehouse',
       lat: newWhLat,
       lng: newWhLng,
-      onPlotSelect: (lat, lng) => {
-        setNewWhLat(Number(lat.toFixed(6)));
-        setNewWhLng(Number(lng.toFixed(6)));
+      radiusMeters: 800,
+      geofenceType: 'CIRCLE',
+      onApply: (res: { lat: number; lng: number; radiusMeters: number; geofenceType: 'CIRCLE' | 'POLYGON' }) => {
+        setNewWhLat(Number(res.lat.toFixed(6)));
+        setNewWhLng(Number(res.lng.toFixed(6)));
+        setPlotContext(null);
+        setShowWarehouseModal(true);
+        showToast('success', `Warehouse coordinates applied: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)}`);
       },
-      onClose: () => {
-        setPlotMode(null);
-        // Re-open modal with updated coordinates!
+      onCancel: () => {
+        setPlotContext(null);
         setShowWarehouseModal(true);
       },
     });
@@ -640,33 +638,7 @@ export default function DrayageTerminalMapPage() {
   return (
     <div className="space-y-6">
 
-      {/* Floating Action Bar when Plot on Map is Active */}
-      {plotMode?.active && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md border border-emerald-500/60 rounded-2xl p-4 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-white animate-in slide-in-from-bottom-4 max-w-xl w-[92vw]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
-            <div>
-              <div className="text-xs font-bold text-emerald-300">
-                📍 Plotting Location: {plotMode.title}
-              </div>
-              <div className="text-[11px] text-slate-300">
-                Click Google Maps or drag the green pin to set location
-              </div>
-            </div>
-            <span className="text-xs font-mono text-emerald-100 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shrink-0">
-              {plotMode.lat.toFixed(5)}, {plotMode.lng.toFixed(5)}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={plotMode.onClose}
-            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 shrink-0"
-          >
-            <Check className="w-4 h-4" />
-            Done Plotting & Return to Form
-          </button>
-        </div>
-      )}
+      
 
       {/* Toast Alert */}
       {toast && (
@@ -777,7 +749,7 @@ export default function DrayageTerminalMapPage() {
             activeEditGeofenceId={mapEditGeofenceId}
             onCloseEditMode={() => setMapEditGeofenceId(null)}
             focusLocation={focusMapLocation}
-            plotMode={plotMode}
+            plotContext={plotContext}
           />
         </GeofenceMapErrorBoundary>
       </div>
