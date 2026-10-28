@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle,
   Compass, Layers, Maximize2, X, Sliders, Check, Eye, Navigation, RefreshCw,
-  Hexagon, Circle as CircleIcon, Warehouse, Info, Undo2,
+  Hexagon, Circle as CircleIcon, Warehouse, Info, Undo2, Map, Globe, Mountain,
+  Move, ShieldCheck,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -91,6 +92,29 @@ interface DrayageGeofenceMapProps {
 
 const DEFAULT_CENTER = { lat: 24.9960, lng: 55.0350 }; // Jebel Ali Port Corridor
 
+const DARK_MAP_STYLES = [
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#0f172a' }],
+  },
+  {
+    featureType: 'landscape',
+    elementType: 'geometry',
+    stylers: [{ color: '#1e293b' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#334155' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+];
+
 export default function DrayageGeofenceMap({
   terminals,
   geofences,
@@ -124,6 +148,10 @@ export default function DrayageGeofenceMap({
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Map Type Switcher State: 'roadmap' (Default) | 'satellite' | 'hybrid' | 'terrain'
+  const [mapTypeId, setMapTypeId] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
+
   const [drawMode, setDrawMode] = useState<'CIRCLE' | 'POLYGON' | null>(null);
   const [circleDraft, setCircleDraft] = useState<{ centerLat: number; centerLng: number; radiusMeters: number } | null>(null);
   const [polygonCount, setPolygonCount] = useState<number>(0);
@@ -139,6 +167,20 @@ export default function DrayageGeofenceMap({
   const [draftName, setDraftName] = useState('');
   const [draftTerminalId, setDraftTerminalId] = useState(selectedTerminalId || terminals[0]?.id || '');
   const [savingDraft, setSavingDraft] = useState(false);
+
+  // Live Stretched Geofence Edit State (for activeEditGeofenceId)
+  const [editingStretchedGf, setEditingStretchedGf] = useState<{
+    id: string;
+    terminalId: string | null;
+    terminalName: string;
+    name: string;
+    type: 'CIRCLE' | 'POLYGON';
+    centerLat: number;
+    centerLng: number;
+    radiusMeters: number;
+    coordinates?: Array<{ lat: number; lng: number }>;
+  } | null>(null);
+  const [savingStretched, setSavingStretched] = useState(false);
 
   // Keep refs synchronized for map click handlers
   const drawModeRef = useRef<'CIRCLE' | 'POLYGON' | null>(drawMode);
@@ -177,7 +219,47 @@ export default function DrayageGeofenceMap({
     }
   }, [drawMode, cleanupDraftCircle, cleanupDraftPolygon]);
 
-  // Native Circle Click Handler
+  // Keep editingStretchedGf in sync when activeEditGeofenceId changes
+  useEffect(() => {
+    if (activeEditGeofenceId) {
+      const gf = geofences.find((g) => g.id === activeEditGeofenceId);
+      if (gf) {
+        let coords: Array<{ lat: number; lng: number }> = [];
+        try {
+          if (gf.coordinatesJson) coords = JSON.parse(gf.coordinatesJson);
+        } catch {}
+
+        setEditingStretchedGf({
+          id: gf.id,
+          terminalId: gf.terminalId,
+          terminalName: gf.terminalName,
+          name: gf.name,
+          type: gf.type,
+          centerLat: gf.centerLat,
+          centerLng: gf.centerLng,
+          radiusMeters: gf.radiusMeters || 1000,
+          coordinates: coords,
+        });
+      }
+    } else {
+      setEditingStretchedGf(null);
+    }
+  }, [activeEditGeofenceId, geofences]);
+
+  // Switch Map Type: Roadmap | Satellite | Hybrid | Terrain
+  const handleSetMapType = useCallback((type: 'roadmap' | 'satellite' | 'hybrid' | 'terrain') => {
+    setMapTypeId(type);
+    if (!mapRef.current) return;
+    mapRef.current.setMapTypeId(type);
+    // If roadmap, reapply custom dark styles; for satellite/hybrid/terrain, clear custom styles
+    if (type === 'roadmap') {
+      mapRef.current.setOptions({ styles: DARK_MAP_STYLES });
+    } else {
+      mapRef.current.setOptions({ styles: null });
+    }
+  }, []);
+
+  // Native Circle Click Handler (Circle with vertex stretching handles)
   const handleMapClickCircle = useCallback((lat: number, lng: number) => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -238,7 +320,7 @@ export default function DrayageGeofenceMap({
     setDrawMode(null);
   }, [circleDraft, cleanupDraftCircle]);
 
-  // Native Polygon Click Handler
+  // Native Polygon Click Handler (with Vertex & Midpoint Stretching)
   const handleMapClickPolygon = useCallback((lat: number, lng: number) => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -266,7 +348,7 @@ export default function DrayageGeofenceMap({
 
     // Render / update polygon boundary
     if (!draftPolygonRef.current) {
-      draftPolygonRef.current = new ctors.Polygon({
+      const poly = new ctors.Polygon({
         map,
         paths: updated,
         strokeColor: '#c084fc',
@@ -274,11 +356,39 @@ export default function DrayageGeofenceMap({
         strokeOpacity: 0.9,
         fillColor: '#9333ea',
         fillOpacity: 0.25,
-        clickable: false,
+        clickable: true,
+        editable: updated.length >= 3,
+        draggable: true,
         zIndex: 100,
       });
+
+      // Synchronize polygon vertex stretching with internal vertex ref
+      const path = poly.getPath();
+      const syncPathChanges = () => {
+        const len = path.getLength();
+        const pts: Array<{ lat: number; lng: number }> = [];
+        for (let i = 0; i < len; i++) {
+          const pt = path.getAt(i);
+          pts.push({
+            lat: Number(pt.lat().toFixed(6)),
+            lng: Number(pt.lng().toFixed(6)),
+          });
+        }
+        polygonVerticesRef.current = pts;
+        setPolygonCount(pts.length);
+      };
+
+      path.addListener('set_at', syncPathChanges);
+      path.addListener('insert_at', syncPathChanges);
+      path.addListener('remove_at', syncPathChanges);
+
+      draftPolygonRef.current = poly;
     } else {
       draftPolygonRef.current.setPath(updated);
+      if (updated.length >= 3) {
+        draftPolygonRef.current.setEditable(true);
+        draftPolygonRef.current.setDraggable(true);
+      }
     }
   }, []);
 
@@ -297,7 +407,24 @@ export default function DrayageGeofenceMap({
 
   // Complete Polygon Draft & Open Save Modal
   const handleCompletePolygonDraft = useCallback(() => {
-    const points = polygonVerticesRef.current;
+    // If draft polygon is editable, extract latest stretched coordinates from path
+    let points = polygonVerticesRef.current;
+    if (draftPolygonRef.current) {
+      const path = draftPolygonRef.current.getPath();
+      const len = path.getLength();
+      if (len >= 3) {
+        const pts: Array<{ lat: number; lng: number }> = [];
+        for (let i = 0; i < len; i++) {
+          const pt = path.getAt(i);
+          pts.push({
+            lat: Number(pt.lat().toFixed(6)),
+            lng: Number(pt.lng().toFixed(6)),
+          });
+        }
+        points = pts;
+      }
+    }
+
     if (points.length < 3) return;
 
     const avgLat = Number((points.reduce((sum, p) => sum + p.lat, 0) / points.length).toFixed(6));
@@ -314,6 +441,31 @@ export default function DrayageGeofenceMap({
     cleanupDraftPolygon();
     setDrawMode(null);
   }, [cleanupDraftPolygon]);
+
+  // Save Stretched Geofence (Polygon Vertices or Circle Radius/Center)
+  const handleSaveStretchedGeofence = async () => {
+    if (!editingStretchedGf) return;
+    try {
+      setSavingStretched(true);
+      await onSaveGeofence({
+        id: editingStretchedGf.id,
+        terminalId: editingStretchedGf.terminalId,
+        terminalName: editingStretchedGf.terminalName,
+        name: editingStretchedGf.name,
+        type: editingStretchedGf.type,
+        centerLat: editingStretchedGf.centerLat,
+        centerLng: editingStretchedGf.centerLng,
+        radiusMeters: editingStretchedGf.radiusMeters,
+        coordinates: editingStretchedGf.coordinates,
+      });
+      setEditingStretchedGf(null);
+      if (onCloseEditMode) onCloseEditMode();
+    } catch (err) {
+      console.error('Failed to save stretched geofence:', err);
+    } finally {
+      setSavingStretched(false);
+    }
+  };
 
   // 1. Initialize Google Maps
   useEffect(() => {
@@ -333,30 +485,14 @@ export default function DrayageGeofenceMap({
             zoomControl: true,
             gestureHandling: 'greedy',
             mapTypeControl: true,
+            mapTypeControlOptions: {
+              style: ctors.MapTypeControlStyle.HORIZONTAL_BAR,
+              position: ctors.ControlPosition.TOP_RIGHT,
+              mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain'],
+            },
             streetViewControl: false,
             fullscreenControl: true,
-            styles: [
-              {
-                featureType: 'water',
-                elementType: 'geometry',
-                stylers: [{ color: '#0f172a' }],
-              },
-              {
-                featureType: 'landscape',
-                elementType: 'geometry',
-                stylers: [{ color: '#1e293b' }],
-              },
-              {
-                featureType: 'road',
-                elementType: 'geometry',
-                stylers: [{ color: '#334155' }],
-              },
-              {
-                featureType: 'poi',
-                elementType: 'labels',
-                stylers: [{ visibility: 'off' }],
-              },
-            ],
+            styles: DARK_MAP_STYLES,
           });
           mapRef.current = map;
 
@@ -405,7 +541,7 @@ export default function DrayageGeofenceMap({
     };
   }, [handleMapClickCircle, handleMapClickPolygon]);
 
-  // 2. Render Existing Geofences (Circles & Polygons) on Google Maps
+  // 2. Render Existing Geofences with Interactive Vertex Stretching
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -417,10 +553,10 @@ export default function DrayageGeofenceMap({
 
     geofences.forEach((gf) => {
       const isSelected = gf.id === activeEditGeofenceId;
-      const strokeColor = gf.type === 'POLYGON' ? '#c084fc' : '#38bdf8';
-      const fillColor = gf.type === 'POLYGON' ? '#a855f7' : '#0284c7';
-      const strokeWeight = isSelected ? 4 : 2;
-      const fillOpacity = isSelected ? 0.35 : 0.18;
+      const strokeColor = isSelected ? '#ec4899' : gf.type === 'POLYGON' ? '#c084fc' : '#38bdf8';
+      const fillColor = isSelected ? '#db2777' : gf.type === 'POLYGON' ? '#a855f7' : '#0284c7';
+      const strokeWeight = isSelected ? 3.5 : 2;
+      const fillOpacity = isSelected ? 0.32 : 0.18;
 
       if (gf.type === 'POLYGON') {
         let polygonCoords: Array<{ lat: number; lng: number }> = [];
@@ -440,7 +576,43 @@ export default function DrayageGeofenceMap({
             fillColor,
             fillOpacity,
             clickable: true,
+            editable: isSelected, // Enables Vertex & Midpoint Drag Handles for Stretching!
+            draggable: isSelected, // Enables dragging the whole shape
+            zIndex: isSelected ? 100 : 10,
           });
+
+          // If selected for editing, listen to vertex changes on its path
+          if (isSelected) {
+            const path = poly.getPath();
+            const onVertexChange = () => {
+              const len = path.getLength();
+              const newPts: Array<{ lat: number; lng: number }> = [];
+              for (let i = 0; i < len; i++) {
+                const pt = path.getAt(i);
+                newPts.push({
+                  lat: Number(pt.lat().toFixed(6)),
+                  lng: Number(pt.lng().toFixed(6)),
+                });
+              }
+              const avgLat = Number((newPts.reduce((s, p) => s + p.lat, 0) / newPts.length).toFixed(6));
+              const avgLng = Number((newPts.reduce((s, p) => s + p.lng, 0) / newPts.length).toFixed(6));
+              setEditingStretchedGf({
+                id: gf.id,
+                terminalId: gf.terminalId,
+                terminalName: gf.terminalName,
+                name: gf.name,
+                type: 'POLYGON',
+                centerLat: avgLat,
+                centerLng: avgLng,
+                radiusMeters: gf.radiusMeters,
+                coordinates: newPts,
+              });
+            };
+
+            path.addListener('set_at', onVertexChange);
+            path.addListener('insert_at', onVertexChange);
+            path.addListener('remove_at', onVertexChange);
+          }
 
           poly.addListener('click', () => {
             if (infoWindowRef.current) {
@@ -450,6 +622,7 @@ export default function DrayageGeofenceMap({
                   <span style="font-size: 11px; color: #7c3aed; font-weight: bold;">⬡ Polygon Ramp Zone</span>
                   <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Linked: ${gf.terminalName}</div>
                   <div style="font-size: 11px; color: #475569; margin-top: 2px;">Vertices: ${polygonCoords.length} points</div>
+                  ${isSelected ? '<div style="font-size: 11px; color: #db2777; font-weight: bold; margin-top: 4px;">📐 Stretch handles active! Drag white corners or edge midpoints.</div>' : ''}
                 </div>
               `);
               if (polygonCoords[0]) {
@@ -464,7 +637,7 @@ export default function DrayageGeofenceMap({
         }
       }
 
-      // Default: Circular Perimeter
+      // Circular Perimeter (with cardinal perimeter stretch handles when selected)
       const circle = new ctors.Circle({
         map,
         center: { lat: gf.centerLat, lng: gf.centerLng },
@@ -475,7 +648,32 @@ export default function DrayageGeofenceMap({
         fillColor,
         fillOpacity,
         clickable: true,
+        editable: isSelected, // Enables edge perimeter handles for stretching radius!
+        draggable: isSelected, // Enables center handle to drag position
+        zIndex: isSelected ? 100 : 10,
       });
+
+      if (isSelected) {
+        const onCircleChange = () => {
+          const c = circle.getCenter();
+          const r = Math.round(circle.getRadius());
+          if (c) {
+            setEditingStretchedGf({
+              id: gf.id,
+              terminalId: gf.terminalId,
+              terminalName: gf.terminalName,
+              name: gf.name,
+              type: 'CIRCLE',
+              centerLat: Number(c.lat().toFixed(6)),
+              centerLng: Number(c.lng().toFixed(6)),
+              radiusMeters: r,
+            });
+          }
+        };
+
+        circle.addListener('radius_changed', onCircleChange);
+        circle.addListener('center_changed', onCircleChange);
+      }
 
       circle.addListener('click', () => {
         if (infoWindowRef.current) {
@@ -485,6 +683,7 @@ export default function DrayageGeofenceMap({
               <span style="font-size: 11px; color: #0284c7; font-weight: bold;">⚪ Circular Perimeter (${gf.radiusMeters}m)</span>
               <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Linked: ${gf.terminalName}</div>
               <div style="font-size: 11px; color: #475569; margin-top: 2px;">Coord: ${gf.centerLat.toFixed(4)}, ${gf.centerLng.toFixed(4)}</div>
+              ${isSelected ? '<div style="font-size: 11px; color: #0284c7; font-weight: bold; margin-top: 4px;">⚪ Stretch handles active! Drag edge handles to stretch radius.</div>' : ''}
             </div>
           `);
           infoWindowRef.current.setPosition({ lat: gf.centerLat, lng: gf.centerLng });
@@ -519,7 +718,7 @@ export default function DrayageGeofenceMap({
           fillColor: isSelected ? '#3b82f6' : '#2563eb',
           fillOpacity: 1,
           strokeColor: '#ffffff',
-          strokeWeight: 2.5,
+          strokeWeight: isSelected ? 2.5 : 1.5,
         },
       });
 
@@ -527,16 +726,14 @@ export default function DrayageGeofenceMap({
         if (onSelectTerminal) onSelectTerminal(term);
         if (infoWindowRef.current) {
           infoWindowRef.current.setContent(`
-            <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 240px;">
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                <span style="background: #2563eb; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;">${term.code}</span>
-                <strong style="font-size: 13px;">${term.name}</strong>
-              </div>
-              <div style="font-size: 11px; color: #64748b;">${term.portName} · ${term.emirate}</div>
-              <div style="font-size: 11px; color: #475569; margin-top: 4px;">Geofence Radius: ${term.geofenceRadiusMeters}m</div>
+            <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
+              <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${term.name}</strong>
+              <span style="font-size: 11px; font-family: monospace; color: #2563eb; font-weight: bold;">[${term.code}]</span>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Port: ${term.portName} (${term.emirate})</div>
+              <div style="font-size: 11px; color: #10b981; margin-top: 2px;">Free Days: ${term.freeDaysDry ?? 5} Dry / ${term.freeDaysReefer ?? 3} Reefer</div>
             </div>
           `);
-          infoWindowRef.current.open({ map, anchor: marker });
+          infoWindowRef.current.open({ anchor: marker, map });
         }
       });
 
@@ -544,7 +741,7 @@ export default function DrayageGeofenceMap({
     });
   }, [terminals, selectedTerminalId, onSelectTerminal]);
 
-  // 4. Render Consignee Warehouse Markers
+  // 4. Render Consignee / Warehouse Markers
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -559,14 +756,14 @@ export default function DrayageGeofenceMap({
       const marker = new ctors.Marker({
         position: { lat: wh.lat, lng: wh.lng },
         map,
-        title: `🏢 ${wh.name} (${wh.zone})`,
+        title: `${wh.name} (${wh.customerName || 'Consignee'})`,
         icon: {
           path: ctors.SymbolPath.CIRCLE,
-          scale: 7,
+          scale: 6,
           fillColor: '#10b981',
           fillOpacity: 0.95,
           strokeColor: '#ffffff',
-          strokeWeight: 2,
+          strokeWeight: 1.5,
         },
       });
 
@@ -574,15 +771,14 @@ export default function DrayageGeofenceMap({
         if (onSelectWarehouse) onSelectWarehouse(wh);
         if (infoWindowRef.current) {
           infoWindowRef.current.setContent(`
-            <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 240px;">
+            <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
               <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${wh.name}</strong>
-              <div style="font-size: 11px; color: #059669; font-weight: bold;">🏢 Consignee Delivery Facility</div>
-              <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Zone: ${wh.zone}</div>
-              ${wh.customerName ? `<div style="font-size: 11px; color: #475569;">Client: ${wh.customerName}</div>` : ''}
-              ${wh.address ? `<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">${wh.address}</div>` : ''}
+              <div style="font-size: 11px; color: #059669; font-weight: bold;">Shipper: ${wh.customerName || 'Consignee'}</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Zone: ${wh.zone}</div>
+              <div style="font-size: 11px; color: #475569; margin-top: 2px;">Ramps: ${wh.rampsCount || 6} loading bays</div>
             </div>
           `);
-          infoWindowRef.current.open({ map, anchor: marker });
+          infoWindowRef.current.open({ anchor: marker, map });
         }
       });
 
@@ -590,15 +786,14 @@ export default function DrayageGeofenceMap({
     });
   }, [warehouses, onSelectWarehouse]);
 
-  // 5. Handle Focus Location Changes (Pan / Zoom to selected geofence or terminal)
+  // 5. Handle Focus Location
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !focusLocation) return;
-    map.panTo({ lat: focusLocation.lat, lng: focusLocation.lng });
-    map.setZoom(focusLocation.zoom || 14);
+    if (!focusLocation || !mapRef.current) return;
+    mapRef.current.panTo({ lat: focusLocation.lat, lng: focusLocation.lng });
+    mapRef.current.setZoom(focusLocation.zoom || 14.5);
   }, [focusLocation]);
 
-  // 6. Handle Plot on Map Mode (Draggable Green Pin)
+  // 6. Handle Plot on Map Mode (Draggable Green Target Pin)
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -612,7 +807,6 @@ export default function DrayageGeofenceMap({
       map.setZoom(15);
 
       if (!plotMarkerRef.current) {
-        // Create draggable target marker
         const marker = new ctors.Marker({
           position: { lat, lng },
           map,
@@ -696,14 +890,14 @@ export default function DrayageGeofenceMap({
     <div className="relative rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-slate-950 shadow-2xl">
       {/* Top Map Control Bar */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 shadow-xl text-white">
-        {/* Left: Port / Corridor Selector */}
+        {/* Left: Port / Corridor Selector & Indicator */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 font-bold text-xs">
             <Anchor className="w-3.5 h-3.5" />
             <span>Google Maps Live Drayage Radar</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1 text-[11px] text-slate-300">
+          <div className="hidden lg:flex items-center gap-1 text-[11px] text-slate-300">
             <span className="w-2 h-2 rounded-full bg-blue-400" />
             <span>{terminals.length} Ports</span>
             <span className="text-slate-500 mx-1">·</span>
@@ -715,16 +909,73 @@ export default function DrayageGeofenceMap({
           </div>
         </div>
 
+        {/* Center: Map Type Selector (Roadmap / Terrain / Satellite / Hybrid) */}
+        <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-700/80">
+          <button
+            type="button"
+            onClick={() => handleSetMapType('roadmap')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+              mapTypeId === 'roadmap'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Default Roadmap (Dark Theme)"
+          >
+            <Map className="w-3 h-3" />
+            <span>Default</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetMapType('satellite')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+              mapTypeId === 'satellite'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="High-Resolution Satellite Imagery"
+          >
+            <Globe className="w-3 h-3" />
+            <span>Satellite</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetMapType('hybrid')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+              mapTypeId === 'hybrid'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Satellite with Road & Berth Labels"
+          >
+            <Layers className="w-3 h-3" />
+            <span>Hybrid</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetMapType('terrain')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+              mapTypeId === 'terrain'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Topographical Elevation & Physical Terrain"
+          >
+            <Mountain className="w-3 h-3" />
+            <span>Terrain</span>
+          </button>
+        </div>
+
         {/* Right: Google Maps Drawing Tools (Native Circle & Polygon) & Fit UAE */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setDrawMode((prev) => (prev === 'CIRCLE' ? null : 'CIRCLE'))}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
               drawMode === 'CIRCLE'
                 ? 'bg-blue-600 border-blue-400 text-white shadow-lg animate-pulse'
                 : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
             }`}
+            title="Draw circular perimeter with interactive radius stretching"
           >
             <CircleIcon className="w-3.5 h-3.5 text-blue-400" />
             <span>⚪ Draw Circle</span>
@@ -733,11 +984,12 @@ export default function DrayageGeofenceMap({
           <button
             type="button"
             onClick={() => setDrawMode((prev) => (prev === 'POLYGON' ? null : 'POLYGON'))}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
               drawMode === 'POLYGON'
                 ? 'bg-purple-600 border-purple-400 text-white shadow-lg animate-pulse'
                 : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
             }`}
+            title="Draw polygon with stretchable vertices and edge midpoints"
           >
             <Hexagon className="w-3.5 h-3.5 text-purple-400" />
             <span>⬡ Draw Polygon</span>
@@ -750,7 +1002,7 @@ export default function DrayageGeofenceMap({
             title="Fit UAE Ports & Corridors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Fit UAE</span>
+            <span className="hidden sm:inline">Fit UAE</span>
           </button>
         </div>
       </div>
@@ -762,7 +1014,7 @@ export default function DrayageGeofenceMap({
             <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
             <span className="text-xs font-bold text-blue-200">
               {circleDraft
-                ? `⚪ Drag center or edge handles to adjust geofence (${circleDraft.radiusMeters}m)`
+                ? `⚪ Drag edge handles to stretch radius (${circleDraft.radiusMeters}m), or drag center to move`
                 : '⚪ Click anywhere on Google Maps to place circular perimeter'}
             </span>
             {circleDraft && (
@@ -794,13 +1046,15 @@ export default function DrayageGeofenceMap({
         </div>
       )}
 
-      {/* Active Polygon Drawing Banner */}
+      {/* Active Polygon Drawing Banner with Vertex Stretching Info */}
       {drawMode === 'POLYGON' && (
         <div className="absolute top-16 left-3 right-3 z-30 bg-purple-950/95 backdrop-blur-md border border-purple-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
             <span className="text-xs font-bold text-purple-200">
-              ⬡ Click on Google Maps to add polygon corners:
+              {polygonCount >= 3
+                ? '⬡ Stretch points active! Drag any white corner vertex to stretch, drag edge midpoints to add corners'
+                : '⬡ Click on Google Maps to add polygon corners:'}
             </span>
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/40 text-purple-200">
               {polygonCount} {polygonCount === 1 ? 'vertex' : 'vertices'} {polygonCount < 3 ? '(min 3 required)' : '✓'}
@@ -831,6 +1085,46 @@ export default function DrayageGeofenceMap({
             <button
               type="button"
               onClick={() => setDrawMode(null)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Live Geofence Vertex Stretching Banner (When Editing Existing Geofence) */}
+      {editingStretchedGf && (
+        <div className="absolute top-16 left-3 right-3 z-30 bg-pink-950/95 backdrop-blur-md border border-pink-500/70 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-pink-400 animate-ping" />
+            <span className="text-xs font-bold text-pink-200 flex items-center gap-1.5">
+              <Move className="w-3.5 h-3.5 text-pink-400" />
+              <span>Editing & Stretching: {editingStretchedGf.name}</span>
+            </span>
+            <span className="text-[11px] text-pink-300 font-mono hidden md:inline">
+              {editingStretchedGf.type === 'POLYGON'
+                ? `(${editingStretchedGf.coordinates?.length || 0} vertices · Drag corner handles to stretch or midpoint handles to add points)`
+                : `(${editingStretchedGf.radiusMeters}m radius · Drag edge handles to stretch radius or center to move)`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSaveStretchedGeofence}
+              disabled={savingStretched}
+              className="px-3.5 py-1 rounded-lg bg-pink-500 hover:bg-pink-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1 disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>{savingStretched ? 'Saving Stretched Shape...' : 'Save Stretched Geofence'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingStretchedGf(null);
+                if (onCloseEditMode) onCloseEditMode();
+              }}
               className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
             >
               Cancel
@@ -910,28 +1204,28 @@ export default function DrayageGeofenceMap({
 
             <form onSubmit={handleSaveDraft} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Geofence Name *</label>
+                <label className="text-slate-300 font-semibold">Geofence Name *</label>
                 <input
                   type="text"
                   required
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. DP World T1 OCR Gate In"
+                  placeholder="e.g. Jebel Ali T1 Gate In Perimeter"
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Linked Port Terminal</label>
+                <label className="text-slate-300 font-semibold">Assign to Port Terminal</label>
                 <select
                   value={draftTerminalId}
                   onChange={(e) => setDraftTerminalId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
                 >
-                  <option value="">General / Consignee Hub</option>
+                  <option value="">General Facility (Not linked to terminal)</option>
                   {terminals.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.code} - {t.name}
+                      {t.name} ({t.code})
                     </option>
                   ))}
                 </select>

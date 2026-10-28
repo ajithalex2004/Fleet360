@@ -6,7 +6,7 @@ import {
   Users, Building2, Warehouse, MapPin, Plus, Edit2, Trash2, CheckCircle2,
   AlertTriangle, Search, Filter, RefreshCw, X, ShieldCheck, DollarSign,
   Phone, User, Compass, Layers, Check, ExternalLink, ArrowRight, Sliders,
-  Navigation, Eye, Info, ChevronRight, FileText, ChevronDown, ChevronUp,
+  Navigation, Eye, Info, ChevronRight, FileText, ChevronDown, ChevronUp, Map, Globe, Mountain, Move,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -138,6 +138,7 @@ export default function DrayageClientMasterPage() {
   const [plotCoordinates, setPlotCoordinates] = useState<{ lat: number; lng: number }>({ lat: 24.9642, lng: 55.0915 });
   const [plotRadius, setPlotRadius] = useState<number>(800);
   const [plotType, setPlotType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
+  const [plotMapTypeId, setPlotMapTypeId] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
   const [savingPlot, setSavingPlot] = useState(false);
 
   // Google Map Refs for Plot Modal
@@ -501,22 +502,28 @@ export default function DrayageClientMasterPage() {
           const map = new ctors.Map(mapContainerRef.current, {
             center,
             zoom: 14,
-            mapTypeId: 'roadmap',
+            mapTypeId: plotMapTypeId,
             fullscreenControl: false,
             streetViewControl: false,
-            mapTypeControl: false,
+            mapTypeControl: true,
+            mapTypeControlOptions: {
+              style: ctors.MapTypeControlStyle.HORIZONTAL_BAR,
+              position: ctors.ControlPosition.TOP_RIGHT,
+              mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain'],
+            },
           });
           mapInstanceRef.current = map;
 
           // Click map to reposition pin
           map.addListener('click', (e: any) => {
             if (!e.latLng) return;
-            const newLat = e.latLng.lat();
-            const newLng = e.latLng.lng();
+            const newLat = Number(e.latLng.lat().toFixed(6));
+            const newLng = Number(e.latLng.lng().toFixed(6));
             setPlotCoordinates({ lat: newLat, lng: newLng });
           });
         } else {
           mapInstanceRef.current.setCenter(center);
+          mapInstanceRef.current.setMapTypeId(plotMapTypeId);
         }
 
         const map = mapInstanceRef.current;
@@ -538,21 +545,44 @@ export default function DrayageClientMasterPage() {
           });
         }
 
-        // Create or update Circle
+        // Create or update Circle with Interactive Radius & Center Stretching
         if (circleRef.current) {
           circleRef.current.setCenter(center);
           circleRef.current.setRadius(plotRadius);
         } else {
-          circleRef.current = new ctors.Circle({
+          const circle = new ctors.Circle({
             center,
             radius: plotRadius,
             map,
             fillColor: '#3b82f6',
-            fillOpacity: 0.18,
+            fillOpacity: 0.22,
             strokeColor: '#2563eb',
-            strokeOpacity: 0.85,
-            strokeWeight: 2,
+            strokeOpacity: 0.9,
+            strokeWeight: 2.5,
+            editable: true, // Enables cardinal edge handles to stretch radius!
+            draggable: true, // Enables center handle to drag position
+            zIndex: 50,
           });
+
+          // Live vertex & radius stretching listener
+          circle.addListener('radius_changed', () => {
+            const r = Math.round(circle.getRadius());
+            setPlotRadius(r);
+          });
+
+          circle.addListener('center_changed', () => {
+            const c = circle.getCenter();
+            if (c) {
+              const newPos = {
+                lat: Number(c.lat().toFixed(6)),
+                lng: Number(c.lng().toFixed(6)),
+              };
+              setPlotCoordinates(newPos);
+              if (markerRef.current) markerRef.current.setPosition(newPos);
+            }
+          });
+
+          circleRef.current = circle;
         }
       } catch (err) {
         console.warn('Error initializing Google Maps for plot modal:', err);
@@ -1740,29 +1770,100 @@ export default function DrayageClientMasterPage() {
             <div className="flex-1 relative bg-slate-900 overflow-hidden">
               <div ref={mapContainerRef} className="w-full h-full" />
 
-              {/* Top Floating Controls */}
-              <div className="absolute top-4 left-4 z-10 p-3 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl space-y-2 text-xs">
-                <div className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
-                  <Navigation className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Geofence Configuration</span>
+              {/* Top Floating Controls: Map Type Switcher & Geofence Stretching Controls */}
+              <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl text-xs">
+                {/* Left: Interactive Radius Slider & Coords */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                    <Move className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Vertex & Perimeter Stretching</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[var(--text-muted)]">Radius:</span>
+                    <input
+                      type="range"
+                      min="200"
+                      max="3000"
+                      step="50"
+                      value={plotRadius}
+                      onChange={(e) => {
+                        const r = Number(e.target.value);
+                        setPlotRadius(r);
+                        if (circleRef.current) circleRef.current.setRadius(r);
+                      }}
+                      className="w-28 accent-blue-500 cursor-pointer"
+                    />
+                    <span className="font-mono font-bold text-blue-400">{plotRadius}m</span>
+                  </div>
+
+                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden sm:inline">
+                    ({plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)})
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[var(--text-muted)]">Radius:</span>
-                  <input
-                    type="range"
-                    min="200"
-                    max="3000"
-                    step="50"
-                    value={plotRadius}
-                    onChange={(e) => setPlotRadius(Number(e.target.value))}
-                    className="w-28 accent-blue-500 cursor-pointer"
-                  />
-                  <span className="font-mono font-bold text-blue-400">{plotRadius}m</span>
-                </div>
-
-                <div className="text-[11px] text-[var(--text-muted)] font-mono">
-                  Lat: {plotCoordinates.lat.toFixed(5)}, Lng: {plotCoordinates.lng.toFixed(5)}
+                {/* Right: Map Type Switcher (Default, Satellite, Hybrid, Terrain) */}
+                <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('roadmap');
+                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('roadmap');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'roadmap'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Map className="w-3 h-3" />
+                    <span>Default</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('satellite');
+                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('satellite');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'satellite'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Globe className="w-3 h-3" />
+                    <span>Satellite</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('hybrid');
+                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('hybrid');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'hybrid'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>Hybrid</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('terrain');
+                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('terrain');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'terrain'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Mountain className="w-3 h-3" />
+                    <span>Terrain</span>
+                  </button>
                 </div>
               </div>
             </div>

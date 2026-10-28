@@ -239,7 +239,7 @@ export default function DrayageTerminalMapPage() {
   const handleOpenAddTerminal = () => {
     setEditingTerminalId(null);
     setTermName('');
-    setTermCode('DPW-JA-T1');
+    setTermCode('');
     setTermPortName('Jebel Ali Port');
     setTermEmirate('Dubai');
     setTermLat(25.0112);
@@ -1055,15 +1055,46 @@ export default function DrayageTerminalMapPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Terminal Code *</label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-[var(--text-muted)]">Terminal Code *</label>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">Format: [OPERATOR]-[PORT]-[BERTH]</span>
+                  </div>
                   <input
                     type="text"
                     required
                     value={termCode}
                     onChange={(e) => setTermCode(e.target.value.toUpperCase())}
-                    placeholder="e.g. DPW-JA-T1, ADP-KP-T1"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold outline-none focus:border-blue-500 uppercase"
+                    placeholder="e.g. DPW-JA-T1, ADP-KP-T1, DPW-PR-T1"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold outline-none focus:border-blue-500 uppercase placeholder:text-slate-500/60"
                   />
+                  <div className="pt-1">
+                    <div className="text-[10px] text-[var(--text-muted)] mb-1">
+                      Graded Code Examples (Click to insert):
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { code: 'DPW-JA-T1', label: 'Jebel Ali T1 (DP World)' },
+                        { code: 'DPW-JA-T2', label: 'Jebel Ali T2 (Mega Berth)' },
+                        { code: 'DPW-JA-T3', label: 'Jebel Ali T3 (Automated)' },
+                        { code: 'ADP-KP-T1', label: 'Khalifa Port T1 (AD Ports)' },
+                        { code: 'DPW-PR-T1', label: 'Port Rashid (Cruise & Cargo)' },
+                        { code: 'SHJ-KFK-T1', label: 'Khorfakkan Container T1' },
+                      ].map((ex) => (
+                        <button
+                          key={ex.code}
+                          type="button"
+                          onClick={() => {
+                            setTermCode(ex.code);
+                            if (!termName.trim()) setTermName(ex.label);
+                          }}
+                          className="px-2 py-0.5 rounded bg-[var(--bg-surface)] hover:bg-blue-600/20 text-slate-400 hover:text-blue-300 border border-[var(--border-subtle)] hover:border-blue-500/40 font-mono text-[10px] transition-all flex items-center gap-1 group"
+                        >
+                          <span className="font-bold text-slate-300 group-hover:text-blue-200">{ex.code}</span>
+                          <span className="text-slate-500 group-hover:text-blue-400">({ex.label})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
