@@ -507,8 +507,8 @@ export default function DrayageClientMasterPage() {
             streetViewControl: false,
             mapTypeControl: true,
             mapTypeControlOptions: {
-              style: ctors.MapTypeControlStyle.HORIZONTAL_BAR,
-              position: ctors.ControlPosition.TOP_RIGHT,
+              style: ctors.MapTypeControlStyle?.HORIZONTAL_BAR ?? 1,
+              position: ctors.ControlPosition?.TOP_RIGHT ?? 3,
               mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain'],
             },
           });
@@ -522,8 +522,8 @@ export default function DrayageClientMasterPage() {
             setPlotCoordinates({ lat: newLat, lng: newLng });
           });
         } else {
-          mapInstanceRef.current.setCenter(center);
-          mapInstanceRef.current.setMapTypeId(plotMapTypeId);
+          mapInstanceRef.current?.setCenter?.(center);
+          mapInstanceRef.current?.setMapTypeId?.(plotMapTypeId);
         }
 
         const map = mapInstanceRef.current;
@@ -677,11 +677,8 @@ export default function DrayageClientMasterPage() {
       <PageHeader
         title="Client Master & Consignee Directory"
         subtitle="Manage client codes, designated unloading ramps, industrial zones, geofence perimeters, contractual trip rates, and driver allowances."
-        breadcrumbs={[
-          { label: 'Logistics', href: '/logistics' },
-          { label: 'Port Drayage', href: '/logistics/drayage' },
-          { label: 'Client Master' },
-        ]}
+        icon={Users}
+        accent="blue"
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -716,34 +713,39 @@ export default function DrayageClientMasterPage() {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard
-          title="Active Clients"
+          label="Active Clients"
           value={clients.length}
           icon={Users}
-          subtext="Corporate consignees"
+          sub="Corporate consignees"
+          accent="blue"
         />
         <KpiCard
-          title="Total Warehouses"
+          label="Total Warehouses"
           value={totalWarehouses}
           icon={Warehouse}
-          subtext="Unloading facilities"
+          sub="Unloading facilities"
+          accent="cyan"
         />
         <KpiCard
-          title="Geofenced Facilities"
+          label="Geofenced Facilities"
           value={`${geofencedCount} / ${totalWarehouses}`}
           icon={ShieldCheck}
-          subtext={`${totalWarehouses ? Math.round((geofencedCount / totalWarehouses) * 100) : 0}% geofence coverage`}
+          sub={`${totalWarehouses ? Math.round((geofencedCount / totalWarehouses) * 100) : 0}% geofence coverage`}
+          accent="emerald"
         />
         <KpiCard
-          title="Avg Trip Rate"
+          label="Avg Trip Rate"
           value={`AED ${avgTripAmount.toLocaleString()}`}
           icon={DollarSign}
-          subtext="FCL container corridor"
+          sub="FCL container corridor"
+          accent="amber"
         />
         <KpiCard
-          title="Avg Driver Allowance"
+          label="Avg Driver Allowance"
           value={`AED ${avgDriverAllowance.toLocaleString()}`}
           icon={DollarSign}
-          subtext="Per standard roundtrip"
+          sub="Per standard roundtrip"
+          accent="violet"
         />
       </div>
 
@@ -954,7 +956,9 @@ export default function DrayageClientMasterPage() {
                               Manage ({clientWhs.length})
                             </span>
                             {clientWhs.length > 0 && geofencedWhsCount === clientWhs.length && (
-                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-0.5" title="All warehouses geofenced" />
+                              <span title="All warehouses geofenced">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-0.5" />
+                              </span>
                             )}
                           </button>
                         </td>
@@ -1808,7 +1812,7 @@ export default function DrayageClientMasterPage() {
                     type="button"
                     onClick={() => {
                       setPlotMapTypeId('roadmap');
-                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('roadmap');
+                      mapInstanceRef.current?.setMapTypeId?.('roadmap');
                     }}
                     className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
                       plotMapTypeId === 'roadmap'
@@ -1823,7 +1827,7 @@ export default function DrayageClientMasterPage() {
                     type="button"
                     onClick={() => {
                       setPlotMapTypeId('satellite');
-                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('satellite');
+                      mapInstanceRef.current?.setMapTypeId?.('satellite');
                     }}
                     className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
                       plotMapTypeId === 'satellite'
@@ -1838,7 +1842,7 @@ export default function DrayageClientMasterPage() {
                     type="button"
                     onClick={() => {
                       setPlotMapTypeId('hybrid');
-                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('hybrid');
+                      mapInstanceRef.current?.setMapTypeId?.('hybrid');
                     }}
                     className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
                       plotMapTypeId === 'hybrid'
@@ -1853,7 +1857,7 @@ export default function DrayageClientMasterPage() {
                     type="button"
                     onClick={() => {
                       setPlotMapTypeId('terrain');
-                      if (mapInstanceRef.current) mapInstanceRef.current.setMapTypeId('terrain');
+                      mapInstanceRef.current?.setMapTypeId?.('terrain');
                     }}
                     className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
                       plotMapTypeId === 'terrain'

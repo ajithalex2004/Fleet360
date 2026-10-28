@@ -45,6 +45,22 @@ interface DrayageTerminal {
   status: string;
 }
 
+interface DrayageClient {
+  id: string;
+  tenantId?: string;
+  name: string;
+  code: string;
+  contactPerson?: string | null;
+  contactNo?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  trn?: string | null;
+  tradeLicense?: string | null;
+  defaultTripAmountAed?: number;
+  defaultDriverAllowanceAed?: number;
+  notes?: string | null;
+}
+
 interface DrayageWarehouse {
   id: string;
   customerId: string | null;
@@ -131,6 +147,22 @@ export default function DrayageTerminalMapPage() {
   const [terminals, setTerminals] = useState<DrayageTerminal[]>(cached?.terminals || []);
   const [geofences, setGeofences] = useState<DrayageGeofence[]>(cached?.geofences || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
+  const [clients, setClients] = useState<DrayageClient[]>(cached?.clients || []);
+  const [newWhCustomerName, setNewWhCustomerName] = useState('');
+
+  // Quick Add Client Modal State
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [newCliName, setNewCliName] = useState('');
+  const [newCliCode, setNewCliCode] = useState('');
+  const [newCliContact, setNewCliContact] = useState('');
+  const [newCliPhone, setNewCliPhone] = useState('');
+  const [newCliAddress, setNewCliAddress] = useState('');
+  const [newCliCity, setNewCliCity] = useState('Dubai');
+  const [newCliTrn, setNewCliTrn] = useState('');
+  const [newCliTradeLicense, setNewCliTradeLicense] = useState('');
+  const [newCliTripAmount, setNewCliTripAmount] = useState(1550);
+  const [newCliAllowance, setNewCliAllowance] = useState(150);
+  const [submittingCli, setSubmittingCli] = useState(false);
   const [customers, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
   const [selectedTerminal, setSelectedTerminal] = useState<DrayageTerminal | null>(cached?.terminals?.[0] || null);
 
@@ -211,6 +243,7 @@ export default function DrayageTerminalMapPage() {
       setTerminals(terms);
       setGeofences(data?.geofences || []);
       setWarehouses(data?.warehouses || []);
+      setClients(data?.clients || []);
       setCustomers(data?.customers || []);
       if (terms.length > 0 && !selectedTerminal) {
         setSelectedTerminal(terms[0]);
@@ -363,14 +396,15 @@ export default function DrayageTerminalMapPage() {
   const handleOpenAddWarehouse = () => {
     setEditingWarehouseId(null);
     setNewWhName('');
-    setNewWhCustomerId('');
+    setNewWhCustomerId(clients[0]?.id || '');
+    setNewWhCustomerName(clients[0]?.name || '');
     setNewWhZone('JAFZA South');
-    setNewWhAddress('');
+    setNewWhAddress(clients[0]?.streetAddress || '');
     setNewWhLat(24.9642);
     setNewWhLng(55.0915);
     setNewWhRamps(4);
-    setNewWhContact('');
-    setNewWhPhone('');
+    setNewWhContact(clients[0]?.contactPerson || '');
+    setNewWhPhone(clients[0]?.contactNo || '');
     setShowWarehouseModal(true);
     setFocusMapLocation({ lat: 24.9642, lng: 55.0915, zoom: 14, title: 'New Warehouse' });
   };
@@ -379,6 +413,7 @@ export default function DrayageTerminalMapPage() {
     setEditingWarehouseId(w.id);
     setNewWhName(w.name);
     setNewWhCustomerId(w.customerId || '');
+    setNewWhCustomerName(w.customerName || '');
     setNewWhZone(w.zone);
     setNewWhAddress(w.address || '');
     setNewWhLat(w.lat || 24.9642);
@@ -395,13 +430,84 @@ export default function DrayageTerminalMapPage() {
     scrollToMap();
   };
 
+  const handleCreateQuickClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCliName.trim()) {
+      showToast('error', 'Client Name is required');
+      return;
+    }
+    const code = newCliCode.trim().toUpperCase() || newCliName.slice(0, 3).toUpperCase();
+    try {
+      setSubmittingCli(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_client',
+          name: newCliName.trim(),
+          code,
+          contactPerson: newCliContact.trim() || undefined,
+          contactNo: newCliPhone.trim() || undefined,
+          streetAddress: newCliAddress.trim() || undefined,
+          city: newCliCity.trim() || 'Dubai',
+          trn: newCliTrn.trim() || undefined,
+          tradeLicense: newCliTradeLicense.trim() || undefined,
+          defaultTripAmountAed: Number(newCliTripAmount) || 1550,
+          defaultDriverAllowanceAed: Number(newCliAllowance) || 150,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create client');
+
+      const createdId = data.id || `cli-${Date.now()}`;
+      const newClientObj: DrayageClient = {
+        id: createdId,
+        name: newCliName.trim(),
+        code,
+        contactPerson: newCliContact.trim() || undefined,
+        contactNo: newCliPhone.trim() || undefined,
+        streetAddress: newCliAddress.trim() || undefined,
+        city: newCliCity.trim() || 'Dubai',
+      };
+
+      setClients((prev) => [newClientObj, ...prev]);
+      setNewWhCustomerId(createdId);
+      setNewWhCustomerName(newCliName.trim());
+      if (!newWhName || newWhName.includes('Hub') || newWhName.includes('Distribution')) {
+        setNewWhName(`${newCliName.trim()} - Main Facility / Ramp`);
+      }
+      if (newCliAddress) setNewWhAddress(newCliAddress);
+      if (newCliContact) setNewWhContact(newCliContact);
+      if (newCliPhone) setNewWhPhone(newCliPhone);
+      if (newCliCity) setNewWhZone(`${newCliCity} Industrial Area`);
+
+      setShowAddClientModal(false);
+      setNewCliName('');
+      setNewCliCode('');
+      setNewCliContact('');
+      setNewCliPhone('');
+      setNewCliAddress('');
+      setNewCliTrn('');
+      setNewCliTradeLicense('');
+      invalidateDrayageClientCache();
+      await loadData(true);
+      showToast('success', `Client "${newCliName.trim()}" created & mapped to destination!`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error creating client');
+    } finally {
+      setSubmittingCli(false);
+    }
+  };
+
   const handleSaveWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWhName.trim()) {
       showToast('error', 'Please enter warehouse / facility name');
       return;
     }
-    const cust = customers.find((c) => c.id === newWhCustomerId);
+    const matchedClient = clients.find((c) => c.id === newWhCustomerId);
+    const matchedCust = customers.find((c) => c.id === newWhCustomerId);
+    const resolvedCustomerName = matchedClient?.name || matchedCust?.name || newWhCustomerName || 'Enterprise Client';
     try {
       setSubmittingWh(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -411,7 +517,7 @@ export default function DrayageTerminalMapPage() {
           action: 'save_warehouse',
           id: editingWarehouseId || undefined,
           customerId: newWhCustomerId || null,
-          customerName: cust?.name || 'Enterprise Client',
+          customerName: resolvedCustomerName,
           name: newWhName.trim(),
           zone: newWhZone.trim() || 'JAFZA South',
           address: newWhAddress.trim() || 'Dubai, UAE',
@@ -1466,17 +1572,66 @@ export default function DrayageTerminalMapPage() {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Linked Consignor (Customer / Shipper)</label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Map to Client / Consignee *</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddClientModal(true)}
+                    className="px-2 py-0.5 rounded bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
+                    title="Add new client in Client Master and map destination"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ Add Client</span>
+                  </button>
+                </div>
                 <SearchableSelect
                   value={newWhCustomerId}
-                  onChange={(val) => setNewWhCustomerId(val)}
+                  onChange={(val) => {
+                    setNewWhCustomerId(val);
+                    const selClient = clients.find((c) => c.id === val);
+                    if (selClient) {
+                      setNewWhCustomerName(selClient.name);
+                      if (!newWhName || newWhName.includes('Hub') || newWhName.includes('Distribution') || newWhName.includes('Facility')) {
+                        setNewWhName(`${selClient.name} - Facility / Ramp`);
+                      }
+                      if (!newWhAddress && selClient.streetAddress) {
+                        setNewWhAddress(selClient.streetAddress);
+                      }
+                      if (!newWhContact && selClient.contactPerson) {
+                        setNewWhContact(selClient.contactPerson);
+                      }
+                      if (!newWhPhone && selClient.contactNo) {
+                        setNewWhPhone(selClient.contactNo);
+                      }
+                      if (selClient.city) {
+                        setNewWhZone(`${selClient.city} Industrial Corridor`);
+                      }
+                    } else {
+                      const cust = customers.find((c) => c.id === val);
+                      if (cust) setNewWhCustomerName(cust.name);
+                    }
+                  }}
                   options={[
-                    { value: '', label: 'General / Shared Facility (All Consignors)' },
-                    ...customers.map((c) => ({ value: c.id, label: c.name, sublabel: 'Consignor Customer' })),
+                    { value: '', label: 'General / Shared Facility (Unassigned to specific client)' },
+                    ...clients.map((cli) => ({
+                      value: cli.id,
+                      label: `${cli.name} (${cli.code})`,
+                      sublabel: `${cli.city || 'UAE'} · Contact: ${cli.contactPerson || cli.contactNo || 'Client Master'}`,
+                    })),
+                    ...customers
+                      .filter((c) => !clients.some((cli) => cli.id === c.id))
+                      .map((c) => ({
+                        value: c.id,
+                        label: c.name,
+                        sublabel: 'Consignor Customer',
+                      })),
                   ]}
-                  placeholder="Search or select linked consignor..."
-                  searchPlaceholder="Type customer name..."
+                  placeholder="Select Client from Client Master or Consignor..."
+                  searchPlaceholder="Type client name or code (e.g. Al-Futtaim, ALF-LOG)..."
                   accent="emerald"
                 />
               </div>
@@ -1599,6 +1754,183 @@ export default function DrayageTerminalMapPage() {
           </div>
         </div>
       )}
-    </div>
+    
+      {/* Quick Add Client Master Modal */}
+      {showAddClientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
+              <div className="flex items-center gap-2.5">
+                <Building2 className="w-5 h-5 text-blue-400" />
+                <div>
+                  <h3 className="text-base font-bold text-[var(--text-main)]">
+                    Add New Client Master
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Create client account and immediately map destination to this client
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddClientModal(false)}
+                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuickClient} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="font-semibold text-[var(--text-main)]">Client / Consignee Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCliName}
+                    onChange={(e) => {
+                      setNewCliName(e.target.value);
+                      if (!newCliCode) {
+                        const words = e.target.value.trim().split(/\s+/);
+                        const suggested = words.length > 1
+                          ? `${words[0].slice(0, 3)}-${words[1].slice(0, 3)}`.toUpperCase()
+                          : e.target.value.slice(0, 6).toUpperCase();
+                        setNewCliCode(suggested);
+                      }
+                    }}
+                    placeholder="e.g. Al-Futtaim Logistics LLC, Landmark Group"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-main)]">Client Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCliCode}
+                    onChange={(e) => setNewCliCode(e.target.value.toUpperCase())}
+                    placeholder="ALF-LOG"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Person</label>
+                  <input
+                    type="text"
+                    value={newCliContact}
+                    onChange={(e) => setNewCliContact(e.target.value)}
+                    placeholder="e.g. Tariq Al-Mansoori"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Phone / Mobile</label>
+                  <input
+                    type="tel"
+                    value={newCliPhone}
+                    onChange={(e) => setNewCliPhone(e.target.value)}
+                    placeholder="+971 50 123 4567"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Street Address</label>
+                  <input
+                    type="text"
+                    value={newCliAddress}
+                    onChange={(e) => setNewCliAddress(e.target.value)}
+                    placeholder="Plot S-204, Road 4, JAFZA South"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Emirate / City</label>
+                  <select
+                    value={newCliCity}
+                    onChange={(e) => setNewCliCity(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Ajman">Ajman</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                    <option value="Fujairah">Fujairah</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">TRN (Tax Reg. No.)</label>
+                  <input
+                    type="text"
+                    value={newCliTrn}
+                    onChange={(e) => setNewCliTrn(e.target.value)}
+                    placeholder="100294820100003"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Trade License</label>
+                  <input
+                    type="text"
+                    value={newCliTradeLicense}
+                    onChange={(e) => setNewCliTradeLicense(e.target.value)}
+                    placeholder="CN-1029481"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Default Trip Rate (AED)</label>
+                  <input
+                    type="number"
+                    value={newCliTripAmount}
+                    onChange={(e) => setNewCliTripAmount(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Driver Allowance (AED)</label>
+                  <input
+                    type="number"
+                    value={newCliAllowance}
+                    onChange={(e) => setNewCliAllowance(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddClientModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCli}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>{submittingCli ? 'Creating...' : 'Create & Map to Destination'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+</div>
   );
 }

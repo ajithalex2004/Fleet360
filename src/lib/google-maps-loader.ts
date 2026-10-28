@@ -133,6 +133,9 @@ export interface GoogleCtors {
   InfoWindow: new (opts?: object) => GMapsInfoWindow;
   /** google.maps.drawing.OverlayType enum — 'circle' | 'polygon' | null etc. */
   OverlayType: { CIRCLE: string; POLYGON: string; MARKER: string; POLYLINE: string; RECTANGLE: string };
+  MapTypeControlStyle?: any;
+  ControlPosition?: any;
+  [key: string]: any;
 }
 
 interface GoogleMapsBootstrap {
@@ -277,6 +280,8 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       decodePath:     geometryLib.encoding.decodePath,
       DrawingManager: DrawingManagerCtor as any,
       OverlayType:    OverlayTypeObj,
+      MapTypeControlStyle: (window as any).google?.maps?.MapTypeControlStyle || { HORIZONTAL_BAR: 1, DROPDOWN_MENU: 2, DEFAULT: 0 },
+      ControlPosition: (window as any).google?.maps?.ControlPosition || { TOP_RIGHT: 3, TOP_LEFT: 1 },
     };
   })();
 
