@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Users, Building2, Warehouse, MapPin, Plus, Edit2, Trash2, CheckCircle2,
@@ -16,12 +16,10 @@ import {
   invalidateDrayageClientCache,
 } from '@/lib/logistics/drayage-client-cache';
 import {
-  loadGoogleMaps,
-  type GMapsMap,
-  type GMapsMarker,
-  type GMapsCircle,
-  type GoogleCtors,
-} from '@/lib/google-maps-loader';
+  ConsigneeDestinationModal,
+  type DrayageClientOption,
+  type DrayageWarehouseData,
+} from '@/components/logistics/drayage/ConsigneeDestinationModal';
 
 interface DrayageClient {
   id: string;
@@ -34,8 +32,8 @@ interface DrayageClient {
   city: string;
   trn: string | null;
   tradeLicense: string | null;
-  defaultTripAmountAed: number;
-  defaultDriverAllowanceAed: number;
+  defaultTripAmountAed?: number;
+  defaultDriverAllowanceAed?: number;
   notes: string | null;
   warehouseCount: number;
   warehouses?: DrayageWarehouse[];
@@ -73,26 +71,23 @@ const INDUSTRIAL_ZONES = [
   'Dubai Industrial City (DIC)',
   'Al Quoz Industrial Area, Dubai',
   'Ras Al Khor Industrial, Dubai',
-  'KEZAD Abu Dhabi (Khalifa Economic Zone)',
-  'ICAD (Industrial City of Abu Dhabi)',
-  'Sharjah Industrial Area 13',
+  'KIZAD / KEZAD, Abu Dhabi',
   'Hamriyah Free Zone, Sharjah',
 ];
 
 export default function DrayageClientMasterPage() {
   const cached = getCachedDrayageData();
-  const [loading, setLoading] = useState(!cached?.clients);
   const [clients, setClients] = useState<DrayageClient[]>(cached?.clients || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
+  const [loading, setLoading] = useState(!cached);
+
+  // Filters & View State
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('ALL');
   const [geofenceFilter, setGeofenceFilter] = useState<'ALL' | 'GEOFENCED' | 'NOT_GEOFENCED'>('ALL');
-  const [viewMode, setViewMode] = useState<'CLIENTS' | 'FACILITIES'>('CLIENTS');
+  const [viewMode, setViewMode] = useState<'CLIENTS' | 'WAREHOUSES'>('CLIENTS');
 
-  // Selected Client for Warehouse Management Drawer
-  const [selectedClientForWarehouses, setSelectedClientForWarehouses] = useState<DrayageClient | null>(null);
-
-  // Client Modal State
+  // Client Modal State (Add / Edit)
   const [showClientModal, setShowClientModal] = useState(false);
   const [editingClient, setEditingClient] = useState<DrayageClient | null>(null);
   const [clientForm, setClientForm] = useState({
@@ -104,48 +99,16 @@ export default function DrayageClientMasterPage() {
     city: 'Dubai',
     trn: '',
     tradeLicense: '',
-    defaultTripAmountAed: 1550,
-    defaultDriverAllowanceAed: 150,
     notes: '',
   });
 
-  // Warehouse Modal State
+  // Selected Client for Dedicated Facility/Warehouse Management Drawer
+  const [selectedClientForWarehouses, setSelectedClientForWarehouses] = useState<DrayageClient | null>(null);
+
+  // Unified Consignee Destination Modal State
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<DrayageWarehouse | null>(null);
-  const [warehouseForm, setWarehouseForm] = useState({
-    customerId: '',
-    customerName: '',
-    name: '',
-    code: '',
-    zone: 'JAFZA South, Dubai',
-    address: '',
-    lat: 24.9642,
-    lng: 55.0915,
-    rampsCount: 8,
-    contactPerson: '',
-    contactPhone: '',
-    geofenceConfigured: true,
-    geofenceType: 'CIRCLE' as 'CIRCLE' | 'POLYGON',
-    geofenceRadiusMeters: 800,
-    geofenceCoordinatesJson: '[]',
-    tripAmountAed: 1550,
-    driverAllowanceAed: 150,
-  });
-
-  // Plot on Map Modal State
-  const [showPlotModal, setShowPlotModal] = useState(false);
-  const [plottingWarehouse, setPlottingWarehouse] = useState<DrayageWarehouse | null>(null);
-  const [plotCoordinates, setPlotCoordinates] = useState<{ lat: number; lng: number }>({ lat: 24.9642, lng: 55.0915 });
-  const [plotRadius, setPlotRadius] = useState<number>(800);
-  const [plotType, setPlotType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
-  const [plotMapTypeId, setPlotMapTypeId] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
-  const [savingPlot, setSavingPlot] = useState(false);
-
-  // Google Map Refs for Plot Modal
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<GMapsMap | null>(null);
-  const markerRef = useRef<GMapsMarker | null>(null);
-  const circleRef = useRef<GMapsCircle | null>(null);
+  const [defaultClientForNewWh, setDefaultClientForNewWh] = useState<string | null>(null);
 
   // Toast / Status Message
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -175,15 +138,21 @@ export default function DrayageClientMasterPage() {
     loadData();
   }, [loadData]);
 
-  // Keep selectedClientForWarehouses in sync when clients change
-  useEffect(() => {
-    if (selectedClientForWarehouses) {
-      const updated = clients.find(c => c.id === selectedClientForWarehouses.id);
-      if (updated) setSelectedClientForWarehouses(updated);
-    }
-  }, [clients, selectedClientForWarehouses]);
+  // Compute KPI Summary Metrics
+  const totalWarehouses = warehouses.length;
+  const geofencedCount = warehouses.filter((w) => Boolean(w.geofenceConfigured)).length;
+  const avgTripAmount = useMemo(() => {
+    if (warehouses.length === 0) return 1550;
+    const sum = warehouses.reduce((acc, w) => acc + (w.tripAmountAed || 1550), 0);
+    return Math.round(sum / warehouses.length);
+  }, [warehouses]);
+  const avgDriverAllowance = useMemo(() => {
+    if (warehouses.length === 0) return 150;
+    const sum = warehouses.reduce((acc, w) => acc + (w.driverAllowanceAed || 150), 0);
+    return Math.round(sum / warehouses.length);
+  }, [warehouses]);
 
-  // Filtered Clients
+  // Filtered Clients (for Client Master table view)
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
     return clients.filter((c) => {
@@ -201,19 +170,19 @@ export default function DrayageClientMasterPage() {
       // If zone filter is active, check if any warehouse matches
       if (zoneFilter !== 'ALL') {
         const clientWhs = warehouses.filter(
-          w => w.customerId === c.id || (w.customerName && w.customerName.toLowerCase() === c.name.toLowerCase())
+          (w) => w.customerId === c.id || (w.customerName && w.customerName.toLowerCase() === c.name.toLowerCase())
         );
-        const hasZone = clientWhs.some(w => w.zone.toLowerCase().includes(zoneFilter.toLowerCase()));
+        const hasZone = clientWhs.some((w) => w.zone.toLowerCase().includes(zoneFilter.toLowerCase()));
         if (!hasZone) return false;
       }
 
       // If geofence filter is active
       if (geofenceFilter !== 'ALL') {
         const clientWhs = warehouses.filter(
-          w => w.customerId === c.id || (w.customerName && w.customerName.toLowerCase() === c.name.toLowerCase())
+          (w) => w.customerId === c.id || (w.customerName && w.customerName.toLowerCase() === c.name.toLowerCase())
         );
-        if (geofenceFilter === 'GEOFENCED' && !clientWhs.some(w => Boolean(w.geofenceConfigured))) return false;
-        if (geofenceFilter === 'NOT_GEOFENCED' && clientWhs.every(w => Boolean(w.geofenceConfigured))) return false;
+        if (geofenceFilter === 'GEOFENCED' && !clientWhs.some((w) => Boolean(w.geofenceConfigured))) return false;
+        if (geofenceFilter === 'NOT_GEOFENCED' && clientWhs.every((w) => Boolean(w.geofenceConfigured))) return false;
       }
 
       return true;
@@ -230,12 +199,14 @@ export default function DrayageClientMasterPage() {
         (w.code && w.code.toLowerCase().includes(q)) ||
         w.customerName.toLowerCase().includes(q) ||
         w.zone.toLowerCase().includes(q) ||
-        (w.address && w.address.toLowerCase().includes(q)) ||
-        (w.contactPerson && w.contactPerson.toLowerCase().includes(q));
+        (w.address && w.address.toLowerCase().includes(q));
 
       if (!matchSearch) return false;
 
-      if (zoneFilter !== 'ALL' && !w.zone.toLowerCase().includes(zoneFilter.toLowerCase())) return false;
+      if (zoneFilter !== 'ALL' && !w.zone.toLowerCase().includes(zoneFilter.toLowerCase())) {
+        return false;
+      }
+
       if (geofenceFilter === 'GEOFENCED' && !w.geofenceConfigured) return false;
       if (geofenceFilter === 'NOT_GEOFENCED' && w.geofenceConfigured) return false;
 
@@ -243,17 +214,7 @@ export default function DrayageClientMasterPage() {
     });
   }, [warehouses, search, zoneFilter, geofenceFilter]);
 
-  // Summary Metrics
-  const totalWarehouses = warehouses.length;
-  const geofencedCount = warehouses.filter(w => Boolean(w.geofenceConfigured)).length;
-  const avgTripAmount = clients.length
-    ? Math.round(clients.reduce((s, c) => s + (c.defaultTripAmountAed || 1550), 0) / clients.length)
-    : 1550;
-  const avgDriverAllowance = clients.length
-    ? Math.round(clients.reduce((s, c) => s + (c.defaultDriverAllowanceAed || 150), 0) / clients.length)
-    : 150;
-
-  // Client Form Handlers
+  // Client Modal Handlers
   const openAddClient = () => {
     setEditingClient(null);
     setClientForm({
@@ -265,8 +226,6 @@ export default function DrayageClientMasterPage() {
       city: 'Dubai',
       trn: '',
       tradeLicense: '',
-      defaultTripAmountAed: 1550,
-      defaultDriverAllowanceAed: 150,
       notes: '',
     });
     setShowClientModal(true);
@@ -283,8 +242,6 @@ export default function DrayageClientMasterPage() {
       city: client.city || 'Dubai',
       trn: client.trn || '',
       tradeLicense: client.tradeLicense || '',
-      defaultTripAmountAed: client.defaultTripAmountAed || 1550,
-      defaultDriverAllowanceAed: client.defaultDriverAllowanceAed || 150,
       notes: client.notes || '',
     });
     setShowClientModal(true);
@@ -312,8 +269,6 @@ export default function DrayageClientMasterPage() {
           city: clientForm.city.trim() || 'Dubai',
           trn: clientForm.trn.trim() || null,
           tradeLicense: clientForm.tradeLicense.trim() || null,
-          defaultTripAmountAed: Number(clientForm.defaultTripAmountAed) || 1550,
-          defaultDriverAllowanceAed: Number(clientForm.defaultDriverAllowanceAed) || 150,
           notes: clientForm.notes.trim() || null,
         }),
       });
@@ -354,103 +309,20 @@ export default function DrayageClientMasterPage() {
     }
   };
 
-  // Warehouse Form Handlers
+  // Facility / Warehouse Modal Openers (Opens Unified ConsigneeDestinationModal)
   const openAddWarehouse = (defaultClient?: DrayageClient) => {
     setEditingWarehouse(null);
-    const client = defaultClient || clients[0];
-    setWarehouseForm({
-      customerId: client?.id || '',
-      customerName: client?.name || '',
-      name: '',
-      code: '',
-      zone: 'JAFZA South, Dubai',
-      address: '',
-      lat: 24.9642,
-      lng: 55.0915,
-      rampsCount: 8,
-      contactPerson: client?.contactPerson || '',
-      contactPhone: client?.contactNo || '',
-      geofenceConfigured: true,
-      geofenceType: 'CIRCLE',
-      geofenceRadiusMeters: 800,
-      geofenceCoordinatesJson: '[]',
-      tripAmountAed: client?.defaultTripAmountAed || 1550,
-      driverAllowanceAed: client?.defaultDriverAllowanceAed || 150,
-    });
+    setDefaultClientForNewWh(defaultClient?.id || selectedClientForWarehouses?.id || null);
     setShowWarehouseModal(true);
   };
 
   const openEditWarehouse = (warehouse: DrayageWarehouse) => {
     setEditingWarehouse(warehouse);
-    setWarehouseForm({
-      customerId: warehouse.customerId || '',
-      customerName: warehouse.customerName || '',
-      name: warehouse.name,
-      code: warehouse.code || '',
-      zone: warehouse.zone || 'JAFZA South, Dubai',
-      address: warehouse.address || '',
-      lat: Number(warehouse.lat ?? 24.9642),
-      lng: Number(warehouse.lng ?? 55.0915),
-      rampsCount: Number(warehouse.rampsCount ?? 6),
-      contactPerson: warehouse.contactPerson || '',
-      contactPhone: warehouse.contactPhone || '',
-      geofenceConfigured: Boolean(warehouse.geofenceConfigured),
-      geofenceType: warehouse.geofenceType || 'CIRCLE',
-      geofenceRadiusMeters: Number(warehouse.geofenceRadiusMeters ?? 800),
-      geofenceCoordinatesJson: warehouse.geofenceCoordinatesJson || '[]',
-      tripAmountAed: warehouse.tripAmountAed != null ? Number(warehouse.tripAmountAed) : 1550,
-      driverAllowanceAed: warehouse.driverAllowanceAed != null ? Number(warehouse.driverAllowanceAed) : 150,
-    });
     setShowWarehouseModal(true);
   };
 
-  const handleSaveWarehouse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!warehouseForm.name.trim()) {
-      showToast('error', 'Warehouse Name is required.');
-      return;
-    }
-    const client = clients.find(c => c.id === warehouseForm.customerId);
-    const customerName = client ? client.name : warehouseForm.customerName || 'Enterprise Shipper';
-    try {
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_warehouse',
-          id: editingWarehouse?.id,
-          customerId: warehouseForm.customerId || null,
-          customerName,
-          name: warehouseForm.name.trim(),
-          code: warehouseForm.code.trim().toUpperCase() || null,
-          zone: warehouseForm.zone.trim(),
-          address: warehouseForm.address.trim(),
-          lat: Number(warehouseForm.lat),
-          lng: Number(warehouseForm.lng),
-          rampsCount: Number(warehouseForm.rampsCount) || 6,
-          contactPerson: warehouseForm.contactPerson.trim() || null,
-          contactPhone: warehouseForm.contactPhone.trim() || null,
-          geofenceConfigured: Boolean(warehouseForm.geofenceConfigured),
-          geofenceType: warehouseForm.geofenceType,
-          geofenceRadiusMeters: Number(warehouseForm.geofenceRadiusMeters) || 800,
-          geofenceCoordinatesJson: warehouseForm.geofenceCoordinatesJson || '[]',
-          tripAmountAed: Number(warehouseForm.tripAmountAed) || 1550,
-          driverAllowanceAed: Number(warehouseForm.driverAllowanceAed) || 150,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save warehouse');
-      setShowWarehouseModal(false);
-      invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', `Warehouse "${warehouseForm.name}" saved successfully.`);
-    } catch (err: unknown) {
-      console.error('Error saving warehouse:', err);
-      showToast('error', 'Error saving warehouse facility.');
-    }
-  };
-
   const handleDeleteWarehouse = async (warehouse: DrayageWarehouse) => {
-    if (!confirm(`Are you sure you want to delete warehouse "${warehouse.name}"?`)) {
+    if (!confirm(`Are you sure you want to delete facility/warehouse "${warehouse.name}"?`)) {
       return;
     }
     try {
@@ -465,210 +337,25 @@ export default function DrayageClientMasterPage() {
       if (!res.ok) throw new Error('Failed to delete warehouse');
       invalidateDrayageClientCache();
       await loadData(true);
-      showToast('success', `Warehouse "${warehouse.name}" removed.`);
+      showToast('success', `Facility/Warehouse "${warehouse.name}" removed.`);
     } catch (err: unknown) {
       console.error('Error deleting warehouse:', err);
-      showToast('error', 'Error deleting warehouse.');
-    }
-  };
-
-  // Plot on Map Modal Initializer
-  const openPlotModal = (wh: DrayageWarehouse) => {
-    setPlottingWarehouse(wh);
-    const lat = Number(wh.lat ?? 24.9642);
-    const lng = Number(wh.lng ?? 55.0915);
-    const radius = Number(wh.geofenceRadiusMeters ?? 800);
-    const type = wh.geofenceType || 'CIRCLE';
-    setPlotCoordinates({ lat, lng });
-    setPlotRadius(radius);
-    setPlotType(type);
-    setShowPlotModal(true);
-  };
-
-  // Initialize and update Google Map in Plot Modal
-  useEffect(() => {
-    if (!showPlotModal || !mapContainerRef.current) return;
-
-    let isMounted = true;
-
-    async function initMap() {
-      try {
-        const ctors = await loadGoogleMaps();
-        if (!isMounted || !mapContainerRef.current) return;
-
-        const center = { lat: plotCoordinates.lat, lng: plotCoordinates.lng };
-
-        if (!mapInstanceRef.current) {
-          const map = new ctors.Map(mapContainerRef.current, {
-            center,
-            zoom: 14,
-            mapTypeId: plotMapTypeId,
-            fullscreenControl: false,
-            streetViewControl: false,
-            mapTypeControl: true,
-            mapTypeControlOptions: {
-              style: ctors.MapTypeControlStyle?.HORIZONTAL_BAR ?? 1,
-              position: ctors.ControlPosition?.TOP_RIGHT ?? 3,
-              mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain'],
-            },
-          });
-          mapInstanceRef.current = map;
-
-          // Click map to reposition pin
-          map.addListener('click', (e: any) => {
-            if (!e.latLng) return;
-            const newLat = Number(e.latLng.lat().toFixed(6));
-            const newLng = Number(e.latLng.lng().toFixed(6));
-            setPlotCoordinates({ lat: newLat, lng: newLng });
-          });
-        } else {
-          mapInstanceRef.current?.setCenter?.(center);
-          mapInstanceRef.current?.setMapTypeId?.(plotMapTypeId);
-        }
-
-        const map = mapInstanceRef.current;
-
-        // Create or update Marker
-        if (markerRef.current) {
-          markerRef.current.setPosition(center);
-        } else {
-          markerRef.current = new ctors.Marker({
-            position: center,
-            map,
-            draggable: true,
-            title: plottingWarehouse?.name || 'Warehouse Location',
-          });
-
-          markerRef.current.addListener('dragend', (e: any) => {
-            if (!e.latLng) return;
-            setPlotCoordinates({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-          });
-        }
-
-        // Create or update Circle with Interactive Radius & Center Stretching
-        if (circleRef.current) {
-          circleRef.current.setCenter(center);
-          circleRef.current.setRadius(plotRadius);
-        } else {
-          const circle = new ctors.Circle({
-            center,
-            radius: plotRadius,
-            map,
-            fillColor: '#3b82f6',
-            fillOpacity: 0.22,
-            strokeColor: '#2563eb',
-            strokeOpacity: 0.9,
-            strokeWeight: 2.5,
-            editable: true, // Enables cardinal edge handles to stretch radius!
-            draggable: true, // Enables center handle to drag position
-            zIndex: 50,
-          });
-
-          // Live vertex & radius stretching listener
-          circle.addListener('radius_changed', () => {
-            const r = Math.round(circle.getRadius());
-            setPlotRadius(r);
-          });
-
-          circle.addListener('center_changed', () => {
-            const c = circle.getCenter();
-            if (c) {
-              const newPos = {
-                lat: Number(c.lat().toFixed(6)),
-                lng: Number(c.lng().toFixed(6)),
-              };
-              setPlotCoordinates(newPos);
-              if (markerRef.current) markerRef.current.setPosition(newPos);
-            }
-          });
-
-          circleRef.current = circle;
-        }
-      } catch (err) {
-        console.warn('Error initializing Google Maps for plot modal:', err);
-      }
-    }
-
-    initMap();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [showPlotModal, plotCoordinates.lat, plotCoordinates.lng, plotRadius]);
-
-  // Clean up map when modal closes
-  useEffect(() => {
-    if (!showPlotModal) {
-      if (markerRef.current) {
-        markerRef.current.setMap(null);
-        markerRef.current = null;
-      }
-      if (circleRef.current) {
-        circleRef.current.setMap(null);
-        circleRef.current = null;
-      }
-      mapInstanceRef.current = null;
-    }
-  }, [showPlotModal]);
-
-  const handleSavePlotOnMap = async () => {
-    if (!plottingWarehouse) return;
-    try {
-      setSavingPlot(true);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_warehouse',
-          id: plottingWarehouse.id,
-          customerId: plottingWarehouse.customerId,
-          customerName: plottingWarehouse.customerName,
-          name: plottingWarehouse.name,
-          code: plottingWarehouse.code,
-          zone: plottingWarehouse.zone,
-          address: plottingWarehouse.address,
-          lat: plotCoordinates.lat,
-          lng: plotCoordinates.lng,
-          rampsCount: plottingWarehouse.rampsCount || 6,
-          contactPerson: plottingWarehouse.contactPerson,
-          contactPhone: plottingWarehouse.contactPhone,
-          geofenceConfigured: true,
-          geofenceType: plotType,
-          geofenceRadiusMeters: plotRadius,
-          geofenceCoordinatesJson: plottingWarehouse.geofenceCoordinatesJson || '[]',
-          tripAmountAed: plottingWarehouse.tripAmountAed || 1550,
-          driverAllowanceAed: plottingWarehouse.driverAllowanceAed || 150,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to update warehouse geofence');
-      setShowPlotModal(false);
-      invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', `Geofence perimeter and coordinates updated for "${plottingWarehouse.name}".`);
-    } catch (err: unknown) {
-      console.error('Error saving plot:', err);
-      showToast('error', 'Failed to save geofence perimeter.');
-    } finally {
-      setSavingPlot(false);
+      showToast('error', 'Error deleting facility/warehouse.');
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-semibold transition-all ${
+          className={`fixed bottom-5 right-5 z-[100] px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold backdrop-blur-md border animate-in slide-in-from-bottom-3 duration-200 ${
             toast.type === 'success'
-              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
-              : 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+              : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
           }`}
         >
-          {toast.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-          )}
+          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
           <span>{toast.message}</span>
         </div>
       )}
@@ -696,7 +383,7 @@ export default function DrayageClientMasterPage() {
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-xs font-semibold shadow-sm transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Facility / Warehouse</span>
+              <span>Add Client Facility/Warehouse</span>
             </button>
             <button
               type="button"
@@ -704,7 +391,7 @@ export default function DrayageClientMasterPage() {
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Client Master</span>
+              <span>Add Client</span>
             </button>
           </div>
         }
@@ -720,7 +407,7 @@ export default function DrayageClientMasterPage() {
           accent="blue"
         />
         <KpiCard
-          label="Total Warehouses"
+          label="Total Facilities"
           value={totalWarehouses}
           icon={Warehouse}
           sub="Unloading facilities"
@@ -734,42 +421,42 @@ export default function DrayageClientMasterPage() {
           accent="emerald"
         />
         <KpiCard
-          label="Avg Trip Rate"
-          value={`AED ${avgTripAmount.toLocaleString()}`}
-          icon={DollarSign}
-          sub="FCL container corridor"
-          accent="amber"
-        />
-        <KpiCard
           label="Avg Driver Allowance"
           value={`AED ${avgDriverAllowance.toLocaleString()}`}
           icon={DollarSign}
           sub="Per standard roundtrip"
+          accent="amber"
+        />
+        <KpiCard
+          label="Avg Trip Rate"
+          value={`AED ${avgTripAmount.toLocaleString()}`}
+          icon={DollarSign}
+          sub="FCL container corridor"
           accent="violet"
         />
       </div>
 
       {/* View Switcher, Search, and Filters */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm">
-        {/* View Tabs */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] w-fit">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+        {/* Left: View Switcher */}
+        <div className="flex items-center bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border-subtle)] shadow-sm">
           <button
             type="button"
             onClick={() => setViewMode('CLIENTS')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewMode === 'CLIENTS'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>Clients View ({clients.length})</span>
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Client Master ({clients.length})</span>
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('FACILITIES')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === 'FACILITIES'
+            onClick={() => setViewMode('WAREHOUSES')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === 'WAREHOUSES'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
@@ -779,16 +466,16 @@ export default function DrayageClientMasterPage() {
           </button>
         </div>
 
-        {/* Search & Select Filters */}
-        <div className="flex flex-wrap items-center gap-2 flex-1 lg:justify-end">
-          <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+        {/* Right: Search & Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search client, code, address, contact..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
+              placeholder={viewMode === 'CLIENTS' ? 'Search client name, code, contact...' : 'Search facility name, code, zone...'}
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500 shadow-sm"
             />
           </div>
 
@@ -828,16 +515,15 @@ export default function DrayageClientMasterPage() {
                   <th className="py-3 px-3">Contact Person</th>
                   <th className="py-3 px-3">Contact No.</th>
                   <th className="py-3 px-3">Street Address</th>
-                  <th className="py-3 px-3 text-right">Trip Amount</th>
-                  <th className="py-3 px-3 text-right">Driver Allowance</th>
-                  <th className="py-3 px-3 text-center">Warehouses</th>
+                  <th className="py-3 px-3">Emirate / City</th>
+                  <th className="py-3 px-3 text-center">Facility / Warehouse Network</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)] text-xs">
                 {filteredClients.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-[var(--text-muted)]">
+                    <td colSpan={8} className="py-12 text-center text-[var(--text-muted)]">
                       <Building2 className="w-8 h-8 mx-auto mb-2 opacity-40 text-blue-400" />
                       <p className="font-medium">No clients found matching current filter.</p>
                       <button
@@ -846,7 +532,7 @@ export default function DrayageClientMasterPage() {
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 text-xs font-semibold transition-all"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Add First Client Master</span>
+                        <span>Add First Client</span>
                       </button>
                     </td>
                   </tr>
@@ -855,7 +541,7 @@ export default function DrayageClientMasterPage() {
                     const clientWhs = warehouses.filter(
                       (w) => w.customerId === client.id || (w.customerName && w.customerName.toLowerCase() === client.name.toLowerCase())
                     );
-                    const geofencedWhsCount = clientWhs.filter(w => Boolean(w.geofenceConfigured)).length;
+                    const geofencedWhsCount = clientWhs.filter((w) => Boolean(w.geofenceConfigured)).length;
                     const isSelected = selectedClientForWarehouses?.id === client.id;
 
                     return (
@@ -874,9 +560,6 @@ export default function DrayageClientMasterPage() {
                             <div>
                               <div className="font-semibold text-sm text-[var(--text-main)] flex items-center gap-2">
                                 <span>{client.name}</span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
-                                  {client.city || 'Dubai'}
-                                </span>
                               </div>
                               {client.trn && (
                                 <div className="text-[10px] text-[var(--text-muted)]">
@@ -933,30 +616,27 @@ export default function DrayageClientMasterPage() {
                           )}
                         </td>
 
-                        {/* Trip Amount */}
-                        <td className="py-3.5 px-3 text-right font-mono font-semibold text-emerald-400">
-                          AED {(client.defaultTripAmountAed || 1550).toLocaleString()}
+                        {/* Emirate / City */}
+                        <td className="py-3.5 px-3 text-[var(--text-muted)] font-medium">
+                          <span className="px-2 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
+                            {client.city || 'Dubai'}
+                          </span>
                         </td>
 
-                        {/* Driver Allowance */}
-                        <td className="py-3.5 px-3 text-right font-mono font-semibold text-amber-400">
-                          AED {(client.defaultDriverAllowanceAed || 150).toLocaleString()}
-                        </td>
-
-                        {/* Warehouse Count & Manage Option */}
+                        {/* Facility / Warehouse Network Manage Option */}
                         <td className="py-3.5 px-3 text-center">
                           <button
                             type="button"
                             onClick={() => setSelectedClientForWarehouses(client)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 font-semibold text-xs transition-all shadow-sm group"
-                            title="Manage warehouses under this client"
+                            title="Manage facilities/warehouses under this client"
                           >
                             <Warehouse className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
                             <span>
                               Manage ({clientWhs.length})
                             </span>
                             {clientWhs.length > 0 && geofencedWhsCount === clientWhs.length && (
-                              <span title="All warehouses geofenced">
+                              <span title="All facilities/warehouses geofenced">
                                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-0.5" />
                               </span>
                             )}
@@ -970,7 +650,7 @@ export default function DrayageClientMasterPage() {
                               type="button"
                               onClick={() => openEditClient(client)}
                               className="p-1.5 rounded-lg hover:bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-blue-400 transition-colors"
-                              title="Edit Client Master"
+                              title="Edit Client"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -978,7 +658,7 @@ export default function DrayageClientMasterPage() {
                               type="button"
                               onClick={() => handleDeleteClient(client)}
                               className="p-1.5 rounded-lg hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
-                              title="Delete Client Master"
+                              title="Delete Client"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -999,37 +679,36 @@ export default function DrayageClientMasterPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                  <th className="py-3 px-4">Warehouse Facility</th>
+                  <th className="py-3 px-4">Facility / Warehouse</th>
                   <th className="py-3 px-3">Client / Consignee</th>
                   <th className="py-3 px-3">Industrial Zone</th>
                   <th className="py-3 px-3 text-center">Loading Ramps</th>
-                  <th className="py-3 px-3 text-right">Trip Amount</th>
                   <th className="py-3 px-3 text-right">Driver Allowance</th>
-                  <th className="py-3 px-3 text-center">Geofence Configured</th>
-                  <th className="py-3 px-3 text-center">Plot on Map</th>
+                  <th className="py-3 px-3 text-right">Trip Amount</th>
+                  <th className="py-3 px-3 text-center">Geofence Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)] text-xs">
                 {filteredWarehouses.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-[var(--text-muted)]">
+                    <td colSpan={8} className="py-12 text-center text-[var(--text-muted)]">
                       <Warehouse className="w-8 h-8 mx-auto mb-2 opacity-40 text-blue-400" />
-                      <p className="font-medium">No warehouse facilities found matching filter.</p>
+                      <p className="font-medium">No facilities found matching filter.</p>
                       <button
                         type="button"
                         onClick={() => openAddWarehouse()}
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 text-xs font-semibold transition-all"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Add First Facility</span>
+                        <span>Add First Facility/Warehouse</span>
                       </button>
                     </td>
                   </tr>
                 ) : (
                   filteredWarehouses.map((wh) => (
                     <tr key={wh.id} className="transition-colors hover:bg-[var(--bg-card)]/60">
-                      {/* Warehouse Name */}
+                      {/* Facility Name */}
                       <td className="py-3.5 px-4 font-medium text-[var(--text-main)]">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
@@ -1074,42 +753,29 @@ export default function DrayageClientMasterPage() {
                         </span>
                       </td>
 
-                      {/* Trip Amount */}
-                      <td className="py-3.5 px-3 text-right font-mono font-semibold text-emerald-400">
-                        AED {(wh.tripAmountAed || 1550).toLocaleString()}
-                      </td>
-
                       {/* Driver Allowance */}
                       <td className="py-3.5 px-3 text-right font-mono font-semibold text-amber-400">
                         AED {(wh.driverAllowanceAed || 150).toLocaleString()}
                       </td>
 
-                      {/* Geofence Configured: Yes / No */}
-                      <td className="py-3.5 px-3 text-center">
-                        {wh.geofenceConfigured ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-[11px]">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Yes ({wh.geofenceRadiusMeters || 800}m)</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-semibold text-[11px]">
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>No</span>
-                          </span>
-                        )}
+                      {/* Trip Amount */}
+                      <td className="py-3.5 px-3 text-right font-mono font-semibold text-emerald-400">
+                        AED {(wh.tripAmountAed || 1550).toLocaleString()}
                       </td>
 
-                      {/* Plot on Map */}
+                      {/* Geofence Status */}
                       <td className="py-3.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => openPlotModal(wh)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-semibold text-xs transition-all shadow-sm"
-                          title="Open interactive Google Maps to view or adjust geofence perimeter"
-                        >
-                          <Compass className="w-3.5 h-3.5 text-blue-400" />
-                          <span>📍 Plot on Map</span>
-                        </button>
+                        {wh.geofenceConfigured ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold text-[11px]">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Configured ({wh.geofenceRadiusMeters || 800}m)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-medium text-[11px]">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Pending</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -1119,7 +785,7 @@ export default function DrayageClientMasterPage() {
                             type="button"
                             onClick={() => openEditWarehouse(wh)}
                             className="p-1.5 rounded-lg hover:bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-blue-400 transition-colors"
-                            title="Edit Warehouse"
+                            title="Edit Facility/Warehouse"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -1127,7 +793,7 @@ export default function DrayageClientMasterPage() {
                             type="button"
                             onClick={() => handleDeleteWarehouse(wh)}
                             className="p-1.5 rounded-lg hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
-                            title="Delete Warehouse"
+                            title="Delete Facility/Warehouse"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1142,25 +808,33 @@ export default function DrayageClientMasterPage() {
         </div>
       )}
 
-      {/* DEDICATED WAREHOUSE MANAGEMENT DRAWER / MODAL (FOR SELECTED CLIENT) */}
+      {/* DEDICATED FACILITY/WAREHOUSE MANAGEMENT DRAWER (FOR SELECTED CLIENT) */}
       {selectedClientForWarehouses && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden">
-            {/* Drawer Header */}
+            {/* Drawer Header (Properly Aligned & Formatted) */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold font-mono text-sm shrink-0">
                   {selectedClientForWarehouses.code}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
-                    <span>{selectedClientForWarehouses.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold border border-blue-500/30">
-                      Warehouse Network
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-[var(--text-main)]">
+                      {selectedClientForWarehouses.name}
+                    </h3>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold border border-blue-500/30">
+                      Facility/Warehouse Network
                     </span>
-                  </h3>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Default Rates: AED {selectedClientForWarehouses.defaultTripAmountAed} Trip / AED {selectedClientForWarehouses.defaultDriverAllowanceAed} Allowance • Contact: {selectedClientForWarehouses.contactPerson || 'N/A'} ({selectedClientForWarehouses.contactNo || 'N/A'})
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-2">
+                    <span>Contact: {selectedClientForWarehouses.contactPerson || 'N/A'} ({selectedClientForWarehouses.contactNo || 'N/A'})</span>
+                    <span>•</span>
+                    <span>{selectedClientForWarehouses.city || 'Dubai'}</span>
+                    <span>•</span>
+                    <span className="text-cyan-400 font-semibold">
+                      {warehouses.filter(w => w.customerId === selectedClientForWarehouses.id || (w.customerName && w.customerName.toLowerCase() === selectedClientForWarehouses.name.toLowerCase())).length} Facilities/Warehouses
+                    </span>
                   </p>
                 </div>
               </div>
@@ -1168,10 +842,10 @@ export default function DrayageClientMasterPage() {
                 <button
                   type="button"
                   onClick={() => openAddWarehouse(selectedClientForWarehouses)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Warehouse for {selectedClientForWarehouses.code}</span>
+                  <span>Add Facility/Warehouse for {selectedClientForWarehouses.code}</span>
                 </button>
                 <button
                   type="button"
@@ -1183,7 +857,7 @@ export default function DrayageClientMasterPage() {
               </div>
             </div>
 
-            {/* Warehouses List */}
+            {/* Facilities/Warehouses List */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {(() => {
                 const clientWhs = warehouses.filter(
@@ -1194,7 +868,7 @@ export default function DrayageClientMasterPage() {
                   return (
                     <div className="py-12 text-center text-[var(--text-muted)] rounded-2xl bg-[var(--bg-card)]/50 border border-dashed border-[var(--border-subtle)] p-6">
                       <Warehouse className="w-10 h-10 mx-auto mb-2 opacity-30 text-blue-400" />
-                      <h4 className="text-sm font-semibold text-[var(--text-main)]">No warehouses configured yet</h4>
+                      <h4 className="text-sm font-semibold text-[var(--text-main)]">No facilities/warehouses configured yet</h4>
                       <p className="text-xs text-[var(--text-muted)] mt-1 max-w-md mx-auto">
                         Add destination distribution centers, container yards, and cold storage facilities for {selectedClientForWarehouses.name}.
                       </p>
@@ -1204,7 +878,7 @@ export default function DrayageClientMasterPage() {
                         className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold shadow-md hover:bg-blue-500 transition-all"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Add First Warehouse</span>
+                        <span>Add First Facility/Warehouse</span>
                       </button>
                     </div>
                   );
@@ -1246,22 +920,22 @@ export default function DrayageClientMasterPage() {
                             </p>
                           )}
 
-                          {/* Rates & Geofence Status */}
+                          {/* Rates against each warehouse: Driver Allowance & Trip Amount */}
                           <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[var(--border-subtle)]">
-                            <div>
-                              <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
-                                Trip Amount
-                              </div>
-                              <div className="font-mono font-bold text-emerald-400 text-sm">
-                                AED {(wh.tripAmountAed || selectedClientForWarehouses.defaultTripAmountAed).toLocaleString()}
-                              </div>
-                            </div>
                             <div>
                               <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
                                 Driver Allowance
                               </div>
                               <div className="font-mono font-bold text-amber-400 text-sm">
-                                AED {(wh.driverAllowanceAed || selectedClientForWarehouses.defaultDriverAllowanceAed).toLocaleString()}
+                                AED {(wh.driverAllowanceAed || 150).toLocaleString()}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">
+                                Trip Amount
+                              </div>
+                              <div className="font-mono font-bold text-emerald-400 text-sm">
+                                AED {(wh.tripAmountAed || 1550).toLocaleString()}
                               </div>
                             </div>
                           </div>
@@ -1285,11 +959,11 @@ export default function DrayageClientMasterPage() {
                           </div>
                         </div>
 
-                        {/* Actions & Plot on Map button */}
+                        {/* Actions */}
                         <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[var(--border-subtle)]">
                           <button
                             type="button"
-                            onClick={() => openPlotModal(wh)}
+                            onClick={() => openEditWarehouse(wh)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-semibold text-xs transition-all shadow-sm"
                           >
                             <Compass className="w-3.5 h-3.5 text-blue-400" />
@@ -1309,7 +983,7 @@ export default function DrayageClientMasterPage() {
                               type="button"
                               onClick={() => handleDeleteWarehouse(wh)}
                               className="p-1.5 rounded-lg hover:bg-rose-500/10 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
-                              title="Delete Warehouse"
+                              title="Delete Facility/Warehouse"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1329,14 +1003,14 @@ export default function DrayageClientMasterPage() {
                 onClick={() => setSelectedClientForWarehouses(null)}
                 className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:bg-[var(--bg-card)] transition-all"
               >
-                Close Drawer
+                Close Facility/Warehouse Network
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ADD / EDIT CLIENT MODAL */}
+      {/* ADD / EDIT CLIENT MODAL (Rates removed: swapped to Warehouse) */}
       {showClientModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -1344,7 +1018,7 @@ export default function DrayageClientMasterPage() {
               <div className="flex items-center gap-2.5">
                 <Building2 className="w-5 h-5 text-blue-400" />
                 <h3 className="text-base font-bold text-[var(--text-main)]">
-                  {editingClient ? `Edit Client: ${editingClient.name}` : 'Add New Client Master'}
+                  {editingClient ? `Edit Client: ${editingClient.name}` : 'Add New Client'}
                 </h3>
               </div>
               <button
@@ -1455,39 +1129,6 @@ export default function DrayageClientMasterPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>Contractual Trip Amount (AED)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={clientForm.defaultTripAmountAed}
-                    onChange={(e) => setClientForm({ ...clientForm, defaultTripAmountAed: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-emerald-500/30 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
-                  />
-                  <p className="text-[10px] text-[var(--text-muted)]">Default rate billed per laden FCL trip.</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>Driver Allowance (AED)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={clientForm.defaultDriverAllowanceAed}
-                    onChange={(e) => setClientForm({ ...clientForm, defaultDriverAllowanceAed: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-amber-500/30 text-xs text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500"
-                  />
-                  <p className="text-[10px] text-[var(--text-muted)]">Default trip allowance paid to the assigned driver.</p>
-                </div>
-              </div>
-
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-[var(--text-main)]">Operational Notes</label>
                 <textarea
@@ -1509,9 +1150,10 @@ export default function DrayageClientMasterPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5"
                 >
-                  {editingClient ? 'Save Changes' : 'Create Client'}
+                  <Check className="w-4 h-4" />
+                  <span>{editingClient ? 'Update Client' : 'Create Client'}</span>
                 </button>
               </div>
             </form>
@@ -1519,391 +1161,25 @@ export default function DrayageClientMasterPage() {
         </div>
       )}
 
-      {/* ADD / EDIT WAREHOUSE MODAL */}
-      {showWarehouseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
-              <div className="flex items-center gap-2.5">
-                <Warehouse className="w-5 h-5 text-blue-400" />
-                <h3 className="text-base font-bold text-[var(--text-main)]">
-                  {editingWarehouse ? `Edit Facility: ${editingWarehouse.name}` : 'Add Warehouse Facility'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowWarehouseModal(false)}
-                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveWarehouse} className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* Linked Client */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--text-main)]">
-                  Linked Client / Consignee <span className="text-rose-400">*</span>
-                </label>
-                <select
-                  required
-                  value={warehouseForm.customerId}
-                  onChange={(e) => {
-                    const cid = e.target.value;
-                    const c = clients.find(cl => cl.id === cid);
-                    setWarehouseForm({
-                      ...warehouseForm,
-                      customerId: cid,
-                      customerName: c?.name || '',
-                      tripAmountAed: c?.defaultTripAmountAed || warehouseForm.tripAmountAed,
-                      driverAllowanceAed: c?.defaultDriverAllowanceAed || warehouseForm.driverAllowanceAed,
-                    });
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">Select Client...</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Warehouse Name & Code */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-[var(--text-main)]">
-                    Warehouse Facility Name <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={warehouseForm.name}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
-                    placeholder="e.g. JAFZA South Fulfillment Hub (Gate 5)"
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[var(--text-main)]">Warehouse Code</label>
-                  <input
-                    type="text"
-                    value={warehouseForm.code}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, code: e.target.value.toUpperCase() })}
-                    placeholder="e.g. WH-JAF-01"
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] font-mono uppercase focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Industrial Zone & Loading Ramps */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-[var(--text-main)]">
-                    Industrial Area / Zone <span className="text-rose-400">*</span>
-                  </label>
-                  <select
-                    value={warehouseForm.zone}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, zone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
-                  >
-                    {INDUSTRIAL_ZONES.map((z) => (
-                      <option key={z} value={z}>{z}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[var(--text-main)]">
-                    Loading Ramps Count
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={warehouseForm.rampsCount}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, rampsCount: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-cyan-400 font-mono font-bold focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Street Address */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--text-main)]">Street Address</label>
-                <input
-                  type="text"
-                  value={warehouseForm.address}
-                  onChange={(e) => setWarehouseForm({ ...warehouseForm, address: e.target.value })}
-                  placeholder="Plot S-204, Jebel Ali Free Zone South, Dubai"
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Rates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>Trip Amount (AED)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={warehouseForm.tripAmountAed}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, tripAmountAed: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-emerald-500/30 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>Driver Allowance (AED)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={warehouseForm.driverAllowanceAed}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, driverAllowanceAed: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-amber-500/30 text-xs text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              {/* Geofence Configuration Section */}
-              <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-[var(--text-main)]">Geofence Configured</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={warehouseForm.geofenceConfigured}
-                      onChange={(e) => setWarehouseForm({ ...warehouseForm, geofenceConfigured: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
-                </div>
-
-                {warehouseForm.geofenceConfigured && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-[var(--text-muted)]">Perimeter Type</label>
-                      <select
-                        value={warehouseForm.geofenceType}
-                        onChange={(e) => setWarehouseForm({ ...warehouseForm, geofenceType: e.target.value as any })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none"
-                      >
-                        <option value="CIRCLE">Circular Perimeter (Radius)</option>
-                        <option value="POLYGON">Polygon Custom Boundary</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-[var(--text-muted)]">Geofence Radius (meters)</label>
-                      <input
-                        type="number"
-                        min="100"
-                        max="5000"
-                        step="100"
-                        value={warehouseForm.geofenceRadiusMeters}
-                        onChange={(e) => setWarehouseForm({ ...warehouseForm, geofenceRadiusMeters: Number(e.target.value) })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] font-mono focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => setShowWarehouseModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all"
-                >
-                  {editingWarehouse ? 'Save Warehouse' : 'Create Warehouse'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* INTERACTIVE PLOT ON GOOGLE MAP MODAL */}
-      {showPlotModal && plottingWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl h-[85vh] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                  <Compass className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
-                    <span>Plot on Map: {plottingWarehouse.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/30">
-                      Google Maps Radar
-                    </span>
-                  </h3>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Drag the center marker or click anywhere on the map to set the warehouse gate location and perimeter.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPlotModal(false)}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Interactive Google Map Canvas */}
-            <div className="flex-1 relative bg-slate-900 overflow-hidden">
-              <div ref={mapContainerRef} className="w-full h-full" />
-
-              {/* Top Floating Controls: Map Type Switcher & Geofence Stretching Controls */}
-              <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl text-xs">
-                {/* Left: Interactive Radius Slider & Coords */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
-                    <Move className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Vertex & Perimeter Stretching</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[var(--text-muted)]">Radius:</span>
-                    <input
-                      type="range"
-                      min="200"
-                      max="3000"
-                      step="50"
-                      value={plotRadius}
-                      onChange={(e) => {
-                        const r = Number(e.target.value);
-                        setPlotRadius(r);
-                        if (circleRef.current) circleRef.current.setRadius(r);
-                      }}
-                      className="w-28 accent-blue-500 cursor-pointer"
-                    />
-                    <span className="font-mono font-bold text-blue-400">{plotRadius}m</span>
-                  </div>
-
-                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden sm:inline">
-                    ({plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)})
-                  </div>
-                </div>
-
-                {/* Right: Map Type Switcher (Default, Satellite, Hybrid, Terrain) */}
-                <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('roadmap');
-                      mapInstanceRef.current?.setMapTypeId?.('roadmap');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'roadmap'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Map className="w-3 h-3" />
-                    <span>Default</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('satellite');
-                      mapInstanceRef.current?.setMapTypeId?.('satellite');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'satellite'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Globe className="w-3 h-3" />
-                    <span>Satellite</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('hybrid');
-                      mapInstanceRef.current?.setMapTypeId?.('hybrid');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'hybrid'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Layers className="w-3 h-3" />
-                    <span>Hybrid</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('terrain');
-                      mapInstanceRef.current?.setMapTypeId?.('terrain');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'terrain'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Mountain className="w-3 h-3" />
-                    <span>Terrain</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)]">
-              <div className="text-xs text-[var(--text-muted)] flex items-center gap-2">
-                <Info className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Geofence events trigger auto-arrival detection when prime movers cross this boundary.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPlotModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSavePlotOnMap}
-                  disabled={savingPlot}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all disabled:opacity-50"
-                >
-                  {savingPlot ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4" />
-                  )}
-                  <span>Save Geofence & Location</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* UNIFIED CONSIGNEE DESTINATION (CLIENT FACILITY / WAREHOUSE) MODAL */}
+      <ConsigneeDestinationModal
+        isOpen={showWarehouseModal}
+        onClose={() => {
+          setShowWarehouseModal(false);
+          setEditingWarehouse(null);
+        }}
+        initialData={editingWarehouse}
+        clients={clients}
+        defaultClientId={defaultClientForNewWh || selectedClientForWarehouses?.id || null}
+        onClientCreated={(newCli) => {
+          setClients((prev) => [newCli as any, ...prev]);
+        }}
+        onSaved={async () => {
+          invalidateDrayageClientCache();
+          await loadData(true);
+          showToast('success', editingWarehouse ? 'Facility/Warehouse updated successfully.' : 'Facility/Warehouse created successfully.');
+        }}
+      />
     </div>
   );
 }

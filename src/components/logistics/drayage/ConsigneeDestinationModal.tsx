@@ -1,0 +1,1250 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Warehouse, Building2, Navigation, Compass, Plus, X,
+  ShieldCheck, DollarSign, User, Phone, Check, RefreshCw,
+  Map, Globe, Layers, Mountain, Move, AlertTriangle, Info,
+} from 'lucide-react';
+import {
+  loadGoogleMaps,
+  type GMapsMap,
+  type GMapsMarker,
+  type GMapsCircle,
+  type GMapsPolygon,
+  type GoogleCtors,
+} from '@/lib/google-maps-loader';
+
+export interface DrayageClientOption {
+  id: string;
+  name: string;
+  code: string;
+  contactPerson?: string | null;
+  contactNo?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  trn?: string | null;
+  tradeLicense?: string | null;
+  defaultTripAmountAed?: number;
+  defaultDriverAllowanceAed?: number;
+}
+
+export interface DrayageWarehouseData {
+  id?: string;
+  customerId: string | null;
+  customerName: string;
+  name: string;
+  code?: string | null;
+  zone: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  rampsCount?: number;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
+  geofenceConfigured?: boolean;
+  geofenceType?: 'CIRCLE' | 'POLYGON';
+  geofenceRadiusMeters?: number;
+  geofenceCoordinatesJson?: string;
+  tripAmountAed?: number | null;
+  driverAllowanceAed?: number | null;
+}
+
+interface ConsigneeDestinationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: (savedWarehouse: DrayageWarehouseData) => void;
+  initialData?: DrayageWarehouseData | null;
+  clients: DrayageClientOption[];
+  onClientCreated?: (newClient: DrayageClientOption) => void;
+  defaultClientId?: string | null;
+}
+
+const DEFAULT_INDUSTRIAL_ZONES = [
+  'JAFZA South',
+  'JAFZA North',
+  'NIP / TechnoPark',
+  'Dubai South (DWC) Logistics District',
+  'Dubai Industrial City (DIC)',
+  'Al Quoz Industrial Area',
+  'Ras Al Khor Industrial',
+  'KIZAD / KEZAD, Abu Dhabi',
+  'Hamriyah Free Zone, Sharjah',
+];
+
+/**
+ * Perform reverse geocoding via Google Maps Geocoder with OpenStreetMap Nominatim fallback.
+ */
+async function reverseGeocodeCoords(lat: number, lng: number): Promise<string | null> {
+  // 1. Google Maps JS API Geocoder
+  try {
+    const ctors = await loadGoogleMaps();
+    const geocoder = new ctors.Geocoder();
+    const gResult = await new Promise<string | null>((resolve) => {
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results && results.length > 0 && results[0]?.formatted_address) {
+          resolve(results[0].formatted_address);
+        } else {
+          resolve(null);
+        }
+      });
+    });
+    if (gResult) return gResult;
+  } catch (err) {
+    console.warn('Google reverse geocoder failed or not available:', err);
+  }
+
+  // 2. OpenStreetMap Nominatim fallback
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.display_name) return data.display_name;
+    }
+  } catch (err) {
+    console.warn('Nominatim reverse geocoder failed:', err);
+  }
+
+  return null;
+}
+
+export function ConsigneeDestinationModal({
+  isOpen,
+  onClose,
+  onSaved,
+  initialData,
+  clients,
+  onClientCreated,
+  defaultClientId,
+}: ConsigneeDestinationModalProps) {
+  // Main form state
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [zone, setZone] = useState('JAFZA South');
+  const [rampsCount, setRampsCount] = useState(4);
+  const [lat, setLat] = useState(24.9642);
+  const [lng, setLng] = useState(55.0915);
+  const [address, setAddress] = useState('');
+  const [driverAllowanceAed, setDriverAllowanceAed] = useState(150);
+  const [tripAmountAed, setTripAmountAed] = useState(1550);
+  const [contactPerson, setContactPerson] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [geofenceConfigured, setGeofenceConfigured] = useState(false);
+  const [geofenceType, setGeofenceType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
+  const [geofenceRadiusMeters, setGeofenceRadiusMeters] = useState(800);
+  const [geofenceCoordinatesJson, setGeofenceCoordinatesJson] = useState('[]');
+  const [submitting, setSubmitting] = useState(false);
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
+
+  // Quick Add Client modal state
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [newCliName, setNewCliName] = useState('');
+  const [newCliCode, setNewCliCode] = useState('');
+  const [newCliContact, setNewCliContact] = useState('');
+  const [newCliPhone, setNewCliPhone] = useState('');
+  const [newCliAddress, setNewCliAddress] = useState('');
+  const [newCliCity, setNewCliCity] = useState('Dubai');
+  const [newCliTrn, setNewCliTrn] = useState('');
+  const [newCliTradeLicense, setNewCliTradeLicense] = useState('');
+  const [submittingCli, setSubmittingCli] = useState(false);
+
+  // Plot on Map modal state
+  const [showPlotModal, setShowPlotModal] = useState(false);
+  const [plotCoordinates, setPlotCoordinates] = useState({ lat: 24.9642, lng: 55.0915 });
+  const [plotRadius, setPlotRadius] = useState(800);
+  const [plotType, setPlotType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
+  const [plotPolygonCoords, setPlotPolygonCoords] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [plotMapTypeId, setPlotMapTypeId] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<GMapsMap | null>(null);
+  const markerRef = useRef<GMapsMarker | null>(null);
+  const circleRef = useRef<GMapsCircle | null>(null);
+  const polygonRef = useRef<GMapsPolygon | null>(null);
+
+  // Populate initial values when opening modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (initialData) {
+      setName(initialData.name || '');
+      setCode(initialData.code || '');
+      setCustomerId(initialData.customerId || '');
+      setCustomerName(initialData.customerName || '');
+      setZone(initialData.zone || 'JAFZA South');
+      setRampsCount(initialData.rampsCount || 4);
+      setLat(initialData.lat ?? 24.9642);
+      setLng(initialData.lng ?? 55.0915);
+      setAddress(initialData.address || '');
+      setDriverAllowanceAed(initialData.driverAllowanceAed ?? 150);
+      setTripAmountAed(initialData.tripAmountAed ?? 1550);
+      setContactPerson(initialData.contactPerson || '');
+      setContactPhone(initialData.contactPhone || '');
+      setGeofenceConfigured(Boolean(initialData.geofenceConfigured));
+      setGeofenceType(initialData.geofenceType || 'CIRCLE');
+      setGeofenceRadiusMeters(initialData.geofenceRadiusMeters ?? 800);
+      setGeofenceCoordinatesJson(initialData.geofenceCoordinatesJson || '[]');
+    } else {
+      const selectedClient = clients.find((c) => c.id === defaultClientId) || clients[0];
+      const initialCid = selectedClient?.id || '';
+      const initialCName = selectedClient?.name || '';
+      setName(initialCName ? `${initialCName} - Facility / Ramp` : '');
+      setCode('');
+      setCustomerId(initialCid);
+      setCustomerName(initialCName);
+      setZone('JAFZA South');
+      setRampsCount(4);
+      setLat(24.9642);
+      setLng(55.0915);
+      setAddress(selectedClient?.streetAddress || '');
+      setDriverAllowanceAed(150);
+      setTripAmountAed(1550);
+      setContactPerson(selectedClient?.contactPerson || '');
+      setContactPhone(selectedClient?.contactNo || '');
+      setGeofenceConfigured(false);
+      setGeofenceType('CIRCLE');
+      setGeofenceRadiusMeters(800);
+      setGeofenceCoordinatesJson('[]');
+    }
+  }, [isOpen, initialData, clients, defaultClientId]);
+
+  // Handle client selection change
+  const handleClientChange = (cId: string) => {
+    setCustomerId(cId);
+    const client = clients.find((c) => c.id === cId);
+    if (client) {
+      setCustomerName(client.name);
+      if (!name || name.includes('- Facility / Ramp')) {
+        setName(`${client.name} - Facility / Ramp`);
+      }
+      if (!address && client.streetAddress) {
+        setAddress(client.streetAddress);
+      }
+      if (!contactPerson && client.contactPerson) {
+        setContactPerson(client.contactPerson);
+      }
+      if (!contactPhone && client.contactNo) {
+        setContactPhone(client.contactNo);
+      }
+    } else {
+      setCustomerName('');
+    }
+  };
+
+  // Open the interactive Plot on Map modal
+  const handleOpenPlotOnMap = () => {
+    setPlotCoordinates({ lat, lng });
+    setPlotRadius(geofenceRadiusMeters || 800);
+    setPlotType(geofenceType || 'CIRCLE');
+
+    let initialPoly: Array<{ lat: number; lng: number }> = [];
+    try {
+      const parsed = JSON.parse(geofenceCoordinatesJson);
+      if (Array.isArray(parsed) && parsed.length >= 3) {
+        initialPoly = parsed;
+      }
+    } catch {
+      // ignore
+    }
+    if (initialPoly.length === 0) {
+      // Default 4 vertices box around center point
+      const delta = 0.003;
+      initialPoly = [
+        { lat: lat + delta, lng: lng - delta },
+        { lat: lat + delta, lng: lng + delta },
+        { lat: lat - delta, lng: lng + delta },
+        { lat: lat - delta, lng: lng - delta },
+      ];
+    }
+    setPlotPolygonCoords(initialPoly);
+    setShowPlotModal(true);
+  };
+
+  // Google Maps setup and listeners in Plot Modal
+  useEffect(() => {
+    if (!showPlotModal || !mapContainerRef.current) return;
+    let isMounted = true;
+
+    async function initPlotMap() {
+      try {
+        const ctors = await loadGoogleMaps();
+        if (!isMounted || !mapContainerRef.current) return;
+
+        const center = { lat: plotCoordinates.lat, lng: plotCoordinates.lng };
+
+        if (!mapInstanceRef.current) {
+          const map = new ctors.Map(mapContainerRef.current, {
+            center,
+            zoom: 15,
+            mapTypeId: plotMapTypeId,
+            fullscreenControl: false,
+            streetViewControl: false,
+            mapTypeControl: false, // We use custom top buttons for clean UI
+          });
+          mapInstanceRef.current = map;
+
+          map.addListener('click', (e: any) => {
+            if (!e.latLng) return;
+            const newLat = Number(e.latLng.lat().toFixed(6));
+            const newLng = Number(e.latLng.lng().toFixed(6));
+            setPlotCoordinates({ lat: newLat, lng: newLng });
+          });
+        } else {
+          mapInstanceRef.current?.setCenter?.(center);
+          mapInstanceRef.current?.setMapTypeId?.(plotMapTypeId);
+        }
+
+        const map = mapInstanceRef.current;
+
+        // Center Pin Marker
+        if (markerRef.current) {
+          markerRef.current.setPosition(center);
+        } else {
+          markerRef.current = new ctors.Marker({
+            position: center,
+            map,
+            draggable: true,
+            title: name || 'Ramp Location',
+          });
+          markerRef.current.addListener('dragend', (e: any) => {
+            if (!e.latLng) return;
+            setPlotCoordinates({
+              lat: Number(e.latLng.lat().toFixed(6)),
+              lng: Number(e.latLng.lng().toFixed(6)),
+            });
+          });
+        }
+
+        // Handle Circle Overlay
+        if (plotType === 'CIRCLE') {
+          if (polygonRef.current) {
+            polygonRef.current.setMap(null);
+            polygonRef.current = null;
+          }
+
+          if (circleRef.current) {
+            circleRef.current.setCenter(center);
+            circleRef.current.setRadius(plotRadius);
+          } else {
+            const circle = new ctors.Circle({
+              center,
+              radius: plotRadius,
+              map,
+              fillColor: '#059669',
+              fillOpacity: 0.22,
+              strokeColor: '#10b981',
+              strokeOpacity: 0.9,
+              strokeWeight: 2.5,
+              editable: true,
+              draggable: true,
+              zIndex: 50,
+            });
+
+            circle.addListener('radius_changed', () => {
+              const r = Math.round(circle.getRadius());
+              setPlotRadius(r);
+            });
+
+            circle.addListener('center_changed', () => {
+              const c = circle.getCenter();
+              if (c) {
+                const newPos = {
+                  lat: Number(c.lat().toFixed(6)),
+                  lng: Number(c.lng().toFixed(6)),
+                };
+                setPlotCoordinates(newPos);
+                if (markerRef.current) markerRef.current.setPosition(newPos);
+              }
+            });
+
+            circleRef.current = circle;
+          }
+        } else {
+          // Handle Polygon Overlay
+          if (circleRef.current) {
+            circleRef.current.setMap(null);
+            circleRef.current = null;
+          }
+
+          if (polygonRef.current) {
+            polygonRef.current.setPath(plotPolygonCoords);
+          } else {
+            const polygon = new ctors.Polygon({
+              paths: plotPolygonCoords,
+              map,
+              fillColor: '#9333ea',
+              fillOpacity: 0.22,
+              strokeColor: '#a855f7',
+              strokeOpacity: 0.9,
+              strokeWeight: 2.5,
+              editable: true,
+              draggable: true,
+              zIndex: 50,
+            });
+
+            const updatePolyPath = () => {
+              const path = polygon.getPath();
+              const coords: Array<{ lat: number; lng: number }> = [];
+              for (let i = 0; i < path.getLength(); i++) {
+                const pt = path.getAt(i);
+                coords.push({
+                  lat: Number(pt.lat().toFixed(6)),
+                  lng: Number(pt.lng().toFixed(6)),
+                });
+              }
+              setPlotPolygonCoords(coords);
+            };
+
+            polygon.getPath().addListener('set_at', updatePolyPath);
+            polygon.getPath().addListener('insert_at', updatePolyPath);
+            polygon.getPath().addListener('remove_at', updatePolyPath);
+
+            polygonRef.current = polygon;
+          }
+        }
+      } catch (err) {
+        console.warn('Error loading Google Maps in Plot Modal:', err);
+      }
+    }
+
+    initPlotMap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showPlotModal, plotCoordinates.lat, plotCoordinates.lng, plotRadius, plotType]);
+
+  // Clean up overlays when plot modal closes
+  useEffect(() => {
+    if (!showPlotModal) {
+      if (markerRef.current) {
+        markerRef.current.setMap(null);
+        markerRef.current = null;
+      }
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
+      if (polygonRef.current) {
+        polygonRef.current.setMap(null);
+        polygonRef.current = null;
+      }
+      mapInstanceRef.current = null;
+    }
+  }, [showPlotModal]);
+
+  // Apply Plot on Map & Reverse Geocode exact street address
+  const handleApplyPlotLocation = async () => {
+    const finalLat = plotCoordinates.lat;
+    const finalLng = plotCoordinates.lng;
+    setLat(finalLat);
+    setLng(finalLng);
+    setGeofenceRadiusMeters(plotRadius);
+    setGeofenceType(plotType);
+    setGeofenceConfigured(true); // Automatically enables Geofence Configured switch!
+
+    if (plotType === 'POLYGON' && plotPolygonCoords.length >= 3) {
+      setGeofenceCoordinatesJson(JSON.stringify(plotPolygonCoords));
+    }
+
+    setShowPlotModal(false);
+
+    // Perform reverse geocoding to capture exact physical street address
+    setReverseGeocoding(true);
+    try {
+      const resolvedAddress = await reverseGeocodeCoords(finalLat, finalLng);
+      if (resolvedAddress) {
+        setAddress(resolvedAddress);
+      }
+    } catch (err) {
+      console.warn('Reverse geocoding error:', err);
+    } finally {
+      setReverseGeocoding(false);
+    }
+  };
+
+  // Quick Client Creation Handler
+  const handleCreateQuickClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCliName.trim()) return;
+
+    const generatedCode =
+      newCliCode.trim().toUpperCase() || newCliName.slice(0, 3).toUpperCase();
+    try {
+      setSubmittingCli(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_client',
+          name: newCliName.trim(),
+          code: generatedCode,
+          contactPerson: newCliContact.trim() || undefined,
+          contactNo: newCliPhone.trim() || undefined,
+          streetAddress: newCliAddress.trim() || undefined,
+          city: newCliCity.trim() || 'Dubai',
+          trn: newCliTrn.trim() || undefined,
+          tradeLicense: newCliTradeLicense.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create client');
+
+      const createdClient: DrayageClientOption = data.client || {
+        id: data.clientId || `client-${Date.now()}`,
+        name: newCliName.trim(),
+        code: generatedCode,
+        contactPerson: newCliContact.trim() || null,
+        contactNo: newCliPhone.trim() || null,
+        streetAddress: newCliAddress.trim() || null,
+        city: newCliCity.trim() || 'Dubai',
+        trn: newCliTrn.trim() || null,
+        tradeLicense: newCliTradeLicense.trim() || null,
+      };
+
+      if (onClientCreated) {
+        onClientCreated(createdClient);
+      }
+
+      // Automatically map this newly created client
+      setCustomerId(createdClient.id);
+      setCustomerName(createdClient.name);
+      if (!name || name.includes('- Facility / Ramp')) {
+        setName(`${createdClient.name} - Facility / Ramp`);
+      }
+      if (createdClient.streetAddress) {
+        setAddress(createdClient.streetAddress);
+      }
+      if (createdClient.contactPerson) {
+        setContactPerson(createdClient.contactPerson);
+      }
+      if (createdClient.contactNo) {
+        setContactPhone(createdClient.contactNo);
+      }
+
+      setShowAddClientModal(false);
+    } catch (err) {
+      console.error('Error creating client:', err);
+    } finally {
+      setSubmittingCli(false);
+    }
+  };
+
+  // Form submission handler
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    try {
+      setSubmitting(true);
+      const payload: DrayageWarehouseData = {
+        id: initialData?.id,
+        customerId: customerId || null,
+        customerName: customerName || (clients.find((c) => c.id === customerId)?.name || 'Direct Client'),
+        name: name.trim(),
+        code: code.trim().toUpperCase() || undefined,
+        zone: zone || 'JAFZA South',
+        address: address.trim() || undefined,
+        lat,
+        lng,
+        rampsCount: Number(rampsCount) || 4,
+        contactPerson: contactPerson.trim() || undefined,
+        contactPhone: contactPhone.trim() || undefined,
+        geofenceConfigured,
+        geofenceType,
+        geofenceRadiusMeters: Number(geofenceRadiusMeters) || 800,
+        geofenceCoordinatesJson: geofenceCoordinatesJson || '[]',
+        tripAmountAed: Number(tripAmountAed) || 1550,
+        driverAllowanceAed: Number(driverAllowanceAed) || 150,
+      };
+
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_warehouse',
+          ...payload,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save consignee destination');
+
+      onSaved(payload);
+      onClose();
+    } catch (err) {
+      console.error('Error saving consignee destination:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* UNIFIED MODAL WINDOW: Add Consignee Destination (Client Facility / Warehouse) */}
+      <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="w-full max-w-xl max-h-[92vh] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
+            <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+              <Warehouse className="w-4 h-4 text-emerald-400" />
+              <span>
+                {initialData?.id
+                  ? 'Edit Consignee Destination (Client Facility / Warehouse)'
+                  : 'Add Consignee Destination (Client Facility / Warehouse)'}
+              </span>
+            </h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Form Body */}
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+            {/* Consignee Facility / Warehouse Name (Client) * */}
+            <div className="space-y-1">
+              <label className="font-semibold text-[var(--text-muted)]">
+                Consignee Facility / Warehouse Name (Client) *
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Landmark Distribution Center NIP, Chalhoub DWC Hub"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-medium"
+              />
+            </div>
+
+            {/* Warehouse / Facility Code */}
+            <div className="space-y-1">
+              <label className="font-semibold text-[var(--text-muted)]">
+                Warehouse / Facility Code (Optional)
+              </label>
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="e.g. AF-LOG-DIC-WH1"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono uppercase outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Map to Client / Consignee * with + Add Client button */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Map to Client / Consignee *</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAddClientModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[11px] shadow-sm transition-all"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Client</span>
+                </button>
+              </div>
+              <select
+                required
+                value={customerId}
+                onChange={(e) => handleClientChange(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-medium"
+              >
+                <option value="">-- Select Client from Master --</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Industrial Zone / Area & Loading Ramps / Bays */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Industrial Zone / Area *
+                </label>
+                <input
+                  type="text"
+                  required
+                  list="zones-list"
+                  value={zone}
+                  onChange={(e) => setZone(e.target.value)}
+                  placeholder="e.g. JAFZA South"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+                <datalist id="zones-list">
+                  {DEFAULT_INDUSTRIAL_ZONES.map((z) => (
+                    <option key={z} value={z} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Loading Ramps / Bays
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={rampsCount}
+                  onChange={(e) => setRampsCount(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold outline-none focus:border-emerald-500 text-cyan-400"
+                />
+              </div>
+            </div>
+
+            {/* GPS Ramp Coordinates with Plot on Map button (Right before Street Address!) */}
+            <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[var(--text-muted)] text-[11px] flex items-center gap-1.5">
+                  <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                  GPS Ramp Coordinates
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenPlotOnMap}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#057a55] hover:bg-[#046c4e] text-white text-xs font-semibold shadow-sm transition-all"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>📍 Plot on Map</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[var(--text-muted)]">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={lat}
+                    onChange={(e) => setLat(parseFloat(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[var(--text-muted)]">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={lng}
+                    onChange={(e) => setLng(parseFloat(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Physical Street Address (Populated exactly via reverse Geocoding!) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Physical Street Address
+                </label>
+                {reverseGeocoding && (
+                  <span className="text-[10px] text-emerald-400 flex items-center gap-1 animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Reverse-geocoding street address...</span>
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Plot S-204, Road 4, JAFZA South"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Commercial Rates: Driver Allowance & Trip Amount against each warehouse */}
+            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20">
+              <div className="space-y-1">
+                <label className="font-semibold text-amber-400 flex items-center gap-1">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  <span>Driver Allowance (AED)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={driverAllowanceAed}
+                  onChange={(e) => setDriverAllowanceAed(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-[var(--text-main)] font-mono font-bold outline-none focus:border-amber-500 text-amber-400"
+                />
+                <p className="text-[10px] text-[var(--text-muted)]">Per trip driver allowance.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-emerald-400 flex items-center gap-1">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  <span>Trip Amount (AED)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={tripAmountAed}
+                  onChange={(e) => setTripAmountAed(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-emerald-500/30 text-[var(--text-main)] font-mono font-bold outline-none focus:border-emerald-500 text-emerald-400"
+                />
+                <p className="text-[10px] text-[var(--text-muted)]">Contracted corridor billing.</p>
+              </div>
+            </div>
+
+            {/* Receiving Contact Person & Receiving Contact Phone */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)] flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Receiving Contact Person</span>
+                </label>
+                <input
+                  type="text"
+                  value={contactPerson}
+                  onChange={(e) => setContactPerson(e.target.value)}
+                  placeholder="Tariq Al-Mansoori"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)] flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Receiving Contact Phone</span>
+                </label>
+                <input
+                  type="text"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="+971 50 482 9910"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Geofence Configured Card */}
+            <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Geofence Configured
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setGeofenceConfigured(!geofenceConfigured)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                    geofenceConfigured ? 'bg-emerald-600 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <div className="bg-white w-4 h-4 rounded-full shadow-md" />
+                </button>
+              </div>
+
+              {geofenceConfigured && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--border-subtle)] animate-in fade-in duration-150">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)] font-semibold">Perimeter Type</label>
+                    <select
+                      value={geofenceType}
+                      onChange={(e) => setGeofenceType(e.target.value as 'CIRCLE' | 'POLYGON')}
+                      className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                    >
+                      <option value="CIRCLE">Circular Perimeter (Radius)</option>
+                      <option value="POLYGON">Custom Polygon Bounds</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)] font-semibold">
+                      Geofence Radius (meters)
+                    </label>
+                    <input
+                      type="number"
+                      step="50"
+                      min="100"
+                      max="5000"
+                      value={geofenceRadiusMeters}
+                      onChange={(e) => setGeofenceRadiusMeters(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] font-semibold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 rounded-xl bg-[#057a55] hover:bg-[#046c4e] text-white font-semibold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                <span>
+                  {initialData?.id ? 'Update Consignee Destination' : 'Save Consignee Destination'}
+                </span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* INTERACTIVE GOOGLE MAPS PLOT MODAL */}
+      {showPlotModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-4xl h-[85vh] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
+                    <span>Plot on Map: {name || 'Consignee Facility'}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/30">
+                      Google Maps Radar
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Drag the center marker or stretch perimeter handles. Reverse-geocodes exact street address upon applying.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlotModal(false)}
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Map Canvas */}
+            <div className="flex-1 relative bg-slate-900 overflow-hidden">
+              <div ref={mapContainerRef} className="w-full h-full" />
+
+              {/* Floating Toolbar: Mode Switcher, Radius Slider, Map Type Switcher */}
+              <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl text-xs">
+                {/* Left: Shape Mode & Radius Slider */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+                    <button
+                      type="button"
+                      onClick={() => setPlotType('CIRCLE')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                        plotType === 'CIRCLE'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      ⚪ Draw Circle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlotType('POLYGON')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                        plotType === 'POLYGON'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      ⬡ Draw Polygon
+                    </button>
+                  </div>
+
+                  {plotType === 'CIRCLE' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--text-muted)]">Radius:</span>
+                      <input
+                        type="range"
+                        min="200"
+                        max="3000"
+                        step="50"
+                        value={plotRadius}
+                        onChange={(e) => {
+                          const r = Number(e.target.value);
+                          setPlotRadius(r);
+                          if (circleRef.current) circleRef.current.setRadius(r);
+                        }}
+                        className="w-24 accent-emerald-500 cursor-pointer"
+                      />
+                      <span className="font-mono font-bold text-emerald-400">{plotRadius}m</span>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden sm:inline">
+                    ({plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)})
+                  </div>
+                </div>
+
+                {/* Right: Map Type Switcher (Default, Satellite, Hybrid, Terrain) */}
+                <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('roadmap');
+                      mapInstanceRef.current?.setMapTypeId?.('roadmap');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'roadmap'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Map className="w-3 h-3" />
+                    <span>Default</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('satellite');
+                      mapInstanceRef.current?.setMapTypeId?.('satellite');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'satellite'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Globe className="w-3 h-3" />
+                    <span>Satellite</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('hybrid');
+                      mapInstanceRef.current?.setMapTypeId?.('hybrid');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'hybrid'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>Hybrid</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlotMapTypeId('terrain');
+                      mapInstanceRef.current?.setMapTypeId?.('terrain');
+                    }}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                      plotMapTypeId === 'terrain'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Mountain className="w-3 h-3" />
+                    <span>Terrain</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)]">
+              <div className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+                <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Geofence radius and street address will be auto-populated into the destination form.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPlotModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyPlotLocation}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#057a55] hover:bg-[#046c4e] text-white text-xs font-semibold shadow-md transition-all"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Apply Geofence & Location</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ADD CLIENT MODAL */}
+      {showAddClientModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-400" />
+                <span>Add New Client</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddClientModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuickClient} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">
+                    Client / Consignee Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCliName}
+                    onChange={(e) => {
+                      setNewCliName(e.target.value);
+                      if (!newCliCode) {
+                        setNewCliCode(e.target.value.slice(0, 3).toUpperCase());
+                      }
+                    }}
+                    placeholder="e.g. Al-Futtaim Logistics LLC"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Client Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCliCode}
+                    onChange={(e) => setNewCliCode(e.target.value.toUpperCase())}
+                    placeholder="ALF-LOG"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono uppercase outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Person</label>
+                  <input
+                    type="text"
+                    value={newCliContact}
+                    onChange={(e) => setNewCliContact(e.target.value)}
+                    placeholder="Tariq Al-Mansoori"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Phone</label>
+                  <input
+                    type="text"
+                    value={newCliPhone}
+                    onChange={(e) => setNewCliPhone(e.target.value)}
+                    placeholder="+971 50 482 9910"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Street Address</label>
+                  <input
+                    type="text"
+                    value={newCliAddress}
+                    onChange={(e) => setNewCliAddress(e.target.value)}
+                    placeholder="Plot S-204, Road 4, JAFZA South"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Emirate / City</label>
+                  <select
+                    value={newCliCity}
+                    onChange={(e) => setNewCliCity(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Ajman">Ajman</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                    <option value="Fujairah">Fujairah</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">TRN (Tax Reg. No.)</label>
+                  <input
+                    type="text"
+                    value={newCliTrn}
+                    onChange={(e) => setNewCliTrn(e.target.value)}
+                    placeholder="100294820100003"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Trade License</label>
+                  <input
+                    type="text"
+                    value={newCliTradeLicense}
+                    onChange={(e) => setNewCliTradeLicense(e.target.value)}
+                    placeholder="CN-1029481"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddClientModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCli}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>{submittingCli ? 'Creating...' : 'Create & Map to Destination'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

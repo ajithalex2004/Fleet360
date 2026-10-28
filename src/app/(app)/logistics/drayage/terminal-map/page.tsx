@@ -9,6 +9,7 @@ import {
   Warehouse, Building2, User, Phone, Check, Navigation,
 } from 'lucide-react';
 import type { PlotContext } from '@/components/logistics/drayage/DrayageGeofenceMap';
+import { ConsigneeDestinationModal } from '@/components/logistics/drayage/ConsigneeDestinationModal';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
@@ -393,41 +394,16 @@ export default function DrayageTerminalMapPage() {
   };
 
   // Warehouse Handlers
+  const [selectedWarehouseForEdit, setSelectedWarehouseForEdit] = useState<DrayageWarehouse | null>(null);
+
   const handleOpenAddWarehouse = () => {
-    setEditingWarehouseId(null);
-    setNewWhName('');
-    setNewWhCustomerId(clients[0]?.id || '');
-    setNewWhCustomerName(clients[0]?.name || '');
-    setNewWhZone('JAFZA South');
-    setNewWhAddress(clients[0]?.streetAddress || '');
-    setNewWhLat(24.9642);
-    setNewWhLng(55.0915);
-    setNewWhRamps(4);
-    setNewWhContact(clients[0]?.contactPerson || '');
-    setNewWhPhone(clients[0]?.contactNo || '');
+    setSelectedWarehouseForEdit(null);
     setShowWarehouseModal(true);
-    setFocusMapLocation({ lat: 24.9642, lng: 55.0915, zoom: 14, title: 'New Warehouse' });
   };
 
   const handleOpenEditWarehouse = (w: DrayageWarehouse) => {
-    setEditingWarehouseId(w.id);
-    setNewWhName(w.name);
-    setNewWhCustomerId(w.customerId || '');
-    setNewWhCustomerName(w.customerName || '');
-    setNewWhZone(w.zone);
-    setNewWhAddress(w.address || '');
-    setNewWhLat(w.lat || 24.9642);
-    setNewWhLng(w.lng || 55.0915);
-    setNewWhRamps(w.rampsCount || 4);
-    setNewWhContact(w.contactPerson || '');
-    setNewWhPhone(w.contactPhone || '');
+    setSelectedWarehouseForEdit(w);
     setShowWarehouseModal(true);
-
-    // Map automatically points to that particular geofence / warehouse location
-    const targetLat = w.lat || 24.9642;
-    const targetLng = w.lng || 55.0915;
-    setFocusMapLocation({ lat: targetLat, lng: targetLng, zoom: 14.5, title: w.name });
-    scrollToMap();
   };
 
   const handleCreateQuickClient = async (e: React.FormEvent) => {
@@ -1145,34 +1121,6 @@ export default function DrayageTerminalMapPage() {
                     placeholder="e.g. DPW-JA-T1, ADP-KP-T1, DPW-PR-T1"
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold outline-none focus:border-blue-500 uppercase placeholder:text-slate-500/60"
                   />
-                  <div className="pt-1">
-                    <div className="text-[10px] text-[var(--text-muted)] mb-1">
-                      Graded Code Examples (Click to insert):
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { code: 'DPW-JA-T1', label: 'Jebel Ali T1 (DP World)' },
-                        { code: 'DPW-JA-T2', label: 'Jebel Ali T2 (Mega Berth)' },
-                        { code: 'DPW-JA-T3', label: 'Jebel Ali T3 (Automated)' },
-                        { code: 'ADP-KP-T1', label: 'Khalifa Port T1 (AD Ports)' },
-                        { code: 'DPW-PR-T1', label: 'Port Rashid (Cruise & Cargo)' },
-                        { code: 'SHJ-KFK-T1', label: 'Khorfakkan Container T1' },
-                      ].map((ex) => (
-                        <button
-                          key={ex.code}
-                          type="button"
-                          onClick={() => {
-                            setTermCode(ex.code);
-                            if (!termName.trim()) setTermName(ex.label);
-                          }}
-                          className="px-2 py-0.5 rounded bg-[var(--bg-surface)] hover:bg-blue-600/20 text-slate-400 hover:text-blue-300 border border-[var(--border-subtle)] hover:border-blue-500/40 font-mono text-[10px] transition-all flex items-center gap-1 group"
-                        >
-                          <span className="font-bold text-slate-300 group-hover:text-blue-200">{ex.code}</span>
-                          <span className="text-slate-500 group-hover:text-blue-400">({ex.label})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -1539,398 +1487,25 @@ export default function DrayageTerminalMapPage() {
         </div>
       </Panel>
 
-      {/* Add / Edit Client Destination Warehouse Modal */}
-      {showWarehouseModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
-                <Warehouse className="w-4 h-4 text-emerald-400" />
-                {editingWarehouseId ? 'Edit Consignee Destination (Client Facility / Ramp)' : 'Add Consignee Destination (Client Facility / Ramp)'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowWarehouseModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Unified Consignee Destination / Facility / Warehouse Modal */}
+      <ConsigneeDestinationModal
+        isOpen={showWarehouseModal}
+        onClose={() => {
+          setShowWarehouseModal(false);
+          setSelectedWarehouseForEdit(null);
+        }}
+        initialData={selectedWarehouseForEdit}
+        clients={clients}
+        onClientCreated={(newCli) => {
+          setClients((prev) => [newCli as any, ...prev]);
+        }}
+        onSaved={async () => {
+          invalidateDrayageClientCache();
+          await loadData(true);
+          showToast('success', selectedWarehouseForEdit ? 'Consignee destination updated successfully' : 'Consignee destination created successfully');
+        }}
+      />
 
-            <form onSubmit={handleSaveWarehouse} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">
-                  Consignee Facility / Warehouse Name (Client) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newWhName}
-                  onChange={(e) => setNewWhName(e.target.value)}
-                  placeholder="e.g. Landmark Distribution Center NIP, Chalhoub DWC Hub"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Map to Client / Consignee *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddClientModal(true)}
-                    className="px-2 py-0.5 rounded bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
-                    title="Add new client in Client Master and map destination"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>+ Add Client</span>
-                  </button>
-                </div>
-                <SearchableSelect
-                  value={newWhCustomerId}
-                  onChange={(val) => {
-                    setNewWhCustomerId(val);
-                    const selClient = clients.find((c) => c.id === val);
-                    if (selClient) {
-                      setNewWhCustomerName(selClient.name);
-                      if (!newWhName || newWhName.includes('Hub') || newWhName.includes('Distribution') || newWhName.includes('Facility')) {
-                        setNewWhName(`${selClient.name} - Facility / Ramp`);
-                      }
-                      if (!newWhAddress && selClient.streetAddress) {
-                        setNewWhAddress(selClient.streetAddress);
-                      }
-                      if (!newWhContact && selClient.contactPerson) {
-                        setNewWhContact(selClient.contactPerson);
-                      }
-                      if (!newWhPhone && selClient.contactNo) {
-                        setNewWhPhone(selClient.contactNo);
-                      }
-                      if (selClient.city) {
-                        setNewWhZone(`${selClient.city} Industrial Corridor`);
-                      }
-                    } else {
-                      const cust = customers.find((c) => c.id === val);
-                      if (cust) setNewWhCustomerName(cust.name);
-                    }
-                  }}
-                  options={[
-                    { value: '', label: 'General / Shared Facility (Unassigned to specific client)' },
-                    ...clients.map((cli) => ({
-                      value: cli.id,
-                      label: `${cli.name} (${cli.code})`,
-                      sublabel: `${cli.city || 'UAE'} · Contact: ${cli.contactPerson || cli.contactNo || 'Client Master'}`,
-                    })),
-                    ...customers
-                      .filter((c) => !clients.some((cli) => cli.id === c.id))
-                      .map((c) => ({
-                        value: c.id,
-                        label: c.name,
-                        sublabel: 'Consignor Customer',
-                      })),
-                  ]}
-                  placeholder="Select Client from Client Master or Consignor..."
-                  searchPlaceholder="Type client name or code (e.g. Al-Futtaim, ALF-LOG)..."
-                  accent="emerald"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Industrial Zone / Area</label>
-                  <input
-                    type="text"
-                    value={newWhZone}
-                    onChange={(e) => setNewWhZone(e.target.value)}
-                    placeholder="e.g. JAFZA South, DIC, KEZAD, DIP"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Loading Ramps / Bays</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={newWhRamps}
-                    onChange={(e) => setNewWhRamps(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Coordinates with Plot on Map button */}
-              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-[var(--text-muted)] text-[11px] flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5 text-emerald-400" />
-                    GPS Ramp Coordinates
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleStartPlotWarehouse}
-                    className="px-2.5 py-1 rounded bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
-                  >
-                    <Compass className="w-3.5 h-3.5" />
-                    📍 Plot on Map
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-[var(--text-muted)]">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={newWhLat}
-                      onChange={(e) => setNewWhLat(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-[var(--text-muted)]">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={newWhLng}
-                      onChange={(e) => setNewWhLng(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Physical Street Address</label>
-                <input
-                  type="text"
-                  value={newWhAddress}
-                  onChange={(e) => setNewWhAddress(e.target.value)}
-                  placeholder="e.g. Plot S-204, Road 4, Dubai, UAE"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person</label>
-                  <input
-                    type="text"
-                    value={newWhContact}
-                    onChange={(e) => setNewWhContact(e.target.value)}
-                    placeholder="e.g. Warehouse Supervisor"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Phone</label>
-                  <input
-                    type="tel"
-                    value={newWhPhone}
-                    onChange={(e) => setNewWhPhone(e.target.value)}
-                    placeholder="+971 4 888 1234"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => setShowWarehouseModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingWh}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  {submittingWh ? 'Saving...' : editingWarehouseId ? 'Update Consignee Destination' : 'Save Consignee Destination'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    
-      {/* Quick Add Client Master Modal */}
-      {showAddClientModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
-              <div className="flex items-center gap-2.5">
-                <Building2 className="w-5 h-5 text-blue-400" />
-                <div>
-                  <h3 className="text-base font-bold text-[var(--text-main)]">
-                    Add New Client Master
-                  </h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    Create client account and immediately map destination to this client
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddClientModal(false)}
-                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateQuickClient} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-[var(--text-main)]">Client / Consignee Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newCliName}
-                    onChange={(e) => {
-                      setNewCliName(e.target.value);
-                      if (!newCliCode) {
-                        const words = e.target.value.trim().split(/\s+/);
-                        const suggested = words.length > 1
-                          ? `${words[0].slice(0, 3)}-${words[1].slice(0, 3)}`.toUpperCase()
-                          : e.target.value.slice(0, 6).toUpperCase();
-                        setNewCliCode(suggested);
-                      }
-                    }}
-                    placeholder="e.g. Al-Futtaim Logistics LLC, Landmark Group"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-main)]">Client Code *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newCliCode}
-                    onChange={(e) => setNewCliCode(e.target.value.toUpperCase())}
-                    placeholder="ALF-LOG"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Contact Person</label>
-                  <input
-                    type="text"
-                    value={newCliContact}
-                    onChange={(e) => setNewCliContact(e.target.value)}
-                    placeholder="e.g. Tariq Al-Mansoori"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Contact Phone / Mobile</label>
-                  <input
-                    type="tel"
-                    value={newCliPhone}
-                    onChange={(e) => setNewCliPhone(e.target.value)}
-                    placeholder="+971 50 123 4567"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Street Address</label>
-                  <input
-                    type="text"
-                    value={newCliAddress}
-                    onChange={(e) => setNewCliAddress(e.target.value)}
-                    placeholder="Plot S-204, Road 4, JAFZA South"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Emirate / City</label>
-                  <select
-                    value={newCliCity}
-                    onChange={(e) => setNewCliCity(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  >
-                    <option value="Dubai">Dubai</option>
-                    <option value="Abu Dhabi">Abu Dhabi</option>
-                    <option value="Sharjah">Sharjah</option>
-                    <option value="Ajman">Ajman</option>
-                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
-                    <option value="Fujairah">Fujairah</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">TRN (Tax Reg. No.)</label>
-                  <input
-                    type="text"
-                    value={newCliTrn}
-                    onChange={(e) => setNewCliTrn(e.target.value)}
-                    placeholder="100294820100003"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Trade License</label>
-                  <input
-                    type="text"
-                    value={newCliTradeLicense}
-                    onChange={(e) => setNewCliTradeLicense(e.target.value)}
-                    placeholder="CN-1029481"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Default Trip Rate (AED)</label>
-                  <input
-                    type="number"
-                    value={newCliTripAmount}
-                    onChange={(e) => setNewCliTripAmount(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Driver Allowance (AED)</label>
-                  <input
-                    type="number"
-                    value={newCliAllowance}
-                    onChange={(e) => setNewCliAllowance(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => setShowAddClientModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingCli}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>{submittingCli ? 'Creating...' : 'Create & Map to Destination'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-</div>
+    </div>
   );
 }
