@@ -421,17 +421,114 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         }
 
+        case 'create_client':
+        case 'save_client': {
+          const id = body.id ? String(body.id) : `cli-${crypto.randomUUID().slice(0, 10)}`;
+          const name = String(body.name ?? 'Enterprise Client').trim();
+          const code = String(body.code ?? 'CLI').trim().toUpperCase();
+          const contactPerson = body.contactPerson ? String(body.contactPerson).trim() : null;
+          const contactNo = body.contactNo ? String(body.contactNo).trim() : null;
+          const streetAddress = body.streetAddress ? String(body.streetAddress).trim() : null;
+          const city = String(body.city ?? 'Dubai').trim();
+          const trn = body.trn ? String(body.trn).trim() : null;
+          const tradeLicense = body.tradeLicense ? String(body.tradeLicense).trim() : null;
+          const defaultTripAmountAed = Number(body.defaultTripAmountAed ?? 1550);
+          const defaultDriverAllowanceAed = Number(body.defaultDriverAllowanceAed ?? 150);
+          const notes = body.notes ? String(body.notes).trim() : null;
+
+          await tx.$executeRawUnsafe(
+            `INSERT INTO logistics_drayage_clients (
+              id, tenant_id, name, code, contact_person, contact_no, street_address, city,
+              trn, trade_license, default_trip_amount_aed, default_driver_allowance_aed, notes, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+            ON CONFLICT (id) DO UPDATE
+               SET name = EXCLUDED.name,
+                   code = EXCLUDED.code,
+                   contact_person = EXCLUDED.contact_person,
+                   contact_no = EXCLUDED.contact_no,
+                   street_address = EXCLUDED.street_address,
+                   city = EXCLUDED.city,
+                   trn = EXCLUDED.trn,
+                   trade_license = EXCLUDED.trade_license,
+                   default_trip_amount_aed = EXCLUDED.default_trip_amount_aed,
+                   default_driver_allowance_aed = EXCLUDED.default_driver_allowance_aed,
+                   notes = EXCLUDED.notes,
+                   updated_at = NOW()`,
+            id,
+            tenantId,
+            name,
+            code,
+            contactPerson,
+            contactNo,
+            streetAddress,
+            city,
+            trn,
+            tradeLicense,
+            defaultTripAmountAed,
+            defaultDriverAllowanceAed,
+            notes,
+          );
+
+          // Sync to platform customers table for cross-module consistency
+          await tx.$executeRawUnsafe(
+            `INSERT INTO customers (
+              id, tenant_id, customer_code, name_en, mobile_number, address, city, trn, trade_license, customer_type, is_active, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'CORPORATE',true,NOW(),NOW())
+            ON CONFLICT (id) DO UPDATE
+               SET customer_code = EXCLUDED.customer_code,
+                   name_en = EXCLUDED.name_en,
+                   mobile_number = EXCLUDED.mobile_number,
+                   address = EXCLUDED.address,
+                   city = EXCLUDED.city,
+                   trn = EXCLUDED.trn,
+                   trade_license = EXCLUDED.trade_license,
+                   updated_at = NOW()`,
+            id,
+            tenantId,
+            code,
+            name,
+            contactNo,
+            streetAddress,
+            city,
+            trn,
+            tradeLicense,
+          ).catch(() => {});
+
+          return { ok: true, id };
+        }
+
+        case 'delete_client': {
+          await tx.$executeRawUnsafe(
+            `DELETE FROM logistics_drayage_clients WHERE id = $1 AND tenant_id = $2`,
+            String(body.id),
+            tenantId,
+          );
+          return { ok: true };
+        }
+
         case 'create_warehouse':
         case 'save_warehouse': {
           const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
+          const geofenceConfigured = Boolean(body.geofenceConfigured);
+          const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
+          const geofenceRadiusMeters = Number(body.geofenceRadiusMeters ?? 800);
+          const geofenceCoords = Array.isArray(body.geofenceCoordinates)
+            ? JSON.stringify(body.geofenceCoordinates)
+            : String(body.geofenceCoordinatesJson ?? '[]');
+          const tripAmountAed = body.tripAmountAed != null ? Number(body.tripAmountAed) : 1550;
+          const driverAllowanceAed = body.driverAllowanceAed != null ? Number(body.driverAllowanceAed) : 150;
+
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_warehouses (
-              id, tenant_id, customer_id, customer_name, name, zone, address, lat, lng, ramps_count, contact_person, contact_phone, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+              id, tenant_id, customer_id, customer_name, name, code, zone, address, lat, lng,
+              ramps_count, contact_person, contact_phone, geofence_configured, geofence_type,
+              geofence_radius_meters, geofence_coordinates_json, trip_amount_aed, driver_allowance_aed, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
             ON CONFLICT (id) DO UPDATE
                SET customer_id = EXCLUDED.customer_id,
                    customer_name = EXCLUDED.customer_name,
                    name = EXCLUDED.name,
+                   code = EXCLUDED.code,
                    zone = EXCLUDED.zone,
                    address = EXCLUDED.address,
                    lat = EXCLUDED.lat,
@@ -439,12 +536,19 @@ export async function POST(req: NextRequest) {
                    ramps_count = EXCLUDED.ramps_count,
                    contact_person = EXCLUDED.contact_person,
                    contact_phone = EXCLUDED.contact_phone,
+                   geofence_configured = EXCLUDED.geofence_configured,
+                   geofence_type = EXCLUDED.geofence_type,
+                   geofence_radius_meters = EXCLUDED.geofence_radius_meters,
+                   geofence_coordinates_json = EXCLUDED.geofence_coordinates_json,
+                   trip_amount_aed = EXCLUDED.trip_amount_aed,
+                   driver_allowance_aed = EXCLUDED.driver_allowance_aed,
                    updated_at = NOW()`,
             id,
             tenantId,
             body.customerId ? String(body.customerId) : null,
             String(body.customerName ?? 'Enterprise Shipper').trim(),
             String(body.name ?? 'Distribution Hub').trim(),
+            body.code ? String(body.code).trim().toUpperCase() : null,
             String(body.zone ?? 'JAFZA South').trim(),
             String(body.address ?? 'Jebel Ali Free Zone, Dubai').trim(),
             Number(body.lat ?? 24.9642),
@@ -452,7 +556,40 @@ export async function POST(req: NextRequest) {
             Number(body.rampsCount ?? 8),
             body.contactPerson ? String(body.contactPerson).trim() : null,
             body.contactPhone ? String(body.contactPhone).trim() : null,
+            geofenceConfigured,
+            geofenceType,
+            geofenceRadiusMeters,
+            geofenceCoords,
+            tripAmountAed,
+            driverAllowanceAed,
           );
+
+          if (geofenceConfigured) {
+            const gfId = `gf-wh-${id}`;
+            await tx.$executeRawUnsafe(
+              `INSERT INTO logistics_drayage_geofences (
+                id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+              ON CONFLICT (id) DO UPDATE
+                 SET name = EXCLUDED.name,
+                     type = EXCLUDED.type,
+                     center_lat = EXCLUDED.center_lat,
+                     center_lng = EXCLUDED.center_lng,
+                     radius_meters = EXCLUDED.radius_meters,
+                     coordinates_json = EXCLUDED.coordinates_json`,
+              gfId,
+              tenantId,
+              null,
+              String(body.customerName ?? 'Warehouse'),
+              `${String(body.name ?? 'Warehouse')} (Facility Geofence)`,
+              geofenceType,
+              Number(body.lat ?? 24.9642),
+              Number(body.lng ?? 55.0915),
+              geofenceRadiusMeters,
+              geofenceCoords,
+            );
+          }
+
           return { ok: true, id };
         }
 
@@ -462,6 +599,11 @@ export async function POST(req: NextRequest) {
             String(body.id),
             tenantId,
           );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM logistics_drayage_geofences WHERE id = $1 AND tenant_id = $2`,
+            `gf-wh-${String(body.id)}`,
+            tenantId,
+          ).catch(() => {});
           return { ok: true };
         }
 

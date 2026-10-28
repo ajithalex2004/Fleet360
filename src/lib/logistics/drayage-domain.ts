@@ -29,6 +29,7 @@ export interface DrayageWarehouse {
   customerId: string | null;
   customerName: string;
   name: string;
+  code?: string | null;
   zone: string;
   address: string;
   lat: number;
@@ -36,6 +37,32 @@ export interface DrayageWarehouse {
   rampsCount: number;
   contactPerson: string | null;
   contactPhone: string | null;
+  geofenceConfigured?: boolean;
+  geofenceType?: 'CIRCLE' | 'POLYGON';
+  geofenceRadiusMeters?: number;
+  geofenceCoordinatesJson?: string;
+  tripAmountAed?: number | null;
+  driverAllowanceAed?: number | null;
+}
+
+export interface DrayageClient {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  contactPerson: string | null;
+  contactNo: string | null;
+  streetAddress: string | null;
+  city: string;
+  trn: string | null;
+  tradeLicense: string | null;
+  defaultTripAmountAed: number;
+  defaultDriverAllowanceAed: number;
+  notes: string | null;
+  warehouseCount: number;
+  warehouses?: DrayageWarehouse[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DrayageTrailer {
@@ -312,6 +339,24 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
   `);
 
   await safeDdl(db, `
+    CREATE TABLE IF NOT EXISTS logistics_drayage_clients (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      contact_person TEXT,
+      contact_no TEXT,
+      street_address TEXT,
+      city TEXT DEFAULT 'Dubai',
+      trn TEXT,
+      trade_license TEXT,
+      default_trip_amount_aed DOUBLE PRECISION NOT NULL DEFAULT 1550,
+      default_driver_allowance_aed DOUBLE PRECISION NOT NULL DEFAULT 150,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS logistics_drayage_warehouses (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -327,7 +372,15 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       contact_phone TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
+    );
+
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS code TEXT;
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_configured BOOLEAN DEFAULT false;
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_type TEXT DEFAULT 'CIRCLE';
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER DEFAULT 800;
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS geofence_coordinates_json TEXT DEFAULT '[]';
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS trip_amount_aed DOUBLE PRECISION DEFAULT 1550;
+    ALTER TABLE logistics_drayage_warehouses ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150;
   `);
 
   await safeDdl(db, `
@@ -660,6 +713,84 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
+  const cliCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
+    `SELECT COUNT(*) AS cnt FROM logistics_drayage_clients WHERE tenant_id = $1`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
+
+  if (Number(cliCountRows[0]?.cnt ?? 0) === 0) {
+    const defaultClients = [
+      {
+        id: `cli-al-futtaim-${tenantId.slice(0, 8)}`,
+        name: 'Al-Futtaim Logistics LLC',
+        code: 'ALF-LOG',
+        contactPerson: 'Tariq Al-Mansoori',
+        contactNo: '+971 50 482 9910',
+        streetAddress: 'Plot S-204, Road 4, JAFZA South',
+        city: 'Dubai',
+        trn: '100294820100003',
+        tradeLicense: 'CN-1029481',
+        defaultTripAmountAed: 1550,
+        defaultDriverAllowanceAed: 150,
+        notes: 'Priority FCL client. Direct gate delivery to JAFZA South Gate 5 ramp.',
+      },
+      {
+        id: `cli-landmark-${tenantId.slice(0, 8)}`,
+        name: 'Landmark Retail Distribution',
+        code: 'LMK-RET',
+        contactPerson: 'Saeed Al-Hashemi',
+        contactNo: '+971 52 819 3320',
+        streetAddress: 'Sector B, Street 14, National Industries Park (NIP)',
+        city: 'Dubai',
+        trn: '100882194000003',
+        tradeLicense: 'CN-2049182',
+        defaultTripAmountAed: 1600,
+        defaultDriverAllowanceAed: 160,
+        notes: 'High volume import accounts. Rapid turn-around required.',
+      },
+      {
+        id: `cli-chalhoub-${tenantId.slice(0, 8)}`,
+        name: 'Chalhoub Luxury Supply Chain',
+        code: 'CHB-LUX',
+        contactPerson: 'Nadia Haddad',
+        contactNo: '+971 55 301 7741',
+        streetAddress: 'Logistics District, Corridor 3, Dubai South (DWC)',
+        city: 'Dubai',
+        trn: '100492817000003',
+        tradeLicense: 'CN-3918274',
+        defaultTripAmountAed: 1750,
+        defaultDriverAllowanceAed: 180,
+        notes: 'Bonded transit clearance and temperature-controlled reefer cargo.',
+      },
+      {
+        id: `cli-adnoc-${tenantId.slice(0, 8)}`,
+        name: 'ADNOC Industrial Polymers',
+        code: 'ADN-POL',
+        contactPerson: 'Rashid Al-Nuaimi',
+        contactNo: '+971 50 912 4402',
+        streetAddress: 'Zone A12, Khalifa Economic Zones Abu Dhabi (KEZAD)',
+        city: 'Abu Dhabi',
+        trn: '100381920000003',
+        tradeLicense: 'CN-4819201',
+        defaultTripAmountAed: 2100,
+        defaultDriverAllowanceAed: 220,
+        notes: 'Heavy petrochemicals and polymer resins corridor to Khalifa Port.',
+      },
+    ];
+
+    for (const c of defaultClients) {
+      await db.$executeRawUnsafe(
+        `INSERT INTO logistics_drayage_clients (
+          id, tenant_id, name, code, contact_person, contact_no, street_address, city,
+          trn, trade_license, default_trip_amount_aed, default_driver_allowance_aed, notes, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+        ON CONFLICT (id) DO NOTHING`,
+        c.id, tenantId, c.name, c.code, c.contactPerson, c.contactNo, c.streetAddress, c.city,
+        c.trn, c.tradeLicense, c.defaultTripAmountAed, c.defaultDriverAllowanceAed, c.notes,
+      );
+    }
+  }
+
   const whCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_warehouses WHERE tenant_id = $1`,
     tenantId,
@@ -729,9 +860,14 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     for (const w of defaultWarehouses) {
       await db.$executeRawUnsafe(
         `INSERT INTO logistics_drayage_warehouses (
-          id, tenant_id, customer_id, customer_name, name, zone, address, lat, lng, ramps_count, contact_person, contact_phone
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-        ON CONFLICT (id) DO NOTHING`,
+          id, tenant_id, customer_id, customer_name, name, zone, address, lat, lng, ramps_count, contact_person, contact_phone,
+          geofence_configured, geofence_type, geofence_radius_meters, trip_amount_aed, driver_allowance_aed
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,'CIRCLE',800,1550,150)
+        ON CONFLICT (id) DO UPDATE
+           SET geofence_configured = true,
+               geofence_radius_meters = 800,
+               trip_amount_aed = 1550,
+               driver_allowance_aed = 150`,
         w.id, tenantId, w.customerId, w.customerName, w.name, w.zone, w.address, w.lat, w.lng, w.ramps, w.contact, w.phone,
       );
     }
@@ -1199,6 +1335,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const [
     terminalRows,
     warehouseRows,
+    clientRows,
     trailerRows,
     jobRows,
     containerRows,
@@ -1219,6 +1356,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       `SELECT * FROM logistics_drayage_warehouses WHERE tenant_id = $1 ORDER BY name ASC`,
       tenantId,
     ),
+    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_clients WHERE tenant_id = $1 ORDER BY name ASC`,
+      tenantId,
+    ).catch(() => []),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT * FROM logistics_drayage_trailers WHERE tenant_id = $1 ORDER BY plate_number ASC`,
       tenantId,
@@ -1324,6 +1465,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     customerId: r.customer_id ? String(r.customer_id) : null,
     customerName: String(r.customer_name),
     name: String(r.name),
+    code: r.code ? String(r.code) : null,
     zone: String(r.zone),
     address: String(r.address),
     lat: Number(r.lat ?? 24.9642),
@@ -1331,7 +1473,41 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     rampsCount: Number(r.ramps_count ?? 6),
     contactPerson: r.contact_person ? String(r.contact_person) : null,
     contactPhone: r.contact_phone ? String(r.contact_phone) : null,
+    geofenceConfigured: Boolean(r.geofence_configured),
+    geofenceType: (r.geofence_type === 'POLYGON' ? 'POLYGON' : 'CIRCLE') as 'CIRCLE' | 'POLYGON',
+    geofenceRadiusMeters: Number(r.geofence_radius_meters ?? 800),
+    geofenceCoordinatesJson: r.geofence_coordinates_json ? String(r.geofence_coordinates_json) : '[]',
+    tripAmountAed: r.trip_amount_aed != null ? Number(r.trip_amount_aed) : null,
+    driverAllowanceAed: r.driver_allowance_aed != null ? Number(r.driver_allowance_aed) : null,
   }));
+
+  // 2b. Clients (Client Master)
+  const clients: DrayageClient[] = (clientRows || []).map((r: any) => {
+    const clientId = String(r.id);
+    const clientName = String(r.name);
+    const mappedWhs = warehouses.filter(
+      (w) => w.customerId === clientId || (w.customerName && w.customerName.toLowerCase() === clientName.toLowerCase())
+    );
+    return {
+      id: clientId,
+      tenantId: String(r.tenant_id),
+      name: clientName,
+      code: String(r.code),
+      contactPerson: r.contact_person ? String(r.contact_person) : null,
+      contactNo: r.contact_no ? String(r.contact_no) : null,
+      streetAddress: r.street_address ? String(r.street_address) : null,
+      city: String(r.city ?? 'Dubai'),
+      trn: r.trn ? String(r.trn) : null,
+      tradeLicense: r.trade_license ? String(r.trade_license) : null,
+      defaultTripAmountAed: Number(r.default_trip_amount_aed ?? 1550),
+      defaultDriverAllowanceAed: Number(r.default_driver_allowance_aed ?? 150),
+      notes: r.notes ? String(r.notes) : null,
+      warehouseCount: mappedWhs.length,
+      warehouses: mappedWhs,
+      createdAt: r.created_at ? new Date(String(r.created_at)).toISOString() : new Date().toISOString(),
+      updatedAt: r.updated_at ? new Date(String(r.updated_at)).toISOString() : new Date().toISOString(),
+    };
+  });
 
   // 3. Trailers
   const trailers: DrayageTrailer[] = trailerRows.map((r: any) => ({
@@ -1708,6 +1884,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     vehicles,
     drivers,
     customers,
+    clients,
     allowances,
     geofences,
     statusLogs,
