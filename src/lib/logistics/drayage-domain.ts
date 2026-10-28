@@ -344,7 +344,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     WHERE code IN ('AEJEA-T1', 'AEJEA-T2', 'AEJEA-T3', 'AEKHL-T1', 'AEDXB-PR');
   `);
 
-  await safeDdl(db, `
+    await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_clients (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -361,8 +361,10 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
+    )
+  `);
 
+  await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_warehouses (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -378,8 +380,10 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       contact_phone TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
+    )
+  `);
 
+  await safeDdl(db, `
     ALTER TABLE logistics_drayage_warehouses
       ADD COLUMN IF NOT EXISTS code TEXT,
       ADD COLUMN IF NOT EXISTS geofence_configured BOOLEAN DEFAULT false,
@@ -387,7 +391,7 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER DEFAULT 800,
       ADD COLUMN IF NOT EXISTS geofence_coordinates_json TEXT DEFAULT '[]',
       ADD COLUMN IF NOT EXISTS trip_amount_aed DOUBLE PRECISION DEFAULT 1550,
-      ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150;
+      ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150
   `);
 
   await safeDdl(db, `
