@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle,
   Compass, Layers, Maximize2, X, Sliders, Check, Eye, Navigation, RefreshCw,
-  Hexagon, Circle as CircleIcon, Warehouse, Info,
+  Hexagon, Circle as CircleIcon, Warehouse, Info, Undo2,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -12,7 +12,6 @@ import {
   type GMapsMarker,
   type GMapsCircle,
   type GMapsPolygon,
-  type GMapsDrawingManager,
   type GMapsInfoWindow,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
@@ -109,7 +108,6 @@ export default function DrayageGeofenceMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GMapsMap | null>(null);
   const ctorsRef = useRef<GoogleCtors | null>(null);
-  const drawingManagerRef = useRef<GMapsDrawingManager | null>(null);
   const infoWindowRef = useRef<GMapsInfoWindow | null>(null);
 
   // Overlays & Markers
@@ -118,9 +116,17 @@ export default function DrayageGeofenceMap({
   const geofenceOverlaysRef = useRef<Array<GMapsCircle | GMapsPolygon>>([]);
   const plotMarkerRef = useRef<GMapsMarker | null>(null);
 
+  // Native Drawing Overlays (Bypasses deprecated DrawingManager)
+  const draftCircleRef = useRef<GMapsCircle | null>(null);
+  const draftPolygonRef = useRef<GMapsPolygon | null>(null);
+  const polygonVerticesRef = useRef<Array<{ lat: number; lng: number }>>([]);
+  const polygonMarkersRef = useRef<GMapsMarker[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drawMode, setDrawMode] = useState<'CIRCLE' | 'POLYGON' | null>(null);
+  const [circleDraft, setCircleDraft] = useState<{ centerLat: number; centerLng: number; radiusMeters: number } | null>(null);
+  const [polygonCount, setPolygonCount] = useState<number>(0);
 
   // Quick Save Modal after Drawing on Google Maps
   const [drawnDraft, setDrawnDraft] = useState<{
@@ -134,7 +140,182 @@ export default function DrayageGeofenceMap({
   const [draftTerminalId, setDraftTerminalId] = useState(selectedTerminalId || terminals[0]?.id || '');
   const [savingDraft, setSavingDraft] = useState(false);
 
-  // 1. Initialize Google Maps & DrawingManager
+  // Keep refs synchronized for map click handlers
+  const drawModeRef = useRef<'CIRCLE' | 'POLYGON' | null>(drawMode);
+  drawModeRef.current = drawMode;
+
+  const plotModeRef = useRef<PlotModeState | null>(plotMode || null);
+  plotModeRef.current = plotMode || null;
+
+  // Cleanup native drawing drafts
+  const cleanupDraftCircle = useCallback(() => {
+    if (draftCircleRef.current) {
+      draftCircleRef.current.setMap(null);
+      draftCircleRef.current = null;
+    }
+    setCircleDraft(null);
+  }, []);
+
+  const cleanupDraftPolygon = useCallback(() => {
+    if (draftPolygonRef.current) {
+      draftPolygonRef.current.setMap(null);
+      draftPolygonRef.current = null;
+    }
+    polygonMarkersRef.current.forEach((m) => m.setMap(null));
+    polygonMarkersRef.current = [];
+    polygonVerticesRef.current = [];
+    setPolygonCount(0);
+  }, []);
+
+  // When drawMode changes, clean up inactive drafts
+  useEffect(() => {
+    if (drawMode !== 'CIRCLE') {
+      cleanupDraftCircle();
+    }
+    if (drawMode !== 'POLYGON') {
+      cleanupDraftPolygon();
+    }
+  }, [drawMode, cleanupDraftCircle, cleanupDraftPolygon]);
+
+  // Native Circle Click Handler
+  const handleMapClickCircle = useCallback((lat: number, lng: number) => {
+    const ctors = ctorsRef.current;
+    const map = mapRef.current;
+    if (!ctors || !map) return;
+
+    if (draftCircleRef.current) {
+      draftCircleRef.current.setCenter({ lat, lng });
+      const r = Math.round(draftCircleRef.current.getRadius());
+      setCircleDraft({ centerLat: lat, centerLng: lng, radiusMeters: r });
+      return;
+    }
+
+    const initialRadius = 500;
+    const circle = new ctors.Circle({
+      map,
+      center: { lat, lng },
+      radius: initialRadius,
+      editable: true,
+      draggable: true,
+      strokeColor: '#38bdf8',
+      strokeWeight: 2.5,
+      strokeOpacity: 0.9,
+      fillColor: '#0284c7',
+      fillOpacity: 0.25,
+      zIndex: 100,
+    });
+
+    const updateStats = () => {
+      const c = circle.getCenter();
+      const r = Math.round(circle.getRadius());
+      if (c) {
+        setCircleDraft({
+          centerLat: Number(c.lat().toFixed(6)),
+          centerLng: Number(c.lng().toFixed(6)),
+          radiusMeters: r,
+        });
+      }
+    };
+
+    circle.addListener('radius_changed', updateStats);
+    circle.addListener('center_changed', updateStats);
+
+    draftCircleRef.current = circle;
+    setCircleDraft({ centerLat: lat, centerLng: lng, radiusMeters: initialRadius });
+  }, []);
+
+  // Confirm Circle Draft & Open Save Modal
+  const handleConfirmCircleDraft = useCallback(() => {
+    if (!circleDraft) return;
+    setDrawnDraft({
+      shape: 'CIRCLE',
+      centerLat: circleDraft.centerLat,
+      centerLng: circleDraft.centerLng,
+      radiusMeters: circleDraft.radiusMeters,
+    });
+    setDraftName(`Port Geofence Zone (${circleDraft.radiusMeters}m)`);
+    cleanupDraftCircle();
+    setDrawMode(null);
+  }, [circleDraft, cleanupDraftCircle]);
+
+  // Native Polygon Click Handler
+  const handleMapClickPolygon = useCallback((lat: number, lng: number) => {
+    const ctors = ctorsRef.current;
+    const map = mapRef.current;
+    if (!ctors || !map) return;
+
+    const newPoint = { lat, lng };
+    const updated = [...polygonVerticesRef.current, newPoint];
+    polygonVerticesRef.current = updated;
+    setPolygonCount(updated.length);
+
+    // Place a visible vertex pin
+    const marker = new ctors.Marker({
+      position: newPoint,
+      map,
+      icon: {
+        path: ctors.SymbolPath.CIRCLE,
+        scale: 4.5,
+        fillColor: '#c084fc',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 1.5,
+      },
+    });
+    polygonMarkersRef.current.push(marker);
+
+    // Render / update polygon boundary
+    if (!draftPolygonRef.current) {
+      draftPolygonRef.current = new ctors.Polygon({
+        map,
+        paths: updated,
+        strokeColor: '#c084fc',
+        strokeWeight: 2.5,
+        strokeOpacity: 0.9,
+        fillColor: '#9333ea',
+        fillOpacity: 0.25,
+        clickable: false,
+        zIndex: 100,
+      });
+    } else {
+      draftPolygonRef.current.setPath(updated);
+    }
+  }, []);
+
+  // Undo Last Polygon Point
+  const handleUndoPolygonPoint = useCallback(() => {
+    if (polygonVerticesRef.current.length === 0) return;
+    polygonVerticesRef.current.pop();
+    const lastMarker = polygonMarkersRef.current.pop();
+    if (lastMarker) lastMarker.setMap(null);
+
+    setPolygonCount(polygonVerticesRef.current.length);
+    if (draftPolygonRef.current) {
+      draftPolygonRef.current.setPath(polygonVerticesRef.current);
+    }
+  }, []);
+
+  // Complete Polygon Draft & Open Save Modal
+  const handleCompletePolygonDraft = useCallback(() => {
+    const points = polygonVerticesRef.current;
+    if (points.length < 3) return;
+
+    const avgLat = Number((points.reduce((sum, p) => sum + p.lat, 0) / points.length).toFixed(6));
+    const avgLng = Number((points.reduce((sum, p) => sum + p.lng, 0) / points.length).toFixed(6));
+
+    setDrawnDraft({
+      shape: 'POLYGON',
+      centerLat: avgLat,
+      centerLng: avgLng,
+      radiusMeters: 1000,
+      coordinates: points,
+    });
+    setDraftName(`Polygon Ramp Zone (${points.length} Vertices)`);
+    cleanupDraftPolygon();
+    setDrawMode(null);
+  }, [cleanupDraftPolygon]);
+
+  // 1. Initialize Google Maps
   useEffect(() => {
     let cancelled = false;
 
@@ -182,80 +363,31 @@ export default function DrayageGeofenceMap({
           // InfoWindow
           infoWindowRef.current = new ctors.InfoWindow();
 
-          // Drawing Manager
-          const dm = new ctors.DrawingManager({
-            drawingMode: null,
-            drawingControl: false,
-            circleOptions: {
-              strokeColor: '#38bdf8',
-              strokeWeight: 2.5,
-              strokeOpacity: 0.9,
-              fillColor: '#0284c7',
-              fillOpacity: 0.25,
-              clickable: false,
-              editable: false,
-            },
-            polygonOptions: {
-              strokeColor: '#c084fc',
-              strokeWeight: 2.5,
-              strokeOpacity: 0.9,
-              fillColor: '#9333ea',
-              fillOpacity: 0.25,
-              clickable: false,
-              editable: false,
-            },
-          });
-          dm.setMap(map);
-          drawingManagerRef.current = dm;
-
-          // Drawing Listeners
-          dm.addListener('circlecomplete', (circle: any) => {
-            const center = circle.getCenter();
-            const radius = Math.round(circle.getRadius());
-            circle.setMap(null); // Remove raw overlay, we'll open draft save dialog
-            dm.setDrawingMode(null);
-            setDrawMode(null);
-
-            setDrawnDraft({
-              shape: 'CIRCLE',
-              centerLat: center.lat(),
-              centerLng: center.lng(),
-              radiusMeters: radius,
-            });
-            setDraftName(`Port OCR Geofence (${radius}m)`);
-          });
-
-          dm.addListener('polygoncomplete', (polygon: any) => {
-            const path = polygon.getPath().getArray().map((p: any) => ({
-              lat: p.lat(),
-              lng: p.lng(),
-            }));
-            polygon.setMap(null);
-            dm.setDrawingMode(null);
-            setDrawMode(null);
-
-            if (path.length > 0) {
-              const avgLat = path.reduce((sum: number, p: any) => sum + p.lat, 0) / path.length;
-              const avgLng = path.reduce((sum: number, p: any) => sum + p.lng, 0) / path.length;
-              setDrawnDraft({
-                shape: 'POLYGON',
-                centerLat: avgLat,
-                centerLng: avgLng,
-                radiusMeters: 1000,
-                coordinates: path,
-              });
-              setDraftName(`Polygon Ramp Zone (${path.length} Vertices)`);
-            }
-          });
-
-          // Click on map to plot coordinates when plotMode is active
+          // Unified Map Click Handler (Supports Plot Mode + Native Circle & Polygon Drawing)
           map.addListener('click', (e: any) => {
-            if (e?.latLng) {
-              const lat = Number(e.latLng.lat().toFixed(6));
-              const lng = Number(e.latLng.lng().toFixed(6));
+            if (!e?.latLng) return;
+            const lat = Number(e.latLng.lat().toFixed(6));
+            const lng = Number(e.latLng.lng().toFixed(6));
+
+            // Case A: Plot Mode (Target Pin Relocation)
+            if (plotModeRef.current?.active) {
               if (plotMarkerRef.current) {
                 plotMarkerRef.current.setPosition({ lat, lng });
               }
+              plotModeRef.current.onPlotSelect(lat, lng);
+              return;
+            }
+
+            // Case B: Native Circle Drawing Mode
+            if (drawModeRef.current === 'CIRCLE') {
+              handleMapClickCircle(lat, lng);
+              return;
+            }
+
+            // Case C: Native Polygon Drawing Mode
+            if (drawModeRef.current === 'POLYGON') {
+              handleMapClickPolygon(lat, lng);
+              return;
             }
           });
         }
@@ -271,24 +403,9 @@ export default function DrayageGeofenceMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [handleMapClickCircle, handleMapClickPolygon]);
 
-  // 2. Sync Drawing Mode Toggle
-  useEffect(() => {
-    const dm = drawingManagerRef.current;
-    const ctors = ctorsRef.current;
-    if (!dm || !ctors) return;
-
-    if (drawMode === 'CIRCLE') {
-      dm.setDrawingMode(ctors.OverlayType.CIRCLE);
-    } else if (drawMode === 'POLYGON') {
-      dm.setDrawingMode(ctors.OverlayType.POLYGON);
-    } else {
-      dm.setDrawingMode(null);
-    }
-  }, [drawMode]);
-
-  // 3. Render Existing Geofences (Circles & Polygons) on Google Maps
+  // 2. Render Existing Geofences (Circles & Polygons) on Google Maps
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -348,61 +465,58 @@ export default function DrayageGeofenceMap({
       }
 
       // Default: Circular Perimeter
-      if (Number.isFinite(gf.centerLat) && Number.isFinite(gf.centerLng)) {
-        const circle = new ctors.Circle({
-          map,
-          center: { lat: gf.centerLat, lng: gf.centerLng },
-          radius: gf.radiusMeters || 1500,
-          strokeColor,
-          strokeWeight,
-          strokeOpacity: 0.9,
-          fillColor,
-          fillOpacity,
-          clickable: true,
-        });
+      const circle = new ctors.Circle({
+        map,
+        center: { lat: gf.centerLat, lng: gf.centerLng },
+        radius: gf.radiusMeters || 1000,
+        strokeColor,
+        strokeWeight,
+        strokeOpacity: 0.85,
+        fillColor,
+        fillOpacity,
+        clickable: true,
+      });
 
-        circle.addListener('click', () => {
-          if (infoWindowRef.current) {
-            infoWindowRef.current.setContent(`
-              <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
-                <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${gf.name}</strong>
-                <span style="font-size: 11px; color: #0284c7; font-weight: bold;">⚪ Circular Perimeter</span>
-                <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Radius: ${(gf.radiusMeters || 1500).toLocaleString()}m</div>
-                <div style="font-size: 11px; color: #475569; margin-top: 2px;">Linked: ${gf.terminalName}</div>
-              </div>
-            `);
-            infoWindowRef.current.setPosition({ lat: gf.centerLat, lng: gf.centerLng });
-            infoWindowRef.current.open({ map });
-          }
-        });
+      circle.addListener('click', () => {
+        if (infoWindowRef.current) {
+          infoWindowRef.current.setContent(`
+            <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
+              <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${gf.name}</strong>
+              <span style="font-size: 11px; color: #0284c7; font-weight: bold;">⚪ Circular Perimeter (${gf.radiusMeters}m)</span>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Linked: ${gf.terminalName}</div>
+              <div style="font-size: 11px; color: #475569; margin-top: 2px;">Coord: ${gf.centerLat.toFixed(4)}, ${gf.centerLng.toFixed(4)}</div>
+            </div>
+          `);
+          infoWindowRef.current.setPosition({ lat: gf.centerLat, lng: gf.centerLng });
+          infoWindowRef.current.open({ map });
+        }
+      });
 
-        geofenceOverlaysRef.current.push(circle);
-      }
+      geofenceOverlaysRef.current.push(circle);
     });
   }, [geofences, activeEditGeofenceId]);
 
-  // 4. Render Terminal Markers on Google Maps
+  // 3. Render Port Terminal Markers
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
     if (!ctors || !map) return;
 
+    // Clear old terminal markers
     terminalMarkersRef.current.forEach((m) => m.setMap(null));
     terminalMarkersRef.current = [];
 
-    terminals.forEach((t) => {
-      if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return;
-      const isSelected = t.id === selectedTerminalId;
+    terminals.forEach((term) => {
+      const isSelected = term.id === selectedTerminalId;
 
-      // Google Maps Marker
       const marker = new ctors.Marker({
-        position: { lat: t.lat, lng: t.lng },
+        position: { lat: term.lat, lng: term.lng },
         map,
-        title: `${t.name} (${t.code})`,
+        title: `${term.code} - ${term.name}`,
         icon: {
           path: ctors.SymbolPath.CIRCLE,
-          scale: isSelected ? 12 : 9,
-          fillColor: isSelected ? '#3b82f6' : '#1d4ed8',
+          scale: isSelected ? 10 : 8,
+          fillColor: isSelected ? '#3b82f6' : '#2563eb',
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 2.5,
@@ -410,16 +524,16 @@ export default function DrayageGeofenceMap({
       });
 
       marker.addListener('click', () => {
-        onSelectTerminal?.(t);
+        if (onSelectTerminal) onSelectTerminal(term);
         if (infoWindowRef.current) {
           infoWindowRef.current.setContent(`
             <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 240px;">
-              <strong style="font-size: 13px; display: block; color: #1e3a8a;">⚓ ${t.name}</strong>
-              <div style="display: flex; gap: 4px; margin: 4px 0;">
-                <span style="background: #dbeafe; color: #1d4ed8; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">${t.code}</span>
-                <span style="background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 10px;">${t.emirate}</span>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <span style="background: #2563eb; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;">${term.code}</span>
+                <strong style="font-size: 13px;">${term.name}</strong>
               </div>
-              <div style="font-size: 11px; color: #64748b;">${t.portName} · Radius: ${t.geofenceRadiusMeters}m</div>
+              <div style="font-size: 11px; color: #64748b;">${term.portName} · ${term.emirate}</div>
+              <div style="font-size: 11px; color: #475569; margin-top: 4px;">Geofence Radius: ${term.geofenceRadiusMeters}m</div>
             </div>
           `);
           infoWindowRef.current.open({ map, anchor: marker });
@@ -430,7 +544,7 @@ export default function DrayageGeofenceMap({
     });
   }, [terminals, selectedTerminalId, onSelectTerminal]);
 
-  // 5. Render Warehouse / Consignee Markers on Google Maps
+  // 4. Render Consignee Warehouse Markers
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -440,31 +554,32 @@ export default function DrayageGeofenceMap({
     warehouseMarkersRef.current = [];
 
     warehouses.forEach((wh) => {
-      if (!wh.lat || !wh.lng || !Number.isFinite(wh.lat) || !Number.isFinite(wh.lng)) return;
+      if (!wh.lat || !wh.lng) return;
 
       const marker = new ctors.Marker({
         position: { lat: wh.lat, lng: wh.lng },
         map,
-        title: wh.name,
+        title: `🏢 ${wh.name} (${wh.zone})`,
         icon: {
           path: ctors.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: '#10b981', // Emerald
-          fillOpacity: 1,
+          scale: 7,
+          fillColor: '#10b981',
+          fillOpacity: 0.95,
           strokeColor: '#ffffff',
           strokeWeight: 2,
         },
       });
 
       marker.addListener('click', () => {
-        onSelectWarehouse?.(wh);
+        if (onSelectWarehouse) onSelectWarehouse(wh);
         if (infoWindowRef.current) {
           infoWindowRef.current.setContent(`
             <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 240px;">
-              <strong style="font-size: 13px; display: block; color: #065f46;">🏢 ${wh.name}</strong>
-              <div style="font-size: 11px; color: #059669; font-weight: 600; margin-top: 2px;">${wh.zone}</div>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${wh.address || 'Consignee Ramp Facility'}</div>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Linked Shipper: ${wh.customerName || 'All Customers'}</div>
+              <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${wh.name}</strong>
+              <div style="font-size: 11px; color: #059669; font-weight: bold;">🏢 Consignee Delivery Facility</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Zone: ${wh.zone}</div>
+              ${wh.customerName ? `<div style="font-size: 11px; color: #475569;">Client: ${wh.customerName}</div>` : ''}
+              ${wh.address ? `<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">${wh.address}</div>` : ''}
             </div>
           `);
           infoWindowRef.current.open({ map, anchor: marker });
@@ -475,18 +590,15 @@ export default function DrayageGeofenceMap({
     });
   }, [warehouses, onSelectWarehouse]);
 
-  // 6. Handle focusLocation smoothly on Google Maps
+  // 5. Handle Focus Location Changes (Pan / Zoom to selected geofence or terminal)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focusLocation) return;
-    const { lat, lng, zoom } = focusLocation;
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      map.panTo({ lat, lng });
-      map.setZoom(zoom || 14);
-    }
+    map.panTo({ lat: focusLocation.lat, lng: focusLocation.lng });
+    map.setZoom(focusLocation.zoom || 14);
   }, [focusLocation]);
 
-  // 7. Interactive Google Maps Plot Mode
+  // 6. Handle Plot on Map Mode (Draggable Green Pin)
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
@@ -603,7 +715,7 @@ export default function DrayageGeofenceMap({
           </div>
         </div>
 
-        {/* Right: Google Maps Drawing Tools (Circle & Polygon) & Fit UAE */}
+        {/* Right: Google Maps Drawing Tools (Native Circle & Polygon) & Fit UAE */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -643,24 +755,87 @@ export default function DrayageGeofenceMap({
         </div>
       </div>
 
-      {/* Active Drawing Instructions Banner */}
-      {drawMode && (
-        <div className="absolute top-16 left-3 right-3 z-30 bg-blue-950/95 backdrop-blur-md border border-blue-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex items-center justify-between text-white animate-in fade-in slide-in-from-top-2">
+      {/* Active Circle Drawing Banner */}
+      {drawMode === 'CIRCLE' && (
+        <div className="absolute top-16 left-3 right-3 z-30 bg-blue-950/95 backdrop-blur-md border border-blue-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
             <span className="text-xs font-bold text-blue-200">
-              {drawMode === 'CIRCLE'
-                ? '⚪ Click & drag on Google Maps to draw circular perimeter'
-                : '⬡ Click points around the yard to draw polygon boundaries, click first point to close'}
+              {circleDraft
+                ? `⚪ Drag center or edge handles to adjust geofence (${circleDraft.radiusMeters}m)`
+                : '⚪ Click anywhere on Google Maps to place circular perimeter'}
+            </span>
+            {circleDraft && (
+              <span className="text-[11px] font-mono text-blue-300">
+                ({circleDraft.centerLat.toFixed(5)}, {circleDraft.centerLng.toFixed(5)}) · {circleDraft.radiusMeters}m
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {circleDraft && (
+              <button
+                type="button"
+                onClick={handleConfirmCircleDraft}
+                className="px-3.5 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Confirm & Save Geofence
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDrawMode(null)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active Polygon Drawing Banner */}
+      {drawMode === 'POLYGON' && (
+        <div className="absolute top-16 left-3 right-3 z-30 bg-purple-950/95 backdrop-blur-md border border-purple-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
+            <span className="text-xs font-bold text-purple-200">
+              ⬡ Click on Google Maps to add polygon corners:
+            </span>
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/40 text-purple-200">
+              {polygonCount} {polygonCount === 1 ? 'vertex' : 'vertices'} {polygonCount < 3 ? '(min 3 required)' : '✓'}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setDrawMode(null)}
-            className="px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
-          >
-            Cancel Drawing
-          </button>
+
+          <div className="flex items-center gap-2">
+            {polygonCount > 0 && (
+              <button
+                type="button"
+                onClick={handleUndoPolygonPoint}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-600 flex items-center gap-1"
+              >
+                <Undo2 className="w-3 h-3" />
+                Undo Point
+              </button>
+            )}
+            {polygonCount >= 3 && (
+              <button
+                type="button"
+                onClick={handleCompletePolygonDraft}
+                className="px-3.5 py-1 rounded-lg bg-purple-500 hover:bg-purple-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Complete & Save Polygon
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDrawMode(null)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -735,48 +910,55 @@ export default function DrayageGeofenceMap({
 
             <form onSubmit={handleSaveDraft} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-slate-400 font-semibold">Terminal / Facility Link</label>
-                <select
-                  value={draftTerminalId}
-                  onChange={(e) => setDraftTerminalId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
-                >
-                  {terminals.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-400 font-semibold">Geofence Name *</label>
+                <label className="text-[11px] font-semibold text-slate-300">Geofence Name *</label>
                 <input
                   type="text"
                   required
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. Jebel Ali T1 Automated OCR Gate"
+                  placeholder="e.g. DP World T1 OCR Gate In"
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700 font-mono text-[11px]">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Type</span>
-                  <strong className="text-blue-400 font-sans">
-                    {drawnDraft.shape === 'CIRCLE' ? '⚪ Circular Perimeter' : '⬡ Polygon Ramp Zone'}
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">
-                    {drawnDraft.shape === 'CIRCLE' ? 'Radius' : 'Vertices'}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">Linked Port Terminal</label>
+                <select
+                  value={draftTerminalId}
+                  onChange={(e) => setDraftTerminalId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
+                >
+                  <option value="">General / Consignee Hub</option>
+                  {terminals.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.code} - {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700 space-y-1 text-[11px] text-slate-300">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Shape:</span>
+                  <span className="font-bold text-white">
+                    {drawnDraft.shape === 'CIRCLE' ? '⚪ Circular Perimeter' : '⬡ Multi-Point Polygon'}
                   </span>
-                  <strong className="text-emerald-400">
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Center:</span>
+                  <span className="font-mono text-white">
+                    {drawnDraft.centerLat.toFixed(5)}, {drawnDraft.centerLng.toFixed(5)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">
+                    {drawnDraft.shape === 'CIRCLE' ? 'Radius:' : 'Boundary Points:'}
+                  </span>
+                  <span className="font-bold text-blue-400">
                     {drawnDraft.shape === 'CIRCLE'
-                      ? `${drawnDraft.radiusMeters}m`
-                      : `${drawnDraft.coordinates?.length || 0} Points`}
-                  </strong>
+                      ? `${drawnDraft.radiusMeters} meters`
+                      : `${drawnDraft.coordinates?.length || 0} vertices`}
+                  </span>
                 </div>
               </div>
 
@@ -784,15 +966,16 @@ export default function DrayageGeofenceMap({
                 <button
                   type="button"
                   onClick={() => setDrawnDraft(null)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:text-white"
                 >
                   Discard
                 </button>
                 <button
                   type="submit"
                   disabled={savingDraft}
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-md disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold disabled:opacity-50 flex items-center gap-1.5"
                 >
+                  <Check className="w-3.5 h-3.5" />
                   {savingDraft ? 'Saving...' : 'Save Geofence'}
                 </button>
               </div>

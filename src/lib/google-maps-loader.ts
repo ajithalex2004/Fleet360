@@ -204,6 +204,17 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
         'Google Maps bootstrap missing after install — check the Network tab for the maps.googleapis.com request and the browser Console for a specific …MapError from Google.',
       );
     }
+    // In Google Maps JS API v3.65+, the drawing library and DrawingManager
+    // were officially deprecated and removed. We catch any failure so the
+    // rest of Google Maps (core, maps, marker, geocoding, places, geometry)
+    // loads without throwing.
+    const drawingLibPromise = bootstrap
+      .importLibrary('drawing')
+      .catch((err) => {
+        console.warn('Google Maps drawing library unavailable or deprecated in v3.65+:', err?.message || err);
+        return null;
+      });
+
     const [coreLib, mapsLib, markerLib, geocodingLib, placesLib, geometryLib, drawingLib] = await Promise.all([
       bootstrap.importLibrary('core'),
       bootstrap.importLibrary('maps'),
@@ -211,8 +222,28 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       bootstrap.importLibrary('geocoding'),
       bootstrap.importLibrary('places'),
       bootstrap.importLibrary('geometry'),
-      bootstrap.importLibrary('drawing'),
+      drawingLibPromise,
     ]);
+
+    class FallbackDrawingManager implements GMapsDrawingManager {
+      private map: GMapsMap | null = null;
+      private mode: string | null = null;
+      constructor(_opts?: object) {}
+      setMap(map: GMapsMap | null) { this.map = map; }
+      setDrawingMode(mode: string | null) { this.mode = mode; }
+      setOptions(_opts: object) {}
+      addListener(_event: string, _cb: (payload: unknown) => void) {}
+    }
+
+    const DrawingManagerCtor = (drawingLib && (drawingLib as any).DrawingManager) || FallbackDrawingManager;
+    const OverlayTypeObj = (drawingLib && (drawingLib as any).OverlayType) || {
+      CIRCLE: 'circle',
+      POLYGON: 'polygon',
+      MARKER: 'marker',
+      POLYLINE: 'polyline',
+      RECTANGLE: 'rectangle',
+    };
+
     return {
       Map:            mapsLib.Map,
       Polyline:       mapsLib.Polyline,
@@ -226,8 +257,8 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       Geocoder:       geocodingLib.Geocoder,
       Autocomplete:   placesLib.Autocomplete,
       decodePath:     geometryLib.encoding.decodePath,
-      DrawingManager: drawingLib.DrawingManager,
-      OverlayType:    drawingLib.OverlayType,
+      DrawingManager: DrawingManagerCtor as any,
+      OverlayType:    OverlayTypeObj,
     };
   })();
 
