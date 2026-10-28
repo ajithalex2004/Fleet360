@@ -171,6 +171,62 @@ export async function POST(req: NextRequest) {
           return { ok: true, bogieRef, count: jobIds.length };
         }
 
+        case 'batch_dispatch': {
+          const dispatches: Array<{
+            type?: 'BOGIE' | 'STREET_TURN' | 'SINGLE';
+            jobIds: string[];
+            vehicleId: string;
+            vehiclePlate: string;
+            driverId: string;
+            driverName: string;
+            trailerId: string;
+            trailerPlate: string;
+            tokenNumber?: string;
+            notes?: string;
+          }> = Array.isArray(body.dispatches) ? body.dispatches : [];
+
+          if (dispatches.length === 0) throw new Error('No dispatches provided in batch');
+
+          let assignedCount = 0;
+          for (const d of dispatches) {
+            const jobIds = Array.isArray(d.jobIds) ? d.jobIds.map(String) : [];
+            if (jobIds.length === 0) continue;
+
+            const token = d.tokenNumber || (d.type === 'BOGIE' ? `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}` : `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`);
+
+            for (const jId of jobIds) {
+              const noteText = d.notes || (d.type === 'BOGIE' ? `Dual-20FT Bogie Combo (${token})` : d.type === 'STREET_TURN' ? `Terminal Street Turn Pair (${token})` : undefined);
+              if (noteText) {
+                await tx.$executeRawUnsafe(
+                  `UPDATE logistics_drayage_jobs
+                      SET notes = COALESCE(notes || ' | ', '') || $3,
+                          priority = CASE WHEN priority = 'URGENT' THEN 'URGENT' ELSE 'HIGH' END,
+                          updated_at = NOW()
+                    WHERE id = $1 AND tenant_id = $2`,
+                  jId,
+                  tenantId,
+                  noteText,
+                );
+              }
+
+              await assignDrayageJob(tx, {
+                tenantId,
+                jobId: jId,
+                vehicleId: String(d.vehicleId),
+                vehiclePlate: String(d.vehiclePlate ?? 'DXB-TRACTOR'),
+                driverId: String(d.driverId),
+                driverName: String(d.driverName ?? 'Assigned Driver'),
+                trailerId: String(d.trailerId),
+                trailerPlate: String(d.trailerPlate ?? 'DXB-TR-9901'),
+                tokenNumber: token,
+              });
+              assignedCount++;
+            }
+          }
+
+          return { ok: true, count: assignedCount, batches: dispatches.length };
+        }
+
         case 'update_status': {
           return updateDrayageJobExecutionStatus(tx, {
             tenantId,
