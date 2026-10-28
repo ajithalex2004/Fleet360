@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   PlusCircle, Package, Trash2, Plus, CheckCircle2, AlertTriangle, RefreshCw,
   Building2, MapPin, ShieldCheck, DollarSign, ArrowRight, FileText, UploadCloud,
-  Warehouse, X, User, Phone, Mail,
+  Warehouse, X, User, Phone, Mail, Calendar, Clock,
 } from 'lucide-react';
 import { PageHeader, Panel, KpiCard } from '@/components/ui/page-theme';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/SearchableSelect';
@@ -697,63 +697,75 @@ export default function DrayageCreateJobsPage() {
             {containers.map((c, index) => (
               <div
                 key={c.id}
-                className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-3"
+                className="p-4 sm:p-5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-4 shadow-sm"
               >
-                <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-                  <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-blue-600/15 text-blue-400 flex items-center justify-center text-[10px]">
+                {/* Header: Container Unit & Quick Actions */}
+                <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-blue-600/15 text-blue-400 font-bold flex items-center justify-center text-xs">
                       {index + 1}
                     </span>
-                    Container #{index + 1}
-                  </span>
+                    <span className="text-xs font-bold text-[var(--text-main)]">
+                      Container #{index + 1}
+                    </span>
+                    {c.containerNumber ? (
+                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-blue-400 font-bold tracking-wide">
+                        {c.containerNumber}
+                      </span>
+                    ) : null}
+                  </div>
                   {containers.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveContainerRow(c.id)}
-                      className="text-xs text-rose-400 hover:text-rose-300 inline-flex items-center gap-1 font-medium"
+                      className="text-xs text-rose-400 hover:text-rose-300 inline-flex items-center gap-1.5 font-medium px-2 py-1 rounded-md hover:bg-rose-500/10 transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Unit
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
+                {/* ── Tier 1: Container Physical Specifications (4 Spacious Columns) ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
                   {/* Container Number */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Container Number *</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between">
+                      <span>Container Number *</span>
+                      <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-mono">ISO 6346</span>
+                    </label>
                     <input
                       type="text"
                       value={c.containerNumber}
                       onChange={(e) => updateContainer(c.id, { containerNumber: e.target.value.toUpperCase() })}
                       placeholder="e.g. MSCU8492014"
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500 text-xs shadow-inner"
                     />
                   </div>
 
                   {/* Size */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Size</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Container Size</label>
                     <select
                       value={c.size}
                       onChange={(e) => updateContainer(c.id, { size: e.target.value as ContainerItem['size'] })}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium"
                     >
-                      <option value="40HC">40HC (High Cube)</option>
-                      <option value="40FT">40FT (Standard)</option>
+                      <option value="40HC">40HC (40ft High Cube)</option>
+                      <option value="40FT">40FT (Standard Dry)</option>
                       <option value="20FT">20FT (Dry Box)</option>
                       <option value="45HC">45HC (High Cube)</option>
                     </select>
                   </div>
 
                   {/* Type */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Type</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Cargo / Equipment Type</label>
                     <select
                       value={c.containerType}
                       onChange={(e) => updateContainer(c.id, { containerType: e.target.value as ContainerItem['containerType'] })}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium"
                     >
-                      <option value="DRY">DRY</option>
+                      <option value="DRY">DRY (General Merchandise)</option>
                       <option value="REEFER">REEFER (Refrigerated)</option>
                       <option value="OPEN_TOP">OPEN TOP</option>
                       <option value="FLAT_RACK">FLAT RACK</option>
@@ -761,105 +773,167 @@ export default function DrayageCreateJobsPage() {
                   </div>
 
                   {/* Seal Number */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Seal Number</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between">
+                      <span>Seal Number</span>
+                      <span className="text-[10px] text-[var(--text-muted)]">Liner / Bolt</span>
+                    </label>
                     <input
                       type="text"
                       value={c.sealNumber}
                       onChange={(e) => updateContainer(c.id, { sealNumber: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                      placeholder="e.g. SL-984210"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 text-xs"
                     />
                   </div>
+                </div>
 
-                  {/* Delivery Date & Time */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">Delivery Date & Time</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="date"
-                        value={c.deliveryDate || c.dischargeDate}
-                        onChange={(e) => updateContainer(c.id, { deliveryDate: e.target.value, dischargeDate: e.target.value })}
-                        className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
-                      />
-                      <input
-                        type="time"
-                        value={c.deliveryTime || '09:00'}
-                        onChange={(e) => updateContainer(c.id, { deliveryTime: e.target.value })}
-                        className="w-20 px-1.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
-                      />
+                {/* ── Tier 2: Schedule & Expiry Timings (2 Spacious Half-Width Cards with Full Date & Time Pickers) ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+                  {/* Card 1: Target Delivery Schedule */}
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                          <Calendar className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <span className="font-semibold text-xs text-[var(--text-main)]">Target Delivery Schedule</span>
+                          <p className="text-[10px] text-[var(--text-muted)]">Consignee ramp arrival & discharge window</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                        Client Window
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-7 space-y-1">
+                        <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-blue-400" />
+                          <span>Delivery Date *</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={c.deliveryDate || c.dischargeDate}
+                          onChange={(e) => updateContainer(c.id, { deliveryDate: e.target.value, dischargeDate: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-blue-400" />
+                          <span>Target Time</span>
+                        </label>
+                        <input
+                          type="time"
+                          value={c.deliveryTime || '09:00'}
+                          onChange={(e) => updateContainer(c.id, { deliveryTime: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium font-mono cursor-pointer"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* DO Expiry Date & Time */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-[var(--text-muted)]">DO Expiry Date & Time</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="date"
-                        value={c.doExpiryDate}
-                        onChange={(e) => updateContainer(c.id, { doExpiryDate: e.target.value })}
-                        className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
-                      />
-                      <input
-                        type="time"
-                        value={c.doExpiryTime || '18:00'}
-                        onChange={(e) => updateContainer(c.id, { doExpiryTime: e.target.value })}
-                        className="w-20 px-1.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
-                      />
+                  {/* Card 2: Delivery Order (DO) Expiry */}
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                          <Clock className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <span className="font-semibold text-xs text-[var(--text-main)]">Delivery Order (DO) Expiry</span>
+                          <p className="text-[10px] text-[var(--text-muted)]">Port free time cutoff before demurrage/detention</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+                        Demurrage Cutoff
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-7 space-y-1">
+                        <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-amber-400" />
+                          <span>DO Expiry Date *</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={c.doExpiryDate}
+                          onChange={(e) => updateContainer(c.id, { doExpiryDate: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-400" />
+                          <span>Cutoff Time</span>
+                        </label>
+                        <input
+                          type="time"
+                          value={c.doExpiryTime || '18:00'}
+                          onChange={(e) => updateContainer(c.id, { doExpiryTime: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium font-mono cursor-pointer"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 5 Regulatory Inspection Flags */}
+                {/* ── Tier 3: Regulatory Inspection Clearance Flags ── */}
                 <div className="pt-2 border-t border-[var(--border-subtle)]">
-                  <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-1.5">
-                    Regulatory Inspection Clearance Flags:
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Regulatory Inspection Clearance Flags:</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-xs">
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/40 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={c.customsInspection}
                         onChange={(e) => updateContainer(c.id, { customsInspection: e.target.checked })}
-                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0 cursor-pointer"
                       />
-                      <span>Dubai Customs</span>
+                      <span className="font-medium text-[var(--text-main)]">Dubai Customs</span>
                     </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/40 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={c.municipalityInspection}
                         onChange={(e) => updateContainer(c.id, { municipalityInspection: e.target.checked })}
-                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0 cursor-pointer"
                       />
-                      <span>Municipality (DM)</span>
+                      <span className="font-medium text-[var(--text-main)]">Municipality (DM)</span>
                     </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/40 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={c.cpipInspection}
                         onChange={(e) => updateContainer(c.id, { cpipInspection: e.target.checked })}
-                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0 cursor-pointer"
                       />
-                      <span>CPIP Inspection</span>
+                      <span className="font-medium text-[var(--text-main)]">CPIP Inspection</span>
                     </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/40 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={c.mercInspection}
                         onChange={(e) => updateContainer(c.id, { mercInspection: e.target.checked })}
-                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0 cursor-pointer"
                       />
-                      <span>Merc / Fumigation</span>
+                      <span className="font-medium text-[var(--text-main)]">Merc / Fumigation</span>
                     </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/40 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={c.boxcareInspection}
                         onChange={(e) => updateContainer(c.id, { boxcareInspection: e.target.checked })}
-                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                        className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0 cursor-pointer"
                       />
-                      <span>Boxcare Seal Audit</span>
+                      <span className="font-medium text-[var(--text-main)]">Boxcare Seal Audit</span>
                     </label>
                   </div>
                 </div>
