@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -472,6 +473,141 @@ export default function DrayageAssignmentPage() {
       return r.level === 'CRITICAL' || r.level === 'EXPIRED';
     });
   }, [unassignedJobs, getDemurrageRisk]);
+
+  // =========================================================================
+  // FLEET DATA GRID (SMART DATA TABLE) COLUMNS
+  // =========================================================================
+  const assignmentColumns: DataGridColumn<DrayageJob>[] = useMemo(() => [
+    {
+      key: 'jobCode',
+      header: 'Job & Phase',
+      accessor: (j) => `${j.jobCode} ${j.jobPhase} ${j.customerName}`,
+      filter: 'text',
+      render: (job) => (
+        <div>
+          <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5">
+            <span>{job.jobCode}</span>
+            <span
+              className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                job.jobPhase === 'L2'
+                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                  : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+              }`}
+            >
+              {job.jobPhase}
+            </span>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[140px]">{job.customerName}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'container',
+      header: 'Container & Route',
+      accessor: (j) => `${j.containerNumber} ${j.containerSize} ${j.terminalName} ${j.warehouseName}`,
+      filter: 'text',
+      render: (job) => (
+        <div>
+          <div className="font-mono font-semibold flex items-center gap-1.5">
+            <span>{job.containerNumber}</span>
+            <span className="text-[10px] font-normal text-[var(--text-muted)]">({job.containerSize})</span>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[190px]">
+            {job.terminalName} → {job.warehouseName}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'demurrage',
+      header: 'Demurrage / DO Risk',
+      accessor: (j) => getDemurrageRisk(j).badgeText,
+      filter: 'text',
+      render: (job) => {
+        const risk = getDemurrageRisk(job);
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${risk.colorClass}`}>
+            {risk.badgeText}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'tokenNumber',
+      header: 'Port Gate Token',
+      accessor: (j) => j.tokenNumber || 'No Token',
+      filter: 'text',
+      render: (job) => (
+        job.tokenNumber ? (
+          <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
+            <Key className="w-3 h-3 shrink-0" />
+            <span>{job.tokenNumber}</span>
+            <button
+              onClick={() => {
+                setEditingTokenJob(job);
+                setNewTokenValue(job.tokenNumber || '');
+              }}
+              className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
+            >
+              Edit
+            </button>
+          </div>
+        ) : (
+          <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
+        )
+      ),
+    },
+    {
+      key: 'assignedAssets',
+      header: 'Assigned Assets',
+      accessor: (j) =>
+        j.assignedVehiclePlate
+          ? `${j.assignedVehiclePlate} ${j.assignedDriverName || ''} ${j.assignedTrailerPlate || ''}`
+          : 'Pending Assignment',
+      filter: 'text',
+      render: (job) => {
+        const isAssigned = Boolean(job.assignedVehicleId);
+        return isAssigned ? (
+          <div className="space-y-0.5">
+            <div className="font-semibold">{job.assignedVehiclePlate}</div>
+            <div className="text-[10px] text-[var(--text-muted)]">
+              {job.assignedDriverName} · {job.assignedTrailerPlate || 'Chassis'}
+            </div>
+          </div>
+        ) : (
+          <span className="text-amber-400 text-[11px] font-medium">Pending Assignment</span>
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (j) => j.status,
+      filter: 'select',
+      selectOptions: ['PENDING', 'ASSIGNED', 'IN_TRANSIT', 'PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'COMPLETED'],
+      render: (job) => <StatusPill status={job.status.toLowerCase()} label={job.status} />,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      sortable: false,
+      filter: false,
+      render: (job) => {
+        const isAssigned = Boolean(job.assignedVehicleId);
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              onClick={() => handleOpenAssign(job)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors"
+            >
+              {isAssigned ? 'Reassign' : 'Assign Fleet'}
+            </button>
+          </div>
+        );
+      },
+    },
+  ], [getDemurrageRisk]);
 
   // =========================================================================
   // ACTIONS: USE THIS PAIR (MANUAL 1-CLICK ASSIGNMENT)
@@ -1200,164 +1336,41 @@ export default function DrayageAssignmentPage() {
         </div>
       )}
 
-      {/* Main Jobs Queue Panel */}
-      <Panel
-        title={`Drayage Jobs Queue (${filteredJobs.length} Jobs)`}
-        subtitle="Select and assign prime movers, drivers, chassis, and token credentials"
-        icon={Package}
-        accent="blue"
-        actions={
-          <div className="flex items-center gap-2">
-            {selectedJobIds.length >= 2 && (
-              <button
-                onClick={handleOpenBogieModal}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Assign Selected {selectedJobIds.length} as Bogie Trip
-              </button>
-            )}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search job, container, token..."
-                className="pl-8 pr-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500 w-48 md:w-64"
-              />
+      {/* FleetDataGrid (Smart Data Table) */}
+      <FleetDataGrid<DrayageJob>
+        rows={jobs}
+        columns={assignmentColumns}
+        getRowId={(j) => j.id}
+        loading={loading}
+        emptyMessage="No drayage jobs in queue"
+        gridName="DrayageAssignmentGrid"
+        numbered={true}
+        selectable={true}
+        selectedIds={new Set(selectedJobIds)}
+        onSelectionChange={(ids) => setSelectedJobIds(Array.from(ids))}
+        toolbar={{
+          title: 'Drayage Jobs Queue',
+          search: true,
+          columns: true,
+          density: true,
+          filters: true,
+          exportCsv: true,
+          exportName: 'drayage_job_assignment',
+          actions: (
+            <div className="flex items-center gap-2">
+              {selectedJobIds.length >= 2 && (
+                <button
+                  onClick={handleOpenBogieModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Assign Selected ({selectedJobIds.length}) as Bogie Trip
+                </button>
+              )}
             </div>
-          </div>
-        }
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
-              <tr>
-                <th className="py-2.5 px-3 w-8">
-                  <input
-                    type="checkbox"
-                    checked={selectedJobIds.length > 0 && selectedJobIds.length === unassignedJobs.length}
-                    onChange={(e) => {
-                      if (e.target.checked) setSelectedJobIds(unassignedJobs.map((j) => j.id));
-                      else setSelectedJobIds([]);
-                    }}
-                    className="rounded border-[var(--border-subtle)] text-blue-600"
-                  />
-                </th>
-                <th className="py-2.5 px-3 font-semibold">Job & Phase</th>
-                <th className="py-2.5 px-3 font-semibold">Container & Route</th>
-                <th className="py-2.5 px-3 font-semibold">Demurrage / DO Risk</th>
-                <th className="py-2.5 px-3 font-semibold">Port Gate Token</th>
-                <th className="py-2.5 px-3 font-semibold">Assigned Assets</th>
-                <th className="py-2.5 px-3 font-semibold">Status</th>
-                <th className="py-2.5 px-3 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
-              {filteredJobs.map((job) => {
-                const isSelected = selectedJobIds.includes(job.id);
-                const isAssigned = Boolean(job.assignedVehicleId);
-                const risk = getDemurrageRisk(job);
-                return (
-                  <tr
-                    key={job.id}
-                    className={`hover:bg-[var(--bg-surface-hover)] transition-colors ${
-                      isSelected ? 'bg-blue-600/5' : ''
-                    }`}
-                  >
-                    <td className="py-3 px-3">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedJobIds((prev) => [...prev, job.id]);
-                          else setSelectedJobIds((prev) => prev.filter((id) => id !== job.id));
-                        }}
-                        className="rounded border-[var(--border-subtle)] text-blue-600"
-                      />
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5">
-                        <span>{job.jobCode}</span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            job.jobPhase === 'L2'
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                              : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                          }`}
-                        >
-                          {job.jobPhase}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[140px]">{job.customerName}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-mono font-semibold flex items-center gap-1.5">
-                        <span>{job.containerNumber}</span>
-                        <span className="text-[10px] font-normal text-[var(--text-muted)]">({job.containerSize})</span>
-                      </div>
-                      <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[180px]">
-                        {job.terminalName} → {job.warehouseName}
-                      </div>
-                    </td>
-                    {/* Demurrage Countdown Risk Badge */}
-                    <td className="py-3 px-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${risk.colorClass}`}>
-                        {risk.badgeText}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      {job.tokenNumber ? (
-                        <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
-                          <Key className="w-3 h-3 shrink-0" />
-                          <span>{job.tokenNumber}</span>
-                          <button
-                            onClick={() => {
-                              setEditingTokenJob(job);
-                              setNewTokenValue(job.tokenNumber || '');
-                            }}
-                            className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
-                          >
-                            Edit
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
-                      {isAssigned ? (
-                        <div className="space-y-0.5">
-                          <div className="font-semibold">{job.assignedVehiclePlate}</div>
-                          <div className="text-[10px] text-[var(--text-muted)]">
-                            {job.assignedDriverName} · {job.assignedTrailerPlate || 'Chassis'}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-amber-400 text-[11px] font-medium">Pending Assignment</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
-                      <StatusPill status={job.status.toLowerCase()} label={job.status} />
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenAssign(job)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors"
-                        >
-                          {isAssigned ? 'Reassign' : 'Assign Fleet'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+          ),
+        }}
+      />
 
       {/* =========================================================================
           AUTO-PILOT BATCH DISPATCH REVIEW MODAL

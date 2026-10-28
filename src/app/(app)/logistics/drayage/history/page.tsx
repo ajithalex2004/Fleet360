@@ -9,6 +9,7 @@ import {
   ExternalLink, ChevronRight, ShieldCheck,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -331,6 +332,122 @@ export default function DrayageHistoryPage() {
   const completedJobs = useMemo(() => jobs.filter((j) => j.status === 'COMPLETED'), [jobs]);
   const totalBilledAed = jobs.reduce((sum, j) => sum + j.rateAmountAed, 0);
 
+  
+  const historyColumns: DataGridColumn<DrayageJob>[] = useMemo(() => [
+    {
+      key: 'jobCode',
+      header: 'Job Reference',
+      accessor: (j) => `${j.jobCode} ${j.jobPhase} ${new Date(j.createdAt).toLocaleDateString()}`,
+      filter: 'text',
+      render: (job) => {
+        const isL2 = job.jobPhase === 'L2';
+        return (
+          <div>
+            <div className="font-mono font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <span className="hover:text-blue-400 transition-colors">{job.jobCode}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                  isL2
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                }`}
+              >
+                {job.jobPhase}
+              </span>
+            </div>
+            <div className="text-[10px] text-[var(--text-muted)]">
+              {new Date(job.createdAt).toLocaleDateString()}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'customer',
+      header: 'Customer & Corridor',
+      accessor: (j) => `${j.customerName} ${j.terminalName} ${j.warehouseName}`,
+      filter: 'text',
+      render: (job) => (
+        <div>
+          <div className="font-medium text-[var(--text-main)] truncate max-w-[160px]">{job.customerName}</div>
+          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[160px]">
+            {job.terminalName} → {job.warehouseName}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'container',
+      header: 'Container Number',
+      accessor: (j) => `${j.containerNumber} ${j.containerSize}`,
+      filter: 'text',
+      render: (job) => (
+        <div>
+          <div className="font-mono font-semibold">{job.containerNumber}</div>
+          <div className="text-[10px] text-[var(--text-muted)]">{job.containerSize}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'executedFleet',
+      header: 'Executed Fleet',
+      accessor: (j) => `${j.assignedVehiclePlate || ''} ${j.assignedDriverName || ''} ${j.assignedTrailerPlate || ''}`,
+      filter: 'text',
+      render: (job) => (
+        <div>
+          <div className="font-medium">{job.assignedVehiclePlate || 'Tractor N/A'}</div>
+          <div className="text-[10px] text-[var(--text-muted)]">
+            {job.assignedDriverName || 'Driver N/A'} · {job.assignedTrailerPlate || 'Chassis N/A'}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'rateAmountAed',
+      header: 'Base Rate (AED)',
+      accessor: (j) => j.rateAmountAed,
+      filter: 'text',
+      align: 'right',
+      render: (job) => (
+        <span className="font-mono font-semibold">AED {job.rateAmountAed.toLocaleString()}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (j) => j.status,
+      filter: 'select',
+      selectOptions: ['COMPLETED', 'IN_TRANSIT', 'PENDING', 'CANCELLED'],
+      render: (job) => <StatusPill status={job.status.toLowerCase()} label={job.status} />,
+    },
+    {
+      key: 'actions',
+      header: 'Invoice & Lifecycle',
+      align: 'right',
+      sortable: false,
+      filter: false,
+      render: (job) => (
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setSelectedJobForLifecycle(job)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] hover:border-blue-500/40 hover:text-blue-400 text-[11px] font-semibold transition-colors"
+            title="View Drayage Execution Lifecycle"
+          >
+            <Eye className="w-3 h-3 text-blue-400" />
+            Lifecycle
+          </button>
+          <button
+            onClick={() => setSelectedJobForInvoice(job)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors"
+          >
+            <FileText className="w-3 h-3" />
+            Tax Invoice
+          </button>
+        </div>
+      ),
+    },
+  ], []);
+
   // Export CSV for Zoho, QuickBooks, Xero
   const handleExportCsv = (format: 'ZOHO' | 'QUICKBOOKS' | 'XERO') => {
     const headers = ['InvoiceNumber', 'CustomerName', 'JobCode', 'ContainerNumber', 'Phase', 'BaseRateAED', 'VAT5AED', 'TotalAED', 'Date'];
@@ -457,119 +574,38 @@ export default function DrayageHistoryPage() {
       </div>
 
       {/* Main Historical Table */}
-      <Panel
-        title={`Turnaround & Billing Archive (${filteredJobs.length} Records)`}
-        icon={FileText}
-        accent="blue"
-        actions={
-          <div className="flex items-center gap-2">
-            <select
-              value={shipmentFilter}
-              onChange={(e) => setShipmentFilter(e.target.value as any)}
-              className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500"
-            >
-              <option value="ALL">All Shipments</option>
-              <option value="IMPORT">IMPORT FCL</option>
-              <option value="EXPORT">EXPORT</option>
-            </select>
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search job or container..."
-                className="pl-8 pr-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500 w-48 md:w-64"
-              />
+      <FleetDataGrid<DrayageJob>
+        rows={filteredJobs}
+        columns={historyColumns}
+        getRowId={(j) => j.id}
+        loading={loading}
+        onRowClick={(job) => setSelectedJobForLifecycle(job)}
+        emptyMessage="No historical drayage records found"
+        gridName="DrayageHistoryGrid"
+        numbered={true}
+        toolbar={{
+          title: 'Turnaround & Billing Archive',
+          search: true,
+          columns: true,
+          density: true,
+          filters: true,
+          exportCsv: true,
+          exportName: 'drayage_job_history',
+          actions: (
+            <div className="flex items-center gap-2">
+              <select
+                value={shipmentFilter}
+                onChange={(e) => setShipmentFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500"
+              >
+                <option value="ALL">All Shipments</option>
+                <option value="IMPORT">IMPORT FCL</option>
+                <option value="EXPORT">EXPORT</option>
+              </select>
             </div>
-          </div>
-        }
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
-              <tr>
-                <th className="py-2.5 px-3 font-semibold">Job Reference</th>
-                <th className="py-2.5 px-3 font-semibold">Customer & Corridor</th>
-                <th className="py-2.5 px-3 font-semibold">Container Number</th>
-                <th className="py-2.5 px-3 font-semibold">Executed Fleet</th>
-                <th className="py-2.5 px-3 font-semibold">Base Rate</th>
-                <th className="py-2.5 px-3 font-semibold">Status</th>
-                <th className="py-2.5 px-3 font-semibold text-right">Invoice</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
-              {filteredJobs.map((job) => {
-                const isL2 = job.jobPhase === 'L2';
-                return (
-                  <tr
-                    key={job.id}
-                    onClick={() => setSelectedJobForLifecycle(job)}
-                    className="hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer group"
-                  >
-                    <td className="py-3 px-3">
-                      <div className="font-mono font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                        <span className="group-hover:text-blue-400 transition-colors">{job.jobCode}</span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            isL2
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                              : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                          }`}
-                        >
-                          {job.jobPhase}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-[var(--text-muted)]">
-                        {new Date(job.createdAt).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-medium text-[var(--text-main)] truncate max-w-[160px]">{job.customerName}</div>
-                      <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[160px]">
-                        {job.terminalName} → {job.warehouseName}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-mono font-semibold">{job.containerNumber}</div>
-                      <div className="text-[10px] text-[var(--text-muted)]">{job.containerSize}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-medium">{job.assignedVehiclePlate || 'Tractor N/A'}</div>
-                      <div className="text-[10px] text-[var(--text-muted)]">
-                        {job.assignedDriverName || 'Driver N/A'} · {job.assignedTrailerPlate || 'Chassis N/A'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 font-mono font-semibold">AED {job.rateAmountAed.toLocaleString()}</td>
-                    <td className="py-3 px-3">
-                      <StatusPill status={job.status.toLowerCase()} label={job.status} />
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSelectedJobForLifecycle(job)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] hover:border-blue-500/40 hover:text-blue-400 text-[11px] font-semibold transition-colors"
-                          title="View Drayage Execution Lifecycle"
-                        >
-                          <Eye className="w-3 h-3 text-blue-400" />
-                          Lifecycle
-                        </button>
-                        <button
-                          onClick={() => setSelectedJobForInvoice(job)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors"
-                        >
-                          <FileText className="w-3 h-3" />
-                          Tax Invoice
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+          ),
+        }}
+      />
 
       {/* Job Execution Lifecycle Modal */}
       {selectedJobForLifecycle && (
