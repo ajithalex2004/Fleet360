@@ -34,11 +34,34 @@ export interface Geofence {
   coordinatesJson?: string;
 }
 
+export interface WarehouseLocation {
+  id: string;
+  name: string;
+  zone: string;
+  lat?: number;
+  lng?: number;
+  customerName?: string;
+  address?: string;
+  rampsCount?: number;
+}
+
+export interface PlotModeState {
+  active: boolean;
+  type: 'TERMINAL' | 'CONSIGNEE';
+  title: string;
+  lat: number;
+  lng: number;
+  onPlotSelect: (lat: number, lng: number) => void;
+  onClose: () => void;
+}
+
 interface DrayageGeofenceMapProps {
   terminals: Terminal[];
   geofences: Geofence[];
+  warehouses?: WarehouseLocation[];
   selectedTerminalId?: string | null;
   onSelectTerminal?: (terminal: Terminal) => void;
+  onSelectWarehouse?: (warehouse: WarehouseLocation) => void;
   onSaveGeofence: (geofence: {
     id?: string;
     terminalId: string | null;
@@ -53,6 +76,8 @@ interface DrayageGeofenceMapProps {
   onDeleteGeofence: (id: string, name: string) => Promise<void>;
   activeEditGeofenceId?: string | null;
   onCloseEditMode?: () => void;
+  focusLocation?: { lat: number; lng: number; zoom?: number; title?: string } | null;
+  plotMode?: PlotModeState | null;
 }
 
 // Mapbox GL JS typings
@@ -172,18 +197,24 @@ function loadMapboxScript(): Promise<void> {
 export default function DrayageGeofenceMap({
   terminals,
   geofences,
+  warehouses = [],
   selectedTerminalId,
   onSelectTerminal,
+  onSelectWarehouse,
   onSaveGeofence,
   onDeleteGeofence,
   activeEditGeofenceId,
   onCloseEditMode,
+  focusLocation,
+  plotMode,
 }: DrayageGeofenceMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const markersRef = useRef<MapboxMarker[]>([]);
   const editMarkerRef = useRef<MapboxMarker | null>(null);
   const polygonVertexMarkersRef = useRef<MapboxMarker[]>([]);
+  const plotMarkerRef = useRef<MapboxMarker | null>(null);
+  const warehouseMarkersRef = useRef<MapboxMarker[]>([]);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -403,8 +434,18 @@ export default function DrayageGeofenceMap({
 
   // Click on map to add vertex in Polygon mode or move center in Circle mode
   const handleMapClick = useCallback((e: any) => {
-    if (!isEditingOnMap || !e?.lngLat) return;
+    if (!e?.lngLat) return;
     const { lng, lat } = e.lngLat;
+
+    if (plotMode?.active) {
+      plotMode.onPlotSelect(lat, lng);
+      if (plotMarkerRef.current) {
+        plotMarkerRef.current.setLngLat([lng, lat]);
+      }
+      return;
+    }
+
+    if (!isEditingOnMap) return;
 
     if (editorShape === 'POLYGON') {
       setPolygonVertices((prev) => [...prev, [lng, lat]]);
@@ -412,7 +453,7 @@ export default function DrayageGeofenceMap({
       setEditorLat(lat);
       setEditorLng(lng);
     }
-  }, [isEditingOnMap, editorShape]);
+  }, [isEditingOnMap, editorShape, plotMode]);
 
   // Undo last polygon point
   const handleUndoPolygonPoint = () => {
@@ -501,6 +542,74 @@ export default function DrayageGeofenceMap({
       updateDraftGeometry('CIRCLE', null, []);
     }
   }, [isEditingOnMap, editorShape, editorLat, editorLng, editorRadius, polygonVertices, updateDraftGeometry]);
+
+
+  // Effect to smoothly fly to focusLocation when requested (e.g. from Terminal or Consignee Edit/Plot)
+  useEffect(() => {
+    if (!mapRef.current || !focusLocation) return;
+    const { lat, lng, zoom } = focusLocation;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      try {
+        mapRef.current.flyTo({
+          center: [lng, lat],
+          zoom: zoom || 14,
+          essential: true,
+        });
+      } catch (e) {
+        console.warn('flyTo focus location failed:', e);
+      }
+    }
+  }, [focusLocation]);
+
+  // Effect for interactive Plot on Map mode
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const mbgl = (window as any)?.mapboxgl;
+    if (!mbgl) return;
+
+    if (plotMode?.active) {
+      const lat = plotMode.lat || 25.0112;
+      const lng = plotMode.lng || 55.0612;
+
+      try {
+        mapRef.current.flyTo({
+          center: [lng, lat],
+          zoom: 14.5,
+          essential: true,
+        });
+      } catch {}
+
+      if (!plotMarkerRef.current) {
+        const el = document.createElement('div');
+        el.className = 'flex flex-col items-center cursor-move';
+        el.innerHTML = `
+          <div style="background: #10b981; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: bold; box-shadow: 0 4px 14px rgba(0,0,0,0.5); border: 2px solid white; display: flex; align-items: center; gap: 4px;">
+            <span>🎯</span>
+            <span>Plot: ${plotMode.title || 'Location'} (Drag to set)</span>
+          </div>
+          <div style="width: 2px; height: 14px; background: #10b981;"></div>
+        `;
+        const mk = new mbgl.Marker({ element: el, draggable: true })
+          .setLngLat([lng, lat])
+          .addTo(mapRef.current);
+
+        mk.on('dragend', () => {
+          try {
+            const ll = mk.getLngLat();
+            plotMode.onPlotSelect(ll.lat, ll.lng);
+          } catch {}
+        });
+        plotMarkerRef.current = mk;
+      } else {
+        plotMarkerRef.current.setLngLat([lng, lat]);
+      }
+    } else {
+      if (plotMarkerRef.current) {
+        try { plotMarkerRef.current.remove(); } catch {}
+        plotMarkerRef.current = null;
+      }
+    }
+  }, [plotMode]);
 
   // Initialize Mapbox map with robust safety fallbacks
   useEffect(() => {
@@ -633,6 +742,12 @@ export default function DrayageGeofenceMap({
       }
       polygonVertexMarkersRef.current.forEach((m) => { try { m.remove(); } catch {} });
       polygonVertexMarkersRef.current = [];
+      warehouseMarkersRef.current.forEach((m) => { try { m.remove(); } catch {} });
+      warehouseMarkersRef.current = [];
+      if (plotMarkerRef.current) {
+        try { plotMarkerRef.current.remove(); } catch {}
+        plotMarkerRef.current = null;
+      }
       try { mapRef.current?.remove(); } catch {}
       mapRef.current = null;
     };
@@ -748,6 +863,47 @@ export default function DrayageGeofenceMap({
         markersRef.current.push(marker);
       });
 
+
+      // Add Warehouse & Consignee Markers
+      warehouseMarkersRef.current.forEach((m) => { try { m.remove(); } catch {} });
+      warehouseMarkersRef.current = [];
+
+      warehouses.forEach((wh) => {
+        if (!wh.lat || !wh.lng || !Number.isFinite(wh.lat) || !Number.isFinite(wh.lng)) return;
+        const el = document.createElement('div');
+        el.className = 'cursor-pointer transform hover:scale-110 transition-transform';
+        el.innerHTML = `
+          <div style="background: #065f46; color: white; border: 1.5px solid #34d399; border-radius: 10px; padding: 3px 6px; font-size: 9px; font-weight: bold; display: flex; align-items: center; gap: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
+            <span>🏢</span>
+            <span style="max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${wh.name}</span>
+          </div>
+        `;
+
+        el.addEventListener('click', () => {
+          onSelectWarehouse?.(wh);
+          try {
+            map.flyTo({ center: [wh.lng!, wh.lat!], zoom: 14 });
+          } catch {}
+        });
+
+        const popup = new mbgl.Popup({ offset: 15, closeButton: false }).setHTML(`
+          <div style="padding: 6px; font-size: 12px; color: #0f172a;">
+            <strong style="display:block; font-size: 13px;">${wh.name}</strong>
+            <span style="color: #64748b; font-size: 11px;">${wh.zone} · ${wh.customerName || 'Consignee Facility'}</span>
+            <div style="margin-top: 4px; font-size: 11px; font-weight: 600; color: #059669;">
+              ${wh.address || 'Consignee Ramp Location'}
+            </div>
+          </div>
+        `);
+
+        const marker = new mbgl.Marker({ element: el })
+          .setLngLat([wh.lng, wh.lat])
+          .setPopup(popup)
+          .addTo(map);
+
+        warehouseMarkersRef.current.push(marker);
+      });
+
       // Add Geofence Center Markers
       activeGfs.forEach((gf) => {
         if (!Number.isFinite(gf.centerLat) || !Number.isFinite(gf.centerLng)) return;
@@ -801,7 +957,7 @@ export default function DrayageGeofenceMap({
     } catch (err) {
       console.warn('Error refreshing markers and geofences:', err);
     }
-  }, [terminals, geofences, selectedTerminalId, isEditingOnMap, editorId, mapLoaded, onSelectTerminal, startEditingGeofence]);
+  }, [terminals, geofences, warehouses, selectedTerminalId, isEditingOnMap, editorId, mapLoaded, onSelectTerminal, onSelectWarehouse, startEditingGeofence]);
 
   // Fit all terminals in view
   const handleFitUAE = () => {
@@ -898,6 +1054,35 @@ export default function DrayageGeofenceMap({
           )}
         </div>
       </div>
+
+
+      {/* Top Banner when Plot on Map is Active */}
+      {plotMode?.active && (
+        <div className="absolute top-14 left-3 right-3 z-30 bg-emerald-950/95 backdrop-blur-md border border-emerald-500/60 rounded-xl px-4 py-2.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-white animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-bold text-emerald-300">
+              📍 Plot on Map Active: {plotMode.title}
+            </span>
+            <span className="text-[11px] text-emerald-100/90 font-mono">
+              ({plotMode.lat.toFixed(5)}, {plotMode.lng.toFixed(5)})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-emerald-300 hidden md:inline">
+              Click anywhere on map or drag pin to set coordinates
+            </span>
+            <button
+              type="button"
+              onClick={plotMode.onClose}
+              className="px-3.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1"
+            >
+              <Check className="w-3.5 h-3.5" />
+              Done Plotting
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Map or Interactive SVG Radar Fallback */}
       {!mapError ? (

@@ -302,6 +302,15 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
     )
   `);
 
+  
+  await safeDdl(db, `
+    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T1' WHERE code = 'AEJEA-T1';
+    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T2' WHERE code = 'AEJEA-T2';
+    UPDATE logistics_drayage_terminals SET code = 'DPW-JA-T3' WHERE code = 'AEJEA-T3';
+    UPDATE logistics_drayage_terminals SET code = 'ADP-KP-T1' WHERE code = 'AEKHL-T1';
+    UPDATE logistics_drayage_terminals SET code = 'DPW-PR-T1' WHERE code = 'AEDXB-PR';
+  `);
+
   await safeDdl(db, `
     CREATE TABLE IF NOT EXISTS logistics_drayage_warehouses (
       id TEXT PRIMARY KEY,
@@ -580,7 +589,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       {
         id: `term-ja1-${tenantId.slice(0, 8)}`,
         name: 'Jebel Ali Port - Terminal 1 (DP World)',
-        code: 'AEJEA-T1',
+        code: 'DPW-JA-T1',
         portName: 'Jebel Ali Port',
         emirate: 'Dubai',
         lat: 25.0112,
@@ -592,7 +601,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       {
         id: `term-ja2-${tenantId.slice(0, 8)}`,
         name: 'Jebel Ali Port - Terminal 2 (Mega Vessel Berth)',
-        code: 'AEJEA-T2',
+        code: 'DPW-JA-T2',
         portName: 'Jebel Ali Port',
         emirate: 'Dubai',
         lat: 25.0245,
@@ -604,7 +613,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       {
         id: `term-ja3-${tenantId.slice(0, 8)}`,
         name: 'Jebel Ali Port - Terminal 3 (Automated)',
-        code: 'AEJEA-T3',
+        code: 'DPW-JA-T3',
         portName: 'Jebel Ali Port',
         emirate: 'Dubai',
         lat: 24.9960,
@@ -616,7 +625,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       {
         id: `term-kp-${tenantId.slice(0, 8)}`,
         name: 'Khalifa Port Container Terminal (AD Ports)',
-        code: 'AEKHL-T1',
+        code: 'ADP-KP-T1',
         portName: 'Khalifa Port',
         emirate: 'Abu Dhabi',
         lat: 24.8055,
@@ -628,7 +637,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       {
         id: `term-pr-${tenantId.slice(0, 8)}`,
         name: 'Mina Rashid / Port Khorfakkan Hub',
-        code: 'AEDXB-PR',
+        code: 'DPW-PR-T1',
         portName: 'Port Rashid',
         emirate: 'Dubai',
         lat: 25.2684,

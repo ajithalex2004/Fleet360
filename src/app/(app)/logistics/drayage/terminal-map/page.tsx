@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
   Search, ShieldCheck, Compass, Layers, ExternalLink, X, Map, Clock,
-  Warehouse, Building2, User, Phone,
+  Warehouse, Building2, User, Phone, Check, Navigation,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -21,7 +21,7 @@ const DrayageGeofenceMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[420px] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col items-center justify-center gap-2 text-xs text-[var(--text-muted)] animate-pulse">
+      <div className="w-full h-[450px] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col items-center justify-center gap-2 text-xs text-[var(--text-muted)] animate-pulse">
         <Compass className="w-6 h-6 text-blue-400 animate-spin" />
         <span>Loading Live Port & Geofence Map...</span>
       </div>
@@ -62,6 +62,7 @@ interface CustomerOption {
   id: string;
   name: string;
 }
+
 interface DrayageGeofence {
   id: string;
   terminalId: string | null;
@@ -74,7 +75,6 @@ interface DrayageGeofence {
   coordinatesJson: string;
   createdAt: string;
 }
-
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -133,18 +133,54 @@ export default function DrayageTerminalMapPage() {
   const [customers, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
   const [selectedTerminal, setSelectedTerminal] = useState<DrayageTerminal | null>(cached?.terminals?.[0] || null);
 
-  // Warehouse Modal State
+  // Map Navigation & Interactive Plot Mode State
+  const [focusMapLocation, setFocusMapLocation] = useState<{
+    lat: number;
+    lng: number;
+    zoom?: number;
+    title?: string;
+  } | null>(null);
+
+  const [plotMode, setPlotMode] = useState<{
+    active: boolean;
+    type: 'TERMINAL' | 'CONSIGNEE';
+    title: string;
+    lat: number;
+    lng: number;
+    onPlotSelect: (lat: number, lng: number) => void;
+    onClose: () => void;
+  } | null>(null);
+
+  // Terminal Modal State (Add / Edit)
+  const [showTerminalModal, setShowTerminalModal] = useState(false);
+  const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null);
+  const [termName, setTermName] = useState('');
+  const [termCode, setTermCode] = useState('');
+  const [termPortName, setTermPortName] = useState('Jebel Ali Port');
+  const [termEmirate, setTermEmirate] = useState('Dubai');
+  const [termLat, setTermLat] = useState(25.0112);
+  const [termLng, setTermLng] = useState(55.0612);
+  const [termRadius, setTermRadius] = useState(1500);
+  const [termFreeDry, setTermFreeDry] = useState(5);
+  const [termFreeReefer, setTermFreeReefer] = useState(3);
+  const [termOperatingHours, setTermOperatingHours] = useState('24/7 Gate Operations');
+  const [submittingTerm, setSubmittingTerm] = useState(false);
+
+  // Warehouse Modal State (Add / Edit)
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
   const [newWhName, setNewWhName] = useState('');
+  const [newWhCustomerId, setNewWhCustomerId] = useState('');
   const [newWhZone, setNewWhZone] = useState('JAFZA South');
   const [newWhAddress, setNewWhAddress] = useState('');
+  const [newWhLat, setNewWhLat] = useState(24.9642);
+  const [newWhLng, setNewWhLng] = useState(55.0915);
+  const [newWhRamps, setNewWhRamps] = useState(4);
   const [newWhContact, setNewWhContact] = useState('');
   const [newWhPhone, setNewWhPhone] = useState('');
-  const [newWhRamps, setNewWhRamps] = useState(4);
-  const [newWhCustomerId, setNewWhCustomerId] = useState('');
   const [submittingWh, setSubmittingWh] = useState(false);
 
-  // Geofence Modal
+  // Geofence Modal State
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [geofenceName, setGeofenceName] = useState('');
   const [geofenceType, setGeofenceType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
@@ -161,6 +197,15 @@ export default function DrayageTerminalMapPage() {
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const scrollToMap = () => {
+    if (typeof window !== 'undefined') {
+      const mapEl = document.getElementById('geofence-map-view');
+      if (mapEl) {
+        mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
   };
 
   const loadData = useCallback(async (forceFresh = false) => {
@@ -190,6 +235,164 @@ export default function DrayageTerminalMapPage() {
     loadData();
   }, [loadData]);
 
+  // Terminal Handlers
+  const handleOpenAddTerminal = () => {
+    setEditingTerminalId(null);
+    setTermName('');
+    setTermCode('DPW-JA-T1');
+    setTermPortName('Jebel Ali Port');
+    setTermEmirate('Dubai');
+    setTermLat(25.0112);
+    setTermLng(55.0612);
+    setTermRadius(1500);
+    setTermFreeDry(5);
+    setTermFreeReefer(3);
+    setTermOperatingHours('24/7 Gate Operations');
+    setShowTerminalModal(true);
+    setFocusMapLocation({ lat: 25.0112, lng: 55.0612, zoom: 14, title: 'New Terminal' });
+  };
+
+  const handleOpenEditTerminal = (t: DrayageTerminal) => {
+    setEditingTerminalId(t.id);
+    setTermName(t.name);
+    setTermCode(t.code);
+    setTermPortName(t.portName);
+    setTermEmirate(t.emirate);
+    setTermLat(t.lat);
+    setTermLng(t.lng);
+    setTermRadius(t.geofenceRadiusMeters);
+    setTermFreeDry(t.freeDaysDry);
+    setTermFreeReefer(t.freeDaysReefer);
+    setTermOperatingHours(t.operatingHours);
+    setShowTerminalModal(true);
+
+    // Map automatically points to that particular geofence / terminal location
+    const matchingGf = geofences.find((g) => g.terminalId === t.id) || geofences.find((g) => g.terminalName === t.name);
+    const targetLat = matchingGf ? matchingGf.centerLat : t.lat;
+    const targetLng = matchingGf ? matchingGf.centerLng : t.lng;
+    setFocusMapLocation({ lat: targetLat, lng: targetLng, zoom: 14.5, title: t.name });
+    scrollToMap();
+  };
+
+  const handleSaveTerminal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!termName.trim()) {
+      showToast('error', 'Terminal name is required');
+      return;
+    }
+    if (!termCode.trim()) {
+      showToast('error', 'Terminal code (e.g. DPW-JA-T1) is required');
+      return;
+    }
+
+    try {
+      setSubmittingTerm(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_terminal',
+          id: editingTerminalId || undefined,
+          name: termName.trim(),
+          code: termCode.trim().toUpperCase(),
+          portName: termPortName.trim() || 'Jebel Ali Port',
+          emirate: termEmirate.trim() || 'Dubai',
+          lat: Number(termLat),
+          lng: Number(termLng),
+          geofenceRadiusMeters: Number(termRadius),
+          freeDaysDry: Number(termFreeDry),
+          freeDaysReefer: Number(termFreeReefer),
+          operatingHours: termOperatingHours.trim() || '24/7 Gate Operations',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save terminal');
+
+      setShowTerminalModal(false);
+      setPlotMode(null);
+      invalidateDrayageClientCache();
+      await loadData(true);
+      showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error saving terminal');
+    } finally {
+      setSubmittingTerm(false);
+    }
+  };
+
+  const handleDeleteTerminal = async (t: DrayageTerminal) => {
+    if (!confirm(`Are you sure you want to delete port terminal "${t.name}" (${t.code})?`)) return;
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_terminal', id: t.id }),
+      });
+      if (!res.ok) throw new Error('Failed to delete terminal');
+      showToast('success', `Terminal "${t.name}" removed`);
+      if (selectedTerminal?.id === t.id) {
+        setSelectedTerminal(null);
+      }
+      invalidateDrayageClientCache();
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error deleting terminal');
+    }
+  };
+
+  const handleStartPlotTerminal = () => {
+    setPlotMode({
+      active: true,
+      type: 'TERMINAL',
+      title: termName || 'Terminal Location',
+      lat: termLat,
+      lng: termLng,
+      onPlotSelect: (lat, lng) => {
+        setTermLat(Number(lat.toFixed(6)));
+        setTermLng(Number(lng.toFixed(6)));
+      },
+      onClose: () => setPlotMode(null),
+    });
+    setFocusMapLocation({ lat: termLat, lng: termLng, zoom: 14.5, title: termName || 'Terminal' });
+    scrollToMap();
+  };
+
+  // Warehouse Handlers
+  const handleOpenAddWarehouse = () => {
+    setEditingWarehouseId(null);
+    setNewWhName('');
+    setNewWhCustomerId('');
+    setNewWhZone('JAFZA South');
+    setNewWhAddress('');
+    setNewWhLat(24.9642);
+    setNewWhLng(55.0915);
+    setNewWhRamps(4);
+    setNewWhContact('');
+    setNewWhPhone('');
+    setShowWarehouseModal(true);
+    setFocusMapLocation({ lat: 24.9642, lng: 55.0915, zoom: 14, title: 'New Warehouse' });
+  };
+
+  const handleOpenEditWarehouse = (w: DrayageWarehouse) => {
+    setEditingWarehouseId(w.id);
+    setNewWhName(w.name);
+    setNewWhCustomerId(w.customerId || '');
+    setNewWhZone(w.zone);
+    setNewWhAddress(w.address || '');
+    setNewWhLat(w.lat || 24.9642);
+    setNewWhLng(w.lng || 55.0915);
+    setNewWhRamps(w.rampsCount || 4);
+    setNewWhContact(w.contactPerson || '');
+    setNewWhPhone(w.contactPhone || '');
+    setShowWarehouseModal(true);
+
+    // Map automatically points to that particular geofence / warehouse location
+    const targetLat = w.lat || 24.9642;
+    const targetLng = w.lng || 55.0915;
+    setFocusMapLocation({ lat: targetLat, lng: targetLng, zoom: 14.5, title: w.name });
+    scrollToMap();
+  };
+
   const handleSaveWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWhName.trim()) {
@@ -203,37 +406,70 @@ export default function DrayageTerminalMapPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'create_warehouse',
+          action: 'save_warehouse',
+          id: editingWarehouseId || undefined,
           customerId: newWhCustomerId || null,
           customerName: cust?.name || 'Enterprise Client',
           name: newWhName.trim(),
           zone: newWhZone.trim() || 'JAFZA South',
           address: newWhAddress.trim() || 'Dubai, UAE',
+          lat: Number(newWhLat),
+          lng: Number(newWhLng),
           contactPerson: newWhContact.trim() || undefined,
           contactPhone: newWhPhone.trim() || undefined,
           rampsCount: Number(newWhRamps) || 4,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create warehouse');
+      if (!res.ok) throw new Error(data.error || 'Failed to save warehouse');
 
       setShowWarehouseModal(false);
-      setNewWhName('');
-      setNewWhZone('JAFZA South');
-      setNewWhAddress('');
-      setNewWhContact('');
-      setNewWhPhone('');
-      setNewWhRamps(4);
+      setPlotMode(null);
       invalidateDrayageClientCache();
       await loadData(true);
-      showToast('success', 'Client destination warehouse created successfully');
+      showToast('success', editingWarehouseId ? 'Consignee destination updated successfully' : 'Consignee destination warehouse created successfully');
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error creating warehouse');
+      showToast('error', err instanceof Error ? err.message : 'Error saving warehouse');
     } finally {
       setSubmittingWh(false);
     }
   };
 
+  const handleDeleteWarehouse = async (w: DrayageWarehouse) => {
+    if (!confirm(`Are you sure you want to delete consignee warehouse "${w.name}"?`)) return;
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_warehouse', id: w.id }),
+      });
+      if (!res.ok) throw new Error('Failed to delete warehouse');
+      showToast('success', `Warehouse "${w.name}" deleted`);
+      invalidateDrayageClientCache();
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error deleting warehouse');
+    }
+  };
+
+  const handleStartPlotWarehouse = () => {
+    setPlotMode({
+      active: true,
+      type: 'CONSIGNEE',
+      title: newWhName || 'Consignee Warehouse',
+      lat: newWhLat,
+      lng: newWhLng,
+      onPlotSelect: (lat, lng) => {
+        setNewWhLat(Number(lat.toFixed(6)));
+        setNewWhLng(Number(lng.toFixed(6)));
+      },
+      onClose: () => setPlotMode(null),
+    });
+    setFocusMapLocation({ lat: newWhLat, lng: newWhLng, zoom: 14.5, title: newWhName || 'Warehouse' });
+    scrollToMap();
+  };
+
+  // Geofence Handlers
   const handleOpenAddGeofence = () => {
     setEditingGeofenceId(null);
     const term = selectedTerminal || terminals[0];
@@ -244,6 +480,29 @@ export default function DrayageTerminalMapPage() {
     setGeofenceLat(term?.lat || 25.0112);
     setGeofenceLng(term?.lng || 55.0612);
     setShowGeofenceModal(true);
+    setFocusMapLocation({ lat: term?.lat || 25.0112, lng: term?.lng || 55.0612, zoom: 14, title: term?.name });
+  };
+
+  // Renamed button action from "+ Add Geofence" to "Edit Geofence" in Selected Terminal Card:
+  // Points directly to that terminal's geofence on the map!
+  const handleEditSelectedTerminalGeofence = () => {
+    if (!selectedTerminal) return;
+    const matchingGf = geofences.find((g) => g.terminalId === selectedTerminal.id) ||
+                       geofences.find((g) => g.terminalName === selectedTerminal.name);
+    if (matchingGf) {
+      setMapEditGeofenceId(matchingGf.id);
+      setFocusMapLocation({
+        lat: matchingGf.centerLat,
+        lng: matchingGf.centerLng,
+        zoom: 14.5,
+        title: matchingGf.name,
+      });
+      scrollToMap();
+      showToast('success', `Editing geofence for ${selectedTerminal.name} on map`);
+    } else {
+      // If no geofence exists yet for this terminal, open the modal pre-filled
+      handleOpenAddGeofence();
+    }
   };
 
   const handleOpenEditGeofence = (gf: DrayageGeofence) => {
@@ -255,6 +514,10 @@ export default function DrayageTerminalMapPage() {
     setGeofenceLat(gf.centerLat || 25.0112);
     setGeofenceLng(gf.centerLng || 55.0612);
     setShowGeofenceModal(true);
+
+    // Map automatically points to that geofence
+    setFocusMapLocation({ lat: gf.centerLat, lng: gf.centerLng, zoom: 14.5, title: gf.name });
+    scrollToMap();
   };
 
   const handleSaveGeofenceFromMap = async (gf: {
@@ -399,6 +662,13 @@ export default function DrayageTerminalMapPage() {
               Refresh
             </button>
             <button
+              onClick={handleOpenAddTerminal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-blue-500/40 text-blue-400 hover:bg-blue-600/10 text-xs font-semibold transition-colors shadow-sm"
+            >
+              <Anchor className="w-3.5 h-3.5" />
+              + Add Terminal
+            </button>
+            <button
               onClick={handleOpenAddGeofence}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors shadow-sm"
             >
@@ -447,15 +717,26 @@ export default function DrayageTerminalMapPage() {
           <DrayageGeofenceMap
             terminals={terminals}
             geofences={geofences}
+            warehouses={warehouses}
             selectedTerminalId={selectedTerminal?.id}
             onSelectTerminal={(t) => {
               const matched = terminals.find((item) => item.id === t.id);
               if (matched) setSelectedTerminal(matched);
             }}
+            onSelectWarehouse={(wh) => {
+              setFocusMapLocation({
+                lat: wh.lat || 24.9642,
+                lng: wh.lng || 55.0915,
+                zoom: 14.5,
+                title: wh.name,
+              });
+            }}
             onSaveGeofence={handleSaveGeofenceFromMap}
             onDeleteGeofence={handleDeleteGeofence}
             activeEditGeofenceId={mapEditGeofenceId}
             onCloseEditMode={() => setMapEditGeofenceId(null)}
+            focusLocation={focusMapLocation}
+            plotMode={plotMode}
           />
         </GeofenceMapErrorBoundary>
       </div>
@@ -465,8 +746,21 @@ export default function DrayageTerminalMapPage() {
         {/* Terminals list (5 cols) */}
         <div className="lg:col-span-5 space-y-3">
           <div className="p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between">
-            <span className="text-xs font-bold text-[var(--text-main)]">Major UAE Ports & Terminals</span>
-            <span className="text-[11px] text-[var(--text-muted)]">{terminals.length} Ports</span>
+            <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <Anchor className="w-3.5 h-3.5 text-blue-400" />
+              Major UAE Ports & Terminals
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[var(--text-muted)]">{terminals.length} Ports</span>
+              <button
+                type="button"
+                onClick={handleOpenAddTerminal}
+                className="px-2 py-1 rounded bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Add Terminal
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -475,18 +769,57 @@ export default function DrayageTerminalMapPage() {
               return (
                 <div
                   key={t.id}
-                  onClick={() => setSelectedTerminal(t)}
+                  onClick={() => {
+                    setSelectedTerminal(t);
+                    setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14, title: t.name });
+                  }}
                   className={`p-4 rounded-xl border cursor-pointer transition-all ${
                     selected
                       ? 'bg-blue-600/10 border-blue-500 text-[var(--text-main)] shadow-sm'
                       : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-[var(--text-main)]">{t.name}</span>
-                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] text-blue-400">
-                      {t.code}
-                    </span>
+                  <div className="flex items-start justify-between mb-1.5 gap-2">
+                    <span className="font-bold text-xs text-[var(--text-main)] leading-snug">{t.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] text-blue-400 font-bold">
+                        {t.code}
+                      </span>
+                      <button
+                        type="button"
+                        title="Plot / Point on Map"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                          scrollToMap();
+                        }}
+                        className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
+                      >
+                        <Compass className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Edit Terminal & Code"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditTerminal(t);
+                        }}
+                        className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete Terminal"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTerminal(t);
+                        }}
+                        className="p-1 rounded hover:bg-rose-600/20 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1.5">
@@ -522,20 +855,27 @@ export default function DrayageTerminalMapPage() {
             <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
               <div className="flex items-start justify-between border-b border-[var(--border-subtle)] pb-4">
                 <div>
-                  <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
-                    <Anchor className="w-4 h-4 text-blue-400" />
-                    {selectedTerminal.name}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
+                      <Anchor className="w-4 h-4 text-blue-400" />
+                      {selectedTerminal.name}
+                    </h3>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400 font-bold">
+                      {selectedTerminal.code}
+                    </span>
+                  </div>
                   <p className="text-xs text-[var(--text-muted)] mt-0.5">
                     Operating Hours: {selectedTerminal.operatingHours} · Emirate: {selectedTerminal.emirate}
                   </p>
                 </div>
+                {/* RENAMED BUTTON: "+ Add Geofence" -> "Edit Geofence" with Edit2 icon */}
                 <button
-                  onClick={handleOpenAddGeofence}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-xs font-semibold transition-colors"
+                  type="button"
+                  onClick={handleEditSelectedTerminalGeofence}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-xs font-semibold transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Geofence
+                  <Edit2 className="w-3.5 h-3.5" />
+                  Edit Geofence
                 </button>
               </div>
 
@@ -585,43 +925,49 @@ export default function DrayageTerminalMapPage() {
                     <tr key={gf.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="py-3 px-3">
                         <div className="font-bold text-[var(--text-main)]">{gf.name}</div>
-                        <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                          Center: {gf.centerLat.toFixed(4)}, {gf.centerLng.toFixed(4)}
+                        <div className="font-mono text-[10px] text-[var(--text-muted)] mt-0.5">
+                          {gf.centerLat.toFixed(4)}, {gf.centerLng.toFixed(4)}
                         </div>
                       </td>
+                      <td className="py-3 px-3 text-[var(--text-muted)]">{gf.terminalName}</td>
                       <td className="py-3 px-3">
-                        <span className="truncate block max-w-[150px]">{gf.terminalName}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[10px] font-mono">
-                          {gf.type}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          gf.type === 'POLYGON'
+                            ? 'bg-purple-500/10 border border-purple-500/20 text-purple-400'
+                            : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                        }`}>
+                          {gf.type === 'POLYGON' ? '⬡ Polygon' : '⚪ Circular'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-mono font-semibold">{gf.radiusMeters}m</td>
+                      <td className="py-3 px-3 font-mono font-medium">
+                        {gf.type === 'POLYGON' ? 'Custom Bounds' : `${gf.radiusMeters}m`}
+                      </td>
                       <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1">
                           <button
+                            type="button"
+                            title="Point on Map"
                             onClick={() => {
-                              setMapEditGeofenceId(gf.id);
-                              const el = document.getElementById('geofence-map-view');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              setFocusMapLocation({ lat: gf.centerLat, lng: gf.centerLng, zoom: 14.5, title: gf.name });
+                              scrollToMap();
                             }}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                            title="Edit on Live Map"
+                            className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
                           >
                             <Compass className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            type="button"
+                            title="Edit Geofence"
                             onClick={() => handleOpenEditGeofence(gf)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                            title="Edit geofence"
+                            className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            type="button"
+                            title="Delete Geofence"
                             onClick={() => handleDeleteGeofence(gf.id, gf.name)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                            title="Delete geofence"
+                            className="p-1 rounded hover:bg-rose-600/20 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -636,7 +982,180 @@ export default function DrayageTerminalMapPage() {
         </div>
       </div>
 
-      {/* Add Geofence Modal */}
+      {/* Add / Edit Terminal Modal */}
+      {showTerminalModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Anchor className="w-4 h-4 text-blue-400" />
+                {editingTerminalId ? 'Edit Port Terminal & Code' : 'Add Port Terminal'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTerminalModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTerminal} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Terminal Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={termName}
+                    onChange={(e) => setTermName(e.target.value)}
+                    placeholder="e.g. Jebel Ali Port - Terminal 1 (DP World)"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Terminal Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={termCode}
+                    onChange={(e) => setTermCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. DPW-JA-T1, ADP-KP-T1"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold outline-none focus:border-blue-500 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Port Authority / Facility</label>
+                  <input
+                    type="text"
+                    value={termPortName}
+                    onChange={(e) => setTermPortName(e.target.value)}
+                    placeholder="e.g. Jebel Ali Port, Khalifa Port"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Emirate</label>
+                  <select
+                    value={termEmirate}
+                    onChange={(e) => setTermEmirate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Fujairah">Fujairah</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Coordinates with Plot on Map button */}
+              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[var(--text-muted)] text-[11px] flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-blue-400" />
+                    GPS Coordinates
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleStartPlotTerminal}
+                    className="px-2.5 py-1 rounded bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    📍 Plot on Map
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)]">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={termLat}
+                      onChange={(e) => setTermLat(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)]">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={termLng}
+                      onChange={(e) => setTermLng(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Geofence Radius (m)</label>
+                  <input
+                    type="number"
+                    value={termRadius}
+                    onChange={(e) => setTermRadius(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Dry Free Days</label>
+                  <input
+                    type="number"
+                    value={termFreeDry}
+                    onChange={(e) => setTermFreeDry(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Reefer Free Days</label>
+                  <input
+                    type="number"
+                    value={termFreeReefer}
+                    onChange={(e) => setTermFreeReefer(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Operating Hours</label>
+                <input
+                  type="text"
+                  value={termOperatingHours}
+                  onChange={(e) => setTermOperatingHours(e.target.value)}
+                  placeholder="e.g. 24/7 Gate Operations"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowTerminalModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingTerm}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  {submittingTerm ? 'Saving...' : editingTerminalId ? 'Update Terminal' : 'Save Terminal'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Geofence Modal */}
       {showGeofenceModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
@@ -646,6 +1165,7 @@ export default function DrayageTerminalMapPage() {
                 {editingGeofenceId ? 'Edit Port / Warehouse Geofence Zone' : 'Configure New Port / Warehouse Geofence'}
               </h3>
               <button
+                type="button"
                 onClick={() => setShowGeofenceModal(false)}
                 className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
               >
@@ -658,12 +1178,20 @@ export default function DrayageTerminalMapPage() {
                 <label className="font-semibold text-[var(--text-muted)]">Terminal / Facility Link</label>
                 <select
                   value={targetTerminalId}
-                  onChange={(e) => setTargetTerminalId(e.target.value)}
+                  onChange={(e) => {
+                    setTargetTerminalId(e.target.value);
+                    const matched = terminals.find((t) => t.id === e.target.value);
+                    if (matched) {
+                      setGeofenceLat(matched.lat);
+                      setGeofenceLng(matched.lng);
+                      setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 >
                   {terminals.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name}
+                      {t.name} ({t.code})
                     </option>
                   ))}
                 </select>
@@ -756,7 +1284,7 @@ export default function DrayageTerminalMapPage() {
         actions={
           <button
             type="button"
-            onClick={() => setShowWarehouseModal(true)}
+            onClick={handleOpenAddWarehouse}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -774,6 +1302,7 @@ export default function DrayageTerminalMapPage() {
                 <th className="py-2.5 px-3 font-semibold">Address</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Unloading Ramps</th>
                 <th className="py-2.5 px-3 font-semibold">Receiving Contact (Consignee Rep)</th>
+                <th className="py-2.5 px-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
@@ -784,6 +1313,11 @@ export default function DrayageTerminalMapPage() {
                       <Warehouse className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       {w.name}
                     </div>
+                    {w.lat && w.lng && (
+                      <div className="font-mono text-[10px] text-[var(--text-muted)] mt-0.5">
+                        {w.lat.toFixed(4)}, {w.lng.toFixed(4)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-3">
                     <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
@@ -812,6 +1346,42 @@ export default function DrayageTerminalMapPage() {
                       <span className="text-[var(--text-faint)]">—</span>
                     )}
                   </td>
+                  <td className="py-3 px-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        title="Plot / Point on Map"
+                        onClick={() => {
+                          setFocusMapLocation({
+                            lat: w.lat || 24.9642,
+                            lng: w.lng || 55.0915,
+                            zoom: 14.5,
+                            title: w.name,
+                          });
+                          scrollToMap();
+                        }}
+                        className="p-1 rounded hover:bg-emerald-600/20 text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
+                      >
+                        <Compass className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Edit Consignee"
+                        onClick={() => handleOpenEditWarehouse(w)}
+                        className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete Consignee"
+                        onClick={() => handleDeleteWarehouse(w)}
+                        className="p-1 rounded hover:bg-rose-600/20 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -819,14 +1389,14 @@ export default function DrayageTerminalMapPage() {
         </div>
       </Panel>
 
-      {/* Add Client Destination Warehouse Modal */}
+      {/* Add / Edit Client Destination Warehouse Modal */}
       {showWarehouseModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Warehouse className="w-4 h-4 text-emerald-400" />
-                Add Consignee Destination (Client Facility / Ramp)
+                {editingWarehouseId ? 'Edit Consignee Destination (Client Facility / Ramp)' : 'Add Consignee Destination (Client Facility / Ramp)'}
               </h3>
               <button
                 type="button"
@@ -891,6 +1461,46 @@ export default function DrayageTerminalMapPage() {
                 </div>
               </div>
 
+              {/* Coordinates with Plot on Map button */}
+              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[var(--text-muted)] text-[11px] flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                    GPS Ramp Coordinates
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleStartPlotWarehouse}
+                    className="px-2.5 py-1 rounded bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/25 text-[11px] font-semibold transition-colors flex items-center gap-1"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    📍 Plot on Map
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)]">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={newWhLat}
+                      onChange={(e) => setNewWhLat(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[var(--text-muted)]">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={newWhLng}
+                      onChange={(e) => setNewWhLng(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="font-semibold text-[var(--text-muted)]">Physical Street Address</label>
                 <input
@@ -936,9 +1546,9 @@ export default function DrayageTerminalMapPage() {
                 <button
                   type="submit"
                   disabled={submittingWh}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50 shadow-sm"
                 >
-                  {submittingWh ? 'Saving...' : 'Save Warehouse Destination'}
+                  {submittingWh ? 'Saving...' : editingWarehouseId ? 'Update Consignee Destination' : 'Save Consignee Destination'}
                 </button>
               </div>
             </form>

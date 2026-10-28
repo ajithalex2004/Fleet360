@@ -376,48 +376,93 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         }
 
-        case 'create_terminal': {
-          const id = `term-${crypto.randomUUID().slice(0, 10)}`;
+        case 'create_terminal':
+        case 'save_terminal': {
+          const id = body.id ? String(body.id) : `term-${crypto.randomUUID().slice(0, 10)}`;
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_terminals (
               id, tenant_id, name, code, port_name, emirate, lat, lng,
-              geofence_radius_meters, free_days_dry, free_days_reefer, status
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'ACTIVE')`,
+              geofence_radius_meters, free_days_dry, free_days_reefer, operating_hours, status, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ACTIVE',NOW())
+            ON CONFLICT (id) DO UPDATE
+               SET name = EXCLUDED.name,
+                   code = EXCLUDED.code,
+                   port_name = EXCLUDED.port_name,
+                   emirate = EXCLUDED.emirate,
+                   lat = EXCLUDED.lat,
+                   lng = EXCLUDED.lng,
+                   geofence_radius_meters = EXCLUDED.geofence_radius_meters,
+                   free_days_dry = EXCLUDED.free_days_dry,
+                   free_days_reefer = EXCLUDED.free_days_reefer,
+                   operating_hours = EXCLUDED.operating_hours,
+                   updated_at = NOW()`,
             id,
             tenantId,
-            String(body.name ?? 'New Port Terminal'),
-            String(body.code ?? 'AE-PORT').toUpperCase(),
-            String(body.portName ?? 'Jebel Ali Port'),
-            String(body.emirate ?? 'Dubai'),
+            String(body.name ?? 'New Port Terminal').trim(),
+            String(body.code ?? 'DPW-JA-T1').toUpperCase().trim(),
+            String(body.portName ?? 'Jebel Ali Port').trim(),
+            String(body.emirate ?? 'Dubai').trim(),
             Number(body.lat ?? 25.0112),
             Number(body.lng ?? 55.0612),
             Number(body.geofenceRadiusMeters ?? 1500),
             Number(body.freeDaysDry ?? 5),
             Number(body.freeDaysReefer ?? 3),
+            String(body.operatingHours ?? '24/7 Gate Operations').trim(),
           );
           return { ok: true, id };
         }
 
-        case 'create_warehouse': {
-          const id = `wh-${crypto.randomUUID().slice(0, 10)}`;
+        case 'delete_terminal': {
+          await tx.$executeRawUnsafe(
+            `DELETE FROM logistics_drayage_terminals WHERE id = $1 AND tenant_id = $2`,
+            String(body.id),
+            tenantId,
+          );
+          return { ok: true };
+        }
+
+        case 'create_warehouse':
+        case 'save_warehouse': {
+          const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_warehouses (
-              id, tenant_id, customer_id, customer_name, name, zone, address, lat, lng, ramps_count, contact_person, contact_phone
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+              id, tenant_id, customer_id, customer_name, name, zone, address, lat, lng, ramps_count, contact_person, contact_phone, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+            ON CONFLICT (id) DO UPDATE
+               SET customer_id = EXCLUDED.customer_id,
+                   customer_name = EXCLUDED.customer_name,
+                   name = EXCLUDED.name,
+                   zone = EXCLUDED.zone,
+                   address = EXCLUDED.address,
+                   lat = EXCLUDED.lat,
+                   lng = EXCLUDED.lng,
+                   ramps_count = EXCLUDED.ramps_count,
+                   contact_person = EXCLUDED.contact_person,
+                   contact_phone = EXCLUDED.contact_phone,
+                   updated_at = NOW()`,
             id,
             tenantId,
             body.customerId ? String(body.customerId) : null,
-            String(body.customerName ?? 'Enterprise Shipper'),
-            String(body.name ?? 'Distribution Hub'),
-            String(body.zone ?? 'JAFZA South'),
-            String(body.address ?? 'Jebel Ali Free Zone, Dubai'),
+            String(body.customerName ?? 'Enterprise Shipper').trim(),
+            String(body.name ?? 'Distribution Hub').trim(),
+            String(body.zone ?? 'JAFZA South').trim(),
+            String(body.address ?? 'Jebel Ali Free Zone, Dubai').trim(),
             Number(body.lat ?? 24.9642),
             Number(body.lng ?? 55.0915),
             Number(body.rampsCount ?? 8),
-            body.contactPerson ? String(body.contactPerson) : null,
-            body.contactPhone ? String(body.contactPhone) : null,
+            body.contactPerson ? String(body.contactPerson).trim() : null,
+            body.contactPhone ? String(body.contactPhone).trim() : null,
           );
           return { ok: true, id };
+        }
+
+        case 'delete_warehouse': {
+          await tx.$executeRawUnsafe(
+            `DELETE FROM logistics_drayage_warehouses WHERE id = $1 AND tenant_id = $2`,
+            String(body.id),
+            tenantId,
+          );
+          return { ok: true };
         }
 
         case 'create_mapped_vehicle': {
