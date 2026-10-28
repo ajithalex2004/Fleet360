@@ -266,6 +266,7 @@ export default function DrayageTerminalMapPage() {
     centerLat: number;
     centerLng: number;
     radiusMeters: number;
+    coordinates?: Array<{ lat: number; lng: number }>;
   }) => {
     try {
       const res = await fetch('/api/logistics/drayage', {
@@ -281,7 +282,7 @@ export default function DrayageTerminalMapPage() {
           centerLat: gf.centerLat,
           centerLng: gf.centerLng,
           radiusMeters: gf.radiusMeters,
-          coordinates: [{ lat: gf.centerLat, lng: gf.centerLng }],
+          coordinates: gf.coordinates && gf.coordinates.length > 0 ? gf.coordinates : [{ lat: gf.centerLat, lng: gf.centerLng }],
         }),
       });
       const data = await res.json();

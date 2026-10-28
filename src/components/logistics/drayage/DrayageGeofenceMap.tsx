@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle,
   Compass, Layers, Maximize2, X, Sliders, Check, Eye, Navigation, RefreshCw,
+  Pentagon, Circle, Undo, RotateCcw,
 } from 'lucide-react';
 
 export interface Terminal {
@@ -47,6 +48,7 @@ interface DrayageGeofenceMapProps {
     centerLat: number;
     centerLng: number;
     radiusMeters: number;
+    coordinates?: Array<{ lat: number; lng: number }>;
   }) => Promise<void>;
   onDeleteGeofence: (id: string, name: string) => Promise<void>;
   activeEditGeofenceId?: string | null;
@@ -96,6 +98,25 @@ function circleRing(lat: number, lng: number, radiusM: number, segments = 64): A
   return ring;
 }
 
+function parsePolygonCoordinates(jsonStr?: string): Array<[number, number]> {
+  if (!jsonStr) return [];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed) || parsed.length < 3) return [];
+    const pts: Array<[number, number]> = [];
+    for (const p of parsed) {
+      if (Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])) {
+        pts.push([Number(p[0]), Number(p[1])]);
+      } else if (p && typeof p === 'object' && 'lng' in p && 'lat' in p) {
+        pts.push([Number(p.lng), Number(p.lat)]);
+      }
+    }
+    return pts;
+  } catch {
+    return [];
+  }
+}
+
 function hasWebGLSupport(): boolean {
   try {
     if (typeof window === 'undefined' || typeof document === 'undefined') return false;
@@ -136,7 +157,7 @@ function loadMapboxScript(): Promise<void> {
         clearTimeout(timeout);
         resolve();
       };
-      script.onerror = (e) => {
+      script.onerror = () => {
         clearTimeout(timeout);
         reject(new Error('Failed to load Mapbox GL JS from CDN'));
       };
@@ -162,6 +183,7 @@ export default function DrayageGeofenceMap({
   const mapRef = useRef<MapboxMap | null>(null);
   const markersRef = useRef<MapboxMarker[]>([]);
   const editMarkerRef = useRef<MapboxMarker | null>(null);
+  const polygonVertexMarkersRef = useRef<MapboxMarker[]>([]);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -172,18 +194,26 @@ export default function DrayageGeofenceMap({
   const [editorId, setEditorId] = useState<string | null>(null);
   const [editorName, setEditorName] = useState('');
   const [editorTerminalId, setEditorTerminalId] = useState('');
+  const [editorShape, setEditorShape] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
   const [editorRadius, setEditorRadius] = useState(1500);
   const [editorLat, setEditorLat] = useState(25.0112);
   const [editorLng, setEditorLng] = useState(55.0612);
+  const [polygonVertices, setPolygonVertices] = useState<Array<[number, number]>>([]); // [[lng, lat], ...]
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helper to update the draft/preview circle source
-  const updateDraftCircle = useCallback((circleData: { lat: number; lng: number; radius: number } | null) => {
+  // Helper to update the draft/preview circle or polygon source
+  const updateDraftGeometry = useCallback((
+    shape: 'CIRCLE' | 'POLYGON',
+    circleData: { lat: number; lng: number; radius: number } | null,
+    polyVertices: Array<[number, number]>
+  ) => {
     try {
       const map = mapRef.current;
       if (!map) return;
       const source = map.getSource('draft-geofence-source') as any;
-      if (source) {
+      if (!source) return;
+
+      if (shape === 'CIRCLE') {
         if (!circleData) {
           source.setData({ type: 'FeatureCollection', features: [] });
         } else {
@@ -201,9 +231,41 @@ export default function DrayageGeofenceMap({
             });
           }
         }
+      } else {
+        // Polygon Mode
+        if (polyVertices.length < 3) {
+          // If fewer than 3 vertices, draw line if >= 2, or empty
+          if (polyVertices.length === 2) {
+            source.setData({
+              type: 'FeatureCollection',
+              features: [
+                {
+                  type: 'Feature',
+                  geometry: { type: 'LineString', coordinates: polyVertices },
+                  properties: {},
+                },
+              ],
+            });
+          } else {
+            source.setData({ type: 'FeatureCollection', features: [] });
+          }
+        } else {
+          // Complete ring (first point repeated at end)
+          const closedRing = [...polyVertices, polyVertices[0]];
+          source.setData({
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                geometry: { type: 'Polygon', coordinates: [closedRing] },
+                properties: {},
+              },
+            ],
+          });
+        }
       }
     } catch (err) {
-      console.warn('Failed to update draft circle on map:', err);
+      console.warn('Failed to update draft geometry on map:', err);
     }
   }, []);
 
@@ -211,15 +273,18 @@ export default function DrayageGeofenceMap({
   const cancelMapEdit = useCallback(() => {
     setIsEditingOnMap(false);
     setEditorId(null);
+    setPolygonVertices([]);
     if (editMarkerRef.current) {
-      try {
-        editMarkerRef.current.remove();
-      } catch {}
+      try { editMarkerRef.current.remove(); } catch {}
       editMarkerRef.current = null;
     }
-    updateDraftCircle(null);
+    polygonVertexMarkersRef.current.forEach(m => {
+      try { m.remove(); } catch {}
+    });
+    polygonVertexMarkersRef.current = [];
+    updateDraftGeometry('CIRCLE', null, []);
     onCloseEditMode?.();
-  }, [onCloseEditMode, updateDraftCircle]);
+  }, [onCloseEditMode, updateDraftGeometry]);
 
   // Start editing a geofence on the map (declared early to prevent TDZ)
   const startEditingGeofence = useCallback((gf: Geofence) => {
@@ -230,6 +295,16 @@ export default function DrayageGeofenceMap({
     setEditorRadius(gf.radiusMeters || 1500);
     setEditorLat(gf.centerLat || 25.0112);
     setEditorLng(gf.centerLng || 55.0612);
+
+    const isPoly = gf.type === 'POLYGON';
+    setEditorShape(isPoly ? 'POLYGON' : 'CIRCLE');
+
+    if (isPoly && gf.coordinatesJson) {
+      const parsed = parsePolygonCoordinates(gf.coordinatesJson);
+      setPolygonVertices(parsed);
+    } else {
+      setPolygonVertices([]);
+    }
 
     if (mapRef.current) {
       try {
@@ -252,9 +327,11 @@ export default function DrayageGeofenceMap({
     setEditorId(null);
     setEditorName(term ? `${term.name} OCR Gate Perimeter` : 'New Port Geofence Zone');
     setEditorTerminalId(term?.id || '');
+    setEditorShape('CIRCLE');
     setEditorRadius(term?.geofenceRadiusMeters || 1500);
     setEditorLat(lat);
     setEditorLng(lng);
+    setPolygonVertices([]);
 
     if (mapRef.current) {
       try {
@@ -279,21 +356,42 @@ export default function DrayageGeofenceMap({
     }
   }, [activeEditGeofenceId, geofences, startCreatingOnMap, startEditingGeofence]);
 
-  // Save changes from map editor
+  // Save changes from map editor (both Circle and Polygon support)
   const handleSaveFromMap = async () => {
     if (!editorName.trim()) return;
+    if (editorShape === 'POLYGON' && polygonVertices.length < 3) {
+      alert('Please place at least 3 points on the map to define the polygon boundary.');
+      return;
+    }
+
     try {
       setIsSaving(true);
       const targetTerm = terminals.find((t) => t.id === editorTerminalId);
+
+      let finalCenterLat = Number(editorLat);
+      let finalCenterLng = Number(editorLng);
+      let finalRadius = Number(editorRadius);
+
+      let coordinatesPayload: Array<{ lat: number; lng: number }> | undefined = undefined;
+
+      if (editorShape === 'POLYGON' && polygonVertices.length >= 3) {
+        // Calculate centroid
+        finalCenterLng = polygonVertices.reduce((sum, p) => sum + p[0], 0) / polygonVertices.length;
+        finalCenterLat = polygonVertices.reduce((sum, p) => sum + p[1], 0) / polygonVertices.length;
+        // Convert to payload
+        coordinatesPayload = polygonVertices.map(([lng, lat]) => ({ lat, lng }));
+      }
+
       await onSaveGeofence({
         id: editorId || undefined,
         terminalId: editorTerminalId || null,
         terminalName: targetTerm?.name || 'Port Terminal',
         name: editorName.trim(),
-        type: 'CIRCLE',
-        centerLat: Number(editorLat),
-        centerLng: Number(editorLng),
-        radiusMeters: Number(editorRadius),
+        type: editorShape,
+        centerLat: finalCenterLat,
+        centerLng: finalCenterLng,
+        radiusMeters: finalRadius,
+        coordinates: coordinatesPayload,
       });
       cancelMapEdit();
     } catch (e) {
@@ -303,15 +401,46 @@ export default function DrayageGeofenceMap({
     }
   };
 
-  // Update preview circle when editing parameters change
+  // Click on map to add vertex in Polygon mode or move center in Circle mode
+  const handleMapClick = useCallback((e: any) => {
+    if (!isEditingOnMap || !e?.lngLat) return;
+    const { lng, lat } = e.lngLat;
+
+    if (editorShape === 'POLYGON') {
+      setPolygonVertices((prev) => [...prev, [lng, lat]]);
+    } else {
+      setEditorLat(lat);
+      setEditorLng(lng);
+    }
+  }, [isEditingOnMap, editorShape]);
+
+  // Undo last polygon point
+  const handleUndoPolygonPoint = () => {
+    setPolygonVertices((prev) => prev.slice(0, -1));
+  };
+
+  // Clear all polygon points
+  const handleClearPolygon = () => {
+    setPolygonVertices([]);
+  };
+
+  // Update preview circle/polygon when editing parameters change
   useEffect(() => {
     if (isEditingOnMap) {
-      updateDraftCircle({ lat: editorLat, lng: editorLng, radius: editorRadius });
+      updateDraftGeometry(
+        editorShape,
+        editorShape === 'CIRCLE' ? { lat: editorLat, lng: editorLng, radius: editorRadius } : null,
+        polygonVertices
+      );
 
-      // Keep draggable marker synced
-      try {
-        const mbgl = (window as any)?.mapboxgl;
-        if (mbgl && mapRef.current) {
+      const mbgl = (window as any)?.mapboxgl;
+      if (mbgl && mapRef.current) {
+        // 1. Circle Mode: Draggable Center Pin
+        if (editorShape === 'CIRCLE') {
+          // Remove polygon markers
+          polygonVertexMarkersRef.current.forEach(m => { try { m.remove(); } catch {} });
+          polygonVertexMarkersRef.current = [];
+
           if (!editMarkerRef.current) {
             const el = document.createElement('div');
             el.className = 'flex flex-col items-center cursor-move';
@@ -336,20 +465,42 @@ export default function DrayageGeofenceMap({
           } else {
             editMarkerRef.current.setLngLat([editorLng, editorLat]);
           }
+        } else {
+          // 2. Polygon Mode: Vertex Markers
+          if (editMarkerRef.current) {
+            try { editMarkerRef.current.remove(); } catch {}
+            editMarkerRef.current = null;
+          }
+
+          // Refresh polygon vertex dots
+          polygonVertexMarkersRef.current.forEach(m => { try { m.remove(); } catch {} });
+          polygonVertexMarkersRef.current = [];
+
+          polygonVertices.forEach(([lng, lat], idx) => {
+            const el = document.createElement('div');
+            el.className = 'cursor-pointer transform hover:scale-125 transition-transform';
+            el.innerHTML = `
+              <div style="background: #f59e0b; color: #0f172a; border: 2px solid white; width: 22px; height: 22px; border-radius: 9999px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.5);">
+                ${idx + 1}
+              </div>
+            `;
+            const mk = new mbgl.Marker({ element: el, anchor: 'center' })
+              .setLngLat([lng, lat])
+              .addTo(mapRef.current);
+            polygonVertexMarkersRef.current.push(mk);
+          });
         }
-      } catch (err) {
-        console.warn('Marker sync warning:', err);
       }
     } else {
       if (editMarkerRef.current) {
-        try {
-          editMarkerRef.current.remove();
-        } catch {}
+        try { editMarkerRef.current.remove(); } catch {}
         editMarkerRef.current = null;
       }
-      updateDraftCircle(null);
+      polygonVertexMarkersRef.current.forEach(m => { try { m.remove(); } catch {} });
+      polygonVertexMarkersRef.current = [];
+      updateDraftGeometry('CIRCLE', null, []);
     }
-  }, [isEditingOnMap, editorLat, editorLng, editorRadius, updateDraftCircle]);
+  }, [isEditingOnMap, editorShape, editorLat, editorLng, editorRadius, polygonVertices, updateDraftGeometry]);
 
   // Initialize Mapbox map with robust safety fallbacks
   useEffect(() => {
@@ -454,11 +605,9 @@ export default function DrayageGeofenceMap({
                 },
               });
 
+              // Click listener for geofence drawing
               map.on('click', (e: any) => {
-                if (e?.lngLat) {
-                  setEditorLat(e.lngLat.lat);
-                  setEditorLng(e.lngLat.lng);
-                }
+                handleMapClick(e);
               });
             } catch (layerErr) {
               console.warn('Error configuring map layers:', layerErr);
@@ -476,24 +625,18 @@ export default function DrayageGeofenceMap({
 
     return () => {
       cancelled = true;
-      markersRef.current.forEach((m) => {
-        try {
-          m.remove();
-        } catch {}
-      });
+      markersRef.current.forEach((m) => { try { m.remove(); } catch {} });
       markersRef.current = [];
       if (editMarkerRef.current) {
-        try {
-          editMarkerRef.current.remove();
-        } catch {}
+        try { editMarkerRef.current.remove(); } catch {}
         editMarkerRef.current = null;
       }
-      try {
-        mapRef.current?.remove();
-      } catch {}
+      polygonVertexMarkersRef.current.forEach((m) => { try { m.remove(); } catch {} });
+      polygonVertexMarkersRef.current = [];
+      try { mapRef.current?.remove(); } catch {}
       mapRef.current = null;
     };
-  }, []);
+  }, [handleMapClick]);
 
   // Update map style when changed
   useEffect(() => {
@@ -518,31 +661,46 @@ export default function DrayageGeofenceMap({
     if (!mbgl) return;
 
     try {
-      markersRef.current.forEach((m) => {
-        try {
-          m.remove();
-        } catch {}
-      });
+      markersRef.current.forEach((m) => { try { m.remove(); } catch {} });
       markersRef.current = [];
 
       const activeGfs = geofences.filter((g) => g.id !== editorId);
-      const features = activeGfs.map((gf) => {
-        const ring = circleRing(gf.centerLat, gf.centerLng, gf.radiusMeters || 1500);
-        const color = gf.terminalId ? '#10b981' : '#3b82f6';
-        return {
-          type: 'Feature' as const,
-          geometry: {
-            type: 'Polygon' as const,
-            coordinates: ring.length ? [ring] : [],
-          },
-          properties: {
-            id: gf.id,
-            name: gf.name,
-            terminalName: gf.terminalName,
-            radiusMeters: gf.radiusMeters,
-            color,
-          },
-        };
+      const features: any[] = [];
+
+      activeGfs.forEach((gf) => {
+        let ring: Array<[number, number]> = [];
+
+        if (gf.type === 'POLYGON' && gf.coordinatesJson) {
+          const parsed = parsePolygonCoordinates(gf.coordinatesJson);
+          if (parsed.length >= 3) {
+            ring = [...parsed, parsed[0]]; // Close ring
+          }
+        }
+
+        // Fallback to circle if not polygon or coordinates empty
+        if (ring.length === 0) {
+          ring = circleRing(gf.centerLat, gf.centerLng, gf.radiusMeters || 1500);
+        }
+
+        const color = gf.type === 'POLYGON' ? '#8b5cf6' : gf.terminalId ? '#10b981' : '#3b82f6';
+
+        if (ring.length > 0) {
+          features.push({
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Polygon' as const,
+              coordinates: [ring],
+            },
+            properties: {
+              id: gf.id,
+              name: gf.name,
+              terminalName: gf.terminalName,
+              type: gf.type,
+              radiusMeters: gf.radiusMeters,
+              color,
+            },
+          });
+        }
       });
 
       const source = map.getSource('saved-geofences-source') as any;
@@ -593,21 +751,25 @@ export default function DrayageGeofenceMap({
       // Add Geofence Center Markers
       activeGfs.forEach((gf) => {
         if (!Number.isFinite(gf.centerLat) || !Number.isFinite(gf.centerLng)) return;
+        const isPoly = gf.type === 'POLYGON';
         const el = document.createElement('div');
         el.className = 'cursor-pointer transform hover:scale-110 transition-transform';
         el.innerHTML = `
-          <div style="background: rgba(16, 185, 129, 0.9); color: white; border: 1.5px solid white; border-radius: 9999px; padding: 2px 6px; font-size: 9px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 3px;">
-            <span>🎯</span>
-            <span>${gf.name.slice(0, 18)}...</span>
+          <div style="background: ${isPoly ? 'rgba(139, 92, 246, 0.95)' : 'rgba(16, 185, 129, 0.95)'}; color: white; border: 1.5px solid white; border-radius: 9999px; padding: 2px 7px; font-size: 9px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 3px;">
+            <span>${isPoly ? '⬡' : '🎯'}</span>
+            <span>${gf.name.slice(0, 18)}${gf.name.length > 18 ? '...' : ''}</span>
           </div>
         `;
 
         const popup = new mbgl.Popup({ offset: 15 }).setHTML(`
-          <div style="padding: 8px; font-size: 12px; color: #0f172a; min-width: 180px;">
-            <strong style="display:block; font-size: 13px; color: #0f172a;">${gf.name}</strong>
-            <span style="color: #64748b; font-size: 11px; display: block; margin-top: 2px;">Link: ${gf.terminalName}</span>
-            <div style="margin-top: 4px; font-size: 11px; font-weight: bold; color: #059669;">
-              Radius: ${gf.radiusMeters}m
+          <div style="padding: 8px; font-size: 12px; color: #0f172a; min-width: 190px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <strong style="font-size: 13px; color: #0f172a;">${gf.name}</strong>
+              <span style="font-size: 10px; font-weight: bold; padding: 1px 5px; border-radius: 4px; background: ${isPoly ? '#ede9fe; color: #6d28d9' : '#dcfce7; color: #15803d'}">${isPoly ? 'POLYGON' : 'CIRCLE'}</span>
+            </div>
+            <span style="color: #64748b; font-size: 11px; display: block; margin-top: 3px;">Link: ${gf.terminalName}</span>
+            <div style="margin-top: 4px; font-size: 11px; font-weight: bold; color: ${isPoly ? '#7c3aed' : '#059669'};">
+              ${isPoly ? 'Custom Multi-point Ramp Boundary' : `Radius: ${gf.radiusMeters}m`}
             </div>
             <div style="margin-top: 8px; display: flex; gap: 6px;">
               <button id="edit-gf-${gf.id}" style="background: #2563eb; color: white; border: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">
@@ -739,11 +901,10 @@ export default function DrayageGeofenceMap({
 
       {/* Main Map or Interactive SVG Radar Fallback */}
       {!mapError ? (
-        <div ref={containerRef} className="w-full h-[420px] bg-slate-950" />
+        <div ref={containerRef} className="w-full h-[450px] bg-slate-950" />
       ) : (
         /* Bulletproof Interactive SVG Radar Fallback */
-        <div className="w-full h-[420px] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 relative flex items-center justify-center p-6 select-none overflow-hidden">
-          {/* Radar Circles Grid */}
+        <div className="w-full h-[450px] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 relative flex items-center justify-center p-6 select-none overflow-hidden">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
             <div className="w-64 h-64 border border-blue-500/40 rounded-full animate-ping" style={{ animationDuration: '4s' }} />
             <div className="absolute w-[500px] h-[500px] border border-cyan-500/20 rounded-full" />
@@ -753,7 +914,6 @@ export default function DrayageGeofenceMap({
             <div className="absolute inset-y-0 left-1/2 border-l border-cyan-500/20" />
           </div>
 
-          {/* Interactive Terminals Grid in Fallback */}
           <div className="relative z-10 w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-4">
             {terminals.slice(0, 6).map((term) => {
               const isSelected = term.id === selectedTerminalId;
@@ -803,16 +963,49 @@ export default function DrayageGeofenceMap({
       {isEditingOnMap && (
         <div className="absolute bottom-3 left-3 right-3 z-20 bg-[var(--bg-surface)]/95 backdrop-blur-md border border-amber-500/50 rounded-2xl p-4 shadow-2xl transition-all">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Header info */}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
+            {/* Header info & Shape Switcher */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-bold uppercase tracking-wider">
-                  {editorId ? 'Editing Geofence on Map' : 'Creating Geofence on Map'}
+                  {editorId ? 'Editing Geofence' : 'Creating Geofence'}
                 </span>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {mapError ? 'Configure geofence parameters below' : 'Click on map or drag pin to move center point'}
+
+                {/* Shape Selector: Circle vs Polygon */}
+                <div className="flex bg-[var(--bg-main)] p-0.5 rounded-lg border border-[var(--border-subtle)] text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setEditorShape('CIRCLE')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-colors ${
+                      editorShape === 'CIRCLE'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Circle className="w-3.5 h-3.5" />
+                    <span>Circular Perimeter</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorShape('POLYGON')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-colors ${
+                      editorShape === 'POLYGON'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <Pentagon className="w-3.5 h-3.5" />
+                    <span>Polygon Ramp Zone</span>
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  {editorShape === 'CIRCLE'
+                    ? 'Click on map or drag center pin'
+                    : 'Click on map to place perimeter vertices'}
                 </span>
               </div>
+
+              {/* Name and Port Link Inputs */}
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -836,28 +1029,68 @@ export default function DrayageGeofenceMap({
               </div>
             </div>
 
-            {/* Interactive Radius Slider & Coordinates */}
-            <div className="flex items-center gap-6">
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-[var(--text-muted)] font-medium">Radius (Meters)</span>
-                  <span className="font-mono font-bold text-amber-400">{editorRadius.toLocaleString()}m</span>
-                </div>
-                <input
-                  type="range"
-                  min="300"
-                  max="8000"
-                  step="100"
-                  value={editorRadius}
-                  onChange={(e) => setEditorRadius(Number(e.target.value))}
-                  className="w-44 accent-amber-500 cursor-pointer"
-                />
-              </div>
+            {/* Shape-Specific Controls */}
+            <div className="flex flex-wrap items-center gap-4">
+              {editorShape === 'CIRCLE' ? (
+                /* Circle: Radius Slider & Lat/Lng */
+                <div className="flex items-center gap-4">
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-[var(--text-muted)] font-medium">Radius (Meters)</span>
+                      <span className="font-mono font-bold text-amber-400">{editorRadius.toLocaleString()}m</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="300"
+                      max="8000"
+                      step="100"
+                      value={editorRadius}
+                      onChange={(e) => setEditorRadius(Number(e.target.value))}
+                      className="w-40 accent-amber-500 cursor-pointer"
+                    />
+                  </div>
 
-              <div className="hidden sm:block text-[11px] text-[var(--text-muted)] font-mono bg-[var(--bg-main)] px-2.5 py-1.5 rounded-lg border border-[var(--border-subtle)]">
-                <div>Lat: {editorLat.toFixed(5)}</div>
-                <div>Lng: {editorLng.toFixed(5)}</div>
-              </div>
+                  <div className="hidden sm:block text-[11px] text-[var(--text-muted)] font-mono bg-[var(--bg-main)] px-2.5 py-1.5 rounded-lg border border-[var(--border-subtle)]">
+                    <div>Lat: {editorLat.toFixed(5)}</div>
+                    <div>Lng: {editorLng.toFixed(5)}</div>
+                  </div>
+                </div>
+              ) : (
+                /* Polygon: Vertex Points Counter & Actions */
+                <div className="flex items-center gap-3">
+                  <div className="bg-[var(--bg-main)] px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[11px]">
+                    <div className="text-[var(--text-muted)]">Polygon Vertices</div>
+                    <div className="font-mono font-bold text-amber-400">
+                      {polygonVertices.length} {polygonVertices.length === 1 ? 'Point' : 'Points'}{' '}
+                      {polygonVertices.length < 3 && (
+                        <span className="text-[10px] text-rose-400 font-normal">(Min 3 needed)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={polygonVertices.length === 0}
+                    onClick={handleUndoPolygonPoint}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-40 transition-colors"
+                    title="Undo last placed vertex"
+                  >
+                    <Undo className="w-3.5 h-3.5" />
+                    <span>Undo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={polygonVertices.length === 0}
+                    onClick={handleClearPolygon}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] text-xs font-medium text-[var(--text-muted)] hover:text-rose-400 disabled:opacity-40 transition-colors"
+                    title="Clear all points"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 shrink-0">
@@ -870,7 +1103,7 @@ export default function DrayageGeofenceMap({
                 </button>
                 <button
                   type="button"
-                  disabled={isSaving || !editorName.trim()}
+                  disabled={isSaving || !editorName.trim() || (editorShape === 'POLYGON' && polygonVertices.length < 3)}
                   onClick={handleSaveFromMap}
                   className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold shadow-md transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
