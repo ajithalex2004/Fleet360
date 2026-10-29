@@ -678,7 +678,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
               updated_at = EXCLUDED.updated_at`,
         pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
         pm.lat, pm.lng, pm.fuel, pm.mileage, pm.nextService, String(pm.idleHours),
-      );
+      ).catch(() => {});
     }
   }
 
@@ -702,7 +702,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         ) VALUES ($1,$2,$3,$4,'HEAVY','ACTIVE',NOW(),NOW())
         ON CONFLICT (id) DO NOTHING`,
         d.id, tenantId, d.name, d.phone,
-      );
+      ).catch(() => {});
     }
   }
 
