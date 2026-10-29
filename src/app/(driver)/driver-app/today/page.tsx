@@ -90,7 +90,7 @@ export interface DriverDrayageJob {
   warehouseGeofence?: DrayageGeofenceBoundary | null;
 }
 
-export function isPointInsideGeofence(
+function isPointInsideGeofence(
   pos: LatLng,
   gf?: DrayageGeofenceBoundary | null,
 ): boolean {
@@ -1451,7 +1451,7 @@ function DrayageJobCard({
             {job.terminalGeofence && (
               <button
                 type="button"
-                onClick={() => onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
+                onClick={() => job.terminalGeofence && onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
                 className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1"
               >
                 <span>⚡ Simulate Entering Port Geofence (Auto-advance to AT_PORT)</span>
@@ -1499,7 +1499,7 @@ function DrayageJobCard({
             {job.warehouseGeofence && (
               <button
                 type="button"
-                onClick={() => onSimulateGeofence({ lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng })}
+                onClick={() => job.warehouseGeofence && onSimulateGeofence({ lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng })}
                 className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center justify-center gap-1"
               >
                 <span>⚡ Simulate Arriving at Ramp Geofence (Auto-pop Prompt)</span>

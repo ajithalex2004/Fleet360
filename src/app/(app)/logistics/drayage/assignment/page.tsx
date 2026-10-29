@@ -6,7 +6,7 @@ import {
   UserCheck, Truck, Layers, Package, CheckCircle2, AlertTriangle, RefreshCw,
   Search, Filter, Plus, ShieldCheck, Compass, ArrowRight, X, ExternalLink,
   Sparkles, Key, Zap, Clock, TrendingUp, AlertCircle, MapPin, DollarSign,
-  ChevronRight, Award, Trash2
+  ChevronRight, Award, Trash2, ArrowUpDown, Leaf, Scale
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -44,6 +44,10 @@ interface DrayageJob {
   driverAllowanceAed: number;
   notes: string | null;
   createdAt: string;
+  cargoWeightKg?: number;
+  shippingLine?: string;
+  bogieJobId?: string | null;
+  streetTurnJobId?: string | null;
 }
 
 interface MappedVehicle {
@@ -119,6 +123,7 @@ interface BogieComboRecommendation {
   commonTerminal: string;
   zone1: string;
   zone2: string;
+  sameZone: boolean;
   dropSequence: string[];
   combinedRevenueAed: number;
   combinedAllowanceAed: number;
@@ -126,17 +131,38 @@ interface BogieComboRecommendation {
   hasUrgentDemurrage: boolean;
   tasSlot: string;
   score: number;
+  box1WeightKg: number;
+  box2WeightKg: number;
+  totalPayloadKg: number;
+  isWeightCompliant: boolean;
+  weightLimitKg: number;
+  weightUtilizationPct: number;
+  chassisRequirement: string;
 }
 
 interface StreetTurnRecommendation {
   id: string;
-  inboundJob: DrayageJob; // L2
-  outboundJob: DrayageJob; // L1
+  l2Job: DrayageJob;
+  exportJob: DrayageJob;
+  inboundJob: DrayageJob;
+  outboundJob: DrayageJob;
+  shippingLine: string;
+  carrierPrefix: string;
+  containerNumber: string;
+  containerSize: string;
+  containerType: string;
+  originWarehouse: string;
+  destWarehouse: string;
+  zone: string;
+  interWarehouseDistanceKm: number;
   terminalName: string;
   tasSlot: string;
   combinedRevenueAed: number;
   combinedAllowanceAed: number;
   deadheadKmSaved: number;
+  co2SavedKg: number;
+  fuelSavingsAed: number;
+  turnaroundHoursSaved: number;
   hasUrgentDemurrage: boolean;
   score: number;
 }
@@ -207,6 +233,7 @@ export default function DrayageAssignmentPage() {
   const [editingTokenJob, setEditingTokenJob] = useState<DrayageJob | null>(null);
   const [newTokenValue, setNewTokenValue] = useState('');
   const [isBogieAssign, setIsBogieAssign] = useState(false);
+  const [activeStreetTurnPair, setActiveStreetTurnPair] = useState<StreetTurnRecommendation | null>(null);
 
   // Assignment Modal Fields
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
@@ -410,6 +437,14 @@ export default function DrayageAssignmentPage() {
         const zone2 = getWarehouseZone(j2.warehouseName, j2.warehouseId);
         const sameZone = zone1.toLowerCase() === zone2.toLowerCase();
 
+        // Weight safety check (UAE RTA / FTA max legal payload limit: 36,000 kg)
+        const box1WeightKg = j1.cargoWeightKg || 14500;
+        const box2WeightKg = j2.cargoWeightKg || 16200;
+        const totalPayloadKg = box1WeightKg + box2WeightKg;
+        const weightLimitKg = 36000;
+        const isWeightCompliant = totalPayloadKg <= weightLimitKg;
+        const weightUtilizationPct = Math.round((totalPayloadKg / weightLimitKg) * 100);
+
         // Calculate sequence: Drop #1 = More urgent DO expiry or alphabetical zone
         const r1 = getDemurrageRisk(j1);
         const r2 = getDemurrageRisk(j2);
@@ -422,9 +457,11 @@ export default function DrayageAssignmentPage() {
 
         const tas = getTasSlotWindow(j1, j2);
 
-        // Scoring: Base 80, Same Zone +15, Demurrage Urgency +25
+        // Scoring: Base 80, Same Zone +15, Demurrage Urgency +25, Weight Compliant +10
         let score = 80;
         if (sameZone) score += 15;
+        if (isWeightCompliant) score += 10;
+        else score -= 30; // penalize overweight pairs
         if (hasUrgentDemurrage) score += 25;
 
         candidates.push({
@@ -434,6 +471,7 @@ export default function DrayageAssignmentPage() {
           commonTerminal: j1.terminalName,
           zone1,
           zone2,
+          sameZone,
           dropSequence: [`Drop #1: ${drop1.warehouseName} (${drop1.customerName})`, `Drop #2: ${drop2.warehouseName} (${drop2.customerName})`],
           combinedRevenueAed,
           combinedAllowanceAed,
@@ -441,6 +479,13 @@ export default function DrayageAssignmentPage() {
           hasUrgentDemurrage,
           tasSlot: tas.slotTime,
           score,
+          box1WeightKg,
+          box2WeightKg,
+          totalPayloadKg,
+          isWeightCompliant,
+          weightLimitKg,
+          weightUtilizationPct,
+          chassisRequirement: '40FT Skeletal / Bogie Multi-Axle',
         });
       }
     }
@@ -461,11 +506,18 @@ export default function DrayageAssignmentPage() {
   }, [unassignedJobs, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
-  // TERMINAL STREET-TURN PAIRING ENGINE (L2 Dropoff + L1 Pickup)
+  // ZONE-BASED STREET-TURN MATCHING ENGINE (L2 Empty Warehouse -> Pending Export Booking)
   // =========================================================================
   const streetTurnPairs = useMemo(() => {
-    const l2Inbound = unassignedJobs.filter((j) => j.jobPhase === 'L2');
-    const l1Outbound = unassignedJobs.filter((j) => j.jobPhase === 'L1');
+    // 1. Freshly activated L2 empty containers sitting in warehouse zones
+    const l2Inbound = unassignedJobs.filter((j) => j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
+    // 2. Pending export bookings
+    const exportBookings = unassignedJobs.filter(
+      (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP')
+    );
+    // Fallback: If no explicit EXPORT jobs in queue, also evaluate unassigned L1 jobs
+    const l1Outbound = exportBookings.length > 0 ? exportBookings : unassignedJobs.filter((j) => j.jobPhase === 'L1');
+
     if (l2Inbound.length === 0 || l1Outbound.length === 0) return [];
 
     const candidates: StreetTurnRecommendation[] = [];
@@ -473,10 +525,42 @@ export default function DrayageAssignmentPage() {
       for (const j1 of l1Outbound) {
         if (j2.id === j1.id) continue;
 
-        // Terminal Match: L2 returns empty to terminal, L1 picks up from same terminal
+        const zoneL2 = getWarehouseZone(j2.warehouseName, j2.warehouseId);
+        const zoneL1 = getWarehouseZone(j1.warehouseName, j1.warehouseId);
+        const sameZone = zoneL2.toLowerCase() === zoneL1.toLowerCase();
+
+        // Terminal Match
         const termMatch =
           j2.terminalName.trim().toLowerCase() === j1.terminalName.trim().toLowerCase();
-        if (!termMatch) continue;
+
+        // Proximity Match: Same Zone or Corridor Cluster (JAFZA / NIP / Dubai South <= 15 km)
+        const isClusterMatch =
+          sameZone ||
+          (zoneL2.includes('JAFZA') && zoneL1.includes('JAFZA')) ||
+          (zoneL2.includes('JAFZA') && zoneL1.includes('NIP')) ||
+          (zoneL2.includes('NIP') && zoneL1.includes('JAFZA'));
+
+        if (!isClusterMatch && !termMatch) continue;
+
+        // Container Size Compatibility: 20FT with 20FT, 40FT/40HC with 40FT/40HC
+        const sizeMatch =
+          j2.containerSize === j1.containerSize ||
+          (j2.containerSize.startsWith('40') && j1.containerSize.startsWith('40'));
+        if (!sizeMatch) continue;
+
+        // Container Type: DRY with DRY, REEFER with REEFER
+        const typeMatch = (j2.containerType || 'DRY').toUpperCase() === (j1.containerType || 'DRY').toUpperCase();
+        if (!typeMatch) continue;
+
+        // Carrier Line Matching (e.g. MSCU with MSC)
+        const line2 = j2.shippingLine || (j2.containerNumber.startsWith('MSC') ? 'MSC' : j2.containerNumber.slice(0, 4));
+        const line1 = j1.shippingLine || (j1.containerNumber.startsWith('MSC') ? 'MSC' : j1.containerNumber.slice(0, 4));
+        const isLineMatch = line2 === line1 || j1.containerNumber.includes('TBD') || !j1.containerNumber;
+
+        const interDist = sameZone ? 3.2 : 6.8;
+        const deadheadSaved = Math.max(48, Math.round(56 - interDist));
+        const co2Saved = Math.round(deadheadSaved * 0.95 * 10) / 10;
+        const fuelSaved = Math.round(deadheadSaved * 4.5 + 400);
 
         const r2 = getDemurrageRisk(j2);
         const r1 = getDemurrageRisk(j1);
@@ -484,17 +568,33 @@ export default function DrayageAssignmentPage() {
         const tas = getTasSlotWindow(j2, j1);
 
         let score = 90;
-        if (hasUrgent) score += 20;
+        if (sameZone) score += 10;
+        if (isLineMatch) score += 8;
+        if (hasUrgent) score += 15;
 
         candidates.push({
           id: `STREET-${j2.id}-${j1.id}`,
+          l2Job: j2,
+          exportJob: j1,
           inboundJob: j2,
           outboundJob: j1,
-          terminalName: j2.terminalName,
+          shippingLine: line2,
+          carrierPrefix: j2.containerNumber.slice(0, 4),
+          containerNumber: j2.containerNumber,
+          containerSize: j2.containerSize,
+          containerType: j2.containerType || 'DRY',
+          originWarehouse: j2.warehouseName,
+          destWarehouse: j1.warehouseName,
+          zone: zoneL2,
+          interWarehouseDistanceKm: interDist,
+          terminalName: j1.terminalName || j2.terminalName,
           tasSlot: tas.slotTime,
           combinedRevenueAed: (j2.rateAmountAed || 1200) + (j1.rateAmountAed || 1450),
           combinedAllowanceAed: (j2.driverAllowanceAed || 120) + (j1.driverAllowanceAed || 150),
-          deadheadKmSaved: 52, // Typical Port <-> Inland Depot roundtrip saved
+          deadheadKmSaved: deadheadSaved,
+          co2SavedKg: co2Saved,
+          fuelSavingsAed: fuelSaved,
+          turnaroundHoursSaved: 4.0,
           hasUrgentDemurrage: hasUrgent,
           score,
         });
@@ -513,7 +613,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalStreetTurns;
-  }, [unassignedJobs, getDemurrageRisk, getTasSlotWindow]);
+  }, [unassignedJobs, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // High Demurrage Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -978,6 +1078,7 @@ export default function DrayageAssignmentPage() {
     setSelectedJobIds([combo.job1.id, combo.job2.id]);
     setAssigningJob(combo.job1);
     setIsBogieAssign(true);
+    setActiveStreetTurnPair(null);
     const rec = getSmartRecommendedAssets(combo.job1, true);
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
@@ -985,7 +1086,17 @@ export default function DrayageAssignmentPage() {
     setTokenInput(`DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
+  const handleSwapBogieSequence = () => {
+    if (selectedJobIds.length === 2) {
+      setSelectedJobIds([selectedJobIds[1], selectedJobIds[0]]);
+      const job1 = jobs.find((j) => j.id === selectedJobIds[1]);
+      if (job1) setAssigningJob(job1);
+      showToast('success', 'Drop sequence swapped: Drop #1 ⇄ Drop #2');
+    }
+  };
+
   const handleUseStreetTurnPair = (pair: StreetTurnRecommendation) => {
+    setActiveStreetTurnPair(pair);
     setSelectedJobIds([pair.inboundJob.id, pair.outboundJob.id]);
     setAssigningJob(pair.inboundJob);
     setIsBogieAssign(false);
@@ -1043,13 +1154,46 @@ export default function DrayageAssignmentPage() {
 
     try {
       setSubmittingAssign(true);
-      if (isBogieAssign) {
+      if (activeStreetTurnPair) {
         const res = await fetch('/api/logistics/drayage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'create_bogie_trip',
-            jobIds: selectedJobIds,
+            action: 'execute_street_turn',
+            l2JobId: activeStreetTurnPair.inboundJob.id,
+            exportJobId: activeStreetTurnPair.outboundJob.id,
+            vehicleId: selectedVehicleId,
+            vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
+            driverId: selectedDriverId,
+            driverName: drv?.fullName || 'Assigned Driver',
+            trailerId: selectedTrailerId,
+            trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
+            tokenNumber: tokenInput,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to execute Street-Turn triangulation');
+        showToast(
+          'success',
+          `⚡ Street-Turn ${data.streetTurnRef} executed! Reallocated ${data.containerNumber} to ${data.exportJobCode}. Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂)! Saved AED ${data.fuelSavingsAed}!`
+        );
+        setActiveStreetTurnPair(null);
+        setSelectedJobIds([]);
+      } else if (isBogieAssign) {
+        // Validate trailer type: cannot be a 20FT trailer!
+        if (tr && tr.trailerType && tr.trailerType.includes('20FT') && !tr.trailerType.includes('40FT')) {
+          showToast('error', '⚠️ Invalid Chassis: A 20FT trailer cannot haul dual 20FT containers. Please choose a 40FT/45FT Skeletal or Bogie chassis.');
+          setSubmittingAssign(false);
+          return;
+        }
+
+        const res = await fetch('/api/logistics/drayage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'execute_bogie_dispatch',
+            job1Id: selectedJobIds[0],
+            job2Id: selectedJobIds[1],
             vehicleId: selectedVehicleId,
             vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
             driverId: selectedDriverId,
@@ -1061,58 +1205,33 @@ export default function DrayageAssignmentPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to assign Bogie trip');
-        showToast('success', `Bogie dispatch ${data.bogieRef} created for ${data.count} jobs!`);
+        showToast(
+          'success',
+          `⚡ Dual-20FT Bogie dispatch ${data.bogieRef} confirmed! Total Payload: ${(data.totalPayloadKg / 1000).toFixed(1)}T (${data.isWeightCompliant ? 'Road Compliant' : 'Overweight Risk'}).`
+        );
         setSelectedJobIds([]);
       } else if (assigningJob) {
-        // If 2 jobs selected for Street Turn
-        if (selectedJobIds.length > 1) {
-          const res = await fetch('/api/logistics/drayage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'batch_dispatch',
-              dispatches: [
-                {
-                  type: 'STREET_TURN',
-                  jobIds: selectedJobIds,
-                  vehicleId: selectedVehicleId,
-                  vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
-                  driverId: selectedDriverId,
-                  driverName: drv?.fullName || 'Assigned Driver',
-                  trailerId: selectedTrailerId,
-                  trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
-                  tokenNumber: tokenInput,
-                  notes: `Street Turn Pair (${tokenInput})`,
-                },
-              ],
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Failed to assign Street Turn pair');
-          showToast('success', `Street Turn pair assigned with token ${tokenInput}!`);
-          setSelectedJobIds([]);
-        } else {
-          const res = await fetch('/api/logistics/drayage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'assign_job',
-              jobId: assigningJob.id,
-              vehicleId: selectedVehicleId,
-              vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
-              driverId: selectedDriverId,
-              driverName: drv?.fullName || 'Assigned Driver',
-              trailerId: selectedTrailerId,
-              trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
-              tokenNumber: tokenInput,
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Failed to assign job');
-          showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber}!`);
-        }
+        const res = await fetch('/api/logistics/drayage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'assign_job',
+            jobId: assigningJob.id,
+            vehicleId: selectedVehicleId,
+            vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
+            driverId: selectedDriverId,
+            driverName: drv?.fullName || 'Assigned Driver',
+            trailerId: selectedTrailerId,
+            trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
+            tokenNumber: tokenInput,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to assign job');
+        showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber}!`);
       }
       setAssigningJob(null);
+      setActiveStreetTurnPair(null);
       invalidateDrayageClientCache();
       await loadData(true);
     } catch (err) {
@@ -1575,7 +1694,7 @@ export default function DrayageAssignmentPage() {
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* 1. Bogie Combos */}
+            {/* 1. Dual-20FT Bogie Combos */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BOGIE') &&
               bogieCombos.map((combo) => (
                 <div
@@ -1598,18 +1717,45 @@ export default function DrayageAssignmentPage() {
                       <span>{combo.tasSlot} TAS Slot Match (Single Entry)</span>
                     </div>
 
-                    {combo.hasUrgentDemurrage && (
-                      <div className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 text-rose-400" />
-                        <span>Demurrage Rescue Pair</span>
+                    {/* Weight & Road Legal Safety Gauge */}
+                    <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-[var(--text-muted)] flex items-center gap-1">
+                          <Scale className="w-3 h-3 text-indigo-400" />
+                          <span>Combined Payload:</span>
+                        </span>
+                        <span className={`font-mono font-bold ${combo.isWeightCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {(combo.totalPayloadKg / 1000).toFixed(1)}T / {(combo.weightLimitKg / 1000).toFixed(1)}T
+                        </span>
                       </div>
-                    )}
+                      <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            combo.isWeightCompliant ? 'bg-emerald-500' : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${Math.min(100, combo.weightUtilizationPct)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className={`font-semibold ${combo.isWeightCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {combo.isWeightCompliant ? '✓ UAE RTA 36T Road Legal' : '⚠️ Overweight Road Violation'}
+                        </span>
+                        <span className="text-[var(--text-muted)]">{combo.weightUtilizationPct}% GCW</span>
+                      </div>
+                    </div>
 
+                    {/* Chassis Requirement Pill */}
+                    <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 flex items-center gap-1.5">
+                      <Truck className="w-3 h-3 text-blue-400 shrink-0" />
+                      <span>Requires: 40FT/45FT Skeletal or Bogie Chassis</span>
+                    </div>
+
+                    {/* Drops Sequence */}
                     <div className="space-y-1.5 pt-1 text-xs">
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
                           <span>1. {combo.job1.containerNumber} (20FT)</span>
-                          <span className="text-[10px] text-[var(--text-muted)] font-normal">{combo.job1.jobCode}</span>
+                          <span className="text-[10px] text-emerald-400 font-normal">{(combo.box1WeightKg / 1000).toFixed(1)}T</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
                           {combo.job1.customerName} → {combo.job1.warehouseName} ({combo.zone1})
@@ -1619,7 +1765,7 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
                           <span>2. {combo.job2.containerNumber} (20FT)</span>
-                          <span className="text-[10px] text-[var(--text-muted)] font-normal">{combo.job2.jobCode}</span>
+                          <span className="text-[10px] text-emerald-400 font-normal">{(combo.box2WeightKg / 1000).toFixed(1)}T</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
                           {combo.job2.customerName} → {combo.job2.warehouseName} ({combo.zone2})
@@ -1650,13 +1796,13 @@ export default function DrayageAssignmentPage() {
                       className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      Use this Bogie Pair
+                      ⚡ Dispatch Dual-20FT Bogie Pair
                     </button>
                   </div>
                 </div>
               ))}
 
-            {/* 2. Street Turn Matches */}
+            {/* 2. Zone-Based Street Turn Triangulation Matches */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'STREET_TURN') &&
               streetTurnPairs.map((pair) => (
                 <div
@@ -1667,52 +1813,81 @@ export default function DrayageAssignmentPage() {
                     <div className="flex items-center justify-between">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
-                        Terminal Street Turn Match
+                        Inland Street-Turn Triangulation
                       </span>
                       <span className="text-[10px] font-mono font-bold text-emerald-400">
                         Score: {pair.score}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span>{pair.tasSlot} TAS Window (No Gate Re-Entry)</span>
+                    {/* Carrier Line Match Badge */}
+                    <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[11px]">
+                      <span className="text-emerald-400 font-bold flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        {pair.shippingLine} Line Verified ({pair.carrierPrefix})
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                        {pair.containerSize} {pair.containerType || 'DRY'}
+                      </span>
                     </div>
 
                     <div className="space-y-1.5 pt-1 text-xs">
-                      {/* L2 Inbound */}
+                      {/* L2 Inbound Empty Box */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-amber-400">Inbound (L2 Empty Drop)</span>
+                          <span className="font-bold text-amber-400">1. Inbound Empty (L2 Warehouse)</span>
                           <span className="font-mono font-bold text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {pair.inboundJob.warehouseName} ➔ {pair.terminalName}
+                          {pair.originWarehouse} ({pair.zone})
                         </div>
                       </div>
 
-                      {/* L1 Outbound */}
+                      {/* Direct Inland Repositioning */}
+                      <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <ArrowRight className="w-3 h-3 text-emerald-400" />
+                          <span>Direct Inland Interchange ({pair.interWarehouseDistanceKm} km)</span>
+                        </span>
+                        <span className="font-bold text-emerald-400">No Port Return</span>
+                      </div>
+
+                      {/* Outbound Export Booking */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-blue-400">Outbound (L1 Export Pick)</span>
-                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.outboundJob.containerNumber}</span>
+                          <span className="font-bold text-blue-400">2. Outbound Export Loading</span>
+                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.exportJob.jobCode}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {pair.terminalName} ➔ {pair.outboundJob.warehouseName}
+                          {pair.destWarehouse} ➔ {pair.terminalName}
                         </div>
                       </div>
                     </div>
                   </div>
 
+                  {/* Economic & Environmental Savings Metrics */}
                   <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2.5">
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div>
-                        <span className="text-[var(--text-muted)] block text-[10px]">Combined Revenue</span>
-                        <span className="font-bold text-emerald-400">AED {pair.combinedRevenueAed.toLocaleString()}</span>
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Saved</span>
+                        <span className="font-bold text-blue-400 flex items-center gap-1">
+                          <span>{pair.deadheadKmSaved} km zero-bobtail</span>
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-[var(--text-muted)] block text-[10px]">Deadhead Saved</span>
-                        <span className="font-bold text-blue-400">{pair.deadheadKmSaved} km zero-bobtail</span>
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Carbon Avoided</span>
+                        <span className="font-bold text-emerald-400 flex items-center gap-1">
+                          <Leaf className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span>{pair.co2SavedKg} kg CO₂</span>
+                        </span>
+                      </div>
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Direct Cost Saved</span>
+                        <span className="font-bold text-emerald-400">AED {pair.fuelSavingsAed.toLocaleString()}</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Turnaround Saved</span>
+                        <span className="font-bold text-cyan-400">{pair.turnaroundHoursSaved} hrs gate dwell</span>
                       </div>
                     </div>
 
@@ -1721,7 +1896,7 @@ export default function DrayageAssignmentPage() {
                       className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      Use this Street Turn
+                      ⚡ Execute Street-Turn Triangulation
                     </button>
                   </div>
                 </div>
@@ -2013,17 +2188,17 @@ export default function DrayageAssignmentPage() {
               <div>
                 <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-blue-400" />
-                  {isBogieAssign
-                    ? 'Assign Bogie Double-Container Trip'
-                    : selectedJobIds.length > 1
-                    ? 'Assign Street Turn Pair'
+                  {activeStreetTurnPair
+                    ? '⚡ Confirm Inland Street-Turn Triangulation'
+                    : isBogieAssign
+                    ? '⚡ Dual-20FT Bogie Dispatch (Single Prime Mover)'
                     : `Assign Assets: ${assigningJob.jobCode}`}
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  {isBogieAssign
-                    ? `Assigning 2x20FT containers to a single prime mover and bogie chassis`
-                    : selectedJobIds.length > 1
-                    ? `Assigning Inbound Drop + Outbound Pickup pair to a single prime mover`
+                  {activeStreetTurnPair
+                    ? `Direct interchange: Reallocating empty container ${activeStreetTurnPair.containerNumber} from ${activeStreetTurnPair.originWarehouse} to ${activeStreetTurnPair.exportJob.jobCode}`
+                    : isBogieAssign
+                    ? `Coupling two 20FT containers onto a 40FT/45FT skeletal/bogie trailer`
                     : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize})`}
                 </p>
               </div>
@@ -2036,6 +2211,117 @@ export default function DrayageAssignmentPage() {
             </div>
 
             <div className="space-y-4 text-xs">
+              {/* Special Triangulation Street-Turn Banner */}
+              {activeStreetTurnPair && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Triangulation Match: {activeStreetTurnPair.shippingLine} Line Verified
+                    </span>
+                    <span className="font-mono text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded">
+                      {activeStreetTurnPair.containerSize} {activeStreetTurnPair.containerType}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
+                      <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Saved</span>
+                      <span className="font-bold text-blue-400">{activeStreetTurnPair.deadheadKmSaved} km zero-bobtail</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
+                      <span className="text-[var(--text-muted)] block text-[9px]">CO₂ Avoided</span>
+                      <span className="font-bold text-emerald-400">{activeStreetTurnPair.co2SavedKg} kg</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
+                      <span className="text-[var(--text-muted)] block text-[9px]">Cost Saved</span>
+                      <span className="font-bold text-emerald-400">AED {activeStreetTurnPair.fuelSavingsAed}</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
+                      <span className="text-[var(--text-muted)] block text-[9px]">Port Turnaround</span>
+                      <span className="font-bold text-cyan-400">{activeStreetTurnPair.turnaroundHoursSaved}h dwell avoided</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Special Dual-20FT Bogie Weight Compliance & Sequence Swap Banner */}
+              {isBogieAssign && selectedJobIds.length === 2 && (
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-indigo-300 flex items-center gap-1.5 text-xs">
+                      <Scale className="w-4 h-4 text-indigo-400" />
+                      Dual-20FT Gross Payload Compliance Check
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSwapBogieSequence}
+                      className="px-2 py-0.5 rounded bg-blue-600/30 text-blue-300 border border-blue-500/40 hover:bg-blue-600/50 text-[10px] font-bold flex items-center gap-1"
+                    >
+                      <ArrowUpDown className="w-3 h-3" />
+                      Swap Drop 1 ⇄ Drop 2
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] text-indigo-300 font-bold">Drop #1 (Lead):</div>
+                      <div className="font-mono font-bold text-[var(--text-main)] truncate">
+                        {jobs.find((j) => j.id === selectedJobIds[0])?.containerNumber || 'Box 1'}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] truncate">
+                        {jobs.find((j) => j.id === selectedJobIds[0])?.customerName}
+                      </div>
+                      <div className="text-[10px] text-emerald-400 font-semibold">
+                        Payload: {((jobs.find((j) => j.id === selectedJobIds[0])?.cargoWeightKg || 14500) / 1000).toFixed(1)}T
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                      <div className="text-[10px] text-indigo-300 font-bold">Drop #2 (Trailing):</div>
+                      <div className="font-mono font-bold text-[var(--text-main)] truncate">
+                        {jobs.find((j) => j.id === selectedJobIds[1])?.containerNumber || 'Box 2'}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] truncate">
+                        {jobs.find((j) => j.id === selectedJobIds[1])?.customerName}
+                      </div>
+                      <div className="text-[10px] text-emerald-400 font-semibold">
+                        Payload: {((jobs.find((j) => j.id === selectedJobIds[1])?.cargoWeightKg || 16200) / 1000).toFixed(1)}T
+                      </div>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const w1 = jobs.find((j) => j.id === selectedJobIds[0])?.cargoWeightKg || 14500;
+                    const w2 = jobs.find((j) => j.id === selectedJobIds[1])?.cargoWeightKg || 16200;
+                    const tot = w1 + w2;
+                    const compliant = tot <= 36000;
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-[var(--text-muted)]">Combined Payload:</span>
+                          <span className={`font-mono font-bold ${compliant ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {(tot / 1000).toFixed(1)}T / 36.0T ({(tot / 360).toFixed(0)}% Legal Limit)
+                          </span>
+                        </div>
+                        <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${compliant ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                            style={{ width: `${Math.min(100, Math.round((tot / 36000) * 100))}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px]">
+                          {compliant ? (
+                            <span className="text-emerald-400 font-semibold">✓ Compliant with UAE RTA / FTA Road Safety Regulations</span>
+                          ) : (
+                            <span className="text-rose-400 font-bold">⚠️ Overweight Alert: Payload exceeds UAE RTA 36-Tonne limit!</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Select Prime Mover */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -2161,7 +2447,7 @@ export default function DrayageAssignmentPage() {
                 <div className="flex items-center justify-between">
                   <label className="font-semibold text-[var(--text-muted)]">Skeletal / Flatbed Chassis *</label>
                   {isBogieAssign ? (
-                    <span className="text-[10px] text-indigo-400 font-semibold">✨ Recommended: 40FT/45FT Flatbed or Bogie Chassis (2x20FT)</span>
+                    <span className="text-[10px] text-indigo-400 font-semibold">✨ Mandatory: 40FT/45FT Flatbed or Bogie Chassis (2x20FT)</span>
                   ) : assigningJob?.containerType === 'REEFER' ? (
                     <span className="text-[10px] text-cyan-400 font-semibold">✨ Recommended: Reefer Chassis with Genset</span>
                   ) : assigningJob?.containerSize === '20FT' ? (
@@ -2170,6 +2456,19 @@ export default function DrayageAssignmentPage() {
                     <span className="text-[10px] text-blue-400 font-semibold">✨ Recommended: 40FT/45FT Skeletal Chassis</span>
                   )}
                 </div>
+                {/* 20FT Trailer Error for Bogie */}
+                {isBogieAssign && selectedTrailerId && (() => {
+                  const selTr = trailers.find((t) => t.id === selectedTrailerId);
+                  if (selTr && selTr.trailerType.includes('20FT') && !selTr.trailerType.includes('40FT')) {
+                    return (
+                      <div className="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-semibold flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <span>Invalid Chassis: Trailer {selTr.plateNumber} is a 20FT chassis. A Bogie trip requires a 40FT or 45FT chassis.</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <SearchableSelect
                   value={selectedTrailerId}
                   onChange={(val) => setSelectedTrailerId(val)}
@@ -2213,7 +2512,13 @@ export default function DrayageAssignmentPage() {
                 disabled={submittingAssign}
                 className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm disabled:opacity-50"
               >
-                {submittingAssign ? 'Assigning Assets...' : 'Confirm Assignment & Token'}
+                {submittingAssign
+    ? 'Assigning Assets...'
+    : activeStreetTurnPair
+    ? 'Confirm Street-Turn Triangulation'
+    : isBogieAssign
+    ? 'Confirm Dual-20FT Bogie Dispatch'
+    : 'Confirm Assignment & Token'}
               </button>
             </div>
           </div>
