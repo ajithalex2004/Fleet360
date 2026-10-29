@@ -174,7 +174,11 @@ ALTER TABLE logistics_drayage_jobs
   ADD COLUMN IF NOT EXISTS cargo_weight_kg DOUBLE PRECISION DEFAULT 14000,
   ADD COLUMN IF NOT EXISTS shipping_line TEXT,
   ADD COLUMN IF NOT EXISTS bogie_job_id TEXT,
-  ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT;
+  ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT,
+  -- Proof of delivery (consignee / shipper tracking portal).
+  ADD COLUMN IF NOT EXISTS pod_photo_url TEXT,
+  ADD COLUMN IF NOT EXISTS pod_signature_name TEXT,
+  ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
   id TEXT PRIMARY KEY,
