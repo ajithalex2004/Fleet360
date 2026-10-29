@@ -662,7 +662,43 @@ export default function DrayageTerminalMapPage() {
       showToast('error', 'Geofence name is required');
       return;
     }
-    const term = terminals.find((t) => t.id === targetTerminalId);
+
+    let targetId: string | null = null;
+    let targetName = 'General Facility';
+    const sel = targetTerminalId;
+    if (sel) {
+      if (sel.startsWith('terminal:')) {
+        const id = sel.replace('terminal:', '');
+        const term = terminals.find((t) => t.id === id);
+        targetId = id;
+        targetName = term?.name || 'Port Terminal';
+      } else if (sel.startsWith('warehouse:')) {
+        const id = sel.replace('warehouse:', '');
+        const wh = warehouses.find((w) => w.id === id);
+        targetId = id;
+        targetName = wh?.customerName ? `${wh.customerName} — ${wh.name}` : (wh?.name || 'Client Destination');
+      } else if (sel.startsWith('client:')) {
+        const id = sel.replace('client:', '');
+        const cli = clients.find((c) => c.id === id);
+        targetId = id;
+        targetName = cli ? `${cli.name} Destination` : 'Client Destination';
+      } else {
+        const term = terminals.find((t) => t.id === sel);
+        const wh = warehouses.find((w) => w.id === sel);
+        const cli = clients.find((c) => c.id === sel);
+        if (term) {
+          targetId = term.id;
+          targetName = term.name;
+        } else if (wh) {
+          targetId = wh.id;
+          targetName = wh.customerName ? `${wh.customerName} — ${wh.name}` : wh.name;
+        } else if (cli) {
+          targetId = cli.id;
+          targetName = `${cli.name} Destination`;
+        }
+      }
+    }
+
     try {
       setSubmittingGf(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -671,8 +707,8 @@ export default function DrayageTerminalMapPage() {
         body: JSON.stringify({
           action: 'save_geofence',
           id: editingGeofenceId || undefined,
-          terminalId: targetTerminalId || null,
-          terminalName: term?.name || 'Port Terminal',
+          terminalId: targetId,
+          terminalName: targetName,
           name: geofenceName.trim(),
           type: geofenceType,
           centerLat: Number(geofenceLat),
@@ -813,6 +849,7 @@ export default function DrayageTerminalMapPage() {
             terminals={terminals}
             geofences={geofences}
             warehouses={warehouses}
+            clients={clients}
             selectedTerminalId={selectedTerminal?.id}
             onSelectTerminal={(t) => {
               const matched = terminals.find((item) => item.id === t.id);
@@ -1009,7 +1046,7 @@ export default function DrayageTerminalMapPage() {
                 <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Geofence Zone Name</th>
-                    <th className="py-2.5 px-3 font-semibold">Terminal Link</th>
+                    <th className="py-2.5 px-3 font-semibold">Port / Client Destination Link</th>
                     <th className="py-2.5 px-3 font-semibold">Geometry</th>
                     <th className="py-2.5 px-3 font-semibold">Radius</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Action</th>
@@ -1273,25 +1310,63 @@ export default function DrayageTerminalMapPage() {
 
             <form onSubmit={handleSaveGeofence} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Terminal / Facility Link</label>
+                <label className="font-semibold text-[var(--text-muted)]">Assign to Port Terminal / Client Destination</label>
                 <select
                   value={targetTerminalId}
                   onChange={(e) => {
-                    setTargetTerminalId(e.target.value);
-                    const matched = terminals.find((t) => t.id === e.target.value);
-                    if (matched) {
-                      setGeofenceLat(matched.lat);
-                      setGeofenceLng(matched.lng);
-                      setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                    const val = e.target.value;
+                    setTargetTerminalId(val);
+                    if (val.startsWith('terminal:')) {
+                      const id = val.replace('terminal:', '');
+                      const matched = terminals.find((t) => t.id === id);
+                      if (matched) {
+                        setGeofenceLat(matched.lat);
+                        setGeofenceLng(matched.lng);
+                        setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                      }
+                    } else if (val.startsWith('warehouse:')) {
+                      const id = val.replace('warehouse:', '');
+                      const matched = warehouses.find((w) => w.id === id);
+                      if (matched && matched.lat && matched.lng) {
+                        setGeofenceLat(matched.lat);
+                        setGeofenceLng(matched.lng);
+                        setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 >
-                  {terminals.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
+                  <option value="">General Facility (Not linked to terminal/client)</option>
+
+                  {terminals.length > 0 && (
+                    <optgroup label="⚓ Port Terminals">
+                      {terminals.map((t) => (
+                        <option key={t.id} value={`terminal:${t.id}`}>
+                          {t.name} ({t.code})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {warehouses.length > 0 && (
+                    <optgroup label="🏢 Client Destinations (Consignee Facilities)">
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={`warehouse:${w.id}`}>
+                          {w.customerName ? `${w.customerName} — ` : ''}{w.name} {w.zone ? `(${w.zone})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {clients.length > 0 && (
+                    <optgroup label="👥 Registered Clients / Shippers">
+                      {clients.map((c) => (
+                        <option key={c.id} value={`client:${c.id}`}>
+                          {c.name} {c.code ? `(${c.code})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 

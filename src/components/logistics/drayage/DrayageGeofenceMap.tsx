@@ -85,10 +85,17 @@ export interface PlotModeState {
   onClose: () => void;
 }
 
+export interface ClientOption {
+  id: string;
+  name: string;
+  code?: string;
+}
+
 interface DrayageGeofenceMapProps {
   terminals: Terminal[];
   geofences: Geofence[];
   warehouses?: WarehouseLocation[];
+  clients?: ClientOption[];
   selectedTerminalId?: string | null;
   onSelectTerminal?: (terminal: Terminal) => void;
   onSelectWarehouse?: (warehouse: WarehouseLocation) => void;
@@ -117,6 +124,7 @@ export default function DrayageGeofenceMap({
   terminals,
   geofences,
   warehouses = [],
+  clients = [],
   selectedTerminalId,
   onSelectTerminal,
   onSelectWarehouse,
@@ -1072,6 +1080,27 @@ export default function DrayageGeofenceMap({
     }
   }, [plotContext, drawMode, circleDraft, cleanupDraftCircle, cleanupDraftPolygon]);
 
+  // Target Mapping Change Handler: Port Terminal vs Client Destination vs Registered Client
+  const handleTargetChange = (val: string) => {
+    setDraftTerminalId(val);
+    // Auto-suggest descriptive name if current name is generic or empty
+    if (!draftName || draftName.startsWith('Port Geofence') || draftName.startsWith('Polygon Ramp') || draftName.startsWith('Circular')) {
+      if (val.startsWith('terminal:')) {
+        const id = val.replace('terminal:', '');
+        const term = terminals.find((t) => t.id === id);
+        if (term) setDraftName(`${term.name} OCR Gate Perimeter`);
+      } else if (val.startsWith('warehouse:')) {
+        const id = val.replace('warehouse:', '');
+        const wh = warehouses.find((w) => w.id === id);
+        if (wh) setDraftName(wh.customerName ? `${wh.customerName} - ${wh.name}` : `${wh.name} Zone`);
+      } else if (val.startsWith('client:')) {
+        const id = val.replace('client:', '');
+        const cli = clients.find((c) => c.id === id);
+        if (cli) setDraftName(`${cli.name} Facility Perimeter`);
+      }
+    }
+  };
+
   // Quick Save Geofence from Map Draft
   const handleSaveDraft = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1079,11 +1108,48 @@ export default function DrayageGeofenceMap({
 
     try {
       setSavingDraft(true);
-      const term = terminals.find((t) => t.id === draftTerminalId);
+      let targetId: string | null = null;
+      let targetName = 'General Facility';
+
+      const sel = draftTerminalId;
+      if (sel) {
+        if (sel.startsWith('terminal:')) {
+          const id = sel.replace('terminal:', '');
+          const term = terminals.find((t) => t.id === id);
+          targetId = id;
+          targetName = term?.name || 'Port Terminal';
+        } else if (sel.startsWith('warehouse:')) {
+          const id = sel.replace('warehouse:', '');
+          const wh = warehouses.find((w) => w.id === id);
+          targetId = id;
+          targetName = wh?.customerName ? `${wh.customerName} — ${wh.name}` : (wh?.name || 'Client Destination');
+        } else if (sel.startsWith('client:')) {
+          const id = sel.replace('client:', '');
+          const cli = clients.find((c) => c.id === id);
+          targetId = id;
+          targetName = cli ? `${cli.name} Destination` : 'Client Destination';
+        } else {
+          // Direct ID lookup fallback
+          const term = terminals.find((t) => t.id === sel);
+          const wh = warehouses.find((w) => w.id === sel);
+          const cli = clients.find((c) => c.id === sel);
+          if (term) {
+            targetId = term.id;
+            targetName = term.name;
+          } else if (wh) {
+            targetId = wh.id;
+            targetName = wh.customerName ? `${wh.customerName} — ${wh.name}` : wh.name;
+          } else if (cli) {
+            targetId = cli.id;
+            targetName = `${cli.name} Destination`;
+          }
+        }
+      }
+
       await onSaveGeofence({
-        terminalId: draftTerminalId || null,
-        terminalName: term?.name || 'Port Terminal',
-        name: draftName.trim() || 'Port Geofence Zone',
+        terminalId: targetId,
+        terminalName: targetName,
+        name: draftName.trim() || targetName || 'Geofence Zone',
         type: drawnDraft.shape,
         centerLat: drawnDraft.centerLat,
         centerLng: drawnDraft.centerLng,
@@ -1584,18 +1650,43 @@ export default function DrayageGeofenceMap({
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold">Assign to Port Terminal</label>
+                <label className="text-slate-300 font-semibold">Assign to Port Terminal/Client Destination</label>
                 <select
                   value={draftTerminalId}
-                  onChange={(e) => setDraftTerminalId(e.target.value)}
+                  onChange={(e) => handleTargetChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white outline-none focus:border-blue-500"
                 >
-                  <option value="">General Facility (Not linked to terminal)</option>
-                  {terminals.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
+                  <option value="">General Facility (Not linked to terminal/client)</option>
+
+                  {terminals.length > 0 && (
+                    <optgroup label="⚓ Port Terminals" className="bg-slate-900 text-blue-400 font-semibold">
+                      {terminals.map((t) => (
+                        <option key={t.id} value={`terminal:${t.id}`} className="bg-slate-800 text-white font-normal">
+                          {t.name} ({t.code})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {warehouses.length > 0 && (
+                    <optgroup label="🏢 Client Destinations (Consignee Facilities)" className="bg-slate-900 text-emerald-400 font-semibold">
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={`warehouse:${w.id}`} className="bg-slate-800 text-white font-normal">
+                          {w.customerName ? `${w.customerName} — ` : ''}{w.name} {w.zone ? `(${w.zone})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {clients.length > 0 && (
+                    <optgroup label="👥 Registered Clients / Shippers" className="bg-slate-900 text-purple-400 font-semibold">
+                      {clients.map((c) => (
+                        <option key={c.id} value={`client:${c.id}`} className="bg-slate-800 text-white font-normal">
+                          {c.name} {c.code ? `(${c.code})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 

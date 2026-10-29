@@ -432,6 +432,29 @@ export async function POST(req: NextRequest) {
             Number(body.radiusMeters ?? 1500),
             coords,
           );
+
+          // If mapped to a client warehouse destination, synchronize the warehouse geofence parameters
+          if (body.terminalId) {
+            await tx.$executeRawUnsafe(
+              `UPDATE logistics_drayage_warehouses
+                  SET geofence_configured = true,
+                      geofence_type = $3,
+                      geofence_radius_meters = $4,
+                      geofence_coordinates_json = $5,
+                      lat = $6,
+                      lng = $7,
+                      updated_at = NOW()
+                WHERE (id = $1 OR customer_id = $1) AND tenant_id = $2`,
+              String(body.terminalId),
+              tenantId,
+              body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE',
+              Number(body.radiusMeters ?? 1000),
+              coords,
+              Number(body.centerLat ?? 25.0112),
+              Number(body.centerLng ?? 55.0612),
+            ).catch(() => {});
+          }
+
           return { ok: true, id };
         }
 
