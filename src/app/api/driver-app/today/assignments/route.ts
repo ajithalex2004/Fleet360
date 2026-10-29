@@ -137,8 +137,64 @@ export async function GET(req: NextRequest) {
         ORDER BY ts.departure_time ASC
       `;
 
+      // 1b) Port Container Drayage assignments for this driver
+      let drayageJobs: any[] = [];
+      try {
+        const drayageRows = await tx.$queryRawUnsafe<any[]>(`
+          SELECT
+            id,
+            job_code AS "jobCode",
+            job_phase AS "jobPhase",
+            shipment_type AS "shipmentType",
+            status,
+            priority,
+            container_number AS "containerNumber",
+            container_size AS "containerSize",
+            container_type AS "containerType",
+            warehouse_name AS "warehouseName",
+            terminal_name AS "terminalName",
+            assigned_vehicle_plate AS "assignedVehiclePlate",
+            assigned_trailer_plate AS "assignedTrailerPlate",
+            placement_location AS "placementLocation",
+            trailer_detached AS "trailerDetached",
+            etc_time AS "etcTime",
+            etc_alert_status AS "etcAlertStatus",
+            rate_amount_aed AS "rateAmountAed",
+            driver_allowance_aed AS "driverAllowanceAed",
+            notes
+          FROM logistics_drayage_jobs
+          WHERE tenant_id = $1
+            AND (
+              assigned_driver_id = $2
+              OR assigned_driver_id IS NULL
+              OR assigned_driver_name = $2
+            )
+            AND status NOT IN ('CANCELLED')
+          ORDER BY
+            CASE
+              WHEN status IN ('IN_TRANSIT', 'LOADED', 'ACCEPTED', 'PLACED_AT_RAMP') THEN 1
+              WHEN status = 'PENDING' THEN 2
+              ELSE 3
+            END,
+            created_at DESC
+          LIMIT 10
+        `, tenantId, ctx.userId);
+
+        drayageJobs = drayageRows.map((j) => ({
+          ...j,
+          rateAmountAed: Number(j.rateAmountAed || 0),
+          driverAllowanceAed: Number(j.driverAllowanceAed || 0),
+          etcTime: j.etcTime ? new Date(j.etcTime).toISOString() : null,
+        }));
+      } catch (drayageErr) {
+        console.warn('[today/assignments] Drayage query skipped or failed:', drayageErr);
+      }
+
       if (trips.length === 0) {
-        return NextResponse.json({ trips: [], generatedAt: new Date().toISOString() });
+        return NextResponse.json(
+          { trips: [], drayageJobs, generatedAt: new Date().toISOString() },
+          { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
+        );
       }
 
       // 2) Per-trip behaviour events — single batch query
@@ -191,7 +247,7 @@ export async function GET(req: NextRequest) {
       });
 
       return NextResponse.json(
-        { trips: result, generatedAt: new Date().toISOString() },
+        { trips: result, drayageJobs, generatedAt: new Date().toISOString() },
         { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
       );
   });
