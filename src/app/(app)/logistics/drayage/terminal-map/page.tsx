@@ -241,13 +241,25 @@ export default function DrayageTerminalMapPage() {
       }
       const data = await fetchDrayageWorkspaceCached({ forceFresh });
       const terms: DrayageTerminal[] = data?.terminals || [];
+      const gfs: DrayageGeofence[] = data?.geofences || [];
       setTerminals(terms);
-      setGeofences(data?.geofences || []);
+      setGeofences(gfs);
       setWarehouses(data?.warehouses || []);
       setClients(data?.clients || []);
       setCustomers(data?.customers || []);
-      if (terms.length > 0 && !selectedTerminal) {
-        setSelectedTerminal(terms[0]);
+      if (terms.length > 0) {
+        if (!selectedTerminal) {
+          setSelectedTerminal(terms[0]);
+          const firstGf = gfs.find((g) => g.terminalId === terms[0].id || g.terminalName === terms[0].name);
+          if (firstGf) setMapEditGeofenceId(firstGf.id);
+        } else {
+          const updated = terms.find((t: DrayageTerminal) => t.id === selectedTerminal.id);
+          if (updated) {
+            setSelectedTerminal(updated);
+            const matchGf = gfs.find((g) => g.terminalId === updated.id || g.terminalName === updated.name);
+            if (matchGf) setMapEditGeofenceId(matchGf.id);
+          }
+        }
       }
     } catch (err) {
       if (!getCachedDrayageData()?.terminals) {
@@ -338,8 +350,30 @@ export default function DrayageTerminalMapPage() {
       setShowTerminalModal(false);
       setPlotContext(null);
       invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created`);
+      const freshData = await fetchDrayageWorkspaceCached({ forceFresh: true });
+      const freshTerms: DrayageTerminal[] = freshData?.terminals || [];
+      const freshGfs: DrayageGeofence[] = freshData?.geofences || [];
+      setTerminals(freshTerms);
+      setGeofences(freshGfs);
+      setWarehouses(freshData?.warehouses || []);
+      setClients(freshData?.clients || []);
+      setCustomers(freshData?.customers || []);
+
+      const savedTerm = (data.id ? freshTerms.find((t) => t.id === data.id) : null) ||
+                        freshTerms.find((t) => t.name === termName.trim()) ||
+                        freshTerms[0];
+      if (savedTerm) {
+        setSelectedTerminal(savedTerm);
+        const matchGf = freshGfs.find((g) => g.terminalId === savedTerm.id || g.terminalName === savedTerm.name);
+        if (matchGf) {
+          setMapEditGeofenceId(matchGf.id);
+        } else {
+          setMapEditGeofenceId(null);
+        }
+        setFocusMapLocation({ lat: savedTerm.lat, lng: savedTerm.lng, zoom: 14.5, title: savedTerm.name });
+      }
+
+      showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created with geofence`);
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error saving terminal');
     } finally {
@@ -853,7 +887,16 @@ export default function DrayageTerminalMapPage() {
             selectedTerminalId={selectedTerminal?.id}
             onSelectTerminal={(t) => {
               const matched = terminals.find((item) => item.id === t.id);
-              if (matched) setSelectedTerminal(matched);
+              if (matched) {
+                setSelectedTerminal(matched);
+                const matchingGf = geofences.find((g) => g.terminalId === matched.id || g.terminalName === matched.name);
+                if (matchingGf) {
+                  setMapEditGeofenceId(matchingGf.id);
+                } else {
+                  setMapEditGeofenceId(null);
+                }
+                setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14.5, title: matched.name });
+              }
             }}
             onSelectWarehouse={(wh) => {
               setFocusMapLocation({
@@ -903,7 +946,14 @@ export default function DrayageTerminalMapPage() {
                   key={t.id}
                   onClick={() => {
                     setSelectedTerminal(t);
-                    setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14, title: t.name });
+                    const matchingGf = geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name);
+                    if (matchingGf) {
+                      setMapEditGeofenceId(matchingGf.id);
+                      setFocusMapLocation({ lat: matchingGf.centerLat, lng: matchingGf.centerLng, zoom: 14.5, title: t.name });
+                    } else {
+                      setMapEditGeofenceId(null);
+                      setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                    }
                   }}
                   className={`p-4 rounded-xl border cursor-pointer transition-all ${
                     selected
@@ -922,7 +972,15 @@ export default function DrayageTerminalMapPage() {
                         title="Plot / Point on Map"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                          setSelectedTerminal(t);
+                          const matchingGf = geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name);
+                          if (matchingGf) {
+                            setMapEditGeofenceId(matchingGf.id);
+                            setFocusMapLocation({ lat: matchingGf.centerLat, lng: matchingGf.centerLng, zoom: 14.5, title: t.name });
+                          } else {
+                            setMapEditGeofenceId(null);
+                            setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                          }
                           scrollToMap();
                         }}
                         className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
@@ -1037,7 +1095,7 @@ export default function DrayageTerminalMapPage() {
 
           {/* Configured Geofences for this port / corridor */}
           <Panel
-            title={`Configured Port Geofences (${geofences.length} Total)`}
+            title={`Configured Geofences (${geofences.length} Total)`}
             icon={Compass}
             accent="blue"
           >
@@ -1053,8 +1111,23 @@ export default function DrayageTerminalMapPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
-                  {geofences.map((gf) => (
-                    <tr key={gf.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  {geofences.map((gf) => {
+                    const isSelected = mapEditGeofenceId === gf.id ||
+                      Boolean(selectedTerminal && (gf.terminalId === selectedTerminal.id || gf.terminalName === selectedTerminal.name));
+                    return (
+                      <tr
+                        key={gf.id}
+                        onClick={() => {
+                          setMapEditGeofenceId(gf.id);
+                          const linkedTerm = terminals.find((t) => t.id === gf.terminalId || t.name === gf.terminalName);
+                          if (linkedTerm) setSelectedTerminal(linkedTerm);
+                          setFocusMapLocation({ lat: gf.centerLat, lng: gf.centerLng, zoom: 14.5, title: gf.name });
+                          scrollToMap();
+                        }}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? 'bg-blue-600/10 font-medium' : 'hover:bg-[var(--bg-surface-hover)]'
+                        }`}
+                      >
                       <td className="py-3 px-3">
                         <div className="font-bold text-[var(--text-main)]">{gf.name}</div>
                         <div className="font-mono text-[10px] text-[var(--text-muted)] mt-0.5">
@@ -1106,7 +1179,8 @@ export default function DrayageTerminalMapPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -658,11 +658,27 @@ export default function DrayageGeofenceMap({
     geofenceOverlaysRef.current = [];
 
     geofences.forEach((gf) => {
-      const isSelected = gf.id === activeEditGeofenceId;
-      const strokeColor = isSelected ? '#ec4899' : gf.type === 'POLYGON' ? '#c084fc' : '#38bdf8';
-      const fillColor = isSelected ? '#db2777' : gf.type === 'POLYGON' ? '#a855f7' : '#0284c7';
-      const strokeWeight = isSelected ? 3.5 : 2;
-      const fillOpacity = isSelected ? 0.32 : 0.18;
+      const isEditActive = gf.id === activeEditGeofenceId;
+      const isTerminalMatch = Boolean(
+        selectedTerminalId && (
+          gf.terminalId === selectedTerminalId ||
+          terminals.find((t) => t.id === selectedTerminalId)?.name === gf.terminalName
+        )
+      );
+      const isSelected = isEditActive;
+      const strokeColor = isEditActive
+        ? '#ec4899'
+        : isTerminalMatch
+        ? (gf.type === 'POLYGON' ? '#9333ea' : '#2563eb')
+        : gf.type === 'POLYGON' ? '#c084fc' : '#38bdf8';
+      const fillColor = isEditActive
+        ? '#db2777'
+        : isTerminalMatch
+        ? (gf.type === 'POLYGON' ? '#a855f7' : '#3b82f6')
+        : gf.type === 'POLYGON' ? '#a855f7' : '#0284c7';
+      const strokeWeight = isEditActive ? 4 : isTerminalMatch ? 3.5 : 2;
+      const fillOpacity = isEditActive ? 0.35 : isTerminalMatch ? 0.28 : 0.16;
+      const zIndex = isEditActive ? 100 : isTerminalMatch ? 60 : 10;
 
       if (gf.type === 'POLYGON') {
         let polygonCoords: Array<{ lat: number; lng: number }> = [];
@@ -684,7 +700,7 @@ export default function DrayageGeofenceMap({
             clickable: true,
             editable: isSelected, // Enables Vertex & Midpoint Drag Handles for Stretching!
             draggable: isSelected, // Enables dragging the whole shape
-            zIndex: isSelected ? 100 : 10,
+            zIndex,
           });
 
           // If selected for editing, listen to vertex changes on its path
@@ -721,6 +737,10 @@ export default function DrayageGeofenceMap({
           }
 
           poly.addListener('click', () => {
+            if (onSelectTerminal) {
+              const matched = terminals.find((t) => t.id === gf.terminalId || t.name === gf.terminalName);
+              if (matched) onSelectTerminal(matched);
+            }
             if (infoWindowRef.current) {
               infoWindowRef.current.setContent(`
                 <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
@@ -756,7 +776,7 @@ export default function DrayageGeofenceMap({
         clickable: true,
         editable: isSelected, // Enables edge perimeter handles for stretching radius!
         draggable: isSelected, // Enables center handle to drag position
-        zIndex: isSelected ? 100 : 10,
+        zIndex,
       });
 
       if (isSelected) {
@@ -782,6 +802,10 @@ export default function DrayageGeofenceMap({
       }
 
       circle.addListener('click', () => {
+        if (onSelectTerminal) {
+          const matched = terminals.find((t) => t.id === gf.terminalId || t.name === gf.terminalName);
+          if (matched) onSelectTerminal(matched);
+        }
         if (infoWindowRef.current) {
           infoWindowRef.current.setContent(`
             <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
@@ -799,7 +823,44 @@ export default function DrayageGeofenceMap({
 
       geofenceOverlaysRef.current.push(circle);
     });
-  }, [geofences, activeEditGeofenceId]);
+
+    // 2b. Fallback: render circular geofence perimeter for any terminal lacking an explicit geofence
+    terminals.forEach((term) => {
+      const hasGf = geofences.some((g) => g.terminalId === term.id || g.terminalName === term.name);
+      if (!hasGf) {
+        const isTerminalMatch = term.id === selectedTerminalId;
+        const circle = new ctors.Circle({
+          map,
+          center: { lat: term.lat, lng: term.lng },
+          radius: term.geofenceRadiusMeters || 1500,
+          strokeColor: isTerminalMatch ? '#2563eb' : '#38bdf8',
+          strokeWeight: isTerminalMatch ? 3.5 : 2,
+          strokeOpacity: isTerminalMatch ? 0.95 : 0.75,
+          fillColor: isTerminalMatch ? '#3b82f6' : '#0284c7',
+          fillOpacity: isTerminalMatch ? 0.28 : 0.14,
+          clickable: true,
+          zIndex: isTerminalMatch ? 60 : 10,
+        });
+
+        circle.addListener('click', () => {
+          if (onSelectTerminal) onSelectTerminal(term);
+          if (infoWindowRef.current) {
+            infoWindowRef.current.setContent(`
+              <div style="padding: 8px; font-family: sans-serif; color: #0f172a; max-width: 220px;">
+                <strong style="font-size: 13px; display: block; margin-bottom: 2px;">${term.name}</strong>
+                <span style="font-size: 11px; color: #0284c7; font-weight: bold;">⚪ Port Perimeter (${term.geofenceRadiusMeters || 1500}m)</span>
+                <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Code: ${term.code} · ${term.portName}</div>
+              </div>
+            `);
+            infoWindowRef.current.setPosition({ lat: term.lat, lng: term.lng });
+            infoWindowRef.current.open({ map });
+          }
+        });
+
+        geofenceOverlaysRef.current.push(circle);
+      }
+    });
+  }, [geofences, activeEditGeofenceId, selectedTerminalId, terminals, onSelectTerminal]);
 
   // 3. Render Port Terminal Markers
   useEffect(() => {
