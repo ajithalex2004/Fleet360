@@ -225,13 +225,25 @@ export default function DrayageTerminalMapPage() {
       }
       const data = await fetchDrayageWorkspaceCached({ forceFresh });
       const terms: DrayageTerminal[] = data?.terminals || [];
+      const gfs: DrayageGeofence[] = data?.geofences || [];
       setTerminals(terms);
-      setGeofences(data?.geofences || []);
+      setGeofences(gfs);
       setWarehouses(data?.warehouses || []);
       setClients(data?.clients || []);
       setCustomers(data?.customers || []);
-      if (terms.length > 0 && !selectedTerminal) {
-        setSelectedTerminal(terms[0]);
+      if (terms.length > 0) {
+        if (!selectedTerminal) {
+          setSelectedTerminal(terms[0]);
+          const firstGf = gfs.find((g) => g.terminalId === terms[0].id || g.terminalName === terms[0].name);
+          if (firstGf) setMapEditGeofenceId(firstGf.id);
+        } else {
+          const updated = terms.find((t: DrayageTerminal) => t.id === selectedTerminal.id);
+          if (updated) {
+            setSelectedTerminal(updated);
+            const matchGf = gfs.find((g) => g.terminalId === updated.id || g.terminalName === updated.name);
+            if (matchGf) setMapEditGeofenceId(matchGf.id);
+          }
+        }
       }
     } catch (err) {
       if (!getCachedDrayageData()?.terminals) {
@@ -322,8 +334,30 @@ export default function DrayageTerminalMapPage() {
       setShowTerminalModal(false);
       setPlotContext(null);
       invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created`);
+      const freshData = await fetchDrayageWorkspaceCached({ forceFresh: true });
+      const freshTerms: DrayageTerminal[] = freshData?.terminals || [];
+      const freshGfs: DrayageGeofence[] = freshData?.geofences || [];
+      setTerminals(freshTerms);
+      setGeofences(freshGfs);
+      setWarehouses(freshData?.warehouses || []);
+      setClients(freshData?.clients || []);
+      setCustomers(freshData?.customers || []);
+
+      const savedTerm = (data.id ? freshTerms.find((t) => t.id === data.id) : null) ||
+                        freshTerms.find((t) => t.name === termName.trim()) ||
+                        freshTerms[0];
+      if (savedTerm) {
+        setSelectedTerminal(savedTerm);
+        const matchGf = freshGfs.find((g) => g.terminalId === savedTerm.id || g.terminalName === savedTerm.name);
+        if (matchGf) {
+          setMapEditGeofenceId(matchGf.id);
+        } else {
+          setMapEditGeofenceId(null);
+        }
+        setFocusMapLocation({ lat: savedTerm.lat, lng: savedTerm.lng, zoom: 14.5, title: savedTerm.name });
+      }
+
+      showToast('success', editingTerminalId ? `Terminal "${termName}" updated successfully` : `Terminal "${termName}" created with geofence`);
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error saving terminal');
     } finally {
@@ -508,7 +542,43 @@ export default function DrayageTerminalMapPage() {
       showToast('error', 'Geofence name is required');
       return;
     }
-    const term = terminals.find((t) => t.id === targetTerminalId);
+
+    let targetId: string | null = null;
+    let targetName = 'General Facility';
+    const sel = targetTerminalId;
+    if (sel) {
+      if (sel.startsWith('terminal:')) {
+        const id = sel.replace('terminal:', '');
+        const term = terminals.find((t) => t.id === id);
+        targetId = id;
+        targetName = term?.name || 'Port Terminal';
+      } else if (sel.startsWith('warehouse:')) {
+        const id = sel.replace('warehouse:', '');
+        const wh = warehouses.find((w) => w.id === id);
+        targetId = id;
+        targetName = wh?.customerName ? `${wh.customerName} — ${wh.name}` : (wh?.name || 'Client Destination');
+      } else if (sel.startsWith('client:')) {
+        const id = sel.replace('client:', '');
+        const cli = clients.find((c) => c.id === id);
+        targetId = id;
+        targetName = cli ? `${cli.name} Destination` : 'Client Destination';
+      } else {
+        const term = terminals.find((t) => t.id === sel);
+        const wh = warehouses.find((w) => w.id === sel);
+        const cli = clients.find((c) => c.id === sel);
+        if (term) {
+          targetId = term.id;
+          targetName = term.name;
+        } else if (wh) {
+          targetId = wh.id;
+          targetName = wh.customerName ? `${wh.customerName} — ${wh.name}` : wh.name;
+        } else if (cli) {
+          targetId = cli.id;
+          targetName = `${cli.name} Destination`;
+        }
+      }
+    }
+
     try {
       setSubmittingGf(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -517,8 +587,8 @@ export default function DrayageTerminalMapPage() {
         body: JSON.stringify({
           action: 'save_geofence',
           id: editingGeofenceId || undefined,
-          terminalId: targetTerminalId || null,
-          terminalName: term?.name || 'Port Terminal',
+          terminalId: targetId,
+          terminalName: targetName,
           name: geofenceName.trim(),
           type: geofenceType,
           centerLat: Number(geofenceLat),
@@ -659,10 +729,20 @@ export default function DrayageTerminalMapPage() {
             terminals={terminals}
             geofences={geofences}
             warehouses={warehouses}
+            clients={clients}
             selectedTerminalId={selectedTerminal?.id}
             onSelectTerminal={(t) => {
               const matched = terminals.find((item) => item.id === t.id);
-              if (matched) setSelectedTerminal(matched);
+              if (matched) {
+                setSelectedTerminal(matched);
+                const matchingGf = geofences.find((g) => g.terminalId === matched.id || g.terminalName === matched.name);
+                if (matchingGf) {
+                  setMapEditGeofenceId(matchingGf.id);
+                } else {
+                  setMapEditGeofenceId(null);
+                }
+                setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14.5, title: matched.name });
+              }
             }}
             onSelectWarehouse={(wh) => {
               setFocusMapLocation({
@@ -712,7 +792,14 @@ export default function DrayageTerminalMapPage() {
                   key={t.id}
                   onClick={() => {
                     setSelectedTerminal(t);
-                    setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14, title: t.name });
+                    const matchingGf = geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name);
+                    if (matchingGf) {
+                      setMapEditGeofenceId(matchingGf.id);
+                      setFocusMapLocation({ lat: matchingGf.centerLat, lng: matchingGf.centerLng, zoom: 14.5, title: t.name });
+                    } else {
+                      setMapEditGeofenceId(null);
+                      setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                    }
                   }}
                   className={`p-4 rounded-xl border cursor-pointer transition-all ${
                     selected
@@ -731,7 +818,15 @@ export default function DrayageTerminalMapPage() {
                         title="Plot / Point on Map"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                          setSelectedTerminal(t);
+                          const matchingGf = geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name);
+                          if (matchingGf) {
+                            setMapEditGeofenceId(matchingGf.id);
+                            setFocusMapLocation({ lat: matchingGf.centerLat, lng: matchingGf.centerLng, zoom: 14.5, title: t.name });
+                          } else {
+                            setMapEditGeofenceId(null);
+                            setFocusMapLocation({ lat: t.lat, lng: t.lng, zoom: 14.5, title: t.name });
+                          }
                           scrollToMap();
                         }}
                         className="p-1 rounded hover:bg-blue-600/20 text-[var(--text-muted)] hover:text-blue-400 transition-colors"
@@ -846,7 +941,7 @@ export default function DrayageTerminalMapPage() {
 
           {/* Configured Geofences for this port / corridor */}
           <Panel
-            title={`Configured Port Geofences (${geofences.length} Total)`}
+            title={`Configured Geofences (${geofences.length} Total)`}
             icon={Compass}
             accent="blue"
           >
@@ -855,15 +950,30 @@ export default function DrayageTerminalMapPage() {
                 <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Geofence Zone Name</th>
-                    <th className="py-2.5 px-3 font-semibold">Terminal Link</th>
+                    <th className="py-2.5 px-3 font-semibold">Linked To</th>
                     <th className="py-2.5 px-3 font-semibold">Geometry</th>
                     <th className="py-2.5 px-3 font-semibold">Radius</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
-                  {geofences.map((gf) => (
-                    <tr key={gf.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  {geofences.map((gf) => {
+                    const isSelected = mapEditGeofenceId === gf.id ||
+                      Boolean(selectedTerminal && (gf.terminalId === selectedTerminal.id || gf.terminalName === selectedTerminal.name));
+                    return (
+                      <tr
+                        key={gf.id}
+                        onClick={() => {
+                          setMapEditGeofenceId(gf.id);
+                          const linkedTerm = terminals.find((t) => t.id === gf.terminalId || t.name === gf.terminalName);
+                          if (linkedTerm) setSelectedTerminal(linkedTerm);
+                          setFocusMapLocation({ lat: gf.centerLat, lng: gf.centerLng, zoom: 14.5, title: gf.name });
+                          scrollToMap();
+                        }}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? 'bg-blue-600/10 font-medium' : 'hover:bg-[var(--bg-surface-hover)]'
+                        }`}
+                      >
                       <td className="py-3 px-3">
                         <div className="font-bold text-[var(--text-main)]">{gf.name}</div>
                         <div className="font-mono text-[10px] text-[var(--text-muted)] mt-0.5">
@@ -915,7 +1025,8 @@ export default function DrayageTerminalMapPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1119,25 +1230,63 @@ export default function DrayageTerminalMapPage() {
 
             <form onSubmit={handleSaveGeofence} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Terminal / Facility Link</label>
+                <label className="font-semibold text-[var(--text-muted)]">Assign to Port Terminal / Client Destination</label>
                 <select
                   value={targetTerminalId}
                   onChange={(e) => {
-                    setTargetTerminalId(e.target.value);
-                    const matched = terminals.find((t) => t.id === e.target.value);
-                    if (matched) {
-                      setGeofenceLat(matched.lat);
-                      setGeofenceLng(matched.lng);
-                      setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                    const val = e.target.value;
+                    setTargetTerminalId(val);
+                    if (val.startsWith('terminal:')) {
+                      const id = val.replace('terminal:', '');
+                      const matched = terminals.find((t) => t.id === id);
+                      if (matched) {
+                        setGeofenceLat(matched.lat);
+                        setGeofenceLng(matched.lng);
+                        setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                      }
+                    } else if (val.startsWith('warehouse:')) {
+                      const id = val.replace('warehouse:', '');
+                      const matched = warehouses.find((w) => w.id === id);
+                      if (matched && matched.lat && matched.lng) {
+                        setGeofenceLat(matched.lat);
+                        setGeofenceLng(matched.lng);
+                        setFocusMapLocation({ lat: matched.lat, lng: matched.lng, zoom: 14 });
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 >
-                  {terminals.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
+                  <option value="">General Facility (Not linked to terminal/client)</option>
+
+                  {terminals.length > 0 && (
+                    <optgroup label="⚓ Port Terminals">
+                      {terminals.map((t) => (
+                        <option key={t.id} value={`terminal:${t.id}`}>
+                          {t.name} ({t.code})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {warehouses.length > 0 && (
+                    <optgroup label="🏢 Client Destinations (Consignee Facilities)">
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={`warehouse:${w.id}`}>
+                          {w.customerName ? `${w.customerName} — ` : ''}{w.name} {w.zone ? `(${w.zone})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {clients.length > 0 && (
+                    <optgroup label="👥 Registered Clients / Shippers">
+                      {clients.map((c) => (
+                        <option key={c.id} value={`client:${c.id}`}>
+                          {c.name} {c.code ? `(${c.code})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 

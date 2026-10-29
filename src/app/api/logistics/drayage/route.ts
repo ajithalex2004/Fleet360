@@ -433,6 +433,44 @@ export async function POST(req: NextRequest) {
             Number(body.radiusMeters ?? 1500),
             coords,
           );
+
+          // If mapped to a client warehouse destination, synchronize the warehouse geofence parameters
+          if (body.terminalId) {
+            await tx.$executeRawUnsafe(
+              `UPDATE logistics_drayage_warehouses
+                  SET geofence_configured = true,
+                      geofence_type = $3,
+                      geofence_radius_meters = $4,
+                      geofence_coordinates_json = $5,
+                      lat = $6,
+                      lng = $7,
+                      updated_at = NOW()
+                WHERE (id = $1 OR customer_id = $1) AND tenant_id = $2`,
+              String(body.terminalId),
+              tenantId,
+              body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE',
+              Number(body.radiusMeters ?? 1000),
+              coords,
+              Number(body.centerLat ?? 25.0112),
+              Number(body.centerLng ?? 55.0612),
+            ).catch(() => {});
+
+            // Also synchronize with port terminal if matching terminal ID
+            await tx.$executeRawUnsafe(
+              `UPDATE logistics_drayage_terminals
+                  SET lat = $3,
+                      lng = $4,
+                      geofence_radius_meters = $5,
+                      updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2`,
+              String(body.terminalId),
+              tenantId,
+              Number(body.centerLat ?? 25.0112),
+              Number(body.centerLng ?? 55.0612),
+              Number(body.radiusMeters ?? 1500),
+            ).catch(() => {});
+          }
+
           return { ok: true, id };
         }
 
@@ -448,6 +486,14 @@ export async function POST(req: NextRequest) {
         case 'create_terminal':
         case 'save_terminal': {
           const id = body.id ? String(body.id) : `term-${crypto.randomUUID().slice(0, 10)}`;
+          const termName = String(body.name ?? 'New Port Terminal').trim();
+          const termCode = String(body.code ?? 'DPW-JA-T1').toUpperCase().trim();
+          const termPort = String(body.portName ?? 'Jebel Ali Port').trim();
+          const termEmirate = String(body.emirate ?? 'Dubai').trim();
+          const termLat = Number(body.lat ?? 25.0112);
+          const termLng = Number(body.lng ?? 55.0612);
+          const termRadius = Number(body.geofenceRadiusMeters ?? 1500);
+
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_terminals (
               id, tenant_id, name, code, port_name, emirate, lat, lng,
@@ -467,21 +513,75 @@ export async function POST(req: NextRequest) {
                    updated_at = NOW()`,
             id,
             tenantId,
-            String(body.name ?? 'New Port Terminal').trim(),
-            String(body.code ?? 'DPW-JA-T1').toUpperCase().trim(),
-            String(body.portName ?? 'Jebel Ali Port').trim(),
-            String(body.emirate ?? 'Dubai').trim(),
-            Number(body.lat ?? 25.0112),
-            Number(body.lng ?? 55.0612),
-            Number(body.geofenceRadiusMeters ?? 1500),
+            termName,
+            termCode,
+            termPort,
+            termEmirate,
+            termLat,
+            termLng,
+            termRadius,
             Number(body.freeDaysDry ?? 5),
             Number(body.freeDaysReefer ?? 3),
             String(body.operatingHours ?? '24/7 Gate Operations').trim(),
           );
+
+          // Automatically upsert an associated perimeter geofence for this port terminal
+          const existingGfRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id FROM logistics_drayage_geofences WHERE terminal_id = $1 AND tenant_id = $2 LIMIT 1`,
+            id,
+            tenantId,
+          ).catch(() => []);
+
+          if (existingGfRows.length > 0) {
+            await tx.$executeRawUnsafe(
+              `UPDATE logistics_drayage_geofences
+                  SET terminal_name = $1,
+                      name = $2,
+                      center_lat = $3,
+                      center_lng = $4,
+                      radius_meters = $5
+                WHERE id = $6 AND tenant_id = $7`,
+              termName,
+              `${termName} Perimeter Geofence`,
+              termLat,
+              termLng,
+              termRadius,
+              existingGfRows[0].id,
+              tenantId,
+            ).catch(() => {});
+          } else {
+            const gfId = `gf-${id}`;
+            await tx.$executeRawUnsafe(
+              `INSERT INTO logistics_drayage_geofences (
+                id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
+              ) VALUES ($1,$2,$3,$4,$5,'CIRCLE',$6,$7,$8,$9)
+              ON CONFLICT (id) DO UPDATE
+                 SET terminal_name = EXCLUDED.terminal_name,
+                     name = EXCLUDED.name,
+                     center_lat = EXCLUDED.center_lat,
+                     center_lng = EXCLUDED.center_lng,
+                     radius_meters = EXCLUDED.radius_meters`,
+              gfId,
+              tenantId,
+              id,
+              termName,
+              `${termName} Perimeter Geofence`,
+              termLat,
+              termLng,
+              termRadius,
+              JSON.stringify([{ lat: termLat, lng: termLng }]),
+            ).catch(() => {});
+          }
+
           return { ok: true, id };
         }
 
         case 'delete_terminal': {
+          await tx.$executeRawUnsafe(
+            `DELETE FROM logistics_drayage_geofences WHERE terminal_id = $1 AND tenant_id = $2`,
+            String(body.id),
+            tenantId,
+          ).catch(() => {});
           await tx.$executeRawUnsafe(
             `DELETE FROM logistics_drayage_terminals WHERE id = $1 AND tenant_id = $2`,
             String(body.id),

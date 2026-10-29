@@ -27,6 +27,10 @@ import {
   getCachedDrayageData,
   invalidateDrayageClientCache,
 } from '@/lib/logistics/drayage-client-cache';
+import {
+  ConsigneeDestinationModal,
+  type DrayageClientOption,
+} from '@/components/logistics/drayage/ConsigneeDestinationModal';
 
 interface CustomerOption {
   id: string;
@@ -99,16 +103,9 @@ export default function DrayageCreateJobsPage() {
   const [newCustomerCity, setNewCustomerCity] = useState('Dubai');
   const [savingCustomer, setSavingCustomer] = useState(false);
 
-  // Quick Warehouse / Destination Creation Modal State
+  // Consignee Destination Modal State & Clients
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
-  const [newWarehouseCustomerId, setNewWarehouseCustomerId] = useState('');
-  const [newWarehouseName, setNewWarehouseName] = useState('');
-  const [newWarehouseZone, setNewWarehouseZone] = useState('JAFZA South');
-  const [newWarehouseAddress, setNewWarehouseAddress] = useState('');
-  const [newWarehouseContact, setNewWarehouseContact] = useState('');
-  const [newWarehousePhone, setNewWarehousePhone] = useState('');
-  const [newWarehouseRamps, setNewWarehouseRamps] = useState(4);
-  const [savingWarehouse, setSavingWarehouse] = useState(false);
+  const [clients, setClients] = useState<DrayageClientOption[]>(cached?.clients || []);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,59 +155,6 @@ export default function DrayageCreateJobsPage() {
     }
   };
 
-  const handleCreateWarehouse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newWarehouseName.trim()) {
-      showToast('error', 'Please enter destination warehouse name');
-      return;
-    }
-    const targetCustomerId = newWarehouseCustomerId || selectedCustomerId || null;
-    const currentCustomer = customers.find((c) => c.id === targetCustomerId);
-    try {
-      setSavingWarehouse(true);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create_warehouse',
-          customerId: targetCustomerId,
-          customerName: currentCustomer?.name || (targetCustomerId ? 'Enterprise Client' : 'General / Shared Hub'),
-          name: newWarehouseName.trim(),
-          zone: newWarehouseZone.trim() || 'JAFZA South',
-          address: newWarehouseAddress.trim() || 'Dubai, UAE',
-          contactPerson: newWarehouseContact.trim() || undefined,
-          contactPhone: newWarehousePhone.trim() || undefined,
-          rampsCount: Number(newWarehouseRamps) || 4,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create warehouse destination');
-
-      const createdWh: WarehouseOption = {
-        id: data.id,
-        customerId: targetCustomerId,
-        customerName: currentCustomer?.name || (targetCustomerId ? 'Enterprise Client' : 'General / Shared Hub'),
-        name: newWarehouseName.trim(),
-        zone: newWarehouseZone.trim() || 'JAFZA South',
-      };
-      setWarehouses((prev) => [createdWh, ...prev]);
-      setSelectedWarehouseId(createdWh.id);
-      setShowWarehouseModal(false);
-      setNewWarehouseName('');
-      setNewWarehouseZone('JAFZA South');
-      setNewWarehouseAddress('');
-      setNewWarehouseContact('');
-      setNewWarehousePhone('');
-      setNewWarehouseRamps(4);
-      invalidateDrayageClientCache();
-      showToast('success', `Destination "${createdWh.name}" added and mapped!`);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error creating warehouse');
-    } finally {
-      setSavingWarehouse(false);
-    }
-  };
-
   // Bulk Paste State
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState('');
@@ -251,10 +195,12 @@ export default function DrayageCreateJobsPage() {
       const custs = data?.customers || [];
       const terms = data?.terminals || [];
       const whs = data?.warehouses || [];
+      const clis = data?.clients || [];
 
       setCustomers(custs);
       setTerminals(terms);
       setWarehouses(whs);
+      setClients(clis);
 
       setSelectedCustomerId((prev) => prev || (custs[0]?.id ?? ''));
       setSelectedTerminalId((prev) => prev || (terms[0]?.id ?? ''));
@@ -586,11 +532,11 @@ export default function DrayageCreateJobsPage() {
                   <p className="text-[10px] text-[var(--text-muted)]">Primary container yard gate-in & discharge facility</p>
                 </div>
 
-                {/* 3. Consignee (Client Destination Warehouse / Ramp) */}
+                {/* 3. Consignee (Client Destination Warehouse / Facility) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-[var(--text-main)] block">
-                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination / Ramp)</span>
+                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination/Facility)</span>
                     </label>
                     <Link
                       href="/logistics/drayage/terminal-map"
@@ -611,10 +557,9 @@ export default function DrayageCreateJobsPage() {
                     addonAction={{
                       label: 'New',
                       icon: Plus,
-                      title: 'Add New Consignee Destination',
+                      title: 'Add Consignee Destination',
                       variant: 'emerald',
                       onClick: () => {
-                        setNewWarehouseCustomerId(selectedCustomerId);
                         setShowWarehouseModal(true);
                       },
                     }}
@@ -1117,136 +1062,34 @@ export default function DrayageCreateJobsPage() {
         </div>
       )}
 
-      {/* Quick Create Client Destination Warehouse Modal */}
-      {showWarehouseModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
-                <Warehouse className="w-4 h-4 text-blue-400" />
-                Add Consignee Destination (Client Facility / Ramp)
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowWarehouseModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateWarehouse} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">
-                  Linked Consignor (Customer / Shipper)
-                </label>
-                <SearchableSelect
-                  value={newWarehouseCustomerId}
-                  onChange={(val) => setNewWarehouseCustomerId(val)}
-                  options={[
-                    { value: '', label: 'General / Shared Facility (All Consignors)' },
-                    ...customerOptions,
-                  ]}
-                  placeholder="Select or search consignor customer..."
-                  searchPlaceholder="Type to filter consignors..."
-                />
-                <p className="text-[10px] text-[var(--text-muted)]">
-                  Mapping this facility to a specific client pins it automatically when booking containers for them.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">
-                  Consignee Facility / Warehouse Name (Client) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newWarehouseName}
-                  onChange={(e) => setNewWarehouseName(e.target.value)}
-                  placeholder="e.g. JAFZA North Automated DC, DIC Central Hub"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Industrial Zone / Area</label>
-                  <input
-                    type="text"
-                    value={newWarehouseZone}
-                    onChange={(e) => setNewWarehouseZone(e.target.value)}
-                    placeholder="e.g. JAFZA South, DIC, KEZAD, DIP"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Loading Ramps / Bays</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={newWarehouseRamps}
-                    onChange={(e) => setNewWarehouseRamps(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-muted)]">Physical Street Address</label>
-                <input
-                  type="text"
-                  value={newWarehouseAddress}
-                  onChange={(e) => setNewWarehouseAddress(e.target.value)}
-                  placeholder="Plot S-204, Road 4, Dubai, UAE"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Receiving Contact Person (Consignee Rep)</label>
-                  <input
-                    type="text"
-                    value={newWarehouseContact}
-                    onChange={(e) => setNewWarehouseContact(e.target.value)}
-                    placeholder="e.g. Warehouse Supervisor"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Receiving Phone</label>
-                  <input
-                    type="tel"
-                    value={newWarehousePhone}
-                    onChange={(e) => setNewWarehousePhone(e.target.value)}
-                    placeholder="+971 4 888 1234"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => setShowWarehouseModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingWarehouse}
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50"
-                >
-                  {savingWarehouse ? 'Adding Destination...' : 'Save & Select Destination'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Unified Consignee Destination (Client Facility / Warehouse) Modal */}
+      <ConsigneeDestinationModal
+        isOpen={showWarehouseModal}
+        onClose={() => setShowWarehouseModal(false)}
+        clients={clients}
+        defaultClientId={selectedCustomerId || null}
+        onClientCreated={(newCli) => {
+          setClients((prev) => [newCli, ...prev]);
+        }}
+        onSaved={async (savedWh) => {
+          invalidateDrayageClientCache();
+          await loadMasters(true);
+          if (savedWh.id) {
+            setSelectedWarehouseId(savedWh.id);
+          }
+          if (savedWh.customerId) {
+            setSelectedCustomerId(savedWh.customerId);
+          }
+          if (savedWh.tripAmountAed) {
+            setRateAmountAed(savedWh.tripAmountAed);
+          }
+          if (savedWh.driverAllowanceAed) {
+            setDriverAllowanceAed(savedWh.driverAllowanceAed);
+          }
+          setShowWarehouseModal(false);
+          showToast('success', `Consignee destination "${savedWh.name}" added and mapped!`);
+        }}
+      />
     </div>
   );
 }

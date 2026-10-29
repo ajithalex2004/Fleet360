@@ -1559,6 +1559,52 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     createdAt: g.created_at ? new Date(String(g.created_at)).toISOString() : new Date().toISOString(),
   }));
 
+  // Ensure every configured terminal has an associated geofence (auto-reconciles terminals like DPW-JA-T2)
+  for (const term of terminals) {
+    const hasGf = geofences.some(
+      (g) => g.terminalId === term.id || g.terminalName === term.name || (term.code && g.name.includes(term.code))
+    );
+    if (!hasGf) {
+      const gfId = `gf-${term.id}`;
+      const autoGf: DrayageGeofence = {
+        id: gfId,
+        tenantId,
+        terminalId: term.id,
+        terminalName: term.name,
+        name: `${term.name} Perimeter Geofence`,
+        type: 'CIRCLE',
+        centerLat: term.lat,
+        centerLng: term.lng,
+        radiusMeters: term.geofenceRadiusMeters || 1500,
+        coordinatesJson: JSON.stringify([{ lat: term.lat, lng: term.lng }]),
+        createdAt: new Date().toISOString(),
+      };
+      geofences.push(autoGf);
+
+      // Persist to database so it stays in sync
+      db.$executeRawUnsafe(
+        `INSERT INTO logistics_drayage_geofences (
+          id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
+        ) VALUES ($1,$2,$3,$4,$5,'CIRCLE',$6,$7,$8,$9)
+        ON CONFLICT (id) DO UPDATE
+           SET terminal_name = EXCLUDED.terminal_name,
+               name = EXCLUDED.name,
+               center_lat = EXCLUDED.center_lat,
+               center_lng = EXCLUDED.center_lng,
+               radius_meters = EXCLUDED.radius_meters`,
+        gfId,
+        tenantId,
+        term.id,
+        term.name,
+        autoGf.name,
+        term.lat,
+        term.lng,
+        autoGf.radiusMeters,
+        autoGf.coordinatesJson,
+      ).catch(() => {});
+    }
+  }
+
   const statusLogs: DrayageStatusLog[] = statusLogRows.map((l: Record<string, unknown>) => ({
     id: String(l.id),
     tenantId: String(l.tenant_id),
