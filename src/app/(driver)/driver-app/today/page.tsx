@@ -36,6 +36,7 @@ import {
   createAutoLifecycle,
   type AutoLifecycleHandle,
   type LatLng,
+  haversineMeters,
 } from '@/lib/driver-offline/auto-lifecycle';
 import {
   AlertTriangle,
@@ -48,7 +49,71 @@ import {
   Clock,
   Zap,
   Flame,
+  Camera,
+  Check,
+  ArrowRight,
+  Anchor,
+  Timer,
 } from 'lucide-react';
+
+export interface DrayageGeofenceBoundary {
+  name: string;
+  type: 'CIRCLE' | 'POLYGON';
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  coordinates?: Array<{ lat: number; lng: number }>;
+}
+
+export interface DriverDrayageJob {
+  id: string;
+  jobCode: string;
+  jobPhase: 'L1' | 'L2' | string;
+  shipmentType: 'IMPORT' | 'EXPORT' | string;
+  status: string;
+  priority: 'STANDARD' | 'HIGH' | 'URGENT' | string;
+  containerNumber: string;
+  containerSize: string;
+  containerType: string;
+  warehouseName: string;
+  terminalName: string;
+  assignedVehiclePlate: string | null;
+  assignedTrailerPlate: string | null;
+  placementLocation: 'RAMP' | 'YARD' | null;
+  trailerDetached: boolean;
+  etcTime: string | null;
+  etcAlertStatus: string;
+  rateAmountAed: number;
+  driverAllowanceAed: number;
+  notes: string | null;
+  terminalGeofence?: DrayageGeofenceBoundary | null;
+  warehouseGeofence?: DrayageGeofenceBoundary | null;
+}
+
+function isPointInsideGeofence(
+  pos: LatLng,
+  gf?: DrayageGeofenceBoundary | null,
+): boolean {
+  if (!pos || !gf) return false;
+
+  // Polygon check using ray-casting algorithm
+  if (gf.type === 'POLYGON' && gf.coordinates && gf.coordinates.length >= 3) {
+    const x = pos.lng, y = pos.lat;
+    let inside = false;
+    const vs = gf.coordinates;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      const xi = vs[i].lng, yi = vs[i].lat;
+      const xj = vs[j].lng, yj = vs[j].lat;
+      const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    if (inside) return true;
+  }
+
+  // Radial / Circle check (using Haversine)
+  const dist = haversineMeters(pos, { lat: gf.lat, lng: gf.lng });
+  return dist <= (gf.radiusMeters || 1000);
+}
 
 interface ServerTrip {
   id: string;
@@ -151,6 +216,13 @@ function DriverTodayContent() {
   const searchParams = useSearchParams();
   const [offlineTrips, setOfflineTrips] = useState<OfflineTrip[] | null>(null);
   const [serverTrips, setServerTrips] = useState<ServerTrip[] | null>(null);
+  const [drayageJobs, setDrayageJobs] = useState<DriverDrayageJob[] | null>(null);
+  const [selectedRampJob, setSelectedRampJob] = useState<DriverDrayageJob | null>(null);
+  const [submittingRamp, setSubmittingRamp] = useState<boolean>(false);
+  const [rampBanner, setRampBanner] = useState<string | null>(null);
+  const [driverGps, setDriverGps] = useState<LatLng | null>(null);
+  const firedTerminalGfRef = useRef<Set<string>>(new Set());
+  const firedWarehouseGfRef = useRef<Set<string>>(new Set());
   const [sync, setSync] = useState<{ queued: number; failed: number } | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -202,6 +274,9 @@ function DriverTodayContent() {
       if (Array.isArray(data.trips)) {
         setServerTrips(data.trips);
       }
+      if (Array.isArray(data.drayageJobs)) {
+        setDrayageJobs(data.drayageJobs);
+      }
     } catch {
       // Offline
     }
@@ -252,6 +327,7 @@ function DriverTodayContent() {
           }),
         });
         setLastLocationPing(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        void evaluateDrayageGeofences({ lat: loc.lat, lng: loc.lng });
       } catch {
         // Silent
       }
@@ -509,6 +585,120 @@ function DriverTodayContent() {
     }
   };
 
+  // Drayage Status & Ramp Placement submit directly to /api/driver/jobs/[id]/status
+  const handleUpdateDrayageStatus = async (
+    jobId: string,
+    payload: {
+      status: string;
+      placementLocation?: string;
+      detachTrailer?: boolean;
+      etc?: string | null;
+      notes?: string;
+      driverName?: string;
+      photo?: string | null;
+    },
+  ) => {
+    try {
+      setSubmittingRamp(true);
+      const res = await fetch(`/api/driver/jobs/${jobId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed with status ${res.status}`);
+      }
+      setSelectedRampJob(null);
+      setRampBanner(`✓ Job status updated: ${payload.status.replace(/_/g, ' ')}`);
+      setTimeout(() => setRampBanner(null), 5000);
+      await fetchRoster();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Status update failed');
+    } finally {
+      setSubmittingRamp(false);
+    }
+  };
+
+  // ⚡ Geofence Auto-Trigger for Port Terminal (-> AT_PORT) & Consignee Warehouse (-> Auto-Prompt Ramp Placement Modal)
+  const evaluateDrayageGeofences = useCallback(
+    async (pos: LatLng) => {
+      setDriverGps(pos);
+      if (!drayageJobs || drayageJobs.length === 0) return;
+
+      for (const job of drayageJobs) {
+        // 1. Port Terminal Geofence entrance: Auto-advance to AT_PORT
+        if (
+          job.terminalGeofence &&
+          !firedTerminalGfRef.current.has(job.id) &&
+          (job.status === 'PENDING' || job.status === 'ACCEPTED' || (job.jobPhase === 'L2' && job.status === 'IN_TRANSIT'))
+        ) {
+          if (isPointInsideGeofence(pos, job.terminalGeofence)) {
+            firedTerminalGfRef.current.add(job.id);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([150, 80, 150]);
+            }
+            setAutoToasts((prev) => [
+              ...prev,
+              {
+                id: `gf-term-${job.id}-${Date.now()}`,
+                tripId: job.id,
+                text: `⚓ Entered ${job.terminalGeofence?.name || 'Port Terminal'} — Auto-advanced to AT_PORT`,
+                at: Date.now(),
+              },
+            ]);
+            void handleUpdateDrayageStatus(job.id, {
+              status: 'AT_PORT',
+              notes: `Auto-advanced to AT_PORT upon entering ${job.terminalGeofence?.name || 'Port Terminal'}`,
+            });
+          }
+        }
+
+        // 2. Warehouse Geofence boundary entrance: Auto-popup Ramp Placement & Destuffing ETC prompt
+        if (
+          job.warehouseGeofence &&
+          !firedWarehouseGfRef.current.has(job.id) &&
+          (job.status === 'IN_TRANSIT' || job.status === 'LOADED')
+        ) {
+          if (isPointInsideGeofence(pos, job.warehouseGeofence)) {
+            firedWarehouseGfRef.current.add(job.id);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([200, 100, 200]);
+            }
+            setAutoToasts((prev) => [
+              ...prev,
+              {
+                id: `gf-wh-${job.id}-${Date.now()}`,
+                tripId: job.id,
+                text: `📍 Arrived at ${job.warehouseGeofence?.name || job.warehouseName} — Confirm Ramp Placement & Destuffing ETC`,
+                at: Date.now(),
+              },
+            ]);
+            // Automatically open Ramp Placement & Destuffing ETC Modal on driver's mobile device!
+            setSelectedRampJob(job);
+          }
+        }
+      }
+    },
+    [drayageJobs, handleUpdateDrayageStatus],
+  );
+
+  // Active continuous GPS watching for drayage geofence auto-triggers
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    if (!drayageJobs || drayageJobs.length === 0) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        void evaluateDrayageGeofences({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [drayageJobs, evaluateDrayageGeofences]);
+
   const headerDate = useMemo(() => {
     return now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }, [now]);
@@ -586,6 +776,14 @@ function DriverTodayContent() {
         </div>
       )}
 
+      {/* Drayage Ramp Placement Confirmation */}
+      {rampBanner && (
+        <div className="bg-sky-950/90 border-b border-sky-500/40 p-2.5 text-center text-xs text-sky-200 font-semibold flex items-center justify-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-sky-400" />
+          <span>{rampBanner}</span>
+        </div>
+      )}
+
       {/* Offline sync status */}
       {sync && (sync.queued > 0 || sync.failed > 0) && (
         <div className="bg-slate-800/80 border-b border-white/10 px-4 py-2 flex items-center justify-between gap-2 text-[11px]">
@@ -634,6 +832,39 @@ function DriverTodayContent() {
       )}
 
       <main className="px-4 py-4 space-y-4">
+        {/* Container Drayage Assignments Section */}
+        {drayageJobs && drayageJobs.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Port Drayage Assignments ({drayageJobs.length})
+                </h2>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                Port & Yard
+              </span>
+            </div>
+
+            {drayageJobs.map((job) => (
+              <DrayageJobCard
+                key={job.id}
+                job={job}
+                now={now}
+                currentPosition={driverGps}
+                onOpenRampModal={() => setSelectedRampJob(job)}
+                onUpdateStatus={(newStatus) =>
+                  handleUpdateDrayageStatus(job.id, { status: newStatus })
+                }
+                onSimulateGeofence={(simPos) => evaluateDrayageGeofences(simPos)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Quick Operations Bar: NRM Trigger */}
         {!activeNrm && (
           <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/10 flex items-center justify-between text-xs">
@@ -790,9 +1021,11 @@ function DriverTodayContent() {
             })}
           </div>
         ) : (
-          <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-6 text-center text-xs text-slate-400">
-            No scheduled trips found for today.
-          </div>
+          (!drayageJobs || drayageJobs.length === 0) ? (
+            <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-6 text-center text-xs text-slate-400">
+              No scheduled trips found for today.
+            </div>
+          ) : null
         )}
       </main>
 
@@ -833,6 +1066,16 @@ function DriverTodayContent() {
         <NrmMovementModal
           onClose={() => setShowNrmModal(false)}
           onStart={handleToggleNrm}
+        />
+      )}
+
+      {/* 📦 Ramp Placement & Destuffing ETC Modal */}
+      {selectedRampJob && (
+        <RampPlacementModal
+          job={selectedRampJob}
+          submitting={submittingRamp}
+          onClose={() => setSelectedRampJob(null)}
+          onSubmit={(payload) => handleUpdateDrayageStatus(selectedRampJob.id, payload)}
         />
       )}
     </div>
@@ -988,6 +1231,591 @@ function NrmMovementModal({
             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-500/20 transition"
           >
             Start NRM
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Port Container Drayage Job Card ─────────────────────────────────────────
+
+function DrayageJobCard({
+  job,
+  now,
+  currentPosition,
+  onOpenRampModal,
+  onUpdateStatus,
+  onSimulateGeofence,
+}: {
+  job: DriverDrayageJob;
+  now: Date;
+  currentPosition: LatLng | null;
+  onOpenRampModal: () => void;
+  onUpdateStatus: (status: string) => void;
+  onSimulateGeofence: (pos: LatLng) => void;
+}) {
+  const isL1 = job.jobPhase === 'L1';
+  const isAtPort = job.status === 'AT_PORT';
+  const isPlacedAtRamp = job.status === 'PLACED_AT_RAMP';
+  const isDetached = job.status === 'CONTAINER_DETACHED' || job.trailerDetached;
+  const isInTransit = job.status === 'IN_TRANSIT' || job.status === 'LOADED';
+  const isPending = job.status === 'PENDING' || job.status === 'ACCEPTED';
+  const isCompleted = job.status === 'COMPLETED';
+
+  // Distance calculations to configured geofences
+  const distToPortM = useMemo(() => {
+    if (!currentPosition || !job.terminalGeofence) return null;
+    return Math.round(haversineMeters(currentPosition, { lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng }));
+  }, [currentPosition, job.terminalGeofence]);
+
+  const distToRampM = useMemo(() => {
+    if (!currentPosition || !job.warehouseGeofence) return null;
+    return Math.round(haversineMeters(currentPosition, { lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng }));
+  }, [currentPosition, job.warehouseGeofence]);
+
+  // Calculate ETC countdown
+  const etcRemainingMs = useMemo(() => {
+    if (!job.etcTime) return null;
+    return new Date(job.etcTime).getTime() - now.getTime();
+  }, [job.etcTime, now]);
+
+  const etcFormatted = useMemo(() => {
+    if (!job.etcTime) return null;
+    const target = new Date(job.etcTime);
+    const timeStr = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (etcRemainingMs == null) return timeStr;
+    if (etcRemainingMs <= 0) return `Elapsed (${timeStr})`;
+    const mins = Math.floor(etcRemainingMs / 60000);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h > 0 ? `${h}h ` : ''}${m}m left · Target ${timeStr}`;
+  }, [job.etcTime, etcRemainingMs]);
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 space-y-3 transition ${
+        isPlacedAtRamp
+          ? 'bg-slate-900 border-sky-500/50 shadow-lg shadow-sky-500/10'
+          : isInTransit
+          ? 'bg-slate-900 border-amber-500/50 shadow-lg shadow-amber-500/10'
+          : 'bg-slate-900/60 border-white/10'
+      }`}
+    >
+      {/* Top Header: Phase, Job Code, Container & Priority */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
+                isL1 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+              }`}
+            >
+              {isL1 ? 'L1 Import Haul' : 'L2 Empty Return'}
+            </span>
+            <span className="font-mono text-[10px] text-slate-400 font-bold">{job.jobCode}</span>
+            {job.priority === 'HIGH' || job.priority === 'URGENT' ? (
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                {job.priority}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="font-mono text-base font-extrabold text-white tracking-wide">{job.containerNumber}</span>
+            <span className="text-[11px] font-mono text-cyan-400 font-semibold">
+              [{job.containerSize} {job.containerType}]
+            </span>
+          </div>
+        </div>
+
+        {/* Status Pill */}
+        <div className="shrink-0 text-right">
+          <span
+            className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${
+              isCompleted
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : isPlacedAtRamp
+                ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 animate-pulse'
+                : isInTransit
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-slate-800 text-slate-300 border-slate-700'
+            }`}
+          >
+            {job.status.replace(/_/g, ' ')}
+          </span>
+          {job.driverAllowanceAed > 0 && (
+            <div className="text-[10px] text-emerald-400 font-semibold mt-1">
+              +AED {job.driverAllowanceAed} Allowance
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Origin / Destination Path with Configured Geofence Badges */}
+      <div className="rounded-xl bg-slate-950/60 p-2.5 border border-white/5 space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+            <Anchor className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span className="text-[11px] truncate text-slate-300">
+              <strong className="text-white">Port Terminal:</strong> {job.terminalName}
+            </span>
+          </div>
+          {job.terminalGeofence && (
+            <span
+              title={`Terminal Geofence: ${job.terminalGeofence.name} (${job.terminalGeofence.radiusMeters}m radius)`}
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0"
+            >
+              ⚓ {distToPortM != null ? `${distToPortM}m` : 'Port GF'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 pl-4 text-slate-500">
+          <ArrowRight className="w-3 h-3 text-slate-600" />
+          <span className="text-[10px]">Direct Drayage Corridor · Automated Geofence Auto-Trigger Armed</span>
+        </div>
+
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+            <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[11px] truncate text-slate-300">
+              <strong className="text-white">Consignee Ramp:</strong> {job.warehouseName}
+            </span>
+          </div>
+          {job.warehouseGeofence && (
+            <span
+              title={`Ramp Geofence: ${job.warehouseGeofence.name} (${job.warehouseGeofence.type === 'POLYGON' ? 'Polygon' : `${job.warehouseGeofence.radiusMeters}m`})`}
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
+            >
+              📍 {distToRampM != null ? `${distToRampM}m` : (job.warehouseGeofence.type === 'POLYGON' ? 'Polygon Ramp' : 'Ramp GF')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Equipment details */}
+      <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+        <div className="flex items-center gap-2">
+          <span>Tractor: <strong className="text-slate-200 font-mono">{job.assignedVehiclePlate || 'Attached'}</strong></span>
+          <span>·</span>
+          <span>Chassis: <strong className="text-slate-200 font-mono">{job.assignedTrailerPlate || 'Standard'}</strong></span>
+        </div>
+        {isDetached && (
+          <span className="text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-500/30">
+            Chassis Detached
+          </span>
+        )}
+      </div>
+
+      {/* Active Destuffing Countdown Banner (if Placed at Ramp or has ETC) */}
+      {job.etcTime && (
+        <div
+          className={`rounded-xl p-2.5 border flex items-center justify-between gap-2 text-xs ${
+            etcRemainingMs != null && etcRemainingMs <= 0
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Timer className={`w-4 h-4 shrink-0 ${etcRemainingMs != null && etcRemainingMs > 0 ? 'animate-spin' : ''}`} />
+            <div className="truncate">
+              <span className="font-semibold text-[11px]">
+                {etcRemainingMs != null && etcRemainingMs <= 0 ? 'Destuffing Window Expired' : 'Destuffing Countdown'}
+              </span>
+              <div className="text-[10px] font-mono opacity-90">{etcFormatted}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenRampModal}
+            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shrink-0 transition"
+          >
+            Extend
+          </button>
+        </div>
+      )}
+
+      {/* Lifecycle Action Buttons */}
+      <div className="pt-1 space-y-2">
+        {isPending && (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('IN_TRANSIT')}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Start Drayage Trip (Gate Out Port)</span>
+            </button>
+            {job.terminalGeofence && (
+              <button
+                type="button"
+                onClick={() => job.terminalGeofence && onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
+                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1"
+              >
+                <span>⚡ Simulate Entering Port Geofence (Auto-advance to AT_PORT)</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {isAtPort && (
+          <div className="space-y-1.5">
+            <div className="p-2.5 rounded-xl bg-sky-950/80 border border-sky-500/40 text-center text-xs text-sky-200 font-semibold flex items-center justify-center gap-1.5">
+              <Anchor className="w-4 h-4 text-sky-400 animate-pulse" />
+              <span>At Port Berth/Gate · Container Loading in Progress</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('IN_TRANSIT')}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Gate Out & Start Transit to Consignee Ramp</span>
+            </button>
+          </div>
+        )}
+
+        {isInTransit && (
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onOpenRampModal}
+                className="py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-1.5"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Placed at Ramp</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateStatus('CONTAINER_DETACHED')}
+                className="py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition flex items-center justify-center gap-1.5"
+              >
+                <span>Detach at Yard</span>
+              </button>
+            </div>
+            {job.warehouseGeofence && (
+              <button
+                type="button"
+                onClick={() => job.warehouseGeofence && onSimulateGeofence({ lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng })}
+                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center justify-center gap-1"
+              >
+                <span>⚡ Simulate Arriving at Ramp Geofence (Auto-pop Prompt)</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {isPlacedAtRamp && !job.etcTime && (
+          <button
+            type="button"
+            onClick={onOpenRampModal}
+            className="w-full py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
+          >
+            <Timer className="w-4 h-4" />
+            <span>Set Destuffing ETC & Placement Photo</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Ramp Placement & Destuffing ETC Modal ───────────────────────────────────
+
+function RampPlacementModal({
+  job,
+  submitting,
+  onClose,
+  onSubmit,
+}: {
+  job: DriverDrayageJob;
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (payload: {
+    status: string;
+    placementLocation: string;
+    detachTrailer: boolean;
+    etc: string;
+    notes: string;
+    photo: string | null;
+  }) => void;
+}) {
+  const [hoursPreset, setHoursPreset] = useState<number | 'custom'>(2);
+  const [customDateTime, setCustomDateTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [placementLocation, setPlacementLocation] = useState<'RAMP' | 'YARD'>('RAMP');
+  const [detachTrailer, setDetachTrailer] = useState<boolean>(true);
+  const [rampNotes, setRampNotes] = useState<string>('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoName, setPhotoName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const calculatedEtc = useMemo(() => {
+    if (hoursPreset === 'custom') {
+      const parsed = new Date(customDateTime);
+      return isNaN(parsed.getTime()) ? new Date(Date.now() + 2 * 60 * 60 * 1000) : parsed;
+    }
+    return new Date(Date.now() + hoursPreset * 60 * 60 * 1000);
+  }, [hoursPreset, customDateTime]);
+
+  const etcLabel = useMemo(() => {
+    return (
+      calculatedEtc.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+      ' (' +
+      calculatedEtc.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+      ')'
+    );
+  }, [calculatedEtc]);
+
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfirm = () => {
+    const notesSummary = [
+      rampNotes.trim(),
+      photoName ? `Photo: ${photoName}` : '',
+      detachTrailer ? 'Chassis detached' : 'Chassis kept coupled',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    onSubmit({
+      status: placementLocation === 'RAMP' ? 'PLACED_AT_RAMP' : 'PLACED_AT_YARD',
+      placementLocation,
+      detachTrailer,
+      etc: calculatedEtc.toISOString(),
+      notes: notesSummary || (placementLocation === 'RAMP' ? 'Placed at warehouse ramp' : 'Placed at yard'),
+      photo: photoPreview,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+      <div className="bg-slate-950 border border-sky-500/40 rounded-3xl p-5 max-w-md w-full space-y-4 shadow-2xl text-xs my-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
+              <Anchor className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">Container Drayage</div>
+              <h3 className="text-sm font-bold text-white">Placed at Ramp & Destuffing ETC</h3>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Container Badge Card */}
+        <div className="rounded-2xl bg-slate-900 border border-white/10 p-3 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-mono font-bold text-sm text-cyan-300">{job.containerNumber}</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+              {job.containerSize} {job.containerType}
+            </span>
+          </div>
+          <div className="text-slate-300 flex items-center gap-1.5 text-[11px]">
+            <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span className="truncate">{job.warehouseName}</span>
+          </div>
+          <div className="text-[10px] text-slate-400 flex items-center gap-2 pt-1 border-t border-white/5">
+            <span>Chassis: <strong className="text-white font-mono">{job.assignedTrailerPlate || 'Standard Chassis'}</strong></span>
+            <span>·</span>
+            <span>Tractor: <strong className="text-white font-mono">{job.assignedVehiclePlate || 'Assigned'}</strong></span>
+          </div>
+        </div>
+
+        {/* Placement Location Selector */}
+        <div className="space-y-1.5">
+          <label className="block text-slate-300 font-semibold">Placement Location *</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setPlacementLocation('RAMP')}
+              className={`p-2.5 rounded-xl border text-center transition font-semibold ${
+                placementLocation === 'RAMP'
+                  ? 'bg-sky-500/20 border-sky-500 text-sky-200'
+                  : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
+              }`}
+            >
+              📍 Loading Dock / Ramp
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlacementLocation('YARD')}
+              className={`p-2.5 rounded-xl border text-center transition font-semibold ${
+                placementLocation === 'YARD'
+                  ? 'bg-sky-500/20 border-sky-500 text-sky-200'
+                  : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
+              }`}
+            >
+              🅿️ Staging Yard
+            </button>
+          </div>
+        </div>
+
+        {/* ETC Duration Presets */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="block text-slate-300 font-semibold">Destuffing Duration (ETC) *</label>
+            <span className="text-[11px] font-mono font-bold text-amber-300">ETA: {etcLabel}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[
+              { val: 1, label: '+1h', sub: 'Express' },
+              { val: 2, label: '+2h', sub: 'Pallet' },
+              { val: 3, label: '+3h', sub: 'Standard' },
+              { val: 4, label: '+4h', sub: 'Floor' },
+            ].map((p) => (
+              <button
+                key={p.val}
+                type="button"
+                onClick={() => setHoursPreset(p.val)}
+                className={`py-2 px-1 rounded-xl border text-center transition ${
+                  hoursPreset === p.val
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+                    : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
+                }`}
+              >
+                <div className="text-xs">{p.label}</div>
+                <div className="text-[9px] opacity-75">{p.sub}</div>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setHoursPreset('custom')}
+            className={`w-full py-1.5 px-2 rounded-xl border text-[11px] text-center transition ${
+              hoursPreset === 'custom'
+                ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+                : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
+            }`}
+          >
+            Custom Target Date / Time
+          </button>
+
+          {hoursPreset === 'custom' && (
+            <input
+              type="datetime-local"
+              value={customDateTime}
+              onChange={(e) => setCustomDateTime(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-amber-500"
+            />
+          )}
+        </div>
+
+        {/* Detach Trailer Checkbox */}
+        <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={detachTrailer}
+            onChange={(e) => setDetachTrailer(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0"
+          />
+          <div className="text-[11px]">
+            <span className="text-white font-semibold">Detach Trailer / Chassis</span>
+            <p className="text-[10px] text-slate-400">Frees your tractor for next assignment while container is destuffed</p>
+          </div>
+        </label>
+
+        {/* Photo Evidence Capture */}
+        <div className="space-y-1.5">
+          <label className="block text-slate-300 font-semibold">Placement Proof / Evidence Photo</label>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoCapture}
+          />
+          {photoPreview ? (
+            <div className="relative rounded-xl overflow-hidden border border-emerald-500/50 bg-slate-900 p-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photoPreview} alt="Placement preview" className="w-12 h-12 rounded-lg object-cover" />
+                <div className="truncate text-[11px]">
+                  <div className="text-emerald-300 font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Photo Captured
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">{photoName}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoPreview(null);
+                  setPhotoName(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-rose-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2.5 rounded-xl border border-dashed border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 font-semibold flex items-center justify-center gap-2 transition"
+            >
+              <Camera className="w-4 h-4" />
+              <span>Take Container Placement Photo</span>
+            </button>
+          )}
+        </div>
+
+        {/* Bay / Notes */}
+        <div>
+          <label className="block text-slate-300 font-semibold mb-1">Ramp Bay / Warehouse Notes</label>
+          <input
+            type="text"
+            value={rampNotes}
+            onChange={(e) => setRampNotes(e.target.value)}
+            placeholder="e.g. Ramp Bay 04 - Forklift unloading active"
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-sky-500"
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-2 border-t border-white/10">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={submitting}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white font-bold shadow-lg shadow-sky-600/30 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+          >
+            {submitting ? (
+              <span>Submitting...</span>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Confirm Placement</span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -91,6 +91,25 @@ function computeScore(rows: ScoreRow[]): ScoreBreakdown {
   return { score, harshBrake, harshAccel, speeding, idleMinutes };
 }
 
+// Row shapes of the drayage queries below (columns as selected).
+type DrayageJobRow = {
+  id: string; jobCode: string; jobPhase: string; shipmentType: string; status: string; priority: string;
+  containerNumber: string; containerSize: string; containerType: string;
+  terminalId: string | null; terminalName: string; warehouseId: string | null; warehouseName: string;
+  assignedVehiclePlate: string | null; assignedTrailerPlate: string | null; placementLocation: string | null;
+  trailerDetached: boolean; etcTime: Date | string | null; etcAlertStatus: string;
+  rateAmountAed: number | null; driverAllowanceAed: number | null; notes: string | null;
+};
+type DrayageGeofenceRow = {
+  id: string; terminal_id: string | null; terminal_name: string | null; name: string | null; type: string | null;
+  center_lat: number | null; center_lng: number | null; radius_meters: number | null; coordinates_json: string | null;
+};
+type DrayageTerminalRow = { id: string; name: string | null; code: string | null; lat: number | null; lng: number | null; geofence_radius_meters: number | null };
+type DrayageWarehouseRow = {
+  id: string; name: string | null; lat: number | null; lng: number | null; geofence_type: string | null;
+  geofence_radius_meters: number | null; geofence_coordinates_json: string | null;
+};
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -137,8 +156,139 @@ export async function GET(req: NextRequest) {
         ORDER BY ts.departure_time ASC
       `;
 
+      // 1b) Port Container Drayage assignments + Configured Geofences
+      let drayageJobs: Array<Record<string, unknown>> = [];
+      try {
+        const [drayageRows, gfRows, termRows, whRows] = await Promise.all([
+          tx.$queryRawUnsafe<DrayageJobRow[]>(`
+            SELECT
+              id,
+              job_code AS "jobCode",
+              job_phase AS "jobPhase",
+              shipment_type AS "shipmentType",
+              status,
+              priority,
+              container_number AS "containerNumber",
+              container_size AS "containerSize",
+              container_type AS "containerType",
+              terminal_id AS "terminalId",
+              terminal_name AS "terminalName",
+              warehouse_id AS "warehouseId",
+              warehouse_name AS "warehouseName",
+              assigned_vehicle_plate AS "assignedVehiclePlate",
+              assigned_trailer_plate AS "assignedTrailerPlate",
+              placement_location AS "placementLocation",
+              trailer_detached AS "trailerDetached",
+              etc_time AS "etcTime",
+              etc_alert_status AS "etcAlertStatus",
+              rate_amount_aed AS "rateAmountAed",
+              driver_allowance_aed AS "driverAllowanceAed",
+              notes
+            FROM logistics_drayage_jobs
+            WHERE tenant_id = $1
+              AND (
+                assigned_driver_id = $2
+                OR assigned_driver_id IS NULL
+                OR assigned_driver_name = $2
+              )
+              AND status NOT IN ('CANCELLED')
+            ORDER BY
+              CASE
+                WHEN status IN ('IN_TRANSIT', 'LOADED', 'ACCEPTED', 'PLACED_AT_RAMP') THEN 1
+                WHEN status = 'PENDING' THEN 2
+                ELSE 3
+              END,
+              created_at DESC
+            LIMIT 10
+          `, tenantId, ctx.userId),
+          tx.$queryRawUnsafe<DrayageGeofenceRow[]>(`
+            SELECT id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
+            FROM logistics_drayage_geofences
+            WHERE tenant_id = $1
+          `, tenantId).catch(() => []),
+          tx.$queryRawUnsafe<DrayageTerminalRow[]>(`
+            SELECT id, name, code, lat, lng, geofence_radius_meters
+            FROM logistics_drayage_terminals
+            WHERE tenant_id = $1
+          `, tenantId).catch(() => []),
+          tx.$queryRawUnsafe<DrayageWarehouseRow[]>(`
+            SELECT id, name, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
+            FROM logistics_drayage_warehouses
+            WHERE tenant_id = $1
+          `, tenantId).catch(() => []),
+        ]);
+
+        const parseGeofenceCoords = (raw?: string | null): Array<{ lat: number; lng: number }> => {
+          if (!raw) return [];
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr) && arr.length > 0 && typeof arr[0].lat === 'number') {
+              return arr;
+            }
+          } catch {}
+          return [];
+        };
+
+        drayageJobs = drayageRows.map((j) => {
+          // Resolve terminal geofence (from DrayageGeofenceMap configured geofences or terminals table)
+          const matchedTermGf = gfRows.find(
+            (g) => (g.terminal_id && g.terminal_id === j.terminalId) ||
+                   (g.terminal_name && g.terminal_name === j.terminalName) ||
+                   (g.name && j.terminalName && g.name.toLowerCase().includes(j.terminalName.toLowerCase().slice(0, 12)))
+          );
+          const matchedTerm = termRows.find(
+            (t) => (t.id && t.id === j.terminalId) ||
+                   (t.name && t.name === j.terminalName) ||
+                   (t.name && j.terminalName && t.name.toLowerCase().includes(j.terminalName.toLowerCase().slice(0, 12)))
+          );
+
+          const terminalGeofence = {
+            name: matchedTermGf?.name || matchedTerm?.name || j.terminalName,
+            type: (matchedTermGf?.type || 'CIRCLE') as 'CIRCLE' | 'POLYGON',
+            lat: Number(matchedTermGf?.center_lat || matchedTerm?.lat || 25.0112),
+            lng: Number(matchedTermGf?.center_lng || matchedTerm?.lng || 55.0612),
+            radiusMeters: Number(matchedTermGf?.radius_meters || matchedTerm?.geofence_radius_meters || 1800),
+            coordinates: parseGeofenceCoords(matchedTermGf?.coordinates_json),
+          };
+
+          // Resolve warehouse geofence (from DrayageGeofenceMap configured geofences or warehouses table)
+          const matchedWhGf = gfRows.find(
+            (g) => (g.terminal_name && g.terminal_name === j.warehouseName) ||
+                   (g.name && j.warehouseName && g.name.toLowerCase().includes(j.warehouseName.toLowerCase().slice(0, 10)))
+          );
+          const matchedWh = whRows.find(
+            (w) => (w.id && w.id === j.warehouseId) ||
+                   (w.name && w.name === j.warehouseName) ||
+                   (w.name && j.warehouseName && w.name.toLowerCase().includes(j.warehouseName.toLowerCase().slice(0, 10)))
+          );
+
+          const warehouseGeofence = {
+            name: matchedWhGf?.name || matchedWh?.name || j.warehouseName,
+            type: (matchedWhGf?.type || matchedWh?.geofence_type || 'POLYGON') as 'CIRCLE' | 'POLYGON',
+            lat: Number(matchedWhGf?.center_lat || matchedWh?.lat || 24.9642),
+            lng: Number(matchedWhGf?.center_lng || matchedWh?.lng || 55.0915),
+            radiusMeters: Number(matchedWhGf?.radius_meters || matchedWh?.geofence_radius_meters || 850),
+            coordinates: parseGeofenceCoords(matchedWhGf?.coordinates_json || matchedWh?.geofence_coordinates_json),
+          };
+
+          return {
+            ...j,
+            rateAmountAed: Number(j.rateAmountAed || 0),
+            driverAllowanceAed: Number(j.driverAllowanceAed || 0),
+            etcTime: j.etcTime ? new Date(j.etcTime).toISOString() : null,
+            terminalGeofence,
+            warehouseGeofence,
+          };
+        });
+      } catch (drayageErr) {
+        console.warn('[today/assignments] Drayage query skipped or failed:', drayageErr);
+      }
+
       if (trips.length === 0) {
-        return NextResponse.json({ trips: [], generatedAt: new Date().toISOString() });
+        return NextResponse.json(
+          { trips: [], drayageJobs, generatedAt: new Date().toISOString() },
+          { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
+        );
       }
 
       // 2) Per-trip behaviour events — single batch query
@@ -191,7 +341,7 @@ export async function GET(req: NextRequest) {
       });
 
       return NextResponse.json(
-        { trips: result, generatedAt: new Date().toISOString() },
+        { trips: result, drayageJobs, generatedAt: new Date().toISOString() },
         { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
       );
   });

@@ -214,6 +214,53 @@ export interface DrayageJob {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  cargoWeightKg?: number;
+  shippingLine?: string;
+  bogieJobId?: string | null;
+  streetTurnJobId?: string | null;
+}
+
+export interface StreetTurnMatch {
+  id: string;
+  l2Job: DrayageJob;
+  exportJob: DrayageJob;
+  shippingLine: string;
+  carrierPrefix: string;
+  containerNumber: string;
+  containerSize: string;
+  containerType: string;
+  originWarehouse: string;
+  destWarehouse: string;
+  zone: string;
+  interWarehouseDistanceKm: number;
+  terminalName: string;
+  deadheadKmSaved: number;
+  co2SavedKg: number;
+  fuelSavingsAed: number;
+  turnaroundHoursSaved: number;
+  score: number;
+}
+
+export interface BogiePairCandidate {
+  id: string;
+  job1: DrayageJob;
+  job2: DrayageJob;
+  commonTerminal: string;
+  zone1: string;
+  zone2: string;
+  sameZone: boolean;
+  box1WeightKg: number;
+  box2WeightKg: number;
+  totalPayloadKg: number;
+  isWeightCompliant: boolean;
+  weightLimitKg: number;
+  weightUtilizationPct: number;
+  recommendedTrailerType: string;
+  combinedRevenueAed: number;
+  combinedAllowanceAed: number;
+  fuelSavingPct: number;
+  tasSlot: string;
+  score: number;
 }
 
 export interface DrayageDriverAllowance {
@@ -370,6 +417,32 @@ export function calculateDemurrageClock(args: {
 }
 
 const seededTenants = new Set<string>();
+
+
+export function detectShippingLine(containerNumber?: string | null, explicitLine?: string | null): string {
+  if (explicitLine && explicitLine.trim()) return explicitLine.trim().toUpperCase();
+  if (!containerNumber) return 'CARRIER_DEFAULT';
+  const prefix = containerNumber.trim().toUpperCase().slice(0, 4);
+  if (prefix.startsWith('MSC') || prefix.startsWith('MED')) return 'MSC';
+  if (prefix.startsWith('MAE') || prefix.startsWith('MSK')) return 'MAERSK';
+  if (prefix.startsWith('HLC') || prefix.startsWith('HLX')) return 'HAPAG-LLOYD';
+  if (prefix.startsWith('CMA')) return 'CMA CGM';
+  if (prefix.startsWith('ONE')) return 'ONE';
+  if (prefix.startsWith('COS')) return 'COSCO';
+  if (prefix.startsWith('EGL') || prefix.startsWith('EMC')) return 'EVERGREEN';
+  return prefix || 'GENERIC_LINE';
+}
+
+export function getWarehouseZoneName(name?: string | null): string {
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('jafza south') || lower.includes('south')) return 'JAFZA South';
+  if (lower.includes('jafza') || lower.includes('jebel ali free zone')) return 'JAFZA North';
+  if (lower.includes('nip') || lower.includes('national industries')) return 'National Industries Park (NIP)';
+  if (lower.includes('dubai south') || lower.includes('dwc')) return 'Dubai South (DWC)';
+  if (lower.includes('al quoz')) return 'Al Quoz Industrial';
+  if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) return 'KEZAD Industrial';
+  return 'Dubai Logistics Corridor';
+}
 
 export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, tenantId: string) {
   if (seededTenants.has(tenantId)) return;
@@ -1039,6 +1112,73 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     );
   }
 
+  // Ensure Street-Turn and Dual-20FT Bogie candidate jobs exist for this tenant
+  const pairingCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
+    `SELECT COUNT(*) AS cnt FROM logistics_drayage_jobs WHERE tenant_id = $1 AND job_code IN ('DRY-L2-1001', 'DRY-EXP-1001', 'DRY-L1-1005', 'DRY-L1-1006')`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
+
+  if (Number(pairingCountRows[0]?.cnt ?? 0) < 4) {
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    // 1. Dual-20FT Bogie Pair
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_jobs (
+        id, tenant_id, job_code, job_phase, shipment_type, status, priority,
+        customer_name, warehouse_id, warehouse_name, terminal_id, terminal_name,
+        container_number, container_size, container_type, do_expiry_date,
+        rate_amount_aed, driver_allowance_aed, cargo_weight_kg, shipping_line, notes
+      ) VALUES
+      ($1, $2, 'DRY-L1-1005', 'L1', 'IMPORT', 'PENDING', 'HIGH',
+       'Dubai Refreshments (PepsiCo) Hub', $3, 'National Industries Park (NIP) Mega Automated DC',
+       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
+       'MSCU2109483', '20FT', 'DRY', $5::timestamptz,
+       1450, 150, 14500, 'MSC', '20FT Import Cargo - Eligible for Dual-20FT Bogie Bundling'),
+      ($6, $2, 'DRY-L1-1006', 'L1', 'IMPORT', 'PENDING', 'HIGH',
+       'Agility Logistics Regional Park', $3, 'National Industries Park (NIP) Mega Automated DC',
+       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
+       'MSCU3918204', '20FT', 'DRY', $7::timestamptz,
+       1450, 150, 16200, 'MSC', '20FT Import Cargo - Eligible for Dual-20FT Bogie Bundling')
+      ON CONFLICT (id) DO NOTHING`,
+      `job-5-${tenantId.slice(0, 8)}`,
+      tenantId,
+      `wh-nip-${tenantId.slice(0, 8)}`,
+      `term-ja1-${tenantId.slice(0, 8)}`,
+      new Date(nowMs + 2 * dayMs).toISOString(),
+      `job-6-${tenantId.slice(0, 8)}`,
+      new Date(nowMs + 3 * dayMs).toISOString(),
+    ).catch(() => {});
+
+    // 2. Freshly Activated L2 Empty + Pending Export Booking in JAFZA South (Street-Turn Triangulation)
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_jobs (
+        id, tenant_id, job_code, job_phase, shipment_type, status, priority,
+        customer_name, warehouse_id, warehouse_name, terminal_id, terminal_name,
+        container_number, container_size, container_type, do_expiry_date,
+        rate_amount_aed, driver_allowance_aed, cargo_weight_kg, shipping_line, notes
+      ) VALUES
+      ($1, $2, 'DRY-L2-1001', 'L2', 'IMPORT', 'PENDING', 'HIGH',
+       'Al-Futtaim Logistics LLC', $3, 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
+       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
+       'MSCU9248102', '40HC', 'DRY', $5::timestamptz,
+       950, 120, 3800, 'MSC', 'Freshly activated L2 empty container awaiting depot return (Street-Turn candidate)'),
+      ($6, $2, 'DRY-EXP-1001', 'L1', 'EXPORT', 'PENDING', 'HIGH',
+       'Gulf Petrochem Exporters FZE', $3, 'JAFZA South Industrial Sector 4',
+       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
+       'MSCU-TBD', '40HC', 'DRY', $7::timestamptz,
+       1950, 180, 21500, 'MSC', 'Pending export booking: requires 40HC MSC empty container for loading (Street-Turn candidate)')
+      ON CONFLICT (id) DO NOTHING`,
+      `job-l2-1001-${tenantId.slice(0, 8)}`,
+      tenantId,
+      `wh-jafza-${tenantId.slice(0, 8)}`,
+      `term-ja1-${tenantId.slice(0, 8)}`,
+      new Date(nowMs + 2 * dayMs).toISOString(),
+      `job-exp-1001-${tenantId.slice(0, 8)}`,
+      new Date(nowMs + 5 * dayMs).toISOString(),
+    ).catch(() => {});
+  }
+
   // Seed default geofences if none exist
   const gfCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_geofences WHERE tenant_id = $1`,
@@ -1395,6 +1535,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     notes: r.notes ? String(r.notes) : null,
     createdAt: r.created_at ? new Date(String(r.created_at)).toISOString() : new Date().toISOString(),
     updatedAt: r.updated_at ? new Date(String(r.updated_at)).toISOString() : new Date().toISOString(),
+    cargoWeightKg: r.cargo_weight_kg != null ? Number(r.cargo_weight_kg) : (String(r.container_size) === '20FT' ? 14500 : 22000),
+    shippingLine: r.shipping_line ? String(r.shipping_line) : detectShippingLine(String(r.container_number)),
+    bogieJobId: r.bogie_job_id ? String(r.bogie_job_id) : null,
+    streetTurnJobId: r.street_turn_job_id ? String(r.street_turn_job_id) : null,
   }));
 
   // 5. Containers + Demurrage Calculation
@@ -2628,3 +2772,399 @@ export async function calculateMissingAllowances(db: DrayageDbClient, tenantId: 
   return { ok: true, createdCount };
 }
 
+
+
+// =========================================================================
+// STREET-TURN TRIANGULATION & BOGIE ENGINE DOMAIN FUNCTIONS
+// =========================================================================
+
+export async function findStreetTurnCandidates(
+  db: DrayageDbClient,
+  tenantId: string,
+): Promise<StreetTurnMatch[]> {
+  const workspace = await getDrayageWorkspaceData(db, tenantId);
+  const unassignedJobs = workspace.jobs.filter(
+    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && j.status !== 'STREET_TURNED'
+  );
+
+  const l2EmptyJobs = unassignedJobs.filter((j) => j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
+  const exportJobs = unassignedJobs.filter((j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'));
+
+  if (l2EmptyJobs.length === 0 || exportJobs.length === 0) return [];
+
+  const candidates: StreetTurnMatch[] = [];
+
+  for (const l2 of l2EmptyJobs) {
+    for (const exp of exportJobs) {
+      if (l2.id === exp.id) continue;
+
+      // 1. Zone proximity matching
+      const zoneL2 = getWarehouseZoneName(l2.warehouseName);
+      const zoneExp = getWarehouseZoneName(exp.warehouseName);
+      const sameZone = zoneL2.toLowerCase() === zoneExp.toLowerCase();
+      const isCorridorCluster =
+        sameZone ||
+        (zoneL2.includes('JAFZA') && zoneExp.includes('JAFZA')) ||
+        (zoneL2.includes('JAFZA') && zoneExp.includes('NIP')) ||
+        (zoneL2.includes('NIP') && zoneExp.includes('JAFZA'));
+
+      if (!isCorridorCluster) continue;
+
+      // 2. Equipment Size & Type Match
+      const sizeMatch =
+        l2.containerSize === exp.containerSize ||
+        (l2.containerSize.startsWith('40') && exp.containerSize.startsWith('40'));
+      if (!sizeMatch) continue;
+
+      const typeMatch = (l2.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
+      if (!typeMatch) continue;
+
+      // 3. Carrier Line Matching
+      const l2Line = detectShippingLine(l2.containerNumber, l2.shippingLine);
+      const expLine = detectShippingLine(exp.containerNumber, exp.shippingLine);
+      const isLineMatch = l2Line === expLine || exp.containerNumber.includes('TBD') || !exp.containerNumber;
+      if (!isLineMatch && expLine !== 'GENERIC_LINE' && expLine !== 'CARRIER_DEFAULT') continue;
+
+      const interDist = sameZone ? 3.2 : 7.8;
+      const deadheadKmSaved = Math.max(48, Math.round(56 - interDist));
+      const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
+      const fuelSavingsAed = Math.round(deadheadKmSaved * 4.5 + 400);
+
+      let score = 90;
+      if (sameZone) score += 8;
+      if (l2Line === expLine) score += 5;
+
+      candidates.push({
+        id: `STREET-${l2.id}-${exp.id}`,
+        l2Job: l2,
+        exportJob: exp,
+        shippingLine: l2Line,
+        carrierPrefix: l2.containerNumber.slice(0, 4),
+        containerNumber: l2.containerNumber,
+        containerSize: l2.containerSize,
+        containerType: l2.containerType,
+        originWarehouse: l2.warehouseName,
+        destWarehouse: exp.warehouseName,
+        zone: zoneL2,
+        interWarehouseDistanceKm: interDist,
+        terminalName: exp.terminalName || l2.terminalName,
+        deadheadKmSaved,
+        co2SavedKg,
+        fuelSavingsAed,
+        turnaroundHoursSaved: 4.0,
+        score,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates;
+}
+
+export async function executeStreetTurnTriangulation(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    l2JobId: string;
+    exportJobId: string;
+    vehicleId?: string;
+    vehiclePlate?: string;
+    driverId?: string;
+    driverName?: string;
+    trailerId?: string;
+    trailerPlate?: string;
+    tokenNumber?: string;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id IN ($1, $2) AND tenant_id = $3`,
+    args.l2JobId,
+    args.exportJobId,
+    args.tenantId,
+  );
+  const l2 = rows.find((r) => String(r.id) === args.l2JobId);
+  const exp = rows.find((r) => String(r.id) === args.exportJobId);
+
+  if (!l2) throw new Error(`L2 Empty Return Job ${args.l2JobId} not found`);
+  if (!exp) throw new Error(`Export Job ${args.exportJobId} not found`);
+
+  const containerNum = String(l2.container_number);
+  const containerSize = String(l2.container_size || '40HC');
+  const containerType = String(l2.container_type || 'DRY');
+  const streetTurnRef = `ST-${Math.floor(1000 + Math.random() * 9000)}`;
+  const token = args.tokenNumber || `DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // 1. Mark L2 job as STREET_TURNED
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET status = 'STREET_TURNED',
+            street_turn_job_id = $3,
+            notes = COALESCE(notes || ' | ', '') || $4,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.l2JobId,
+    args.tenantId,
+    args.exportJobId,
+    `Inland Street-Turned to Export Job ${exp.job_code} (${streetTurnRef}) - 52km deadhead avoided`,
+  );
+
+  // 2. Allocate empty container to Export Job
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET container_id = $3,
+            container_number = $4,
+            container_size = $5,
+            container_type = $6,
+            street_turn_job_id = $7,
+            priority = 'HIGH',
+            notes = COALESCE(notes || ' | ', '') || $8,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.exportJobId,
+    args.tenantId,
+    l2.container_id ? String(l2.container_id) : null,
+    containerNum,
+    containerSize,
+    containerType,
+    args.l2JobId,
+    `Container ${containerNum} allocated via Inland Street-Turn from ${l2.job_code} (${streetTurnRef})`,
+  );
+
+  // 3. If vehicle, driver, and trailer provided, dispatch Export Job
+  if (args.vehicleId && args.driverId && args.trailerId) {
+    await assignDrayageJob(db, {
+      tenantId: args.tenantId,
+      jobId: args.exportJobId,
+      vehicleId: args.vehicleId,
+      vehiclePlate: args.vehiclePlate || 'DXB-TRACTOR',
+      driverId: args.driverId,
+      driverName: args.driverName || 'Assigned Driver',
+      trailerId: args.trailerId,
+      trailerPlate: args.trailerPlate || 'DXB-TR-9901',
+      tokenNumber: token,
+    });
+  }
+
+  // 4. Update container status
+  if (l2.container_id) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET status = 'REALLOCATED_EXPORT',
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      String(l2.container_id),
+      args.tenantId,
+    );
+  }
+
+  // 5. Log status event
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'STREET_TURN_EXECUTED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.exportJobId,
+    String(exp.job_code),
+    `Triangulation Street-Turn executed with ${l2.job_code}. Container ${containerNum} repositioned inland from ${l2.warehouse_name} to ${exp.warehouse_name}. 52km empty port deadhead avoided.`,
+    args.actor || 'Dispatcher Console',
+  );
+
+  return {
+    ok: true,
+    streetTurnRef,
+    l2JobCode: String(l2.job_code),
+    exportJobCode: String(exp.job_code),
+    containerNumber: containerNum,
+    deadheadKmSaved: 52,
+    co2SavedKg: 49.4,
+    fuelSavingsAed: 750,
+    tokenNumber: token,
+  };
+}
+
+export async function findBogiePairCandidates(
+  db: DrayageDbClient,
+  tenantId: string,
+): Promise<BogiePairCandidate[]> {
+  const workspace = await getDrayageWorkspaceData(db, tenantId);
+  const unassignedJobs = workspace.jobs.filter(
+    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED'
+  );
+  const twentyFtJobs = unassignedJobs.filter((j) => j.containerSize === '20FT');
+
+  if (twentyFtJobs.length < 2) return [];
+
+  const candidates: BogiePairCandidate[] = [];
+  const usedIds = new Set<string>();
+
+  for (let i = 0; i < twentyFtJobs.length; i++) {
+    const j1 = twentyFtJobs[i];
+    if (usedIds.has(j1.id)) continue;
+
+    for (let k = i + 1; k < twentyFtJobs.length; k++) {
+      const j2 = twentyFtJobs[k];
+      if (usedIds.has(j2.id)) continue;
+
+      const sameTerminal =
+        j1.terminalName.trim().toLowerCase() === j2.terminalName.trim().toLowerCase();
+      if (!sameTerminal) continue;
+
+      const zone1 = getWarehouseZoneName(j1.warehouseName);
+      const zone2 = getWarehouseZoneName(j2.warehouseName);
+      const sameZone = zone1.toLowerCase() === zone2.toLowerCase();
+
+      const box1WeightKg = j1.cargoWeightKg || 14500;
+      const box2WeightKg = j2.cargoWeightKg || 16200;
+      const totalPayloadKg = box1WeightKg + box2WeightKg;
+      const weightLimitKg = 36000;
+      const isWeightCompliant = totalPayloadKg <= weightLimitKg;
+      const weightUtilizationPct = Math.round((totalPayloadKg / weightLimitKg) * 100);
+
+      const drop1 = j1.doExpiryDate && j2.doExpiryDate && j1.doExpiryDate <= j2.doExpiryDate ? j1 : j2;
+      const drop2 = drop1.id === j1.id ? j2 : j1;
+
+      const combinedRevenueAed = (j1.rateAmountAed || 1450) + (j2.rateAmountAed || 1450);
+      const combinedAllowanceAed = (j1.driverAllowanceAed || 150) + (j2.driverAllowanceAed || 150);
+
+      let score = 80;
+      if (sameZone) score += 15;
+      if (isWeightCompliant) score += 10;
+      else score -= 30;
+
+      candidates.push({
+        id: `BOGIE-${j1.id}-${j2.id}`,
+        job1: drop1,
+        job2: drop2,
+        commonTerminal: j1.terminalName,
+        zone1,
+        zone2,
+        sameZone,
+        box1WeightKg,
+        box2WeightKg,
+        totalPayloadKg,
+        isWeightCompliant,
+        weightLimitKg,
+        weightUtilizationPct,
+        recommendedTrailerType: '40FT_SKELETAL / Bogie Multi-Axle Chassis',
+        combinedRevenueAed,
+        combinedAllowanceAed,
+        fuelSavingPct: 40,
+        tasSlot: '08:00 - 10:00 (Gate 3 TAS)',
+        score,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates;
+}
+
+export async function executeBogiePairDispatch(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    job1Id: string;
+    job2Id: string;
+    vehicleId: string;
+    vehiclePlate: string;
+    driverId: string;
+    driverName: string;
+    trailerId: string;
+    trailerPlate: string;
+    tokenNumber?: string;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id IN ($1, $2) AND tenant_id = $3`,
+    args.job1Id,
+    args.job2Id,
+    args.tenantId,
+  );
+  if (jobRows.length !== 2) throw new Error('Both 20FT jobs must exist for Bogie pairing');
+
+  const j1 = jobRows.find((r) => String(r.id) === args.job1Id);
+  const j2 = jobRows.find((r) => String(r.id) === args.job2Id);
+  if (!j1 || !j2) throw new Error('Jobs not found');
+
+  if (String(j1.container_size) !== '20FT' || String(j2.container_size) !== '20FT') {
+    throw new Error('A Bogie trip strictly requires two 20FT containers');
+  }
+
+  const trailerRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_trailers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.trailerId,
+    args.tenantId,
+  );
+  const trailer = trailerRows[0];
+  if (trailer) {
+    const trType = String(trailer.trailer_type || '');
+    if (trType.includes('20FT') && !trType.includes('40FT')) {
+      throw new Error(`Trailer ${trailer.plate_number} is a 20FT chassis. A Bogie pair requires a 40FT/45FT Skeletal or Bogie trailer.`);
+    }
+  }
+
+  const w1 = Number(j1.cargo_weight_kg ?? 14500);
+  const w2 = Number(j2.cargo_weight_kg ?? 16200);
+  const totalPayload = w1 + w2;
+  const isWeightCompliant = totalPayload <= 36000;
+
+  const bogieRef = `BOGIE-${Math.floor(1000 + Math.random() * 9000)}`;
+  const token = args.tokenNumber || `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  for (const [idx, job] of [j1, j2].entries()) {
+    const otherJobId = job.id === j1.id ? j2.id : j1.id;
+    const dropIndex = idx + 1;
+
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET bogie_job_id = $3,
+              notes = COALESCE(notes || ' | ', '') || $4,
+              priority = 'HIGH',
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      job.id,
+      args.tenantId,
+      otherJobId,
+      `Paired in 2x20FT Bogie Dispatch (${bogieRef}) - Drop #${dropIndex}`,
+    );
+
+    await assignDrayageJob(db, {
+      tenantId: args.tenantId,
+      jobId: String(job.id),
+      vehicleId: args.vehicleId,
+      vehiclePlate: args.vehiclePlate,
+      driverId: args.driverId,
+      driverName: args.driverName,
+      trailerId: args.trailerId,
+      trailerPlate: args.trailerPlate,
+      tokenNumber: token,
+    });
+  }
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'BOGIE_DISPATCH_CREATED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    String(j1.id),
+    String(j1.job_code),
+    `Dual-20FT Bogie Pair dispatched (${bogieRef}). Total payload: ${totalPayload.toLocaleString()} kg (${isWeightCompliant ? 'Road Compliant' : 'Overweight Risk'}). Token: ${token}`,
+    args.actor || 'Dispatcher Console',
+  );
+
+  return {
+    ok: true,
+    bogieRef,
+    tokenNumber: token,
+    job1Code: String(j1.job_code),
+    job2Code: String(j2.job_code),
+    totalPayloadKg: totalPayload,
+    isWeightCompliant,
+  };
+}

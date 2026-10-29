@@ -21,6 +21,10 @@ import {
   extendContainerDeliveryOrder,
   calculateMissingAllowances,
   recordDrayageStatusLog,
+  findStreetTurnCandidates,
+  executeStreetTurnTriangulation,
+  findBogiePairCandidates,
+  executeBogiePairDispatch,
 } from '@/lib/logistics/drayage-domain';
 
 let drayageSchemaEnsured = false;
@@ -140,6 +144,50 @@ export async function POST(req: NextRequest) {
             token,
           );
           return { ok: true, tokenNumber: token };
+        }
+
+        case 'get_street_turn_candidates': {
+          const candidates = await findStreetTurnCandidates(tx, tenantId);
+          return { ok: true, candidates };
+        }
+
+        case 'execute_street_turn': {
+          const res = await executeStreetTurnTriangulation(tx, {
+            tenantId,
+            l2JobId: String(body.l2JobId),
+            exportJobId: String(body.exportJobId),
+            vehicleId: body.vehicleId ? String(body.vehicleId) : undefined,
+            vehiclePlate: body.vehiclePlate ? String(body.vehiclePlate) : undefined,
+            driverId: body.driverId ? String(body.driverId) : undefined,
+            driverName: body.driverName ? String(body.driverName) : undefined,
+            trailerId: body.trailerId ? String(body.trailerId) : undefined,
+            trailerPlate: body.trailerPlate ? String(body.trailerPlate) : undefined,
+            tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
+            actor: String(body.actor || 'Dispatcher Console'),
+          });
+          return res;
+        }
+
+        case 'get_bogie_candidates': {
+          const candidates = await findBogiePairCandidates(tx, tenantId);
+          return { ok: true, candidates };
+        }
+
+        case 'execute_bogie_dispatch': {
+          const res = await executeBogiePairDispatch(tx, {
+            tenantId,
+            job1Id: String(body.job1Id),
+            job2Id: String(body.job2Id),
+            vehicleId: String(body.vehicleId),
+            vehiclePlate: String(body.vehiclePlate ?? 'DXB-TRACTOR'),
+            driverId: String(body.driverId),
+            driverName: String(body.driverName ?? 'Assigned Driver'),
+            trailerId: String(body.trailerId),
+            trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
+            tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
+            actor: String(body.actor || 'Dispatcher Console'),
+          });
+          return res;
         }
 
         case 'create_bogie_trip': {

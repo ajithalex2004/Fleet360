@@ -169,7 +169,12 @@ CREATE TABLE IF NOT EXISTS logistics_drayage_jobs (
 -- auto-activation; ADD COLUMN covers databases where the table already exists.
 ALTER TABLE logistics_drayage_jobs
   ADD COLUMN IF NOT EXISTS etc_time TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS etc_alert_status TEXT NOT NULL DEFAULT 'NEW';
+  ADD COLUMN IF NOT EXISTS etc_alert_status TEXT NOT NULL DEFAULT 'NEW',
+  -- Bogie pairing / street-turn triangulation (drayage assignment).
+  ADD COLUMN IF NOT EXISTS cargo_weight_kg DOUBLE PRECISION DEFAULT 14000,
+  ADD COLUMN IF NOT EXISTS shipping_line TEXT,
+  ADD COLUMN IF NOT EXISTS bogie_job_id TEXT,
+  ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT;
 
 CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
   id TEXT PRIMARY KEY,
