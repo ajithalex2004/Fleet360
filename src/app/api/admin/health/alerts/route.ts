@@ -8,6 +8,7 @@ import {
   sendTestHealthAlert,
   HealthAlertConfig,
 } from '@/lib/health/alerting';
+import { withAuditedAction } from '@/lib/audited-action';
 
 // Platform health alerting is platform-wide configuration — and "test" sends
 // an alert to whatever targets the caller supplies — so both handlers are for
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -73,3 +74,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -536,8 +536,10 @@ export function normalizeTenantModules(
   requested: readonly unknown[],
 ): { ok: true; modules: string[] } | { ok: false; error: string } {
   const out = new Set<string>(SYSTEM_MODULE_KEYS);
-  // When explicit modules are requested, only include what is configured
-  // for (const m of MODULES) if (m.subscription === 'always-on') out.add(m.key);
+  // Always-on modules are part of every tenant's set (that is what
+  // always-on means); a change had commented this out, so saving a tenant's
+  // modules silently dropped e.g. Service Tickets.
+  for (const m of MODULES) if (m.subscription === 'always-on') out.add(m.key);
   for (const raw of requested) {
     if (typeof raw !== 'string') return { ok: false, error: 'Module keys must be strings' };
     if ((SYSTEM_MODULE_KEYS as readonly string[]).includes(raw)) continue;

@@ -5,7 +5,8 @@ import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { DEFAULT_NUI_REASONS, NuiReasonSeed } from '@/lib/fleet/nui-reasons';
+import { DEFAULT_NUI_REASONS, NuiReasonSeed } from '@/lib/fleet/nui-reasons';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export type { NuiReasonSeed };
 
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant(
     { headers: req.headers, nextUrl: req.nextUrl },
     { allowPlatformSwitch: true },
@@ -157,3 +158,6 @@ export async function POST(req: NextRequest) {
     }
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

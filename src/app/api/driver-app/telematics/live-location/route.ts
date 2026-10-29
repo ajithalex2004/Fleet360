@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { rejectForeignIdentifiers, requireDriverActor } from '@/lib/driver-app-actor';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -56,11 +58,17 @@ export async function OPTIONS(req: NextRequest) {
 /**
  * POST /api/driver-app/telematics/live-location
  *
- * Periodic GPS pings from the signed-in driver's app, for live dispatch and
- * telematics. The tenant is the session's. This used to accept anonymous
- * pings: the tenant was taken from whatever vehicle id the body named, else
- * a hard-coded tenant, and the vehicle fell back to a hard-coded one — so
- * anyone could plant positions on any vehicle.
+ * Receives periodic high-accuracy GPS telemetry pings from the driver app
+ * and updates vehicle position for live dispatch visibility.
+ *
+ * Only an active driver of the session's tenant may send pings, and only
+ * for the vehicle of their own IN_PROGRESS trip (src/lib/driver-app-actor.ts).
+ * With no active trip the ping is acknowledged but not stored. A body
+ * driverId/vehicleId naming anyone or anything else is rejected with 403.
+ *
+ * (Restored: a drayage change had replaced this with a handler that took
+ * anonymous pings, resolving the tenant from a body vehicle id or a
+ * hard-coded tenant, and writing to a hard-coded fallback vehicle.)
  */
 export async function POST(req: NextRequest) {
   const origin = corsOrigin(req);
@@ -69,66 +77,66 @@ export async function POST(req: NextRequest) {
     return withCorsHeaders(NextResponse.json({ error: authz.error }, { status: authz.status }), origin);
   }
   const { tenantId } = authz;
+  // Verify the credential before opening a transaction, so requests without
+  // a valid driver session never touch the database.
+  const session = await requireDriverSessionForTenant(req, tenantId);
+  if (session instanceof NextResponse) return withCorsHeaders(session, origin);
 
-  const rawBody = await req.json().catch(() => ({}));
-  const body = stripTenantOwnershipFields(rawBody as Record<string, unknown>);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const actor = await requireDriverActor(tx, session);
+    if (actor instanceof NextResponse) return withCorsHeaders(actor, origin);
 
-  const vehicleRef = typeof body.vehicleId === 'string' && body.vehicleId.trim()
-    ? body.vehicleId.trim()
-    : req.cookies.get('xl-driver-vehicle-id')?.value ?? null;
-  if (!vehicleRef) {
-    return withCorsHeaders(NextResponse.json({ error: 'vehicleId is required' }, { status: 400 }), origin);
-  }
+    try {
+      const rawBody = await req.json().catch(() => ({}));
+      const body = stripTenantOwnershipFields(rawBody);
 
-  const { lat, lng, speedKmh = 0, heading = 0, accuracy = 0 } = body as Record<string, unknown>;
-  if (
-    typeof lat !== 'number' ||
-    typeof lng !== 'number' ||
-    Number.isNaN(lat) ||
-    Number.isNaN(lng) ||
-    (lat === 0 && lng === 0) ||
-    (Math.abs(lat - 25.2048) < 0.0001 && Math.abs(lng - 55.2708) < 0.0001)
-  ) {
-    return withCorsHeaders(
-      NextResponse.json({ error: 'Valid real device GPS coordinates required' }, { status: 400 }),
-      origin,
-    );
-  }
+      const {
+        lat,
+        lng,
+        speedKmh = 0,
+        heading = 0,
+        accuracy = 0,
+      } = body;
 
-  try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
-      // The vehicle must be the caller's tenant's: by id, else by plate/code.
-      const vehicle =
-        (await tx.vehicle.findFirst({
-          where: { id: vehicleRef, tenantId, deletedAt: null },
-          select: { id: true },
-        })) ??
-        (await tx.vehicle.findFirst({
-          where: { tenantId, deletedAt: null, OR: [{ licensePlate: vehicleRef }, { vehicleCode: vehicleRef }] },
-          select: { id: true },
-        }));
-      if (!vehicle) {
-        return withCorsHeaders(NextResponse.json({ ok: false, error: 'Vehicle not found' }, { status: 404 }), origin);
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        return withCorsHeaders(
+          NextResponse.json({ error: 'Valid lat and lng numbers are required' }, { status: 400 }),
+          origin,
+        );
       }
 
-      const now = new Date();
-      const speed = Math.max(0, Number(speedKmh) || 0);
+      const vehicle = actor.activeTrip?.vehicle ?? null;
+      const foreign = rejectForeignIdentifiers(actor, body, vehicle);
+      if (foreign) return withCorsHeaders(foreign, origin);
+
+      // Live position is tracked in BusGpsPing, the table the telematics
+      // gateway and geofence evaluator read. The vehicle is the one on the
+      // driver's own IN_PROGRESS trip; the client does not choose it.
+      if (!vehicle) {
+        return withCorsHeaders(
+          NextResponse.json({
+            ok: true,
+            recorded: false,
+            reason: 'No trip in progress for this driver; location not recorded.',
+            timestamp: new Date().toISOString(),
+          }),
+          origin,
+        );
+      }
+
       await tx.busGpsPing.create({
         data: {
           tenantId,
           vehicleId: vehicle.id,
           latitude: lat,
           longitude: lng,
-          speedKmh: speed,
-          headingDeg: Math.max(0, Number(heading) || 0),
-          accuracyM: Math.max(0, Number(accuracy) || 0),
-          occurredAt: now,
+          speedKmh,
+          headingDeg: heading,
+          accuracyM: accuracy,
+          occurredAt: new Date(),
           source: 'DRIVER_APP',
         },
       });
-
-      // Touch the vehicle so live fleet queries see the movement at once.
-      await tx.vehicle.update({ where: { id: vehicle.id }, data: { updatedAt: now } });
 
       return withCorsHeaders(
         NextResponse.json({
@@ -137,15 +145,16 @@ export async function POST(req: NextRequest) {
           vehicleId: vehicle.id,
           lat,
           lng,
-          speedKmh: speed,
-          source: 'DRIVER_APP',
-          timestamp: now.toISOString(),
+          timestamp: new Date().toISOString(),
         }),
         origin,
       );
-    });
-  } catch (err) {
-    console.error('[api/driver-app/telematics/live-location POST]', err);
-    return withCorsHeaders(NextResponse.json({ error: 'Failed to process location ping' }, { status: 500 }), origin);
-  }
+    } catch (err) {
+      console.error('[api/driver-app/telematics/live-location POST]', err);
+      return withCorsHeaders(
+        NextResponse.json({ error: 'Failed to process location ping' }, { status: 500 }),
+        origin,
+      );
+    }
+  });
 }

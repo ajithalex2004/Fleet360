@@ -41,16 +41,17 @@ const VEHICLE_SELECT = {
 
 type DriverRef = { id: string; name: string | null; firstName: string | null; lastName: string | null; assignedVehicleId?: string | null };
 
-/** The caller's own driver profile in the tenant: by id, else by the signed-in user's email. */
+/**
+ * The caller's own driver profile in the tenant. Driver sessions carry the
+ * driver id (biometric login, this route), so it is matched by id only —
+ * never by email: drivers have no link to user accounts beyond an editable
+ * email, so an email match would let an office user act as a driver
+ * (as src/lib/driver-app-actor.ts also refuses).
+ */
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {
-  const select = { id: true, name: true, firstName: true, lastName: true, assignedVehicleId: true } as const;
-  const byId = await prisma.driver.findFirst({ where: { id: userId, tenantId, deletedAt: null }, select });
-  if (byId) return byId;
-  const user = await prisma.user.findFirst({ where: { id: userId }, select: { email: true } });
-  if (!user?.email) return null;
   return prisma.driver.findFirst({
-    where: { email: { equals: user.email, mode: 'insensitive' }, tenantId, deletedAt: null },
-    select,
+    where: { id: userId, tenantId, deletedAt: null },
+    select: { id: true, name: true, firstName: true, lastName: true, assignedVehicleId: true },
   });
 }
 

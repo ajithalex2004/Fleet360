@@ -1,25 +1,27 @@
+// CORS and session checks for /api/driver-app/telematics/live-location.
+// Who may ping for which vehicle (the driver's own in-progress trip) is
+// covered against the real driver-actor logic in driver-app-actor.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const { db, tx } = vi.hoisted(() => {
-  const db = {
-    vehicles: [] as Array<{ id: string; tenantId: string }>,
-    pings: [] as unknown[],
-  };
+  const db = { pings: [] as unknown[] };
   const tx = {
-    vehicle: {
-      findFirst: vi.fn(async ({ where }: { where: { id?: string; tenantId: string } }) =>
-        db.vehicles.find((v) => v.tenantId === where.tenantId && (where.id ? v.id === where.id : false)) ?? null),
-      update: vi.fn(async () => ({})),
-    },
     busGpsPing: { create: vi.fn(async ({ data }: { data: unknown }) => { db.pings.push(data); return data; }) },
   };
   return { db, tx };
 });
 
+// vitest.config.ts aliases next/server to a minimal stub; use the real one
+// (as middleware-identity-headers.test.ts does) so instanceof NextResponse holds.
+vi.mock('next/server', async () => await import('next/server.js'));
 vi.mock('@/lib/prisma', () => ({ prisma: tx }));
 vi.mock('@/lib/rls', () => ({
   withTenantRls: (_p: unknown, _t: string, fn: (t: typeof tx) => unknown) => fn(tx),
+}));
+// No valid driver session: the route must stop before any database work.
+vi.mock('@/lib/driver-session', () => ({
+  requireDriverSessionForTenant: async () => NextResponse.json({ error: 'Driver session required' }, { status: 401 }),
 }));
 
 import { OPTIONS, POST } from '@/app/api/driver-app/telematics/live-location/route';
@@ -27,14 +29,16 @@ import { OPTIONS, POST } from '@/app/api/driver-app/telematics/live-location/rou
 const URL_ = 'http://localhost/api/driver-app/telematics/live-location';
 const ping = { lat: 25.1, lng: 55.1, vehicleId: 'veh-a' };
 
-function post(headers: Record<string, string>, body: unknown = ping) {
-  return POST(new NextRequest(URL_, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) }));
+function post(headers: Record<string, string>) {
+  return POST(new NextRequest(URL_, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(ping),
+  }));
 }
 
 beforeEach(() => {
-  db.vehicles = [{ id: 'veh-a', tenantId: 'tenant-a' }, { id: 'veh-b', tenantId: 'tenant-b' }];
   db.pings = [];
-  vi.clearAllMocks();
 });
 
 describe('live-location CORS preflight', () => {
@@ -53,21 +57,16 @@ describe('live-location CORS preflight', () => {
 });
 
 describe('live-location POST', () => {
-  it('refuses an anonymous ping and writes nothing (it used to guess the tenant from the body)', async () => {
+  it('refuses an anonymous ping and writes nothing', async () => {
     const res = await post({});
     expect(res.status).toBe(401);
     expect(db.pings).toHaveLength(0);
   });
 
-  it('records a ping for a vehicle in the caller tenant', async () => {
-    const res = await post({ 'x-tenant-id': 'tenant-a', 'x-user-id': 'drv-1' });
-    expect(res.status).toBe(200);
-    expect(db.pings).toHaveLength(1);
-  });
-
-  it('refuses a vehicle of another tenant', async () => {
-    const res = await post({ 'x-tenant-id': 'tenant-a', 'x-user-id': 'drv-1' }, { ...ping, vehicleId: 'veh-b' });
-    expect(res.status).toBe(404);
+  it('refuses identity headers without a valid driver session, keeping CORS for the app', async () => {
+    const res = await post({ 'x-tenant-id': 'tenant-a', 'x-user-id': 'drv-1', origin: 'https://localhost2' });
+    expect(res.status).toBe(401);
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://localhost2');
     expect(db.pings).toHaveLength(0);
   });
 });

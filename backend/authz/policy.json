@@ -1,6 +1,6 @@
 {
  "policyVersion": "2026-10-13.1",
- "catalogueVersion": "c9977e3a",
+ "catalogueVersion": "0ac7ad93",
  "catalogue": [
   "leasing:view:*",
   "leasing:create:inquiries",
@@ -249,7 +249,13 @@
   "vendors:edit:*",
   "vendors:delete:*",
   "vendors:approve:*",
-  "vendors:export:*"
+  "vendors:export:*",
+  "drayage:view:*",
+  "drayage:create:*",
+  "drayage:edit:*",
+  "drayage:delete:*",
+  "drayage:approve:*",
+  "drayage:export:*"
  ],
  "moduleAliases": {
   "rental": [
@@ -267,6 +273,11 @@
   ],
   "school-bus": [
    "school_bus"
+  ],
+  "drayage": [
+   "port-drayage",
+   "port_drayage",
+   "container-drayage"
   ]
  },
  "trialFreeModules": [
@@ -1448,6 +1459,31 @@
    }
   },
   {
+   "template": "health",
+   "methods": {
+    "GET": "platform"
+   }
+  },
+  {
+   "template": "health/ping",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "health/self-test",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "health/alerts",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
    "template": "nav-permissions",
    "methods": {
     "GET": "admin",
@@ -1468,6 +1504,21 @@
     "GET": "platform",
     "POST": "platform",
     "PUT": "platform"
+   }
+  },
+  {
+   "template": "nui-reasons",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "nui-reasons/[id]",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin",
+    "DELETE": "admin"
    }
   },
   {

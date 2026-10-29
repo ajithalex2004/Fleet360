@@ -72,6 +72,8 @@ export const MODULES = [
   'school-bus', 'logistics', 'incidents', 'dispatch', 'service-tickets',
   'customer-mgmt', 'booking-portal', 'assets', 'sustainability', 'agents',
   'customer', 'mobile-apps', 'ai-platform', 'vendors',
+  // Appended (the permission claim catalogue is append-only).
+  'drayage',
 ] as const satisfies readonly Module[];
 
 export const ACTIONS = [
@@ -394,6 +396,13 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'vendors', action: 'delete', resource: '*', label: 'Delete Vendors & Partners' },
   { module: 'vendors', action: 'approve', resource: '*', label: 'Approve Vendors & Partners' },
   { module: 'vendors', action: 'export', resource: '*', label: 'Export Vendors & Partners' },
+  // ── DRAYAGE (appended: the permission claim catalogue is append-only) ──
+  { module: 'drayage', action: 'view',    resource: '*', label: 'View Port & Container Drayage' },
+  { module: 'drayage', action: 'create',  resource: '*', label: 'Create Drayage Jobs' },
+  { module: 'drayage', action: 'edit',    resource: '*', label: 'Edit Drayage Jobs' },
+  { module: 'drayage', action: 'delete',  resource: '*', label: 'Delete Drayage Jobs' },
+  { module: 'drayage', action: 'approve', resource: '*', label: 'Approve Drayage Allowances & Payments' },
+  { module: 'drayage', action: 'export',  resource: '*', label: 'Export Drayage Data' },
 ];
 
 // Helper: all modules view only permissions

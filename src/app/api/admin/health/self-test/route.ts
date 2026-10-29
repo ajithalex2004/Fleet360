@@ -7,7 +7,8 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { getStorage } from '@/lib/storage';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import fs from 'fs/promises';
-import path from 'path';
+import path from 'path';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export interface SelfTestStep {
   id: string;
@@ -33,7 +34,7 @@ export interface SelfTestReport {
   steps: SelfTestStep[];
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -385,3 +386,6 @@ export async function POST(req: NextRequest) {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
