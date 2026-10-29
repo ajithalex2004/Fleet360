@@ -11,6 +11,8 @@ import {
   assignDrayageJob,
   updateDrayageJobExecutionStatus,
   activateL2EmptyReturnJob,
+  extendDrayageJobEtcTime,
+  checkAndAutoActivateExpiredEtcJobs,
   ensureDrayageSchema,
   verifyPortEdiForJob,
   appendDrayageItineraryLeg,
@@ -246,7 +248,24 @@ export async function POST(req: NextRequest) {
             status: String(body.status),
             placementLocation: body.placementLocation ?? undefined,
             detachTrailer: body.detachTrailer,
+            etcTime: body.etcTime || body.etc || undefined,
+            notes: body.notes || undefined,
+            actor: body.actor || undefined,
           });
+        }
+
+        case 'extend_etc': {
+          return extendDrayageJobEtcTime(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            minutesToAdd: Number(body.minutesToAdd ?? 60),
+            reason: body.reason ? String(body.reason) : undefined,
+            actor: body.actor ? String(body.actor) : 'Dispatch Console',
+          });
+        }
+
+        case 'check_etc_timers': {
+          return checkAndAutoActivateExpiredEtcJobs(tx, tenantId);
         }
 
         case 'activate_l2': {

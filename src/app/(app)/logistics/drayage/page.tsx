@@ -68,6 +68,8 @@ interface DrayageWorkspaceData {
     rateAmountAed: number;
     l2Activated: boolean;
     trailerDetached: boolean;
+    etcTime?: string | null;
+    etcAlertStatus?: string;
     createdAt: string;
   }>;
   vehicles: Array<{
@@ -457,6 +459,12 @@ export default function DrayageDashboardPage() {
                     </td>
                     <td className="py-3 px-3">
                       <StatusPill status={j.status.toLowerCase()} label={j.status} />
+                      {j.etcTime && j.jobPhase === 'L1' && (
+                        <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400 font-mono">
+                          <Clock className="w-3 h-3" />
+                          <span>ETC: {new Date(j.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 font-mono font-semibold">AED {j.rateAmountAed.toLocaleString()}</td>
                     <td className="py-3 px-3 text-right">
@@ -468,7 +476,7 @@ export default function DrayageDashboardPage() {
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 text-[11px] font-semibold transition-colors"
                           >
                             <RefreshCw className={`w-3 h-3 ${triggeringL2Id === j.id ? 'animate-spin' : ''}`} />
-                            Trigger L2 Empty Return
+                            Trigger L2 Now
                           </button>
                         )}
                         <Link
