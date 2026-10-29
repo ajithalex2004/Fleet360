@@ -616,6 +616,17 @@
    }
   },
   {
+   "prefix": "driver",
+   "read": {
+    "kind": "module",
+    "module": "logistics"
+   },
+   "write": {
+    "kind": "module",
+    "module": "logistics"
+   }
+  },
+  {
    "prefix": "driver-app",
    "read": {
     "kind": "external"
