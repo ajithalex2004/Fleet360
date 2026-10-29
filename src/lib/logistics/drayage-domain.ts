@@ -88,8 +88,11 @@ export interface MappedFleetVehicle {
   year: number | null;
   status: string;
   vehicleUsage: string;
+  type?: string | null;
   fuelType: string | null;
+  fuelLevelPct?: number | null;
   currentMileage: number | null;
+  nextServiceKm?: number | null;
   registrationExpiry: string | null;
   insuranceExpiry: string | null;
   assignedDriverId: string | null;
@@ -97,6 +100,8 @@ export interface MappedFleetVehicle {
   activeJobCode: string | null;
   lat: number;
   lng: number;
+  updatedAt?: string | null;
+  assignedTripsCount?: number;
 }
 
 export interface MappedFleetDriver {
@@ -113,6 +118,7 @@ export interface MappedFleetDriver {
   assignedVehicleId: string | null;
   activeJobCode: string | null;
   complianceOk: boolean;
+  completedTripsToday?: number;
 }
 
 export interface MappedFleetCustomer {
@@ -924,20 +930,51 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
 
   if (Number(primeMoverCountRows[0]?.cnt ?? 0) === 0) {
     const defaultPrimeMovers = [
-      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4011', make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024 },
-      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4012', make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024 },
-      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4013', make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023 },
-      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4014', make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024 },
-      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: 'AUH-PR-3021', make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023 },
+      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4011', make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024, lat: 25.0112, lng: 55.0612, fuel: 88, mileage: 42000, nextService: 50000, idleHours: 4.5 },
+      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4012', make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024, lat: 24.9850, lng: 55.0760, fuel: 94, mileage: 38000, nextService: 45000, idleHours: 2.5 },
+      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4013', make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023, lat: 24.9642, lng: 55.0915, fuel: 75, mileage: 65000, nextService: 70000, idleHours: 5.8 },
+      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4014', make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024, lat: 24.9310, lng: 55.0750, fuel: 68, mileage: 51000, nextService: 60000, idleHours: 1.2 },
+      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: 'AUH-PR-3021', make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023, lat: 24.8055, lng: 54.6462, fuel: 82, mileage: 78000, nextService: 85000, idleHours: 3.0 },
     ];
     for (const pm of defaultPrimeMovers) {
       await db.$executeRawUnsafe(
         `INSERT INTO vehicles (
           id, tenant_id, plate_number, license_plate, registration_no,
-          make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active, created_at, updated_at
-        ) VALUES ($1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,NOW(),NOW())
-        ON CONFLICT (id) DO NOTHING`,
+          make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active,
+          current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km,
+          created_at, updated_at
+        ) VALUES ($1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,$7,$8,$9,$9,$10,$11,NOW(),NOW() - ($12 || ' hours')::interval)
+        ON CONFLICT (id) DO UPDATE
+          SET current_lat = EXCLUDED.current_lat,
+              current_lng = EXCLUDED.current_lng,
+              fuel_level_pct = EXCLUDED.fuel_level_pct,
+              updated_at = EXCLUDED.updated_at`,
         pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
+        pm.lat, pm.lng, pm.fuel, pm.mileage, pm.nextService, String(pm.idleHours),
+      );
+    }
+  }
+
+  // Ensure dedicated Heavy Duty Drayage Drivers exist
+  const heavyDriverCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
+    `SELECT COUNT(*) AS cnt FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL AND (license_type = 'HEAVY' OR license_type IS NULL)`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
+
+  if (Number(heavyDriverCountRows[0]?.cnt ?? 0) === 0) {
+    const defaultDrivers = [
+      { id: `drv-salim-${tenantId.slice(0, 8)}`, name: 'Salim Al Harthi', phone: '+971 50 128 4491' },
+      { id: `drv-rashid-${tenantId.slice(0, 8)}`, name: 'Rashid Al-Marri', phone: '+971 52 391 8840' },
+      { id: `drv-tariq-${tenantId.slice(0, 8)}`, name: 'Tariq Mahmood', phone: '+971 55 490 2210' },
+      { id: `drv-imran-${tenantId.slice(0, 8)}`, name: 'Imran Khan', phone: '+971 56 718 3392' },
+    ];
+    for (const d of defaultDrivers) {
+      await db.$executeRawUnsafe(
+        `INSERT INTO drivers (
+          id, tenant_id, name, contact_number, license_type, status, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,'HEAVY','ACTIVE',NOW(),NOW())
+        ON CONFLICT (id) DO NOTHING`,
+        d.id, tenantId, d.name, d.phone,
       );
     }
   }
@@ -1428,9 +1465,14 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(vehicle_usage, 'LOGISTICS') AS vehicle_usage,
               vehicle_group,
               fuel_type,
-              current_mileage,
+              COALESCE(fuel_level_pct, fuel_level::int, 85) AS fuel_level_pct,
+              COALESCE(current_lat, 25.0112) AS current_lat,
+              COALESCE(current_lng, 55.0612) AS current_lng,
+              COALESCE(current_mileage, 45000) AS current_mileage,
+              COALESCE(next_service_km, 55000) AS next_service_km,
               registration_expiry,
-              insurance_expiry
+              insurance_expiry,
+              COALESCE(updated_at, NOW() - INTERVAL '3.5 hours') AS updated_at
          FROM vehicles
         WHERE tenant_id = $1
           AND deleted_at IS NULL
@@ -1668,9 +1710,22 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   // 6. Mapped Fleet360 Vehicles (from `vehicles` table, prioritizing LOGISTICS usage)
   const activeJobByVehicle = new Map<string, DrayageJob>();
+  const tripsCountByVehicle = new Map<string, number>();
+  const activeJobByDriver = new Map<string, DrayageJob>();
+  const tripsCountByDriver = new Map<string, number>();
+
   for (const j of jobs) {
-    if (j.assignedVehicleId && j.status !== 'COMPLETED') {
-      activeJobByVehicle.set(j.assignedVehicleId, j);
+    if (j.assignedVehicleId) {
+      tripsCountByVehicle.set(j.assignedVehicleId, (tripsCountByVehicle.get(j.assignedVehicleId) || 0) + 1);
+      if (j.status !== 'COMPLETED') {
+        activeJobByVehicle.set(j.assignedVehicleId, j);
+      }
+    }
+    if (j.assignedDriverId) {
+      tripsCountByDriver.set(j.assignedDriverId, (tripsCountByDriver.get(j.assignedDriverId) || 0) + 1);
+      if (j.status !== 'COMPLETED') {
+        activeJobByDriver.set(j.assignedDriverId, j);
+      }
     }
   }
 
@@ -1683,28 +1738,26 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       make: String(v.make),
       model: String(v.model),
       year: v.year != null ? Number(v.year) : 2024,
+      type: v.type ? String(v.type) : 'PRIME_MOVER',
       status: activeJob ? 'ON_DRAYAGE_TRIP' : String(v.status),
       vehicleUsage: String(v.vehicle_usage),
       fuelType: v.fuel_type ? String(v.fuel_type) : 'DIESEL',
+      fuelLevelPct: v.fuel_level_pct != null ? Number(v.fuel_level_pct) : 85,
       currentMileage: v.current_mileage != null ? Number(v.current_mileage) : 48200 + idx * 3100,
+      nextServiceKm: v.next_service_km != null ? Number(v.next_service_km) : 55000,
       registrationExpiry: v.registration_expiry instanceof Date ? v.registration_expiry.toISOString() : null,
       insuranceExpiry: v.insurance_expiry instanceof Date ? v.insurance_expiry.toISOString() : null,
       assignedDriverId: activeJob?.assignedDriverId ?? null,
       assignedDriverName: activeJob?.assignedDriverName ?? null,
       activeJobCode: activeJob?.jobCode ?? null,
-      lat: activeJob?.currentLat ?? (25.0080 + (idx % 5) * 0.008),
-      lng: activeJob?.currentLng ?? (55.0640 + (idx % 5) * 0.009),
+      lat: activeJob?.currentLat ?? (v.current_lat != null ? Number(v.current_lat) : (25.0080 + (idx % 5) * 0.008)),
+      lng: activeJob?.currentLng ?? (v.current_lng != null ? Number(v.current_lng) : (55.0640 + (idx % 5) * 0.009)),
+      updatedAt: v.updated_at instanceof Date ? v.updated_at.toISOString() : (typeof v.updated_at === 'string' ? v.updated_at : null),
+      assignedTripsCount: tripsCountByVehicle.get(id) || 0,
     };
   });
 
   // 7. Mapped Fleet360 Drivers (from `drivers` table)
-  const activeJobByDriver = new Map<string, DrayageJob>();
-  for (const j of jobs) {
-    if (j.assignedDriverId && j.status !== 'COMPLETED') {
-      activeJobByDriver.set(j.assignedDriverId, j);
-    }
-  }
-
   const drivers: MappedFleetDriver[] = rawDrivers.map((d: any) => {
     const id = String(d.id);
     const first = String(d.first_name ?? '').trim();
@@ -1719,14 +1772,15 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       fullName,
       firstName: first || fullName,
       lastName: last,
-      phone: d.phone ? String(d.phone) : '+971 50 000 0000',
+      phone: d.phone ? String(d.phone) : (d.contact_number ? String(d.contact_number) : '+971 50 000 0000'),
       licenseNumber: d.license_number ? String(d.license_number) : 'UAE-HVY-88210',
       licenseExpiry: licExpiry,
       status: activeJob ? 'ON_TRIP' : String(d.status ?? 'ACTIVE'),
       assignmentType: d.assignment_type ? String(d.assignment_type) : 'LOGISTICS',
-      assignedVehicleId: d.assigned_vehicle_id ? String(d.assigned_vehicle_id) : null,
+      assignedVehicleId: d.assigned_vehicle_id ? String(d.assigned_vehicle_id) : (activeJob?.assignedVehicleId ?? null),
       activeJobCode: activeJob?.jobCode ?? null,
       complianceOk: !isExpired && String(d.status ?? 'ACTIVE') === 'ACTIVE',
+      completedTripsToday: tripsCountByDriver.get(id) || 0,
     };
   });
 

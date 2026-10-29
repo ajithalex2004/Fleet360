@@ -54,6 +54,15 @@ interface MappedVehicle {
   type?: string | null;
   vehicleUsage?: string | null;
   status: string;
+  fuelLevelPct?: number | null;
+  currentMileage?: number | null;
+  nextServiceKm?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  updatedAt?: string | null;
+  assignedTripsCount?: number;
+  assignedDriverId?: string | null;
+  assignedDriverName?: string | null;
 }
 
 interface MappedDriver {
@@ -62,6 +71,8 @@ interface MappedDriver {
   phone: string | null;
   status: string;
   complianceOk: boolean;
+  completedTripsToday?: number;
+  assignedVehicleId?: string | null;
 }
 
 interface DrayageTrailer {
@@ -70,6 +81,8 @@ interface DrayageTrailer {
   trailerType: string;
   masterStatus: string;
   operationalStatus: string;
+  capacityTons?: number;
+  currentLocation?: string | null;
 }
 
 interface DrayageTerminal {
@@ -78,6 +91,8 @@ interface DrayageTerminal {
   code: string;
   portName: string;
   emirate: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface DrayageWarehouse {
@@ -146,6 +161,24 @@ interface AutoPilotDispatchItem {
   allowanceAed: number;
   demurrageRescue: boolean;
   tasSlot: string;
+  matchScorePct?: number;
+  proximityKm?: number;
+}
+
+interface Vehicle4FactorScore {
+  vehicle: MappedVehicle;
+  driver?: MappedDriver;
+  proximityScore: number;    // 60%
+  idlenessScore: number;     // 25%
+  workloadScore: number;     // 10%
+  availabilityScore: number; // 5%
+  totalScore: number;        // 100%
+  distanceKm: number;
+  idleHours: number;
+  tripsToday: number;
+  fuelPct: number;
+  maintenanceBufferKm: number;
+  rankBadge: string;
 }
 
 export default function DrayageAssignmentPage() {
@@ -626,18 +659,214 @@ export default function DrayageAssignmentPage() {
   ], [getDemurrageRisk]);
 
   // =========================================================================
-  // SMART ASSET SHORTLISTING ENGINE (WEIGHTAGE & COMPATIBILITY)
+  // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
+  // =========================================================================
+
+  // Haversine GPS Distance in Kilometers
+  const getHaversineDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Resolve Port Container Terminal GPS Coordinates
+  const getTerminalCoordinates = useCallback(
+    (terminalNameOrId?: string | null): { lat: number; lng: number; name: string } => {
+      if (terminalNameOrId) {
+        const match = terminals.find(
+          (t) =>
+            t.id === terminalNameOrId ||
+            t.name.toLowerCase() === terminalNameOrId.toLowerCase() ||
+            t.code.toLowerCase() === terminalNameOrId.toLowerCase()
+        );
+        if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+          return { lat: match.lat, lng: match.lng, name: match.name };
+        }
+        const lower = terminalNameOrId.toLowerCase();
+        if (lower.includes('khalifa') || lower.includes('auh') || lower.includes('abu dhabi')) {
+          return { lat: 24.8432, lng: 54.7121, name: 'Khalifa Port Container Terminal' };
+        }
+        if (lower.includes('rashid')) {
+          return { lat: 25.2697, lng: 55.2758, name: 'Port Rashid Terminal' };
+        }
+        if (lower.includes('sharjah') || lower.includes('khalid')) {
+          return { lat: 25.3582, lng: 55.3721, name: 'Port Khalid Terminal' };
+        }
+        if (lower.includes('t1')) {
+          return { lat: 25.0112, lng: 55.0617, name: 'DP World Jebel Ali Terminal 1' };
+        }
+        if (lower.includes('t2')) {
+          return { lat: 25.0185, lng: 55.0562, name: 'DP World Jebel Ali Terminal 2' };
+        }
+        if (lower.includes('t3')) {
+          return { lat: 24.9982, lng: 55.0458, name: 'DP World Jebel Ali Terminal 3' };
+        }
+        if (lower.includes('t4')) {
+          return { lat: 24.9895, lng: 55.0381, name: 'DP World Jebel Ali Terminal 4' };
+        }
+      }
+      // Default to DP World Jebel Ali Port Container Terminal Hub
+      return { lat: 25.0112, lng: 55.0617, name: 'DP World Jebel Ali Port' };
+    },
+    [terminals]
+  );
+
+  // Calculate 4-Factor Composite Telematics Score
+  const calculate4FactorScore = useCallback(
+    (
+      vehicle: MappedVehicle,
+      targetTerminalLoc: { lat: number; lng: number },
+      candidateDriver?: MappedDriver
+    ): Vehicle4FactorScore => {
+      // 1. 📍 Proximity Score (60%) — GPS distance to pickup terminal / corridor
+      const vLat = typeof vehicle.lat === 'number' && vehicle.lat !== 0 ? vehicle.lat : 25.0112;
+      const vLng = typeof vehicle.lng === 'number' && vehicle.lng !== 0 ? vehicle.lng : 55.0617;
+      const distanceKm = getHaversineDistanceKm(vLat, vLng, targetTerminalLoc.lat, targetTerminalLoc.lng);
+
+      let proximityScore = 100;
+      if (distanceKm <= 3) {
+        proximityScore = 100; // Directly at port gate or adjacent yard
+      } else if (distanceKm <= 10) {
+        proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
+      } else if (distanceKm <= 30) {
+        proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
+      } else if (distanceKm <= 70) {
+        proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
+      } else {
+        proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+      }
+
+      // 2. ⏱️ Idleness Score (25%) — Turnaround queue / dwell time (FIFO balancing)
+      let idleHours = 2.4;
+      if (vehicle.updatedAt) {
+        const parsedTime = new Date(vehicle.updatedAt).getTime();
+        if (!isNaN(parsedTime)) {
+          idleHours = Math.max(0.1, Math.round(((Date.now() - parsedTime) / (1000 * 60 * 60)) * 10) / 10);
+        }
+      }
+
+      let idlenessScore = 75;
+      if (idleHours < 0.5) {
+        idlenessScore = 40; // Just completed run, cooldown/turnaround needed
+      } else if (idleHours < 1.5) {
+        idlenessScore = 70;
+      } else if (idleHours < 3.0) {
+        idlenessScore = 85;
+      } else if (idleHours <= 6.0) {
+        idlenessScore = 100; // Optimal FIFO queue window
+      } else {
+        idlenessScore = 95; // High dwell truck waiting in queue
+      }
+
+      // 3. ⚖️ Driver Workload (10%) — Trips completed today & active duty hours
+      const tripsToday =
+        candidateDriver?.completedTripsToday ??
+        vehicle.assignedTripsCount ??
+        0;
+
+      let workloadScore = 100;
+      if (tripsToday === 0) {
+        workloadScore = 100; // Fresh driver, 0 duty fatigue
+      } else if (tripsToday === 1) {
+        workloadScore = 90;
+      } else if (tripsToday === 2) {
+        workloadScore = 75;
+      } else if (tripsToday === 3) {
+        workloadScore = 50; // Near corridor maximum safe duty limit
+      } else {
+        workloadScore = 20; // Shift limit reached / fatigue avoidance
+      }
+
+      // 4. 🛡️ Availability Score (5%) — Fuel level, maintenance buffer, and roadworthiness
+      const fuelPct = vehicle.fuelLevelPct ?? 82;
+      let fuelScore = 100;
+      if (fuelPct >= 70) fuelScore = 100;
+      else if (fuelPct >= 50) fuelScore = 80;
+      else if (fuelPct >= 30) fuelScore = 55;
+      else fuelScore = 20;
+
+      const currentKm = vehicle.currentMileage ?? 0;
+      const nextService = vehicle.nextServiceKm ?? (currentKm + 8500);
+      const maintenanceBufferKm = Math.max(0, nextService - currentKm);
+      let maintScore = 100;
+      if (maintenanceBufferKm >= 2000) maintScore = 100;
+      else if (maintenanceBufferKm >= 500) maintScore = 80;
+      else maintScore = 40;
+
+      const roadworthyScore =
+        vehicle.status === 'AVAILABLE' ? 100 : vehicle.status === 'STANDBY' ? 85 : 50;
+
+      const availabilityScore = Math.round(0.5 * fuelScore + 0.3 * maintScore + 0.2 * roadworthyScore);
+
+      // Composite Weighted Calculation: 60% Prox + 25% Idle + 10% Workload + 5% Avail
+      const totalScore = Math.round(
+        0.60 * proximityScore +
+        0.25 * idlenessScore +
+        0.10 * workloadScore +
+        0.05 * availabilityScore
+      );
+
+      return {
+        vehicle,
+        driver: candidateDriver,
+        proximityScore,
+        idlenessScore,
+        workloadScore,
+        availabilityScore,
+        totalScore,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        idleHours,
+        tripsToday,
+        fuelPct,
+        maintenanceBufferKm,
+        rankBadge: '',
+      };
+    },
+    []
+  );
+
+  // =========================================================================
+  // SMART ASSET SHORTLISTING ENGINE (4-FACTOR WEIGHTAGE & COMPATIBILITY)
   // =========================================================================
   const getSmartRecommendedAssets = useCallback(
     (job: DrayageJob | null, isBogie = false) => {
-      // 1. Prime Mover Shortlisting:
-      // Heavy commercial prime mover with status AVAILABLE and vehicle_usage LOGISTICS
-      const bestVehicle =
-        availableVehicles.find((v) => v.status === 'AVAILABLE') ||
-        availableVehicles[0] ||
-        primeMovers[0];
+      // 1. Resolve Target Pickup Terminal GPS Location
+      const targetLoc = getTerminalCoordinates(job?.terminalId || job?.terminalName);
 
-      // 2. Chassis / Trailer Shortlisting based on container specs & cargo type
+      // 2. Candidate vehicles: only heavy commercial prime movers
+      const candidateVehicles = availableVehicles.length > 0 ? availableVehicles : primeMovers;
+
+      // 3. Score all Candidate Prime Movers using the 4-Factor Weighted Engine
+      const scoredList: Vehicle4FactorScore[] = candidateVehicles.map((v) => {
+        const assignedDrv = drivers.find((d) => d.id === v.assignedDriverId);
+        const candidateDrv =
+          assignedDrv ||
+          availableDrivers.find((d) => d.status === 'ACTIVE' && d.complianceOk) ||
+          drivers[0];
+        return calculate4FactorScore(v, targetLoc, candidateDrv);
+      });
+
+      // Sort descending by 4-factor composite score
+      scoredList.sort((a, b) => b.totalScore - a.totalScore);
+      scoredList.forEach((item, index) => {
+        if (index === 0) item.rankBadge = '🥇';
+        else if (index === 1) item.rankBadge = '🥈';
+        else if (index === 2) item.rankBadge = '🥉';
+        else item.rankBadge = '🚛';
+      });
+
+      const bestScored = scoredList[0];
+      const bestVehicle = bestScored?.vehicle;
+
+      // 4. Chassis / Trailer Shortlisting based on container specs & cargo type
       let bestTrailer: DrayageTrailer | undefined;
 
       if (isBogie) {
@@ -670,20 +899,77 @@ export default function DrayageAssignmentPage() {
         bestTrailer = availableTrailers[0];
       }
 
-      // 3. Driver Shortlisting (active & compliance passed)
+      // 5. Driver Shortlisting (active & compliance passed, prioritizing lowest workload)
+      const sortedAvailableDrivers = [...availableDrivers].sort(
+        (a, b) => (a.completedTripsToday ?? 0) - (b.completedTripsToday ?? 0)
+      );
+
       const bestDriver =
-        availableDrivers.find((d) => d.status === 'ACTIVE' && d.complianceOk) ||
-        availableDrivers[0] ||
+        (bestVehicle?.assignedDriverId ? drivers.find((d) => d.id === bestVehicle.assignedDriverId) : undefined) ||
+        sortedAvailableDrivers[0] ||
         drivers[0];
 
       return {
         vehicleId: bestVehicle?.id ?? '',
         trailerId: bestTrailer?.id ?? '',
         driverId: bestDriver?.id ?? '',
+        topScore: bestScored,
+        rankedList: scoredList,
       };
     },
-    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers],
+    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers, getTerminalCoordinates, calculate4FactorScore],
   );
+
+  // Target Terminal for active assignment modal
+  const targetTerminalLoc = useMemo(() => {
+    return getTerminalCoordinates(assigningJob?.terminalId || assigningJob?.terminalName);
+  }, [assigningJob, getTerminalCoordinates]);
+
+  // Scored Prime Movers for current modal
+  const scoredPrimeMovers = useMemo(() => {
+    if (!assigningJob) return [];
+    const candidateVehicles = availableVehicles.length > 0 ? availableVehicles : primeMovers;
+    const scored = candidateVehicles.map((v) => {
+      const assignedDrv = drivers.find((d) => d.id === v.assignedDriverId);
+      const candidateDrv =
+        assignedDrv ||
+        availableDrivers.find((d) => d.status === 'ACTIVE' && d.complianceOk) ||
+        drivers[0];
+      return calculate4FactorScore(v, targetTerminalLoc, candidateDrv);
+    });
+    scored.sort((a, b) => b.totalScore - a.totalScore);
+    scored.forEach((item, idx) => {
+      if (idx === 0) item.rankBadge = '🥇';
+      else if (idx === 1) item.rankBadge = '🥈';
+      else if (idx === 2) item.rankBadge = '🥉';
+      else item.rankBadge = '🚛';
+    });
+    return scored;
+  }, [assigningJob, availableVehicles, primeMovers, drivers, availableDrivers, targetTerminalLoc, calculate4FactorScore]);
+
+  // Current selected prime mover 4-factor score
+  const currentVehicleScore = useMemo(() => {
+    if (!selectedVehicleId) return null;
+    return scoredPrimeMovers.find((s) => s.vehicle.id === selectedVehicleId) || null;
+  }, [selectedVehicleId, scoredPrimeMovers]);
+
+  // Selectable Prime Mover dropdown options with 4-Factor badges and breakdowns
+  const primeMoverSelectOptions = useMemo(() => {
+    if (scoredPrimeMovers.length > 0) {
+      return scoredPrimeMovers.map((s) => ({
+        value: s.vehicle.id,
+        label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model} [${s.totalScore}% Match]`,
+        sublabel: `📍 ${s.distanceKm}km (${s.proximityScore}pts) • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today • 🛡️ Fuel: ${s.fuelPct}%`,
+        badge: `${s.totalScore}% Match`,
+      }));
+    }
+    return primeMovers.map((v) => ({
+      value: v.id,
+      label: `${v.plateNumber} · ${v.make} ${v.model}`,
+      sublabel: `Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
+      badge: v.status,
+    }));
+  }, [scoredPrimeMovers, primeMovers]);
 
   // =========================================================================
   // ACTIONS: USE THIS PAIR (MANUAL 1-CLICK ASSIGNMENT)
@@ -837,7 +1123,7 @@ export default function DrayageAssignmentPage() {
   };
 
   // =========================================================================
-  // FEATURE 7: GLOBAL "AUTO-PILOT" BATCH DISPATCH ENGINE
+  // FEATURE 7: GLOBAL "AUTO-PILOT" BATCH DISPATCH ENGINE (4-FACTOR WEIGHTED)
   // =========================================================================
   const handleRunAutoPilot = (jobIdsToOptimize?: string[]) => {
     const candidateJobs =
@@ -858,14 +1144,51 @@ export default function DrayageAssignmentPage() {
     const assignedIds = new Set<string>();
     const candidateIdSet = new Set(candidateJobs.map((j) => j.id));
 
+    // Helper: Pick optimal tractor and driver for a terminal using the 4-Factor Engine
+    const pickBestTractorAndDriver = (terminalLoc: { lat: number; lng: number }) => {
+      if (availV.length === 0 || availD.length === 0) return null;
+
+      // Score all remaining available tractors against this terminal
+      const scored = availV.map((v) => {
+        const assignedDrv = drivers.find((d) => d.id === v.assignedDriverId);
+        const candidateDrv = assignedDrv || availD[0];
+        return calculate4FactorScore(v, terminalLoc, candidateDrv);
+      });
+
+      scored.sort((a, b) => b.totalScore - a.totalScore);
+      const topScored = scored[0];
+      const vIdx = availV.findIndex((v) => v.id === topScored.vehicle.id);
+      const veh = availV.splice(vIdx >= 0 ? vIdx : 0, 1)[0];
+
+      // Match driver: prefer assigned driver if in availD, else pick driver with lowest completedTripsToday (FIFO & Workload balancing)
+      let drvIdx = veh.assignedDriverId ? availD.findIndex((d) => d.id === veh.assignedDriverId) : -1;
+      if (drvIdx === -1) {
+        let minTrips = 999;
+        drvIdx = 0;
+        availD.forEach((d, idx) => {
+          const trips = d.completedTripsToday ?? 0;
+          if (trips < minTrips) {
+            minTrips = trips;
+            drvIdx = idx;
+          }
+        });
+      }
+      const drv = availD.splice(drvIdx, 1)[0];
+
+      return { veh, drv, score: topScored };
+    };
+
     // 1. First Pass: Street Turn Pairs
     for (const st of streetTurnPairs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
       if (!candidateIdSet.has(st.inboundJob.id) || !candidateIdSet.has(st.outboundJob.id)) continue;
       if (assignedIds.has(st.inboundJob.id) || assignedIds.has(st.outboundJob.id)) continue;
 
-      const veh = availV.shift()!;
-      const drv = availD.shift()!;
+      const termLoc = getTerminalCoordinates(st.terminalName);
+      const best = pickBestTractorAndDriver(termLoc);
+      if (!best) break;
+
+      const { veh, drv, score: topScored } = best;
       const tr = availT.shift()!;
       const token = `DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -892,6 +1215,8 @@ export default function DrayageAssignmentPage() {
         allowanceAed: st.combinedAllowanceAed,
         demurrageRescue: st.hasUrgentDemurrage,
         tasSlot: st.tasSlot,
+        matchScorePct: topScored.totalScore,
+        proximityKm: topScored.distanceKm,
       });
     }
 
@@ -901,8 +1226,11 @@ export default function DrayageAssignmentPage() {
       if (!candidateIdSet.has(bg.job1.id) || !candidateIdSet.has(bg.job2.id)) continue;
       if (assignedIds.has(bg.job1.id) || assignedIds.has(bg.job2.id)) continue;
 
-      const veh = availV.shift()!;
-      const drv = availD.shift()!;
+      const termLoc = getTerminalCoordinates(bg.commonTerminal);
+      const best = pickBestTractorAndDriver(termLoc);
+      if (!best) break;
+
+      const { veh, drv, score: topScored } = best;
       // For 2x20FT Bogie, match 40FT/45FT Flatbed or Skeletal chassis
       const trIdx = availT.findIndex((t) => t.trailerType.includes('FLATBED') || t.trailerType.includes('40FT') || !t.trailerType.includes('20FT'));
       const tr = trIdx >= 0 ? availT.splice(trIdx, 1)[0] : availT.shift()!;
@@ -931,6 +1259,8 @@ export default function DrayageAssignmentPage() {
         allowanceAed: bg.combinedAllowanceAed,
         demurrageRescue: bg.hasUrgentDemurrage,
         tasSlot: bg.tasSlot,
+        matchScorePct: topScored.totalScore,
+        proximityKm: topScored.distanceKm,
       });
     }
 
@@ -939,8 +1269,11 @@ export default function DrayageAssignmentPage() {
     for (const job of remainingJobs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
 
-      const veh = availV.shift()!;
-      const drv = availD.shift()!;
+      const termLoc = getTerminalCoordinates(job.terminalId || job.terminalName);
+      const best = pickBestTractorAndDriver(termLoc);
+      if (!best) break;
+
+      const { veh, drv, score: topScored } = best;
       const isReefer = job.containerType?.toUpperCase().includes('REEFER');
       const is20 = job.containerSize?.trim() === '20FT';
       let trIdx = -1;
@@ -978,6 +1311,8 @@ export default function DrayageAssignmentPage() {
         allowanceAed: job.driverAllowanceAed || 150,
         demurrageRescue: risk.level === 'CRITICAL' || risk.level === 'EXPIRED',
         tasSlot: tas.slotTime,
+        matchScorePct: topScored.totalScore,
+        proximityKm: topScored.distanceKm,
       });
     }
 
@@ -1150,7 +1485,7 @@ export default function DrayageAssignmentPage() {
           value={availableVehicles.length}
           icon={Truck}
           accent="blue"
-          sub={`of ${vehicles.length} total mapped`}
+          sub={`of ${primeMovers.length} heavy tractors`}
         />
         <KpiCard
           label="Available Drivers"
@@ -1616,9 +1951,17 @@ export default function DrayageAssignmentPage() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-[var(--border-subtle)] text-[11px]">
-                      <div className="flex items-center gap-1.5 text-[var(--text-main)] font-medium">
-                        <Truck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        <span>Tractor: {item.selectedVehiclePlate}</span>
+                      <div className="flex flex-col gap-0.5 text-[var(--text-main)] font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span>Tractor: {item.selectedVehiclePlate}</span>
+                        </div>
+                        {typeof item.matchScorePct === 'number' && (
+                          <div className="text-[10px] text-blue-400 font-semibold pl-5 flex items-center gap-1">
+                            <span>🎯 {item.matchScorePct}% Match</span>
+                            <span className="text-[var(--text-muted)]">• 📍 {item.proximityKm}km</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 text-[var(--text-main)] font-medium">
                         <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -1701,30 +2044,111 @@ export default function DrayageAssignmentPage() {
                 </div>
                 <SearchableSelect
                   value={selectedVehicleId}
-                  onChange={(val) => setSelectedVehicleId(val)}
-                  options={primeMovers.map((v) => ({
-                    value: v.id,
-                    label: `${v.plateNumber} · ${v.make} ${v.model}`,
-                    sublabel: `Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
-                    badge: v.status,
-                  }))}
+                  onChange={(val) => {
+                    setSelectedVehicleId(val);
+                    const veh = primeMovers.find((v) => v.id === val);
+                    if (veh?.assignedDriverId) {
+                      const drv = drivers.find((d) => d.id === veh.assignedDriverId);
+                      if (drv && drv.complianceOk) {
+                        setSelectedDriverId(drv.id);
+                      }
+                    }
+                  }}
+                  options={primeMoverSelectOptions}
                   placeholder="-- Search & Choose Prime Mover --"
                   searchPlaceholder="Type plate number, make, model..."
                   isClearable
                 />
+
+                {/* 4-Factor Telematics Match Score Breakdown Card */}
+                {currentVehicleScore && (
+                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-blue-500/30 space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{currentVehicleScore.rankBadge}</span>
+                        <span className="font-bold text-[var(--text-main)] text-xs">
+                          4-Factor Telematics Match Score:
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            currentVehicleScore.totalScore >= 85
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : currentVehicleScore.totalScore >= 70
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          }`}
+                        >
+                          {currentVehicleScore.totalScore}% Match
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        Pickup: {targetTerminalLoc.name}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                      <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="text-[var(--text-muted)] flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span>Proximity (60%)</span>
+                        </div>
+                        <div className="font-bold text-xs text-[var(--text-main)]">
+                          {currentVehicleScore.distanceKm} km
+                        </div>
+                        <div className="text-[9px] text-emerald-400">Score: {currentVehicleScore.proximityScore}/100</div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="text-[var(--text-muted)] flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span>Idleness (25%)</span>
+                        </div>
+                        <div className="font-bold text-xs text-[var(--text-main)]">
+                          {currentVehicleScore.idleHours}h dwell
+                        </div>
+                        <div className="text-[9px] text-cyan-400">Score: {currentVehicleScore.idlenessScore}/100</div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="text-[var(--text-muted)] flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-indigo-400 shrink-0" />
+                          <span>Workload (10%)</span>
+                        </div>
+                        <div className="font-bold text-xs text-[var(--text-main)]">
+                          {currentVehicleScore.tripsToday} trip(s) today
+                        </div>
+                        <div className="text-[9px] text-indigo-400">Score: {currentVehicleScore.workloadScore}/100</div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="text-[var(--text-muted)] flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-purple-400 shrink-0" />
+                          <span>Availability (5%)</span>
+                        </div>
+                        <div className="font-bold text-xs text-[var(--text-main)]">
+                          {currentVehicleScore.fuelPct}% fuel
+                        </div>
+                        <div className="text-[9px] text-purple-400">Score: {currentVehicleScore.availabilityScore}/100</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Select Driver */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-[var(--text-muted)]">Fleet360 Heavy Duty Driver *</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-muted)]">Fleet360 Heavy Duty Driver *</label>
+                  <span className="text-[10px] text-emerald-400 font-semibold">FIFO Queue & Workload Balanced</span>
+                </div>
                 <SearchableSelect
                   value={selectedDriverId}
                   onChange={(val) => setSelectedDriverId(val)}
                   options={drivers.map((d) => ({
                     value: d.id,
                     label: d.fullName,
-                    sublabel: d.phone ? `Phone: ${d.phone} • ${d.status}` : `Status: ${d.status}`,
-                    badge: d.status,
+                    sublabel: `Trips Today: ${d.completedTripsToday ?? 0} • ${d.phone ? `Phone: ${d.phone} • ` : ''}Status: ${d.status}`,
+                    badge: (d.completedTripsToday ?? 0) === 0 ? 'Fresh Driver' : `${d.completedTripsToday} Trips`,
                   }))}
                   placeholder="-- Search & Choose Driver --"
                   searchPlaceholder="Type driver name, mobile number..."
