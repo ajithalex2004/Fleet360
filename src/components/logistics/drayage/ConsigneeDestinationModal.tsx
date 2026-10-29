@@ -5,6 +5,7 @@ import {
   Warehouse, Building2, Navigation, Compass, Plus, X,
   ShieldCheck, DollarSign, User, Phone, Check, RefreshCw,
   Map, Globe, Layers, Mountain, Move, AlertTriangle, Info,
+  Edit3, Undo2, RotateCcw, MousePointerClick, Hexagon,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -12,6 +13,7 @@ import {
   type GMapsMarker,
   type GMapsCircle,
   type GMapsPolygon,
+  type GMapsPolyline,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
 
@@ -161,11 +163,72 @@ export function ConsigneeDestinationModal({
   const [plotPolygonCoords, setPlotPolygonCoords] = useState<Array<{ lat: number; lng: number }>>([]);
   const [plotMapTypeId, setPlotMapTypeId] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
 
+  // Interactive Polygon Click-to-Draw state
+  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
+  const [drawingVertices, setDrawingVertices] = useState<Array<{ lat: number; lng: number }>>([]);
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<GMapsMap | null>(null);
   const markerRef = useRef<GMapsMarker | null>(null);
   const circleRef = useRef<GMapsCircle | null>(null);
   const polygonRef = useRef<GMapsPolygon | null>(null);
+  const ctorsRef = useRef<GoogleCtors | null>(null);
+
+  // Drawing refs for real-time map event handlers
+  const isDrawingPolygonRef = useRef(false);
+  isDrawingPolygonRef.current = isDrawingPolygon;
+  const drawingVerticesRef = useRef<Array<{ lat: number; lng: number }>>([]);
+  const drawingMarkersRef = useRef<GMapsMarker[]>([]);
+  const drawingPolylineRef = useRef<GMapsPolyline | null>(null);
+
+  // Synchronized state refs for map events
+  const plotCoordinatesRef = useRef(plotCoordinates);
+  plotCoordinatesRef.current = plotCoordinates;
+  const plotRadiusRef = useRef(plotRadius);
+  plotRadiusRef.current = plotRadius;
+  const plotTypeRef = useRef(plotType);
+  plotTypeRef.current = plotType;
+  const plotPolygonCoordsRef = useRef(plotPolygonCoords);
+  plotPolygonCoordsRef.current = plotPolygonCoords;
+
+  // Geometry helper: Distance between two points in km (Haversine formula)
+  const getPointsDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Geometry helper: Generate a 4-corner bounding box centered on a point
+  const generateCenteredPolygon = (center: { lat: number; lng: number }, radiusMeters: number = 250) => {
+    const dLat = radiusMeters / 111320;
+    const cosLat = Math.cos((center.lat * Math.PI) / 180);
+    const dLng = radiusMeters / (111320 * (cosLat === 0 ? 1 : Math.abs(cosLat)));
+    return [
+      { lat: Number((center.lat + dLat).toFixed(6)), lng: Number((center.lng - dLng).toFixed(6)) }, // NW
+      { lat: Number((center.lat + dLat).toFixed(6)), lng: Number((center.lng + dLng).toFixed(6)) }, // NE
+      { lat: Number((center.lat - dLat).toFixed(6)), lng: Number((center.lng + dLng).toFixed(6)) }, // SE
+      { lat: Number((center.lat - dLat).toFixed(6)), lng: Number((center.lng - dLng).toFixed(6)) }, // SW
+    ];
+  };
+
+  // Geometry helper: Calculate center centroid of a polygon
+  const getPolygonCentroid = (coords: Array<{ lat: number; lng: number }>) => {
+    if (!coords || !coords.length) return { lat: 24.9642, lng: 55.0915 };
+    const sumLat = coords.reduce((acc, p) => acc + p.lat, 0);
+    const sumLng = coords.reduce((acc, p) => acc + p.lng, 0);
+    return {
+      lat: Number((sumLat / coords.length).toFixed(6)),
+      lng: Number((sumLng / coords.length).toFixed(6)),
+    };
+  };
 
   // Populate initial values when opening modal
   useEffect(() => {
@@ -238,9 +301,13 @@ export function ConsigneeDestinationModal({
 
   // Open the interactive Plot on Map modal
   const handleOpenPlotOnMap = () => {
-    setPlotCoordinates({ lat, lng });
+    const center = { lat, lng };
+    setPlotCoordinates(center);
+    plotCoordinatesRef.current = center;
     setPlotRadius(geofenceRadiusMeters || 800);
+    plotRadiusRef.current = geofenceRadiusMeters || 800;
     setPlotType(geofenceType || 'CIRCLE');
+    plotTypeRef.current = geofenceType || 'CIRCLE';
 
     let initialPoly: Array<{ lat: number; lng: number }> = [];
     try {
@@ -251,21 +318,289 @@ export function ConsigneeDestinationModal({
     } catch {
       // ignore
     }
-    if (initialPoly.length === 0) {
-      // Default 4 vertices box around center point
-      const delta = 0.003;
-      initialPoly = [
-        { lat: lat + delta, lng: lng - delta },
-        { lat: lat + delta, lng: lng + delta },
-        { lat: lat - delta, lng: lng + delta },
-        { lat: lat - delta, lng: lng - delta },
-      ];
+
+    let needNewBox = false;
+    if (initialPoly.length < 3) {
+      needNewBox = true;
+    } else {
+      const centroid = getPolygonCentroid(initialPoly);
+      const dist = getPointsDistanceKm(centroid.lat, centroid.lng, center.lat, center.lng);
+      if (dist > 1.2) {
+        needNewBox = true;
+      }
     }
+
+    if (needNewBox) {
+      initialPoly = generateCenteredPolygon(center, Math.max(250, Math.min(geofenceRadiusMeters || 800, 600)));
+    }
+
     setPlotPolygonCoords(initialPoly);
+    plotPolygonCoordsRef.current = initialPoly;
     setShowPlotModal(true);
   };
 
-  // Google Maps setup and listeners in Plot Modal
+  // Cleanup interactive drawing mode markers and polyline
+  const cleanupDrawingMode = () => {
+    drawingMarkersRef.current.forEach((m) => m.setMap(null));
+    drawingMarkersRef.current = [];
+    if (drawingPolylineRef.current) {
+      drawingPolylineRef.current.setMap(null);
+      drawingPolylineRef.current = null;
+    }
+    drawingVerticesRef.current = [];
+    setDrawingVertices([]);
+    setIsDrawingPolygon(false);
+    isDrawingPolygonRef.current = false;
+  };
+
+  // Render Circle overlay with editable handles
+  const renderCircleOverlay = (center: { lat: number; lng: number }, radius: number) => {
+    const map = mapInstanceRef.current;
+    const ctors = ctorsRef.current;
+    if (!map || !ctors) return;
+
+    if (polygonRef.current) {
+      polygonRef.current.setMap(null);
+      polygonRef.current = null;
+    }
+
+    if (circleRef.current) {
+      circleRef.current.setCenter(center);
+      circleRef.current.setRadius(radius);
+      circleRef.current.setMap(map);
+    } else {
+      const circle = new ctors.Circle({
+        center,
+        radius,
+        map,
+        fillColor: '#059669',
+        fillOpacity: 0.22,
+        strokeColor: '#10b981',
+        strokeOpacity: 0.9,
+        strokeWeight: 2.5,
+        editable: true,
+        draggable: true,
+        zIndex: 50,
+      });
+
+      circle.addListener('radius_changed', () => {
+        const r = Math.round(circle.getRadius());
+        setPlotRadius(r);
+        plotRadiusRef.current = r;
+      });
+
+      circle.addListener('center_changed', () => {
+        const c = circle.getCenter();
+        if (c) {
+          const newPos = {
+            lat: Number(c.lat().toFixed(6)),
+            lng: Number(c.lng().toFixed(6)),
+          };
+          setPlotCoordinates(newPos);
+          plotCoordinatesRef.current = newPos;
+          if (markerRef.current) markerRef.current.setPosition(newPos);
+        }
+      });
+
+      circleRef.current = circle;
+    }
+  };
+
+  // Render Polygon overlay with editable handles and vertex listeners
+  const renderPolygonOverlay = (coords: Array<{ lat: number; lng: number }>) => {
+    const map = mapInstanceRef.current;
+    const ctors = ctorsRef.current;
+    if (!map || !ctors) return;
+
+    if (circleRef.current) {
+      circleRef.current.setMap(null);
+      circleRef.current = null;
+    }
+
+    if (polygonRef.current) {
+      polygonRef.current.setPath(coords);
+      polygonRef.current.setMap(map);
+    } else {
+      const polygon = new ctors.Polygon({
+        paths: coords,
+        map,
+        fillColor: '#9333ea',
+        fillOpacity: 0.25,
+        strokeColor: '#c084fc',
+        strokeOpacity: 0.95,
+        strokeWeight: 2.5,
+        editable: true,
+        draggable: true,
+        zIndex: 50,
+      });
+
+      const updatePolyPath = () => {
+        const path = polygon.getPath();
+        const updated: Array<{ lat: number; lng: number }> = [];
+        for (let i = 0; i < path.getLength(); i++) {
+          const pt = path.getAt(i);
+          updated.push({
+            lat: Number(pt.lat().toFixed(6)),
+            lng: Number(pt.lng().toFixed(6)),
+          });
+        }
+        setPlotPolygonCoords(updated);
+        plotPolygonCoordsRef.current = updated;
+
+        // Keep center pin at polygon centroid
+        const centroid = getPolygonCentroid(updated);
+        setPlotCoordinates(centroid);
+        plotCoordinatesRef.current = centroid;
+        if (markerRef.current) {
+          markerRef.current.setPosition(centroid);
+        }
+      };
+
+      polygon.getPath().addListener('set_at', updatePolyPath);
+      polygon.getPath().addListener('insert_at', updatePolyPath);
+      polygon.getPath().addListener('remove_at', updatePolyPath);
+
+      polygonRef.current = polygon;
+    }
+  };
+
+  // Mode Switch Handlers
+  const handleSelectCircle = () => {
+    cleanupDrawingMode();
+    setPlotType('CIRCLE');
+    plotTypeRef.current = 'CIRCLE';
+    renderCircleOverlay(plotCoordinatesRef.current, plotRadiusRef.current);
+  };
+
+  const handleSelectPolygon = () => {
+    cleanupDrawingMode();
+    setPlotType('POLYGON');
+    plotTypeRef.current = 'POLYGON';
+
+    let coords = plotPolygonCoordsRef.current;
+    const center = plotCoordinatesRef.current;
+    let needNewBox = false;
+
+    if (!coords || coords.length < 3) {
+      needNewBox = true;
+    } else {
+      const centroid = getPolygonCentroid(coords);
+      const dist = getPointsDistanceKm(centroid.lat, centroid.lng, center.lat, center.lng);
+      if (dist > 1.2) {
+        needNewBox = true;
+      }
+    }
+
+    if (needNewBox) {
+      coords = generateCenteredPolygon(center, Math.max(250, Math.min(plotRadiusRef.current, 600)));
+      setPlotPolygonCoords(coords);
+      plotPolygonCoordsRef.current = coords;
+    }
+
+    renderPolygonOverlay(coords);
+  };
+
+  // Reset to 4-corner box centered on current marker
+  const handleResetPolygonToCenterBox = () => {
+    cleanupDrawingMode();
+    const center = plotCoordinatesRef.current;
+    const newBox = generateCenteredPolygon(center, Math.max(250, Math.min(plotRadiusRef.current, 600)));
+    setPlotPolygonCoords(newBox);
+    plotPolygonCoordsRef.current = newBox;
+    renderPolygonOverlay(newBox);
+  };
+
+  // Interactive Click-to-Draw Polygon mode
+  const startDrawingPolygon = () => {
+    cleanupDrawingMode();
+    if (polygonRef.current) {
+      polygonRef.current.setMap(null);
+      polygonRef.current = null;
+    }
+    setIsDrawingPolygon(true);
+    isDrawingPolygonRef.current = true;
+    setDrawingVertices([]);
+    drawingVerticesRef.current = [];
+  };
+
+  const handleMapClickWhileDrawing = (newPt: { lat: number; lng: number }) => {
+    const map = mapInstanceRef.current;
+    const ctors = ctorsRef.current;
+    if (!map || !ctors) return;
+
+    const updated = [...drawingVerticesRef.current, newPt];
+    drawingVerticesRef.current = updated;
+    setDrawingVertices(updated);
+
+    const pin = new ctors.Marker({
+      position: newPt,
+      map,
+      title: `Vertex #${updated.length}`,
+      icon: {
+        path: ctors.SymbolPath.CIRCLE,
+        scale: 5,
+        fillColor: '#c084fc',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
+      },
+    });
+    drawingMarkersRef.current.push(pin);
+
+    // If clicking first point with >= 3 points, auto-close
+    if (updated.length === 1) {
+      pin.addListener('click', () => {
+        if (drawingVerticesRef.current.length >= 3) {
+          finishDrawingPolygon();
+        }
+      });
+    }
+
+    if (!drawingPolylineRef.current) {
+      drawingPolylineRef.current = new ctors.Polyline({
+        path: updated,
+        map,
+        strokeColor: '#c084fc',
+        strokeOpacity: 0.95,
+        strokeWeight: 2.5,
+      });
+    } else {
+      drawingPolylineRef.current.setPath(updated);
+    }
+  };
+
+  const handleUndoDrawingPoint = () => {
+    if (drawingVerticesRef.current.length === 0) return;
+    const updated = [...drawingVerticesRef.current];
+    updated.pop();
+    drawingVerticesRef.current = updated;
+    setDrawingVertices(updated);
+
+    const lastMarker = drawingMarkersRef.current.pop();
+    if (lastMarker) lastMarker.setMap(null);
+
+    if (drawingPolylineRef.current) {
+      drawingPolylineRef.current.setPath(updated);
+    }
+  };
+
+  const finishDrawingPolygon = () => {
+    const pts = drawingVerticesRef.current;
+    if (pts.length < 3) return;
+
+    const centroid = getPolygonCentroid(pts);
+    setPlotCoordinates(centroid);
+    plotCoordinatesRef.current = centroid;
+    if (markerRef.current) markerRef.current.setPosition(centroid);
+
+    setPlotPolygonCoords(pts);
+    plotPolygonCoordsRef.current = pts;
+
+    cleanupDrawingMode();
+    renderPolygonOverlay(pts);
+  };
+
+  // Google Maps setup in Plot Modal
   useEffect(() => {
     if (!showPlotModal || !mapContainerRef.current) return;
     let isMounted = true;
@@ -274,13 +609,14 @@ export function ConsigneeDestinationModal({
       try {
         const ctors = await loadGoogleMaps();
         if (!isMounted || !mapContainerRef.current) return;
+        ctorsRef.current = ctors;
 
-        const center = { lat: plotCoordinates.lat, lng: plotCoordinates.lng };
+        const center = plotCoordinatesRef.current;
 
         if (!mapInstanceRef.current) {
           const map = new ctors.Map(mapContainerRef.current, {
             center,
-            zoom: 15,
+            zoom: 16,
             mapTypeId: plotMapTypeId,
             fullscreenControl: false,
             streetViewControl: false,
@@ -290,9 +626,29 @@ export function ConsigneeDestinationModal({
 
           map.addListener('click', (e: any) => {
             if (!e.latLng) return;
-            const newLat = Number(e.latLng.lat().toFixed(6));
-            const newLng = Number(e.latLng.lng().toFixed(6));
-            setPlotCoordinates({ lat: newLat, lng: newLng });
+            const newPt = {
+              lat: Number(e.latLng.lat().toFixed(6)),
+              lng: Number(e.latLng.lng().toFixed(6)),
+            };
+
+            // If user is currently in interactive Click-to-Draw Polygon mode
+            if (isDrawingPolygonRef.current) {
+              handleMapClickWhileDrawing(newPt);
+              return;
+            }
+
+            // Normal mode: relocate center marker & circle
+            setPlotCoordinates(newPt);
+            plotCoordinatesRef.current = newPt;
+            if (markerRef.current) {
+              markerRef.current.setPosition(newPt);
+            }
+
+            if (plotTypeRef.current === 'CIRCLE') {
+              if (circleRef.current) {
+                circleRef.current.setCenter(newPt);
+              }
+            }
           });
         } else {
           mapInstanceRef.current?.setCenter?.(center);
@@ -313,99 +669,24 @@ export function ConsigneeDestinationModal({
           });
           markerRef.current.addListener('dragend', (e: any) => {
             if (!e.latLng) return;
-            setPlotCoordinates({
+            const newPt = {
               lat: Number(e.latLng.lat().toFixed(6)),
               lng: Number(e.latLng.lng().toFixed(6)),
-            });
+            };
+            setPlotCoordinates(newPt);
+            plotCoordinatesRef.current = newPt;
+
+            if (plotTypeRef.current === 'CIRCLE' && circleRef.current) {
+              circleRef.current.setCenter(newPt);
+            }
           });
         }
 
-        // Handle Circle Overlay
-        if (plotType === 'CIRCLE') {
-          if (polygonRef.current) {
-            polygonRef.current.setMap(null);
-            polygonRef.current = null;
-          }
-
-          if (circleRef.current) {
-            circleRef.current.setCenter(center);
-            circleRef.current.setRadius(plotRadius);
-          } else {
-            const circle = new ctors.Circle({
-              center,
-              radius: plotRadius,
-              map,
-              fillColor: '#059669',
-              fillOpacity: 0.22,
-              strokeColor: '#10b981',
-              strokeOpacity: 0.9,
-              strokeWeight: 2.5,
-              editable: true,
-              draggable: true,
-              zIndex: 50,
-            });
-
-            circle.addListener('radius_changed', () => {
-              const r = Math.round(circle.getRadius());
-              setPlotRadius(r);
-            });
-
-            circle.addListener('center_changed', () => {
-              const c = circle.getCenter();
-              if (c) {
-                const newPos = {
-                  lat: Number(c.lat().toFixed(6)),
-                  lng: Number(c.lng().toFixed(6)),
-                };
-                setPlotCoordinates(newPos);
-                if (markerRef.current) markerRef.current.setPosition(newPos);
-              }
-            });
-
-            circleRef.current = circle;
-          }
+        // Render current shape
+        if (plotTypeRef.current === 'POLYGON') {
+          renderPolygonOverlay(plotPolygonCoordsRef.current);
         } else {
-          // Handle Polygon Overlay
-          if (circleRef.current) {
-            circleRef.current.setMap(null);
-            circleRef.current = null;
-          }
-
-          if (polygonRef.current) {
-            polygonRef.current.setPath(plotPolygonCoords);
-          } else {
-            const polygon = new ctors.Polygon({
-              paths: plotPolygonCoords,
-              map,
-              fillColor: '#9333ea',
-              fillOpacity: 0.22,
-              strokeColor: '#a855f7',
-              strokeOpacity: 0.9,
-              strokeWeight: 2.5,
-              editable: true,
-              draggable: true,
-              zIndex: 50,
-            });
-
-            const updatePolyPath = () => {
-              const path = polygon.getPath();
-              const coords: Array<{ lat: number; lng: number }> = [];
-              for (let i = 0; i < path.getLength(); i++) {
-                const pt = path.getAt(i);
-                coords.push({
-                  lat: Number(pt.lat().toFixed(6)),
-                  lng: Number(pt.lng().toFixed(6)),
-                });
-              }
-              setPlotPolygonCoords(coords);
-            };
-
-            polygon.getPath().addListener('set_at', updatePolyPath);
-            polygon.getPath().addListener('insert_at', updatePolyPath);
-            polygon.getPath().addListener('remove_at', updatePolyPath);
-
-            polygonRef.current = polygon;
-          }
+          renderCircleOverlay(plotCoordinatesRef.current, plotRadiusRef.current);
         }
       } catch (err) {
         console.warn('Error loading Google Maps in Plot Modal:', err);
@@ -417,11 +698,12 @@ export function ConsigneeDestinationModal({
     return () => {
       isMounted = false;
     };
-  }, [showPlotModal, plotCoordinates.lat, plotCoordinates.lng, plotRadius, plotType]);
+  }, [showPlotModal]);
 
   // Clean up overlays when plot modal closes
   useEffect(() => {
     if (!showPlotModal) {
+      cleanupDrawingMode();
       if (markerRef.current) {
         markerRef.current.setMap(null);
         markerRef.current = null;
@@ -440,17 +722,31 @@ export function ConsigneeDestinationModal({
 
   // Apply Plot on Map & Reverse Geocode exact street address
   const handleApplyPlotLocation = async () => {
-    const finalLat = plotCoordinates.lat;
-    const finalLng = plotCoordinates.lng;
-    setLat(finalLat);
-    setLng(finalLng);
-    setGeofenceRadiusMeters(plotRadius);
-    setGeofenceType(plotType);
-    setGeofenceConfigured(true); // Automatically enables Geofence Configured switch!
+    let finalLat = plotCoordinates.lat;
+    let finalLng = plotCoordinates.lng;
+    let finalRadius = plotRadius;
 
     if (plotType === 'POLYGON' && plotPolygonCoords.length >= 3) {
+      const centroid = getPolygonCentroid(plotPolygonCoords);
+      finalLat = centroid.lat;
+      finalLng = centroid.lng;
+
+      // Compute bounding radius in meters from centroid to furthest vertex
+      let maxDistMeters = 0;
+      for (const pt of plotPolygonCoords) {
+        const dMeters = getPointsDistanceKm(centroid.lat, centroid.lng, pt.lat, pt.lng) * 1000;
+        if (dMeters > maxDistMeters) maxDistMeters = dMeters;
+      }
+      finalRadius = Math.max(100, Math.round(maxDistMeters));
+
       setGeofenceCoordinatesJson(JSON.stringify(plotPolygonCoords));
     }
+
+    setLat(finalLat);
+    setLng(finalLng);
+    setGeofenceRadiusMeters(finalRadius);
+    setGeofenceType(plotType);
+    setGeofenceConfigured(true); // Automatically enables Geofence Configured switch!
 
     setShowPlotModal(false);
 
@@ -857,33 +1153,61 @@ export function ConsigneeDestinationModal({
               </div>
 
               {geofenceConfigured && (
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--border-subtle)] animate-in fade-in duration-150">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-[var(--text-muted)] font-semibold">Perimeter Type</label>
-                    <select
-                      value={geofenceType}
-                      onChange={(e) => setGeofenceType(e.target.value as 'CIRCLE' | 'POLYGON')}
-                      className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
-                    >
-                      <option value="CIRCLE">Circular Perimeter (Radius)</option>
-                      <option value="POLYGON">Custom Polygon Bounds</option>
-                    </select>
+                <div className="space-y-2.5 pt-2 border-t border-[var(--border-subtle)] animate-in fade-in duration-150">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[var(--text-muted)] font-semibold">Perimeter Type</label>
+                      <select
+                        value={geofenceType}
+                        onChange={(e) => setGeofenceType(e.target.value as 'CIRCLE' | 'POLYGON')}
+                        className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                      >
+                        <option value="CIRCLE">Circular Perimeter (Radius)</option>
+                        <option value="POLYGON">Custom Polygon Bounds</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[var(--text-muted)] font-semibold">
+                        {geofenceType === 'POLYGON' ? 'Bounding Radius (meters)' : 'Geofence Radius (meters)'}
+                      </label>
+                      <input
+                        type="number"
+                        step="50"
+                        min="100"
+                        max="5000"
+                        value={geofenceRadiusMeters}
+                        onChange={(e) => setGeofenceRadiusMeters(Number(e.target.value))}
+                        className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-[var(--text-muted)] font-semibold">
-                      Geofence Radius (meters)
-                    </label>
-                    <input
-                      type="number"
-                      step="50"
-                      min="100"
-                      max="5000"
-                      value={geofenceRadiusMeters}
-                      onChange={(e) => setGeofenceRadiusMeters(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
-                    />
-                  </div>
+                  {geofenceType === 'POLYGON' && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs">
+                      <div className="flex items-center gap-2 text-purple-300">
+                        <Hexagon className="w-4 h-4 text-purple-400 shrink-0" />
+                        <span>
+                          {(() => {
+                            try {
+                              const parsed = JSON.parse(geofenceCoordinatesJson);
+                              if (Array.isArray(parsed) && parsed.length >= 3) {
+                                return `${parsed.length} custom polygon boundary vertices configured`;
+                              }
+                            } catch {}
+                            return '4-point default bounding box ready on map';
+                          })()}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenPlotOnMap}
+                        className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 underline"
+                      >
+                        Fine-tune on Map
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -951,37 +1275,40 @@ export function ConsigneeDestinationModal({
             <div className="flex-1 relative bg-slate-900 overflow-hidden">
               <div ref={mapContainerRef} className="w-full h-full" />
 
-              {/* Floating Toolbar: Mode Switcher, Radius Slider, Map Type Switcher */}
+              {/* Floating Toolbar: Mode Switcher, Drawing Actions, Map Type Switcher */}
               <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl text-xs">
-                {/* Left: Shape Mode & Radius Slider */}
-                <div className="flex flex-wrap items-center gap-3">
+                {/* Left: Shape Mode & Tools */}
+                <div className="flex flex-wrap items-center gap-2.5">
                   <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
                     <button
                       type="button"
-                      onClick={() => setPlotType('CIRCLE')}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      onClick={handleSelectCircle}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
                         plotType === 'CIRCLE'
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      ⚪ Draw Circle
+                      <span>⚪</span>
+                      <span>Draw Circle</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPlotType('POLYGON')}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      onClick={handleSelectPolygon}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
                         plotType === 'POLYGON'
                           ? 'bg-purple-600 text-white shadow-sm'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      ⬡ Draw Polygon
+                      <Hexagon className="w-3.5 h-3.5" />
+                      <span>Draw Polygon</span>
                     </button>
                   </div>
 
+                  {/* Circle Tools */}
                   {plotType === 'CIRCLE' && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
                       <span className="text-[var(--text-muted)]">Radius:</span>
                       <input
                         type="range"
@@ -992,6 +1319,7 @@ export function ConsigneeDestinationModal({
                         onChange={(e) => {
                           const r = Number(e.target.value);
                           setPlotRadius(r);
+                          plotRadiusRef.current = r;
                           if (circleRef.current) circleRef.current.setRadius(r);
                         }}
                         className="w-24 accent-emerald-500 cursor-pointer"
@@ -1000,7 +1328,81 @@ export function ConsigneeDestinationModal({
                     </div>
                   )}
 
-                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden sm:inline">
+                  {/* Polygon Tools */}
+                  {plotType === 'POLYGON' && (
+                    <div className="flex flex-wrap items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
+                      {!isDrawingPolygon ? (
+                        <>
+                          <span className="px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono text-[11px] flex items-center gap-1">
+                            <Hexagon className="w-3 h-3 text-purple-400" />
+                            <span>{plotPolygonCoords.length} Vertices</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={startDrawingPolygon}
+                            className="px-2.5 py-1 rounded-md bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                            title="Click on map to drop custom perimeter points"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Click-to-Draw Boundary</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleResetPolygonToCenterBox}
+                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1.5 transition-all"
+                            title="Reset to 4-corner bounding box centered on pin"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reset Box</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold text-[11px] flex items-center gap-1.5 animate-pulse">
+                            <MousePointerClick className="w-3 h-3 text-amber-400" />
+                            <span>Click map to add points ({drawingVertices.length})</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={finishDrawingPolygon}
+                            disabled={drawingVertices.length < 3}
+                            className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1 transition-all shadow-sm"
+                            title="Close and complete polygon (requires at least 3 vertices)"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Complete Polygon</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleUndoDrawingPoint}
+                            disabled={drawingVertices.length === 0}
+                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] disabled:opacity-40 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1 transition-all"
+                            title="Remove last point"
+                          >
+                            <Undo2 className="w-3 h-3" />
+                            <span>Undo</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              cleanupDrawingMode();
+                              renderPolygonOverlay(plotPolygonCoordsRef.current);
+                            }}
+                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-rose-500/20 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-rose-300 text-[11px] font-semibold transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden xl:inline">
                     ({plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)})
                   </div>
                 </div>
@@ -1067,6 +1469,28 @@ export function ConsigneeDestinationModal({
                     <Mountain className="w-3 h-3" />
                     <span>Terrain</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Bottom Guidance Banner */}
+              <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none flex justify-center">
+                <div className="px-3.5 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 text-[11px] text-slate-300 shadow-xl flex items-center gap-2">
+                  <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  {plotType === 'CIRCLE' && (
+                    <span>
+                      Drag the center marker to reposition. Drag perimeter handles or use slider to adjust circular radius.
+                    </span>
+                  )}
+                  {plotType === 'POLYGON' && !isDrawingPolygon && (
+                    <span>
+                      Drag white corner & midpoint handles to stretch boundary over depot walls. Or click <strong>Click-to-Draw</strong> for custom bounds.
+                    </span>
+                  )}
+                  {plotType === 'POLYGON' && isDrawingPolygon && (
+                    <span className="text-amber-200">
+                      Click anywhere on the map to place boundary corners. When finished, click <strong>Complete Polygon</strong>.
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
