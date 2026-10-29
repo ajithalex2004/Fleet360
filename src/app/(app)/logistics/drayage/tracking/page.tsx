@@ -2,6 +2,23 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+import {
+  Radio, Compass, Map as MapIcon, SlidersHorizontal, Maximize2,
+} from 'lucide-react';
+
+const DrayageCorridorLiveMap = dynamic(
+  () => import('@/components/logistics/drayage/DrayageCorridorLiveMap'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[620px] rounded-2xl bg-slate-900 animate-pulse flex flex-col items-center justify-center text-xs text-blue-400 gap-2 border border-slate-800">
+        <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
+        <span>Initializing Real-Time UAE Corridor Telematics Radar...</span>
+      </div>
+    ),
+  }
+);
 import {
   Navigation, Package, Truck, CheckCircle2, AlertTriangle, RefreshCw,
   Search, ShieldCheck, MapPin, Send, MessageSquare, Clock, Plus,
@@ -36,6 +53,13 @@ interface DrayageJob {
   rateAmountAed: number;
   driverAllowanceAed: number;
   customsInspection: boolean;
+  currentLat?: number | null;
+  currentLng?: number | null;
+  cargoWeightKg?: number;
+  shippingLine?: string;
+  bogieJobId?: string | null;
+  streetTurnJobId?: string | null;
+  doExpiryDate?: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -68,6 +92,11 @@ export default function DrayageJobTrackingPage() {
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [messages, setMessages] = useState<DispatchMessage[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [terminals, setTerminals] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [geofences, setGeofences] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'SPLIT' | 'RADAR' | 'CONSOLE'>('SPLIT');
 
   // EDI verification state
   const [ediLoading, setEdiLoading] = useState(false);
@@ -119,6 +148,10 @@ export default function DrayageJobTrackingPage() {
       setJobs(allJobs);
       setStatusLogs(data.statusLogs || []);
       setMessages(data.messages || []);
+      setTerminals(data.terminals || []);
+      setWarehouses(data.warehouses || []);
+      setGeofences(data.geofences || []);
+      setVehicles(data.vehicles || []);
 
       if (allJobs.length > 0 && !selectedJobId) {
         setSelectedJobId(allJobs[0].id);
@@ -337,18 +370,112 @@ export default function DrayageJobTrackingPage() {
         icon={Navigation}
         accent="blue"
         actions={
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode('SPLIT')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  viewMode === 'SPLIT'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                <Compass className="w-3.5 h-3.5 text-blue-300" />
+                Split Radar & Console
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('RADAR')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  viewMode === 'RADAR'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                Full Corridor Radar
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('CONSOLE')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  viewMode === 'CONSOLE'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                Console Only
+              </button>
+            </div>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         }
       />
 
+      {/* Real-Time Telematics & Fleet Corridor KPI Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KpiCard
+          label="On Freight Corridors (E11/E311)"
+          value={jobs.filter((j) => j.status === 'IN_TRANSIT').length}
+          icon={Truck}
+          accent="blue"
+        />
+        <KpiCard
+          label="Dual-20FT Bogie Dispatches"
+          value={jobs.filter((j) => Boolean(j.bogieJobId)).length}
+          icon={Layers}
+          accent="violet"
+        />
+        <KpiCard
+          label="Street-Turn Triangulations"
+          value={jobs.filter((j) => Boolean(j.streetTurnJobId) || j.status === 'STREET_TURNED').length}
+          icon={RefreshCw}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Detached at Warehouse Ramps"
+          value={jobs.filter((j) => j.trailerDetached || j.status === 'PLACED_AT_RAMP' || j.placementLocation === 'RAMP').length}
+          icon={Clock}
+          accent="amber"
+        />
+        <KpiCard
+          label="Port PCS / Gate Clearance"
+          value={`${jobs.filter((j) => j.tokenNumber).length} / ${jobs.length}`}
+          icon={ShieldCheck}
+          accent="cyan"
+        />
+      </div>
+
+{/* Real-Time Telematics Corridor Map (Full Radar or Split) */}
+      {(viewMode === 'RADAR' || viewMode === 'SPLIT') && (
+        <DrayageCorridorLiveMap
+          jobs={jobs}
+          terminals={terminals}
+          warehouses={warehouses}
+          geofences={geofences}
+          vehicles={vehicles}
+          selectedJobId={selectedJobId}
+          onSelectJob={(id) => setSelectedJobId(id)}
+          onAdvanceStage={(status) => handleUpdateStatus(status)}
+          onVerifyEdi={(provider) => handleVerifyEdi(provider)}
+          onOpenChat={(id) => {
+            setSelectedJobId(id);
+          }}
+          fullHeight={viewMode === 'RADAR'}
+        />
+      )}
+
       {/* Main Split Layout: Left Active Jobs Selector / Right Detailed Execution Console */}
+      {viewMode !== 'RADAR' && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Jobs List (4 cols) */}
         <div className="lg:col-span-4 space-y-3">
@@ -799,6 +926,7 @@ export default function DrayageJobTrackingPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Multi-Leg Itinerary Modal */}
       {showLegModal && activeJob && (

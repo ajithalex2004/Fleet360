@@ -54,6 +54,8 @@ export interface GMapsLatLngBounds {
 export interface GMapsPolyline {
   setMap(map: GMapsMap | null): void;
   setPath(path: GMapsLatLngLiteral[]): void;
+  addListener(event: string, cb: (e?: any) => void): void;
+  [key: string]: any;
 }
 export interface GMapsCircle {
   setMap(map: GMapsMap | null): void;
