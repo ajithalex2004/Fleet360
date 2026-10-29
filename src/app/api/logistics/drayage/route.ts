@@ -20,6 +20,8 @@ import {
   acknowledgeDrayageAlert,
   extendContainerDeliveryOrder,
   calculateMissingAllowances,
+  adjustDriverAllowance,
+  settleDriverAllowancesPayout,
   recordDrayageStatusLog,
   findStreetTurnCandidates,
   executeStreetTurnTriangulation,
@@ -865,29 +867,82 @@ export async function POST(req: NextRequest) {
           return calculateMissingAllowances(tx, tenantId);
         }
 
+        case 'adjust_allowance': {
+          return adjustDriverAllowance(tx, {
+            tenantId,
+            allowanceId: String(body.allowanceId),
+            allowanceAmountAed: Number(body.allowanceAmountAed ?? 150),
+            portGateFeeAed: Number(body.portGateFeeAed ?? 35),
+            overnightHaltAed: Number(body.overnightHaltAed ?? 0),
+            bogieBonusAed: Number(body.bogieBonusAed ?? 0),
+            streetTurnBonusAed: Number(body.streetTurnBonusAed ?? 0),
+            inspectionBonusAed: Number(body.inspectionBonusAed ?? 0),
+            adjustmentNotes: body.adjustmentNotes ? String(body.adjustmentNotes) : null,
+            actor: userId ?? 'Finance Settlement Desk',
+          });
+        }
+
+        case 'settle_allowances': {
+          const ids: string[] = Array.isArray(body.allowanceIds)
+            ? body.allowanceIds.map(String)
+            : body.allowanceId
+            ? [String(body.allowanceId)]
+            : [];
+          return settleDriverAllowancesPayout(tx, {
+            tenantId,
+            allowanceIds: ids,
+            paymentMethod: String(body.paymentMethod ?? 'WPS_PAYROLL'),
+            paymentRef: body.paymentRef ? String(body.paymentRef) : undefined,
+            notes: body.notes ? String(body.notes) : undefined,
+            actor: userId ?? 'Finance Settlement Desk',
+          });
+        }
+
         case 'update_allowance_status': {
-          const newStatus = ['APPROVED', 'PAID', 'PENDING'].includes(String(body.status))
+          const newStatus = ['APPROVED', 'PAID', 'PENDING', 'REJECTED'].includes(String(body.status))
             ? String(body.status)
             : 'APPROVED';
+          if (newStatus === 'PAID') {
+            return settleDriverAllowancesPayout(tx, {
+              tenantId,
+              allowanceIds: [String(body.allowanceId)],
+              paymentMethod: String(body.paymentMethod ?? 'WPS_PAYROLL'),
+              paymentRef: body.paymentRef ? String(body.paymentRef) : undefined,
+              notes: body.notes ? String(body.notes) : undefined,
+              actor: userId ?? 'Fleet Supervisor',
+            });
+          }
           await tx.$executeRawUnsafe(
             `UPDATE logistics_drayage_allowances
                 SET status = $3,
                     approved_by = $4,
-                    approved_at = NOW()
+                    approved_at = NOW(),
+                    adjustment_notes = CASE WHEN $5::text IS NOT NULL AND $5::text != '' THEN $5::text ELSE adjustment_notes END
               WHERE id = $1 AND tenant_id = $2`,
             String(body.allowanceId),
             tenantId,
             newStatus,
             userId ?? 'Fleet Supervisor',
+            body.notes ? String(body.notes) : null,
           );
           return { ok: true, status: newStatus };
         }
 
         case 'bulk_update_allowances': {
           const ids: string[] = Array.isArray(body.allowanceIds) ? body.allowanceIds.map(String) : [];
-          const newStatus = ['APPROVED', 'PAID', 'PENDING'].includes(String(body.status))
+          const newStatus = ['APPROVED', 'PAID', 'PENDING', 'REJECTED'].includes(String(body.status))
             ? String(body.status)
             : 'APPROVED';
+          if (newStatus === 'PAID') {
+            const res = await settleDriverAllowancesPayout(tx, {
+              tenantId,
+              allowanceIds: ids,
+              paymentMethod: String(body.paymentMethod ?? 'WPS_PAYROLL'),
+              paymentRef: body.paymentRef ? String(body.paymentRef) : undefined,
+              actor: userId ?? 'Fleet Supervisor',
+            });
+            return { ...res, updatedCount: res.settledCount, status: 'PAID' };
+          }
           for (const id of ids) {
             await tx.$executeRawUnsafe(
               `UPDATE logistics_drayage_allowances

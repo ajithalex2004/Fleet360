@@ -196,6 +196,16 @@ CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
   approved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Driver allowance & finance settlement (bonuses and WPS payout ledger).
+ALTER TABLE logistics_drayage_allowances
+  ADD COLUMN IF NOT EXISTS bogie_bonus_aed DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS street_turn_bonus_aed DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS inspection_bonus_aed DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS payment_ref TEXT,
+  ADD COLUMN IF NOT EXISTS payment_method TEXT,
+  ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS paid_by TEXT,
+  ADD COLUMN IF NOT EXISTS adjustment_notes TEXT;
 
 CREATE TABLE IF NOT EXISTS logistics_drayage_geofences (
   id TEXT PRIMARY KEY,
