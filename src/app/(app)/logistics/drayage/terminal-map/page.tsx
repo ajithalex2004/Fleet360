@@ -1046,7 +1046,7 @@ export default function DrayageTerminalMapPage() {
                 <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Geofence Zone Name</th>
-                    <th className="py-2.5 px-3 font-semibold">Port / Client Destination Link</th>
+                    <th className="py-2.5 px-3 font-semibold">Linked To</th>
                     <th className="py-2.5 px-3 font-semibold">Geometry</th>
                     <th className="py-2.5 px-3 font-semibold">Radius</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Action</th>
