@@ -200,6 +200,8 @@ export interface DrayageJob {
   placementLocation: 'RAMP' | 'YARD' | null;
   trailerDetached: boolean;
   l2Activated: boolean;
+  etcTime: string | null;
+  etcAlertStatus: string;
   rateAmountAed: number;
   driverAllowanceAed: number;
   customsInspection: boolean;
@@ -1138,6 +1140,11 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
 export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: string) {
   await seedTenantDrayageDefaultsIfNeeded(db, tenantId);
 
+  // Proactively check and auto-activate any Leg 1 jobs whose Offload ETC timer has elapsed
+  await checkAndAutoActivateExpiredEtcJobs(db, tenantId).catch((err) => {
+    console.error('[getDrayageWorkspaceData] checkAndAutoActivateExpiredEtcJobs error:', err);
+  });
+
   // Parallelize all 13 workspace SQL queries into a single roundtrip to maximize throughput
   const [
     terminalRows,
@@ -1374,6 +1381,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     placementLocation: r.placement_location ? (String(r.placement_location) as 'RAMP' | 'YARD') : null,
     trailerDetached: Boolean(r.trailer_detached),
     l2Activated: Boolean(r.l2_activated),
+    etcTime: r.etc_time ? new Date(String(r.etc_time)).toISOString() : null,
+    etcAlertStatus: r.etc_alert_status ? String(r.etc_alert_status) : 'NEW',
     rateAmountAed: Number(r.rate_amount_aed ?? 1450),
     driverAllowanceAed: Number(r.driver_allowance_aed ?? 150),
     customsInspection: Boolean(r.customs_inspection),
@@ -1706,13 +1715,21 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   for (const j of jobs) {
     if (j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP') && !j.l2Activated) {
       const key = `det-l2-${j.id}`;
+      const hasEtc = Boolean(j.etcTime);
+      const isExpired = hasEtc && new Date(j.etcTime as string).getTime() <= Date.now();
       alerts.push({
         id: key,
         tenantId,
         type: 'DETACHED_TRAILER',
-        severity: 'CRITICAL',
-        title: `Detached Chassis Awaiting L2 Empty Return — ${j.containerNumber}`,
-        message: `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Activate L2 Empty Return once destuffing finishes.`,
+        severity: isExpired ? 'URGENT' : 'CRITICAL',
+        title: isExpired
+          ? `Offload ETC Expired: Ready for L2 Empty Return — ${j.containerNumber}`
+          : hasEtc
+          ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
+          : `Detached Chassis Awaiting L2 Empty Return — ${j.containerNumber}`,
+        message: hasEtc
+          ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Offloading completion estimated at ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}. Background worker will trigger Leg 2.`
+          : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Activate L2 Empty Return once destuffing finishes.`,
         terminalName: j.terminalName,
         containerId: j.containerId,
         containerNumber: j.containerNumber,
@@ -2020,6 +2037,9 @@ export async function updateDrayageJobExecutionStatus(
     status: string;
     placementLocation?: 'RAMP' | 'YARD' | null;
     detachTrailer?: boolean;
+    etcTime?: string | null;
+    notes?: string;
+    actor?: string;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -2033,6 +2053,22 @@ export async function updateDrayageJobExecutionStatus(
 
   const placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
   const detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
+  const isRampPlacement = args.status === 'PLACED_AT_RAMP' || (detached && placement === 'RAMP') || args.status === 'CONTAINER_DETACHED';
+
+  // Handle ETC (Estimated Time of Completion for container offloading / destuffing)
+  let effectiveEtcTime: string | null = null;
+  if (args.etcTime) {
+    try {
+      effectiveEtcTime = new Date(args.etcTime).toISOString();
+    } catch {
+      effectiveEtcTime = new Date(Date.now() + 3 * 3600000).toISOString();
+    }
+  } else if (isRampPlacement) {
+    // If not explicitly provided by driver, fallback to standard 3-hour destuffing SLA
+    effectiveEtcTime = job.etc_time ? new Date(String(job.etc_time)).toISOString() : new Date(Date.now() + 3 * 3600000).toISOString();
+  } else if (job.etc_time) {
+    effectiveEtcTime = new Date(String(job.etc_time)).toISOString();
+  }
 
   // Interpolate GPS coordinates depending on stage
   let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
@@ -2056,6 +2092,9 @@ export async function updateDrayageJobExecutionStatus(
             trailer_detached = $5,
             current_lat = $6,
             current_lng = $7,
+            etc_time = $8::timestamptz,
+            etc_alert_status = CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END,
+            notes = CASE WHEN $9::text IS NOT NULL AND $9::text != '' THEN $9::text ELSE notes END,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
@@ -2065,11 +2104,17 @@ export async function updateDrayageJobExecutionStatus(
     detached,
     lat,
     lng,
+    effectiveEtcTime,
+    args.notes ? String(args.notes) : null,
   );
 
-  // Sync container status
+  // Sync container status: When placed at ramp or detached, container transitions to WAITING_MT_RETURN
   if (job.container_id) {
     const isCompletedL2 = String(job.job_phase) === 'L2' && (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED');
+    let cntStatus = args.status;
+    if (isRampPlacement || args.status === 'WAITING_MT_RETURN') {
+      cntStatus = 'WAITING_MT_RETURN';
+    }
     await db.$executeRawUnsafe(
       `UPDATE logistics_drayage_containers
           SET status = $3,
@@ -2079,7 +2124,7 @@ export async function updateDrayageJobExecutionStatus(
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
-      args.status,
+      cntStatus,
       isCompletedL2,
     );
   }
@@ -2110,18 +2155,23 @@ export async function updateDrayageJobExecutionStatus(
     );
   }
 
+  const logActor = args.actor || 'Dispatch Console';
+  const etcNote = effectiveEtcTime ? ` | Offloading ETC: ${new Date(effectiveEtcTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}` : '';
+  const customNotes = args.notes ? ` - ${args.notes}` : '';
+
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, $5, $6, 'Dispatch Console')`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     `log-${crypto.randomUUID().slice(0, 12)}`,
     args.tenantId,
     args.jobId,
     String(job.job_code),
     args.status,
-    `Execution stage updated to ${args.status}${placement ? ` (${placement})` : ''}${detached ? ' [Chassis Detached]' : ''}`,
+    `Execution stage updated to ${args.status}${placement ? ` (${placement})` : ''}${detached ? ' [Chassis Detached]' : ''}${etcNote}${customNotes}`,
+    logActor,
   );
 
-  return { ok: true, status: args.status };
+  return { ok: true, status: args.status, etcTime: effectiveEtcTime };
 }
 
 export async function activateL2EmptyReturnJob(
@@ -2214,6 +2264,98 @@ export async function activateL2EmptyReturnJob(
   );
 
   return { ok: true, l2JobId: l2Id, l2JobCode: l2Code };
+}
+
+export async function extendDrayageJobEtcTime(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    minutesToAdd: number;
+    reason?: string;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const baseTime = job.etc_time ? new Date(String(job.etc_time)).getTime() : Date.now();
+  const newEtc = new Date(baseTime + args.minutesToAdd * 60000).toISOString();
+
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET etc_time = $3::timestamptz,
+            etc_alert_status = 'NEW',
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.jobId,
+    args.tenantId,
+    newEtc,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'ETC_EXTENDED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    `Offloading ETC extended by +${args.minutesToAdd}m to ${new Date(newEtc).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}${args.reason ? ` (${args.reason})` : ''}`,
+    args.actor || 'Dispatch Console',
+  );
+
+  return { ok: true, etcTime: newEtc };
+}
+
+export async function checkAndAutoActivateExpiredEtcJobs(
+  db: DrayageDbClient,
+  tenantId?: string,
+): Promise<{ checked: number; activated: Array<{ l2JobId: string; l2JobCode: string; l1JobCode: string }> }> {
+  await ensureDrayageSchema(db);
+  const whereClause = tenantId
+    ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= NOW()`
+    : `job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= NOW()`;
+  const params = tenantId ? [tenantId] : [];
+  const expired = await db.$queryRawUnsafe<Array<{ id: string; tenant_id: string; job_code: string; etc_time: Date }>>(
+    `SELECT id, tenant_id, job_code, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
+    ...params,
+  );
+
+  const activated: Array<{ l2JobId: string; l2JobCode: string; l1JobCode: string }> = [];
+  for (const job of expired) {
+    try {
+      const res = await activateL2EmptyReturnJob(db, {
+        tenantId: String(job.tenant_id),
+        l1JobId: String(job.id),
+      });
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET etc_alert_status = 'ACTIVATED',
+                updated_at = NOW()
+          WHERE id = $1`,
+        job.id,
+      );
+      await db.$executeRawUnsafe(
+        `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+         VALUES ($1, $2, $3, $4, 'AUTO_L2_ACTIVATED', $5, 'Background Timer Worker')`,
+        `log-${crypto.randomUUID().slice(0, 12)}`,
+        job.tenant_id,
+        job.id,
+        String(job.job_code),
+        `Automated Leg 2 activation triggered upon Offloading ETC expiration (${new Date(job.etc_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })})`,
+      );
+      activated.push({ l2JobId: res.l2JobId, l2JobCode: res.l2JobCode, l1JobCode: String(job.job_code) });
+    } catch (err) {
+      console.error(`[checkAndAutoActivateExpiredEtcJobs] Error activating L2 for ${job.job_code}:`, err);
+    }
+  }
+  return { checked: expired.length, activated };
 }
 
 export async function recordDrayageStatusLog(

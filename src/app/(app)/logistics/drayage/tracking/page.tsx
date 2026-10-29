@@ -47,6 +47,8 @@ interface DrayageJob {
   placementLocation: 'RAMP' | 'YARD' | null;
   trailerDetached: boolean;
   l2Activated: boolean;
+  etcTime?: string | null;
+  etcAlertStatus?: string;
   rateAmountAed: number;
   driverAllowanceAed: number;
   customsInspection: boolean;
@@ -102,6 +104,16 @@ export default function DrayageJobTrackingPage() {
 
   // Status updating
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [etcModalOpen, setEtcModalOpen] = useState(false);
+  const [targetStatusForEtc, setTargetStatusForEtc] = useState<'PLACED_AT_RAMP' | 'CONTAINER_DETACHED'>('PLACED_AT_RAMP');
+  const [selectedEtcHours, setSelectedEtcHours] = useState(3);
+  const [customEtcInput, setCustomEtcInput] = useState('');
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -157,6 +169,7 @@ export default function DrayageJobTrackingPage() {
     newStatus: string,
     placement?: 'RAMP' | 'YARD',
     detach?: boolean,
+    etcTime?: string | null,
   ) => {
     if (!activeJob) return;
     try {
@@ -170,6 +183,7 @@ export default function DrayageJobTrackingPage() {
           status: newStatus,
           placementLocation: placement,
           detachTrailer: detach,
+          etcTime: etcTime || undefined,
         }),
       });
       const data = await res.json();
@@ -178,6 +192,32 @@ export default function DrayageJobTrackingPage() {
       await loadData();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error updating stage');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  // Extend ETC timer
+  const handleExtendEtc = async (minutesToAdd: number) => {
+    if (!activeJob) return;
+    try {
+      setUpdatingStatus(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'extend_etc',
+          jobId: activeJob.id,
+          minutesToAdd,
+          actor: 'Dispatch Console',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to extend ETC');
+      showToast('success', `ETC extended by +${minutesToAdd}m (New ETC: ${new Date(data.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`);
+      await loadData();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error extending ETC');
     } finally {
       setUpdatingStatus(false);
     }
@@ -465,6 +505,79 @@ export default function DrayageJobTrackingPage() {
                   </div>
                 </div>
 
+                {/* Offloading ETC Countdown & Management */}
+                {activeJob.jobPhase === 'L1' && (activeJob.etcTime || activeJob.placementLocation === 'RAMP' || activeJob.status === 'PLACED_AT_RAMP' || activeJob.trailerDetached) && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                        <Clock className="w-4 h-4 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-amber-400">Destuffing & Offload Timer (ETC)</span>
+                          {activeJob.etcTime && new Date(activeJob.etcTime).getTime() <= Date.now() ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                              ⚠️ EXPIRED - AUTO-L2 TRIGGER PENDING
+                            </span>
+                          ) : activeJob.etcTime ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              ⏳ ACTIVE TIMER
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400">
+                              NO ETC SET
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          {activeJob.etcTime ? (
+                            <>
+                              Expected Completion: <strong className="text-[var(--text-main)] font-mono">{new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                              {' · '}
+                              <span className={new Date(activeJob.etcTime).getTime() <= Date.now() ? 'text-rose-400 font-semibold' : 'text-amber-400 font-semibold'}>
+                                {new Date(activeJob.etcTime).getTime() <= Date.now()
+                                  ? 'Offloading completed - Dynamic L2 activation triggered'
+                                  : `${Math.max(1, Math.round((new Date(activeJob.etcTime).getTime() - Date.now()) / 60000))} mins remaining`}
+                              </span>
+                            </>
+                          ) : (
+                            'Set ETC from driver mobile app or click button below to activate Leg 2 automation'
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleExtendEtc(60)}
+                        disabled={updatingStatus}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                        title="Extend Offload ETC by 1 hour"
+                      >
+                        +1 Hour
+                      </button>
+                      <button
+                        onClick={() => handleExtendEtc(120)}
+                        disabled={updatingStatus}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                        title="Extend Offload ETC by 2 hours"
+                      >
+                        +2 Hours
+                      </button>
+                      {!activeJob.l2Activated && (
+                        <button
+                          onClick={handleTriggerL2}
+                          disabled={updatingStatus}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Trigger L2 Now
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Execution Stage Action Buttons */}
                 <div className="pt-2">
                   <div className="text-[11px] font-bold text-[var(--text-main)] mb-2 flex items-center justify-between">
@@ -494,14 +607,24 @@ export default function DrayageJobTrackingPage() {
                       3. In Transit (E11)
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus('PLACED_AT_RAMP', 'RAMP', false)}
+                      onClick={() => {
+                        setTargetStatusForEtc('PLACED_AT_RAMP');
+                        setEtcModalOpen(true);
+                      }}
                       disabled={updatingStatus}
                       className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500 hover:text-blue-400 transition-colors"
                     >
                       4. Placed at Ramp
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true)}
+                      onClick={() => {
+                        if (activeJob.jobPhase === 'L1' && !activeJob.etcTime) {
+                          setTargetStatusForEtc('CONTAINER_DETACHED');
+                          setEtcModalOpen(true);
+                        } else {
+                          handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true);
+                        }
+                      }}
                       disabled={updatingStatus}
                       className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors"
                     >
@@ -769,6 +892,102 @@ export default function DrayageJobTrackingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ETC Modal */}
+      {etcModalOpen && activeJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-sm text-[var(--text-main)]">Set Offloading ETC (Leg 2 Trigger)</h3>
+              </div>
+              <button
+                onClick={() => setEtcModalOpen(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4 text-xs">
+              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
+                <div className="flex justify-between text-[var(--text-muted)]">
+                  <span>Container:</span>
+                  <span className="font-mono font-bold text-[var(--text-main)]">{activeJob.containerNumber}</span>
+                </div>
+                <div className="flex justify-between text-[var(--text-muted)]">
+                  <span>Facility / Ramp:</span>
+                  <span className="font-medium text-[var(--text-main)]">{activeJob.warehouseName}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-2">
+                  Estimated Offload Duration (Driver Mobile Preset):
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((hrs) => (
+                    <button
+                      key={hrs}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEtcHours(hrs);
+                        setCustomEtcInput('');
+                      }}
+                      className={`py-2 px-1 rounded-xl text-xs font-bold border transition-colors ${
+                        selectedEtcHours === hrs && !customEtcInput
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500'
+                          : 'bg-[var(--bg-main)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      +{hrs} {hrs === 1 ? 'Hour' : 'Hours'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
+                  Or Custom Estimated Time of Completion:
+                </label>
+                <input
+                  type="datetime-local"
+                  value={customEtcInput}
+                  onChange={(e) => setCustomEtcInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-300">
+                💡 When this timer expires, Fleet360&apos;s background engine will dynamically activate <strong>Leg 2 Empty Return</strong> with <strong>HIGH priority</strong> and pair it with the nearest available prime mover.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+              <button
+                onClick={() => setEtcModalOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const etcIso = customEtcInput
+                    ? new Date(customEtcInput).toISOString()
+                    : new Date(Date.now() + selectedEtcHours * 3600000).toISOString();
+                  handleUpdateStatus(targetStatusForEtc, 'RAMP', targetStatusForEtc === 'CONTAINER_DETACHED', etcIso);
+                  setEtcModalOpen(false);
+                }}
+                disabled={updatingStatus}
+                className="px-4 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
+              >
+                Confirm & Start Timer
+              </button>
+            </div>
           </div>
         </div>
       )}

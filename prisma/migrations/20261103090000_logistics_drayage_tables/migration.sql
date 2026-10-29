@@ -160,9 +160,16 @@ CREATE TABLE IF NOT EXISTS logistics_drayage_jobs (
   current_lat DOUBLE PRECISION,
   current_lng DOUBLE PRECISION,
   notes TEXT,
+  etc_time TIMESTAMPTZ,
+  etc_alert_status TEXT NOT NULL DEFAULT 'NEW',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Offload ETC (estimated completion of destuffing) drives the L2 empty-return
+-- auto-activation; ADD COLUMN covers databases where the table already exists.
+ALTER TABLE logistics_drayage_jobs
+  ADD COLUMN IF NOT EXISTS etc_time TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS etc_alert_status TEXT NOT NULL DEFAULT 'NEW';
 
 CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
   id TEXT PRIMARY KEY,
