@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Anchor, Bell, PlusCircle, UserCheck, Navigation, History,
   Layers, Wallet, BarChart3, Truck, MapPin, FileSpreadsheet,
-  ChevronRight,
+  ChevronRight, Globe,
 } from 'lucide-react';
 
 const DRAYAGE_TABS = [
@@ -15,6 +15,7 @@ const DRAYAGE_TABS = [
   { href: '/logistics/drayage/create-jobs', label: 'Create Jobs', icon: PlusCircle },
   { href: '/logistics/drayage/assignment', label: 'Job Assignment', icon: UserCheck },
   { href: '/logistics/drayage/tracking', label: 'Job Tracking', icon: Navigation },
+  { href: '/logistics/drayage/portal', label: 'Consignee Portal', icon: Globe },
   { href: '/logistics/drayage/history', label: 'Job History', icon: History },
   { href: '/logistics/drayage/containers', label: 'Containers', icon: Layers },
   { href: '/logistics/drayage/payments', label: 'Payments', icon: Wallet },

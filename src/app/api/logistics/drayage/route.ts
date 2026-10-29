@@ -27,6 +27,8 @@ import {
   executeStreetTurnTriangulation,
   findBogiePairCandidates,
   executeBogiePairDispatch,
+  consigneeConfirmEmptyReady,
+  submitJobPodEvidence,
 } from '@/lib/logistics/drayage-domain';
 
 let drayageSchemaEnsured = false;
@@ -966,6 +968,27 @@ export async function POST(req: NextRequest) {
             status: String(body.status ?? 'NOTE'),
             notes: String(body.notes ?? ''),
             actor: String(body.actor ?? 'Dispatch Console'),
+          });
+        }
+
+        case 'consignee_confirm_empty_ready': {
+          return consigneeConfirmEmptyReady(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            receiverName: String(body.receiverName ?? 'Consignee Dock Supervisor'),
+            bayNotes: body.bayNotes ? String(body.bayNotes) : undefined,
+            photoUrl: body.photoUrl ? String(body.photoUrl) : null,
+          });
+        }
+
+        case 'submit_pod_evidence': {
+          return submitJobPodEvidence(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            receiverName: String(body.receiverName ?? 'Warehouse Bay Supervisor'),
+            photoUrl: body.photoUrl ? String(body.photoUrl) : null,
+            notes: body.notes ? String(body.notes) : undefined,
+            actor: body.actor ? String(body.actor) : undefined,
           });
         }
 

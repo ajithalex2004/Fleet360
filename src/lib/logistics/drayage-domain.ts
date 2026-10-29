@@ -221,6 +221,9 @@ export interface DrayageJob {
   shippingLine?: string;
   bogieJobId?: string | null;
   streetTurnJobId?: string | null;
+  podPhotoUrl?: string | null;
+  podSignatureName?: string | null;
+  podSignedAt?: string | null;
 }
 
 export interface StreetTurnMatch {
@@ -561,7 +564,10 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       ADD COLUMN IF NOT EXISTS cargo_weight_kg DOUBLE PRECISION DEFAULT 14000,
       ADD COLUMN IF NOT EXISTS shipping_line TEXT,
       ADD COLUMN IF NOT EXISTS bogie_job_id TEXT,
-      ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT;
+      ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT,
+      ADD COLUMN IF NOT EXISTS pod_photo_url TEXT,
+      ADD COLUMN IF NOT EXISTS pod_signature_name TEXT,
+      ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ;
   `);
 
   await safeDdl(db, `
@@ -1854,6 +1860,9 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     shippingLine: r.shipping_line ? String(r.shipping_line) : detectShippingLine(String(r.container_number)),
     bogieJobId: r.bogie_job_id ? String(r.bogie_job_id) : null,
     streetTurnJobId: r.street_turn_job_id ? String(r.street_turn_job_id) : null,
+    podPhotoUrl: r.pod_photo_url ? String(r.pod_photo_url) : null,
+    podSignatureName: r.pod_signature_name ? String(r.pod_signature_name) : null,
+    podSignedAt: r.pod_signed_at ? new Date(String(r.pod_signed_at)).toISOString() : null,
   }));
 
   // 5. Containers + Demurrage Calculation
@@ -3761,5 +3770,137 @@ export async function executeBogiePairDispatch(
     job2Code: String(j2.job_code),
     totalPayloadKg: totalPayload,
     isWeightCompliant,
+  };
+}
+
+// =========================================================================
+// CONSIGNEE & SHIPPER SELF-SERVICE TRACKING PORTAL DOMAIN FUNCTIONS
+// =========================================================================
+
+export async function consigneeConfirmEmptyReady(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    receiverName: string;
+    bayNotes?: string;
+    photoUrl?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Shipment job not found');
+
+  const receiver = (args.receiverName || 'Consignee Dock Supervisor').trim();
+  const nowIso = new Date().toISOString();
+
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET pod_signature_name = $3,
+            pod_signed_at = NOW(),
+            pod_photo_url = COALESCE($4, pod_photo_url),
+            etc_time = NOW(),
+            etc_alert_status = 'TRIGGERED',
+            notes = COALESCE(notes || ' | ', '') || $5,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.jobId,
+    args.tenantId,
+    receiver,
+    args.photoUrl ? String(args.photoUrl) : null,
+    `Consignee Empty Release signed by ${receiver}${args.bayNotes ? `: ${args.bayNotes}` : ''}`,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'CONSIGNEE_EMPTY_RELEASE', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    `Consignee (${receiver}) confirmed container ${job.container_number} destuffing complete & empty ready for L2 pickup.${args.bayNotes ? ` Dock Note: ${args.bayNotes}` : ''}`,
+    `${receiver} (Consignee Portal)`,
+  );
+
+  // If L1 job and L2 has not yet been activated, dynamically activate Leg 2 immediately
+  let l2Result: { l2JobId?: string; l2JobCode?: string } = {};
+  if (String(job.job_phase) === 'L1' && !job.l2_activated) {
+    const act = await activateL2EmptyReturnJob(db, {
+      tenantId: args.tenantId,
+      l1JobId: args.jobId,
+    });
+    l2Result = { l2JobId: act.l2JobId, l2JobCode: act.l2JobCode };
+  }
+
+  return {
+    ok: true,
+    jobId: args.jobId,
+    jobCode: String(job.job_code),
+    containerNumber: String(job.container_number),
+    receiverName: receiver,
+    signedAt: nowIso,
+    l2Activated: true,
+    ...l2Result,
+  };
+}
+
+export async function submitJobPodEvidence(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    receiverName: string;
+    photoUrl?: string | null;
+    notes?: string;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const receiver = (args.receiverName || 'Warehouse Bay Supervisor').trim();
+  const signedAtIso = new Date().toISOString();
+
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET pod_signature_name = $3,
+            pod_signed_at = NOW(),
+            pod_photo_url = COALESCE($4, pod_photo_url),
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.jobId,
+    args.tenantId,
+    receiver,
+    args.photoUrl ? String(args.photoUrl) : null,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'EPOD_SIGNED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    `Digital ePOD & Placement Photo verified by ${receiver}.${args.notes ? ` ${args.notes}` : ''}`,
+    args.actor || `${receiver} (Consignee Portal)`,
+  );
+
+  return {
+    ok: true,
+    jobId: args.jobId,
+    receiverName: receiver,
+    signedAt: signedAtIso,
+    photoUrl: args.photoUrl ?? null,
   };
 }
