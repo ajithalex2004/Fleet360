@@ -239,6 +239,17 @@ export function ConsigneeDestinationModal({
     };
   };
 
+  // Lock body scroll when modal or plot on map is open to prevent duplicate background scrollbars
+  useEffect(() => {
+    if (isOpen || showPlotModal) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = origOverflow;
+      };
+    }
+  }, [isOpen, showPlotModal]);
+
   // Populate initial values when opening modal
   useEffect(() => {
     if (!isOpen) return;
