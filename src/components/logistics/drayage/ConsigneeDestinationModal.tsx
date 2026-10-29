@@ -5,7 +5,7 @@ import {
   Warehouse, Building2, Navigation, Compass, Plus, X,
   ShieldCheck, DollarSign, User, Phone, Check, RefreshCw,
   Map, Globe, Layers, Mountain, Move, AlertTriangle, Info,
-  Edit3, Undo2, RotateCcw, MousePointerClick, Hexagon,
+  Edit3, Undo2, RotateCcw, MousePointerClick, Hexagon, Search,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -14,6 +14,8 @@ import {
   type GMapsCircle,
   type GMapsPolygon,
   type GMapsPolyline,
+  type GMapsAutocomplete,
+  type GMapsGeocoder,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
 
@@ -166,6 +168,13 @@ export function ConsigneeDestinationModal({
   // Interactive Polygon Click-to-Draw state
   const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
   const [drawingVertices, setDrawingVertices] = useState<Array<{ lat: number; lng: number }>>([]);
+
+  // Google Maps Search in Map state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const autocompleteRef = useRef<GMapsAutocomplete | null>(null);
+  const geocoderRef = useRef<GMapsGeocoder | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<GMapsMap | null>(null);
@@ -600,6 +609,114 @@ export function ConsigneeDestinationModal({
     renderPolygonOverlay(pts);
   };
 
+  // Apply a search result or coordinate jump from Google Maps search
+  const handleApplySearchResult = (newLat: number, newLng: number, label?: string) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const newPos = { lat: newLat, lng: newLng };
+    setPlotCoordinates(newPos);
+    plotCoordinatesRef.current = newPos;
+
+    if (markerRef.current) {
+      markerRef.current.setPosition(newPos);
+    }
+
+    map.panTo(newPos);
+    map.setZoom(16);
+
+    if (label) {
+      setSearchQuery(label);
+      if (!address) {
+        setAddress(label);
+      }
+    }
+
+    if (plotTypeRef.current === 'CIRCLE') {
+      if (circleRef.current) {
+        circleRef.current.setCenter(newPos);
+      } else {
+        renderCircleOverlay(newPos, plotRadiusRef.current);
+      }
+    } else if (plotTypeRef.current === 'POLYGON') {
+      // Re-center a clean 4-corner box right on this searched location
+      const newBox = generateCenteredPolygon(newPos, Math.max(250, Math.min(plotRadiusRef.current, 600)));
+      setPlotPolygonCoords(newBox);
+      plotPolygonCoordsRef.current = newBox;
+      renderPolygonOverlay(newBox);
+    }
+  };
+
+  // Search submit (Enter key or 🔍 button click)
+  const handleSearchSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    // 1. Check if user entered coordinates (e.g., "24.6780, 54.9643")
+    const coordMatch = query.match(/^\s*(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)\s*$/);
+    if (coordMatch) {
+      const parsedLat = parseFloat(coordMatch[1]);
+      const parsedLng = parseFloat(coordMatch[3]);
+      if (!isNaN(parsedLat) && !isNaN(parsedLng) && parsedLat >= -90 && parsedLat <= 90 && parsedLng >= -180 && parsedLng <= 180) {
+        handleApplySearchResult(
+          Number(parsedLat.toFixed(6)),
+          Number(parsedLng.toFixed(6)),
+          `${parsedLat.toFixed(5)}, ${parsedLng.toFixed(5)}`
+        );
+        return;
+      }
+    }
+
+    // 2. Geocode address or facility name via Google Geocoder
+    setSearchLoading(true);
+    try {
+      if (geocoderRef.current) {
+        geocoderRef.current.geocode({ address: query }, async (results, status) => {
+          if (status === 'OK' && results && results[0]?.geometry?.location) {
+            const loc = results[0].geometry.location;
+            const newLat = Number(loc.lat().toFixed(6));
+            const newLng = Number(loc.lng().toFixed(6));
+            handleApplySearchResult(newLat, newLng, results[0].formatted_address || query);
+            setSearchLoading(false);
+          } else {
+            // 3. Fallback to OpenStreetMap Nominatim if Google Geocoder doesn't return
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+                headers: { Accept: 'application/json' },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data[0]) {
+                  const newLat = Number(parseFloat(data[0].lat).toFixed(6));
+                  const newLng = Number(parseFloat(data[0].lon).toFixed(6));
+                  handleApplySearchResult(newLat, newLng, data[0].display_name || query);
+                }
+              }
+            } catch (nomErr) {
+              console.warn('Nominatim fallback search error:', nomErr);
+            } finally {
+              setSearchLoading(false);
+            }
+          }
+        });
+      } else {
+        setSearchLoading(false);
+      }
+    } catch (err) {
+      console.warn('Geocoding search error:', err);
+      setSearchLoading(false);
+    }
+  };
+
+  // Fly / Re-center on Pin
+  const handleFlyToPin = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.panTo(plotCoordinatesRef.current);
+    map.setZoom(16);
+  };
+
   // Google Maps setup in Plot Modal
   useEffect(() => {
     if (!showPlotModal || !mapContainerRef.current) return;
@@ -656,6 +773,25 @@ export function ConsigneeDestinationModal({
         }
 
         const map = mapInstanceRef.current;
+
+        // Geocoder instance
+        geocoderRef.current = new ctors.Geocoder();
+
+        // Initialize Google Places Autocomplete on the Search Input
+        if (searchInputRef.current && !autocompleteRef.current) {
+          const ac = new ctors.Autocomplete(searchInputRef.current, {
+            fields: ['geometry', 'name', 'formatted_address'],
+          });
+          autocompleteRef.current = ac;
+          ac.addListener('place_changed', () => {
+            const place = ac.getPlace();
+            const loc = place.geometry?.location;
+            if (!loc) return;
+            const newLat = Number(loc.lat().toFixed(6));
+            const newLng = Number(loc.lng().toFixed(6));
+            handleApplySearchResult(newLat, newLng, place.formatted_address || place.name || '');
+          });
+        }
 
         // Center Pin Marker
         if (markerRef.current) {
@@ -717,6 +853,9 @@ export function ConsigneeDestinationModal({
         polygonRef.current = null;
       }
       mapInstanceRef.current = null;
+      autocompleteRef.current = null;
+      geocoderRef.current = null;
+      setSearchQuery('');
     }
   }, [showPlotModal]);
 
@@ -1275,200 +1414,293 @@ export function ConsigneeDestinationModal({
             <div className="flex-1 relative bg-slate-900 overflow-hidden">
               <div ref={mapContainerRef} className="w-full h-full" />
 
-              {/* Floating Toolbar: Mode Switcher, Drawing Actions, Map Type Switcher */}
-              <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] shadow-xl text-xs">
-                {/* Left: Shape Mode & Tools */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+              {/* Google Places Autocomplete Styling */}
+              <style>{`
+                .pac-container {
+                  z-index: 100000 !important;
+                  font-family: inherit;
+                  border-radius: 12px;
+                  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+                  border: 1px solid rgba(0, 0, 0, 0.1);
+                  margin-top: 4px;
+                  background-color: #ffffff;
+                }
+                .pac-item {
+                  padding: 8px 12px;
+                  font-size: 13px;
+                  cursor: pointer;
+                  line-height: 1.4;
+                }
+                .pac-item:hover {
+                  background-color: #f1f5f9;
+                }
+                .pac-item-query {
+                  font-size: 13px;
+                  font-weight: 600;
+                  color: #0f172a;
+                }
+                .pac-matched {
+                  font-weight: 700;
+                  color: #008080;
+                }
+              `}</style>
+
+              {/* Floating Google Maps Search & Control Overlay */}
+              <div className="absolute top-3 left-3 right-3 z-20 flex flex-col gap-2 pointer-events-none">
+                {/* Row 1: Google Maps Search Bar (Left) + Map Type Switcher (Right) */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {/* Google Maps Search Bar — Matches user screenshot exactly */}
+                  <div className="pointer-events-auto flex items-center bg-white rounded-xl shadow-2xl border border-slate-200 px-3 py-1.5 gap-2 w-full sm:w-[380px] transition-all focus-within:ring-2 focus-within:ring-teal-500/50">
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSearchSubmit();
+                        }
+                      }}
+                      placeholder="Search Google Maps"
+                      className="flex-1 bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
+                    />
+
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
+                        title="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* Magnifying Glass Search Button */}
                     <button
                       type="button"
-                      onClick={handleSelectCircle}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
-                        plotType === 'CIRCLE'
+                      onClick={() => handleSearchSubmit()}
+                      disabled={searchLoading}
+                      className="text-slate-500 hover:text-teal-600 p-1 transition-colors"
+                      title="Search place or coordinates"
+                    >
+                      {searchLoading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </button>
+
+                    {/* Teal Diamond Navigation / Directions Icon */}
+                    <button
+                      type="button"
+                      onClick={handleFlyToPin}
+                      className="w-7 h-7 rounded-lg bg-[#008080] hover:bg-[#006666] active:scale-95 text-white flex items-center justify-center shadow-md transition-all shrink-0"
+                      title="Center map on pin"
+                    >
+                      <Navigation className="w-3.5 h-3.5 rotate-45" />
+                    </button>
+                  </div>
+
+                  {/* Map Type Switcher (Default, Satellite, Hybrid, Terrain) */}
+                  <div className="pointer-events-auto flex items-center gap-1 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/60 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlotMapTypeId('roadmap');
+                        mapInstanceRef.current?.setMapTypeId?.('roadmap');
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                        plotMapTypeId === 'roadmap'
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      <span>⚪</span>
-                      <span>Draw Circle</span>
+                      <Map className="w-3 h-3" />
+                      <span>Default</span>
                     </button>
                     <button
                       type="button"
-                      onClick={handleSelectPolygon}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
-                        plotType === 'POLYGON'
-                          ? 'bg-purple-600 text-white shadow-sm'
+                      onClick={() => {
+                        setPlotMapTypeId('satellite');
+                        mapInstanceRef.current?.setMapTypeId?.('satellite');
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                        plotMapTypeId === 'satellite'
+                          ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      <Hexagon className="w-3.5 h-3.5" />
-                      <span>Draw Polygon</span>
+                      <Globe className="w-3 h-3" />
+                      <span>Satellite</span>
                     </button>
-                  </div>
-
-                  {/* Circle Tools */}
-                  {plotType === 'CIRCLE' && (
-                    <div className="flex items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
-                      <span className="text-[var(--text-muted)]">Radius:</span>
-                      <input
-                        type="range"
-                        min="200"
-                        max="3000"
-                        step="50"
-                        value={plotRadius}
-                        onChange={(e) => {
-                          const r = Number(e.target.value);
-                          setPlotRadius(r);
-                          plotRadiusRef.current = r;
-                          if (circleRef.current) circleRef.current.setRadius(r);
-                        }}
-                        className="w-24 accent-emerald-500 cursor-pointer"
-                      />
-                      <span className="font-mono font-bold text-emerald-400">{plotRadius}m</span>
-                    </div>
-                  )}
-
-                  {/* Polygon Tools */}
-                  {plotType === 'POLYGON' && (
-                    <div className="flex flex-wrap items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
-                      {!isDrawingPolygon ? (
-                        <>
-                          <span className="px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono text-[11px] flex items-center gap-1">
-                            <Hexagon className="w-3 h-3 text-purple-400" />
-                            <span>{plotPolygonCoords.length} Vertices</span>
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={startDrawingPolygon}
-                            className="px-2.5 py-1 rounded-md bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all shadow-sm"
-                            title="Click on map to drop custom perimeter points"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Click-to-Draw Boundary</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleResetPolygonToCenterBox}
-                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1.5 transition-all"
-                            title="Reset to 4-corner bounding box centered on pin"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>Reset Box</span>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold text-[11px] flex items-center gap-1.5 animate-pulse">
-                            <MousePointerClick className="w-3 h-3 text-amber-400" />
-                            <span>Click map to add points ({drawingVertices.length})</span>
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={finishDrawingPolygon}
-                            disabled={drawingVertices.length < 3}
-                            className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1 transition-all shadow-sm"
-                            title="Close and complete polygon (requires at least 3 vertices)"
-                          >
-                            <Check className="w-3 h-3" />
-                            <span>Complete Polygon</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleUndoDrawingPoint}
-                            disabled={drawingVertices.length === 0}
-                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] disabled:opacity-40 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1 transition-all"
-                            title="Remove last point"
-                          >
-                            <Undo2 className="w-3 h-3" />
-                            <span>Undo</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              cleanupDrawingMode();
-                              renderPolygonOverlay(plotPolygonCoordsRef.current);
-                            }}
-                            className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-rose-500/20 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-rose-300 text-[11px] font-semibold transition-all"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="text-[11px] text-[var(--text-muted)] font-mono hidden xl:inline">
-                    ({plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)})
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlotMapTypeId('hybrid');
+                        mapInstanceRef.current?.setMapTypeId?.('hybrid');
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                        plotMapTypeId === 'hybrid'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <Layers className="w-3 h-3" />
+                      <span>Hybrid</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlotMapTypeId('terrain');
+                        mapInstanceRef.current?.setMapTypeId?.('terrain');
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                        plotMapTypeId === 'terrain'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <Mountain className="w-3 h-3" />
+                      <span>Terrain</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Right: Map Type Switcher (Default, Satellite, Hybrid, Terrain) */}
-                <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('roadmap');
-                      mapInstanceRef.current?.setMapTypeId?.('roadmap');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'roadmap'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Map className="w-3 h-3" />
-                    <span>Default</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('satellite');
-                      mapInstanceRef.current?.setMapTypeId?.('satellite');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'satellite'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Globe className="w-3 h-3" />
-                    <span>Satellite</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('hybrid');
-                      mapInstanceRef.current?.setMapTypeId?.('hybrid');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'hybrid'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Layers className="w-3 h-3" />
-                    <span>Hybrid</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlotMapTypeId('terrain');
-                      mapInstanceRef.current?.setMapTypeId?.('terrain');
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                      plotMapTypeId === 'terrain'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                    }`}
-                  >
-                    <Mountain className="w-3 h-3" />
-                    <span>Terrain</span>
-                  </button>
+                {/* Row 2: Drawing Tools & Coordinates */}
+                <div className="pointer-events-auto flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 shadow-xl text-xs">
+                  {/* Left: Shape Mode & Tools */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex items-center gap-1 bg-[var(--bg-card)] p-0.5 rounded-lg border border-[var(--border-subtle)]">
+                      <button
+                        type="button"
+                        onClick={handleSelectCircle}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
+                          plotType === 'CIRCLE'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                        }`}
+                      >
+                        <span>⚪</span>
+                        <span>Draw Circle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSelectPolygon}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
+                          plotType === 'POLYGON'
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                        }`}
+                      >
+                        <Hexagon className="w-3.5 h-3.5" />
+                        <span>Draw Polygon</span>
+                      </button>
+                    </div>
+
+                    {/* Circle Tools */}
+                    {plotType === 'CIRCLE' && (
+                      <div className="flex items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)]">Radius:</span>
+                        <input
+                          type="range"
+                          min="200"
+                          max="3000"
+                          step="50"
+                          value={plotRadius}
+                          onChange={(e) => {
+                            const r = Number(e.target.value);
+                            setPlotRadius(r);
+                            plotRadiusRef.current = r;
+                            if (circleRef.current) circleRef.current.setRadius(r);
+                          }}
+                          className="w-24 accent-emerald-500 cursor-pointer"
+                        />
+                        <span className="font-mono font-bold text-emerald-400">{plotRadius}m</span>
+                      </div>
+                    )}
+
+                    {/* Polygon Tools */}
+                    {plotType === 'POLYGON' && (
+                      <div className="flex flex-wrap items-center gap-2 pl-1 border-l border-[var(--border-subtle)]">
+                        {!isDrawingPolygon ? (
+                          <>
+                            <span className="px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono text-[11px] flex items-center gap-1">
+                              <Hexagon className="w-3 h-3 text-purple-400" />
+                              <span>{plotPolygonCoords.length} Vertices</span>
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={startDrawingPolygon}
+                              className="px-2.5 py-1 rounded-md bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                              title="Click on map to drop custom perimeter points"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Click-to-Draw Boundary</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleResetPolygonToCenterBox}
+                              className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1.5 transition-all"
+                              title="Reset to 4-corner bounding box centered on pin"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Reset Box</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold text-[11px] flex items-center gap-1.5 animate-pulse">
+                              <MousePointerClick className="w-3 h-3 text-amber-400" />
+                              <span>Click map to add points ({drawingVertices.length})</span>
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={finishDrawingPolygon}
+                              disabled={drawingVertices.length < 3}
+                              className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1 transition-all shadow-sm"
+                              title="Close and complete polygon (requires at least 3 vertices)"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Complete Polygon</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleUndoDrawingPoint}
+                              disabled={drawingVertices.length === 0}
+                              className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] disabled:opacity-40 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px] font-semibold flex items-center gap-1 transition-all"
+                              title="Remove last point"
+                            >
+                              <Undo2 className="w-3 h-3" />
+                              <span>Undo</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                cleanupDrawingMode();
+                                renderPolygonOverlay(plotPolygonCoordsRef.current);
+                              }}
+                              className="px-2.5 py-1 rounded-md bg-[var(--bg-card)] hover:bg-rose-500/20 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-rose-300 text-[11px] font-semibold transition-all"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="text-[11px] text-slate-300 font-mono bg-slate-950/60 px-2 py-0.5 rounded-md border border-slate-700/50">
+                      📍 {plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)}
+                    </div>
+                  </div>
                 </div>
               </div>
 

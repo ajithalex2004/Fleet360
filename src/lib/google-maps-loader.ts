@@ -95,13 +95,15 @@ export interface GMapsAutocomplete {
     formatted_address?: string;
   };
 }
-interface GMapsGeocoderResult {
+export interface GMapsGeocoderResult {
   formatted_address?: string;
+  geometry?: { location?: GMapsLatLng; location_type?: string; viewport?: GMapsLatLngBounds };
   address_components?: Array<{ long_name?: string; short_name?: string; types?: string[] }>;
+  types?: string[];
 }
 export interface GMapsGeocoder {
   geocode(
-    request: { location: GMapsLatLngLiteral },
+    request: { location?: GMapsLatLngLiteral; address?: string },
     cb: (results: GMapsGeocoderResult[] | null, status: string) => void,
   ): void;
 }

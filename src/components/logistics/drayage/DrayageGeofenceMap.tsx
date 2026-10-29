@@ -5,7 +5,7 @@ import {
   MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle,
   Compass, Layers, Maximize2, X, Sliders, Check, Eye, Navigation, RefreshCw,
   Hexagon, Circle as CircleIcon, Warehouse, Info, Undo2, Map, Globe, Mountain,
-  Move, ShieldCheck,
+  Move, ShieldCheck, Search,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -14,6 +14,8 @@ import {
   type GMapsCircle,
   type GMapsPolygon,
   type GMapsInfoWindow,
+  type GMapsAutocomplete,
+  type GMapsGeocoder,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
 
@@ -201,6 +203,13 @@ export default function DrayageGeofenceMap({
     coordinates?: Array<{ lat: number; lng: number }>;
   } | null>(null);
   const [savingStretched, setSavingStretched] = useState(false);
+
+  // Google Maps Search in Map state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const autocompleteRef = useRef<GMapsAutocomplete | null>(null);
+  const geocoderRef = useRef<GMapsGeocoder | null>(null);
 
   // Keep refs synchronized for map click handlers
   const drawModeRef = useRef<'CIRCLE' | 'POLYGON' | null>(drawMode);
@@ -489,6 +498,95 @@ export default function DrayageGeofenceMap({
     }
   };
 
+  // Google Maps Search in Map Handlers
+  const handleSearchJump = useCallback(
+    (lat: number, lng: number, label?: string) => {
+      const map = mapRef.current;
+      if (!map) return;
+      map.panTo({ lat, lng });
+      map.setZoom(16);
+      if (label) setSearchQuery(label);
+
+      // If in circle drawing mode, drop draft circle at search location
+      if (drawModeRef.current === 'CIRCLE') {
+        handleMapClickCircle(lat, lng);
+      }
+    },
+    [handleMapClickCircle]
+  );
+
+  const handleSearchSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      const query = searchQuery.trim();
+      if (!query) return;
+
+      // 1. Check if coordinates
+      const coordMatch = query.match(/^\s*(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)\s*$/);
+      if (coordMatch) {
+        const parsedLat = parseFloat(coordMatch[1]);
+        const parsedLng = parseFloat(coordMatch[3]);
+        if (
+          !isNaN(parsedLat) &&
+          !isNaN(parsedLng) &&
+          parsedLat >= -90 &&
+          parsedLat <= 90 &&
+          parsedLng >= -180 &&
+          parsedLng <= 180
+        ) {
+          handleSearchJump(
+            Number(parsedLat.toFixed(6)),
+            Number(parsedLng.toFixed(6)),
+            `${parsedLat.toFixed(5)}, ${parsedLng.toFixed(5)}`
+          );
+          return;
+        }
+      }
+
+      // 2. Geocode address or port name via Google Geocoder
+      setSearchLoading(true);
+      try {
+        if (geocoderRef.current) {
+          geocoderRef.current.geocode({ address: query }, async (results, status) => {
+            if (status === 'OK' && results && results[0]?.geometry?.location) {
+              const loc = results[0].geometry.location;
+              const lat = Number(loc.lat().toFixed(6));
+              const lng = Number(loc.lng().toFixed(6));
+              handleSearchJump(lat, lng, results[0].formatted_address || query);
+              setSearchLoading(false);
+            } else {
+              // 3. Fallback to OpenStreetMap Nominatim
+              try {
+                const res = await fetch(
+                  `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+                  { headers: { Accept: 'application/json' } }
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data && data[0]) {
+                    const lat = Number(parseFloat(data[0].lat).toFixed(6));
+                    const lng = Number(parseFloat(data[0].lon).toFixed(6));
+                    handleSearchJump(lat, lng, data[0].display_name || query);
+                  }
+                }
+              } catch (nomErr) {
+                console.warn('Nominatim fallback error:', nomErr);
+              } finally {
+                setSearchLoading(false);
+              }
+            }
+          });
+        } else {
+          setSearchLoading(false);
+        }
+      } catch (err) {
+        console.warn('Geocoding search error:', err);
+        setSearchLoading(false);
+      }
+    },
+    [searchQuery, handleSearchJump]
+  );
+
   // 1. Initialize Google Maps
   useEffect(() => {
     let cancelled = false;
@@ -517,6 +615,25 @@ export default function DrayageGeofenceMap({
             styles: DARK_MAP_STYLES,
           });
           mapRef.current = map;
+
+          // Geocoder instance
+          geocoderRef.current = new ctors.Geocoder();
+
+          // Initialize Google Places Autocomplete on Search Input
+          if (searchInputRef.current && !autocompleteRef.current) {
+            const ac = new ctors.Autocomplete(searchInputRef.current, {
+              fields: ['geometry', 'name', 'formatted_address'],
+            });
+            autocompleteRef.current = ac;
+            ac.addListener('place_changed', () => {
+              const place = ac.getPlace();
+              const loc = place.geometry?.location;
+              if (!loc) return;
+              const lat = Number(loc.lat().toFixed(6));
+              const lng = Number(loc.lng().toFixed(6));
+              handleSearchJump(lat, lng, place.formatted_address || place.name || '');
+            });
+          }
 
           // InfoWindow
           infoWindowRef.current = new ctors.InfoWindow();
@@ -1033,6 +1150,90 @@ export default function DrayageGeofenceMap({
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-slate-950 shadow-2xl">
+      {/* Google Places Autocomplete Styling */}
+      <style>{`
+        .pac-container {
+          z-index: 100000 !important;
+          font-family: inherit;
+          border-radius: 12px;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          margin-top: 4px;
+          background-color: #ffffff;
+        }
+        .pac-item {
+          padding: 8px 12px;
+          font-size: 13px;
+          cursor: pointer;
+          line-height: 1.4;
+        }
+        .pac-item:hover {
+          background-color: #f1f5f9;
+        }
+        .pac-item-query {
+          font-size: 13px;
+          font-weight: 600;
+          color: #0f172a;
+        }
+        .pac-matched {
+          font-weight: 700;
+          color: #008080;
+        }
+      `}</style>
+
+      {/* Floating Google Maps Search Bar — Matches user screenshot */}
+      <div className="absolute top-16 left-3 z-20 flex items-center bg-white rounded-xl shadow-2xl border border-slate-200 px-3 py-1.5 gap-2 w-72 sm:w-[380px] transition-all focus-within:ring-2 focus-within:ring-teal-500/50">
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSearchSubmit();
+            }
+          }}
+          placeholder="Search Google Maps"
+          className="flex-1 bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
+        />
+
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
+            title="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Magnifying Glass Search Button */}
+        <button
+          type="button"
+          onClick={() => handleSearchSubmit()}
+          disabled={searchLoading}
+          className="text-slate-500 hover:text-teal-600 p-1 transition-colors"
+          title="Search place or coordinates"
+        >
+          {searchLoading ? (
+            <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+          ) : (
+            <Search className="w-4 h-4" />
+          )}
+        </button>
+
+        {/* Teal Diamond Navigation / Directions Icon */}
+        <button
+          type="button"
+          onClick={handleFitUAE}
+          className="w-7 h-7 rounded-lg bg-[#008080] hover:bg-[#006666] active:scale-95 text-white flex items-center justify-center shadow-md transition-all shrink-0"
+          title="Fit all UAE ports & corridors"
+        >
+          <Navigation className="w-3.5 h-3.5 rotate-45" />
+        </button>
+      </div>
       {/* Top Map Control Bar */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 shadow-xl text-white">
         {/* Left: Port / Corridor Selector & Indicator */}
