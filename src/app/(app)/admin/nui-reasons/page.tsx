@@ -14,9 +14,6 @@ import {
   Edit2,
   Trash2,
   RotateCcw,
-  Sparkles,
-  Shield,
-  Layers,
 } from 'lucide-react';
 
 export interface NuiReason {

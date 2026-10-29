@@ -4,8 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Navigation,
-  Clock,
-  Gauge,
   MapPin,
   Calendar,
   RefreshCw,
@@ -14,7 +12,6 @@ import {
   Smartphone,
   Cpu,
   User,
-  Shield,
   Loader2,
 } from 'lucide-react';
 import { loadGoogleMaps, type GMapsMap, type GMapsMarker, type GMapsPolyline } from '@/lib/google-maps-loader';
@@ -425,7 +422,7 @@ export default function VehicleTrackingHistoryModal({
               <MapPin className="w-12 h-12 text-[var(--text-faint)] mb-2" />
               <p className="text-sm font-semibold text-[var(--text-main)]">No GPS pings recorded in this timeframe</p>
               <p className="text-xs text-[var(--text-muted)] max-w-md mt-1">
-                Try selecting "All Recorded" to view historical trips or ensure the driver mobile app or OBD gateway is actively transmitting.
+                Try selecting &ldquo;All Recorded&rdquo; to view historical trips or ensure the driver mobile app or OBD gateway is actively transmitting.
               </p>
             </div>
           ) : (

@@ -81,7 +81,7 @@ export default function LoginPage() {
           window.location.assign('/platform');
           return;
         }
-      } catch (_) {}
+      } catch {}
     }
 
     const ssoFlag = params.get('sso');

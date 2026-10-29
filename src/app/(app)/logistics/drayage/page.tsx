@@ -3,9 +3,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Anchor, Package, Truck, Clock, AlertTriangle, CheckCircle2, Plus, RefreshCw,
-  MapPin, ShieldCheck, ArrowRight, Layers, UserCheck, Wallet, DollarSign,
-  TrendingUp, BarChart3, AlertCircle, Calendar, Eye, Sliders,
+  Anchor,
+  Package,
+  Truck,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Plus,
+  RefreshCw,
+  ArrowRight,
+  Layers,
+  UserCheck,
+  DollarSign,
+  TrendingUp,
+  Eye,
+  Sliders,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
@@ -95,7 +107,6 @@ export default function DrayageDashboardPage() {
   const [data, setData] = useState<DrayageWorkspaceData | null>(cached);
   const [loading, setLoading] = useState(!cached);
   const [triggeringL2Id, setTriggeringL2Id] = useState<string | null>(null);
-  const [selectedJob, setSelectedJob] = useState<DrayageWorkspaceData['jobs'][0] | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string) => {

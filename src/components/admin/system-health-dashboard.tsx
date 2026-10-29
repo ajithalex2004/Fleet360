@@ -25,16 +25,9 @@ import {
   ChevronDown,
   ChevronUp,
   FlaskConical,
-  Download,
   X,
   Sparkles,
-  Bot,
-  MapPin,
   Compass,
-  DollarSign,
-  TrendingUp,
-  Globe,
-  Bell,
   Send,
   BellRing,
 } from 'lucide-react';
@@ -42,6 +35,15 @@ import { PageHeader } from '@/components/ui/page-theme';
 import { PlatformInfoTab } from '@/components/admin/health-tabs/platform-info-tab';
 import { SchemaStatusTab } from '@/components/admin/health-tabs/schema-status-tab';
 import { JobRunsTab } from '@/components/admin/health-tabs/job-runs-tab';
+
+/** The jobs summary the public /api/health payload carries (fields read for the fallback view). */
+type PublicJobsSummary = {
+  scheduler?: 'degraded' | 'disabled' | 'active' | 'inactive';
+  isTicking?: boolean;
+  failures24h?: number;
+  outboxLagMs?: number | null;
+  pendingOutbox?: number;
+};
 
 export interface HealthData {
   status: 'ok' | 'degraded' | 'unhealthy';
@@ -426,7 +428,7 @@ export function SystemHealthDashboardView({
         tabParam === 'job-runs' ||
         tabParam === 'diagnostics'
       ) {
-        setActiveTab(tabParam as any);
+        setActiveTab(tabParam as Parameters<typeof setActiveTab>[0]);
       }
     }
   }, []);
@@ -453,7 +455,6 @@ export function SystemHealthDashboardView({
   const [showJsonInspector, setShowJsonInspector] = useState(false);
   const [showSchedulerJobs, setShowSchedulerJobs] = useState(false);
   const [showLongQueries, setShowLongQueries] = useState(false);
-  const [showErpLogs, setShowErpLogs] = useState(false);
 
   // Synthetic Self-Test States
   const [runningSelfTest, setRunningSelfTest] = useState(false);
@@ -658,8 +659,8 @@ export function SystemHealthDashboardView({
           jobsAndOutbox: pubPayload.jobs
             ? {
                 scheduler: {
-                  status: (pubPayload.jobs as any).scheduler ?? 'active',
-                  isTicking: (pubPayload.jobs as any).isTicking ?? true,
+                  status: (pubPayload.jobs as PublicJobsSummary).scheduler ?? 'active',
+                  isTicking: (pubPayload.jobs as PublicJobsSummary).isTicking ?? true,
                   started: true,
                   disabled: false,
                   startedAt: null,
@@ -673,37 +674,37 @@ export function SystemHealthDashboardView({
                   jobSchedules: [],
                 },
                 jobRuns24h: {
-                  status: ((pubPayload.jobs as any).failures24h ?? 0) > 0 ? 'warning' : 'healthy',
+                  status: ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0 ? 'warning' : 'healthy',
                   total24h: 0,
                   succeeded24h: 0,
-                  failed24h: (pubPayload.jobs as any).failures24h ?? 0,
+                  failed24h: (pubPayload.jobs as PublicJobsSummary).failures24h ?? 0,
                   runningNow: 0,
                   failureRatePercent: 0,
                   message:
-                    ((pubPayload.jobs as any).failures24h ?? 0) > 0
-                      ? `${(pubPayload.jobs as any).failures24h} failure(s) in last 24h`
+                    ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0
+                      ? `${(pubPayload.jobs as PublicJobsSummary).failures24h} failure(s) in last 24h`
                       : 'All background jobs running smoothly',
                   lastRun: null,
                   recentFailures: [],
                 },
                 outbox: {
                   status:
-                    ((pubPayload.jobs as any).outboxLagMs != null && (pubPayload.jobs as any).outboxLagMs >= 60000)
+                    (((pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? 0) >= 60000)
                       ? 'degraded'
                       : 'healthy',
-                  pendingCount: (pubPayload.jobs as any).pendingOutbox ?? 0,
+                  pendingCount: (pubPayload.jobs as PublicJobsSummary).pendingOutbox ?? 0,
                   stuckCount: 0,
                   parkedCount: 0,
                   published24h: 0,
                   totalEvents: 0,
-                  lagMs: (pubPayload.jobs as any).outboxLagMs ?? null,
+                  lagMs: (pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? null,
                   oldestPendingAt: null,
                   message: 'Transactional outbox synchronized with background publisher',
                   pendingByType: [],
                 },
               }
             : undefined,
-          dbPool: (pubPayload.dbPool as any) ?? {
+          dbPool: (pubPayload.dbPool as HealthData['dbPool'] | undefined) ?? {
             status: 'healthy',
             active: 1,
             idle: 25,
@@ -717,7 +718,7 @@ export function SystemHealthDashboardView({
             rollbackRatePercent: 0.15,
             longRunningQueries: [],
           },
-          enterpriseBridge: (pubPayload.enterpriseBridge as any) ?? {
+          enterpriseBridge: (pubPayload.enterpriseBridge as HealthData['enterpriseBridge'] | undefined) ?? {
             status: 'not_configured',
             totalConnectors: 0,
             healthyCount: 0,
@@ -729,7 +730,7 @@ export function SystemHealthDashboardView({
             recentErrorsCount24h: 0,
             recentLogs: [],
           },
-          security: (pubPayload.security as any) ?? {
+          security: (pubPayload.security as HealthData['security'] | undefined) ?? {
             status: 'healthy',
             activeSessions: {
               activeUsers24h: 1,
@@ -751,8 +752,8 @@ export function SystemHealthDashboardView({
               mfaAdminCount: 0,
             },
           },
-          aiSpending: (pubPayload.aiSpending as any) ?? undefined,
-          googleApisSpending: (pubPayload.googleApisSpending as any) ?? undefined,
+          aiSpending: (pubPayload.aiSpending as HealthData['aiSpending'] | undefined) ?? undefined,
+          googleApisSpending: (pubPayload.googleApisSpending as HealthData['googleApisSpending'] | undefined) ?? undefined,
         };
 
         setData(synthData);
@@ -1063,7 +1064,7 @@ export function SystemHealthDashboardView({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => handleTabChange(tab.id as any)}
+                onClick={() => handleTabChange(tab.id as Parameters<typeof handleTabChange>[0])}
                 className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-xl transition-all whitespace-nowrap shadow-sm ${
                   isActive ? tab.activeBg : tab.inactiveBg
                 }`}
@@ -1359,7 +1360,7 @@ export function SystemHealthDashboardView({
                   </label>
                   <select
                     value={alertConfigForm.minSeverity}
-                    onChange={(e) => setAlertConfigForm((p) => ({ ...p, minSeverity: e.target.value as any }))}
+                    onChange={(e) => setAlertConfigForm((p) => ({ ...p, minSeverity: e.target.value as typeof p.minSeverity }))}
                     className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs rounded-lg px-2.5 py-1.5 text-[var(--text-main)]"
                   >
                     <option value="degraded">Degraded & Unhealthy (High & Critical - Recommended)</option>

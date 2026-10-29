@@ -18,7 +18,6 @@ import dynamic from 'next/dynamic';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 import {
   Radio,
-  WifiOff,
   Activity,
   Cpu,
   RefreshCw,
@@ -42,8 +41,6 @@ import {
   LayoutGrid,
   MapPin,
   Loader2,
-  Gauge,
-  Fuel,
   Smartphone,
   User,
   Phone,
@@ -51,7 +48,6 @@ import {
   Map,
   ExternalLink,
 } from 'lucide-react';
-import type { VehiclePosition } from '@/components/shared/FleetLiveMap';
 
 const FleetLiveMap = dynamic(() => import('@/components/shared/FleetLiveMap'), {
   ssr: false,

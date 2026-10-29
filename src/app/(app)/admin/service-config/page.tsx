@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 
 /**
  * /admin/service-config — Service Configuration Engine (Phase 2A).

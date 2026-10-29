@@ -30,9 +30,9 @@ interface AgreementRow {
   agreement_no?: string | null;
   vehicle_category?: string | null;
   registration_no?: string | null;
-  pickup_date?: string | null;
+  start_date?: string | null;
   actual_return_date?: string | null;
-  dropoff_date?: string | null;
+  end_date?: string | null;
   pickup_location_code?: string | null;
   dropoff_location_code?: string | null;
   customer_type?: string | null;

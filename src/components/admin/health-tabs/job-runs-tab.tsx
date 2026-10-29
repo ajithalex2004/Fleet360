@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, RefreshCw, AlertTriangle, CheckCircle2, Play, SkipForward, XCircle } from 'lucide-react';
+import { Clock, RefreshCw, AlertTriangle, CheckCircle2, Play, SkipForward, XCircle, type LucideIcon } from 'lucide-react';
 
 interface Run {
   id: string;
@@ -18,7 +18,7 @@ interface Run {
   error: string | null;
 }
 
-const STATUS_BADGES: Record<string, { bg: string; text: string; border: string; icon: any }> = {
+const STATUS_BADGES: Record<string, { bg: string; text: string; border: string; icon: LucideIcon }> = {
   SUCCEEDED: {
     bg: 'bg-emerald-500/10',
     text: 'text-emerald-400',

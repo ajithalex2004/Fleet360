@@ -4,18 +4,17 @@ import Link from 'next/link';
 import { lookupVehicle, KNOWN_MAKES, getModelsForMake, type VehicleKnowledge } from '@/lib/vehicle-knowledge-base';
 import SlideOverDrawer, { DrawerTab, DrawerAction } from '@/components/ui/SlideOverDrawer';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { 
-  Car, 
-  Cpu, 
-  FileText, 
-  Wrench, 
-  UserCheck, 
-  MapPin, 
-  Fuel, 
-  Gauge, 
-  Shield, 
+import {
+  Car,
+  Cpu,
+  FileText,
+  Wrench,
+  UserCheck,
+  MapPin,
+  Fuel,
+  Gauge,
+  Shield,
   Calendar,
-  Code,
   Edit2,
   Trash2,
   Upload,
@@ -227,21 +226,9 @@ export default function VehiclesPage() {
   }, []);
 
   // Organizational Hierarchy state (Region -> Department -> Unit)
-  const [hierarchyRegions, setHierarchyRegions] = useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [hierarchyRegions] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [vehicleDepts, setVehicleDepts] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [vehicleUnits, setVehicleUnits] = useState<Array<{ id: string; name: string; code?: string }>>([]);
-
-  const loadVehicleHierarchyRegions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/customer-hierarchy?level=REGION');
-      if (res.ok) {
-        const json = await res.json();
-        setHierarchyRegions(Array.isArray(json) ? json : []);
-      }
-    } catch (err) {
-      console.error('Failed to load regions:', err);
-    }
-  }, []);
 
   const loadVehicleDepts = useCallback(async (rId: string) => {
     if (!rId) { setVehicleDepts([]); setVehicleUnits([]); return; }
@@ -373,9 +360,8 @@ export default function VehiclesPage() {
   // Vehicle Lifecycle History state
   const [vehicleLifecycleEvents, setVehicleLifecycleEvents] = useState<VehicleLifecycleEvent[]>([]);
   const [loadingLifecycleEvents, setLoadingLifecycleEvents] = useState(false);
-  const [showAddLifecycleModal, setShowAddLifecycleModal] = useState(false);
-  const [addingLifecycleEvent, setAddingLifecycleEvent] = useState(false);
-  const [lifecycleForm, setLifecycleForm] = useState({
+  const [, setShowAddLifecycleModal] = useState(false);
+  const [, setLifecycleForm] = useState({
     eventType: 'STAGE_TRANSITION',
     toStage: 'OPERATIONAL',
     description: '',
@@ -945,6 +931,7 @@ export default function VehiclesPage() {
         
         // Strip heavy base64 file data so payload stays lightweight (< 2KB)
         const cleanDocs = (form.documents || []).map(d => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omitted on purpose
           const { fileData, ...rest } = d;
           return rest;
         });
@@ -957,6 +944,7 @@ export default function VehiclesPage() {
       }
 
       // Strip large raw data urls before transmitting
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omitted on purpose
       const { mulkiyaCopyUrl, ...cleanForm } = form;
       const payload = {
         ...cleanForm,

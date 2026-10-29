@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
   ArrowLeftRight,
   Plus,
@@ -15,7 +14,6 @@ import {
   User,
   Gauge,
   Fuel,
-  FileText,
   Tag,
   ExternalLink,
   RotateCcw,
@@ -171,7 +169,7 @@ export default function TransfersPage() {
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [reasons, setReasons] = useState<NuiReasonOption[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [, setLoadingOptions] = useState(false);
 
   // Modal & Form
   const [showModal, setShowModal] = useState(false);

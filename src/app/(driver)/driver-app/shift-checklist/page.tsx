@@ -33,7 +33,7 @@ import { useRouter } from 'next/navigation';
 import { BackButton } from '@/components/driver-app/BackButton';
 import { useMobileTheme } from '@/contexts/MobileThemeContext';
 import { getApiEndpoint, parseJsonSafely } from '@/lib/api-endpoint';
-import { Car, Gauge, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { Car, Gauge, Sun, Moon } from 'lucide-react';
 
 type ItemState = {
   ok: boolean | null;   // null = not yet marked (the new default)
@@ -82,7 +82,7 @@ const CATEGORY_ICON: Record<string, string> = {
 
 export default function ShiftChecklistPage() {
   const router = useRouter();
-  const { theme, isDark, toggleTheme } = useMobileTheme();
+  const { isDark, toggleTheme } = useMobileTheme();
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [startOdometer, setStartOdometer] = useState<number | null>(null);
@@ -184,7 +184,6 @@ export default function ShiftChecklistPage() {
   }, []);
 
   const allMarked = useMemo(() => DEFAULT_CHECKLIST.every((c) => items[c.key].ok !== null), [items]);
-  const anyFailed = useMemo(() => DEFAULT_CHECKLIST.some((c) => items[c.key].ok === false), [items]);
   const blockingFailed = useMemo(
     () => DEFAULT_CHECKLIST.some((c) => c.blocking && items[c.key].ok === false),
     [items]

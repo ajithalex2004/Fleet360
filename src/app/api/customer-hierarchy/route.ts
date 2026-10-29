@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
       // ── Tree Mode: returns nested hierarchy [Region -> Department -> Section] ──
       if (tree) {
-        const rows = await tx.$queryRawUnsafe<any[]>(
+        const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT h.*, p.name as parent_name, p.code as parent_code
            FROM customer_hierarchy h
            LEFT JOIN customer_hierarchy p ON p.id = h.parent_id
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 
       // ── All Mode: flat list with joined parent details ──
       if (all) {
-        const rows = await tx.$queryRawUnsafe<any[]>(
+        const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT h.*, p.name as parent_name, p.code as parent_code, p.level as parent_level
            FROM customer_hierarchy h
            LEFT JOIN customer_hierarchy p ON p.id = h.parent_id
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
         where += ` AND parent_id IS NULL`;
       }
 
-      let items = await tx.$queryRawUnsafe<any[]>(
+      let items = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT * FROM customer_hierarchy ${where} ORDER BY name ASC`,
         ...params,
       );
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
             r.id, tenantId, r.name, r.code,
           ).catch(() => {});
         }
-        items = await tx.$queryRawUnsafe<any[]>(
+        items = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT * FROM customer_hierarchy ${where} ORDER BY name ASC`,
           ...params,
         );
@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
             d.id, tenantId, d.name, d.code, parentId,
           ).catch(() => {});
         }
-        items = await tx.$queryRawUnsafe<any[]>(
+        items = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT * FROM customer_hierarchy ${where} ORDER BY name ASC`,
           ...params,
         );
@@ -178,7 +178,7 @@ export async function GET(req: NextRequest) {
             u.id, tenantId, u.name, u.code, parentId,
           ).catch(() => {});
         }
-        items = await tx.$queryRawUnsafe<any[]>(
+        items = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT * FROM customer_hierarchy ${where} ORDER BY name ASC`,
           ...params,
         );
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
       const id = body.id || randomUUID();
       const code = body.code ? String(body.code).trim().toUpperCase() : null;
 
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `INSERT INTO customer_hierarchy (id, tenant_id, level, parent_id, name, code, description, is_active, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
          RETURNING *`,

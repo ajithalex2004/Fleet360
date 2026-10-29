@@ -1,26 +1,19 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { 
-  Car, 
-  Layers, 
-  Building2, 
-  MapPin, 
-  Calendar, 
-  Gauge, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  X, 
-  Search, 
-  Filter, 
-  ArrowRight,
-  ShieldCheck,
+import {
+  Car,
+  Layers,
+  Building2,
+  Calendar,
+  AlertCircle,
+  X,
+  Search,
+  Filter,
   CornerDownLeft,
   ChevronRight,
   MoreVertical,
   ExternalLink,
-  RotateCcw,
 } from 'lucide-react';
 
 interface Allocation {
@@ -128,7 +121,7 @@ export default function AllocationsPage() {
 
   // Vehicle master dropdown list
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
-  const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [, setLoadingVehicles] = useState(false);
 
   // Cascading Hierarchy: Region -> Department -> Unit
   const [regions, setRegions] = useState<HierarchyNode[]>([]);
@@ -535,7 +528,7 @@ export default function AllocationsPage() {
               ) : allocations.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-12 text-center text-[var(--text-muted)]">
-                    No allocations found. Click "+ New Allocation" to assign a vehicle.
+                    No allocations found. Click &ldquo;+ New Allocation&rdquo; to assign a vehicle.
                   </td>
                 </tr>
               ) : (

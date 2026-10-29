@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
@@ -91,7 +92,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         employee_id: string | null;
         driver_category: string | null;
         issuing_authority: string | null;
-        additional_documents: any | null;
+        additional_documents: unknown;
       }>>(
         `SELECT employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE id::text = $1 LIMIT 1`,
         id,
@@ -236,12 +237,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           },
         });
 
+        // A driver role, in this tenant or global. The two OR filters were
+        // written as duplicate keys, so only the tenant one applied, and the
+        // fallback took any role at all: a new driver user could be given
+        // whichever role came first, an admin role included. No driver role
+        // means no membership rather than a guessed one.
         const role = await tx.role.findFirst({
           where: {
-            OR: [{ code: 'DRIVER' }, { name: { contains: 'Driver', mode: 'insensitive' } }],
-            OR: [{ tenantId }, { tenantId: null }],
+            AND: [
+              { OR: [{ code: 'DRIVER' }, { name: { contains: 'Driver', mode: 'insensitive' } }] },
+              { OR: [{ tenantId }, { tenantId: null }] },
+            ],
           },
-        }) || await tx.role.findFirst({ where: { OR: [{ tenantId }, { tenantId: null }] } });
+        });
 
         if (role) {
           await tx.userTenant.upsert({
@@ -293,10 +301,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           compliance: complianceFlags(updated),
         })
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[Driver Hub] PATCH /api/drivers/[id] error:', e);
-      if (e?.code === 'P2002') {
-        const target = Array.isArray(e.meta?.target) ? e.meta.target.join(', ') : String(e.meta?.target || 'field');
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const rawTarget = e.meta?.target;
+        const target = Array.isArray(rawTarget) ? rawTarget.join(', ') : String(rawTarget || 'field');
         if (target.includes('license') || target.includes('licenseNumber')) {
           return NextResponse.json({ error: 'A driver with this License Number already exists.' }, { status: 400 });
         }
@@ -308,7 +317,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
         return NextResponse.json({ error: 'Unique constraint conflict on ' + target + '.' }, { status: 400 });
       }
-      return NextResponse.json({ error: e?.message || 'Failed to update driver' }, { status: 500 });
+      return NextResponse.json({ error: (e instanceof Error && e.message) || 'Failed to update driver' }, { status: 500 });
     }
   });
 }

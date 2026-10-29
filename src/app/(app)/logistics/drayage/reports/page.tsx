@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  FileSpreadsheet, Download, RefreshCw, Calendar, Search, Filter,
-  DollarSign, Package, Clock, ShieldCheck, CheckCircle2, UserCheck,
+  FileSpreadsheet,
+  Download,
+  RefreshCw,
+  Search,
+  DollarSign,
+  Package,
+  Clock,
+  UserCheck,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -89,7 +94,7 @@ export default function DrayageReportsPage() {
     if (!data) return;
     let headers: string[] = [];
     let rows: string[][] = [];
-    let filename = `drayage_${activeReport.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `drayage_${activeReport.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
 
     if (activeReport === 'DEMURRAGE_AUDIT') {
       headers = ['ContainerNumber', 'Customer', 'Terminal', 'Type', 'Discharged', 'DaysInPort', 'FreeDaysAllowed', 'OverdueDays', 'AccruedPenaltyAED', 'Status'];

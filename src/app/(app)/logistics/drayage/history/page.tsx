@@ -1,14 +1,24 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  History, Package, FileText, Download, Printer, Search, Filter,
-  Calendar, CheckCircle2, DollarSign, Clock, Layers, ArrowRight, Eye,
-  Building2, X, RefreshCw, Truck, QrCode, MapPin, Activity, CheckCircle,
-  ExternalLink, ChevronRight, ShieldCheck,
+  History,
+  Package,
+  FileText,
+  Download,
+  Printer,
+  CheckCircle2,
+  DollarSign,
+  Clock,
+  Eye,
+  Building2,
+  X,
+  Truck,
+  QrCode,
+  MapPin,
+  Activity,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 import {
   fetchDrayageWorkspaceCached,
@@ -286,7 +296,7 @@ export default function DrayageHistoryPage() {
   const cached = getCachedDrayageData();
   const [loading, setLoading] = useState(!cached?.jobs);
   const [jobs, setJobs] = useState<DrayageJob[]>(cached?.jobs || []);
-  const [search, setSearch] = useState('');
+  const [search] = useState('');
   const [shipmentFilter, setShipmentFilter] = useState<'ALL' | 'IMPORT' | 'EXPORT'>('ALL');
   const [selectedJobForInvoice, setSelectedJobForInvoice] = useState<DrayageJob | null>(null);
   const [selectedJobForLifecycle, setSelectedJobForLifecycle] = useState<DrayageJob | null>(null);
@@ -595,7 +605,7 @@ export default function DrayageHistoryPage() {
             <div className="flex items-center gap-2">
               <select
                 value={shipmentFilter}
-                onChange={(e) => setShipmentFilter(e.target.value as any)}
+                onChange={(e) => setShipmentFilter(e.target.value as Parameters<typeof setShipmentFilter>[0])}
                 className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500"
               >
                 <option value="ALL">All Shipments</option>

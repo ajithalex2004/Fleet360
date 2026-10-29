@@ -51,7 +51,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       const body = stripTenantOwnershipFields(bodyRaw);
       const now = new Date().toISOString();
 
-      const existing = await tx.$queryRawUnsafe<any[]>(
+      const existing = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT id FROM fleet_nui_reasons WHERE id::text = $1`,
         params.id,
       );
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       };
 
       const sets: string[] = [`updated_at = $1::timestamptz`];
-      const vals: any[] = [now];
+      const vals: unknown[] = [now];
       let idx = 2;
 
       for (const [key, col] of Object.entries(fieldMap)) {

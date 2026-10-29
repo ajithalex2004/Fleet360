@@ -74,7 +74,7 @@ export async function getHealthAlertConfig(): Promise<HealthAlertConfig> {
           ? map['health_alert_email_enabled'] === 'true'
           : !!(map['health_alert_email'] || process.env.HEALTH_ALERT_EMAIL || process.env.ADMIN_ALERT_EMAIL || process.env.OPS_ALERT_EMAIL),
         cooldownMinutes: map['health_alert_cooldown_minutes'] ? parseInt(map['health_alert_cooldown_minutes'], 10) : 15,
-        lastStatus: (map['health_alert_last_status'] as any) || memoryAlertConfig.lastStatus,
+        lastStatus: (map['health_alert_last_status'] as HealthAlertConfig['lastStatus']) || memoryAlertConfig.lastStatus,
         lastSentAt: map['health_alert_last_sent_at'] || memoryAlertConfig.lastSentAt,
         lastSummary: map['health_alert_last_summary'] || memoryAlertConfig.lastSummary,
       };
@@ -690,7 +690,7 @@ export async function sendTestHealthAlert(
  * Background watchdog cron task handler.
  * Probes core database, storage, redis, and triggers automated alerts if state degrades.
  */
-export async function runHealthWatchdogJob(ctx?: any): Promise<{
+export async function runHealthWatchdogJob(): Promise<{
   status: 'ok' | 'error' | 'skipped';
   summary: string;
   data?: Record<string, unknown>;

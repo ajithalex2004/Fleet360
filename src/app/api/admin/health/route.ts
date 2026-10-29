@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { schemaReport, REQUIRED_SCHEMAS } from '@/lib/db/schema-registry';
 import { storageStatus } from '@/lib/storage/health';
 import { redisStatus } from '@/lib/redis-status';
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  // Platform-wide health (all tenants' backlog, integrations, spend): a
+  // platform admin's view, not any tenant user's.
+  if (authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Only a platform admin can view platform health.' }, { status: 403 });
+  }
 
   const startTime = Date.now();
 
@@ -40,7 +46,7 @@ export async function GET(req: NextRequest) {
   const dbStart = Date.now();
   try {
     await ensureDbConnected({ force: true, retries: 2, timeoutMs: 2_500 });
-    await prisma.$queryRaw`SELECT 1`;
+    await withPlatformAdmin(prisma, (tx) => tx.$queryRaw`SELECT 1`);
   } catch (err) {
     dbStatus = 'error';
     dbError = err instanceof Error ? err.message : String(err);
@@ -211,9 +217,24 @@ export async function GET(req: NextRequest) {
     schema: { status: schema.status, missingCount: schema.missingCount },
     backend: backendInfo,
     jobsAndOutbox,
-    dbPool,
-    enterpriseBridge,
-    security,
+    // The alert rules read their own summary shape; map the metrics onto it
+    // (passed through as-is, the rules' fields were always undefined and the
+    // pool, ERP-connector and brute-force alerts could never fire).
+    dbPool: {
+      status: dbPool.status,
+      activeConnections: dbPool.active,
+      poolExhaustionRisk: dbPool.status === 'critical',
+    },
+    enterpriseBridge: {
+      status: enterpriseBridge.status,
+      totalConnectors: enterpriseBridge.totalConnectors,
+      errorConnectors: enterpriseBridge.errorCount,
+    },
+    security: {
+      status: security.status,
+      failedLoginsLastHour: security.bruteForce.failedLogins1h,
+      bruteForceRisk: security.bruteForce.status !== 'normal',
+    },
     integrations: { missingKeys: missingIntegrations },
   }).catch((alertErr) => {
     console.error('[api/admin/health] alert evaluation failed:', alertErr);

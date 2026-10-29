@@ -1,11 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  Layers, Package, AlertTriangle, CheckCircle2, Clock, Plus,
-  Download, UploadCloud, Search, Filter, RefreshCw, X, ShieldCheck,
-  FileSpreadsheet, ArrowRight,
+  Layers,
+  Package,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Plus,
+  Download,
+  UploadCloud,
+  Search,
+  X,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import {
@@ -49,7 +55,7 @@ interface DrayageContainer {
 
 export default function DrayageContainersPage() {
   const cached = getCachedDrayageData();
-  const [loading, setLoading] = useState(!cached?.containers);
+  const [, setLoading] = useState(!cached?.containers);
   const [containers, setContainers] = useState<DrayageContainer[]>(cached?.containers || []);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -60,15 +66,15 @@ export default function DrayageContainersPage() {
   const [containerNumber, setContainerNumber] = useState('');
   const [size, setSize] = useState('40HC');
   const [containerType, setContainerType] = useState('DRY');
-  const [customerName, setCustomerName] = useState('Al-Futtaim Logistics LLC');
-  const [terminalName, setTerminalName] = useState('Jebel Ali Port - Terminal 1 (DP World)');
-  const [warehouseName, setWarehouseName] = useState('JAFZA South Bonded Fulfillment Hub (Gate 5)');
+  const [customerName] = useState('Al-Futtaim Logistics LLC');
+  const [terminalName] = useState('Jebel Ali Port - Terminal 1 (DP World)');
+  const [warehouseName] = useState('JAFZA South Bonded Fulfillment Hub (Gate 5)');
   const [doExpiryDate, setDoExpiryDate] = useState(new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10));
   const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().slice(0, 10));
-  const [sealNumber, setSealNumber] = useState('');
+  const [sealNumber] = useState('');
   const [weightKg, setWeightKg] = useState(22400);
-  const [customsInspection, setCustomsInspection] = useState(true);
-  const [municipalityInspection, setMunicipalityInspection] = useState(false);
+  const [customsInspection] = useState(true);
+  const [municipalityInspection] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
 
   // Bulk Upload state
@@ -372,7 +378,6 @@ export default function DrayageContainersPage() {
             <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
               {filteredContainers.map((c) => {
                 const isOverdue = c.demurrage.status === 'CRITICAL_OVERDUE';
-                const isWarning = c.demurrage.status === 'WARNING';
                 return (
                   <tr key={c.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="py-3 px-3">

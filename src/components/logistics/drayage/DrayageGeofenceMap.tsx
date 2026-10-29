@@ -1,11 +1,23 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle,
-  Compass, Layers, Maximize2, X, Sliders, Check, Eye, Navigation, RefreshCw,
-  Hexagon, Circle as CircleIcon, Warehouse, Info, Undo2, Map, Globe, Mountain,
-  Move, ShieldCheck, Search,
+  Anchor,
+  AlertTriangle,
+  Compass,
+  Layers,
+  X,
+  Check,
+  Navigation,
+  RefreshCw,
+  Hexagon,
+  Circle as CircleIcon,
+  Undo2,
+  Map,
+  Globe,
+  Mountain,
+  Move,
+  Search,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -121,7 +133,6 @@ export default function DrayageGeofenceMap({
   onSelectTerminal,
   onSelectWarehouse,
   onSaveGeofence,
-  onDeleteGeofence,
   activeEditGeofenceId,
   onCloseEditMode,
   focusLocation,
@@ -607,7 +618,7 @@ export default function DrayageGeofenceMap({
           infoWindowRef.current = new ctors.InfoWindow();
 
           // Unified Map Click Handler (Supports Plot Mode + Native Circle & Polygon Drawing)
-          map.addListener('click', (e: any) => {
+          map.addListener('click', (e) => {
             if (!e?.latLng) return;
             const lat = Number(e.latLng.lat().toFixed(6));
             const lng = Number(e.latLng.lng().toFixed(6));

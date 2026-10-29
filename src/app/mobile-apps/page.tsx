@@ -38,7 +38,7 @@ const APPS: MobileApp[] = [
     audience: 'Chauffeur, Fleet & Logistics Drivers',
     description: 'Real-time GPS telematics, live vehicle sign-in, shift pre-trip safety checklist, multi-language (English / Arabic / Hindi), turn-by-turn route dispatch, and dark/light UI mode.',
     href: '/driver-app',
-    apkHref: '/api/mobile/download-driver-apk',
+    apkHref: '/api/mobile/download-apk?app=driver',
     icon: BusFront,
     gradient: 'from-blue-600 via-indigo-600 to-cyan-600',
     ring: 'ring-blue-500/50',

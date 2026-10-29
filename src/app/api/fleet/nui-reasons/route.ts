@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -13,9 +13,9 @@ const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
 
-async function seedIfEmpty(tx: any) {
+async function seedIfEmpty(tx: TxClient) {
   try {
-    const existing = await tx.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM fleet_nui_reasons`);
+    const existing = await tx.$queryRawUnsafe<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM fleet_nui_reasons`);
     const count = Number(existing[0]?.count ?? 0);
     if (count === 0) {
       for (const item of DEFAULT_NUI_REASONS) {

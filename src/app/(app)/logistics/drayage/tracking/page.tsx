@@ -1,13 +1,29 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  Navigation, Package, Truck, CheckCircle2, AlertTriangle, RefreshCw,
-  Search, ShieldCheck, MapPin, Send, MessageSquare, Clock, Plus,
-  Layers, Unplug, ArrowRight, Eye, UserCheck, Key, FileText, Check,
+  Navigation,
+  Package,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  ShieldCheck,
+  Send,
+  MessageSquare,
+  Clock,
+  Plus,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+
+/** EDI clearance check result shown on the tracking card (the fields read here). */
+interface EdiVerification {
+  providerLabel?: string;
+  verifiedAt: string;
+  customsStatus?: string;
+  doStatus?: string;
+  vesselName?: string;
+  tokenNumber?: string;
+}
 
 interface DrayageJob {
   id: string;
@@ -69,7 +85,7 @@ export default function DrayageJobTrackingPage() {
 
   // EDI verification state
   const [ediLoading, setEdiLoading] = useState(false);
-  const [ediResult, setEdiResult] = useState<any | null>(null);
+  const [ediResult, setEdiResult] = useState<EdiVerification | null>(null);
 
   // Multi-leg modal state
   const [showLegModal, setShowLegModal] = useState(false);

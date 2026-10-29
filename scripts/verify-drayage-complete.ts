@@ -24,7 +24,6 @@ import {
   appendDrayageItineraryLeg,
   sendDispatchChatMessage,
   extendContainerDeliveryOrder,
-  calculateMissingAllowances,
   calculateDemurrageClock,
 } from '../src/lib/logistics/drayage-domain';
 

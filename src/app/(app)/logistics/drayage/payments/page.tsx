@@ -1,10 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  Wallet, DollarSign, CheckCircle2, Clock, Check, RefreshCw,
-  Search, Filter, UserCheck, ShieldCheck, ArrowRight, AlertTriangle,
+  Wallet,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  Check,
+  RefreshCw,
+  Search,
+  AlertTriangle,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
@@ -29,7 +34,7 @@ interface DrayageDriverAllowance {
 }
 
 export default function DrayagePaymentsPage() {
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [allowances, setAllowances] = useState<DrayageDriverAllowance[]>([]);
   const [statusTab, setStatusTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'PAID'>('PENDING');
   const [search, setSearch] = useState('');

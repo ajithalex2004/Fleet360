@@ -501,11 +501,6 @@ export async function getAiHealthAndSpendingMetrics(): Promise<AiHealthAndSpendi
 
   await ensureAgentSchema().catch(() => {});
 
-  let totalDbRuns = 0;
-  let totalDbTokens = 0;
-  let totalDbCostUsd = 0;
-  let totalDbCostAed = 0;
-  let totalDbSavingsAed = 0;
   const dbRowsByModel: Record<string, { runs: number; inTokens: number; outTokens: number; cachedTokens: number; costUsd: number; costAed: number; savingsAed: number; durationMs: number; failed: number }> = {};
 
   try {
@@ -541,12 +536,6 @@ export async function getAiHealthAndSpendingMetrics(): Promise<AiHealthAndSpendi
     if (Array.isArray(rows)) {
       for (const r of rows) {
         const key = (r.model_alias || 'DETERMINISTIC_RULES').toUpperCase();
-        totalDbRuns += Number(r.total_runs || 0);
-        totalDbTokens += Number(r.input_tokens || 0) + Number(r.output_tokens || 0);
-        totalDbCostUsd += Number(r.cost_usd || 0);
-        totalDbCostAed += Number(r.cost_aed || 0);
-        totalDbSavingsAed += Number(r.actual_savings_aed || 0);
-
         if (!dbRowsByModel[key]) {
           dbRowsByModel[key] = {
             runs: Number(r.total_runs || 0),

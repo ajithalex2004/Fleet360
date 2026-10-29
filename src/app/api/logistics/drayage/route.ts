@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import crypto from 'crypto';
 import {
   getDrayageWorkspaceData,
@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
+    // Tenant ownership comes from the session, never the body.
+    const body = stripTenantOwnershipFields(await req.json());
     const action = String(body.action ?? '');
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {

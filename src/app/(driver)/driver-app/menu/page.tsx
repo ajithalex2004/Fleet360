@@ -15,9 +15,10 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMobileI18n, MobileLanguage } from '@/contexts/MobileLanguageContext';
+import { useMobileI18n } from '@/contexts/MobileLanguageContext';
 import { useMobileTheme } from '@/contexts/MobileThemeContext';
 import { getApiEndpoint, parseJsonSafely } from '@/lib/api-endpoint';
+import type { LucideIcon } from 'lucide-react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -35,7 +36,6 @@ import {
   Bus,
   Sun,
   Moon,
-  Globe,
   Award,
 } from 'lucide-react';
 
@@ -47,7 +47,7 @@ interface ShiftInfo {
 
 interface MenuCard {
   href: string;
-  icon: any;
+  icon: LucideIcon;
   title: string;
   subtitle: string;
   cardStyle: {

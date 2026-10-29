@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  BarChart3, TrendingUp, DollarSign, Package, UserCheck, Truck,
-  Download, Calendar, ShieldCheck, CheckCircle2, Clock, ArrowRight,
-  RefreshCw,
+  BarChart3,
+  TrendingUp,
+  DollarSign,
+  Package,
+  UserCheck,
+  Download,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
 
 interface DrayageWorkspaceData {
   summary: {
@@ -48,7 +52,7 @@ interface DrayageWorkspaceData {
 
 export default function DrayageAnalyticsPage() {
   const [data, setData] = useState<DrayageWorkspaceData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'7' | '30' | '90'>('30');
 
   const loadData = useCallback(async () => {

@@ -1,11 +1,8 @@
-import type { PrismaClient } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 export interface DrayageDbClient {
-  $queryRawUnsafe: <T = any>(query: string, ...values: any[]) => Promise<T>;
-  $executeRawUnsafe: (query: string, ...values: any[]) => Promise<number>;
-  [key: string]: any;
+  $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
+  $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<number>;
 }
 
 export interface DrayageTerminal {
@@ -293,286 +290,14 @@ export interface DrayageAlertItem {
   createdAt: string;
 }
 
-let schemaBootstrapped = false;
-
-async function safeDdl(_db: DrayageDbClient | null, sql: string): Promise<void> {
-  try {
-    await prisma.$executeRawUnsafe(sql);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (
-      msg.includes('42501') ||
-      msg.includes('permission denied') ||
-      msg.includes('already exists') ||
-      msg.includes('duplicate key')
-    ) {
-      return;
-    }
-    console.warn('[Drayage] Schema DDL notice:', msg);
-  }
-}
-
-export async function ensureDrayageSchema(db: DrayageDbClient) {
-  if (schemaBootstrapped) return;
-  schemaBootstrapped = true;
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_terminals (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      code TEXT NOT NULL,
-      port_name TEXT NOT NULL,
-      emirate TEXT NOT NULL DEFAULT 'Dubai',
-      lat DOUBLE PRECISION NOT NULL DEFAULT 25.0112,
-      lng DOUBLE PRECISION NOT NULL DEFAULT 55.0612,
-      geofence_radius_meters INTEGER NOT NULL DEFAULT 1500,
-      free_days_dry INTEGER NOT NULL DEFAULT 5,
-      free_days_reefer INTEGER NOT NULL DEFAULT 3,
-      operating_hours TEXT NOT NULL DEFAULT '24/7 Gate Operations',
-      status TEXT NOT NULL DEFAULT 'ACTIVE',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  
-  await safeDdl(db, `
-    UPDATE logistics_drayage_terminals
-    SET code = CASE code
-      WHEN 'AEJEA-T1' THEN 'DPW-JA-T1'
-      WHEN 'AEJEA-T2' THEN 'DPW-JA-T2'
-      WHEN 'AEJEA-T3' THEN 'DPW-JA-T3'
-      WHEN 'AEKHL-T1' THEN 'ADP-KP-T1'
-      WHEN 'AEDXB-PR' THEN 'DPW-PR-T1'
-      ELSE code
-    END
-    WHERE code IN ('AEJEA-T1', 'AEJEA-T2', 'AEJEA-T3', 'AEKHL-T1', 'AEDXB-PR');
-  `);
-
-    await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_clients (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      code TEXT NOT NULL,
-      contact_person TEXT,
-      contact_no TEXT,
-      street_address TEXT,
-      city TEXT DEFAULT 'Dubai',
-      trn TEXT,
-      trade_license TEXT,
-      default_trip_amount_aed DOUBLE PRECISION NOT NULL DEFAULT 1550,
-      default_driver_allowance_aed DOUBLE PRECISION NOT NULL DEFAULT 150,
-      notes TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_warehouses (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      customer_id TEXT,
-      customer_name TEXT NOT NULL,
-      name TEXT NOT NULL,
-      zone TEXT NOT NULL,
-      address TEXT NOT NULL,
-      lat DOUBLE PRECISION NOT NULL DEFAULT 24.9642,
-      lng DOUBLE PRECISION NOT NULL DEFAULT 55.0915,
-      ramps_count INTEGER NOT NULL DEFAULT 6,
-      contact_person TEXT,
-      contact_phone TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    ALTER TABLE logistics_drayage_warehouses
-      ADD COLUMN IF NOT EXISTS code TEXT,
-      ADD COLUMN IF NOT EXISTS geofence_configured BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS geofence_type TEXT DEFAULT 'CIRCLE',
-      ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER DEFAULT 800,
-      ADD COLUMN IF NOT EXISTS geofence_coordinates_json TEXT DEFAULT '[]',
-      ADD COLUMN IF NOT EXISTS trip_amount_aed DOUBLE PRECISION DEFAULT 1550,
-      ADD COLUMN IF NOT EXISTS driver_allowance_aed DOUBLE PRECISION DEFAULT 150
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_trailers (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      plate_number TEXT NOT NULL,
-      trailer_type TEXT NOT NULL DEFAULT '40FT_SKELETAL',
-      capacity_tons DOUBLE PRECISION NOT NULL DEFAULT 45,
-      master_status TEXT NOT NULL DEFAULT 'AVAILABLE',
-      operational_status TEXT NOT NULL DEFAULT 'EMPTY',
-      linked_container_number TEXT,
-      current_location TEXT DEFAULT 'Jebel Ali Main Yard',
-      lat DOUBLE PRECISION DEFAULT 25.0045,
-      lng DOUBLE PRECISION DEFAULT 55.0680,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_containers (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      container_number TEXT NOT NULL,
-      size TEXT NOT NULL DEFAULT '40HC',
-      container_type TEXT NOT NULL DEFAULT 'DRY',
-      shipment_type TEXT NOT NULL DEFAULT 'IMPORT',
-      status TEXT NOT NULL DEFAULT 'AT_PORT_DISCHARGED',
-      customer_id TEXT,
-      customer_name TEXT NOT NULL,
-      terminal_id TEXT,
-      terminal_name TEXT NOT NULL,
-      warehouse_id TEXT,
-      warehouse_name TEXT NOT NULL,
-      do_expiry_date TIMESTAMPTZ,
-      discharge_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      empty_return_date TIMESTAMPTZ,
-      seal_number TEXT,
-      weight_kg DOUBLE PRECISION NOT NULL DEFAULT 22400,
-      customs_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      municipality_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      cpip_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      merc_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      boxcare_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      linked_trailer_plate TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_jobs (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      job_code TEXT NOT NULL,
-      job_phase TEXT NOT NULL DEFAULT 'L1',
-      parent_job_id TEXT,
-      shipment_type TEXT NOT NULL DEFAULT 'IMPORT',
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      priority TEXT NOT NULL DEFAULT 'STANDARD',
-      customer_id TEXT,
-      customer_name TEXT NOT NULL,
-      warehouse_id TEXT,
-      warehouse_name TEXT NOT NULL,
-      terminal_id TEXT,
-      terminal_name TEXT NOT NULL,
-      container_id TEXT,
-      container_number TEXT NOT NULL,
-      container_size TEXT NOT NULL DEFAULT '40HC',
-      container_type TEXT NOT NULL DEFAULT 'DRY',
-      do_expiry_date TIMESTAMPTZ,
-      token_number TEXT,
-      assigned_vehicle_id TEXT,
-      assigned_vehicle_plate TEXT,
-      assigned_driver_id TEXT,
-      assigned_driver_name TEXT,
-      assigned_trailer_id TEXT,
-      assigned_trailer_plate TEXT,
-      placement_location TEXT,
-      trailer_detached BOOLEAN NOT NULL DEFAULT FALSE,
-      l2_activated BOOLEAN NOT NULL DEFAULT FALSE,
-      rate_amount_aed DOUBLE PRECISION NOT NULL DEFAULT 1450,
-      driver_allowance_aed DOUBLE PRECISION NOT NULL DEFAULT 150,
-      customs_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      municipality_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      cpip_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      merc_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      boxcare_inspection BOOLEAN NOT NULL DEFAULT FALSE,
-      current_lat DOUBLE PRECISION,
-      current_lng DOUBLE PRECISION,
-      notes TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      job_id TEXT NOT NULL,
-      job_code TEXT NOT NULL,
-      driver_id TEXT NOT NULL,
-      driver_name TEXT NOT NULL,
-      vehicle_plate TEXT,
-      container_number TEXT NOT NULL,
-      trip_phase TEXT NOT NULL DEFAULT 'L1',
-      route_summary TEXT NOT NULL,
-      allowance_amount_aed DOUBLE PRECISION NOT NULL DEFAULT 150,
-      port_gate_fee_aed DOUBLE PRECISION NOT NULL DEFAULT 35,
-      overnight_halt_aed DOUBLE PRECISION NOT NULL DEFAULT 0,
-      total_amount_aed DOUBLE PRECISION NOT NULL DEFAULT 185,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      approved_by TEXT,
-      approved_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_geofences (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      terminal_id TEXT,
-      terminal_name TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'CIRCLE',
-      center_lat DOUBLE PRECISION NOT NULL DEFAULT 25.0112,
-      center_lng DOUBLE PRECISION NOT NULL DEFAULT 55.0612,
-      radius_meters INTEGER NOT NULL DEFAULT 1500,
-      coordinates_json TEXT NOT NULL DEFAULT '[]',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_status_logs (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      job_id TEXT NOT NULL,
-      job_code TEXT NOT NULL,
-      status TEXT NOT NULL,
-      notes TEXT NOT NULL DEFAULT '',
-      actor TEXT NOT NULL DEFAULT 'Dispatch Console',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_messages (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      job_id TEXT NOT NULL,
-      job_code TEXT NOT NULL,
-      sender_role TEXT NOT NULL DEFAULT 'DISPATCHER',
-      sender_name TEXT NOT NULL,
-      message TEXT NOT NULL,
-      is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await safeDdl(db, `
-    CREATE TABLE IF NOT EXISTS logistics_drayage_alerts (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      alert_key TEXT NOT NULL,
-      acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  schemaBootstrapped = true;
-}
+/**
+ * The drayage tables are created by prisma/migrations/20261103090000_logistics_drayage_tables.
+ * This used to run CREATE/ALTER TABLE at runtime (blocked by the runtime-DDL
+ * guard), which in production failed silently: the app role has no DDL rights.
+ * Kept as a no-op so existing callers need no change.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function ensureDrayageSchema(_db: DrayageDbClient): Promise<void> {}
 
 export function calculateDemurrageClock(args: {
   containerType: string;
@@ -1536,7 +1261,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   ]);
 
   // 1. Terminals
-  const terminals: DrayageTerminal[] = terminalRows.map((r: any) => ({
+  const terminals: DrayageTerminal[] = terminalRows.map((r: Record<string, unknown>) => ({
     id: String(r.id),
     tenantId: String(r.tenant_id),
     name: String(r.name),
@@ -1553,7 +1278,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 2. Warehouses
-  const warehouses: DrayageWarehouse[] = warehouseRows.map((r: any) => ({
+  const warehouses: DrayageWarehouse[] = warehouseRows.map((r: Record<string, unknown>) => ({
     id: String(r.id),
     tenantId: String(r.tenant_id),
     customerId: r.customer_id ? String(r.customer_id) : null,
@@ -1576,7 +1301,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 2b. Clients (Client Master)
-  const clients: DrayageClient[] = (clientRows || []).map((r: any) => {
+  const clients: DrayageClient[] = (clientRows || []).map((r: Record<string, unknown>) => {
     const clientId = String(r.id);
     const clientName = String(r.name);
     const mappedWhs = warehouses.filter(
@@ -1604,7 +1329,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   });
 
   // 3. Trailers
-  const trailers: DrayageTrailer[] = trailerRows.map((r: any) => ({
+  const trailers: DrayageTrailer[] = trailerRows.map((r: Record<string, unknown>) => ({
     id: String(r.id),
     tenantId: String(r.tenant_id),
     plateNumber: String(r.plate_number),
@@ -1619,7 +1344,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 4. Jobs
-  const jobs: DrayageJob[] = jobRows.map((r: any) => ({
+  const jobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => ({
     id: String(r.id),
     tenantId: String(r.tenant_id),
     jobCode: String(r.job_code),
@@ -1665,7 +1390,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   // 5. Containers + Demurrage Calculation
   const terminalMap = new Map(terminals.map(t => [t.id, t]));
-  const containers: DrayageContainer[] = containerRows.map((r: any) => {
+  const containers: DrayageContainer[] = containerRows.map((r: Record<string, unknown>) => {
     const term = r.terminal_id ? terminalMap.get(String(r.terminal_id)) : undefined;
     const dischargeIso = r.discharge_date ? new Date(String(r.discharge_date)).toISOString() : new Date().toISOString();
     const emptyReturnIso = r.empty_return_date ? new Date(String(r.empty_return_date)).toISOString() : null;
@@ -1729,7 +1454,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
   }
 
-  const vehicles: MappedFleetVehicle[] = rawVehicles.map((v: any, idx: number) => {
+  const vehicles: MappedFleetVehicle[] = rawVehicles.map((v: Record<string, unknown>, idx: number) => {
     const id = String(v.id);
     const activeJob = activeJobByVehicle.get(id);
     return {
@@ -1758,7 +1483,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   });
 
   // 7. Mapped Fleet360 Drivers (from `drivers` table)
-  const drivers: MappedFleetDriver[] = rawDrivers.map((d: any) => {
+  const drivers: MappedFleetDriver[] = rawDrivers.map((d: Record<string, unknown>) => {
     const id = String(d.id);
     const first = String(d.first_name ?? '').trim();
     const last = String(d.last_name ?? '').trim();
@@ -1785,7 +1510,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   });
 
   // 8. Mapped Fleet360 Customers (from `customers` table)
-  const customers: MappedFleetCustomer[] = rawCustomers.map((c: any) => ({
+  const customers: MappedFleetCustomer[] = rawCustomers.map((c: Record<string, unknown>) => ({
     id: String(c.id),
     customerCode: c.customer_code ? String(c.customer_code) : null,
     name: String(c.name_en ?? 'Enterprise Client'),
@@ -1798,7 +1523,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 9. Driver Allowances
-  const allowances: DrayageDriverAllowance[] = allowanceRows.map((a: any) => ({
+  const allowances: DrayageDriverAllowance[] = allowanceRows.map((a: Record<string, unknown>) => ({
     id: String(a.id),
     tenantId: String(a.tenant_id),
     jobId: String(a.job_id),
@@ -1820,7 +1545,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 10. Geofences, Status Logs, Messages & Intelligent Alerts
-  const geofences: DrayageGeofence[] = geofenceRows.map((g: any) => ({
+  const geofences: DrayageGeofence[] = geofenceRows.map((g: Record<string, unknown>) => ({
     id: String(g.id),
     tenantId: String(g.tenant_id),
     terminalId: g.terminal_id ? String(g.terminal_id) : null,
@@ -1834,7 +1559,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     createdAt: g.created_at ? new Date(String(g.created_at)).toISOString() : new Date().toISOString(),
   }));
 
-  const statusLogs: DrayageStatusLog[] = statusLogRows.map((l: any) => ({
+  const statusLogs: DrayageStatusLog[] = statusLogRows.map((l: Record<string, unknown>) => ({
     id: String(l.id),
     tenantId: String(l.tenant_id),
     jobId: String(l.job_id),
@@ -1845,7 +1570,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
   }));
 
-  const messages: DrayageDispatchMessage[] = messageRows.map((m: any) => ({
+  const messages: DrayageDispatchMessage[] = messageRows.map((m: Record<string, unknown>) => ({
     id: String(m.id),
     tenantId: String(m.tenant_id),
     jobId: String(m.job_id),
@@ -1857,7 +1582,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     createdAt: m.created_at ? new Date(String(m.created_at)).toISOString() : new Date().toISOString(),
   }));
 
-  const ackSet = new Set(ackRows.filter((r: any) => r.acknowledged).map((r: any) => String(r.alert_key)));
+  const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
 
   const alerts: DrayageAlertItem[] = [];
   const jobByContainerId = new Map(jobs.filter(j => j.containerId).map(j => [j.containerId as string, j]));

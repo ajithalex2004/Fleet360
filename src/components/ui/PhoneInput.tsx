@@ -10,11 +10,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   COUNTRIES,
-  DEFAULT_COUNTRY,
   CountryMeta,
   parsePhoneNumber,
 } from '@/lib/phone-format';
-import { ChevronDown, Search, Check, Phone } from 'lucide-react';
+import { ChevronDown, Search, Check } from 'lucide-react';
 
 export interface PhoneInputProps {
   value?: string | null;
