@@ -36,6 +36,7 @@ import {
   createAutoLifecycle,
   type AutoLifecycleHandle,
   type LatLng,
+  haversineMeters,
 } from '@/lib/driver-offline/auto-lifecycle';
 import {
   AlertTriangle,
@@ -54,6 +55,15 @@ import {
   Anchor,
   Timer,
 } from 'lucide-react';
+
+export interface DrayageGeofenceBoundary {
+  name: string;
+  type: 'CIRCLE' | 'POLYGON';
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  coordinates?: Array<{ lat: number; lng: number }>;
+}
 
 export interface DriverDrayageJob {
   id: string;
@@ -76,6 +86,33 @@ export interface DriverDrayageJob {
   rateAmountAed: number;
   driverAllowanceAed: number;
   notes: string | null;
+  terminalGeofence?: DrayageGeofenceBoundary | null;
+  warehouseGeofence?: DrayageGeofenceBoundary | null;
+}
+
+export function isPointInsideGeofence(
+  pos: LatLng,
+  gf?: DrayageGeofenceBoundary | null,
+): boolean {
+  if (!pos || !gf) return false;
+
+  // Polygon check using ray-casting algorithm
+  if (gf.type === 'POLYGON' && gf.coordinates && gf.coordinates.length >= 3) {
+    const x = pos.lng, y = pos.lat;
+    let inside = false;
+    const vs = gf.coordinates;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      const xi = vs[i].lng, yi = vs[i].lat;
+      const xj = vs[j].lng, yj = vs[j].lat;
+      const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    if (inside) return true;
+  }
+
+  // Radial / Circle check (using Haversine)
+  const dist = haversineMeters(pos, { lat: gf.lat, lng: gf.lng });
+  return dist <= (gf.radiusMeters || 1000);
 }
 
 interface ServerTrip {
@@ -183,6 +220,9 @@ function DriverTodayContent() {
   const [selectedRampJob, setSelectedRampJob] = useState<DriverDrayageJob | null>(null);
   const [submittingRamp, setSubmittingRamp] = useState<boolean>(false);
   const [rampBanner, setRampBanner] = useState<string | null>(null);
+  const [driverGps, setDriverGps] = useState<LatLng | null>(null);
+  const firedTerminalGfRef = useRef<Set<string>>(new Set());
+  const firedWarehouseGfRef = useRef<Set<string>>(new Set());
   const [sync, setSync] = useState<{ queued: number; failed: number } | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -287,6 +327,7 @@ function DriverTodayContent() {
           }),
         });
         setLastLocationPing(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        void evaluateDrayageGeofences({ lat: loc.lat, lng: loc.lng });
       } catch {
         // Silent
       }
@@ -579,6 +620,85 @@ function DriverTodayContent() {
     }
   };
 
+  // ⚡ Geofence Auto-Trigger for Port Terminal (-> AT_PORT) & Consignee Warehouse (-> Auto-Prompt Ramp Placement Modal)
+  const evaluateDrayageGeofences = useCallback(
+    async (pos: LatLng) => {
+      setDriverGps(pos);
+      if (!drayageJobs || drayageJobs.length === 0) return;
+
+      for (const job of drayageJobs) {
+        // 1. Port Terminal Geofence entrance: Auto-advance to AT_PORT
+        if (
+          job.terminalGeofence &&
+          !firedTerminalGfRef.current.has(job.id) &&
+          (job.status === 'PENDING' || job.status === 'ACCEPTED' || (job.jobPhase === 'L2' && job.status === 'IN_TRANSIT'))
+        ) {
+          if (isPointInsideGeofence(pos, job.terminalGeofence)) {
+            firedTerminalGfRef.current.add(job.id);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([150, 80, 150]);
+            }
+            setAutoToasts((prev) => [
+              ...prev,
+              {
+                id: `gf-term-${job.id}-${Date.now()}`,
+                tripId: job.id,
+                text: `⚓ Entered ${job.terminalGeofence?.name || 'Port Terminal'} — Auto-advanced to AT_PORT`,
+                at: Date.now(),
+              },
+            ]);
+            void handleUpdateDrayageStatus(job.id, {
+              status: 'AT_PORT',
+              notes: `Auto-advanced to AT_PORT upon entering ${job.terminalGeofence?.name || 'Port Terminal'}`,
+            });
+          }
+        }
+
+        // 2. Warehouse Geofence boundary entrance: Auto-popup Ramp Placement & Destuffing ETC prompt
+        if (
+          job.warehouseGeofence &&
+          !firedWarehouseGfRef.current.has(job.id) &&
+          (job.status === 'IN_TRANSIT' || job.status === 'LOADED')
+        ) {
+          if (isPointInsideGeofence(pos, job.warehouseGeofence)) {
+            firedWarehouseGfRef.current.add(job.id);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([200, 100, 200]);
+            }
+            setAutoToasts((prev) => [
+              ...prev,
+              {
+                id: `gf-wh-${job.id}-${Date.now()}`,
+                tripId: job.id,
+                text: `📍 Arrived at ${job.warehouseGeofence?.name || job.warehouseName} — Confirm Ramp Placement & Destuffing ETC`,
+                at: Date.now(),
+              },
+            ]);
+            // Automatically open Ramp Placement & Destuffing ETC Modal on driver's mobile device!
+            setSelectedRampJob(job);
+          }
+        }
+      }
+    },
+    [drayageJobs, handleUpdateDrayageStatus],
+  );
+
+  // Active continuous GPS watching for drayage geofence auto-triggers
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    if (!drayageJobs || drayageJobs.length === 0) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        void evaluateDrayageGeofences({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [drayageJobs, evaluateDrayageGeofences]);
+
   const headerDate = useMemo(() => {
     return now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }, [now]);
@@ -734,10 +854,12 @@ function DriverTodayContent() {
                 key={job.id}
                 job={job}
                 now={now}
+                currentPosition={driverGps}
                 onOpenRampModal={() => setSelectedRampJob(job)}
                 onUpdateStatus={(newStatus) =>
                   handleUpdateDrayageStatus(job.id, { status: newStatus })
                 }
+                onSimulateGeofence={(simPos) => evaluateDrayageGeofences(simPos)}
               />
             ))}
           </div>
@@ -1122,20 +1244,36 @@ function NrmMovementModal({
 function DrayageJobCard({
   job,
   now,
+  currentPosition,
   onOpenRampModal,
   onUpdateStatus,
+  onSimulateGeofence,
 }: {
   job: DriverDrayageJob;
   now: Date;
+  currentPosition: LatLng | null;
   onOpenRampModal: () => void;
   onUpdateStatus: (status: string) => void;
+  onSimulateGeofence: (pos: LatLng) => void;
 }) {
   const isL1 = job.jobPhase === 'L1';
+  const isAtPort = job.status === 'AT_PORT';
   const isPlacedAtRamp = job.status === 'PLACED_AT_RAMP';
   const isDetached = job.status === 'CONTAINER_DETACHED' || job.trailerDetached;
   const isInTransit = job.status === 'IN_TRANSIT' || job.status === 'LOADED';
   const isPending = job.status === 'PENDING' || job.status === 'ACCEPTED';
   const isCompleted = job.status === 'COMPLETED';
+
+  // Distance calculations to configured geofences
+  const distToPortM = useMemo(() => {
+    if (!currentPosition || !job.terminalGeofence) return null;
+    return Math.round(haversineMeters(currentPosition, { lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng }));
+  }, [currentPosition, job.terminalGeofence]);
+
+  const distToRampM = useMemo(() => {
+    if (!currentPosition || !job.warehouseGeofence) return null;
+    return Math.round(haversineMeters(currentPosition, { lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng }));
+  }, [currentPosition, job.warehouseGeofence]);
 
   // Calculate ETC countdown
   const etcRemainingMs = useMemo(() => {
@@ -1214,23 +1352,45 @@ function DrayageJobCard({
         </div>
       </div>
 
-      {/* Origin / Destination Path */}
-      <div className="rounded-xl bg-slate-950/60 p-2.5 border border-white/5 space-y-1.5 text-xs">
-        <div className="flex items-center gap-2 text-slate-300">
-          <Anchor className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-          <span className="text-[11px] truncate text-slate-300">
-            <strong className="text-white">Port Terminal:</strong> {job.terminalName}
-          </span>
+      {/* Origin / Destination Path with Configured Geofence Badges */}
+      <div className="rounded-xl bg-slate-950/60 p-2.5 border border-white/5 space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+            <Anchor className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span className="text-[11px] truncate text-slate-300">
+              <strong className="text-white">Port Terminal:</strong> {job.terminalName}
+            </span>
+          </div>
+          {job.terminalGeofence && (
+            <span
+              title={`Terminal Geofence: ${job.terminalGeofence.name} (${job.terminalGeofence.radiusMeters}m radius)`}
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0"
+            >
+              ⚓ {distToPortM != null ? `${distToPortM}m` : 'Port GF'}
+            </span>
+          )}
         </div>
+
         <div className="flex items-center gap-2 pl-4 text-slate-500">
           <ArrowRight className="w-3 h-3 text-slate-600" />
-          <span className="text-[10px]">Direct Drayage Corridor</span>
+          <span className="text-[10px]">Direct Drayage Corridor · Automated Geofence Auto-Trigger Armed</span>
         </div>
-        <div className="flex items-center gap-2 text-slate-300">
-          <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="text-[11px] truncate text-slate-300">
-            <strong className="text-white">Consignee Warehouse:</strong> {job.warehouseName}
-          </span>
+
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+            <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[11px] truncate text-slate-300">
+              <strong className="text-white">Consignee Ramp:</strong> {job.warehouseName}
+            </span>
+          </div>
+          {job.warehouseGeofence && (
+            <span
+              title={`Ramp Geofence: ${job.warehouseGeofence.name} (${job.warehouseGeofence.type === 'POLYGON' ? 'Polygon' : `${job.warehouseGeofence.radiusMeters}m`})`}
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
+            >
+              📍 {distToRampM != null ? `${distToRampM}m` : (job.warehouseGeofence.type === 'POLYGON' ? 'Polygon Ramp' : 'Ramp GF')}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1277,35 +1437,74 @@ function DrayageJobCard({
       )}
 
       {/* Lifecycle Action Buttons */}
-      <div className="pt-1">
+      <div className="pt-1 space-y-2">
         {isPending && (
-          <button
-            type="button"
-            onClick={() => onUpdateStatus('IN_TRANSIT')}
-            className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-          >
-            <Truck className="w-4 h-4" />
-            <span>Start Drayage Trip (Gate Out Port)</span>
-          </button>
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('IN_TRANSIT')}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Start Drayage Trip (Gate Out Port)</span>
+            </button>
+            {job.terminalGeofence && (
+              <button
+                type="button"
+                onClick={() => onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
+                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1"
+              >
+                <span>⚡ Simulate Entering Port Geofence (Auto-advance to AT_PORT)</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {isAtPort && (
+          <div className="space-y-1.5">
+            <div className="p-2.5 rounded-xl bg-sky-950/80 border border-sky-500/40 text-center text-xs text-sky-200 font-semibold flex items-center justify-center gap-1.5">
+              <Anchor className="w-4 h-4 text-sky-400 animate-pulse" />
+              <span>At Port Berth/Gate · Container Loading in Progress</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('IN_TRANSIT')}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Gate Out & Start Transit to Consignee Ramp</span>
+            </button>
+          </div>
         )}
 
         {isInTransit && (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onOpenRampModal}
-              className="py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-1.5"
-            >
-              <MapPin className="w-4 h-4" />
-              <span>Placed at Ramp</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateStatus('CONTAINER_DETACHED')}
-              className="py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition flex items-center justify-center gap-1.5"
-            >
-              <span>Detach at Yard</span>
-            </button>
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onOpenRampModal}
+                className="py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-1.5"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Placed at Ramp</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateStatus('CONTAINER_DETACHED')}
+                className="py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition flex items-center justify-center gap-1.5"
+              >
+                <span>Detach at Yard</span>
+              </button>
+            </div>
+            {job.warehouseGeofence && (
+              <button
+                type="button"
+                onClick={() => onSimulateGeofence({ lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng })}
+                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center justify-center gap-1"
+              >
+                <span>⚡ Simulate Arriving at Ramp Geofence (Auto-pop Prompt)</span>
+              </button>
+            )}
           </div>
         )}
 
