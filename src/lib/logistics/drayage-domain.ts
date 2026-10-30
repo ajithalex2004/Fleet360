@@ -1086,12 +1086,13 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   ).catch(() => [{ cnt: 0 }]);
 
   if (Number(primeMoverCountRows[0]?.cnt ?? 0) === 0) {
+    const tag = tenantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'TRX';
     const defaultPrimeMovers = [
-      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4011', make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024, lat: 25.0112, lng: 55.0612, fuel: 88, mileage: 42000, nextService: 50000, idleHours: 4.5 },
-      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4012', make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024, lat: 24.9850, lng: 55.0760, fuel: 94, mileage: 38000, nextService: 45000, idleHours: 2.5 },
-      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4013', make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023, lat: 24.9642, lng: 55.0915, fuel: 75, mileage: 65000, nextService: 70000, idleHours: 5.8 },
-      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: 'DXB-PR-4014', make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024, lat: 24.9310, lng: 55.0750, fuel: 68, mileage: 51000, nextService: 60000, idleHours: 1.2 },
-      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: 'AUH-PR-3021', make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023, lat: 24.8055, lng: 54.6462, fuel: 82, mileage: 78000, nextService: 85000, idleHours: 3.0 },
+      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4011`, make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024, lat: 25.0112, lng: 55.0612, fuel: 88, mileage: 42000, nextService: 50000, idleHours: 4.5 },
+      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4012`, make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024, lat: 24.9850, lng: 55.0760, fuel: 94, mileage: 38000, nextService: 45000, idleHours: 2.5 },
+      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4013`, make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023, lat: 24.9642, lng: 55.0915, fuel: 75, mileage: 65000, nextService: 70000, idleHours: 5.8 },
+      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4014`, make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024, lat: 24.9310, lng: 55.0750, fuel: 68, mileage: 51000, nextService: 60000, idleHours: 1.2 },
+      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: `AUH-${tag}-3021`, make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023, lat: 24.8055, lng: 54.6462, fuel: 82, mileage: 78000, nextService: 85000, idleHours: 3.0 },
     ];
     for (const pm of defaultPrimeMovers) {
       await db.$executeRawUnsafe(
@@ -1100,12 +1101,10 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
           make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active,
           current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km,
           created_at, updated_at
-        ) VALUES ($1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,$7,$8,$9,$9,$10,$11,NOW(),NOW() - ($12 || ' hours')::interval)
-        ON CONFLICT (id) DO UPDATE
-          SET current_lat = EXCLUDED.current_lat,
-              current_lng = EXCLUDED.current_lng,
-              fuel_level_pct = EXCLUDED.fuel_level_pct,
-              updated_at = EXCLUDED.updated_at`,
+        )
+        SELECT $1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,$7,$8,$9,$9,$10,$11,NOW(),NOW() - ($12 || ' hours')::interval
+        WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $2)
+        ON CONFLICT DO NOTHING`,
         pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
         pm.lat, pm.lng, pm.fuel, pm.mileage, pm.nextService, String(pm.idleHours),
       ).catch(() => {});
@@ -1129,8 +1128,10 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       await db.$executeRawUnsafe(
         `INSERT INTO drivers (
           id, tenant_id, name, contact_number, license_type, status, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,'HEAVY','ACTIVE',NOW(),NOW())
-        ON CONFLICT (id) DO NOTHING`,
+        )
+        SELECT $1,$2,$3,$4,'HEAVY','ACTIVE',NOW(),NOW()
+        WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $2)
+        ON CONFLICT DO NOTHING`,
         d.id, tenantId, d.name, d.phone,
       ).catch(() => {});
     }
