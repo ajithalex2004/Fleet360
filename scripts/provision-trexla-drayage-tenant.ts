@@ -30,7 +30,9 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
-async function detectUserTableName(prisma: any): Promise<string> {
+async function detectUserTableName(prisma: {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+}): Promise<string> {
   const rows = await prisma.$queryRawUnsafe<Array<{ table_name: string }>>(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = 'public' AND table_name IN ('User', 'users')
@@ -306,7 +308,7 @@ async function main() {
   console.log('\n4. Bootstrapping Port & Container Drayage Operational Workspace for Trexla Logistics...');
   await ensureDrayageSchema(prisma);
   const workspace = await withTenantRls(prisma, provisioned.tenant.id, async (tx) => {
-    const ws = await getDrayageWorkspaceData(tx, provisioned.tenant.id);
+    await getDrayageWorkspaceData(tx, provisioned.tenant.id);
     await calculateMissingAllowances(tx, provisioned.tenant.id);
     return getDrayageWorkspaceData(tx, provisioned.tenant.id);
   });
