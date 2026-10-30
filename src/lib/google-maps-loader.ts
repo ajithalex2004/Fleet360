@@ -20,15 +20,30 @@
 export interface GMapsLatLng { lat(): number; lng(): number }
 interface GMapsLatLngLiteral { lat: number; lng: number }
 
+export interface GMapsMVCArray<T = unknown> {
+  getArray(): T[];
+  getLength(): number;
+  getAt(i: number): T;
+  setAt(i: number, elem: T): void;
+  insertAt(i: number, elem: T): void;
+  removeAt(i: number): T;
+  addListener(event: string, cb: (e?: unknown) => void): void;
+  [key: string]: unknown;
+}
+
 export interface GMapsMap {
   addListener(event: string, cb: (e: { latLng?: GMapsLatLng }) => void): void;
   panTo(pos: GMapsLatLngLiteral): void;
   setZoom(z: number): void;
+  setCenter?(pos: GMapsLatLngLiteral): void;
   fitBounds(bounds: GMapsLatLngBounds, padding?: number | { top: number; right: number; bottom: number; left: number }): void;
+  setMapTypeId?(type: string): void;
+  setOptions?(opts: object | null): void;
+  [key: string]: unknown;
 }
 export interface GMapsMarker {
   setPosition(pos: GMapsLatLngLiteral): void;
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: unknown) => void): void;
   getPosition(): GMapsLatLng | null;
   setMap(map: GMapsMap | null): void;
 }
@@ -39,6 +54,8 @@ export interface GMapsLatLngBounds {
 export interface GMapsPolyline {
   setMap(map: GMapsMap | null): void;
   setPath(path: GMapsLatLngLiteral[]): void;
+  addListener(event: string, cb: (e?: unknown) => void): void;
+  [key: string]: unknown;
 }
 export interface GMapsCircle {
   setMap(map: GMapsMap | null): void;
@@ -47,14 +64,17 @@ export interface GMapsCircle {
   setCenter(pos: GMapsLatLngLiteral): void;
   setRadius(r: number): void;
   setOptions(opts: object): void;
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: unknown) => void): void;
 }
 export interface GMapsPolygon {
   setMap(map: GMapsMap | null): void;
-  getPath(): { getArray(): GMapsLatLng[]; getLength(): number };
+  getPath(): GMapsMVCArray<GMapsLatLng>;
   setPath(path: GMapsLatLngLiteral[]): void;
   setOptions(opts: object): void;
-  addListener(event: string, cb: () => void): void;
+  setEditable(editable: boolean): void;
+  setDraggable(draggable: boolean): void;
+  addListener(event: string, cb: (e?: unknown) => void): void;
+  [key: string]: unknown;
 }
 export interface GMapsDrawingManager {
   setMap(map: GMapsMap | null): void;
@@ -62,21 +82,30 @@ export interface GMapsDrawingManager {
   setOptions(opts: object): void;
   addListener(event: string, cb: (payload: unknown) => void): void;
 }
+export interface GMapsInfoWindow {
+  open(opts?: { map?: GMapsMap; anchor?: GMapsMarker }): void;
+  close(): void;
+  setContent(content: string | Node): void;
+  setPosition(pos: GMapsLatLngLiteral | GMapsLatLng): void;
+}
+
 export interface GMapsAutocomplete {
-  addListener(event: string, cb: () => void): void;
+  addListener(event: string, cb: (e?: unknown) => void): void;
   getPlace(): {
     geometry?: { location?: GMapsLatLng };
     name?: string;
     formatted_address?: string;
   };
 }
-interface GMapsGeocoderResult {
+export interface GMapsGeocoderResult {
   formatted_address?: string;
+  geometry?: { location?: GMapsLatLng; location_type?: string; viewport?: GMapsLatLngBounds };
   address_components?: Array<{ long_name?: string; short_name?: string; types?: string[] }>;
+  types?: string[];
 }
 export interface GMapsGeocoder {
   geocode(
-    request: { location: GMapsLatLngLiteral },
+    request: { location?: GMapsLatLngLiteral; address?: string },
     cb: (results: GMapsGeocoderResult[] | null, status: string) => void,
   ): void;
 }
@@ -105,8 +134,12 @@ export interface GoogleCtors {
   Circle: new (opts: object) => GMapsCircle;
   Polygon: new (opts: object) => GMapsPolygon;
   DrawingManager: new (opts?: object) => GMapsDrawingManager;
+  InfoWindow: new (opts?: object) => GMapsInfoWindow;
   /** google.maps.drawing.OverlayType enum — 'circle' | 'polygon' | null etc. */
   OverlayType: { CIRCLE: string; POLYGON: string; MARKER: string; POLYLINE: string; RECTANGLE: string };
+  MapTypeControlStyle?: Record<string, number>;
+  ControlPosition?: Record<string, number>;
+  [key: string]: unknown;
 }
 
 interface GoogleMapsBootstrap {
@@ -115,7 +148,7 @@ interface GoogleMapsBootstrap {
   // it from 'maps' (which we used to do) throws
   // `google.maps.LatLngBounds is not a constructor`.
   importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds']; LatLng: GoogleCtors['LatLng']; SymbolPath: GoogleCtors['SymbolPath'] }>;
-  importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon'] }>;
+  importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon']; InfoWindow: GoogleCtors['InfoWindow'] }>;
   importLibrary(name: 'marker'):    Promise<{ Marker: GoogleCtors['Marker'] }>;
   importLibrary(name: 'geocoding'): Promise<{ Geocoder: GoogleCtors['Geocoder'] }>;
   importLibrary(name: 'places'):    Promise<{ Autocomplete: GoogleCtors['Autocomplete'] }>;
@@ -196,6 +229,17 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
         'Google Maps bootstrap missing after install — check the Network tab for the maps.googleapis.com request and the browser Console for a specific …MapError from Google.',
       );
     }
+    // In Google Maps JS API v3.65+, the drawing library and DrawingManager
+    // were officially deprecated and removed. We catch any failure so the
+    // rest of Google Maps (core, maps, marker, geocoding, places, geometry)
+    // loads without throwing.
+    const drawingLibPromise = bootstrap
+      .importLibrary('drawing')
+      .catch((err) => {
+        console.warn('Google Maps drawing library unavailable or deprecated in v3.65+:', err?.message || err);
+        return null;
+      });
+
     const [coreLib, mapsLib, markerLib, geocodingLib, placesLib, geometryLib, drawingLib] = await Promise.all([
       bootstrap.importLibrary('core'),
       bootstrap.importLibrary('maps'),
@@ -203,13 +247,39 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       bootstrap.importLibrary('geocoding'),
       bootstrap.importLibrary('places'),
       bootstrap.importLibrary('geometry'),
-      bootstrap.importLibrary('drawing'),
+      drawingLibPromise,
     ]);
+
+    class FallbackDrawingManager implements GMapsDrawingManager {
+      private map: GMapsMap | null = null;
+      private mode: string | null = null;
+      constructor() {}
+      setMap(map: GMapsMap | null) { this.map = map; }
+      setDrawingMode(mode: string | null) { this.mode = mode; }
+      setOptions() {}
+      addListener() {}
+    }
+
+    const DrawingManagerCtor = (drawingLib && drawingLib.DrawingManager) || FallbackDrawingManager;
+    const OverlayTypeObj = (drawingLib && drawingLib.OverlayType) || {
+      CIRCLE: 'circle',
+      POLYGON: 'polygon',
+      MARKER: 'marker',
+      POLYLINE: 'polyline',
+      RECTANGLE: 'rectangle',
+    };
+
+    // Enums the async loader does not hand out, read off the loaded namespace.
+    const liveMaps = (window as unknown as {
+      google?: { maps?: { MapTypeControlStyle?: Record<string, number>; ControlPosition?: Record<string, number> } };
+    }).google?.maps;
+
     return {
       Map:            mapsLib.Map,
       Polyline:       mapsLib.Polyline,
       Circle:         mapsLib.Circle,
       Polygon:        mapsLib.Polygon,
+      InfoWindow:     mapsLib.InfoWindow,
       LatLngBounds:   coreLib.LatLngBounds,   // ← 'core', not 'maps'
       LatLng:         coreLib.LatLng,
       SymbolPath:     coreLib.SymbolPath,
@@ -217,8 +287,10 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       Geocoder:       geocodingLib.Geocoder,
       Autocomplete:   placesLib.Autocomplete,
       decodePath:     geometryLib.encoding.decodePath,
-      DrawingManager: drawingLib.DrawingManager,
-      OverlayType:    drawingLib.OverlayType,
+      DrawingManager: DrawingManagerCtor,
+      OverlayType:    OverlayTypeObj,
+      MapTypeControlStyle: liveMaps?.MapTypeControlStyle || { HORIZONTAL_BAR: 1, DROPDOWN_MENU: 2, DEFAULT: 0 },
+      ControlPosition: liveMaps?.ControlPosition || { TOP_RIGHT: 3, TOP_LEFT: 1 },
     };
   })();
 

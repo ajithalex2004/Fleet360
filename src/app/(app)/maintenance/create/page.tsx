@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
     Vehicle,
     Garage,
@@ -320,17 +321,21 @@ export default function CreateRequestPage() {
                     <div className="grid gap-6 md:grid-cols-3">
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-muted)]">Vehicle ID *</label>
-                            <select
-                                required
-                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
-                                value={formData.vehicleId}
-                                onChange={(e) => handleVehicleChange(e.target.value)}
-                            >
-                                <option value="" className="text-[var(--text-main)] bg-[var(--bg-surface)]">Select Vehicle</option>
-                                {vehicles.map((v) => (
-                                    <option key={v.id} value={v.id} className="text-[var(--text-main)] bg-[var(--bg-surface)]">{v.licensePlate} - {v.make} {v.model}</option>
-                                ))}
-                            </select>
+                            <div className="mt-1">
+                                <SearchableSelect
+                                    value={formData.vehicleId}
+                                    onChange={(val) => handleVehicleChange(val)}
+                                    placeholder="Search vehicle by plate or model..."
+                                    searchPlaceholder="Type plate, make, or model..."
+                                    accent="blue"
+                                    isClearable
+                                    options={vehicles.map((v) => ({
+                                        value: v.id,
+                                        label: `${v.licensePlate} — ${v.make} ${v.model}`,
+                                        sublabel: `${v.type || 'Vehicle'} • Year ${v.year || ''}`.trim(),
+                                    }))}
+                                />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-muted)]">Vehicle Type</label>
@@ -422,7 +427,7 @@ export default function CreateRequestPage() {
                                     ))}
                                 </div>
                                 {getFilteredJobs().length === 0 && (
-                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No jobs found matching "{jobSearch}"</p>
+                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No jobs found matching &quot;{jobSearch}&quot;</p>
                                 )}
                             </div>
                             <p className="mt-2 text-xs text-[var(--text-faint)]">
@@ -521,16 +526,20 @@ export default function CreateRequestPage() {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-muted)]">Driver</label>
-                            <select
-                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
-                                value={formData.driverId}
-                                onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                            >
-                                <option value="">Select Driver</option>
-                                {drivers.map((d) => (
-                                    <option key={d.id} value={d.id}>{d.name}</option>
-                                ))}
-                            </select>
+                            <div className="mt-1">
+                                <SearchableSelect
+                                    value={formData.driverId || ''}
+                                    onChange={(val) => setFormData({ ...formData, driverId: val })}
+                                    placeholder="Search driver by name..."
+                                    searchPlaceholder="Type driver name..."
+                                    accent="blue"
+                                    isClearable
+                                    options={drivers.map((d) => ({
+                                        value: d.id,
+                                        label: d.name,
+                                    }))}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

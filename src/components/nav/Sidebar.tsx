@@ -12,19 +12,6 @@
  * Every nav click does two things: opens a workspace tab (or activates an
  * existing one) AND routes Next.js to the href. The URL always mirrors
  * the active tab so back/forward and shareable links work.
- *
- * Performance notes:
- *  - Each row is a <Link> with prefetch on hover (or automatic prefetch
- *    when the link enters the viewport) instead of a router.push() call.
- *    Next.js pre-downloads the destination route's RSC payload in the
- *    background, so by the time the user clicks, the navigation
- *    effectively becomes a client-side transition with no network wait.
- *  - The onMouseEnter handler kicks off an additional explicit
- *    router.prefetch(href) on top of the default <Link> behaviour, which
- *    is a no-op in production (already prefetched) but cheap insurance
- *    against any <Link> prefetch scheduling delays.
- *  - The WorkspaceTabsFullError handling stays on the click handler —
- *    prefetch never throws it, only the tab-store op does.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -36,6 +23,7 @@ import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
 import { canOpenModule } from '@/lib/nav/module-visibility';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { RunningLabel } from '@/components/ui/RunningLabel';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
@@ -54,22 +42,60 @@ export default function Sidebar({ onTabsFull }: Props) {
   const activeModule = useMemo(() => moduleFromPathname(pathname), [pathname]);
   const { tLabel } = useLanguage();
 
-  // Hide superOnly sub-pages from non-SUPER_ADMIN users. Page-level access is
-  // still enforced by the API; this keeps the sidebar uncluttered.
   const { user, tenant, permissions } = usePermissions();
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
-  // Only modules the tenant has and the user's role may use (same rule as
-  // ModuleGuard). Nothing is listed until the session has loaded.
   const canOpen = (id: string) =>
     !!user && canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
-  const visibleSubPages = (subs?: SubPage[]) =>
-    subs ? subs.filter(sp => !sp.superOnly || isSuperAdmin) : undefined;
+  const visibleSubPages = (subs?: SubPage[], moduleId?: string) => {
+    if (!subs) return undefined;
+    let list = subs.filter(sp => !sp.superOnly || isSuperAdmin);
+    if (
+      moduleId === 'logistics' &&
+      !isSuperAdmin &&
+      tenant?.enabledModules &&
+      tenant.enabledModules.length > 0 &&
+      !tenant.enabledModules.includes('logistics') &&
+      (tenant.enabledModules.includes('drayage') || tenant.enabledModules.includes('port-drayage') || tenant.enabledModules.includes('container-drayage'))
+    ) {
+      list = list.filter(sp => sp.href.startsWith('/logistics/drayage'));
+    }
+    return list;
+  };
 
   const [collapsed, setCollapsed] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<Set<string>>(new Set());
   const [collapsedCats, setCollapsedCats] = useState<Set<NavCategory>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['fleet', 'admin', 'finance', 'logistics']));
+
+  useEffect(() => {
+    if (activeModule?.id) {
+      setExpandedModules(prev => {
+        if (prev.has(activeModule.id)) return prev;
+        const next = new Set(prev);
+        next.add(activeModule.id);
+        return next;
+      });
+      if (activeModule.category) {
+        setCollapsedCats(prev => {
+          if (!prev.has(activeModule.category)) return prev;
+          const next = new Set(prev);
+          next.delete(activeModule.category);
+          return next;
+        });
+      }
+    }
+  }, [activeModule?.id, activeModule?.category]);
+
+  const toggleModuleExpand = (moduleId: string) => {
+    setExpandedModules(prev => {
+      const next = new Set(prev);
+      if (next.has(moduleId)) next.delete(moduleId);
+      else next.add(moduleId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     try {
@@ -93,7 +119,7 @@ export default function Sidebar({ onTabsFull }: Props) {
   };
 
   const toggleCollapsed = () => {
-    if (pinned) return; // Don't collapse when pinned
+    if (pinned) return;
     setCollapsed(c => {
       const next = !c;
       try { window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch {}
@@ -105,7 +131,7 @@ export default function Sidebar({ onTabsFull }: Props) {
     setPinned(p => {
       const next = !p;
       try { window.localStorage.setItem(PINNED_KEY, next ? '1' : '0'); } catch {}
-      if (next) setCollapsed(false); // Expand when pinned
+      if (next) setCollapsed(false);
       return next;
     });
   };
@@ -132,24 +158,6 @@ export default function Sidebar({ onTabsFull }: Props) {
   const [flyoutTop, setFlyoutTop] = useState(0);
   const navRef = useRef<HTMLElement | null>(null);
 
-  /**
-   * Prefetch the destination route. <Link prefetch> already does this
-   * automatically on hover/viewport-entry, but we call it explicitly on
-   * mouseenter so the prefetch is in flight by the time the user moves
-   * the cursor to the link (the <Link> handler fires after the same
-   * mouseenter, so this is a defensive double-prefetch that's a cheap
-   * no-op once the request is in flight).
-   */
-  const prefetch = (href: string) => {
-    try { router.prefetch(href); } catch { /* non-fatal */ }
-  };
-
-  /**
-   * Programmatic nav (used by collapsed-mode flyout buttons that aren't
-   * <Link> elements). Same openTab + push pattern as before — the flyout
-   * is positioned with absolute styling, so we keep it as a <button> with
-   * an explicit router.push for the rare case the user actually uses it.
-   */
   const navigate = (moduleId: string, target: { label: string; href: string; icon: LucideIcon }) => {
     try {
       openTab({ key: target.href, label: target.label, moduleId, iconName: target.icon.displayName ?? 'Circle' });
@@ -235,6 +243,9 @@ export default function Sidebar({ onTabsFull }: Props) {
 
           return (
             <div key={cat.id} className="mb-2.5">
+              {cat.id === 'finance' && (
+                <div className="my-2.5 mx-1 border-t border-[var(--border-subtle)]" />
+              )}
               <button
                 type="button"
                 onClick={() => toggleCategory(cat.id)}
@@ -260,6 +271,8 @@ export default function Sidebar({ onTabsFull }: Props) {
                         <NavRow
                           module={m}
                           collapsed={false}
+                          isExpanded={isActive || expandedModules.has(m.id)}
+                          onToggleExpand={toggleModuleExpand}
                           active={isActive}
                           moduleId={m.id}
                           onTabOpen={openTab}
@@ -267,9 +280,9 @@ export default function Sidebar({ onTabsFull }: Props) {
                           onHide={hideModule}
                           onHover={() => {}}
                         />
-                        {isActive && visibleSubPages(m.subPages)?.length ? (
+                        {(isActive || expandedModules.has(m.id)) && visibleSubPages(m.subPages, m.id)?.length ? (
                           <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 rtl:pl-0 rtl:pr-2 border-l rtl:border-l-0 rtl:border-r border-[var(--border-subtle)] ml-4 rtl:ml-0 rtl:mr-4">
-                            {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
+                            {visibleSubPages(m.subPages, m.id)!.map((sp, idx, arr) => {
                               const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
                               const showHeader = sp.group && sp.group !== prevGroup;
                               return (
@@ -350,12 +363,12 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       {collapsed && flyoutFor && (() => {
         const m = MODULES.find(x => x.id === flyoutFor);
-        const visible = visibleSubPages(m?.subPages);
+        const visible = visibleSubPages(m?.subPages, m?.id);
         if (!m || !visible?.length) return null;
         const categoryDef = NAV_CATEGORIES.find(c => c.id === m.category);
         return (
           <div
-            className="absolute left-[60px] rtl:left-auto rtl:right-[60px] z-50 min-w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
+            className="absolute left-[60px] rtl:left-auto rtl:right-[60px] z-50 min-w-[230px] max-h-[80vh] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
             style={{ top: Math.max(8, flyoutTop) + 'px' }}
             onMouseEnter={() => setFlyoutFor(m.id)}
             onMouseLeave={() => setFlyoutFor(null)}
@@ -390,8 +403,32 @@ export default function Sidebar({ onTabsFull }: Props) {
                         }`}
                       >
                         <ActiveIcon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
-                        <span className="truncate">{tLabel(sp.label)}</span>
+                        <RunningLabel text={tLabel(sp.label)} className="flex-1" />
                       </button>
+                      {sp.children && sp.children.length > 0 && (
+                        <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-[var(--border-subtle)] ml-3.5">
+                          {sp.children.map(child => {
+                            const ChildIcon = child.icon ?? ActiveIcon;
+                            const childActive = pathname === child.href;
+                            return (
+                              <li key={child.href}>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(m.id, { label: child.label, href: child.href, icon: ChildIcon })}
+                                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left rtl:text-right text-[12px] transition-colors ${
+                                    childActive
+                                      ? 'bg-cyan-500/15 text-cyan-300 font-bold'
+                                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
+                                  }`}
+                                >
+                                  <ChildIcon className={`h-3 w-3 flex-shrink-0 ${childActive ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
+                                  <RunningLabel text={tLabel(child.label)} className="flex-1" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </li>
                   </React.Fragment>
                 );
@@ -405,13 +442,13 @@ export default function Sidebar({ onTabsFull }: Props) {
 }
 
 function NavRow({
-  module: m, collapsed, active, moduleId, onTabOpen, onTabsFull, onHover, onHide,
+  module: m, collapsed, active, isExpanded, moduleId, onTabOpen, onTabsFull, onHover, onHide, onToggleExpand,
 }: {
-  module: ModuleDef; collapsed: boolean; active: boolean; moduleId: string;
+  module: ModuleDef; collapsed: boolean; active: boolean; isExpanded?: boolean; moduleId: string;
   onTabOpen: (t: { key: string; label: string; moduleId: string; iconName: string }) => void;
   onTabsFull?: (message: string) => void;
   onHover: (el: HTMLElement) => void;
-  onHide: (moduleId: string) => void;
+  onHide: (moduleId: string) => void; onToggleExpand?: (moduleId: string) => void;
 }) {
   const { tLabel } = useLanguage();
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -468,11 +505,23 @@ function NavRow({
         }`}
       >
         <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
-        {!collapsed && <span className="flex-1 truncate text-[13px]">{label}</span>}
+        {!collapsed && <RunningLabel text={label} className="flex-1 text-[13px]" />}
         {!collapsed && m.subPages && m.subPages.length > 0 && (
-          active
-            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] rtl:rotate-90 text-cyan-400" />
-            : <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 text-[var(--text-faint)]" />
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleExpand?.(m.id);
+            }}
+            className="p-1 hover:bg-[var(--bg-surface-hover)] rounded-md text-[var(--text-faint)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
+            title={isExpanded ? tLabel('Collapse') : tLabel('Expand')}
+          >
+            {isExpanded
+              ? <ChevronDown className="h-3.5 w-3.5 text-cyan-400" />
+              : <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 text-[var(--text-faint)]" />}
+          </span>
         )}
       </Link>
 
@@ -507,6 +556,10 @@ function SubRow({
   onTabsFull?: (message: string) => void;
 }) {
   const { tLabel } = useLanguage();
+  const pathname = usePathname() ?? '';
+  const hasChildren = Boolean(page.children && page.children.length > 0);
+  const isChildActive = hasChildren && (pathname.startsWith(page.href) || page.children!.some(c => pathname === c.href || pathname.startsWith(c.href + '/')));
+  const [expanded, setExpanded] = useState(true);
   const Icon = page.icon ?? parentIcon;
   const label = tLabel(page.label);
 
@@ -525,35 +578,77 @@ function SubRow({
     }
   };
   return (
-    <Link
-      href={page.href}
-      prefetch
-      onClick={handleClick}
-      onMouseEnter={() => prefetchHref(page.href)}
-      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left rtl:text-right text-[12px] transition-colors ${
-        active
-          ? 'bg-cyan-500/10 text-cyan-300 font-bold'
-          : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
-      }`}
-    >
-      <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
-      <span className="truncate">{label}</span>
-    </Link>
+    <div>
+      <Link
+        href={page.href}
+        prefetch
+        onClick={handleClick}
+        onMouseEnter={() => prefetchHref(page.href)}
+        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left rtl:text-right text-[12px] transition-colors ${
+          active || isChildActive
+            ? 'bg-cyan-500/10 text-cyan-300 font-bold'
+            : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
+        }`}
+      >
+        <Icon className={`h-3 w-3 flex-shrink-0 ${active || isChildActive ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
+        <RunningLabel text={label} className="flex-1 text-[12px]" />
+        {hasChildren && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setExpanded(v => !v);
+            }}
+            className="p-0.5 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-faint)] hover:text-[var(--text-main)]"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className="h-3 w-3 rtl:rotate-180" />}
+          </span>
+        )}
+      </Link>
+      {hasChildren && expanded && (
+        <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 rtl:pl-0 rtl:pr-2 border-l rtl:border-l-0 rtl:border-r border-[var(--border-subtle)] ml-3.5 rtl:ml-0 rtl:mr-3.5">
+          {page.children!.map(child => {
+            const ChildIcon = child.icon ?? Icon;
+            const childActive = pathname === child.href;
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  prefetch
+                  onClick={(e) => {
+                    try {
+                      onTabOpen({ key: child.href, label: child.label, moduleId, iconName: ChildIcon.displayName ?? 'Circle' });
+                    } catch (err) {
+                      e.preventDefault();
+                      if (err instanceof WorkspaceTabsFullError) onTabsFull?.(err.message);
+                      else throw err;
+                    }
+                  }}
+                  onMouseEnter={() => prefetchHref(child.href)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left rtl:text-right text-[11.5px] transition-colors ${
+                    childActive
+                      ? 'bg-cyan-500/15 text-cyan-300 font-bold'
+                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <ChildIcon className={`h-3 w-3 flex-shrink-0 ${childActive ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
+                  <span className="truncate">{tLabel(child.label)}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
-// Module-level prefetch helper — uses Next's router singleton. Captured
-// at module load to avoid a per-row closure. Non-fatal: if router is not
-// available (e.g. during a server render), the call is silently dropped.
-let _prefetch: ((href: string) => void) | null = null;
+const _prefetch: ((href: string) => void) | null = null;
 function prefetchHref(href: string) {
   if (!_prefetch) {
     try {
-      // next/navigation's useRouter() is a hook, so we can't call it
-      // outside a component. Instead, dispatch a custom event that the
-      // AppShell catches — it owns the router instance. This is cheaper
-      // than passing the router down through every row, and the cost is
-      // one event dispatch per hover.
       window.dispatchEvent(new CustomEvent('fleet360:prefetch', { detail: { href } }));
     } catch { /* SSR / no window */ }
     return;

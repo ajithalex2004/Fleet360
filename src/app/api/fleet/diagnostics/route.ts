@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       const vehicleDiagnostics = vehicles.map((v, index) => {
         // Sample realistic telemetry variation across fleet
         let dtcs: string[] = [];
-        let sensors = {
+        const sensors = {
           coolantTempC: 88 + (index % 12),
           engineRpm: 1400 + (index % 400),
           oilPressureKpa: 320 - (index % 40),

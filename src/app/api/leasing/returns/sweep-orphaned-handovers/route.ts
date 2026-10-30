@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         });
 
         const unlinkedHandoverIds = unlinked.map((r) => r.id);
-        let linkedFromUnlinked: string[] = [];
+        const linkedFromUnlinked: string[] = [];
         if (!dryRun) {
           for (const handoverId of unlinkedHandoverIds) {
             try {

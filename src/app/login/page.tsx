@@ -70,8 +70,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    clearClientSession();
     const params  = new URLSearchParams(window.location.search);
+    if (params.get('logout') === 'true') {
+      clearClientSession();
+    } else {
+      try {
+        const stored = localStorage.getItem('xl_mobility_session');
+        const snap = localStorage.getItem('xl_mobility_session_snapshot');
+        if (stored && snap) {
+          window.location.assign('/platform');
+          return;
+        }
+      } catch {}
+    }
 
     const ssoFlag = params.get('sso');
     if (ssoFlag && SSO_MESSAGES[ssoFlag]) {
@@ -161,7 +172,7 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem('xl_backend_token');
       }
-      router.replace('/platform');
+      window.location.assign('/platform');
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {

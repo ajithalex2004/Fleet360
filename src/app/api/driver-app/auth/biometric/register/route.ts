@@ -41,7 +41,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // Lazy import: we don't want to add @simplewebauthn/server as a hard dep
 // for the admin app. The first registration in a tenant pulls it in.
 let _rpID: string | null = null;
-let _rpName = 'Fleet360 Driver';
+const _rpName = 'Fleet360 Driver';
 let _origin: string | null = null;
 
 async function rp() {

@@ -1,4 +1,3 @@
-// @ts-nocheck — one-off CLI script, types not maintained
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -46,10 +45,10 @@ async function check() {
     console.log('Config found:', activeConfig);
 
     // Logic calc
-    const freqVal = activeConfig.frequencyValue || 0;
-    const threshVal = activeConfig.thresholdValue || 0;
-    const lastSvc = schedule.lastServiceMileage;
-    const current = vehicle.currentMileage || 0;
+    const freqVal = Number(activeConfig.frequencyValue ?? 0);
+    const threshVal = Number(activeConfig.thresholdValue ?? 0);
+    const lastSvc = Number(schedule.lastServiceMileage ?? 0);
+    const current = Number(vehicle.currentMileage ?? 0);
 
     const nextDue = lastSvc + freqVal;
     const diff = nextDue - current;
@@ -70,7 +69,7 @@ async function check() {
 
     // Check existing alerts
     const alerts = await prisma.alert.findMany({
-        where: { vehicleId: vehicle.id }
+        where: { relatedEntityId: vehicle.id }
     });
     console.log(`\nExisting Alerts in DB for this vehicle: ${alerts.length}`);
     alerts.forEach(a => console.log(`- ${a.title} (${a.status})`));

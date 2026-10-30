@@ -8,6 +8,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { validatePasswordPolicy } from '@/lib/password-policy';
 // ── PBKDF2 helpers — must match /api/auth/login and /api/tenants/provision ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {
@@ -50,9 +51,10 @@ async function handlePOST(req: NextRequest) {
     if (!user_id || !current_password || !new_password) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
-    if (new_password.length < 8) {
+    const pwCheck = validatePasswordPolicy(new_password);
+    if (!pwCheck.ok) {
       return NextResponse.json(
-        { error: 'New password must be at least 8 characters' },
+        { error: 'New password must meet password policy: ' + pwCheck.error },
         { status: 400 }
       );
     }

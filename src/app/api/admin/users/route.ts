@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
       ? searchParams.get('tenantId')
       : authz.tenantId;
     const isActive   = searchParams.get('isActive');
-    const module     = searchParams.get('module') as ModuleName | null;
+    const moduleParam = searchParams.get('module') as ModuleName | null;
     const search     = searchParams.get('search');
 
     // Build where clause
@@ -182,10 +182,10 @@ export async function GET(req: NextRequest) {
       const users = await getUsers(isActive, search);
 
       // Filter by module access if requested (in-memory, post-fetch)
-      const filtered = module
+      const filtered = moduleParam
         ? users.filter(u => {
             const ma = u.moduleAccess as Record<string, boolean> | null;
-            return !ma || ma[module] !== false; // null = full access (backward compat)
+            return !ma || ma[moduleParam] !== false; // null = full access (backward compat)
           })
         : users;
 

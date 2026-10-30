@@ -39,7 +39,7 @@ export default function LeasingPortalDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Welcome back</h1>
-        <p className="text-sm text-slate-400 mt-1">Here's an overview of your lease.</p>
+        <p className="text-sm text-slate-400 mt-1">Here&apos;s an overview of your lease.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -41,7 +41,7 @@ const GROUP_STYLE = {
 const MODULE_GROUP_SPECS: readonly ModuleGroupSpec[] = [
   { label: 'Booking & Transport', icon: '🚗', color: 'blue',
     description: 'Rentals, leases, shuttles, school runs, freight and self-service booking',
-    keys: ['rental', 'leasing', 'bus-ops', 'school-bus', 'logistics', 'booking-portal'] },
+    keys: ['rental', 'leasing', 'bus-ops', 'school-bus', 'logistics', 'drayage', 'booking-portal'] },
   { label: 'Fleet Management', icon: '🚌', color: 'emerald',
     description: 'Vehicles, drivers, assets and the work that keeps them moving',
     keys: ['fleet', 'maintenance', 'driver-mgmt', 'assets'] },

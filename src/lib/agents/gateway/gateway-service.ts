@@ -18,7 +18,7 @@ import {
   ModelProviderType,
   AgentRunTelemetry,
 } from '../types';
-import { calculateTokenCost } from '../telemetry';
+import { calculateTokenCost, recordAiInvocation } from '../telemetry';
 
 export interface GatewayMessage {
   role: 'system' | 'user' | 'assistant';
@@ -38,6 +38,10 @@ export interface GatewayOptions {
   responseFormat?: 'text' | 'json';
   maxRetries?: number;
   retryBaseDelayMs?: number;
+  agentId?: string;
+  eventType?: string;
+  entityId?: string;
+  recordTelemetry?: boolean;
 }
 
 export interface GatewayVisionOptions extends GatewayOptions {
@@ -208,9 +212,31 @@ export class AIGatewayService {
    * 1. Multi-Turn / Tool Chat Completion with Fallback Stack & Caching
    */
   async chat(messages: GatewayMessage[], options: GatewayOptions = {}): Promise<GatewayResponse> {
+    const callStarted = Date.now();
     const alias = options.capabilityAlias ?? 'ECONOMY_TEXT';
     const tenantId = options.tenantId ?? 'default';
     const cacheKey = hashPromptKey(messages, alias, tenantId);
+    const dispatchTelemetry = (res: GatewayResponse) => {
+      if (options.recordTelemetry !== false) {
+        void recordAiInvocation({
+          tenantId: options.tenantId,
+          agentId: options.agentId ?? 'ai-gateway',
+          eventType: options.eventType ?? 'CHAT_COMPLETION',
+          entityId: options.entityId,
+          modelAlias: res.capabilityAlias,
+          modelProvider: res.provider,
+          inputTokens: res.inputTokens,
+          outputTokens: res.outputTokens,
+          cachedTokens: res.cachedTokens,
+          costUsd: res.costUsd,
+          costAed: res.costAed,
+          status: res.fromFallback ? 'FAILED' : 'COMPLETED',
+          durationMs: Date.now() - callStarted,
+        });
+      }
+      return res;
+    };
+
 
     // Check L1 In-Memory Cache
     if (!options.forceFresh) {
@@ -254,7 +280,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].openai;
         const res = await this.callOpenAI(messages, model, options, openAiKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (openAiErr) {
         console.warn('[ai-gateway] OpenAI call failed, initiating fallback chain:', openAiErr);
       }
@@ -267,7 +293,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].gemini;
         const res = await this.callGemini(messages, model, options, geminiKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (geminiErr) {
         console.warn('[ai-gateway] Gemini call failed, attempting Anthropic fallback:', geminiErr);
       }
@@ -280,7 +306,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].anthropic;
         const res = await this.callAnthropic(messages, model, options, anthropicKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (anthropicErr) {
         console.warn('[ai-gateway] Anthropic call failed, resorting to canned fallback:', anthropicErr);
       }
@@ -298,7 +324,7 @@ export class AIGatewayService {
       costAed: 0,
     };
 
-    return {
+    return dispatchTelemetry({
       content: fallbackText,
       capabilityAlias: 'DETERMINISTIC_RULES',
       model: 'deterministic-fallback',
@@ -313,7 +339,7 @@ export class AIGatewayService {
       costAvoidedUsd: 0,
       costAvoidedAed: 0,
       telemetry,
-    };
+    });
   }
 
   /**

@@ -46,6 +46,7 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/api/platform/plans',
   '/api/admin/session',
   '/api/health',
+  '/health',
   '/api/readyz',
   // Own secret-header auth (x-deployment-health-secret), not session-based -
   // must bypass the session check here or that auth can never be reached.
@@ -97,6 +98,7 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   '/carrier-portal/',
   '/api/carrier-portal/',
   // Driver mobile app — device-token authed.
+  '/api/mobile/',
   '/api/driver-app/',
   // BLE gateway ingest — hardware devices sign the raw body with a
   // per-gateway HMAC-SHA256 (x-gateway-signature) and have no operator

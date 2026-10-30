@@ -5,7 +5,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Mail, MapPin, Phone, User, X } from 'lucide-react';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
+import { Building2, Mail, MapPin, User, X } from 'lucide-react';
 import { getGarages, createGarage } from '@/services/mockData';
 import { Garage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';
@@ -109,7 +111,7 @@ export default function VendorGaragesPage() {
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
           <Building2 className="mx-auto h-8 w-8 text-[var(--text-faint)]" />
           <p className="mt-3 font-medium text-[var(--text-main)]">No garages registered yet</p>
-          <p className="mt-1 text-sm text-[var(--text-faint)]">Click "+ Add Garage" to register your first repair centre.</p>
+          <p className="mt-1 text-sm text-[var(--text-faint)]">Click &quot;+ Add Garage&quot; to register your first repair centre.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -160,9 +162,8 @@ export default function VendorGaragesPage() {
                   </div>
                 )}
                 {g.contactNumber && (
-                  <span className="flex items-center gap-1 ml-auto whitespace-nowrap">
-                    <Phone className="h-3 w-3" />
-                    {g.contactNumber}
+                  <span className="ml-auto whitespace-nowrap">
+                    <PhoneCell value={g.contactNumber} />
                   </span>
                 )}
               </div>
@@ -240,12 +241,10 @@ export default function VendorGaragesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Number</label>
-                  <input
-                    type="text"
+                  <PhoneInput
                     value={form.contactNumber}
-                    onChange={e => setForm({ ...form, contactNumber: e.target.value })}
-                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                    placeholder="+971 2 555 0101"
+                    onChange={(val) => setForm(f => ({ ...f, contactNumber: val }))}
+                    placeholder="50 123 4567"
                   />
                 </div>
               </div>

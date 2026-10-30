@@ -4,13 +4,13 @@ Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/uni
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
 - Policy version: `2026-10-13.1`
-- Permission catalogue version: `c9977e3a` (248 permissions)
+- Permission catalogue version: `0ac7ad93` (254 permissions)
 
 ## API areas
 
 | Area (`/api/…`) | Routes | Reads (GET) | Writes (POST/PUT/PATCH/DELETE) |
 |---|---:|---|---|
-| `admin` | 96 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
+| `admin` | 102 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
 | `agents` | 11 | module `agents` | module `agents` |
 | `agents/anomalies` | 1 | module `finance` | module `finance` |
 | `agents/preventive-maintenance` | 3 | module `maintenance` | module `maintenance` |
@@ -43,13 +43,14 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `dispatcher` | 2 | module `dispatch` | module `dispatch` |
 | `documents` | 8 | module `compliance` | module `compliance` |
 | `documents/intelligence/cron` | 1 | external | external |
-| `driver-app` | 29 | external | external |
-| `drivers` | 7 | module `driver-mgmt` | module `driver-mgmt` |
+| `driver` | 1 | module `logistics` | module `logistics` |
+| `driver-app` | 30 | external | external |
+| `drivers` | 9 | module `driver-mgmt` | module `driver-mgmt` |
 | `esign` | 3 | module `leasing` | module `leasing` |
 | `exchange` | 17 | partner | partner |
 | `files` | 1 | self | self |
 | `finance` | 47 | module `finance` | module `finance` |
-| `fleet` | 31 | module `fleet` | module `fleet` |
+| `fleet` | 36 | module `fleet` | module `fleet` |
 | `garages` | 2 | module `maintenance` | module `maintenance` |
 | `health` | 2 | external | external |
 | `incidents` | 3 | module `incidents` | module `incidents` |
@@ -61,7 +62,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `leasing` | 91 | module `leasing` | module `leasing` |
 | `leasing-portal` | 13 | external | external |
 | `leasing/documents/upload` | 1 | module `leasing` | self |
-| `logistics` | 63 | module `logistics` | module `logistics` |
+| `logistics` | 65 | module `logistics` | module `logistics` |
 | `logistics/rates/quote` | 0 | self | self |
 | `maintenance` | 23 | module `maintenance` | module `maintenance` |
 | `maintenance-requests` | 3 | module `maintenance` | module `maintenance` |
@@ -90,7 +91,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `shipper-portal` | 9 | external | external |
 | `stripe` | 1 | external | external |
 | `sustainability` | 3 | module `sustainability` | module `sustainability` |
-| `telematics` | 4 | module `fleet` | module `fleet` |
+| `telematics` | 5 | module `fleet` | module `fleet` |
 | `tenant` | 1 | self | tenant-admin |
 | `tenant-branches` | 1 | self | tenant-admin |
 | `tenant-subscriptions` | 1 | tenant-admin | tenant-admin |
@@ -109,17 +110,17 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 
 V view · C create · E edit · D delete · A approve · X export · `*` all resources, `r` some resources only.
 
-| Role | admin | agents | ai-platform | assets | booking-portal | bus-ops | compliance | customer | customer-mgmt | dispatch | driver-mgmt | finance | fleet | incidents | leasing | logistics | maintenance | mobile-apps | rental | reports | school-bus | service-tickets | sustainability | vendors |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SUPER_ADMIN | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all |
-| TENANT_ADMIN | — | V C E D A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr Ar X Mr | V C A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr X | V Cr E D Ar X | V Cr Er Dr X | V C E D A X | V Cr Er Dr Ar X | V C E D A X | V Cr Er Ar X | V C E D A X | V Cr Er Dr Ar X | V C X | V C E D A X | V C E D A X | V C E D A X | V C E D A X |
-| LEASING_MANAGER | — | — | — | — | — | — | — | — | — | — | — | V | — | — | V Cr Er Dr Ar X | — | — | — | — | V C X | — | — | — | — |
-| LEASING_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — | — | — | — | — |
-| RAC_MANAGER | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er Dr Ar X | V | — | — | — | — |
-| RAC_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — |
-| TRANSPORT_MANAGER | — | — | — | — | — | V Cr Er Dr Ar X Mr | — | — | — | V C E D A X | V | — | V | — | — | — | — | — | — | V | V C E D A X | — | — | — |
-| TRANSPORT_OPERATOR | — | — | — | — | — | V Cr Er Ar Mr | — | — | — | V C E A | V | — | V | — | — | — | — | — | — | — | V C E A | — | — | — |
-| FLEET_MANAGER | — | — | — | V C E D A X | — | — | V C | — | — | — | V Cr Er Dr X | — | V Cr Er Dr X | — | — | — | V Cr Er Ar X | — | — | V C X | — | — | — | — |
-| FINANCE_MANAGER | V | V | V | V | V | V | V | V | V | V | V | V Cr E D Ar X | V | V | V Cr Dr Ar X | V | V | V | V | V C X | V | V | V | V |
-| VIEWER | Vr | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V |
-| PARTNER | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| Role | admin | agents | ai-platform | assets | booking-portal | bus-ops | compliance | customer | customer-mgmt | dispatch | drayage | driver-mgmt | finance | fleet | incidents | leasing | logistics | maintenance | mobile-apps | rental | reports | school-bus | service-tickets | sustainability | vendors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| SUPER_ADMIN | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all | all |
+| TENANT_ADMIN | — | V C E D A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr Ar X Mr | V C A X | V C E D A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr X | V Cr E D Ar X | V Cr Er Dr X | V C E D A X | V Cr Er Dr Ar X | V C E D A X | V Cr Er Ar X | V C E D A X | V Cr Er Dr Ar X | V C X | V C E D A X | V C E D A X | V C E D A X | V C E D A X |
+| LEASING_MANAGER | — | — | — | — | — | — | — | — | — | — | — | — | V | — | — | V Cr Er Dr Ar X | — | — | — | — | V C X | — | — | — | — |
+| LEASING_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — | — | — | — | — |
+| RAC_MANAGER | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er Dr Ar X | V | — | — | — | — |
+| RAC_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — |
+| TRANSPORT_MANAGER | — | — | — | — | — | V Cr Er Dr Ar X Mr | — | — | — | V C E D A X | — | V | — | V | — | — | — | — | — | — | V | V C E D A X | — | — | — |
+| TRANSPORT_OPERATOR | — | — | — | — | — | V Cr Er Ar Mr | — | — | — | V C E A | — | V | — | V | — | — | — | — | — | — | — | V C E A | — | — | — |
+| FLEET_MANAGER | — | — | — | V C E D A X | — | — | V C | — | — | — | — | V Cr Er Dr X | — | V Cr Er Dr X | — | — | — | V Cr Er Ar X | — | — | V C X | — | — | — | — |
+| FINANCE_MANAGER | V | V | V | V | V | V | V | V | V | V | V | V | V Cr E D Ar X | V | V | V Cr Dr Ar X | V | V | V | V | V C X | V | V | V | V |
+| VIEWER | Vr | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V | V |
+| PARTNER | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |

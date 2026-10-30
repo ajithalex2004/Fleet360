@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Truck, MapPin, Inbox,
+  Truck, MapPin, Inbox, Package,
   Plus, Map, Gavel, Building2, WalletCards,
 } from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
@@ -164,6 +164,7 @@ export default function LogisticsDashboard() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
+              { href: '/logistics/drayage',  icon: Package, label: 'Port & container drayage', desc: 'L1/L2 container haulage, port gate tokens, trailer detach & demurrage clock', accent: 'cyan' as const },
               { href: '/logistics/trips',    icon: Map,   label: 'Shipment orders', desc: 'Manage active and pending shipments',        accent: 'amber'   as const },
               { href: '/logistics/marketplace', icon: Gavel, label: 'Freight marketplace', desc: 'Open RFQs, compare carrier bids, and award loads', accent: 'emerald' as const },
               { href: '/logistics/carriers', icon: Truck, label: 'Carrier network', desc: 'Onboard carriers, compliance, scorecards, and app tokens', accent: 'emerald' as const },

@@ -148,7 +148,7 @@ export default function AvailabilityPage() {
 
       {result === null && !loading && (
         <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-faint)]">
-          Select a date range and click "Check Availability" to see available vehicles
+          Select a date range and click &quot;Check Availability&quot; to see available vehicles
         </div>
       )}
     </div>

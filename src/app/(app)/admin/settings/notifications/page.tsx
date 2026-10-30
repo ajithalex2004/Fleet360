@@ -666,6 +666,305 @@ function WhatsAppCard() {
 /* ─────────────────────────────────────────────────────────────
    Main Page
 ───────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   System Health & Operations Alerting Card
+───────────────────────────────────────────────────────────── */
+interface HealthAlertState {
+  enabled: boolean;
+  minSeverity: 'degraded' | 'unhealthy';
+  webhookUrl: string;
+  webhookEnabled: boolean;
+  email: string;
+  emailEnabled: boolean;
+  cooldownMinutes: number;
+  lastStatus?: string | null;
+  lastSentAt?: string | null;
+  lastSummary?: string | null;
+}
+
+function HealthAlertCard() {
+  const [config, setConfig] = useState<HealthAlertState>({
+    enabled: true,
+    minSeverity: 'degraded',
+    webhookUrl: '',
+    webhookEnabled: true,
+    email: '',
+    emailEnabled: true,
+    cooldownMinutes: 15,
+  });
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/health/alerts')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.config) {
+          setConfig(data.config);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch('/api/admin/health/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save', config }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setSaveMsg('Saved!');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch {
+      setSaveMsg('Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testProbe = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/admin/health/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', config }),
+      });
+      const data = await res.json();
+      setTestResult({
+        success: !!data.success,
+        message: data.message || (data.success ? '✓ Test alert dispatched successfully' : 'Test probe failed'),
+      });
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Network failure',
+      });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 7000);
+    }
+  };
+
+  const baseInput =
+    'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-rose-500/50 placeholder-[var(--text-faint)]';
+
+  return (
+    <div className="bg-[var(--bg-surface)]/70 border border-rose-500/25 rounded-2xl overflow-hidden shadow-sm">
+      <div className="bg-gradient-to-r from-rose-600 via-orange-600 to-amber-600 p-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🚨</span>
+          <div>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              Automated Health Alerting (Webhook / Slack / Email)
+              {config.enabled && (
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              )}
+            </h2>
+            <p className="text-white/80 text-xs mt-0.5">
+              Automated incident dispatch when system status changes from OK to Degraded or Unhealthy, and recovery notifications
+            </p>
+          </div>
+        </div>
+        <span
+          className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+            config.enabled
+              ? 'bg-emerald-500/20 text-emerald-100 border-emerald-400/40'
+              : 'bg-black/30 text-white/60 border-[var(--border-subtle)]'
+          }`}
+        >
+          {config.enabled ? '● Alerting Active' : '○ Alerting Paused'}
+        </span>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* Toggle master switch & Min severity */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4 border-b border-[var(--border-subtle)]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-main)]">Enable Health Alert Engine</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Automatically monitor probes & trigger operational alerts
+              </p>
+            </div>
+            <Toggle checked={config.enabled} onChange={(v) => setConfig((p) => ({ ...p, enabled: v }))} onColor="bg-rose-500" />
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]">
+            <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+              Minimum Alert Severity Threshold
+            </label>
+            <select
+              value={config.minSeverity}
+              onChange={(e) => setConfig((p) => ({ ...p, minSeverity: e.target.value as any }))}
+              className={`${baseInput} mt-1 cursor-pointer`}
+            >
+              <option value="degraded">Degraded & Unhealthy (High & Critical - Recommended)</option>
+              <option value="unhealthy">Unhealthy Only (Critical Outages / DB Down)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Webhook Configuration */}
+        <div className="space-y-3 pb-4 border-b border-[var(--border-subtle)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">💬</span>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-main)]">Slack / Discord / Webhook Channel</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Dispatches structured incident cards with status, response latency, and subsystem failure details
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Webhook Channel</span>
+              <Toggle
+                checked={config.webhookEnabled}
+                onChange={(v) => setConfig((p) => ({ ...p, webhookEnabled: v }))}
+                onColor="bg-rose-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            <input
+              type="url"
+              value={config.webhookUrl}
+              onChange={(e) => setConfig((p) => ({ ...p, webhookUrl: e.target.value }))}
+              placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..."
+              className={baseInput}
+            />
+            <p className="text-[11px] text-[var(--text-faint)]">
+              Auto-detects Slack incoming webhooks, Discord channel webhooks, or generic JSON HTTP endpoints.
+            </p>
+          </div>
+        </div>
+
+        {/* Email Configuration */}
+        <div className="space-y-3 pb-4 border-b border-[var(--border-subtle)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📧</span>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-main)]">Operations Emergency Email</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Sends formatted incident & recovery emails directly to your engineering or DevOps distribution list
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Email Alerts</span>
+              <Toggle
+                checked={config.emailEnabled}
+                onChange={(v) => setConfig((p) => ({ ...p, emailEnabled: v }))}
+                onColor="bg-rose-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <input
+                type="email"
+                value={config.email}
+                onChange={(e) => setConfig((p) => ({ ...p, email: e.target.value }))}
+                placeholder="ops@fleet360.ae, devops@company.com"
+                className={baseInput}
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={config.cooldownMinutes}
+                  onChange={(e) => setConfig((p) => ({ ...p, cooldownMinutes: parseInt(e.target.value, 10) || 15 }))}
+                  className={`${baseInput} text-center`}
+                />
+                <span className="text-xs text-[var(--text-faint)] whitespace-nowrap">min cooldown</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Status / Incident log summary */}
+        {config.lastSentAt && (
+          <div className="p-3 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)] flex items-center justify-between flex-wrap gap-2">
+            <span>
+              <strong>Last Dispatched:</strong> {new Date(config.lastSentAt).toLocaleString()} ({config.lastStatus?.toUpperCase() || 'OK'})
+            </span>
+            {config.lastSummary && (
+              <span className="text-[var(--text-faint)] truncate max-w-md">
+                {config.lastSummary}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer / Buttons */}
+      <div className="px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={testProbe}
+            disabled={testing || (!config.webhookUrl && !config.email)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 transition-all"
+          >
+            {testing ? (
+              <>
+                <span className="animate-spin inline-block">⟳</span> Testing Dispatch…
+              </>
+            ) : (
+              <>🧪 Send Test Alert</>
+            )}
+          </button>
+          {testResult && (
+            <span
+              className={`text-xs ${
+                testResult.success ? 'text-emerald-400 font-semibold' : 'text-rose-400'
+              }`}
+            >
+              {testResult.message}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {saveMsg && (
+            <span className={`text-xs ${saveMsg === 'Saved!' ? 'text-emerald-400' : 'text-red-400'}`}>
+              {saveMsg}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-rose-600 to-orange-600 text-white hover:opacity-90 disabled:opacity-50 transition-all shadow-md shadow-rose-500/10"
+          >
+            {saving ? (
+              <>
+                <span className="animate-spin inline-block">⟳</span> Saving…
+              </>
+            ) : (
+              <>💾 Save Health Alert Settings</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NotificationChannelsPage() {
   const [settings, setSettings] = useState<Settings>({});
   const [loading, setLoading]   = useState(true);
@@ -773,6 +1072,9 @@ export default function NotificationChannelsPage() {
 
       {/* WhatsApp (existing card, unchanged) */}
       <WhatsAppCard />
+
+      {/* Automated Health & Operations Alerting (Webhook / Slack / Email) */}
+      <HealthAlertCard />
 
       {/* Notification Preferences Matrix */}
       <NotificationPrefsMatrix

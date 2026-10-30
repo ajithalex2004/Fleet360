@@ -137,7 +137,7 @@ export default function HierarchyPage() {
           <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
             {regions.length === 0 ? (
               <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
-                No regions yet. Click "+ Add Region" to start.
+                No regions yet. Click &quot;+ Add Region&quot; to start.
               </div>
             ) : regions.map(r => (
               <NodeCard key={r.id} node={r} level="REGION"

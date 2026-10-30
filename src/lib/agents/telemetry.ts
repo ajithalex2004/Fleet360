@@ -194,3 +194,117 @@ export async function updateDailyRoiMetrics(opts: {
     console.error('[telemetry] Failed to update daily ROI metrics:', err);
   }
 }
+
+
+export interface RecordAiInvocationOptions {
+  runId?: string;
+  tenantId?: string;
+  agentId?: string;
+  eventType?: string;
+  entityId?: string;
+  modelAlias?: ModelCapabilityAlias | string;
+  modelProvider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  durationMs?: number;
+  status?: 'COMPLETED' | 'FAILED' | 'RUNNING';
+  errorText?: string;
+  costUsd?: number;
+  costAed?: number;
+  savingsAed?: number;
+  businessOutcome?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Record a live AI runtime invocation directly into agent_runs and update daily ROI.
+ * Safe and non-blocking: never throws, preserving caller execution flow.
+ */
+export async function recordAiInvocation(opts: RecordAiInvocationOptions): Promise<string> {
+  const runId = opts.runId || crypto.randomUUID();
+  const tenantId = opts.tenantId || 'default';
+  const agentId = opts.agentId || 'ai-runtime-service';
+  const eventType = opts.eventType || 'AI_INVOCATION';
+  const status = opts.status || 'COMPLETED';
+  const alias = (opts.modelAlias || 'ECONOMY_TEXT') as ModelCapabilityAlias;
+  const inTokens = opts.inputTokens || 0;
+  const outTokens = opts.outputTokens || 0;
+  const cachedTokens = opts.cachedTokens || 0;
+
+  // Calculate pricing if not provided
+  let costUsd = opts.costUsd;
+  let costAed = opts.costAed;
+  if (costUsd === undefined || costAed === undefined) {
+    const calculated = calculateTokenCost(alias, inTokens, outTokens, cachedTokens);
+    costUsd = costUsd ?? calculated.costUsd;
+    costAed = costAed ?? calculated.costAed;
+  }
+
+  const savingsAed = opts.savingsAed || 0;
+  const durationMs = opts.durationMs || 0;
+
+  try {
+    await ensureAgentSchema();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO agent_runs (
+         id, agent_id, tenant_id, event_type, entity_id,
+         duration_ms, status, error_text,
+         model_alias, model_provider, input_tokens, output_tokens, cached_tokens,
+         cost_usd, cost_aed, actual_savings_aed, estimated_savings_aed,
+         business_outcome, input, created_at
+       ) VALUES (
+         $1::uuid, $2, $3, $4, $5,
+         $6, $7, $8,
+         $9, $10, $11, $12, $13,
+         $14, $15, $16, $16,
+         $17, $18::jsonb, NOW()
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         status = EXCLUDED.status,
+         error_text = EXCLUDED.error_text,
+         duration_ms = EXCLUDED.duration_ms,
+         model_alias = EXCLUDED.model_alias,
+         model_provider = EXCLUDED.model_provider,
+         input_tokens = EXCLUDED.input_tokens,
+         output_tokens = EXCLUDED.output_tokens,
+         cached_tokens = EXCLUDED.cached_tokens,
+         cost_usd = EXCLUDED.cost_usd,
+         cost_aed = EXCLUDED.cost_aed,
+         actual_savings_aed = EXCLUDED.actual_savings_aed,
+         business_outcome = EXCLUDED.business_outcome`,
+      runId,
+      agentId,
+      tenantId,
+      eventType,
+      opts.entityId || null,
+      durationMs,
+      status,
+      opts.errorText || null,
+      alias,
+      opts.modelProvider || 'openai',
+      inTokens,
+      outTokens,
+      cachedTokens,
+      costUsd,
+      costAed,
+      savingsAed,
+      opts.businessOutcome || null,
+      opts.metadata ? JSON.stringify(opts.metadata) : null,
+    );
+
+    // Also update daily ROI
+    void updateDailyRoiMetrics({
+      tenantId,
+      agentId: agentId as AgentId,
+      costUsd,
+      costAed,
+      savingsAed,
+      wasAccepted: status === 'COMPLETED',
+    });
+  } catch (err) {
+    console.warn('[telemetry] Non-fatal error recording AI invocation:', err);
+  }
+
+  return runId;
+}

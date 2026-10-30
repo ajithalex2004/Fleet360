@@ -25,13 +25,30 @@ import { withAuditedAction } from '@/lib/audited-action';
 // exporting anything else fails next build's route-shape validation.
 // Nothing outside this file imports these.
 const TOGGLEABLE_NAV_KEYS = [
+  // Organization & Masters
+  'hierarchy',
   'branches',
-  'billing',
+  'nui-reasons',
+  'company-profile',
+
+  // Operations & Workflows
+  'service-config',
   'workflows',
-  'esign',
-  'whatsapp',
   'dispatch',
+  'shipper-portal-config',
+  'partner-onboarding',
+
+  // Communications & Alerts
+  'notifications',
+  'email-templates',
+  'whatsapp',
+  'esign',
+  'alerts',
+
+  // Commercial & Governance
+  'billing',
   'audit-logs',
+  'integrations',
 ] as const;
 
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────

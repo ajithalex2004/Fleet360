@@ -82,7 +82,7 @@ export default function ParentAlertsPage() {
 
       {merged.length === 0 ? (
         <div className="p-6 rounded-2xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-sm text-[var(--text-muted)]">
-          No alerts yet. We'll notify you here when buses depart, your child boards, or anything needs your attention.
+          No alerts yet. We&apos;ll notify you here when buses depart, your child boards, or anything needs your attention.
         </div>
       ) : (
         <div className="space-y-2">

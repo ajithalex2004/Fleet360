@@ -1,3 +1,4 @@
+import { validatePasswordPolicy } from '@/lib/password-policy';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -80,9 +81,13 @@ export async function POST(request: NextRequest) {
   if (!email || !password) {
     return NextResponse.json({ error: 'email and password are required.' }, { status: 400 });
   }
-  if (password.length < 8) {
-    return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
-  }
+  const pwCheck = validatePasswordPolicy(password);
+    if (!pwCheck.ok) {
+      return NextResponse.json(
+        { error: 'Password must meet policy: ' + pwCheck.error },
+        { status: 400 }
+      );
+    }
 
   try {
     // 1. Ensure platform tenant exists

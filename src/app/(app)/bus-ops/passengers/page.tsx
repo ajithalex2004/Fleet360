@@ -21,6 +21,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import PhoneInput from '@/components/ui/PhoneInput';
 import { Users, Plus, Edit, Trash2, X, UserPlus, Upload, FileDown } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 
@@ -655,10 +656,12 @@ export default function PassengersPage() {
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Contact</label>
-                  <input type="tel" value={empDraft.contactNumber} onChange={e => setEmpDraft({ ...empDraft, contactNumber: e.target.value })}
-                    placeholder="+971 50 …"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Mobile Contact</label>
+                  <PhoneInput
+                    value={empDraft.contactNumber}
+                    onChange={(val) => setEmpDraft({ ...empDraft, contactNumber: val })}
+                    placeholder="50 123 4567"
+                  />
                 </div>
               </div>
               <div>

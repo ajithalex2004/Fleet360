@@ -86,7 +86,7 @@ export default function PassengerWaitlistPage() {
       <Link href="/bus-ops/passenger" className="text-xs text-cyan-400 hover:underline">← My Bus</Link>
       <div>
         <h1 className="text-2xl font-bold">Join Waitlist</h1>
-        <p className="text-sm text-slate-400">Pick a trip in the next 3 days. You'll auto-promote if a seat frees up.</p>
+        <p className="text-sm text-slate-400">Pick a trip in the next 3 days. You&apos;ll auto-promote if a seat frees up.</p>
       </div>
 
       {msg && (

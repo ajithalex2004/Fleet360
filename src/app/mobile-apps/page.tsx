@@ -33,6 +33,27 @@ interface MobileApp {
 
 const APPS: MobileApp[] = [
   {
+    id: 'fleet360-driver',
+    name: 'Fleet360 Driver App',
+    audience: 'Chauffeur, Fleet & Logistics Drivers',
+    description: 'Real-time GPS telematics, live vehicle sign-in, shift pre-trip safety checklist, multi-language (English / Arabic / Hindi), turn-by-turn route dispatch, and dark/light UI mode.',
+    href: '/driver-app',
+    apkHref: '/api/mobile/download-apk?app=driver',
+    icon: BusFront,
+    gradient: 'from-blue-600 via-indigo-600 to-cyan-600',
+    ring: 'ring-blue-500/50',
+    tag: 'Fleet Telematics & Ops',
+    module: 'driver-app',
+    capabilities: [
+      'Live GPS Telematics',
+      'Pre-Trip Safety Check',
+      'Vehicle Sign-In & Odometer',
+      'EN / AR / HI Languages',
+      'Dark & Light Mode',
+      'Native Android APK',
+    ],
+  },
+  {
     id: 'fleet360-booking-app',
     name: 'Fleet360 Booking App',
     audience: 'Corporate Clients, Freight Shippers & Guests',
@@ -154,7 +175,7 @@ export default function MobileAppsPage() {
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         <section>
           <p className="text-slate-400 max-w-3xl text-sm leading-relaxed">
-            Installable progressive web apps. Open the link on your phone, then tap "Add to Home Screen" — the app installs scope-locked to its role,
+            Installable progressive web apps. Open the link on your phone, then tap &quot;Add to Home Screen&quot; — the app installs scope-locked to its role,
             works offline-cached, and is a single codebase across iOS and Android. No app-store submission, no native build pipeline, no separate auth realm.
           </p>
         </section>
@@ -202,7 +223,7 @@ export default function MobileAppsPage() {
                     {app.apkHref && (
                       <a
                         href={app.apkHref}
-                        download="Fleet360 Booking App.apk"
+                        download={app.id === 'fleet360-driver' ? 'Fleet360-Driver.apk' : 'Fleet360 Booking App.apk'}
                         className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs sm:text-sm font-semibold border border-emerald-500/30 transition-all shadow-md"
                       >
                         <Download className="w-4 h-4 text-emerald-400" />
@@ -222,13 +243,13 @@ export default function MobileAppsPage() {
             iOS Add to Home Screen
           </div>
           <ol className="list-decimal pl-5 space-y-1 text-xs">
-            <li>Open the app URL in <strong>Safari</strong> (Chrome on iOS won't trigger install).</li>
+            <li>Open the app URL in <strong>Safari</strong> (Chrome on iOS won&apos;t trigger install).</li>
             <li>Tap the Share button → <strong>Add to Home Screen</strong>.</li>
             <li>The app launches standalone (no Safari chrome) from the home-screen icon.</li>
           </ol>
           <div className="border-t border-white/5 pt-3">
             <div className="text-white font-semibold text-xs mb-1">Android</div>
-            <p className="text-xs">Chrome shows the install prompt automatically when the manifest is detected. Or use the menu → "Install app".</p>
+            <p className="text-xs">Chrome shows the install prompt automatically when the manifest is detected. Or use the menu → &quot;Install app&quot;.</p>
           </div>
           <div className="border-t border-white/5 pt-3 text-xs italic">
             Web Bluetooth + Web NFC are <strong>Android-only</strong> (Chrome). iOS staff can still use QR + manual boarding methods.

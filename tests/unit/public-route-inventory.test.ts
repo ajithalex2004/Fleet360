@@ -70,6 +70,8 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/api/leasing-portal/': 'leasing-portal-session cookie (requireLeasingPortal)',
   '/api/carrier-portal/': 'carrier invite token',
   '/api/driver-app/': 'driver-app device session (verified in middleware) / WebAuthn',
+  '/api/mobile/': 'none — static APK downloads; no database or tenant data',
+  '/health': 'none — status page; data from the public /api/health, admin calls are SUPER_ADMIN-gated',
   '/api/bus-ops/gateway/': 'per-gateway HMAC signature',
   '/api/push/': 'operator session or scheduler secret, checked in the handler',
   '/api/cron/': 'CRON_SECRET bearer token',
@@ -87,6 +89,9 @@ const SESSION_ISSUERS: Record<string, RegExp> = {
   'src/app/api/auth/invitation/accept/route.ts': /token_hash|tokenHash/,
   'src/app/api/auth/sso/callback/route.ts': /authorizationCodeGrant\(/,
   'src/app/api/driver-app/auth/biometric/login/finish/route.ts': /verifyAuthenticationResponse\(/,
+  // Re-issues the driver session for an already signed-in caller's own
+  // driver profile (session user id = driver id) after binding a vehicle.
+  'src/app/api/driver-app/auth/vehicle-login/route.ts': /requireAuthorizedTenant\(/,
   // Sign-up: the session is for the account the request just created.
   'src/app/api/tenants/provision/route.ts': /An account with this email already exists/,
 };

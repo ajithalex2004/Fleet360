@@ -35,13 +35,14 @@ import {
   CheckCircle2, 
   Activity,
   Plus,
-  Headphones
+  Headphones,
+  Settings
 } from 'lucide-react';
 
 interface ModuleDef {
   id: string;
   title: string;
-  category: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'enterprise';
+  category: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'finance' | 'admin';
   description: string;
   href: string;
   icon: React.ReactNode;
@@ -304,7 +305,7 @@ const MODULES: ModuleDef[] = [
     icon: <CarFront className="w-5 h-5 text-amber-400" />,
     gradient: 'from-amber-500/15 to-orange-500/10',
     borderAccent: 'hover:border-amber-500/50',
-    tags: ['Inventory', 'Mulkiya Vault', 'Salik & Fines', 'TCO Engine'],
+    tags: ['Vehicle Master', 'Allocations', 'Mulkiya Vault', 'TCO Engine'],
     status: 'LIVE',
     stats: [
       { label: 'Total Fleet', value: '1,420' },
@@ -406,7 +407,7 @@ const MODULES: ModuleDef[] = [
   {
     id: 'finance',
     title: 'Finance & VAT Billing',
-    category: 'enterprise',
+    category: 'finance',
     description: 'Automated FTA-compliant Tax Invoices, Salik toll batch reconciliation, payment receipts, and revenue reports.',
     href: '/finance',
     icon: <CircleDollarSign className="w-5 h-5 text-emerald-400" />,
@@ -415,10 +416,22 @@ const MODULES: ModuleDef[] = [
     tags: ['FTA Tax Invoices', 'Salik Tolls', '5% VAT Engine'],
     status: 'LIVE',
   },
+  {
+    id: 'admin',
+    title: 'Enterprise Administration & Masters',
+    category: 'admin',
+    description: 'Company profile, 3-tier organizational hierarchy, user roles, NUI reasons, and security governance.',
+    href: '/admin',
+    icon: <Settings className="w-5 h-5 text-indigo-400" />,
+    gradient: 'from-indigo-500/15 to-purple-500/10',
+    borderAccent: 'hover:border-indigo-500/50',
+    tags: ['Organization Masters', 'Roles & RBAC', 'NUI Reasons', 'Audit Log'],
+    status: 'LIVE',
+  },
 ];
 
 interface CategorySectionDef {
-  id: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'enterprise';
+  id: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'finance' | 'admin';
   label: string;
   shortLabel: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -474,13 +487,22 @@ const PLATFORM_CATEGORIES: CategorySectionDef[] = [
     description: 'RTA commercial road permits, GHG carbon tracking, cross-module BI analytics & customer CRM',
   },
   {
-    id: 'enterprise',
-    label: 'Enterprise & Admin',
-    shortLabel: 'Enterprise',
+    id: 'finance',
+    label: 'Finance',
+    shortLabel: 'Finance',
     icon: CircleDollarSign,
     color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
     badgeText: 'FINANCE & BILLING',
-    description: 'FTA tax invoices, Salik toll reconciliation, 5% VAT engine & platform enterprise settings',
+    description: 'FTA tax invoices, Salik toll reconciliation, 5% VAT engine & general ledger',
+  },
+  {
+    id: 'admin',
+    label: 'Admin',
+    shortLabel: 'Admin',
+    icon: Settings,
+    color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+    badgeText: 'ORGANIZATION & MASTERS',
+    description: 'Company profile, hierarchy, user roles, approval workflows & platform settings',
   },
 ];
 

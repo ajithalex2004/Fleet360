@@ -42,6 +42,7 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     hostname: 'localhost2',
+    cleartext: true,
   },
   plugins: {
     // Camera — DVIR defect photos. We restrict to environment + photos

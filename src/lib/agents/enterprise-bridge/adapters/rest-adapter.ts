@@ -16,7 +16,7 @@ import { applyFieldMappings, reverseFieldMappings } from '../canonical-models';
 
 export class GenericRestAdapter extends BaseEnterpriseAdapter {
   private getEndpointForEntity(entityType: CanonicalEntityType): string {
-    const customEndpoints = this.connection.authCredentials?.endpoints || {};
+    const customEndpoints = (this.connection.authCredentials?.endpoints as Record<string, string> | undefined) || {};
     if (customEndpoints[entityType]) {
       return customEndpoints[entityType];
     }

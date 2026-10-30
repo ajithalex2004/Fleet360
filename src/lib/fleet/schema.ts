@@ -10,6 +10,7 @@ export const FLEET_SCHEMA: SchemaSpec = { tables: [
     'fleet_allocations',
     'fleet_transfers',
     'fleet_vehicle_insurance',
+    'fleet_nui_reasons',
   ] };
 
 export function ensureFleetSchema(): Promise<void> {
@@ -117,7 +118,7 @@ async function _runDdl(): Promise<void> {
       CREATE TABLE IF NOT EXISTS fleet_transfers (
         id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         transfer_no             TEXT        NOT NULL,
-        vehicle_id              UUID,
+        vehicle_id              TEXT,
         from_branch_id          TEXT,
         from_branch_name        TEXT,
         to_branch_id            TEXT,
@@ -148,6 +149,21 @@ async function _runDdl(): Promise<void> {
         renewal_reminder_days   INT         DEFAULT 30,
         document_url            TEXT,
         status                  TEXT        NOT NULL DEFAULT 'ACTIVE',
+        notes                   TEXT,
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- ── fleet_nui_reasons ───────────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS fleet_nui_reasons (
+        id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        code                    TEXT        NOT NULL,
+        name                    TEXT        NOT NULL,
+        reason_type             TEXT        NOT NULL,
+        description             TEXT,
+        impact_level            TEXT        DEFAULT 'MEDIUM',
+        is_billable             BOOLEAN     NOT NULL DEFAULT FALSE,
+        is_active               BOOLEAN     NOT NULL DEFAULT TRUE,
         notes                   TEXT,
         created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -184,6 +200,34 @@ async function _runDdl(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fvi_vehicle    ON fleet_vehicle_insurance(vehicle_id);
       CREATE INDEX IF NOT EXISTS idx_fvi_status     ON fleet_vehicle_insurance(status);
       CREATE INDEX IF NOT EXISTS idx_fvi_end_date   ON fleet_vehicle_insurance(end_date);
+
+      -- ── Indexes: fleet_nui_reasons ───────────────────────────────────────────
+      CREATE INDEX IF NOT EXISTS idx_fnr_code       ON fleet_nui_reasons(code);
+      CREATE INDEX IF NOT EXISTS idx_fnr_type       ON fleet_nui_reasons(reason_type);
+      CREATE INDEX IF NOT EXISTS idx_fnr_active     ON fleet_nui_reasons(is_active);
+      BEGIN
+        ALTER TABLE fleet_transfers ALTER COLUMN vehicle_id TYPE TEXT;
+        ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS approved_by TEXT;
+        ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS requested_by_id TEXT;
+        ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS approved_by_id TEXT;
+        ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS reason_id TEXT;
+        ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS reason_type TEXT;
+        ALTER TABLE fleet_lifecycle_events ALTER COLUMN vehicle_id TYPE TEXT;
+        ALTER TABLE fleet_allocations ALTER COLUMN vehicle_id TYPE TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS region_id TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS region_name TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS department_id TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS department_name TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS unit_id TEXT;
+        ALTER TABLE fleet_allocations ADD COLUMN IF NOT EXISTS unit_name TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS region_id TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS region_name TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS department_id TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS department_name TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_id TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_name TEXT;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END;
     END
     $DDL$
   `);

@@ -122,9 +122,18 @@ body {
 }
 
 /* ── Scrollbars ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.45) transparent;
+}
+
+html.light * {
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -132,20 +141,22 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #52525b;
-  border-radius: 4px;
+  background: rgba(113, 113, 122, 0.45);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
 
 html.light ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(148, 163, 184, 0.55);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: rgba(113, 113, 122, 0.8);
 }
 
 html.light ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(100, 116, 139, 0.8);
 }
 
 /* ── Universal Form Inputs ── */
@@ -223,4 +234,41 @@ html.light .modern-card, html.light .obsidian-glass, html.light .glass-panel-obs
   body { background: white !important; color: black !important; }
   .print\:hidden { display: none !important; }
   .print\:block  { display: block !important; }
+}
+
+
+/* ── Running Text / Marquee Animation for Lengthy Buttons & Labels ── */
+@keyframes running-text-scroll {
+  0%, 15% {
+    transform: translateX(0%);
+  }
+  50%, 65% {
+    transform: translateX(var(--marquee-distance, -45%));
+  }
+  85%, 100% {
+    transform: translateX(0%);
+  }
+}
+
+.running-label-wrap {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.running-label-inner {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* Run smoothly on hover of the parent button or row */
+.group:hover .running-label-inner.is-overflowing,
+.running-label-wrap:hover .running-label-inner.is-overflowing,
+button:hover .running-label-inner.is-overflowing,
+a:hover .running-label-inner.is-overflowing {
+  animation: running-text-scroll 5s ease-in-out infinite;
 }

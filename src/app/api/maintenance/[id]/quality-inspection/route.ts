@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   publishInspectionPassed,
@@ -67,20 +68,20 @@ export async function POST(
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const { id } = params;
-            const body = await request.json();
+            const body = stripTenantOwnershipFields(await request.json());
 
-            const overallResult: string = body.overallResult ?? 'PENDING';
+            const overallResult: string = (body.overallResult as string | undefined) ?? 'PENDING';
 
             const inspection = await tx.qualityInspection.create({
                 data: {
-                    tenantId:      body.tenantId      ?? '',
+                    tenantId,
                     requestId:     id,
-                    inspectorId:   body.inspectorId   ?? null,
-                    inspectorName: body.inspectorName ?? null,
+                    inspectorId:   (body.inspectorId as string | undefined)   ?? null,
+                    inspectorName: (body.inspectorName as string | undefined) ?? null,
                     overallResult,
-                    notes:         body.notes         ?? null,
+                    notes:         (body.notes as string | undefined)         ?? null,
                     inspectedAt:   overallResult !== 'PENDING' ? new Date() : null,
-                    checklist:     body.checklist ?? [],
+                    checklist:     (body.checklist ?? []) as Prisma.InputJsonValue,
                 },
             });
 
@@ -95,18 +96,18 @@ export async function POST(
                     data:  { status: nextStatus },
                 });
 
-                const tenantId = (mr as any).tenantId as string | null;
-                if (tenantId) {
-                    const inspectedAt = (inspection as any).inspectedAt
-                        ? new Date((inspection as any).inspectedAt).toISOString()
+                const mrTenantId = mr.tenantId;
+                if (mrTenantId) {
+                    const inspectedAt = inspection.inspectedAt
+                        ? new Date(inspection.inspectedAt).toISOString()
                         : new Date().toISOString();
 
                     const qcPayload = {
                         requestId:     id,
-                        vehicleId:     (mr as any).vehicleId   ?? '',
-                        tenantId,
-                        requestNumber: (mr as any).workOrderNo ?? null,
-                        garageId:      (mr as any).garageId    ?? null,
+                        vehicleId:     mr.vehicleId   ?? '',
+                        tenantId:      mrTenantId,
+                        requestNumber: mr.workOrderNo ?? null,
+                        garageId:      mr.garageId    ?? null,
                         garageName:    null,
                         occurredAt:    inspectedAt,
                     };

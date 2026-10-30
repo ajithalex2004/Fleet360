@@ -44,6 +44,10 @@ async function safeRemove(target) {
 }
 
 (async () => {
+  if (process.env.RESET_DEV_CACHE !== 'true') {
+    // Preserve webpack pack cache across restarts so dev server does not recompile all 1800+ modules from scratch
+    return;
+  }
   if (!fs.existsSync(cacheDir)) {
     // Nothing to do — fresh checkout, first dev run.
     return;

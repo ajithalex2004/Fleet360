@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import { SWITCH_OFF } from '@/lib/ui/toggle';
 import UserAccessDialog from '@/components/admin/UserAccessDialog';
@@ -15,6 +17,7 @@ interface User {
   userType?: string;
   department?: string;
   position?: string;
+  mobileNumber?: string | null;
   isActive: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
@@ -145,8 +148,9 @@ export default function UsersPage() {
       email:      u.email,
       username:   u.username,
       position:   u.position   ?? '',
-      userType:   u.userType   ?? 'STAFF',
-      newPassword: '',
+      userType:     u.userType   ?? 'STAFF',
+      mobileNumber: u.mobileNumber ?? '',
+      newPassword:  '',
     });
     setFormError('');
     setLines(null);
@@ -172,8 +176,9 @@ export default function UsersPage() {
         lastName:   editForm.lastName,
         email:      editForm.email,
         username:   editForm.username,
-        position:   editForm.position,
-        userType:   editForm.userType,
+        position:     editForm.position,
+        userType:     editForm.userType,
+        mobileNumber: editForm.mobileNumber || null,
         // Sent once loaded: '' clears a line.
         ...(lines ? { managerUserId: lines.managerUserId, departmentHeadUserId: lines.departmentHeadUserId } : {}),
       };
@@ -269,7 +274,14 @@ export default function UsersPage() {
                         {!u.firstName && !u.lastName && <span className="text-[var(--text-muted)]">—</span>}
                       </td>
                       <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{u.username}</td>
-                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{u.email}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
+                        <div>{u.email}</div>
+                        {u.mobileNumber && (
+                          <div className="mt-1">
+                            <PhoneCell value={u.mobileNumber} />
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <div className="flex flex-col gap-1">
                           {(u.memberships ?? []).map(m => (
@@ -422,6 +434,14 @@ export default function UsersPage() {
                   <p className="text-xs text-[var(--text-faint)] pt-1">
                     Set per company from its Department list in <strong>Modules</strong>.
                   </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Mobile Number</label>
+                  <PhoneInput
+                    value={editForm.mobileNumber ?? ''}
+                    onChange={(val) => setEditForm((p) => ({ ...p, mobileNumber: val }))}
+                    placeholder="50 123 4567"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Position</label>

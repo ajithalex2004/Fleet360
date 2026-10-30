@@ -1,7 +1,6 @@
 import {
     Vehicle,
     Driver,
-    Garage,
     MaintenanceRequest,
     ServiceRequest,
 } from '@/types/maintenance';
