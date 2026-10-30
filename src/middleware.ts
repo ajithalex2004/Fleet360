@@ -157,18 +157,41 @@ function partnerHomeRedirect(request: NextRequest): NextResponse {
   return NextResponse.redirect(url);
 }
 
+/**
+ * Origins allowed cross-origin with credentials: the driver app's WebView
+ * (capacitor.config.ts server.hostname 'localhost2': https on Android,
+ * capacitor:// on iOS) and the web app's own origin.
+ */
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (['https://localhost2', 'capacitor://localhost2', 'https://localhost', 'capacitor://localhost'].includes(origin)) {
+    return true;
+  }
+  try {
+    return !!process.env.NEXT_PUBLIC_APP_URL && new URL(process.env.NEXT_PUBLIC_APP_URL).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get('origin');
 
-  // Handle CORS preflight (OPTIONS) for mobile app / web cross-origin requests
+  // CORS preflight (OPTIONS) for the mobile app's WebView. Only allowlisted
+  // origins get CORS headers: reflecting any Origin with Allow-Credentials
+  // let every website make credentialed requests to the whole API from a
+  // signed-in user's browser. x-tenant-id is not offered: identity headers
+  // are set by this middleware, never by clients.
   if (request.method === 'OPTIONS') {
     const corsHeaders = new Headers();
-    corsHeaders.set('Access-Control-Allow-Origin', origin || '*');
-    corsHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Id, X-Requested-With, Cookie');
-    corsHeaders.set('Access-Control-Allow-Credentials', 'true');
-    corsHeaders.set('Access-Control-Max-Age', '86400');
+    if (origin && isAllowedCorsOrigin(origin)) {
+      corsHeaders.set('Access-Control-Allow-Origin', origin);
+      corsHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      corsHeaders.set('Access-Control-Allow-Credentials', 'true');
+      corsHeaders.set('Access-Control-Max-Age', '86400');
+      corsHeaders.set('Vary', 'Origin');
+    }
     return new NextResponse(null, { status: 204, headers: corsHeaders });
   }
 

@@ -416,7 +416,6 @@ export class AIGatewayService {
     prompt: string,
     options: GatewayVisionOptions = {},
   ): Promise<GatewayResponse> {
-    const visionStarted = Date.now();
     const alias = options.capabilityAlias ?? (options.detail === 'high' ? 'VISION_HIGH_ACCURACY' : 'VISION_FAST');
     const openAiKey = process.env.OPENAI_API_KEY;
 

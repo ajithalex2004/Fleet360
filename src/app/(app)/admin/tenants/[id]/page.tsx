@@ -1481,7 +1481,7 @@ export default function TenantDetailPage() {
             {TOGGLEABLE_NAV_GROUPS.map((group) => {
               const allKeys = group.items.map(i => i.key);
               const allEnabled = allKeys.every(k => navPerms[k]);
-              const someEnabled = allKeys.some(k => navPerms[k]);
+              
 
               const toggleGroup = () => {
                 const targetState = !allEnabled;

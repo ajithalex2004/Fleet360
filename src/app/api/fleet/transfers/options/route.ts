@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -39,11 +39,11 @@ export async function GET(req: NextRequest) {
       // 1. Fetch branches from tenant_branches and vehicles
       let branchList: { id: string; name: string; emirate?: string }[] = [];
       try {
-        const tbRows = await tx.$queryRawUnsafe<any[]>(
+        const tbRows = await tx.$queryRawUnsafe<Array<{ id: string; name: string; emirate: string | null }>>(
           `SELECT id, branch_name as name, emirate FROM tenant_branches WHERE deleted_at IS NULL AND is_active = TRUE ORDER BY branch_name ASC`,
         );
         if (tbRows.length > 0) {
-          branchList = tbRows.map(r => ({ id: String(r.id), name: r.name, emirate: r.emirate }));
+          branchList = tbRows.map(r => ({ id: String(r.id), name: r.name, emirate: r.emirate ?? undefined }));
         }
       } catch {}
 
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       // 2. Fetch employees from "User" table
       let employeeList: { id: string; employeeId: string; name: string; position?: string; department?: string; label: string }[] = [];
       try {
-        const userRows = await tx.$queryRawUnsafe<any[]>(
+        const userRows = await tx.$queryRawUnsafe<Array<{ id: string; email: string | null; username: string | null; firstName: string | null; lastName: string | null; employeeId: string | null; position: string | null; department: string | null }>>(
           `SELECT id, email, username, "firstName", "lastName", "employeeId", position, department 
            FROM "User" 
            WHERE is_active = TRUE 
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
         if (userRows.length > 0) {
           employeeList = userRows.map((u, i) => {
-            const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.email;
+            const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.email || 'Staff';
             const empId = u.employeeId || `EMP-${1000 + (i + 1) * 7}`;
             const role = u.position || u.department || 'Staff';
             return {
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       // 3. Fetch NUI Reasons (type = 'TRANSFER' or 'ALL')
       let reasonList: { id: string; code: string; name: string; reasonType: string; label: string }[] = [];
       try {
-        const rRows = await tx.$queryRawUnsafe<any[]>(
+        const rRows = await tx.$queryRawUnsafe<Array<{ id: string; code: string; name: string; reason_type: string }>>(
           `SELECT id, code, name, reason_type 
            FROM fleet_nui_reasons 
            WHERE is_active = TRUE AND reason_type IN ('TRANSFER', 'ALL') 

@@ -113,6 +113,7 @@ export async function GET(req: NextRequest) {
             status: 'ACTIVE',
           },
           select: {
+            id: true,
             vehicleId: true,
             driverId: true,
           },
@@ -310,7 +311,7 @@ export async function GET(req: NextRequest) {
         const alerts: TelematicsAlert[] = [];
 
         // 1. Overspeeding Alert (> 100 km/h)
-        const isOverspeeding = Boolean(ping && ping.speedKmh > 100);
+        const isOverspeeding = Boolean(ping && (ping.speedKmh ?? 0) > 100);
         const dbOverspeed = vehicleDbAlerts.find((a) => a.code?.toUpperCase().includes('OVERSPEED'));
         if (isOverspeeding || dbOverspeed) {
           alerts.push({
@@ -447,7 +448,7 @@ export async function GET(req: NextRequest) {
             alerts.push({
               id: a.id,
               type: 'OTHER',
-              severity: (a.severity as any) || 'HIGH',
+              severity: (a.severity as TelematicsAlert['severity']) || 'HIGH',
               title: a.title || a.code || 'Vehicle Alert',
               description: a.description || 'Active operational anomaly reported',
               timestamp: a.createdAt?.toISOString() || now.toISOString(),

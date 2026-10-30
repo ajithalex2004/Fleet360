@@ -12,6 +12,20 @@ const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
 
+/** The fleet_transfers columns the completion step reads (the row has more). */
+interface FleetTransferRow extends Record<string, unknown> {
+  vehicle_id: string | null;
+  to_branch_id: string | null;
+  to_branch_name: string | null;
+  from_branch_name: string | null;
+  mileage_at_transfer: number | string | null;
+  reason: string | null;
+  transfer_no: string | null;
+  approved_by: string | null;
+  requested_by: string | null;
+  notes: string | null;
+}
+
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
@@ -28,7 +42,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         "SELECT * FROM fleet_transfers WHERE id::text = $1", params.id
       );
       if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -55,7 +69,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       const body = stripTenantOwnershipFields(bodyRaw);
       const now = new Date().toISOString();
 
-      const existing = await tx.$queryRawUnsafe<any[]>(
+      const existing = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         "SELECT * FROM fleet_transfers WHERE id::text = $1", params.id
       );
       if (!existing.length) {
@@ -84,7 +98,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       };
 
       const sets: string[] = [`updated_at = $1::timestamptz`];
-      const vals: any[] = [now];
+      const vals: unknown[] = [now];
       let idx = 2;
       for (const [key, col] of Object.entries(fieldMap)) {
         if (key in body) {
@@ -97,7 +111,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         `UPDATE fleet_transfers SET ${sets.join(', ')} WHERE id::text = $${idx}`, ...vals
       );
 
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<FleetTransferRow[]>(
         "SELECT * FROM fleet_transfers WHERE id::text = $1", params.id
       );
       const updated = rows[0];

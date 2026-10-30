@@ -92,9 +92,15 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'health':                                      { GET: 'platform' },
   'health/ping':                                 { POST: 'platform' },
   'health/self-test':                            { POST: 'platform' },
+  // Platform health alert configuration; "test" sends to caller-supplied targets.
+  'health/alerts':                               { GET: 'platform', POST: 'platform' },
   'nav-permissions':                             { GET: 'admin', PUT: 'platform' },
   'notification-rules':                          { GET: 'platform', POST: 'platform', PUT: 'platform' },
   'notification-templates':                      { GET: 'platform', POST: 'platform', PUT: 'platform' },
+  // NUI (not-in-use) reason master: tenant admins maintain it; fleet screens
+  // read reasons through /api/fleet/nui-reasons.
+  'nui-reasons':                                 { GET: 'admin', POST: 'admin' },
+  'nui-reasons/[id]':                            { GET: 'admin', PUT: 'admin', DELETE: 'admin' },
   'permissions':                                 { GET: 'admin' },
   'platform-settings':                           { GET: 'platform', PATCH: 'platform' },
   'platform/plans':                              { GET: 'platform', POST: 'platform' },

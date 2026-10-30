@@ -24,6 +24,8 @@ export function getApiEndpoint(path: string): string {
   return `http://192.168.1.17:3000${path}`;
 }
 
+// Callers read arbitrary fields of whatever JSON the endpoint returned.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function parseJsonSafely(res: Response): Promise<any | null> {
   try {
     const contentType = res.headers.get('content-type') || '';

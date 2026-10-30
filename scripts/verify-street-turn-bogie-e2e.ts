@@ -1,7 +1,7 @@
 // Bypass server-only guard for standalone testing
 try {
   const resolved = require.resolve('server-only');
-  (require.cache as any)[resolved] = {
+  (require.cache as Record<string, unknown>)[resolved] = {
     id: resolved,
     filename: resolved,
     loaded: true,
@@ -55,7 +55,7 @@ async function runVerification() {
   try {
     // 1. Initialize Workspace & Seed Defaults
     console.log('1. Initializing drayage workspace & seed data...');
-    const initialWorkspace = await getDrayageWorkspaceData(prisma as any, testTenantId);
+    const initialWorkspace = await getDrayageWorkspaceData(prisma, testTenantId);
     console.log(`   Initial jobs count: ${initialWorkspace.jobs.length}`);
 
     // Verify helper detections
@@ -75,7 +75,7 @@ async function runVerification() {
 
     // 2. Test Street-Turn Triangulation Candidate Detection
     console.log('\n2. Testing Street-Turn Candidate Matching Engine...');
-    const streetTurnCandidates = await findStreetTurnCandidates(prisma as any, testTenantId);
+    const streetTurnCandidates = await findStreetTurnCandidates(prisma, testTenantId);
     console.log(`   Found ${streetTurnCandidates.length} Street-Turn Triangulation Candidate(s)`);
 
     if (streetTurnCandidates.length === 0) {
@@ -96,7 +96,7 @@ async function runVerification() {
 
     // 3. Test Street-Turn Execution
     console.log('\n3. Testing Street-Turn Triangulation Execution...');
-    const stExecution = await executeStreetTurnTriangulation(prisma as any, {
+    const stExecution = await executeStreetTurnTriangulation(prisma, {
       tenantId: testTenantId,
       l2JobId: topCandidate.l2Job.id,
       exportJobId: topCandidate.exportJob.id,
@@ -114,7 +114,7 @@ async function runVerification() {
     if (!stExecution.ok) throw new Error('Street-Turn execution failed');
 
     // Verify Database State for Street Turn
-    const updatedL2 = (await prisma.$queryRawUnsafe<any[]>(
+    const updatedL2 = (await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT id, job_code, status, street_turn_job_id, notes FROM logistics_drayage_jobs WHERE id = $1`,
       topCandidate.l2Job.id,
     ))[0];
@@ -123,7 +123,7 @@ async function runVerification() {
       throw new Error(`Expected L2 job status STREET_TURNED, got ${updatedL2.status}`);
     }
 
-    const updatedExp = (await prisma.$queryRawUnsafe<any[]>(
+    const updatedExp = (await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT id, job_code, status, container_number, street_turn_job_id, assigned_driver_name FROM logistics_drayage_jobs WHERE id = $1`,
       topCandidate.exportJob.id,
     ))[0];
@@ -134,7 +134,7 @@ async function runVerification() {
 
     // 4. Test Dual-20FT Bogie Candidate Detection
     console.log('\n4. Testing Dual-20FT Bogie Candidate Matching Engine...');
-    const bogieCandidates = await findBogiePairCandidates(prisma as any, testTenantId);
+    const bogieCandidates = await findBogiePairCandidates(prisma, testTenantId);
     console.log(`   Found ${bogieCandidates.length} Bogie Combo Candidate(s)`);
 
     if (bogieCandidates.length === 0) {
@@ -172,7 +172,7 @@ async function runVerification() {
     // Attempt dispatch with 20FT trailer - MUST FAIL!
     let rejected20Ft = false;
     try {
-      await executeBogiePairDispatch(prisma as any, {
+      await executeBogiePairDispatch(prisma, {
         tenantId: testTenantId,
         job1Id: topBogie.job1.id,
         job2Id: topBogie.job2.id,
@@ -184,9 +184,9 @@ async function runVerification() {
         trailerPlate: 'DXB-TR-20FT',
         tokenNumber: 'DPW-BG-FAIL-01',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       rejected20Ft = true;
-      console.log(`   ✓ Correctly rejected 20FT trailer for Bogie: "${err.message}"`);
+      console.log(`   ✓ Correctly rejected 20FT trailer for Bogie: "${err instanceof Error ? err.message : String(err)}"`);
     }
 
     if (!rejected20Ft) {
@@ -195,7 +195,7 @@ async function runVerification() {
 
     // Now dispatch with 40FT trailer - MUST SUCCEED!
     console.log('\n6. Testing Valid Dual-20FT Bogie Dispatch with 40FT/Bogie Chassis...');
-    const bogieDispatch = await executeBogiePairDispatch(prisma as any, {
+    const bogieDispatch = await executeBogiePairDispatch(prisma, {
       tenantId: testTenantId,
       job1Id: topBogie.job1.id,
       job2Id: topBogie.job2.id,
@@ -213,7 +213,7 @@ async function runVerification() {
     if (!bogieDispatch.ok) throw new Error('Bogie dispatch failed');
 
     // Verify both jobs updated in database
-    const verifyJobs = await prisma.$queryRawUnsafe<any[]>(
+    const verifyJobs = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT id, job_code, status, bogie_job_id, assigned_trailer_plate, token_number FROM logistics_drayage_jobs WHERE id IN ($1, $2)`,
       topBogie.job1.id,
       topBogie.job2.id,

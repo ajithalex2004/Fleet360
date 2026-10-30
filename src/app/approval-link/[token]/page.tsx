@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 
 /**
  * Email decision page (src/lib/workflow/decision-link.ts): an approver opens

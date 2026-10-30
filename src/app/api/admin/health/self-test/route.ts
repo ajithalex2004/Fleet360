@@ -3,11 +3,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { runOutsideRlsScope } from '@/lib/rls-scope';
+import { withPlatformAdmin } from '@/lib/rls';
 import { getStorage } from '@/lib/storage';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import fs from 'fs/promises';
-import path from 'path';
+import path from 'path';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export interface SelfTestStep {
   id: string;
@@ -33,10 +34,14 @@ export interface SelfTestReport {
   steps: SelfTestStep[];
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  // Writes a database probe and reads platform-wide queues: platform admins only.
+  if (authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Only a platform admin can run the platform self-test.' }, { status: 403 });
   }
 
   const overallStart = Date.now();
@@ -46,24 +51,22 @@ export async function POST(req: NextRequest) {
   const dbStart = Date.now();
   try {
     const testNonce = `selftest-${randomUUID()}`;
-    await runOutsideRlsScope(async () => {
-      await prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(
-          'CREATE TEMP TABLE IF NOT EXISTS __selftest_probe (id TEXT PRIMARY KEY, val TEXT, created_at TIMESTAMPTZ DEFAULT NOW()) ON COMMIT DROP',
-        );
-        await tx.$executeRawUnsafe(
-          'INSERT INTO __selftest_probe (id, val) VALUES ($1, $2)',
-          `id-${Date.now()}`,
-          testNonce,
-        );
-        const [readBack] = await tx.$queryRawUnsafe<Array<{ val: string }>>(
-          'SELECT val FROM __selftest_probe WHERE val = $1 LIMIT 1',
-          testNonce,
-        );
-        if (!readBack || readBack.val !== testNonce) {
-          throw new Error('Database read-back did not match written nonce');
-        }
-      });
+    await withPlatformAdmin(prisma, async (tx) => {
+      await tx.$executeRawUnsafe(
+        'CREATE TEMP TABLE IF NOT EXISTS __selftest_probe (id TEXT PRIMARY KEY, val TEXT, created_at TIMESTAMPTZ DEFAULT NOW()) ON COMMIT DROP',
+      );
+      await tx.$executeRawUnsafe(
+        'INSERT INTO __selftest_probe (id, val) VALUES ($1, $2)',
+        `id-${Date.now()}`,
+        testNonce,
+      );
+      const [readBack] = await tx.$queryRawUnsafe<Array<{ val: string }>>(
+        'SELECT val FROM __selftest_probe WHERE val = $1 LIMIT 1',
+        testNonce,
+      );
+      if (!readBack || readBack.val !== testNonce) {
+        throw new Error('Database read-back did not match written nonce');
+      }
     });
     steps.push({
       id: 'db-acid',
@@ -187,8 +190,9 @@ export async function POST(req: NextRequest) {
   // ── Step 4: Transactional Outbox Pipeline Readiness ──────────────────────────
   const outboxStart = Date.now();
   try {
-    const [row] = await runOutsideRlsScope(() =>
-      prisma.$queryRawUnsafe<Array<{ count: number; lagMs: number | null; parked: number }>>(`
+    // Platform context: the backlog across every tenant.
+    const [row] = await withPlatformAdmin(prisma, (tx) =>
+      tx.$queryRawUnsafe<Array<{ count: number; lagMs: number | null; parked: number }>>(`
         SELECT
           COUNT(*) FILTER (WHERE published_at IS NULL)::int AS count,
           COUNT(*) FILTER (WHERE published_at IS NULL AND failed_at IS NOT NULL AND retry_count >= 5)::int AS parked,
@@ -382,3 +386,6 @@ export async function POST(req: NextRequest) {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -23,7 +23,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { toDriverTripStatus } from '@/lib/trip-state';
 interface TripRow {
   id: string;
@@ -91,6 +91,25 @@ function computeScore(rows: ScoreRow[]): ScoreBreakdown {
   return { score, harshBrake, harshAccel, speeding, idleMinutes };
 }
 
+// Row shapes of the drayage queries below (columns as selected).
+type DrayageJobRow = {
+  id: string; jobCode: string; jobPhase: string; shipmentType: string; status: string; priority: string;
+  containerNumber: string; containerSize: string; containerType: string;
+  terminalId: string | null; terminalName: string; warehouseId: string | null; warehouseName: string;
+  assignedVehiclePlate: string | null; assignedTrailerPlate: string | null; placementLocation: string | null;
+  trailerDetached: boolean; etcTime: Date | string | null; etcAlertStatus: string;
+  rateAmountAed: number | null; driverAllowanceAed: number | null; notes: string | null;
+};
+type DrayageGeofenceRow = {
+  id: string; terminal_id: string | null; terminal_name: string | null; name: string | null; type: string | null;
+  center_lat: number | null; center_lng: number | null; radius_meters: number | null; coordinates_json: string | null;
+};
+type DrayageTerminalRow = { id: string; name: string | null; code: string | null; lat: number | null; lng: number | null; geofence_radius_meters: number | null };
+type DrayageWarehouseRow = {
+  id: string; name: string | null; lat: number | null; lng: number | null; geofence_type: string | null;
+  geofence_radius_meters: number | null; geofence_coordinates_json: string | null;
+};
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -138,10 +157,10 @@ export async function GET(req: NextRequest) {
       `;
 
       // 1b) Port Container Drayage assignments + Configured Geofences
-      let drayageJobs: any[] = [];
+      let drayageJobs: Array<Record<string, unknown>> = [];
       try {
         const [drayageRows, gfRows, termRows, whRows] = await Promise.all([
-          tx.$queryRawUnsafe<any[]>(`
+          tx.$queryRawUnsafe<DrayageJobRow[]>(`
             SELECT
               id,
               job_code AS "jobCode",
@@ -189,17 +208,17 @@ export async function GET(req: NextRequest) {
               created_at DESC
             LIMIT 10
           `, tenantId, ctx.userId),
-          tx.$queryRawUnsafe<any[]>(`
+          tx.$queryRawUnsafe<DrayageGeofenceRow[]>(`
             SELECT id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
             FROM logistics_drayage_geofences
             WHERE tenant_id = $1
           `, tenantId).catch(() => []),
-          tx.$queryRawUnsafe<any[]>(`
+          tx.$queryRawUnsafe<DrayageTerminalRow[]>(`
             SELECT id, name, code, lat, lng, geofence_radius_meters
             FROM logistics_drayage_terminals
             WHERE tenant_id = $1
           `, tenantId).catch(() => []),
-          tx.$queryRawUnsafe<any[]>(`
+          tx.$queryRawUnsafe<DrayageWarehouseRow[]>(`
             SELECT id, name, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
             FROM logistics_drayage_warehouses
             WHERE tenant_id = $1

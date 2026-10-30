@@ -24,13 +24,7 @@ import { getApiEndpoint, parseJsonSafely } from '@/lib/api-endpoint';
 import { useRouter } from 'next/navigation';
 import {
   Car,
-  Smartphone,
   Navigation,
-  Radio,
-  ShieldCheck,
-  ShieldAlert,
-  Play,
-  Square,
   RefreshCw,
   LogOut,
   ArrowRight,
@@ -38,9 +32,6 @@ import {
   KeyRound,
   Fingerprint,
   CheckCircle2,
-  ChevronRight,
-  Hash,
-  Compass,
   Settings,
   Sun,
   Moon,
@@ -228,7 +219,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
 
 export default function DriverAppLauncher() {
   const router = useRouter();
-  const { language, setLanguage, isRTL } = useMobileI18n();
+  const { language, setLanguage } = useMobileI18n();
   const txt = UI_STRINGS[language] || UI_STRINGS.en;
   const [showServerModal, setShowServerModal] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState('');
@@ -241,7 +232,6 @@ export default function DriverAppLauncher() {
   const [phase, setPhase] = useState<Phase>('booting');
   const [bootInfo, setBootInfo] = useState<BootInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   // Active Vehicle Session
   const [activeVehicle, setActiveVehicle] = useState<FleetVehicle | null>(null);
@@ -249,7 +239,7 @@ export default function DriverAppLauncher() {
   // Fleet vehicles list for assignment picker
   const [fleetVehicles, setFleetVehicles] = useState<FleetVehicle[]>(DEFAULT_FLEET_VEHICLES);
   const [selectedVehicle, setSelectedVehicle] = useState<FleetVehicle | null>(DEFAULT_FLEET_VEHICLES[0]);
-  const [customVehicleQuery, setCustomVehicleQuery] = useState('');
+  const [customVehicleQuery] = useState('');
   const [odometerInput, setOdometerInput] = useState('67050');
   const [driverInfo, setDriverInfo] = useState<{ id?: string; name?: string; assignedVehicleId?: string } | null>({
     name: 'Jennish John',
@@ -258,7 +248,6 @@ export default function DriverAppLauncher() {
   const [isStartingChecklist, setIsStartingChecklist] = useState(false);
 
   // Vehicle Direct Login form
-  const [vehicleIdentifier, setVehicleIdentifier] = useState('96448');
 
   // Driver Credentials form
   const [username, setUsername] = useState('jjohn@gmail.com');
@@ -266,12 +255,12 @@ export default function DriverAppLauncher() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Mobile Tracking State
-  const [isTracking, setIsTracking] = useState(false);
-  const [currentSpeed, setCurrentSpeed] = useState<number>(0);
-  const [coords, setCoords] = useState<{ lat: number; lng: number; accuracy: number; heading: number } | null>(null);
-  const [pingsSent, setPingsSent] = useState<number>(0);
-  const [lastPingTime, setLastPingTime] = useState<string | null>(null);
-  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [, setIsTracking] = useState(false);
+  const [, setCurrentSpeed] = useState<number>(0);
+  const [, setCoords] = useState<{ lat: number; lng: number; accuracy: number; heading: number } | null>(null);
+  const [, setPingsSent] = useState<number>(0);
+  const [, setLastPingTime] = useState<string | null>(null);
+  const [, setGpsError] = useState<string | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   const lastSentRef = useRef<number>(0);
@@ -456,7 +445,7 @@ export default function DriverAppLauncher() {
     };
   }, []);
 
-  const { theme, isDark, toggleTheme } = useMobileTheme();
+  const { isDark, toggleTheme } = useMobileTheme();
 
   // Helper to fetch fleet vehicles and transition to vehicle-odometer prompt
   const proceedToVehicleOdometer = async (fallbackDriverName?: string) => {
@@ -512,67 +501,6 @@ export default function DriverAppLauncher() {
     } catch (err) {
       console.warn('Proceed to vehicle odometer fallback:', err);
       setPhase('vehicle-odometer');
-    }
-  };
-
-  // ── Vehicle Direct Login ──────────────────────────────────────────────────
-  const doVehicleLogin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!vehicleIdentifier.trim()) {
-      setErrorMsg('Please enter a Vehicle Code or Plate Number');
-      return;
-    }
-
-    setPhase('authing');
-    setErrorMsg(null);
-    setStatusMsg('Finding vehicle and initializing session…');
-
-    try {
-      const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ vehicleIdentifier: vehicleIdentifier.trim() }),
-      });
-
-      const data = await parseJsonSafely(res);
-      if (!res.ok || !data) {
-        // Fallback for direct offline vehicle match
-        const found = DEFAULT_FLEET_VEHICLES.find(
-          (v) =>
-            v.licensePlate?.toLowerCase() === vehicleIdentifier.trim().toLowerCase() ||
-            v.vehicleCode?.toLowerCase() === vehicleIdentifier.trim().toLowerCase()
-        ) || {
-          id: '3c779fd8-d536-475c-a38e-9919909fab84',
-          vehicleCode: vehicleIdentifier.toUpperCase(),
-          licensePlate: vehicleIdentifier.toUpperCase(),
-          make: 'FLEET',
-          model: 'VEHICLE',
-          year: 2023,
-          deviceId: '',
-          isDeviceBlank: true,
-          canActivateMobileTracking: true,
-          odometerReading: 67050,
-        };
-
-        setActiveVehicle(found);
-        setStatusMsg('Vehicle connected (Offline/Stand-alone mode).');
-        setPhase('ready');
-        if (found.canActivateMobileTracking) startMobileTracking(found);
-        return;
-      }
-
-      setActiveVehicle(data.vehicle);
-      if (data.driver) setDriverInfo(data.driver);
-      setStatusMsg(data.message);
-      setPhase('ready');
-
-      if (data.vehicle?.canActivateMobileTracking) {
-        startMobileTracking(data.vehicle);
-      }
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to connect to vehicle');
-      setPhase('error');
     }
   };
 

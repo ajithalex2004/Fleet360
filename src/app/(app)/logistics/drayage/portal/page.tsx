@@ -3,12 +3,27 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  Globe, Search, Package, Truck, CheckCircle2, Clock, ShieldCheck,
-  MapPin, Camera, FileCheck, RefreshCw, AlertTriangle, Copy, Check,
-  Calendar, ArrowRight, Sparkles, Anchor, Warehouse, UserCheck, X,
-  ExternalLink, Award, Timer,
+  Globe,
+  Search,
+  Package,
+  Truck,
+  CheckCircle2,
+  Clock,
+  ShieldCheck,
+  Camera,
+  FileCheck,
+  RefreshCw,
+  AlertTriangle,
+  Copy,
+  Check,
+  Calendar,
+  Anchor,
+  Warehouse,
+  X,
+  ExternalLink,
+  Timer,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 
 interface PortalJob {
   id: string;

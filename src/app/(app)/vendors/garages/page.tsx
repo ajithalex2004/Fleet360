@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PhoneCell from '@/components/ui/PhoneCell';
-import { Building2, Mail, MapPin, Phone, User, X } from 'lucide-react';
+import { Building2, Mail, MapPin, User, X } from 'lucide-react';
 import { getGarages, createGarage } from '@/services/mockData';
 import { Garage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';

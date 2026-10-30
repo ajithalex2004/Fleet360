@@ -177,7 +177,7 @@ function buildVehicleMarkerSvg(pos: VehiclePosition): string {
 /**
  * Builds cluster marker SVG for grouped vehicles.
  */
-function buildClusterMarkerSvg(count: number, moving: number, idle: number, stop: number): string {
+function buildClusterMarkerSvg(count: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="68" height="68" viewBox="0 0 68 68">
     <circle cx="34" cy="34" r="30" fill="#0891B2" opacity="0.25">
       <animate attributeName="r" values="26;32;26" dur="2.5s" repeatCount="indefinite"/>
@@ -237,7 +237,6 @@ function generateShareUrls(p: VehiclePosition) {
  */
 function buildInfoWindowHtml(p: VehiclePosition): string {
   const status = (p.operationalStatus || p.status || 'STOP').toUpperCase();
-  const color = getOperationalColor(status);
   const statusBadge = status === 'MOVING'
     ? `<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid #10b981;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">🟢 Moving (${p.speed_kmh.toFixed(0)} km/h)</span>`
     : status === 'IDLE'
@@ -433,11 +432,7 @@ export default function FleetLiveMap({ positions, selectedId, onSelect, classNam
     });
 
     for (const c of clusters) {
-      const moving = c.positions.filter(p => (p.operationalStatus || p.status) === 'MOVING').length;
-      const idle = c.positions.filter(p => (p.operationalStatus || p.status) === 'IDLE').length;
-      const stop = c.positions.filter(p => (p.operationalStatus || p.status) === 'STOP').length;
-
-      const iconUrl = buildClusterMarkerSvg(c.positions.length, moving, idle, stop);
+      const iconUrl = buildClusterMarkerSvg(c.positions.length);
       const existing = clusterMarkersRef.current.get(c.id);
 
       if (existing) {

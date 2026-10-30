@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
   Layers, Package, AlertTriangle, CheckCircle2, Clock, Plus,
-  Download, UploadCloud, Search, Filter, RefreshCw, X, ShieldCheck,
-  FileSpreadsheet, ArrowRight, Key, ShieldAlert, Calendar, CheckCheck,
+  Download, UploadCloud, Search, RefreshCw, X, ShieldCheck,
+  Key, ShieldAlert, CheckCheck,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -71,15 +70,15 @@ export default function DrayageContainersPage() {
   const [containerNumber, setContainerNumber] = useState('');
   const [size, setSize] = useState('40HC');
   const [containerType, setContainerType] = useState('DRY');
-  const [customerName, setCustomerName] = useState('Al-Futtaim Logistics LLC');
-  const [terminalName, setTerminalName] = useState('Jebel Ali Port - Terminal 1 (DP World)');
-  const [warehouseName, setWarehouseName] = useState('JAFZA South Bonded Fulfillment Hub (Gate 5)');
+  const [customerName] = useState('Al-Futtaim Logistics LLC');
+  const [terminalName] = useState('Jebel Ali Port - Terminal 1 (DP World)');
+  const [warehouseName] = useState('JAFZA South Bonded Fulfillment Hub (Gate 5)');
   const [doExpiryDate, setDoExpiryDate] = useState(new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10));
   const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().slice(0, 10));
-  const [sealNumber, setSealNumber] = useState('');
+  const [sealNumber] = useState('');
   const [weightKg, setWeightKg] = useState(22400);
-  const [customsInspection, setCustomsInspection] = useState(true);
-  const [municipalityInspection, setMunicipalityInspection] = useState(false);
+  const [customsInspection] = useState(true);
+  const [municipalityInspection] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
 
   // Bulk Upload state
@@ -489,7 +488,7 @@ export default function DrayageContainersPage() {
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={gateFilter}
-              onChange={(e) => setGateFilter(e.target.value as any)}
+              onChange={(e) => setGateFilter(e.target.value as typeof gateFilter)}
               className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] outline-none focus:border-blue-500 font-semibold"
             >
               <option value="ALL">All PCS States</option>
@@ -712,7 +711,7 @@ export default function DrayageContainersPage() {
                 <label className="font-semibold text-[var(--text-muted)]">Clearance Agency</label>
                 <select
                   value={inspectModal.agency}
-                  onChange={(e) => setInspectModal({ ...inspectModal, agency: e.target.value as any })}
+                  onChange={(e) => setInspectModal({ ...inspectModal, agency: e.target.value as typeof inspectModal.agency })}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-amber-500"
                 >
                   <option value="CUSTOMS">Dubai Customs / Federal Customs Authority</option>

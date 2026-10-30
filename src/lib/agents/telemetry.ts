@@ -296,7 +296,7 @@ export async function recordAiInvocation(opts: RecordAiInvocationOptions): Promi
     // Also update daily ROI
     void updateDailyRoiMetrics({
       tenantId,
-      agentId: agentId as any,
+      agentId: agentId as AgentId,
       costUsd,
       costAed,
       savingsAed,

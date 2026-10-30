@@ -3,12 +3,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  UserCheck, Truck, Layers, Package, CheckCircle2, AlertTriangle, RefreshCw,
-  Search, Filter, Plus, ShieldCheck, Compass, ArrowRight, X, ExternalLink,
-  Sparkles, Key, Zap, Clock, TrendingUp, AlertCircle, MapPin, DollarSign,
-  ChevronRight, Award, Trash2, ArrowUpDown, Leaf, Scale
+  UserCheck,
+  Truck,
+  Layers,
+  Package,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Plus,
+  ShieldCheck,
+  ArrowRight,
+  X,
+  Sparkles,
+  Key,
+  Zap,
+  Clock,
+  TrendingUp,
+  AlertCircle,
+  MapPin,
+  Trash2,
+  ArrowUpDown,
+  Leaf,
+  Scale,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 import {
@@ -225,7 +243,6 @@ export default function DrayageAssignmentPage() {
   const [trailers, setTrailers] = useState<DrayageTrailer[]>(cached?.trailers || []);
   const [terminals, setTerminals] = useState<DrayageTerminal[]>(cached?.terminals || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
-  const [search, setSearch] = useState('');
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
 
   // Smart Analysis UI state
@@ -307,18 +324,6 @@ export default function DrayageAssignmentPage() {
     () => jobs.filter((j) => j.status === 'PENDING' || !j.assignedVehicleId),
     [jobs],
   );
-
-  const filteredJobs = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return jobs;
-    return jobs.filter(
-      (j) =>
-        j.jobCode.toLowerCase().includes(q) ||
-        j.containerNumber.toLowerCase().includes(q) ||
-        j.customerName.toLowerCase().includes(q) ||
-        (j.tokenNumber && j.tokenNumber.toLowerCase().includes(q)),
-    );
-  }, [jobs, search]);
 
   // =========================================================================
   // DEMURRAGE & DETENTION RISK CALCULATOR

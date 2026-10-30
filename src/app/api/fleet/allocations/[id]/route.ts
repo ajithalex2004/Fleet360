@@ -24,7 +24,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT fa.*, v.vehicle_code, v.make, v.model, v.license_plate, v.plate_number
          FROM fleet_allocations fa
          LEFT JOIN vehicles v ON v.id = fa.vehicle_id::text
@@ -78,7 +78,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       };
 
       const sets: string[] = [`updated_at = $1::timestamptz`];
-      const vals: any[] = [now];
+      const vals: unknown[] = [now];
       let idx = 2;
       for (const [key, col] of Object.entries(fieldMap)) {
         if (key in body) {
@@ -95,7 +95,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
       // Handle vehicle return automation
       if (body.status === 'RETURNED' || body.status === 'CANCELLED') {
-        const allocRows = await tx.$queryRawUnsafe<any[]>(
+        const allocRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT vehicle_id, allocated_to_name FROM fleet_allocations WHERE id::text = $1`,
           params.id,
         );
@@ -132,7 +132,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         }
       }
 
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT * FROM fleet_allocations WHERE id::text = $1`,
         params.id,
       );

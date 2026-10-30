@@ -137,7 +137,7 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       // One query: each driver with their latest performance row
       // (src/lib/agents/driver-coaching/agent.ts). It used to be two, and the
       // second queued response leaked into the next test.
-      (prisma.$queryRaw as any).mockResolvedValueOnce([
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
         {
           id: 'drv-2',
           first_name: 'Vikram',

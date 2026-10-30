@@ -1,15 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  Users, Building2, Warehouse, MapPin, Plus, Edit2, Trash2, CheckCircle2,
-  AlertTriangle, Search, Filter, RefreshCw, X, ShieldCheck, DollarSign,
-  Phone, User, Compass, Layers, Check, ExternalLink, ArrowRight, Sliders,
-  Navigation, Eye, Info, ChevronRight, FileText, ChevronDown, ChevronUp, Map, Globe, Mountain, Move,
+  Users,
+  Building2,
+  Warehouse,
+  MapPin,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  Search,
+  RefreshCw,
+  X,
+  ShieldCheck,
+  DollarSign,
+  Phone,
+  User,
+  Compass,
+  Check,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
-import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { PageHeader, KpiCard } from '@/components/ui/page-theme';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -17,8 +29,6 @@ import {
 } from '@/lib/logistics/drayage-client-cache';
 import {
   ConsigneeDestinationModal,
-  type DrayageClientOption,
-  type DrayageWarehouseData,
 } from '@/components/logistics/drayage/ConsigneeDestinationModal';
 
 interface DrayageClient {
@@ -492,7 +502,7 @@ export default function DrayageClientMasterPage() {
 
           <select
             value={geofenceFilter}
-            onChange={(e) => setGeofenceFilter(e.target.value as any)}
+            onChange={(e) => setGeofenceFilter(e.target.value as Parameters<typeof setGeofenceFilter>[0])}
             className="px-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-blue-500"
           >
             <option value="ALL">All Geofence Status</option>
@@ -1172,7 +1182,7 @@ export default function DrayageClientMasterPage() {
         clients={clients}
         defaultClientId={defaultClientForNewWh || selectedClientForWarehouses?.id || null}
         onClientCreated={(newCli) => {
-          setClients((prev) => [newCli as any, ...prev]);
+          setClients((prev) => [newCli as (typeof prev)[number], ...prev]);
         }}
         onSaved={async () => {
           invalidateDrayageClientCache();

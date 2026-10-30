@@ -56,7 +56,7 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
-  const intervalIdRef = useRef<any>(null);
+  const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentIntervalMsRef = useRef<number>(30000);
   const lastCoordsRef = useRef<{ lat: number; lng: number; heading: number; accuracy: number } | null>(null);
   const isPingingRef = useRef(false);
@@ -341,7 +341,7 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
 
           if (currentIntervalMsRef.current !== nextInterval) {
             currentIntervalMsRef.current = nextInterval;
-            clearInterval(intervalIdRef.current);
+            if (intervalIdRef.current) clearInterval(intervalIdRef.current);
             intervalIdRef.current = setInterval(runLoop, nextInterval);
           }
         };

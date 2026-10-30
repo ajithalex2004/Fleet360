@@ -1,17 +1,27 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import {
-  MapPin, Anchor, Plus, Edit2, Trash2, CheckCircle2, AlertTriangle, RefreshCw,
-  Search, ShieldCheck, Compass, Layers, ExternalLink, X, Map, Clock,
-  Warehouse, Building2, User, Phone, Check, Navigation,
+  MapPin,
+  Anchor,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  ShieldCheck,
+  Compass,
+  X,
+  Clock,
+  Warehouse,
+  Building2,
+  Navigation,
 } from 'lucide-react';
 import type { PlotContext } from '@/components/logistics/drayage/DrayageGeofenceMap';
 import { ConsigneeDestinationModal } from '@/components/logistics/drayage/ConsigneeDestinationModal';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
-import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
@@ -149,22 +159,7 @@ export default function DrayageTerminalMapPage() {
   const [geofences, setGeofences] = useState<DrayageGeofence[]>(cached?.geofences || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
   const [clients, setClients] = useState<DrayageClient[]>(cached?.clients || []);
-  const [newWhCustomerName, setNewWhCustomerName] = useState('');
-
-  // Quick Add Client Modal State
-  const [showAddClientModal, setShowAddClientModal] = useState(false);
-  const [newCliName, setNewCliName] = useState('');
-  const [newCliCode, setNewCliCode] = useState('');
-  const [newCliContact, setNewCliContact] = useState('');
-  const [newCliPhone, setNewCliPhone] = useState('');
-  const [newCliAddress, setNewCliAddress] = useState('');
-  const [newCliCity, setNewCliCity] = useState('Dubai');
-  const [newCliTrn, setNewCliTrn] = useState('');
-  const [newCliTradeLicense, setNewCliTradeLicense] = useState('');
-  const [newCliTripAmount, setNewCliTripAmount] = useState(1550);
-  const [newCliAllowance, setNewCliAllowance] = useState(150);
-  const [submittingCli, setSubmittingCli] = useState(false);
-  const [customers, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
+  const [, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
   const [selectedTerminal, setSelectedTerminal] = useState<DrayageTerminal | null>(cached?.terminals?.[0] || null);
 
   // Map Navigation & Interactive Plot Mode State
@@ -194,17 +189,6 @@ export default function DrayageTerminalMapPage() {
 
   // Warehouse Modal State (Add / Edit)
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
-  const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
-  const [newWhName, setNewWhName] = useState('');
-  const [newWhCustomerId, setNewWhCustomerId] = useState('');
-  const [newWhZone, setNewWhZone] = useState('JAFZA South');
-  const [newWhAddress, setNewWhAddress] = useState('');
-  const [newWhLat, setNewWhLat] = useState(24.9642);
-  const [newWhLng, setNewWhLng] = useState(55.0915);
-  const [newWhRamps, setNewWhRamps] = useState(4);
-  const [newWhContact, setNewWhContact] = useState('');
-  const [newWhPhone, setNewWhPhone] = useState('');
-  const [submittingWh, setSubmittingWh] = useState(false);
 
   // Geofence Modal State
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
@@ -440,119 +424,6 @@ export default function DrayageTerminalMapPage() {
     setShowWarehouseModal(true);
   };
 
-  const handleCreateQuickClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCliName.trim()) {
-      showToast('error', 'Client Name is required');
-      return;
-    }
-    const code = newCliCode.trim().toUpperCase() || newCliName.slice(0, 3).toUpperCase();
-    try {
-      setSubmittingCli(true);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create_client',
-          name: newCliName.trim(),
-          code,
-          contactPerson: newCliContact.trim() || undefined,
-          contactNo: newCliPhone.trim() || undefined,
-          streetAddress: newCliAddress.trim() || undefined,
-          city: newCliCity.trim() || 'Dubai',
-          trn: newCliTrn.trim() || undefined,
-          tradeLicense: newCliTradeLicense.trim() || undefined,
-          defaultTripAmountAed: Number(newCliTripAmount) || 1550,
-          defaultDriverAllowanceAed: Number(newCliAllowance) || 150,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create client');
-
-      const createdId = data.id || `cli-${Date.now()}`;
-      const newClientObj: DrayageClient = {
-        id: createdId,
-        name: newCliName.trim(),
-        code,
-        contactPerson: newCliContact.trim() || undefined,
-        contactNo: newCliPhone.trim() || undefined,
-        streetAddress: newCliAddress.trim() || undefined,
-        city: newCliCity.trim() || 'Dubai',
-      };
-
-      setClients((prev) => [newClientObj, ...prev]);
-      setNewWhCustomerId(createdId);
-      setNewWhCustomerName(newCliName.trim());
-      if (!newWhName || newWhName.includes('Hub') || newWhName.includes('Distribution')) {
-        setNewWhName(`${newCliName.trim()} - Main Facility / Ramp`);
-      }
-      if (newCliAddress) setNewWhAddress(newCliAddress);
-      if (newCliContact) setNewWhContact(newCliContact);
-      if (newCliPhone) setNewWhPhone(newCliPhone);
-      if (newCliCity) setNewWhZone(`${newCliCity} Industrial Area`);
-
-      setShowAddClientModal(false);
-      setNewCliName('');
-      setNewCliCode('');
-      setNewCliContact('');
-      setNewCliPhone('');
-      setNewCliAddress('');
-      setNewCliTrn('');
-      setNewCliTradeLicense('');
-      invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', `Client "${newCliName.trim()}" created & mapped to destination!`);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error creating client');
-    } finally {
-      setSubmittingCli(false);
-    }
-  };
-
-  const handleSaveWarehouse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newWhName.trim()) {
-      showToast('error', 'Please enter warehouse / facility name');
-      return;
-    }
-    const matchedClient = clients.find((c) => c.id === newWhCustomerId);
-    const matchedCust = customers.find((c) => c.id === newWhCustomerId);
-    const resolvedCustomerName = matchedClient?.name || matchedCust?.name || newWhCustomerName || 'Enterprise Client';
-    try {
-      setSubmittingWh(true);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_warehouse',
-          id: editingWarehouseId || undefined,
-          customerId: newWhCustomerId || null,
-          customerName: resolvedCustomerName,
-          name: newWhName.trim(),
-          zone: newWhZone.trim() || 'JAFZA South',
-          address: newWhAddress.trim() || 'Dubai, UAE',
-          lat: Number(newWhLat),
-          lng: Number(newWhLng),
-          contactPerson: newWhContact.trim() || undefined,
-          contactPhone: newWhPhone.trim() || undefined,
-          rampsCount: Number(newWhRamps) || 4,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save warehouse');
-
-      setShowWarehouseModal(false);
-      setPlotContext(null);
-      invalidateDrayageClientCache();
-      await loadData(true);
-      showToast('success', editingWarehouseId ? 'Consignee destination updated successfully' : 'Consignee destination warehouse created successfully');
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error saving warehouse');
-    } finally {
-      setSubmittingWh(false);
-    }
-  };
-
   const handleDeleteWarehouse = async (w: DrayageWarehouse) => {
     if (!confirm(`Are you sure you want to delete consignee warehouse "${w.name}"?`)) return;
     try {
@@ -568,31 +439,6 @@ export default function DrayageTerminalMapPage() {
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error deleting warehouse');
     }
-  };
-
-  const handleStartPlotWarehouse = () => {
-    setShowWarehouseModal(false);
-    setPlotContext({
-      type: 'WAREHOUSE',
-      title: newWhName || 'Consignee Warehouse',
-      lat: newWhLat,
-      lng: newWhLng,
-      radiusMeters: 800,
-      geofenceType: 'CIRCLE',
-      onApply: (res: { lat: number; lng: number; radiusMeters: number; geofenceType: 'CIRCLE' | 'POLYGON' }) => {
-        setNewWhLat(Number(res.lat.toFixed(6)));
-        setNewWhLng(Number(res.lng.toFixed(6)));
-        setPlotContext(null);
-        setShowWarehouseModal(true);
-        showToast('success', `Warehouse coordinates applied: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)}`);
-      },
-      onCancel: () => {
-        setPlotContext(null);
-        setShowWarehouseModal(true);
-      },
-    });
-    setFocusMapLocation({ lat: newWhLat, lng: newWhLng, zoom: 15, title: newWhName || 'Warehouse' });
-    scrollToMap();
   };
 
   // Geofence Handlers
@@ -1460,7 +1306,7 @@ export default function DrayageTerminalMapPage() {
                   <label className="font-semibold text-[var(--text-muted)]">Geometry Type</label>
                   <select
                     value={geofenceType}
-                    onChange={(e) => setGeofenceType(e.target.value as any)}
+                    onChange={(e) => setGeofenceType(e.target.value as Parameters<typeof setGeofenceType>[0])}
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   >
                     <option value="CIRCLE">Circular Perimeter</option>
@@ -1646,7 +1492,7 @@ export default function DrayageTerminalMapPage() {
         initialData={selectedWarehouseForEdit}
         clients={clients}
         onClientCreated={(newCli) => {
-          setClients((prev) => [newCli as any, ...prev]);
+          setClients((prev) => [newCli as (typeof prev)[number], ...prev]);
         }}
         onSaved={async () => {
           invalidateDrayageClientCache();

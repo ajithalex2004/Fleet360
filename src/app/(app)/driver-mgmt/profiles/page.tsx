@@ -24,15 +24,13 @@ import {
   Trash2,
   FileCheck,
   Loader2,
-  Building2,
   MoreVertical,
   Edit2,
-  ShieldCheck,
   Phone,
 } from 'lucide-react';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PhoneCell from '@/components/ui/PhoneCell';
-import { validatePasswordPolicy, PASSWORD_POLICY_HINT } from '@/lib/password-policy';
+import { validatePasswordPolicy } from '@/lib/password-policy';
 import { COUNTRIES } from '@/lib/phone-format';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -49,6 +47,16 @@ export interface DriverAdditionalDocument {
   fileData?: string;
   autofilled?: boolean;
   confidence?: number;
+}
+
+/** A staff record as /api/bus-ops/staff returns it (the fields read here). */
+interface StaffApiRow {
+  id: string;
+  employeeId?: string | null;
+  name?: string | null;
+  department?: string | null;
+  contactNumber?: string | null;
+  email?: string | null;
 }
 
 export interface Driver {
@@ -250,11 +258,11 @@ export default function DriverProfilesPage() {
         const staffData = await sRes.json();
         if (Array.isArray(staffData)) {
           const validStaff = staffData
-            .filter((s: any) => s.employeeId)
-            .map((s: any) => ({
+            .filter((s: StaffApiRow) => s.employeeId)
+            .map((s: StaffApiRow) => ({
               id: s.id,
-              employeeId: s.employeeId,
-              name: s.name,
+              employeeId: s.employeeId ?? '',
+              name: s.name ?? '',
               department: s.department,
               contactNumber: s.contactNumber,
               email: s.email,
@@ -268,7 +276,7 @@ export default function DriverProfilesPage() {
       if (hRes && hRes.ok) {
         const hData = await hRes.json();
         if (Array.isArray(hData) && hData.length > 0) {
-          const names = Array.from(new Set(hData.map((h: any) => h.name).filter(Boolean)));
+          const names = Array.from(new Set(hData.map((h: { name?: string | null }) => h.name).filter((n): n is string => Boolean(n))));
           setHierarchyList(prev => Array.from(new Set([...names, ...prev])));
         }
       }
@@ -368,7 +376,7 @@ export default function DriverProfilesPage() {
         docs[idx] = { ...docs[idx], [field]: val };
 
         // Sync passport & visa back to driver root fields
-        const upd: any = { ...prev, additionalDocuments: docs };
+        const upd: typeof prev = { ...prev, additionalDocuments: docs };
         if (docs[idx].documentType === 'PASSPORT') {
           if (field === 'documentNumber') upd.passportNumber = val;
           if (field === 'expiryDate')     upd.passportExpiry = val;
@@ -842,7 +850,7 @@ export default function DriverProfilesPage() {
                             >
                               <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80">
                                 <div className="text-[11px] uppercase font-black tracking-wider text-cyan-700 dark:text-cyan-400">
-                                  {d.driverCode || d.employeeId || 'Driver'}
+                                  {d.employeeId || 'Driver'}
                                 </div>
                                 <div className="text-xs font-bold text-slate-950 dark:text-slate-200 truncate mt-0.5">
                                   {d.firstName} {d.lastName}
@@ -954,7 +962,7 @@ export default function DriverProfilesPage() {
               ].map(t => (
                 <button
                   key={t.key}
-                  onClick={() => setTab(t.key as any)}
+                  onClick={() => setTab(t.key as typeof tab)}
                   className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
                     tab === t.key
                       ? 'border-cyan-500 text-cyan-400 bg-cyan-500/5'
@@ -1381,17 +1389,17 @@ export default function DriverProfilesPage() {
                           <span className="text-[11px] text-[var(--text-faint)]">Min 8 chars, letter, digit, symbol</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
-                          <span className={form.password.length >= 8 ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                            {form.password.length >= 8 ? '✓' : '•'} At least 8 characters
+                          <span className={(form.password ?? '').length >= 8 ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                            {(form.password ?? '').length >= 8 ? '✓' : '•'} At least 8 characters
                           </span>
-                          <span className={/[a-zA-Z]/.test(form.password) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                            {/[a-zA-Z]/.test(form.password) ? '✓' : '•'} One alphabet letter (A–Z or a–z)
+                          <span className={/[a-zA-Z]/.test(form.password ?? '') ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                            {/[a-zA-Z]/.test(form.password ?? '') ? '✓' : '•'} One alphabet letter (A–Z or a–z)
                           </span>
-                          <span className={/\d/.test(form.password) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                            {/\d/.test(form.password) ? '✓' : '•'} One numeric digit (0–9)
+                          <span className={/\d/.test(form.password ?? '') ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                            {/\d/.test(form.password ?? '') ? '✓' : '•'} One numeric digit (0–9)
                           </span>
-                          <span className={/[^a-zA-Z0-9]/.test(form.password) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                            {/[^a-zA-Z0-9]/.test(form.password) ? '✓' : '•'} One special character or symbol
+                          <span className={/[^a-zA-Z0-9]/.test(form.password ?? '') ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                            {/[^a-zA-Z0-9]/.test(form.password ?? '') ? '✓' : '•'} One special character or symbol
                           </span>
                         </div>
                       </div>

@@ -2,10 +2,29 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Warehouse, Building2, Navigation, Compass, Plus, X,
-  ShieldCheck, DollarSign, User, Phone, Check, RefreshCw,
-  Map, Globe, Layers, Mountain, Move, AlertTriangle, Info,
-  Edit3, Undo2, RotateCcw, MousePointerClick, Hexagon, Search,
+  Warehouse,
+  Building2,
+  Navigation,
+  Compass,
+  Plus,
+  X,
+  ShieldCheck,
+  DollarSign,
+  User,
+  Phone,
+  Check,
+  RefreshCw,
+  Map,
+  Globe,
+  Layers,
+  Mountain,
+  Info,
+  Edit3,
+  Undo2,
+  RotateCcw,
+  MousePointerClick,
+  Hexagon,
+  Search,
 } from 'lucide-react';
 import {
   loadGoogleMaps,
@@ -16,6 +35,7 @@ import {
   type GMapsPolyline,
   type GMapsAutocomplete,
   type GMapsGeocoder,
+  type GMapsLatLng,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
 
@@ -752,7 +772,7 @@ export function ConsigneeDestinationModal({
           });
           mapInstanceRef.current = map;
 
-          map.addListener('click', (e: any) => {
+          map.addListener('click', (e) => {
             if (!e.latLng) return;
             const newPt = {
               lat: Number(e.latLng.lat().toFixed(6)),
@@ -814,11 +834,12 @@ export function ConsigneeDestinationModal({
             draggable: true,
             title: name || 'Ramp Location',
           });
-          markerRef.current.addListener('dragend', (e: any) => {
-            if (!e.latLng) return;
+          markerRef.current.addListener('dragend', (e?: unknown) => {
+            const latLng = (e as { latLng?: GMapsLatLng } | undefined)?.latLng;
+            if (!latLng) return;
             const newPt = {
-              lat: Number(e.latLng.lat().toFixed(6)),
-              lng: Number(e.latLng.lng().toFixed(6)),
+              lat: Number(latLng.lat().toFixed(6)),
+              lng: Number(latLng.lng().toFixed(6)),
             };
             setPlotCoordinates(newPt);
             plotCoordinatesRef.current = newPt;

@@ -7,7 +7,6 @@ import {
   Plus,
   Search,
   CheckCircle2,
-  XCircle,
   AlertTriangle,
   FolderTree,
   Building2,
@@ -18,10 +17,6 @@ import {
   Edit2,
   Trash2,
   RotateCcw,
-  Sparkles,
-  ExternalLink,
-  Filter,
-  Check,
 } from 'lucide-react';
 
 export interface HierarchyNode {
@@ -144,18 +139,6 @@ export default function OrganizationHierarchyMasterPage() {
 
   const activeRegions = useMemo(() => allRegions.filter((r) => r.is_active !== false), [allRegions]);
   const activeDepartments = useMemo(() => allDepartments.filter((d) => d.is_active !== false), [allDepartments]);
-
-  // Departments available for selected parent region in modal
-  const modalDepartments = useMemo(() => {
-    if (modal.level !== 'UNIT') return [];
-    if (!modal.parentId) return activeDepartments;
-    // Find if parentId is region or dept
-    const isRegion = activeRegions.some((r) => r.id === modal.parentId);
-    if (isRegion) {
-      return activeDepartments.filter((d) => d.parent_id === modal.parentId);
-    }
-    return activeDepartments;
-  }, [modal.level, modal.parentId, activeRegions, activeDepartments]);
 
   // Quick stats
   const stats = useMemo(() => {

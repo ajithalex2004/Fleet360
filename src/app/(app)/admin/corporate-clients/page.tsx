@@ -3,25 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PhoneCell from '@/components/ui/PhoneCell';
-import Link from 'next/link';
 import {
   Building2,
   Users,
   Plus,
   Search,
-  Phone,
   Mail,
   ShieldCheck,
   CreditCard,
-  Percent,
   CheckCircle2,
   Trash2,
-  Send,
   MessageSquare,
-  Sparkles,
-  ArrowRight,
-  DollarSign,
-  AlertCircle,
   X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';

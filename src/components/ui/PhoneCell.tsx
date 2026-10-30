@@ -31,7 +31,7 @@ export default function PhoneCell({
     return <span className="text-[var(--text-faint)] italic">—</span>;
   }
 
-  const { country, nationalNumber, fullE164 } = parsePhoneNumber(value);
+  const { nationalNumber, fullE164 } = parsePhoneNumber(value);
 
   if (!nationalNumber) {
     return <span className="text-[var(--text-muted)] font-mono text-xs">{value}</span>;

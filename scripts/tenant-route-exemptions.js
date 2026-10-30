@@ -63,6 +63,13 @@ const RULE_EXEMPTIONS = [
     dataScope: 'Public VAPID key only', owner: 'Identity & Security Engineering',
     test: 'tests/unit/public-endpoint-auth.test.ts',
   },
+  {
+    file: 'src/app/api/driver-app/telematics/live-location/route.ts', method: 'OPTIONS', type: 'missing_auth',
+    reason: 'CORS preflight from the driver app WebView. Browsers send preflights without credentials, so there is no session to check; it reads and writes nothing and returns CORS headers only to allowlisted origins (the app WebView and NEXT_PUBLIC_APP_URL).',
+    authMechanism: 'None needed (no data access); the POST it precedes requires requireAuthorizedTenant',
+    dataScope: 'None (response headers only)', owner: 'Mobile App Team',
+    test: 'tests/unit/driver-app-live-location.test.ts',
+  },
   // ── Device ingest ──────────────────────────────────────────────────────────
   {
     file: 'src/app/api/assets/ble/ingest/route.ts', method: 'POST', type: 'missing_auth',

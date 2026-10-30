@@ -9,8 +9,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   },
@@ -261,11 +261,17 @@
     "vendors:edit:*",
     "vendors:delete:*",
     "vendors:approve:*",
-    "vendors:export:*"
+    "vendors:export:*",
+    "drayage:view:*",
+    "drayage:create:*",
+    "drayage:edit:*",
+    "drayage:delete:*",
+    "drayage:approve:*",
+    "drayage:export:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "________________________A8D______________w"
+    "v": "0ac7ad93",
+    "b": "________________________A8D______________z8"
    }
   },
   {
@@ -508,11 +514,17 @@
     "vendors:edit:*",
     "vendors:delete:*",
     "vendors:approve:*",
-    "vendors:export:*"
+    "vendors:export:*",
+    "drayage:view:*",
+    "drayage:create:*",
+    "drayage:edit:*",
+    "drayage:delete:*",
+    "drayage:approve:*",
+    "drayage:export:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "________________________A8D______________w"
+    "v": "0ac7ad93",
+    "b": "________________________A8D______________z8"
    }
   },
   {
@@ -551,8 +563,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgAAAAA"
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgAAAAAA"
    }
   },
   {
@@ -569,8 +581,8 @@
     "rental:edit:pricing"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "0ac7ad93",
+    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -628,11 +640,12 @@
     "customer:view:*",
     "mobile-apps:view:*",
     "ai-platform:view:*",
-    "vendors:view:*"
+    "vendors:view:*",
+    "drayage:view:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAEEQBA"
+    "v": "0ac7ad93",
+    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAEEQBAE"
    }
   },
   {
@@ -645,8 +658,8 @@
     "custom:thing:x"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "custom:thing:x",
      "fleet:view:vehicles",
@@ -664,8 +677,8 @@
     "maintenance:view:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAAAAAA",
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "logistics:create:shipments"
     ]
@@ -677,8 +690,8 @@
    "plan": "PRO",
    "permissions": [],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -703,8 +716,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "c9977e3a",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "0ac7ad93",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   }

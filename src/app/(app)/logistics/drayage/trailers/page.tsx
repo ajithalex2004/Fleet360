@@ -1,11 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  Truck, Layers, Plus, Trash2, Edit3, Search, Filter, RefreshCw,
-  CheckCircle2, AlertTriangle, Download, X, MapPin, Settings2,
-  Tag, Palette, Check, RotateCcw, Info, Sliders, ShieldCheck,
+  Truck,
+  Layers,
+  Plus,
+  Trash2,
+  Edit3,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  X,
+  MapPin,
+  Settings2,
+  Palette,
+  RotateCcw,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
@@ -82,7 +92,7 @@ import {
 
 export default function DrayageTrailersPage() {
   const cached = getCachedDrayageData();
-  const [loading, setLoading] = useState(!cached?.trailers);
+  const [, setLoading] = useState(!cached?.trailers);
   const [trailers, setTrailers] = useState<DrayageTrailer[]>(cached?.trailers || []);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
@@ -707,7 +717,7 @@ export default function DrayageTrailersPage() {
                       <label className="font-semibold text-[var(--text-muted)]">Badge Tone / Color</label>
                       <select
                         value={newStatusTone}
-                        onChange={(e) => setNewStatusTone(e.target.value as any)}
+                        onChange={(e) => setNewStatusTone(e.target.value as Parameters<typeof setNewStatusTone>[0])}
                         className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 font-semibold"
                       >
                         <option value="emerald">Emerald (Green - Available / Clear)</option>
@@ -1003,7 +1013,7 @@ export default function DrayageTrailersPage() {
                   <label className="font-semibold text-[var(--text-muted)]">Master Status</label>
                   <select
                     value={masterStatus}
-                    onChange={(e) => setMasterStatus(e.target.value as any)}
+                    onChange={(e) => setMasterStatus(e.target.value as Parameters<typeof setMasterStatus>[0])}
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   >
                     <option value="AVAILABLE">AVAILABLE</option>

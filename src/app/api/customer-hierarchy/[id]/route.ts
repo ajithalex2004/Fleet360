@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, authz.tenantId, async (tx) => {
     try {
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT h.*, p.name as parent_name, p.code as parent_code
          FROM customer_hierarchy h
          LEFT JOIN customer_hierarchy p ON p.id = h.parent_id
@@ -37,31 +37,34 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   });
 }
 
+// Each handler authorizes the caller itself (the tenant checks read each
+// exported handler), then shares the update logic.
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-  return handleUpdate(req, props);
-}
-
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-  return handleUpdate(req, props);
-}
-
-async function handleUpdate(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
-  const authz = requireAuthorizedTenant(
-    { headers: req.headers, nextUrl: req.nextUrl },
-    { allowPlatformSwitch: true },
-  );
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  return handleUpdate(req, props, authz.tenantId);
+}
 
-  return withTenantRls(prisma, authz.tenantId, async (tx) => {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }, { allowPlatformSwitch: true });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  return handleUpdate(req, props, authz.tenantId);
+}
+
+async function handleUpdate(req: NextRequest, props: { params: Promise<{ id: string }> }, tenantId: string) {
+  const params = await props.params;
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
       const sets: string[] = [];
-      const vals: any[] = [];
+      const vals: unknown[] = [];
       let idx = 1;
 
       if (body.name !== undefined) {
@@ -90,19 +93,19 @@ async function handleUpdate(req: NextRequest, props: { params: Promise<{ id: str
       }
 
       vals.push(params.id);
-      vals.push(authz.tenantId);
+      vals.push(tenantId);
       await tx.$executeRawUnsafe(
         `UPDATE customer_hierarchy SET ${sets.join(', ')} WHERE id = $${idx} AND (tenant_id = $${idx + 1} OR tenant_id IS NULL)`,
         ...vals,
       );
 
-      const rows = await tx.$queryRawUnsafe<any[]>(
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT h.*, p.name as parent_name, p.code as parent_code
          FROM customer_hierarchy h
          LEFT JOIN customer_hierarchy p ON p.id = h.parent_id
          WHERE h.id = $1 AND (h.tenant_id = $2 OR h.tenant_id IS NULL)`,
         params.id,
-        authz.tenantId,
+        tenantId,
       );
 
       return NextResponse.json(rows[0]);

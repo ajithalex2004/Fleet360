@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
@@ -35,7 +36,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   });
 }
 
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant(
     { headers: req.headers, nextUrl: req.nextUrl },
@@ -51,7 +52,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       const body = stripTenantOwnershipFields(bodyRaw);
       const now = new Date().toISOString();
 
-      const existing = await tx.$queryRawUnsafe<any[]>(
+      const existing = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT id FROM fleet_nui_reasons WHERE id::text = $1`,
         params.id,
       );
@@ -70,7 +71,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       };
 
       const sets: string[] = [`updated_at = $1::timestamptz`];
-      const vals: any[] = [now];
+      const vals: unknown[] = [now];
       let idx = 2;
 
       for (const [key, col] of Object.entries(fieldMap)) {
@@ -104,7 +105,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   });
 }
 
-export async function DELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant(
     { headers: _.headers, nextUrl: _.nextUrl },
@@ -127,3 +128,9 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
     }
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const DELETE = withAuditedAction(handleDELETE);

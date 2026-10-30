@@ -18,7 +18,7 @@
  *   5. Interactive InfoWindow & Telematics Drawer with vehicle telemetry, DO expiry, EDI check, and quick dispatch actions.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   loadGoogleMaps,
   type GMapsMap,
@@ -28,12 +28,17 @@ import {
   type GMapsPolygon,
   type GMapsInfoWindow,
   type GoogleCtors,
+  type GMapsLatLng,
 } from '@/lib/google-maps-loader';
 import {
-  Navigation, Truck, ShieldCheck, MapPin, Clock, Eye, Layers,
-  Compass, RefreshCw, Send, CheckCircle2, AlertTriangle, ArrowRight,
-  Maximize2, Minimize2, Radio, Filter, Search, SlidersHorizontal,
-  X, ExternalLink, Zap,
+  Navigation,
+  ShieldCheck,
+  Clock,
+  RefreshCw,
+  Send,
+  AlertTriangle,
+  Search,
+  X,
 } from 'lucide-react';
 
 export interface DrayageCorridorJob {
@@ -395,10 +400,8 @@ export default function DrayageCorridorLiveMap({
   terminals,
   warehouses,
   geofences,
-  vehicles,
   selectedJobId,
   onSelectJob,
-  onAdvanceStage,
   onVerifyEdi,
   onOpenChat,
   className = '',
@@ -424,15 +427,15 @@ export default function DrayageCorridorLiveMap({
 
   // Layer Visibility Toggles
   const [showCorridors, setShowCorridors] = useState(true);
-  const [showPorts, setShowPorts] = useState(true);
-  const [showWarehouses, setShowWarehouses] = useState(true);
+  const [showPorts] = useState(true);
+  const [showWarehouses] = useState(true);
   const [showGeofences, setShowGeofences] = useState(true);
   const [showBogieLinks, setShowBogieLinks] = useState(true);
   const [showStreetTurnLinks, setShowStreetTurnLinks] = useState(true);
 
   // Filters
   const [filterPhase, setFilterPhase] = useState<'ALL' | 'L1' | 'L2' | 'BOGIE' | 'STREET_TURN' | 'RAMP'>('ALL');
-  const [filterCorridor, setFilterCorridor] = useState<string>('ALL');
+  const [filterCorridor] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Selected Job Details Drawer state (for full height / radar mode)
@@ -550,8 +553,9 @@ export default function DrayageCorridorLiveMap({
         zIndex: 5,
       });
 
-      poly.addListener?.('click', (e: any) => {
-        if (!infoWindowRef.current || !e.latLng) return;
+      poly.addListener?.('click', (e?: unknown) => {
+        const ev = e as { latLng?: GMapsLatLng } | undefined;
+        if (!infoWindowRef.current || !ev?.latLng) return;
         const html = `
           <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; max-width: 260px; padding: 4px;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
@@ -566,7 +570,7 @@ export default function DrayageCorridorLiveMap({
           </div>
         `;
         infoWindowRef.current.setContent(html);
-        infoWindowRef.current.setPosition(e.latLng);
+        infoWindowRef.current.setPosition(ev.latLng);
         infoWindowRef.current.open({ map });
       });
 

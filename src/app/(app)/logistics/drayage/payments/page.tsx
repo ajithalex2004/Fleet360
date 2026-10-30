@@ -2,10 +2,25 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Wallet, DollarSign, CheckCircle2, Clock, Check, RefreshCw,
-  Search, UserCheck, ShieldCheck, AlertTriangle, SlidersHorizontal,
-  FileSpreadsheet, CreditCard, Award, Layers, Sparkles, X, FileText,
-  Building2, Truck, Ban, Eye,
+  Wallet,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  Check,
+  RefreshCw,
+  Search,
+  UserCheck,
+  ShieldCheck,
+  AlertTriangle,
+  SlidersHorizontal,
+  FileSpreadsheet,
+  CreditCard,
+  Award,
+  Sparkles,
+  X,
+  FileText,
+  Truck,
+  Eye,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
@@ -57,15 +72,8 @@ interface DriverPayoutSummary {
   allowances: DrayageDriverAllowance[];
 }
 
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  WPS_PAYROLL: 'UAE WPS Payroll Transfer',
-  BANK_TRANSFER: 'Corporate Bank IBAN Wire',
-  FUEL_CASH_CARD: 'Fleet Fuel & Petty Cash Card',
-  DRIVER_WALLET: 'Driver App Digital Wallet',
-};
-
 export default function DrayagePaymentsPage() {
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [allowances, setAllowances] = useState<DrayageDriverAllowance[]>([]);
   const [activeView, setActiveView] = useState<'LEDGER' | 'DRIVER_PAYOUTS'>('LEDGER');
   const [statusTab, setStatusTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED'>('ALL');

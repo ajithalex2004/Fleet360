@@ -4,11 +4,22 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  PlusCircle, Package, Trash2, Plus, CheckCircle2, AlertTriangle, RefreshCw,
-  Building2, MapPin, ShieldCheck, DollarSign, ArrowRight, FileText, UploadCloud,
-  Warehouse, X, User, Phone, Mail, Calendar, Clock,
+  PlusCircle,
+  Package,
+  Trash2,
+  Plus,
+  CheckCircle2,
+  AlertTriangle,
+  Building2,
+  MapPin,
+  ShieldCheck,
+  FileText,
+  UploadCloud,
+  X,
+  Calendar,
+  Clock,
 } from 'lucide-react';
-import { PageHeader, Panel, KpiCard } from '@/components/ui/page-theme';
+import { PageHeader, Panel } from '@/components/ui/page-theme';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/SearchableSelect';
 import {
   fetchDrayageWorkspaceCached,
@@ -61,7 +72,7 @@ interface ContainerItem {
 export default function DrayageCreateJobsPage() {
   const router = useRouter();
   const cached = getCachedDrayageData();
-  const [loading, setLoading] = useState(!cached?.customers?.length);
+  const [, setLoading] = useState(!cached?.customers?.length);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 

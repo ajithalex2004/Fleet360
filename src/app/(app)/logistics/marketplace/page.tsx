@@ -13,7 +13,6 @@
  * Fixes the dangling "Freight marketplace" deep-link on the logistics dashboard.
  */
 'use client';
-import Link from 'next/link';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gavel, RefreshCw, Truck, Clock, CheckCircle2, Trophy, Plus, Link2, X, Copy, Radio, MapPin } from 'lucide-react';

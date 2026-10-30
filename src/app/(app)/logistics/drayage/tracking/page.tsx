@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
-  Radio, Compass, Map as MapIcon, SlidersHorizontal, Maximize2,
+  Radio, Compass, Truck, Layers,
 } from 'lucide-react';
 
 const DrayageCorridorLiveMap = dynamic(
@@ -20,11 +19,34 @@ const DrayageCorridorLiveMap = dynamic(
   }
 );
 import {
-  Navigation, Package, Truck, CheckCircle2, AlertTriangle, RefreshCw,
-  Search, ShieldCheck, MapPin, Send, MessageSquare, Clock, Plus,
-  Layers, Unplug, ArrowRight, Eye, UserCheck, Key, FileText, Check,
+  Navigation,
+  Package,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  ShieldCheck,
+  Send,
+  MessageSquare,
+  Clock,
+  Plus,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import type {
+  DrayageCorridorTerminal,
+  DrayageCorridorWarehouse,
+  DrayageCorridorGeofence,
+  DrayageCorridorVehicle,
+} from '@/components/logistics/drayage/DrayageCorridorLiveMap';
+
+/** EDI clearance check result shown on the tracking card (the fields read here). */
+interface EdiVerification {
+  providerLabel?: string;
+  verifiedAt: string;
+  customsStatus?: string;
+  doStatus?: string;
+  vesselName?: string;
+  tokenNumber?: string;
+}
 
 interface DrayageJob {
   id: string;
@@ -92,15 +114,15 @@ export default function DrayageJobTrackingPage() {
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [messages, setMessages] = useState<DispatchMessage[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [terminals, setTerminals] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [geofences, setGeofences] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [terminals, setTerminals] = useState<DrayageCorridorTerminal[]>([]);
+  const [warehouses, setWarehouses] = useState<DrayageCorridorWarehouse[]>([]);
+  const [geofences, setGeofences] = useState<DrayageCorridorGeofence[]>([]);
+  const [vehicles, setVehicles] = useState<DrayageCorridorVehicle[]>([]);
   const [viewMode, setViewMode] = useState<'SPLIT' | 'RADAR' | 'CONSOLE'>('SPLIT');
 
   // EDI verification state
   const [ediLoading, setEdiLoading] = useState(false);
-  const [ediResult, setEdiResult] = useState<any | null>(null);
+  const [ediResult, setEdiResult] = useState<EdiVerification | null>(null);
 
   // Multi-leg modal state
   const [showLegModal, setShowLegModal] = useState(false);

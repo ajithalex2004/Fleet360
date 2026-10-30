@@ -2,75 +2,94 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { rejectForeignIdentifiers, requireDriverActor } from '@/lib/driver-app-actor';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
 /**
- * OPTIONS /api/driver-app/telematics/live-location
- * Handles CORS preflights from Capacitor Android / iOS WebView and web clients.
+ * Origins allowed to call this route cross-origin with credentials: the
+ * driver app's WebView (capacitor.config.ts server.hostname 'localhost2':
+ * https on Android, capacitor:// on iOS) and the web app's own origin.
+ * Reflecting any Origin with Allow-Credentials let any website send
+ * credentialed requests here from a signed-in driver's browser.
  */
-export async function OPTIONS(req: NextRequest) {
-  const origin = req.headers.get('origin') || '*';
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Tenant-Id, X-Requested-With, Cookie',
-      'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
+function allowedOrigins(): Set<string> {
+  const origins = new Set(['https://localhost2', 'capacitor://localhost2', 'https://localhost', 'capacitor://localhost']);
+  try {
+    if (process.env.NEXT_PUBLIC_APP_URL) origins.add(new URL(process.env.NEXT_PUBLIC_APP_URL).origin);
+  } catch {
+    // malformed URL: no extra origin
+  }
+  return origins;
+}
+
+function corsOrigin(req: NextRequest): string | null {
+  const origin = req.headers.get('origin');
+  return origin && allowedOrigins().has(origin) ? origin : null;
 }
 
 function withCorsHeaders(res: NextResponse, origin: string | null): NextResponse {
   if (origin) {
     res.headers.set('Access-Control-Allow-Origin', origin);
     res.headers.set('Access-Control-Allow-Credentials', 'true');
-    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Id, X-Requested-With, Cookie');
+    res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.headers.set('Vary', 'Origin');
   }
   return res;
+}
+
+/**
+ * OPTIONS /api/driver-app/telematics/live-location
+ * CORS preflight from the driver app's WebView. Preflights carry no
+ * credentials, so there is no session to check; it reads and writes
+ * nothing, and only allowlisted origins get CORS headers.
+ */
+export async function OPTIONS(req: NextRequest) {
+  const res = new NextResponse(null, { status: 204 });
+  const origin = corsOrigin(req);
+  if (origin) res.headers.set('Access-Control-Max-Age', '86400');
+  return withCorsHeaders(res, origin);
 }
 
 /**
  * POST /api/driver-app/telematics/live-location
  *
  * Receives periodic high-accuracy GPS telemetry pings from the driver app
- * and updates vehicle position for live dispatch and telematics visibility.
+ * and updates vehicle position for live dispatch visibility.
+ *
+ * Only an active driver of the session's tenant may send pings, and only
+ * for the vehicle of their own IN_PROGRESS trip (src/lib/driver-app-actor.ts).
+ * With no active trip the ping is acknowledged but not stored. A body
+ * driverId/vehicleId naming anyone or anything else is rejected with 403.
+ *
+ * (Restored: a drayage change had replaced this with a handler that took
+ * anonymous pings, resolving the tenant from a body vehicle id or a
+ * hard-coded tenant, and writing to a hard-coded fallback vehicle.)
  */
 export async function POST(req: NextRequest) {
-  const origin = req.headers.get('origin');
-  const rawBody = await req.json().catch(() => ({}));
-  const body = stripTenantOwnershipFields(rawBody);
-
+  const origin = corsOrigin(req);
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  let tenantId: string | null = authz.ok ? authz.tenantId : null;
-
-  const explicitVehicleId = typeof body.vehicleId === 'string' && body.vehicleId.trim()
-    ? body.vehicleId.trim()
-    : req.cookies.get('xl-driver-vehicle-id')?.value ?? null;
-
-  // Fallback for APK/Capacitor standalone cross-origin where session cookies may not be passed
-  if (!tenantId && explicitVehicleId) {
-    const vMatch = await prisma.vehicle.findFirst({
-      where: { id: explicitVehicleId, deletedAt: null },
-      select: { tenantId: true },
-    });
-    if (vMatch?.tenantId) {
-      tenantId = vMatch.tenantId;
-    }
+  if (!authz.ok) {
+    return withCorsHeaders(NextResponse.json({ error: authz.error }, { status: authz.status }), origin);
   }
-
-  // Fallback default tenant for driver app if not resolved
-  if (!tenantId) {
-    tenantId = '35ad69c6-0451-4210-8ec3-01472c902e15';
-  }
+  const { tenantId } = authz;
+  // Verify the credential before opening a transaction, so requests without
+  // a valid driver session never touch the database.
+  const session = await requireDriverSessionForTenant(req, tenantId);
+  if (session instanceof NextResponse) return withCorsHeaders(session, origin);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const actor = await requireDriverActor(tx, session);
+    if (actor instanceof NextResponse) return withCorsHeaders(actor, origin);
+
     try {
+      const rawBody = await req.json().catch(() => ({}));
+      const body = stripTenantOwnershipFields(rawBody);
+
       const {
         lat,
         lng,
@@ -79,103 +98,62 @@ export async function POST(req: NextRequest) {
         accuracy = 0,
       } = body;
 
-      if (
-        typeof lat !== 'number' ||
-        typeof lng !== 'number' ||
-        isNaN(lat) ||
-        isNaN(lng) ||
-        (lat === 0 && lng === 0) ||
-        (Math.abs(lat - 25.2048) < 0.0001 && Math.abs(lng - 55.2708) < 0.0001)
-      ) {
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
         return withCorsHeaders(
-          NextResponse.json({ error: 'Valid real device GPS coordinates required' }, { status: 400 }),
-          origin
+          NextResponse.json({ error: 'Valid lat and lng numbers are required' }, { status: 400 }),
+          origin,
         );
       }
 
-      // Default to Jennish John's vehicle (96448) if ID not found or blank
-      let vehicleIdToUse = explicitVehicleId || '3c779fd8-d536-475c-a38e-9919909fab84';
+      const vehicle = actor.activeTrip?.vehicle ?? null;
+      const foreign = rejectForeignIdentifiers(actor, body, vehicle);
+      if (foreign) return withCorsHeaders(foreign, origin);
 
-      let foundVehicle = await tx.vehicle.findFirst({
-        where: { id: vehicleIdToUse, tenantId, deletedAt: null },
-        select: { id: true, deviceId: true, assignedDriverId: true },
-      });
-
-      if (!foundVehicle && explicitVehicleId) {
-        // Try searching by license plate or vehicle code
-        foundVehicle = await tx.vehicle.findFirst({
-          where: {
-            tenantId,
-            deletedAt: null,
-            OR: [
-              { licensePlate: explicitVehicleId },
-              { vehicleCode: explicitVehicleId },
-            ],
-          },
-          select: { id: true, deviceId: true, assignedDriverId: true },
-        });
-      }
-
-      if (!foundVehicle) {
-        // Fallback to Jennish John's vehicle
-        foundVehicle = await tx.vehicle.findFirst({
-          where: { id: '3c779fd8-d536-475c-a38e-9919909fab84', tenantId, deletedAt: null },
-          select: { id: true, deviceId: true, assignedDriverId: true },
-        });
-      }
-
-      if (!foundVehicle) {
+      // Live position is tracked in BusGpsPing, the table the telematics
+      // gateway and geofence evaluator read. The vehicle is the one on the
+      // driver's own IN_PROGRESS trip; the client does not choose it.
+      if (!vehicle) {
         return withCorsHeaders(
-          NextResponse.json({ ok: false, error: 'Vehicle not found' }, { status: 404 }),
-          origin
+          NextResponse.json({
+            ok: true,
+            recorded: false,
+            reason: 'No trip in progress for this driver; location not recorded.',
+            timestamp: new Date().toISOString(),
+          }),
+          origin,
         );
       }
 
-      const vehicleToTrack = foundVehicle;
-
-      // Record high-accuracy GPS ping into BusGpsPing
-      const now = new Date();
       await tx.busGpsPing.create({
         data: {
           tenantId,
-          vehicleId: vehicleToTrack.id,
+          vehicleId: vehicle.id,
           latitude: lat,
           longitude: lng,
-          speedKmh: Math.max(0, Number(speedKmh) || 0),
-          headingDeg: Math.max(0, Number(heading) || 0),
-          accuracyM: Math.max(0, Number(accuracy) || 0),
-          occurredAt: now,
+          speedKmh,
+          headingDeg: heading,
+          accuracyM: accuracy,
+          occurredAt: new Date(),
           source: 'DRIVER_APP',
         },
       });
-
-      // Update vehicle timestamp so live fleet queries immediately see active movement
-      await tx.vehicle.update({
-        where: { id: vehicleToTrack.id },
-        data: { updatedAt: now },
-      }).catch(() => {});
 
       return withCorsHeaders(
         NextResponse.json({
           ok: true,
           recorded: true,
-          vehicleId: vehicleToTrack.id,
+          vehicleId: vehicle.id,
           lat,
           lng,
-          speedKmh: Math.max(0, Number(speedKmh) || 0),
-          source: 'DRIVER_APP',
-          timestamp: now.toISOString(),
+          timestamp: new Date().toISOString(),
         }),
-        origin
+        origin,
       );
     } catch (err) {
       console.error('[api/driver-app/telematics/live-location POST]', err);
       return withCorsHeaders(
-        NextResponse.json(
-          { error: err instanceof Error ? err.message : 'Failed to process location ping' },
-          { status: 500 }
-        ),
-        origin
+        NextResponse.json({ error: 'Failed to process location ping' }, { status: 500 }),
+        origin,
       );
     }
   });

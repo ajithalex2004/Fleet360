@@ -2,21 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { VehicleRef, DriverRef } from '@/components/ui/EntityRef';
-import { 
-  MoreVertical, 
-  ClipboardCheck, 
-  ShieldAlert, 
-  ShieldCheck, 
-  Eye, 
-  X, 
-  FileText, 
-  CheckCircle2, 
+import {
+  MoreVertical,
+  ClipboardCheck,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+  CheckCircle2,
   AlertTriangle,
   Clock,
   Gauge,
   User,
   Car,
-  Calendar
 } from 'lucide-react';
 
 interface Shift {
@@ -243,7 +240,7 @@ export default function ShiftManagement() {
                 {filteredShifts.map((shift) => {
                   const checklistEntries = shift.checklist ? Object.entries(shift.checklist) : [];
                   const hasChecklist = checklistEntries.length > 0;
-                  const failedCount = checklistEntries.filter(([_, v]) => v?.ok === false).length;
+                  const failedCount = checklistEntries.filter(([, v]) => v?.ok === false).length;
 
                   return (
                     <tr key={shift.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
