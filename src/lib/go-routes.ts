@@ -46,6 +46,13 @@ export const GO_ROUTES: readonly GoRoute[] = [
   { method: 'GET', path: '/api/logistics/driver-stats' },
   { method: 'GET', path: '/api/logistics/tracking' },
 
+  // Logistics — shipping requests (demand intake & conversion)
+  { method: 'GET', path: '/api/logistics/shipping-requests' },
+  { method: 'POST', path: '/api/logistics/shipping-requests' },
+  { method: 'GET', path: '/api/logistics/shipping-requests/:id' },
+  { method: 'PATCH', path: '/api/logistics/shipping-requests/:id' },
+  { method: 'POST', path: '/api/logistics/shipping-requests/:id/convert' },
+
   // Logistics — carriers, rates, marketplace
   { method: 'GET', path: '/api/logistics/carriers' },
   { method: 'GET', path: '/api/logistics/carriers/:id' },

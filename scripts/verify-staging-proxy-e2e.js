@@ -130,44 +130,38 @@ async function seedStagingRecords() {
       LOGIN_USER_ID,
     );
 
-    // Link User to Tenant A via UserTenant model
-    const roleAId = crypto.randomUUID();
-    await tx.role.create({
-      data: {
-        id: roleAId,
-        tenantId: TENANT_A_ID,
-        name: 'Tenant Admin A',
-        code: 'TENANT_ADMIN',
-      },
+    // Link User to Tenant A and B using the platform TENANT_ADMIN role
+    let adminRole = await tx.role.findFirst({
+      where: { code: 'TENANT_ADMIN', tenantId: null },
     });
+    if (!adminRole) {
+      adminRole = await tx.role.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: 'Tenant Administrator',
+          code: 'TENANT_ADMIN',
+          tenantId: null,
+          isSystem: true,
+        },
+      });
+    }
 
     await tx.userTenant.create({
       data: {
         id: crypto.randomUUID(),
         userId: LOGIN_USER_ID,
         tenantId: TENANT_A_ID,
-        roleId: roleAId,
+        roleId: adminRole.id,
         isActive: true,
       },
     });
 
-    // Link User to Tenant B via UserTenant model
-    const roleBId = crypto.randomUUID();
-    await tx.role.create({
-      data: {
-        id: roleBId,
-        tenantId: TENANT_B_ID,
-        name: 'Tenant Admin B',
-        code: 'TENANT_ADMIN',
-      },
-    });
-
     await tx.userTenant.create({
       data: {
         id: crypto.randomUUID(),
         userId: LOGIN_USER_ID,
         tenantId: TENANT_B_ID,
-        roleId: roleBId,
+        roleId: adminRole.id,
         isActive: true,
       },
     });
