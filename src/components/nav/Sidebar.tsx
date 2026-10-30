@@ -44,17 +44,32 @@ export default function Sidebar({ onTabsFull }: Props) {
 
   const { user, tenant, permissions } = usePermissions();
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
+  const isTenantAdmin = user?.roleCode === 'TENANT_ADMIN' || user?.roleCode === 'ADMIN' || Boolean(user?.roleCode?.includes('ADMIN'));
   const canOpen = (id: string) =>
-    !!user && canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
+    !!user && canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions, navPermissions: tenant?.navPermissions });
   const visibleSubPages = (subs?: SubPage[], moduleId?: string) => {
     if (!subs) return undefined;
     let list = subs.filter(sp => !sp.superOnly || isSuperAdmin);
-    if (moduleId === 'admin' && !isSuperAdmin) {
+    if (!isSuperAdmin) {
       const navPerms = tenant?.navPermissions ?? {};
       list = list.filter(sp => {
-        if (!sp.navKey) return true;
-        if (sp.navKey in navPerms) return navPerms[sp.navKey] === true;
-        return !sp.defaultHiddenForTenantAdmin;
+        // Explicit sub-menu toggle (`sub:<href>`) applies across ALL modules
+        if (`sub:${sp.href}` in navPerms && navPerms[`sub:${sp.href}`] === false) return false;
+        if (!isTenantAdmin && `other:sub:${sp.href}` in navPerms && navPerms[`other:sub:${sp.href}`] === false) return false;
+
+        if (moduleId === 'admin') {
+          if (sp.href === '/admin' && navPerms['overview'] === false) return false;
+          if (sp.href === '/admin/users' && navPerms['users'] === false) return false;
+          if (sp.href === '/admin/roles' && navPerms['roles'] === false) return false;
+          if (!isTenantAdmin) {
+            const otherKey = sp.navKey ? `other:${sp.navKey}` : `other:sub:${sp.href}`;
+            if (navPerms[otherKey] !== true && navPerms[`other:sub:${sp.href}`] !== true) return false;
+          }
+          if (!sp.navKey) return true;
+          if (sp.navKey in navPerms) return navPerms[sp.navKey] === true;
+          return !sp.defaultHiddenForTenantAdmin;
+        }
+        return true;
       });
     }
     if (
@@ -211,6 +226,8 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       <nav ref={navRef} className="flex-1 overflow-y-auto overflow-x-visible p-2">
         {NAV_CATEGORIES.map((cat, catIdx) => {
+          if (!isSuperAdmin && tenant?.navPermissions?.[`cat:${cat.id}`] === false) return null;
+          if (!isSuperAdmin && !isTenantAdmin && tenant?.navPermissions?.[`other:cat:${cat.id}`] === false) return null;
           const catModules = MODULES.filter(m => m.category === cat.id && !hiddenModules.has(m.id) && canOpen(m.id));
           if (catModules.length === 0) return null;
           const isCatCollapsed = collapsedCats.has(cat.id);

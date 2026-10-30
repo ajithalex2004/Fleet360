@@ -87,7 +87,7 @@ function clearCache() { _cache = null; }
 // snapshot while we revalidate in the background. The server still authorises
 // every API call, so a briefly-stale client snapshot is safe.
 const SESSION_KEY = 'xl_mobility_session';
-const SNAPSHOT_KEY = 'xl_mobility_session_snapshot';
+const SNAPSHOT_KEY = 'xl_mobility_session_snapshot_v2';
 
 function hasStoredSession(): boolean {
   try {

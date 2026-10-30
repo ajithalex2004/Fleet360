@@ -130,9 +130,24 @@ async function handlePUT(request: NextRequest) {
     return NextResponse.json({ error: 'tenantId and permissions required' }, { status: 400 });
   }
 
-  // Upsert each toggleable key
+  // Upsert each toggleable key + any dynamic Menu (mod:*), Category (cat:*), Sub-Menu (sub:*), or Other-User (other:*) key
+  const allKeysToSave = new Set<string>([
+    ...TOGGLEABLE_NAV_KEYS,
+    ...Object.keys(permissions).filter(
+      (k) =>
+        k.startsWith('cat:') ||
+        k.startsWith('mod:') ||
+        k.startsWith('sub:') ||
+        k.startsWith('other:') ||
+        k === 'overview' ||
+        k === 'users' ||
+        k === 'roles',
+    ),
+  ]);
+
   await withTenantRls(prisma, targetTenantId, async (tx) => {
-    for (const key of TOGGLEABLE_NAV_KEYS) {
+    for (const key of allKeysToSave) {
+      if (!(key in permissions) && !TOGGLEABLE_NAV_KEYS.includes(key as any)) continue;
       const enabled = permissions[key] === true;
       await tx.$executeRawUnsafe(
         `INSERT INTO tenant_admin_nav_permissions (id, tenant_id, nav_key, enabled, updated_at)

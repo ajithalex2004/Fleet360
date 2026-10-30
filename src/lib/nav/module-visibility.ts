@@ -19,6 +19,8 @@ export interface ModuleViewer {
   enabledModules: readonly string[] | null | undefined;
   /** The session's effective permissions, module:action:resource. */
   permissions: readonly string[];
+  /** Optional per-tenant Menu / Category / Sub-Menu visibility overrides set by Super Admin. */
+  navPermissions?: Record<string, boolean> | null | undefined;
 }
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
@@ -50,13 +52,28 @@ function tenantHas(enabled: readonly string[] | null | undefined, module: string
 export function canOpenModule(module: string, viewer: ModuleViewer): boolean {
   const role = viewer.roleCode ?? '';
   if (role === SUPER_ADMIN) return true;
+
+  const navPerms = viewer.navPermissions ?? {};
+  const isTenantAdmin = role === TENANT_ADMIN || role === 'ADMIN' || role.includes('ADMIN');
+
+  // Explicit Super Admin module-level override (`mod:<moduleId>`)
+  if (navPerms[`mod:${module}`] === false) return false;
+  if (!isTenantAdmin && navPerms[`other:mod:${module}`] === false) return false;
+
   if (module === 'admin') {
     if (viewer.enabledModules && viewer.enabledModules.length > 0 && !viewer.enabledModules.includes('admin')) {
       return false;
     }
-    return role === TENANT_ADMIN || role === SUPER_ADMIN || role === 'ADMIN' || role.includes('ADMIN') || holdsAnyPermissionIn(viewer.permissions, 'admin');
+    if (!isTenantAdmin && navPerms['other:mod:admin'] === true) return true;
+    return isTenantAdmin || holdsAnyPermissionIn(viewer.permissions, 'admin');
   }
-  if (module === 'exchange') return role === TENANT_ADMIN || role === PARTNER;
+  if (module === 'exchange') {
+    if (navPerms['mod:exchange'] === true) return isTenantAdmin || role === PARTNER || navPerms['other:mod:exchange'] === true;
+    return (isTenantAdmin || role === PARTNER) && (tenantHas(viewer.enabledModules, 'exchange') || tenantHas(viewer.enabledModules, 'vendors'));
+  }
   if (module === 'locations') return canOpenModule('fleet', viewer);
+  if (navPerms[`mod:${module}`] === true) {
+    return isTenantAdmin || navPerms[`other:mod:${module}`] !== false;
+  }
   return tenantHas(viewer.enabledModules, module) && holdsAnyPermissionIn(viewer.permissions, module);
 }

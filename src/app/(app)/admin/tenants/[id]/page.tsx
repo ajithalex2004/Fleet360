@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { MODULES, resolveModuleKey } from '@/lib/modules';
+import { NAV_CATEGORIES, MODULES as SIDEBAR_MODULES } from '@/lib/nav/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
 import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
@@ -900,6 +901,8 @@ export default function TenantDetailPage() {
   const [navPerms, setNavPerms]         = useState<Record<string,boolean>>({});
   const [navPermsSaving, setNavPermsSaving] = useState(false);
   const [navPermsSaved, setNavPermsSaved]   = useState(false);
+  const [menuAudience, setMenuAudience]     = useState<'tenant-admin' | 'other-users'>('tenant-admin');
+  const [expandedMenuIds, setExpandedMenuIds] = useState<Record<string, boolean>>({ dispatch: true, exchange: true, admin: true });
   const [branches, setBranches]     = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -1139,7 +1142,7 @@ export default function TenantDetailPage() {
           ['modules',      '🧩 Modules & Feature Flags'],
           ['features',     '⚙️ Feature Settings'],
           ['attachments',  '📎 Attachments'],
-          ['admin-access', '🔐 Admin Access'],
+          ['admin-access', '🔐 Menus, Sub-Menus & Admin Access'],
           ['users',        `Users (${users.length})`],
           ['roles',        `Roles (${roles.length})`],
           ['branches',     `Branches (${branches.length})`],
@@ -1163,6 +1166,13 @@ export default function TenantDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setTab('admin-access')}
+                  className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors"
+                >
+                  🔐 Control Menus, Sub-Menus &amp; Live Operations &rarr;
+                </button>
                 {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
                 {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
                 <button onClick={saveModules} disabled={saving}
@@ -1192,6 +1202,13 @@ export default function TenantDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setTab('admin-access')}
+                  className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors"
+                >
+                  🔐 Control Menus, Sub-Menus &amp; Live Operations &rarr;
+                </button>
                 {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
                 {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
                 <button onClick={saveModules} disabled={saving}
@@ -1450,12 +1467,277 @@ export default function TenantDetailPage() {
         </div>
       )}
 
-      {/* ── ADMIN ACCESS ── */}
+      {/* ── ADMIN ACCESS & FULL MENU / SUB-MENU CONTROLLER ── */}
       {tab === 'admin-access' && (
-        <div className="space-y-6 max-w-3xl">
+        <div className="space-y-6 max-w-5xl">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-[var(--text-main)] font-semibold text-lg flex items-center gap-2">
+                <span>Menu, Sub-Menu &amp; Admin Access Control Center</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-normal">Super Admin Control</span>
+              </h3>
+              <p className="text-[var(--text-muted)] text-sm mt-1">
+                Enable or disable entire Menu Categories (such as <strong>Live Operations</strong>), individual Menus, and every Sub-Menu item for <strong>Tenant Admin</strong> and <strong>Other Users</strong>. Changes auto-save immediately.
+              </p>
+            </div>
+            {/* Audience selector */}
+            <div className="inline-flex rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1">
+              <button
+                type="button"
+                onClick={() => setMenuAudience('tenant-admin')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  menuAudience === 'tenant-admin'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                👤 Tenant Admin View
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenuAudience('other-users')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  menuAudience === 'other-users'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                👥 Other Users (Managers / Operators)
+              </button>
+            </div>
+          </div>
+
+          {/* ── FULL SIDEBAR CATEGORY, MENU & SUB-MENU TREE CONTROLLER ── */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-[var(--text-main)] uppercase tracking-wider">
+                1. All Sidebar Menu Categories, Menus &amp; Sub-Menus ({menuAudience === 'tenant-admin' ? 'Tenant Admin' : 'Other Users'})
+              </h4>
+              {navPermsSaving && <span className="text-xs text-blue-400">⟳ Auto-saving…</span>}
+              {navPermsSaved && !navPermsSaving && <span className="text-xs text-emerald-400 font-semibold">✓ Saved to Tenant!</span>}
+            </div>
+
+            {NAV_CATEGORIES.map((cat) => {
+              const catKey = menuAudience === 'tenant-admin' ? `cat:${cat.id}` : `other:cat:${cat.id}`;
+              const catModules = SIDEBAR_MODULES.filter((m) => m.category === cat.id);
+              const isCatEnabled = navPerms[catKey] !== false && (
+                cat.id !== 'operations' || catModules.some((m) => enabledModules.includes(m.id) || navPerms[`mod:${m.id}`] === true)
+              );
+
+              const persistBoth = async (nextNav: Record<string, boolean>, nextMods?: string[]) => {
+                setNavPermsSaving(true);
+                setNavPermsSaved(false);
+                try {
+                  await Promise.all([
+                    fetch('/api/admin/nav-permissions', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ tenantId: id, permissions: nextNav }),
+                    }),
+                    nextMods
+                      ? fetch(`/api/admin/tenants/${id}/modules`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ enabledModules: nextMods, featureFlags, allowOverrideAll: true }),
+                        })
+                      : Promise.resolve(),
+                  ]);
+                  const cached = _detailCache.get(id);
+                  if (cached) _detailCache.set(id, { ...cached, navPerms: nextNav, ts: Date.now() });
+                  setNavPermsSaved(true);
+                  setTimeout(() => setNavPermsSaved(false), 3000);
+                } finally {
+                  setNavPermsSaving(false);
+                }
+              };
+
+              const toggleEntireCategory = () => {
+                const target = !isCatEnabled;
+                const nextNav = { ...navPerms, [catKey]: target };
+                const nextMods = new Set(enabledModules);
+                for (const m of catModules) {
+                  const modKey = menuAudience === 'tenant-admin' ? `mod:${m.id}` : `other:mod:${m.id}`;
+                  nextNav[modKey] = target;
+                  if (menuAudience === 'tenant-admin') {
+                    if (target) nextMods.add(m.id);
+                    else nextMods.delete(m.id);
+                  }
+                }
+                const modsArr = [...nextMods];
+                setNavPerms(nextNav);
+                if (menuAudience === 'tenant-admin') setEnabledModules(modsArr);
+                void persistBoth(nextNav, menuAudience === 'tenant-admin' ? modsArr : undefined);
+              };
+
+              return (
+                <div key={cat.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+                  <div className="px-5 py-3.5 bg-[var(--bg-surface-hover)]/50 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={toggleEntireCategory}
+                        className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                          isCatEnabled ? 'bg-emerald-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isCatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">{cat.label}</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isCatEnabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                            {isCatEnabled ? 'Category Enabled' : 'Category Disabled'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-faint)]">{cat.description}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleEntireCategory}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] transition-colors"
+                    >
+                      {isCatEnabled ? `Disable All ${cat.shortLabel}` : `Enable All ${cat.shortLabel}`}
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]/50">
+                    {catModules.map((mod) => {
+                      const modKey = menuAudience === 'tenant-admin' ? `mod:${mod.id}` : `other:mod:${mod.id}`;
+                      const isModEnabled =
+                        isCatEnabled &&
+                        (modKey in navPerms
+                          ? navPerms[modKey] === true
+                          : mod.id === 'admin'
+                            ? menuAudience === 'tenant-admin'
+                            : mod.id === 'exchange'
+                              ? enabledModules.includes('exchange') || enabledModules.includes('vendors')
+                              : mod.id === 'logistics'
+                                ? enabledModules.includes('logistics') || enabledModules.includes('drayage')
+                                : enabledModules.includes(mod.id));
+
+                      const subs = (mod.subPages ?? []).filter((sp) => !sp.superOnly);
+                      const isExpanded = !!expandedMenuIds[mod.id];
+
+                      const toggleMod = () => {
+                        const target = !isModEnabled;
+                        const nextNav = { ...navPerms, [modKey]: target };
+                        if (target) nextNav[catKey] = true;
+                        const nextMods = new Set(enabledModules);
+                        if (menuAudience === 'tenant-admin') {
+                          if (target) {
+                            nextMods.add(mod.id);
+                            if (mod.id === 'logistics') nextMods.add('drayage');
+                          } else {
+                            nextMods.delete(mod.id);
+                          }
+                        }
+                        const modsArr = [...nextMods];
+                        setNavPerms(nextNav);
+                        if (menuAudience === 'tenant-admin') setEnabledModules(modsArr);
+                        void persistBoth(nextNav, menuAudience === 'tenant-admin' ? modsArr : undefined);
+                      };
+
+                      return (
+                        <div key={mod.id} className="px-5 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={toggleMod}
+                                className={`relative inline-flex w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                                  isModEnabled ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'
+                                }`}
+                              >
+                                <span className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isModEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                              </button>
+                              <div>
+                                <span className="text-sm font-semibold text-[var(--text-main)]">{mod.label}</span>
+                                <span className="ml-2 text-[11px] font-mono text-[var(--text-faint)]">{mod.href}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {subs.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedMenuIds((p) => ({ ...p, [mod.id]: !p[mod.id] }))}
+                                  className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                                >
+                                  {isExpanded ? `▾ Hide Sub-Menus (${subs.length})` : `▸ Sub-Menus (${subs.length})`}
+                                </button>
+                              )}
+                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${isModEnabled ? 'bg-blue-500/20 text-blue-300' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'}`}>
+                                {isModEnabled ? 'Menu Enabled' : 'Menu Disabled'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isExpanded && subs.length > 0 && (
+                            <div className="mt-3 ml-8 pl-4 border-l-2 border-[var(--border-subtle)] grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {subs.map((sp) => {
+                                const subKey =
+                                  mod.id === 'admin' && sp.navKey
+                                    ? menuAudience === 'tenant-admin'
+                                      ? sp.navKey
+                                      : `other:${sp.navKey}`
+                                    : menuAudience === 'tenant-admin'
+                                      ? `sub:${sp.href}`
+                                      : `other:sub:${sp.href}`;
+                                const isSubEnabled =
+                                  subKey in navPerms
+                                    ? navPerms[subKey] === true
+                                    : mod.id === 'admin'
+                                      ? menuAudience === 'tenant-admin' && !sp.defaultHiddenForTenantAdmin
+                                      : true;
+
+                                return (
+                                  <div
+                                    key={sp.href}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/20 px-3 py-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-medium text-[var(--text-main)] truncate">{sp.label}</p>
+                                      <p className="text-[10px] text-[var(--text-faint)] font-mono truncate">{sp.group ? `${sp.group} · ${sp.href}` : sp.href}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextNav = { ...navPerms, [subKey]: !isSubEnabled };
+                                        if (mod.id === 'admin' && menuAudience === 'tenant-admin') {
+                                          if (sp.href === '/admin') nextNav['overview'] = !isSubEnabled;
+                                          if (sp.href === '/admin/users') nextNav['users'] = !isSubEnabled;
+                                          if (sp.href === '/admin/roles') nextNav['roles'] = !isSubEnabled;
+                                        }
+                                        setNavPerms(nextNav);
+                                        void persistBoth(nextNav);
+                                      }}
+                                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex-shrink-0 ${
+                                        isSubEnabled
+                                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                          : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                      }`}
+                                    >
+                                      {isSubEnabled ? '✓ Enabled' : '✕ Disabled'}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <hr className="border-[var(--border-subtle)]" />
+
           <div>
-            <h3 className="text-[var(--text-main)] font-semibold text-lg flex items-center gap-2">
-              <span>Tenant Admin — Menu & Feature Assignment</span>
+            <h3 className="text-[var(--text-main)] font-semibold text-base flex items-center gap-2">
+              <span>2. Admin Sub-Menu Detailed Permissions (Tenant Admin)</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-normal">Super Admin Control</span>
             </h3>
             <p className="text-[var(--text-muted)] text-sm mt-1">
