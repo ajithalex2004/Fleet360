@@ -159,6 +159,38 @@ html.light ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.8);
 }
 
+/* ── Dedicated visible scrollbar for the Sidebar Menu Bar ── */
+.sidebar-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(113, 113, 122, 0.7) rgba(255, 255, 255, 0.04);
+}
+html.light .sidebar-scrollbar {
+  scrollbar-color: rgba(100, 116, 139, 0.65) rgba(226, 232, 240, 0.6);
+}
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.6);
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.7);
+  border-radius: 9999px;
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.65);
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.95);
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.9);
+}
+
 /* ── Universal Form Inputs ── */
 input, select, textarea {
   background-color: var(--input-bg);

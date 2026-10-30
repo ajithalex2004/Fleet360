@@ -28,6 +28,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
 const PINNED_KEY = 'fleet360-sidebar-pinned-v1';
+const WIDE_KEY = 'fleet360-sidebar-wide-v1';
 const HIDDEN_MODULES_KEY = 'fleet360-sidebar-hidden-modules-v1';
 const CAT_COLLAPSED_KEY = 'fleet360-sidebar-cat-collapsed-v1';
 
@@ -87,6 +88,7 @@ export default function Sidebar({ onTabsFull }: Props) {
 
   const [collapsed, setCollapsed] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [wide, setWide] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<Set<string>>(new Set());
   const [collapsedCats, setCollapsedCats] = useState<Set<NavCategory>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
@@ -122,8 +124,17 @@ export default function Sidebar({ onTabsFull }: Props) {
 
   useEffect(() => {
     try {
-      if (window.localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true);
-      if (window.localStorage.getItem(PINNED_KEY) === '1') setPinned(true);
+      const isPinned = window.localStorage.getItem(PINNED_KEY) === '1';
+      const isWide = window.localStorage.getItem(WIDE_KEY) === '1';
+      setPinned(isPinned);
+      setWide(isWide);
+      if (isPinned) {
+        // When pinned, never allow the sidebar to start contracted
+        setCollapsed(false);
+        window.localStorage.setItem(COLLAPSE_KEY, '0');
+      } else if (window.localStorage.getItem(COLLAPSE_KEY) === '1') {
+        setCollapsed(true);
+      }
       const hidden = window.localStorage.getItem(HIDDEN_MODULES_KEY);
       if (hidden) setHiddenModules(new Set(JSON.parse(hidden)));
       const collapsedCatsData = window.localStorage.getItem(CAT_COLLAPSED_KEY);
@@ -141,19 +152,37 @@ export default function Sidebar({ onTabsFull }: Props) {
     });
   };
 
-  const toggleCollapsed = () => {
+  const contractSidebar = () => {
+    // Once pinned, do not contract unless the user clicks Unpin first
     if (pinned) return;
-    setCollapsed(c => {
-      const next = !c;
-      try { window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch {}
-      return next;
-    });
+    if (!collapsed && wide) {
+      setWide(false);
+      try { window.localStorage.setItem(WIDE_KEY, '0'); } catch {}
+      return;
+    }
+    setCollapsed(true);
+    try { window.localStorage.setItem(COLLAPSE_KEY, '1'); } catch {}
+  };
+
+  const expandSidebar = () => {
+    if (collapsed) {
+      setCollapsed(false);
+      try { window.localStorage.setItem(COLLAPSE_KEY, '0'); } catch {}
+      return;
+    }
+    if (!wide) {
+      setWide(true);
+      try { window.localStorage.setItem(WIDE_KEY, '1'); } catch {}
+    }
   };
 
   const togglePinned = () => {
     setPinned(p => {
       const next = !p;
-      try { window.localStorage.setItem(PINNED_KEY, next ? '1' : '0'); } catch {}
+      try {
+        window.localStorage.setItem(PINNED_KEY, next ? '1' : '0');
+        if (next) window.localStorage.setItem(COLLAPSE_KEY, '0');
+      } catch {}
       if (next) setCollapsed(false);
       return next;
     });
@@ -192,39 +221,63 @@ export default function Sidebar({ onTabsFull }: Props) {
     }
   };
 
+  const isEffectivelyCollapsed = collapsed && !pinned;
+  const widthClass = isEffectivelyCollapsed ? 'w-[68px]' : wide ? 'w-76' : 'w-60';
+
   return (
     <aside
-      className={`relative flex flex-col flex-shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-[width] duration-150 ${collapsed ? 'w-[60px]' : 'w-56'}`}
+      className={`sticky top-0 h-screen max-h-screen relative flex flex-col flex-shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-[width] duration-150 ${widthClass}`}
       onMouseLeave={() => setFlyoutFor(null)}
     >
-      <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-3 py-3">
+      <div className={`border-b border-[var(--border-subtle)] px-2.5 py-2.5 ${isEffectivelyCollapsed ? 'flex flex-col items-center gap-1.5' : 'flex items-center gap-2'}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-fleet360.png" alt="FLEET360" className="h-7 w-7 flex-shrink-0 rounded-lg object-contain" />
-        {!collapsed && (
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-[var(--text-main)]">Fleet360</div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{tLabel('Mobility platform')}</div>
+        {!isEffectivelyCollapsed && (
+          <div className="leading-tight min-w-0 flex-1">
+            <div className="text-sm font-semibold text-[var(--text-main)] truncate">Fleet360</div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] truncate">{tLabel('Mobility platform')}</div>
           </div>
         )}
-        <button
-          type="button"
-          onClick={togglePinned}
-          title={pinned ? tLabel('Unpin sidebar') : tLabel('Pin sidebar (keep expanded)')}
-          className={`ml-auto rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/10' : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'}`}
-        >
-          <Pin className={`h-4 w-4 ${pinned ? 'fill-current' : ''}`} />
-        </button>
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? tLabel('Expand sidebar') : tLabel('Collapse sidebar')}
-          className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
-        >
-          {collapsed ? <ChevronsRight className="h-4 w-4 rtl:rotate-180" /> : <ChevronsLeft className="h-4 w-4 rtl:rotate-180" />}
-        </button>
+        <div className={`flex items-center gap-1 ${isEffectivelyCollapsed ? 'justify-center' : 'ml-auto flex-shrink-0'}`}>
+          <button
+            type="button"
+            onClick={togglePinned}
+            title={pinned ? tLabel('Pinned — click to unpin so sidebar can contract') : tLabel('Pin sidebar (lock expanded)')}
+            className={`rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/15 ring-1 ring-amber-500/40' : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'}`}
+          >
+            <Pin className={`h-4 w-4 ${pinned ? 'fill-current' : ''}`} />
+          </button>
+          {!isEffectivelyCollapsed && (
+            <button
+              type="button"
+              onClick={contractSidebar}
+              disabled={pinned}
+              title={pinned ? tLabel('Sidebar is pinned — click Unpin to contract') : wide ? tLabel('Contract sidebar') : tLabel('Collapse sidebar (<<)')}
+              aria-label={tLabel('Collapse sidebar')}
+              className={`rounded-md p-1 transition-colors ${
+                pinned
+                  ? 'opacity-40 cursor-not-allowed text-[var(--text-faint)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              <ChevronsLeft className="h-4 w-4 rtl:rotate-180" />
+            </button>
+          )}
+          {(isEffectivelyCollapsed || !wide) && (
+            <button
+              type="button"
+              onClick={expandSidebar}
+              title={isEffectivelyCollapsed ? tLabel('Expand sidebar (>>)') : tLabel('Expand sidebar wider (>>)')}
+              aria-label={tLabel('Expand sidebar')}
+              className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
+            >
+              <ChevronsRight className="h-4 w-4 rtl:rotate-180" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <nav ref={navRef} className="flex-1 overflow-y-auto overflow-x-visible p-2">
+      <nav ref={navRef} className="flex-1 min-h-0 overflow-y-scroll overflow-x-hidden p-2 sidebar-scrollbar">
         {NAV_CATEGORIES.map((cat, catIdx) => {
           if (!isSuperAdmin && tenant?.navPermissions?.[`cat:${cat.id}`] === false) return null;
           if (!isSuperAdmin && !isTenantAdmin && tenant?.navPermissions?.[`other:cat:${cat.id}`] === false) return null;
@@ -233,7 +286,7 @@ export default function Sidebar({ onTabsFull }: Props) {
           const isCatCollapsed = collapsedCats.has(cat.id);
           const CatIcon = cat.icon;
 
-          if (collapsed) {
+          if (isEffectivelyCollapsed) {
             return (
               <div key={cat.id}>
                 {catIdx > 0 && <div className="my-1.5 mx-2 border-t border-[var(--border-subtle)]/60" />}
@@ -343,7 +396,7 @@ export default function Sidebar({ onTabsFull }: Props) {
       </nav>
 
       {/* Settings panel - show/hide modules, theme */}
-      {!collapsed && (
+      {!isEffectivelyCollapsed && (
         <div className="border-t border-[var(--border-subtle)] p-2 space-y-1.5">
           <div className="px-2">
             <ThemeToggle />
@@ -360,7 +413,7 @@ export default function Sidebar({ onTabsFull }: Props) {
       )}
 
       {/* Hidden modules panel */}
-      {showSettings && !collapsed && hiddenModules.size > 0 && (
+      {showSettings && !isEffectivelyCollapsed && hiddenModules.size > 0 && (
         <div className="absolute bottom-14 left-2 right-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2 shadow-2xl">
           <div className="border-b border-[var(--border-subtle)] px-2 pb-2 mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">
             {tLabel('Hidden Modules')}
@@ -386,7 +439,7 @@ export default function Sidebar({ onTabsFull }: Props) {
         </div>
       )}
 
-      {collapsed && flyoutFor && (() => {
+      {isEffectivelyCollapsed && flyoutFor && (() => {
         const m = MODULES.find(x => x.id === flyoutFor);
         const visible = visibleSubPages(m?.subPages, m?.id);
         if (!m || !visible?.length) return null;
