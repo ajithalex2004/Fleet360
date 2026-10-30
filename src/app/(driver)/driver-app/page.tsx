@@ -63,6 +63,19 @@ interface FleetVehicle {
 
 const DEFAULT_FLEET_VEHICLES: FleetVehicle[] = [
   {
+    id: 'a901b2c3-d4e5-4f6a-8b7c-000000004011',
+    vehicleCode: 'PM-001',
+    licensePlate: 'DXB-767-4011',
+    make: 'MERCEDES-BENZ',
+    model: 'ACTROS 2645 LS 6x4 PRIME MOVER',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 142850,
+    isAssignedToMe: true,
+  },
+  {
     id: '3c779fd8-d536-475c-a38e-9919909fab84',
     vehicleCode: 'VEH-000247',
     licensePlate: '96448',
@@ -250,8 +263,8 @@ export default function DriverAppLauncher() {
   // Vehicle Direct Login form
 
   // Driver Credentials form
-  const [username, setUsername] = useState('jjohn@gmail.com');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('driver@trexla-logistics.ae');
+  const [password, setPassword] = useState('Trexla@2026!');
   const [showPassword, setShowPassword] = useState(false);
 
   // Mobile Tracking State
@@ -480,16 +493,23 @@ export default function DriverAppLauncher() {
       }
 
       // STRICTLY filter to ONLY assigned vehicle(s) for this driver
+      const isTrexlaDriver =
+        activeDriverName.toLowerCase().includes('rashid') ||
+        activeDriverName.toLowerCase().includes('trexla') ||
+        username.toLowerCase().includes('trexla');
+
       const assignedOnly = vehicles.filter((v) =>
-        v.isAssignedToMe ||
-        (driver?.assignedVehicleId && (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)) ||
-        (activeDriverName.toLowerCase().includes('jennish') && (v.licensePlate === '96448' || v.vehicleCode === 'VEH-000247'))
+        isTrexlaDriver
+          ? v.licensePlate === 'DXB-767-4011' || v.vehicleCode === 'PM-001'
+          : (activeDriverName.toLowerCase().includes('jennish') && (v.licensePlate === '96448' || v.vehicleCode === 'VEH-000247')) ||
+            (driver?.assignedVehicleId && (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)) ||
+            v.isAssignedToMe
       );
 
       const targetList = assignedOnly.length > 0 ? assignedOnly : [DEFAULT_FLEET_VEHICLES[0]];
       setFleetVehicles(targetList);
       setSelectedVehicle(targetList[0]);
-      setOdometerInput(targetList[0].odometerReading ? String(targetList[0].odometerReading) : '67050');
+      setOdometerInput(targetList[0].odometerReading ? String(targetList[0].odometerReading) : '142850');
 
       // Pre-bind assigned vehicle so background tracking and 30s pings start immediately upon login
       if (typeof window !== 'undefined' && targetList[0]) {
@@ -556,7 +576,9 @@ export default function DriverAppLauncher() {
     setErrorMsg(null);
     try {
       let displayName = username;
-      if (username.toLowerCase().includes('jennish') || username.toLowerCase().includes('jjohn')) {
+      if (username.toLowerCase().includes('rashid') || username.toLowerCase().includes('trexla')) {
+        displayName = 'Rashid Al-Marri';
+      } else if (username.toLowerCase().includes('jennish') || username.toLowerCase().includes('jjohn')) {
         displayName = 'Jennish John';
       }
 
