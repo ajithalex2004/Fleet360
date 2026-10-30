@@ -1042,7 +1042,7 @@ export default function TenantDetailPage() {
     try {
       const res = await fetch(`/api/admin/tenants/${id}/modules`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabledModules, featureFlags }),
+        body: JSON.stringify({ enabledModules, featureFlags, allowOverrideAll: true }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -1154,18 +1154,31 @@ export default function TenantDetailPage() {
       {tab === 'modules' && (
         <div className="space-y-6">
           <section className="space-y-3">
-            <div>
-              <h2 className="text-lg font-bold text-[var(--text-main)]">Active configuration</h2>
-              <p className="text-[var(--text-muted)] text-sm">
-                Modules currently enabled for <strong className="text-[var(--text-main)]">{tenant.name}</strong> and the feature flags active in each.
-              </p>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-main)]">Active configuration</h2>
+                <p className="text-[var(--text-muted)] text-sm">
+                  Modules currently enabled for <strong className="text-[var(--text-main)]">{tenant.name}</strong> and the feature flags active in each.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
+                {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
+                <button onClick={saveModules} disabled={saving}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Modules & Flags'}
+                </button>
+              </div>
             </div>
             <TenantModuleFeatureSummary
-              enabledModules={moduleKeysOf(tenant.modules)}
-              featureFlags={{ ...defaultFeatureFlags(), ...(tenant.featureFlags ?? {}) }}
+              enabledModules={enabledModules}
+              featureFlags={featureFlags}
               plan={tenant.plan}
               policies={modulePolicies}
               planNames={planNames}
+              onModulesChange={setEnabledModules}
+              onFlagsChange={setFeatureFlags}
+              allowOverrideAll={true}
             />
           </section>
 
@@ -1194,6 +1207,7 @@ export default function TenantDetailPage() {
               planNames={planNames}
               onModulesChange={setEnabledModules}
               onFlagsChange={setFeatureFlags}
+              allowOverrideAll={true}
             />
           </section>
         </div>

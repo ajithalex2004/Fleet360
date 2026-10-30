@@ -86,7 +86,15 @@ export const ALL_MODULE_KEYS: readonly ModuleKey[] = MODULE_GROUPS.flatMap((g) =
 const REGISTRY_POLICIES: ModulePolicies = resolvePolicies(null);
 
 /** Effective on/off of every module for these switches, policies and plan. */
-function effectiveSet(switchedOn: ReadonlySet<string>, policies: ModulePolicies, plan?: string): Set<string> {
+function effectiveSet(
+  switchedOn: ReadonlySet<string>,
+  policies: ModulePolicies,
+  plan?: string,
+  allowOverrideAll?: boolean,
+): Set<string> {
+  if (allowOverrideAll) {
+    return new Set(MODULES.filter((m) => switchedOn.has(m.key)).map((m) => m.key));
+  }
   return new Set(MODULES.filter((m) => moduleEnabledFor(m.key, policies[m.key], switchedOn, plan)).map((m) => m.key));
 }
 
@@ -102,28 +110,37 @@ interface Props {
   policies?: ModulePolicies;
   /** Plan code -> display name, for "Professional+" badges. */
   planNames?: Record<string, string>;
+  /** When true, allows enabling/disabling every module per-tenant regardless of ALWAYS_ON/TIER policy. */
+  allowOverrideAll?: boolean;
 }
 
 export function ModuleFeaturePicker({
-  enabledModules, featureFlags, onModulesChange, onFlagsChange, plan, policies = REGISTRY_POLICIES, planNames,
+  enabledModules,
+  featureFlags,
+  onModulesChange,
+  onFlagsChange,
+  plan,
+  policies = REGISTRY_POLICIES,
+  planNames,
+  allowOverrideAll = false,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const switchedOn = new Set(enabledModules);
-  const enabled = effectiveSet(switchedOn, policies, plan);
-  const isPerTenant = (m: ModuleDef) => policies[m.key].availability === 'PER_TENANT';
+  const enabled = effectiveSet(switchedOn, policies, plan, allowOverrideAll);
+  const isPerTenant = (m: ModuleDef) => allowOverrideAll || policies[m.key].availability === 'PER_TENANT';
 
   const enabledCount = ALL_MODULE_KEYS.filter((k) => enabled.has(k)).length;
   const activeFlagCount = activeFeatureKeys(enabled, featureFlags).length;
 
   const setModules = (keys: Set<string>) => onModulesChange([...keys]);
   const toggleModule = (key: ModuleKey) => {
-    const next = new Set(switchedOn);
+    const next = new Set(allowOverrideAll ? enabled : switchedOn);
     if (next.has(key)) next.delete(key); else next.add(key);
     setModules(next);
   };
   const toggleGroup = (group: ModuleGroup, on: boolean) => {
-    const next = new Set(switchedOn);
+    const next = new Set(allowOverrideAll ? enabled : switchedOn);
     for (const m of group.modules) {
       if (!isPerTenant(m)) continue;
       if (on) next.add(m.key); else next.delete(m.key);
@@ -174,7 +191,7 @@ export function ModuleFeaturePicker({
               {group.modules.map((m) => {
                 const on = enabled.has(m.key);
                 const policy: ModulePolicy = policies[m.key];
-                const locked = policy.availability !== 'PER_TENANT';
+                const locked = !allowOverrideAll && policy.availability !== 'PER_TENANT';
                 const flags = FEATURES_BY_MODULE[m.key];
                 const flagsOn = flags.filter((d) => featureFlags[d.key]).length;
                 const open = !!expanded[m.key];
@@ -249,48 +266,166 @@ export function ModuleFeaturePicker({
 }
 
 /**
- * Read-only view of a tenant's enabled modules and the feature flags active
- * on each (Manage page summary).
+ * View (and optionally inline-toggle) a tenant's enabled modules and the
+ * feature flags active on each (Manage page "Active configuration" window).
  */
-export function TenantModuleFeatureSummary({ enabledModules, featureFlags, plan, policies = REGISTRY_POLICIES, planNames }: {
+export function TenantModuleFeatureSummary({
+  enabledModules,
+  featureFlags,
+  plan,
+  policies = REGISTRY_POLICIES,
+  planNames,
+  onModulesChange,
+  onFlagsChange,
+  allowOverrideAll = false,
+}: {
   /** The tenant's stored per-tenant switches. */
   enabledModules: readonly string[];
   featureFlags: FeatureFlagMap;
   plan?: string;
   policies?: ModulePolicies;
   planNames?: Record<string, string>;
+  onModulesChange?: (next: string[]) => void;
+  onFlagsChange?: (next: FeatureFlagMap) => void;
+  allowOverrideAll?: boolean;
 }) {
-  const enabled = effectiveSet(new Set(enabledModules), policies, plan);
-  const mods = ALL_MODULE_KEYS.filter((k) => enabled.has(k)).map((k) => MODULE_BY_KEY[k]);
+  const [showDisabled, setShowDisabled] = useState(false);
+  const interactive = Boolean(onModulesChange || onFlagsChange);
+  const switchedOn = new Set(enabledModules);
+  const enabled = effectiveSet(switchedOn, policies, plan, allowOverrideAll);
+  const enabledMods = ALL_MODULE_KEYS.filter((k) => enabled.has(k)).map((k) => MODULE_BY_KEY[k]);
+  const disabledMods = ALL_MODULE_KEYS.filter((k) => !enabled.has(k)).map((k) => MODULE_BY_KEY[k]);
+  const mods = interactive && showDisabled ? ALL_MODULE_KEYS.map((k) => MODULE_BY_KEY[k]) : enabledMods;
+
+  const handleToggleModule = (key: ModuleKey, currentlyOn: boolean) => {
+    if (!onModulesChange) return;
+    const next = new Set(enabled);
+    if (currentlyOn) next.delete(key);
+    else next.add(key);
+    onModulesChange([...next]);
+  };
+
+  const handleToggleFlag = (flagKey: string) => {
+    if (!onFlagsChange) return;
+    onFlagsChange({ ...featureFlags, [flagKey]: !featureFlags[flagKey] });
+  };
+
   if (mods.length === 0) {
-    return <p className="text-sm text-[var(--text-muted)]">No modules enabled.</p>;
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[var(--text-muted)]">No modules enabled.</p>
+        {interactive && disabledMods.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowDisabled(true)}
+            className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-xs font-semibold text-blue-400 hover:text-blue-300"
+          >
+            + Show Disabled Modules ({disabledMods.length})
+          </button>
+        )}
+      </div>
+    );
   }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-      {mods.map((m) => {
-        const active = FEATURES_BY_MODULE[m.key].filter((d) => featureFlags[d.key]);
-        return (
-          <div key={m.key} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-[var(--text-main)]">{m.name}</span>
-              <span className="text-[10px] text-emerald-400 flex-shrink-0">
-                {policies[m.key].availability === 'ALWAYS_ON' ? 'DEFAULT'
-                  : policies[m.key].availability === 'TIER' ? policyLabel(policies[m.key], planNames).toUpperCase() : 'ENABLED'}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1 mt-2">
-              {active.length === 0
-                ? <span className="text-[11px] text-[var(--text-faint)]">No feature flags active</span>
-                : active.map((d) => (
-                    <span key={d.key}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+    <div className="space-y-3">
+      {interactive && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="text-[var(--text-muted)]">
+            Toggle any module switch or click any <strong className="text-amber-400">⚡ feature badge</strong> below to enable or disable it directly, then click <strong>Save Modules &amp; Flags</strong>.
+          </span>
+          {disabledMods.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDisabled((v) => !v)}
+              className="px-3 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              {showDisabled ? `Hide Disabled Modules (${disabledMods.length})` : `+ Show Disabled Modules (${disabledMods.length})`}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {mods.map((m) => {
+          const isModOn = enabled.has(m.key);
+          const allFlags = FEATURES_BY_MODULE[m.key];
+          const active = allFlags.filter((d) => featureFlags[d.key]);
+
+          return (
+            <div
+              key={m.key}
+              className={`rounded-xl border p-3.5 transition-all ${
+                isModOn
+                  ? 'border-emerald-500/30 bg-emerald-500/5'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 opacity-65'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-[var(--text-main)]">{m.name}</span>
+                {interactive && onModulesChange ? (
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <span className={`text-[10px] font-bold ${isModOn ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>
+                      {isModOn ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                    <Switch
+                      checked={isModOn}
+                      onChange={() => handleToggleModule(m.key, isModOn)}
+                      label={`Toggle ${m.name}`}
+                    />
+                  </label>
+                ) : (
+                  <span className="text-[10px] text-emerald-400 flex-shrink-0">
+                    {policies[m.key].availability === 'ALWAYS_ON'
+                      ? 'DEFAULT'
+                      : policies[m.key].availability === 'TIER'
+                      ? policyLabel(policies[m.key], planNames).toUpperCase()
+                      : 'ENABLED'}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {interactive && onFlagsChange ? (
+                  allFlags.length === 0 ? (
+                    <span className="text-[11px] text-[var(--text-faint)]">No feature flags available</span>
+                  ) : (
+                    allFlags.map((d) => {
+                      const flagOn = Boolean(featureFlags[d.key]);
+                      return (
+                        <button
+                          key={d.key}
+                          type="button"
+                          onClick={() => handleToggleFlag(d.key)}
+                          title={`${flagOn ? 'Disable' : 'Enable'} ${d.name}: ${d.description}`}
+                          className={`text-[10px] px-2 py-0.5 rounded border font-medium transition-all cursor-pointer ${
+                            flagOn
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                              : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] opacity-60 hover:opacity-100'
+                          }`}
+                        >
+                          {flagOn ? `⚡ ${d.name}` : `+ ${d.name}`}
+                        </button>
+                      );
+                    })
+                  )
+                ) : active.length === 0 ? (
+                  <span className="text-[11px] text-[var(--text-faint)]">No feature flags active</span>
+                ) : (
+                  active.map((d) => (
+                    <span
+                      key={d.key}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    >
                       ⚡ {d.name}
                     </span>
-                  ))}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
