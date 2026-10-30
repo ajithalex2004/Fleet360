@@ -11,17 +11,15 @@ export function getApiEndpoint(path: string): string {
     }
     const origin = window.location.origin;
     if (
-      origin.includes('localhost') ||
-      origin.includes('127.0.0.1') ||
-      origin.startsWith('http://') ||
-      origin.startsWith('https://')
+      origin.includes(':3000') ||
+      origin.includes(':3001') ||
+      origin.includes('railway.app') ||
+      origin.includes('vercel.app')
     ) {
-      if (origin.includes(':3000') || origin.includes(':3001')) {
-        return path;
-      }
+      return path;
     }
   }
-  return `http://192.168.1.17:3000${path}`;
+  return `https://fleet360-app-production.up.railway.app${path}`;
 }
 
 // Callers read arbitrary fields of whatever JSON the endpoint returned.
