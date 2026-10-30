@@ -49,6 +49,14 @@ export default function Sidebar({ onTabsFull }: Props) {
   const visibleSubPages = (subs?: SubPage[], moduleId?: string) => {
     if (!subs) return undefined;
     let list = subs.filter(sp => !sp.superOnly || isSuperAdmin);
+    if (moduleId === 'admin' && !isSuperAdmin) {
+      const navPerms = tenant?.navPermissions ?? {};
+      list = list.filter(sp => {
+        if (!sp.navKey) return true;
+        if (sp.navKey in navPerms) return navPerms[sp.navKey] === true;
+        return !sp.defaultHiddenForTenantAdmin;
+      });
+    }
     if (
       moduleId === 'logistics' &&
       !isSuperAdmin &&

@@ -10,6 +10,7 @@ interface TenantInfo {
   plan?: string;
   defaultLanguage?: string;
   enabledModules: string[];
+  navPermissions?: Record<string, boolean>;
 }
 
 interface UserInfo {

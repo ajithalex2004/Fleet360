@@ -90,6 +90,16 @@ export async function GET(req: NextRequest) {
       // the code catalogue, the wildcard only for the platform SUPER_ADMIN.
       const permStrings = await resolveSessionPermissions(tx as never, userId, tenantId);
 
+      // Fetch per-tenant Admin menu navigation permissions (controlled by Super Admin in Admin -> Tenants -> Admin Access)
+      const navPermRows = await tx
+        .$queryRawUnsafe<{ nav_key: string; enabled: boolean }[]>(
+          `SELECT nav_key, enabled FROM tenant_admin_nav_permissions WHERE tenant_id = $1`,
+          tenantId,
+        )
+        .catch(() => [] as { nav_key: string; enabled: boolean }[]);
+      const navPermissions: Record<string, boolean> = {};
+      for (const r of navPermRows) navPermissions[r.nav_key] = r.enabled;
+
       return NextResponse.json(
         {
           user: {
@@ -112,6 +122,7 @@ export async function GET(req: NextRequest) {
               userTenant.tenant.modules.filter(m => (m as { isEnabled?: boolean | null }).isEnabled !== false).map(m => m.module),
               userTenant.tenant.plan,
             ),
+            navPermissions,
           },
           permissions: [...new Set(permStrings)],
         },

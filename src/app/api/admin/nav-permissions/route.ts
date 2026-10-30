@@ -51,6 +51,17 @@ const TOGGLEABLE_NAV_KEYS = [
   'integrations',
 ] as const;
 
+// Organization & Masters + Audit Log default to true unless disabled;
+// Operations & Workflows, Communications & Alerts, and Subscription & Integrations
+// default to false (hidden from Tenant Admin unless Super Admin grants access).
+const DEFAULT_ENABLED_NAV_KEYS = new Set<string>([
+  'hierarchy',
+  'branches',
+  'nui-reasons',
+  'company-profile',
+  'audit-logs',
+]);
+
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -88,9 +99,10 @@ export async function GET(request: NextRequest) {
     )
   );
 
-  // Build a full map — keys not in DB default to false
+  // Build a full map — Organization & Masters / Audit Log default to true;
+  // Operations & Workflows, Communications & Alerts, Subscription & Integrations default to false
   const map: Record<string, boolean> = {};
-  for (const key of TOGGLEABLE_NAV_KEYS) map[key] = false;
+  for (const key of TOGGLEABLE_NAV_KEYS) map[key] = DEFAULT_ENABLED_NAV_KEYS.has(key);
   for (const row of rows) map[row.nav_key] = row.enabled;
 
   return NextResponse.json({ tenantId: targetId, permissions: map });

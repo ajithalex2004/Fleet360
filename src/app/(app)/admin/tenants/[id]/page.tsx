@@ -899,6 +899,7 @@ export default function TenantDetailPage() {
   ];
   const [navPerms, setNavPerms]         = useState<Record<string,boolean>>({});
   const [navPermsSaving, setNavPermsSaving] = useState(false);
+  const [navPermsSaved, setNavPermsSaved]   = useState(false);
   const [branches, setBranches]     = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -1495,15 +1496,33 @@ export default function TenantDetailPage() {
             {TOGGLEABLE_NAV_GROUPS.map((group) => {
               const allKeys = group.items.map(i => i.key);
               const allEnabled = allKeys.every(k => navPerms[k]);
-              
+
+              const persistNavPerms = async (next: Record<string, boolean>) => {
+                setNavPermsSaving(true);
+                setNavPermsSaved(false);
+                try {
+                  const res = await fetch('/api/admin/nav-permissions', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenantId: id, permissions: next }),
+                  });
+                  if (res.ok) {
+                    const cached = _detailCache.get(id);
+                    if (cached) _detailCache.set(id, { ...cached, navPerms: next, ts: Date.now() });
+                    setNavPermsSaved(true);
+                    setTimeout(() => setNavPermsSaved(false), 3000);
+                  }
+                } finally {
+                  setNavPermsSaving(false);
+                }
+              };
 
               const toggleGroup = () => {
                 const targetState = !allEnabled;
-                setNavPerms(prev => {
-                  const next = { ...prev };
-                  allKeys.forEach(k => { next[k] = targetState; });
-                  return next;
-                });
+                const next = { ...navPerms };
+                allKeys.forEach(k => { next[k] = targetState; });
+                setNavPerms(next);
+                void persistNavPerms(next);
               };
 
               return (
@@ -1529,7 +1548,11 @@ export default function TenantDetailPage() {
                       <div key={item.key} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[var(--bg-surface-hover)]/20 transition-colors">
                         <button
                           type="button"
-                          onClick={() => setNavPerms(p => ({ ...p, [item.key]: !p[item.key] }))}
+                          onClick={() => {
+                            const next = { ...navPerms, [item.key]: !navPerms[item.key] };
+                            setNavPerms(next);
+                            void persistNavPerms(next);
+                          }}
                           className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'}`}
                         >
                           <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
@@ -1539,7 +1562,7 @@ export default function TenantDetailPage() {
                           <p className="text-[var(--text-faint)] text-xs mt-0.5">{item.desc}</p>
                         </div>
                         <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}>
-                          {navPerms[item.key] ? 'Enabled' : 'Hidden'}
+                          {navPerms[item.key] ? 'Enabled for Tenant Admin' : 'Hidden from Tenant Admin'}
                         </span>
                       </div>
                     ))}
@@ -1581,18 +1604,22 @@ export default function TenantDetailPage() {
           </div>
 
           {/* Save button */}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {navPermsSaving && <span className="text-xs text-blue-400">⟳ Saving changes…</span>}
+            {navPermsSaved && !navPermsSaving && <span className="text-xs text-emerald-400 font-semibold">✓ Saved!</span>}
             <button
               disabled={navPermsSaving}
               onClick={async () => {
                 setNavPermsSaving(true);
+                setNavPermsSaved(false);
                 try {
                   await fetch('/api/admin/nav-permissions', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tenantId: id, permissions: navPerms }),
                   });
-                  alert('Admin access permissions saved.');
+                  setNavPermsSaved(true);
+                  setTimeout(() => setNavPermsSaved(false), 3000);
                 } catch { alert('Failed to save permissions.'); }
                 finally { setNavPermsSaving(false); }
               }}

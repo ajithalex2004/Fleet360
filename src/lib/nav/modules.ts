@@ -178,6 +178,16 @@ export interface SubPage {
    */
   superOnly?: boolean;
   /**
+   * Optional per-tenant admin navigation key (stored in `tenant_admin_nav_permissions`).
+   * Controlled by Super Admin via Admin -> Tenants -> [Tenant] -> Admin Access.
+   */
+  navKey?: string;
+  /**
+   * When true, this sub-page is hidden from Tenant Admins by default unless
+   * explicitly granted (`navPermissions[navKey] === true`) by a Super Admin.
+   */
+  defaultHiddenForTenantAdmin?: boolean;
+  /**
    * Optional group heading (uppercase caption) rendered above this row and
    * every subsequent row that shares the same group value, until the group
    * changes or ends. Undefined leaves the item ungrouped (rendered flush at
@@ -737,33 +747,33 @@ export const MODULES: ModuleDef[] = [
 
       // ── Organization & Masters (Tenant Admin) ──
       { label: 'Overview',                href: '/admin',                       icon: LayoutDashboard, group: 'Organization & Masters' },
-      { label: 'Company profile',         href: '/admin/company-profile',       icon: Building2,       group: 'Organization & Masters' },
-      { label: 'Region, Department & Section', href: '/admin/hierarchy',       icon: FolderTree,      group: 'Organization & Masters' },
-      { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2,       group: 'Organization & Masters' },
-      { label: 'NUI Reason Master',       href: '/admin/nui-reasons',           icon: BookOpen,        group: 'Organization & Masters' },
+      { label: 'Company profile',         href: '/admin/company-profile',       icon: Building2,       group: 'Organization & Masters', navKey: 'company-profile' },
+      { label: 'Region, Department & Section', href: '/admin/hierarchy',       icon: FolderTree,      group: 'Organization & Masters', navKey: 'hierarchy' },
+      { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2,       group: 'Organization & Masters', navKey: 'branches' },
+      { label: 'NUI Reason Master',       href: '/admin/nui-reasons',           icon: BookOpen,        group: 'Organization & Masters', navKey: 'nui-reasons' },
 
       // ── Identity & Access (Tenant Admin) ──
       { label: 'Users',                   href: '/admin/users',                 icon: Users,           group: 'Identity & Access' },
       { label: 'Roles & permissions',     href: '/admin/roles',                 icon: Shield,          group: 'Identity & Access' },
-      { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch,      group: 'Identity & Access' },
+      { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch,      group: 'Identity & Access', navKey: 'audit-logs' },
 
-      // ── Operations & Workflows (Tenant Admin) ──
-      { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders,         group: 'Operations & Workflows' },
-      { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow,        group: 'Operations & Workflows' },
-      { label: 'Dispatch monitor',        href: '/admin/dispatch',              icon: Radio,           group: 'Operations & Workflows' },
-      { label: 'Shipper portal config',   href: '/admin/shipper-portal-config', icon: Sliders,         group: 'Operations & Workflows' },
-      { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck,     group: 'Operations & Workflows' },
+      // ── Operations & Workflows (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
+      { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders,         group: 'Operations & Workflows', navKey: 'service-config', defaultHiddenForTenantAdmin: true },
+      { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow,        group: 'Operations & Workflows', navKey: 'workflows', defaultHiddenForTenantAdmin: true },
+      { label: 'Dispatch monitor',        href: '/admin/dispatch',              icon: Radio,           group: 'Operations & Workflows', navKey: 'dispatch', defaultHiddenForTenantAdmin: true },
+      { label: 'Shipper portal config',   href: '/admin/shipper-portal-config', icon: Sliders,         group: 'Operations & Workflows', navKey: 'shipper-portal-config', defaultHiddenForTenantAdmin: true },
+      { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck,     group: 'Operations & Workflows', navKey: 'partner-onboarding', defaultHiddenForTenantAdmin: true },
 
-      // ── Communications & Alerts (Tenant Admin) ──
-      { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell,         group: 'Communications & Alerts' },
-      { label: 'Email templates',         href: '/admin/email-templates',       icon: Mail,            group: 'Communications & Alerts' },
-      { label: 'WhatsApp console',        href: '/admin/whatsapp',              icon: MessageCircle,   group: 'Communications & Alerts' },
-      { label: 'E-signing console',       href: '/admin/esign',                 icon: Eye,             group: 'Communications & Alerts' },
-      { label: 'Alert engine',            href: '/admin/alerts',                icon: Bell,            group: 'Communications & Alerts' },
+      // ── Communications & Alerts (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
+      { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell,         group: 'Communications & Alerts', navKey: 'notifications', defaultHiddenForTenantAdmin: true },
+      { label: 'Email templates',         href: '/admin/email-templates',       icon: Mail,            group: 'Communications & Alerts', navKey: 'email-templates', defaultHiddenForTenantAdmin: true },
+      { label: 'WhatsApp console',        href: '/admin/whatsapp',              icon: MessageCircle,   group: 'Communications & Alerts', navKey: 'whatsapp', defaultHiddenForTenantAdmin: true },
+      { label: 'E-signing console',       href: '/admin/esign',                 icon: Eye,             group: 'Communications & Alerts', navKey: 'esign', defaultHiddenForTenantAdmin: true },
+      { label: 'Alert engine',            href: '/admin/alerts',                icon: Bell,            group: 'Communications & Alerts', navKey: 'alerts', defaultHiddenForTenantAdmin: true },
 
-      // ── Subscription & Integrations (Tenant Admin) ──
-      { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard,      group: 'Subscription & Integrations' },
-      { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders,         group: 'Subscription & Integrations' },
+      // ── Subscription & Integrations (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
+      { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard,      group: 'Subscription & Integrations', navKey: 'billing', defaultHiddenForTenantAdmin: true },
+      { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders,         group: 'Subscription & Integrations', navKey: 'integrations', defaultHiddenForTenantAdmin: true },
     ],
   },
 ];
