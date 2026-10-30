@@ -14,25 +14,15 @@ function SessionFallback({ label }: { label: string }) {
   );
 }
 
-/**
- * Static placeholder rendered during SSR + the first client render, before
- * PermissionProvider has had a chance to read localStorage. Stable across
- * renders so React's hydration check passes — once mounted=true, we swap in
- * SessionFallback / UserSwitcher / Sign-in based on live auth state.
- */
 function SsrPlaceholder() {
   return <div className="w-32 h-9 rounded-xl bg-slate-800/60 border border-white/10 animate-pulse" />;
 }
 
 export default function PlatformSessionSlot() {
-  // Track mount so we render an SSR-stable placeholder on server + first
-  // client render. Without this the server renders <SessionFallback> (because
-  // isLoading=true with no session at SSR time) while the client tries to
-  // hydrate with <UserSwitcher> (because the localStorage snapshot has the
-  // session), and React throws "Hydration failed" — re-rendering the whole
-  // tree on the client and adding noticeable latency to /platform loads.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const { isAuthenticated, isLoading } = usePermissions();
 
@@ -40,10 +30,9 @@ export default function PlatformSessionSlot() {
   if (isLoading) return <SessionFallback label="Session..." />;
   if (isAuthenticated) return <UserSwitcher />;
 
-  // Prevent false-positive "Sign in" button if session is currently cached/validating
-  const hasLocalSession = typeof window !== 'undefined' && (
-    !!localStorage.getItem('xl_mobility_session') || !!localStorage.getItem('xl_mobility_session_snapshot')
-  );
+  const hasLocalSession =
+    typeof window !== 'undefined' &&
+    (!!localStorage.getItem('xl_mobility_session') || !!localStorage.getItem('xl_mobility_session_snapshot'));
   if (hasLocalSession) {
     return <SessionFallback label="Authenticating..." />;
   }
@@ -51,9 +40,9 @@ export default function PlatformSessionSlot() {
   return (
     <Link
       href="/login"
-      className="rounded-lg bg-blue-600/20 border border-blue-500/30 px-4 py-1.5 text-sm font-medium text-blue-300 hover:bg-blue-600/30 transition-all"
+      className="rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 hover:text-white transition-all"
     >
-      Sign in
+      Sign In
     </Link>
   );
 }
