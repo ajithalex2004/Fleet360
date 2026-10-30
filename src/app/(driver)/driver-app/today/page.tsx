@@ -706,12 +706,12 @@ function DriverTodayContent() {
       setSubmittingRamp(true);
       // Optimistically update local drayageJobs state immediately so UI responds both online and offline
       setDrayageJobs((prev) =>
-        prev.map((j) =>
+        (prev ?? []).map((j) =>
           j.id === jobId
             ? {
                 ...j,
                 status: payload.status,
-                placementLocation: (payload.placementLocation as any) ?? j.placementLocation,
+                placementLocation: (payload.placementLocation as DriverDrayageJob['placementLocation'] | undefined) ?? j.placementLocation,
                 trailerDetached: payload.detachTrailer ?? j.trailerDetached,
                 etcTime: payload.etc ?? j.etcTime,
                 notes: payload.notes ?? j.notes,
