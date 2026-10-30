@@ -29,6 +29,9 @@ import {
   executeBogiePairDispatch,
   consigneeConfirmEmptyReady,
   submitJobPodEvidence,
+  bookPcsToken,
+  clearPortInspection,
+  revalidateDeliveryOrder,
 } from '@/lib/logistics/drayage-domain';
 
 let drayageSchemaEnsured = false;
@@ -988,6 +991,40 @@ export async function POST(req: NextRequest) {
             receiverName: String(body.receiverName ?? 'Warehouse Bay Supervisor'),
             photoUrl: body.photoUrl ? String(body.photoUrl) : null,
             notes: body.notes ? String(body.notes) : undefined,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'book_pcs_token': {
+          return bookPcsToken(tx, {
+            tenantId,
+            jobId: body.jobId ? String(body.jobId) : undefined,
+            containerId: body.containerId ? String(body.containerId) : undefined,
+            terminalName: body.terminalName ? String(body.terminalName) : undefined,
+            slotWindowMinutes: body.slotWindowMinutes ? Number(body.slotWindowMinutes) : 120,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'clear_port_inspection': {
+          return clearPortInspection(tx, {
+            tenantId,
+            containerId: body.containerId ? String(body.containerId) : undefined,
+            jobId: body.jobId ? String(body.jobId) : undefined,
+            agency: body.agency,
+            newSealNumber: body.newSealNumber ? String(body.newSealNumber) : undefined,
+            clearedBy: body.clearedBy ? String(body.clearedBy) : undefined,
+            notes: body.notes ? String(body.notes) : undefined,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'revalidate_delivery_order': {
+          return revalidateDeliveryOrder(tx, {
+            tenantId,
+            containerId: body.containerId ? String(body.containerId) : undefined,
+            jobId: body.jobId ? String(body.jobId) : undefined,
+            extendDays: body.extendDays ? Number(body.extendDays) : 5,
             actor: body.actor ? String(body.actor) : undefined,
           });
         }

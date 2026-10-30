@@ -48,6 +48,15 @@ interface DrayageJob {
   shippingLine?: string;
   bogieJobId?: string | null;
   streetTurnJobId?: string | null;
+  customsInspection?: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  pcsTokenNumber?: string | null;
+  pcsSlotStart?: string | null;
+  pcsSlotEnd?: string | null;
+  pcsTokenStatus?: string | null;
+  inspectionStatus?: string | null;
+  doStatus?: string | null;
 }
 
 interface MappedVehicle {
@@ -683,27 +692,39 @@ export default function DrayageAssignmentPage() {
     },
     {
       key: 'tokenNumber',
-      header: 'Port Gate Token',
+      header: 'Port Gate Token & PCS',
       accessor: (j) => j.tokenNumber || 'No Token',
       filter: 'text',
       render: (job) => (
-        job.tokenNumber ? (
-          <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
-            <Key className="w-3 h-3 shrink-0" />
-            <span>{job.tokenNumber}</span>
-            <button
-              onClick={() => {
-                setEditingTokenJob(job);
-                setNewTokenValue(job.tokenNumber || '');
-              }}
-              className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
-            >
-              Edit
-            </button>
-          </div>
-        ) : (
-          <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
-        )
+        <div className="space-y-1">
+          {job.tokenNumber ? (
+            <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
+              <Key className="w-3 h-3 shrink-0" />
+              <span>{job.tokenNumber}</span>
+              <button
+                onClick={() => {
+                  setEditingTokenJob(job);
+                  setNewTokenValue(job.tokenNumber || '');
+                }}
+                className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
+              >
+                Edit
+              </button>
+            </div>
+          ) : (
+            <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
+          )}
+          {job.inspectionStatus === 'HOLD_PENDING' && (
+            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              Customs Hold Pending
+            </span>
+          )}
+          {job.doStatus === 'EXPIRED' && (
+            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+              eDO Expired
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -2485,16 +2506,47 @@ export default function DrayageAssignmentPage() {
                 />
               </div>
 
-              {/* Port Gate Token */}
-              <div className="space-y-1.5">
-                <label className="font-semibold text-[var(--text-muted)]">Port Gate Token / Appointment Code</label>
+              {/* Port Gate Token & PCS Pre-Dispatch Interlock */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-muted)]">Port Gate Token / Appointment Code</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const term = (assigningJob?.terminalName || '').toUpperCase();
+                      const prefix = term.includes('KHALIFA') ? 'ATLP-KP' : term.includes('TERMINAL 2') ? 'DPW-T2' : 'DPW-T1';
+                      setTokenInput(`${prefix}-${Math.floor(100000 + Math.random() * 900000)}`);
+                    }}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1"
+                  >
+                    <Key className="w-3 h-3" />
+                    ⚡ Auto-Generate PCS Token
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. DPW-TKN-8841"
+                  placeholder="e.g. DPW-T1-884120"
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500"
                 />
+
+                {assigningJob && (assigningJob.inspectionStatus === 'HOLD_PENDING' || assigningJob.doStatus === 'EXPIRED') && (
+                  <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>PCS Pre-Dispatch Advisory:</span>
+                    </div>
+                    <div>
+                      {assigningJob.inspectionStatus === 'HOLD_PENDING' && (
+                        <span>Container {assigningJob.containerNumber} has an active inspection hold. Driver must report to port inspection bay. </span>
+                      )}
+                      {assigningJob.doStatus === 'EXPIRED' && (
+                        <span>Electronic DO is expired. Revalidate eDO in Containers desk to ensure gate clearance.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

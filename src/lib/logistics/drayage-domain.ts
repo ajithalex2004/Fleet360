@@ -171,6 +171,16 @@ export interface DrayageContainer {
   boxcareInspection: boolean;
   linkedTrailerPlate: string | null;
   demurrage: DrayageDemurrageInfo;
+  pcsTokenNumber?: string | null;
+  pcsSlotStart?: string | null;
+  pcsSlotEnd?: string | null;
+  pcsTokenStatus?: 'PENDING' | 'BOOKED' | 'EXPIRED' | 'GATE_ENTERED' | 'CANCELLED' | string;
+  inspectionStatus?: 'NOT_REQUIRED' | 'HOLD_PENDING' | 'INSPECTION_BOOKED' | 'CLEARED' | 'REJECTED' | string;
+  inspectionSealNumber?: string | null;
+  inspectionClearedBy?: string | null;
+  inspectionClearedAt?: string | null;
+  doStatus?: 'VALID' | 'EXPIRED' | 'REVALIDATED' | string;
+  doRevalidatedAt?: string | null;
 }
 
 export interface DrayageJob {
@@ -224,6 +234,12 @@ export interface DrayageJob {
   podPhotoUrl?: string | null;
   podSignatureName?: string | null;
   podSignedAt?: string | null;
+  pcsTokenNumber?: string | null;
+  pcsSlotStart?: string | null;
+  pcsSlotEnd?: string | null;
+  pcsTokenStatus?: string | null;
+  inspectionStatus?: string | null;
+  doStatus?: string | null;
 }
 
 export interface StreetTurnMatch {
@@ -567,7 +583,27 @@ export async function ensureDrayageSchema(db: DrayageDbClient) {
       ADD COLUMN IF NOT EXISTS street_turn_job_id TEXT,
       ADD COLUMN IF NOT EXISTS pod_photo_url TEXT,
       ADD COLUMN IF NOT EXISTS pod_signature_name TEXT,
-      ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ;
+      ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pcs_token_number TEXT,
+      ADD COLUMN IF NOT EXISTS pcs_slot_start TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pcs_slot_end TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pcs_token_status TEXT DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS inspection_status TEXT DEFAULT 'CLEARED',
+      ADD COLUMN IF NOT EXISTS do_status TEXT DEFAULT 'VALID';
+  `);
+
+  await safeDdl(db, `
+    ALTER TABLE logistics_drayage_containers
+      ADD COLUMN IF NOT EXISTS pcs_token_number TEXT,
+      ADD COLUMN IF NOT EXISTS pcs_slot_start TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pcs_slot_end TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pcs_token_status TEXT DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS inspection_status TEXT DEFAULT 'CLEARED',
+      ADD COLUMN IF NOT EXISTS inspection_seal_number TEXT,
+      ADD COLUMN IF NOT EXISTS inspection_cleared_by TEXT,
+      ADD COLUMN IF NOT EXISTS inspection_cleared_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS do_status TEXT DEFAULT 'VALID',
+      ADD COLUMN IF NOT EXISTS do_revalidated_at TIMESTAMPTZ;
   `);
 
   await safeDdl(db, `
@@ -1863,6 +1899,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     podPhotoUrl: r.pod_photo_url ? String(r.pod_photo_url) : null,
     podSignatureName: r.pod_signature_name ? String(r.pod_signature_name) : null,
     podSignedAt: r.pod_signed_at ? new Date(String(r.pod_signed_at)).toISOString() : null,
+    pcsTokenNumber: r.pcs_token_number ? String(r.pcs_token_number) : (r.token_number ? String(r.token_number) : null),
+    pcsSlotStart: r.pcs_slot_start ? new Date(String(r.pcs_slot_start)).toISOString() : null,
+    pcsSlotEnd: r.pcs_slot_end ? new Date(String(r.pcs_slot_end)).toISOString() : null,
+    pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : (r.token_number ? 'BOOKED' : 'PENDING'),
+    inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
+    doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
   }));
 
   // 5. Containers + Demurrage Calculation
@@ -1907,6 +1949,16 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       boxcareInspection: Boolean(r.boxcare_inspection),
       linkedTrailerPlate: r.linked_trailer_plate ? String(r.linked_trailer_plate) : null,
       demurrage,
+      pcsTokenNumber: r.pcs_token_number ? String(r.pcs_token_number) : null,
+      pcsSlotStart: r.pcs_slot_start ? new Date(String(r.pcs_slot_start)).toISOString() : null,
+      pcsSlotEnd: r.pcs_slot_end ? new Date(String(r.pcs_slot_end)).toISOString() : null,
+      pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : 'PENDING',
+      inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
+      inspectionSealNumber: r.inspection_seal_number ? String(r.inspection_seal_number) : null,
+      inspectionClearedBy: r.inspection_cleared_by ? String(r.inspection_cleared_by) : null,
+      inspectionClearedAt: r.inspection_cleared_at ? new Date(String(r.inspection_cleared_at)).toISOString() : null,
+      doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
+      doRevalidatedAt: r.do_revalidated_at ? new Date(String(r.do_revalidated_at)).toISOString() : null,
     };
   });
 
@@ -3902,5 +3954,353 @@ export async function submitJobPodEvidence(
     receiverName: receiver,
     signedAt: signedAtIso,
     photoUrl: args.photoUrl ?? null,
+  };
+}
+
+// =============================================================================
+// OPTION C: PORT COMMUNITY SYSTEM (PCS) & GATE TOKEN AUTOMATION DOMAIN ENGINES
+// =============================================================================
+
+export async function bookPcsToken(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId?: string;
+    containerId?: string;
+    terminalName?: string;
+    slotWindowMinutes?: number;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const durationMin = args.slotWindowMinutes && args.slotWindowMinutes > 0 ? args.slotWindowMinutes : 120;
+  const start = new Date();
+  const end = new Date(start.getTime() + durationMin * 60 * 1000);
+
+  // Generate PCS Token with terminal prefix
+  const termName = (args.terminalName || '').toUpperCase();
+  let prefix = 'DPW-T1';
+  if (termName.includes('TERMINAL 2') || termName.includes('T2')) prefix = 'DPW-T2';
+  else if (termName.includes('TERMINAL 3') || termName.includes('T3')) prefix = 'DPW-T3';
+  else if (termName.includes('KHALIFA') || termName.includes('AD PORTS') || termName.includes('KP')) prefix = 'ATLP-KP';
+  else if (termName.includes('RASHID') || termName.includes('KHORFAKKAN')) prefix = 'DPW-PR';
+
+  const tokenNumber = `${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+  // 1. If jobId supplied, update job and linked container
+  let targetContainerNumber = '';
+  let targetJobCode = '';
+
+  if (args.jobId) {
+    const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    );
+    const job = jobRows[0];
+    if (job) {
+      targetJobCode = String(job.job_code);
+      targetContainerNumber = String(job.container_number);
+
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET token_number = $3,
+                pcs_token_number = $3,
+                pcs_slot_start = $4::timestamptz,
+                pcs_slot_end = $5::timestamptz,
+                pcs_token_status = 'BOOKED',
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.jobId,
+        args.tenantId,
+        tokenNumber,
+        start.toISOString(),
+        end.toISOString(),
+      );
+
+      // Sync to container record if exists
+      if (job.container_id) {
+        await db.$executeRawUnsafe(
+          `UPDATE logistics_drayage_containers
+              SET pcs_token_number = $3,
+                  pcs_slot_start = $4::timestamptz,
+                  pcs_slot_end = $5::timestamptz,
+                  pcs_token_status = 'BOOKED',
+                  updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2`,
+          String(job.container_id),
+          args.tenantId,
+          tokenNumber,
+          start.toISOString(),
+          end.toISOString(),
+        );
+      }
+    }
+  }
+
+  // 2. If containerId supplied, update container and any active associated job
+  if (args.containerId) {
+    const cntRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_containers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.containerId,
+      args.tenantId,
+    );
+    const cnt = cntRows[0];
+    if (cnt) {
+      targetContainerNumber = String(cnt.container_number);
+
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_containers
+            SET pcs_token_number = $3,
+                pcs_slot_start = $4::timestamptz,
+                pcs_slot_end = $5::timestamptz,
+                pcs_token_status = 'BOOKED',
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.containerId,
+        args.tenantId,
+        tokenNumber,
+        start.toISOString(),
+        end.toISOString(),
+      );
+
+      // Also update any matching pending job for this container
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET token_number = $3,
+                pcs_token_number = $3,
+                pcs_slot_start = $4::timestamptz,
+                pcs_slot_end = $5::timestamptz,
+                pcs_token_status = 'BOOKED',
+                updated_at = NOW()
+          WHERE container_number = $1 AND tenant_id = $2 AND status IN ('PENDING', 'ASSIGNED')`,
+        targetContainerNumber,
+        args.tenantId,
+        tokenNumber,
+        start.toISOString(),
+        end.toISOString(),
+      );
+    }
+  }
+
+  // Audit log
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'PCS_TOKEN_BOOKED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId || `cnt-${args.containerId}`,
+    targetJobCode || targetContainerNumber || 'PCS-APPOINTMENT',
+    `Dubai Trade / ATLP e-Token ${tokenNumber} confirmed. Port Gate slot window: ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+    args.actor || 'PCS Integration Gateway',
+  );
+
+  return {
+    ok: true,
+    tokenNumber,
+    slotStart: start.toISOString(),
+    slotEnd: end.toISOString(),
+    containerNumber: targetContainerNumber,
+  };
+}
+
+export async function clearPortInspection(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    containerId?: string;
+    jobId?: string;
+    agency?: 'CUSTOMS' | 'MUNICIPALITY' | 'CPIP' | 'MERC' | 'BOXCARE' | 'ALL';
+    newSealNumber?: string;
+    clearedBy?: string;
+    notes?: string;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const agency = args.agency || 'CUSTOMS';
+  const clearedBy = (args.clearedBy || 'Dubai Customs Officer').trim();
+  const newSeal = args.newSealNumber ? args.newSealNumber.trim().toUpperCase() : null;
+  const nowIso = new Date().toISOString();
+
+  let containerNumber = '';
+  let jobCode = '';
+
+  // Determine container and job references
+  if (args.jobId) {
+    const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    );
+    if (jobRows[0]) {
+      jobCode = String(jobRows[0].job_code);
+      containerNumber = String(jobRows[0].container_number);
+    }
+  }
+
+  if (args.containerId && !containerNumber) {
+    const cntRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_containers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.containerId,
+      args.tenantId,
+    );
+    if (cntRows[0]) {
+      containerNumber = String(cntRows[0].container_number);
+    }
+  }
+
+  // Update inspection fields on container
+  if (containerNumber) {
+    const isAll = agency === 'ALL';
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET customs_inspection = CASE WHEN $3 = 'CUSTOMS' OR $4 THEN false ELSE customs_inspection END,
+              municipality_inspection = CASE WHEN $3 = 'MUNICIPALITY' OR $4 THEN false ELSE municipality_inspection END,
+              cpip_inspection = CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END,
+              merc_inspection = CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END,
+              boxcare_inspection = CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END,
+              inspection_status = 'CLEARED',
+              inspection_seal_number = COALESCE($5, inspection_seal_number),
+              seal_number = COALESCE($5, seal_number),
+              inspection_cleared_by = $6,
+              inspection_cleared_at = NOW(),
+              updated_at = NOW()
+        WHERE container_number = $1 AND tenant_id = $2`,
+      containerNumber,
+      args.tenantId,
+      agency,
+      isAll,
+      newSeal,
+      clearedBy,
+    );
+
+    // Also update any matching job for this container
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET customs_inspection = CASE WHEN $3 = 'CUSTOMS' OR $4 THEN false ELSE customs_inspection END,
+              municipality_inspection = CASE WHEN $3 = 'MUNICIPALITY' OR $4 THEN false ELSE municipality_inspection END,
+              cpip_inspection = CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END,
+              merc_inspection = CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END,
+              boxcare_inspection = CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END,
+              inspection_status = 'CLEARED',
+              updated_at = NOW()
+        WHERE container_number = $1 AND tenant_id = $2`,
+      containerNumber,
+      args.tenantId,
+      agency,
+      isAll,
+    );
+  }
+
+  // Audit log
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'INSPECTION_CLEARED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId || `cnt-${containerNumber}`,
+    jobCode || containerNumber || 'CLEARANCE',
+    `Port Authority inspection (${agency}) cleared by ${clearedBy}.${newSeal ? ` Verified new customs seal #${newSeal}.` : ''}${args.notes ? ` Remarks: ${args.notes}` : ''}`,
+    args.actor || `${clearedBy} (Customs Clearance Desk)`,
+  );
+
+  return {
+    ok: true,
+    containerNumber,
+    agencyCleared: agency,
+    newSealNumber: newSeal,
+    clearedBy,
+    clearedAt: nowIso,
+  };
+}
+
+export async function revalidateDeliveryOrder(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    containerId?: string;
+    jobId?: string;
+    extendDays?: number;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const daysToAdd = args.extendDays && args.extendDays > 0 ? args.extendDays : 5;
+  let containerNumber = '';
+  let jobCode = '';
+
+  if (args.jobId) {
+    const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    );
+    if (jobRows[0]) {
+      jobCode = String(jobRows[0].job_code);
+      containerNumber = String(jobRows[0].container_number);
+    }
+  }
+
+  if (args.containerId && !containerNumber) {
+    const cntRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_containers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.containerId,
+      args.tenantId,
+    );
+    if (cntRows[0]) {
+      containerNumber = String(cntRows[0].container_number);
+    }
+  }
+
+  // Extend DO by daysToAdd from now or current expiry
+  const newExpiry = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+  const newExpiryIso = newExpiry.toISOString();
+
+  if (containerNumber) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET do_expiry_date = $3::timestamptz,
+              do_status = 'REVALIDATED',
+              do_revalidated_at = NOW(),
+              updated_at = NOW()
+        WHERE container_number = $1 AND tenant_id = $2`,
+      containerNumber,
+      args.tenantId,
+      newExpiryIso,
+    );
+
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET do_expiry_date = $3::timestamptz,
+              do_status = 'REVALIDATED',
+              updated_at = NOW()
+        WHERE container_number = $1 AND tenant_id = $2`,
+      containerNumber,
+      args.tenantId,
+      newExpiryIso,
+    );
+  }
+
+  // Audit log
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'DO_REVALIDATED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId || `cnt-${containerNumber}`,
+    jobCode || containerNumber || 'EDO-SYNC',
+    `Electronic Delivery Order (eDO) revalidated via Dubai Trade / ATLP API. Valid until ${newExpiry.toLocaleDateString()} (+${daysToAdd} days).`,
+    args.actor || 'Shipping Line eDO Interface',
+  );
+
+  return {
+    ok: true,
+    containerNumber,
+    newDoExpiry: newExpiryIso,
+    daysExtended: daysToAdd,
   };
 }
