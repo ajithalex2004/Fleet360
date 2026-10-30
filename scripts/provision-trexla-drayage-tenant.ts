@@ -31,13 +31,13 @@ function hashPassword(password: string): string {
 }
 
 async function detectUserTableName(prisma: {
-  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
 }): Promise<string> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ table_name: string }>>(
+  const rows = (await prisma.$queryRawUnsafe(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = 'public' AND table_name IN ('User', 'users')
      LIMIT 1`
-  );
+  )) as Array<{ table_name: string }>;
   return rows[0]?.table_name === 'users' ? 'users' : '"User"';
 }
 
