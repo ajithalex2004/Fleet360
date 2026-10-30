@@ -54,6 +54,7 @@ import {
   ArrowRight,
   Anchor,
   Timer,
+  Key,
 } from 'lucide-react';
 
 export interface DrayageGeofenceBoundary {
@@ -86,6 +87,13 @@ export interface DriverDrayageJob {
   rateAmountAed: number;
   driverAllowanceAed: number;
   notes: string | null;
+  tokenNumber?: string | null;
+  pcsTokenNumber?: string | null;
+  pcsSlotStart?: string | null;
+  pcsSlotEnd?: string | null;
+  customsInspection?: boolean;
+  inspectionStatus?: string | null;
+  doStatus?: string | null;
   terminalGeofence?: DrayageGeofenceBoundary | null;
   warehouseGeofence?: DrayageGeofenceBoundary | null;
 }
@@ -1407,6 +1415,50 @@ function DrayageJobCard({
           </span>
         )}
       </div>
+
+      {/* Option C: Digital Port Gate e-Token Pass Card */}
+      {job.tokenNumber && (
+        <div className="rounded-xl bg-gradient-to-br from-slate-900 via-cyan-950/40 to-slate-900 p-3 border border-cyan-500/30 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-cyan-300">
+              <Key className="w-3.5 h-3.5 text-cyan-400" />
+              <span>PCS Terminal Gate e-Token</span>
+            </div>
+            <span className="font-mono text-[9px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+              GATE ACCESS CONFIRMED
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 bg-slate-950/80 p-2.5 rounded-lg border border-cyan-500/20">
+            <div className="space-y-0.5">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Appointment Pass</span>
+              <div className="font-mono font-black text-sm text-white tracking-wider">{job.tokenNumber}</div>
+              <div className="text-[10px] text-cyan-200">
+                {job.pcsSlotStart && job.pcsSlotEnd ? (
+                  <>Slot: {new Date(job.pcsSlotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(job.pcsSlotEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>
+                ) : (
+                  <>Terminal Window: 2-Hour Active Gate Slot</>
+                )}
+              </div>
+            </div>
+
+            {/* Stylized Terminal Gate Barcode visual */}
+            <div className="text-right space-y-1">
+              <div className="h-6 w-24 bg-gradient-to-r from-white via-slate-400 to-white opacity-80 rounded flex items-center justify-center font-mono text-[8px] text-slate-950 font-bold tracking-widest">
+                ||||||||||||||||
+              </div>
+              <span className="text-[8px] font-mono text-slate-400 block">SCAN AT KIOSK</span>
+            </div>
+          </div>
+
+          {job.customsInspection && (
+            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px] flex items-center justify-between">
+              <span>⚠️ Stop at Port Customs / CPIP Bay before Terminal Exit</span>
+              <span className="font-bold text-amber-300">+AED 40 Bonus</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Active Destuffing Countdown Banner (if Placed at Ramp or has ETC) */}
       {job.etcTime && (

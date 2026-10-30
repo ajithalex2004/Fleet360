@@ -178,7 +178,26 @@ ALTER TABLE logistics_drayage_jobs
   -- Proof of delivery (consignee / shipper tracking portal).
   ADD COLUMN IF NOT EXISTS pod_photo_url TEXT,
   ADD COLUMN IF NOT EXISTS pod_signature_name TEXT,
-  ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS pod_signed_at TIMESTAMPTZ,
+  -- Port Community System gate token, inspection and eDO status.
+  ADD COLUMN IF NOT EXISTS pcs_token_number TEXT,
+  ADD COLUMN IF NOT EXISTS pcs_slot_start TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS pcs_slot_end TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS pcs_token_status TEXT DEFAULT 'PENDING',
+  ADD COLUMN IF NOT EXISTS inspection_status TEXT DEFAULT 'CLEARED',
+  ADD COLUMN IF NOT EXISTS do_status TEXT DEFAULT 'VALID';
+
+ALTER TABLE logistics_drayage_containers
+  ADD COLUMN IF NOT EXISTS pcs_token_number TEXT,
+  ADD COLUMN IF NOT EXISTS pcs_slot_start TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS pcs_slot_end TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS pcs_token_status TEXT DEFAULT 'PENDING',
+  ADD COLUMN IF NOT EXISTS inspection_status TEXT DEFAULT 'CLEARED',
+  ADD COLUMN IF NOT EXISTS inspection_seal_number TEXT,
+  ADD COLUMN IF NOT EXISTS inspection_cleared_by TEXT,
+  ADD COLUMN IF NOT EXISTS inspection_cleared_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS do_status TEXT DEFAULT 'VALID',
+  ADD COLUMN IF NOT EXISTS do_revalidated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS logistics_drayage_allowances (
   id TEXT PRIMARY KEY,

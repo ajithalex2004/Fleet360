@@ -23,7 +23,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { toDriverTripStatus } from '@/lib/trip-state';
 interface TripRow {
   id: string;
@@ -173,6 +173,13 @@ export async function GET(req: NextRequest) {
               container_type AS "containerType",
               terminal_id AS "terminalId",
               terminal_name AS "terminalName",
+              token_number AS "tokenNumber",
+              pcs_token_number AS "pcsTokenNumber",
+              pcs_slot_start AS "pcsSlotStart",
+              pcs_slot_end AS "pcsSlotEnd",
+              customs_inspection AS "customsInspection",
+              inspection_status AS "inspectionStatus",
+              do_status AS "doStatus",
               warehouse_id AS "warehouseId",
               warehouse_name AS "warehouseName",
               assigned_vehicle_plate AS "assignedVehiclePlate",
