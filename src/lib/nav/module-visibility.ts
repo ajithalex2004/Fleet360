@@ -72,6 +72,9 @@ export function canOpenModule(module: string, viewer: ModuleViewer): boolean {
     return (isTenantAdmin || role === PARTNER) && (tenantHas(viewer.enabledModules, 'exchange') || tenantHas(viewer.enabledModules, 'vendors'));
   }
   if (module === 'locations') return canOpenModule('fleet', viewer);
+  if (module === 'mobile-apps') {
+    return isTenantAdmin || holdsAnyPermissionIn(viewer.permissions, 'mobile-apps') || holdsAnyPermissionIn(viewer.permissions, 'driver-mgmt') || holdsAnyPermissionIn(viewer.permissions, 'fleet') || holdsAnyPermissionIn(viewer.permissions, 'logistics');
+  }
   if (navPerms[`mod:${module}`] === true) {
     return isTenantAdmin || navPerms[`other:mod:${module}`] !== false;
   }
