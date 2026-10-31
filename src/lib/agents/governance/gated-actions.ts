@@ -20,6 +20,12 @@
  * can be hours old): a vehicle that already has an open predictive work
  * order, an incident already at or above the proposed severity, a job no
  * longer waiting for a driver — each returns `stale` and changes nothing.
+ *
+ * Approving one of these runs its executor (PolicyService.reviewApprovalItem).
+ * Besides the three gated actions above, three queued-for-approval actions
+ * have executors: SUSPEND_DRIVER (compliance), SCHEDULE_PM_SLOT
+ * (preventive-maintenance) and LINK_TRIPS (vehicle-reuse). Any other action
+ * type is recorded as APPROVED_MANUAL — approved, carried out by hand.
  */
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
@@ -30,6 +36,9 @@ export const GATED_ACTION_TYPES = [
   'CREATE_PREDICTIVE_WORK_ORDER',
   'ESCALATE_INCIDENT_SEVERITY',
   'OFFER_DISPATCH_JOB',
+  'SUSPEND_DRIVER',
+  'SCHEDULE_PM_SLOT',
+  'LINK_TRIPS',
 ] as const;
 export type GatedActionType = (typeof GATED_ACTION_TYPES)[number];
 
@@ -62,22 +71,44 @@ const DRIVER_BUSY_STATUSES = ['OFFERED', 'ACCEPTED', 'IN_PROGRESS'];
 const DRIVER_AVAILABLE_STATUSES = ['ACTIVE', 'AVAILABLE', 'ON_SHIFT'];
 const OPEN_WO_STATUSES = ['OPEN', 'IN_PROGRESS', 'PENDING_PARTS'];
 
+/** Driver statuses that already keep a driver out of dispatch. */
+const DRIVER_BLOCKED_STATUSES = ['SUSPENDED', 'INACTIVE'];
+/**
+ * Fleet360's operational zone (as bus-ops/validate-assignment.ts DEFAULT_TZ):
+ * PM slots carry a local date and time. Asia/Dubai has no DST, so a fixed
+ * offset is exact.
+ */
+const OPERATIONAL_UTC_OFFSET = '+04:00';
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const obj = (v: unknown): Record<string, unknown> =>
+  (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/**
+ * Next tenant-local fleet work order number, under a per-tenant lock held to
+ * the end of the transaction: wo_number was COUNT(*)+1 with no lock, so
+ * concurrent creators in a tenant could take the same number. COUNT(*) runs
+ * under RLS, so numbers are tenant-local (as the Fleet Work Orders API
+ * allocates them); wo_number has no global unique constraint.
+ */
+async function lockAndNextWorkOrderNumber(tenantId: string): Promise<string> {
+  await prisma.$executeRawUnsafe(
+    `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+    `fleet-work-order-number:${tenantId}`,
+  );
+  const [{ count }] = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count FROM fleet_work_orders`,
+  );
+  return 'FWO-' + String(Number(count) + 1).padStart(6, '0');
+}
 
 async function createPredictiveWorkOrder(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
   const vehicleId = str(p.vehicleId);
   if (!vehicleId) throw new Error('CREATE_PREDICTIVE_WORK_ORDER payload is missing vehicleId');
 
-  // Number allocation and the open-order check under one per-tenant lock:
-  // wo_number was COUNT(*)+1 with no lock, so concurrent creators in a tenant
-  // could take the same number. COUNT(*) runs under RLS, so numbers are
-  // tenant-local (as the Fleet Work Orders API allocates them); wo_number
-  // has no global unique constraint.
-  await prisma.$executeRawUnsafe(
-    `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-    `fleet-work-order-number:${tenantId}`,
-  );
+  // Number allocation and the open-order check under one per-tenant lock.
+  const woNumber = await lockAndNextWorkOrderNumber(tenantId);
   const open = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id::text FROM fleet_work_orders
       WHERE vehicle_id::text = $1 AND requested_by = 'Predictive Maintenance Agent'
@@ -90,10 +121,6 @@ async function createPredictiveWorkOrder(tenantId: string, p: Record<string, unk
     return { ok: false, stale: true, reason: `Vehicle already has an open predictive work order (${open[0].id}).` };
   }
 
-  const [{ count }] = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `SELECT COUNT(*) AS count FROM fleet_work_orders`,
-  );
-  const woNumber = 'FWO-' + String(Number(count) + 1).padStart(6, '0');
   const [{ id }] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO fleet_work_orders (
        wo_number, vehicle_id, description, status, priority, wo_type,
@@ -211,10 +238,132 @@ async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): 
   return { ok: true, detail: { jobId, driverId, vehicleId, attempt: updated[0].current_attempt } };
 }
 
+/** Compliance: a driver failed the pre-dispatch readiness gate. Block them from dispatch. */
+async function suspendDriver(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+  const readiness = obj(p.readiness);
+  const driverId = str(readiness.driverId) || str(p.driverId);
+  if (!driverId) throw new Error('SUSPEND_DRIVER payload is missing readiness.driverId');
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ status: string | null }>>(
+    `SELECT status FROM drivers WHERE id::text = $1 AND deleted_at IS NULL FOR UPDATE`,
+    driverId,
+  );
+  if (rows.length === 0) return { ok: false, stale: true, reason: 'Driver no longer exists.' };
+  const current = (rows[0].status ?? '').toUpperCase();
+  if (DRIVER_BLOCKED_STATUSES.includes(current)) {
+    return { ok: false, stale: true, reason: `Driver is already ${current}.` };
+  }
+  // dispatch-optimiser skips SUSPENDED drivers, and OFFER_DISPATCH_JOB only
+  // offers to available ones, so this takes the driver out of dispatch.
+  await prisma.$executeRawUnsafe(
+    `UPDATE drivers SET status = 'SUSPENDED', updated_at = NOW() WHERE id::text = $1`,
+    driverId,
+  );
+  return { ok: true, detail: { driverId, from: current || null, to: 'SUSPENDED' } };
+}
+
+/** Preventive maintenance: book the recommended service slot as a scheduled work order. */
+async function schedulePmSlot(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+  const vehicleId = str(p.vehicleId);
+  const slot = obj(p.slot);
+  const slotDate = str(slot.slotDate);
+  const startTime = str(slot.startTime) || '09:00';
+  if (!vehicleId || !/^\d{4}-\d{2}-\d{2}$/.test(slotDate) || !/^\d{2}:\d{2}$/.test(startTime)) {
+    throw new Error('SCHEDULE_PM_SLOT payload needs vehicleId and slot.slotDate (YYYY-MM-DD) / slot.startTime (HH:MM)');
+  }
+  const scheduledAt = new Date(`${slotDate}T${startTime}:00${OPERATIONAL_UTC_OFFSET}`);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new Error(`SCHEDULE_PM_SLOT slot is not a valid date: ${slotDate} ${startTime}`);
+  }
+  if (scheduledAt.getTime() < Date.now()) {
+    return { ok: false, stale: true, reason: `The recommended slot (${slotDate} ${startTime}) has passed; re-run the agent for a new one.` };
+  }
+  // fleet_work_orders.vehicle_id is UUID, but vehicles.id also holds legacy
+  // non-UUID ids: say so instead of failing the approval on the cast.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(vehicleId)) {
+    return { ok: false, stale: true, reason: `Vehicle id '${vehicleId}' is not a UUID, so a fleet work order can't reference it; schedule this one by hand.` };
+  }
+
+  // Number allocation and the open-order check under one per-tenant lock.
+  const woNumber = await lockAndNextWorkOrderNumber(tenantId);
+  const open = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id::text FROM fleet_work_orders
+      WHERE vehicle_id::text = $1 AND requested_by = 'Preventive Maintenance Agent'
+        AND status = ANY($2::text[])
+      LIMIT 1`,
+    vehicleId,
+    OPEN_WO_STATUSES,
+  );
+  if (open.length > 0) {
+    return { ok: false, stale: true, reason: `Vehicle already has an open preventive work order (${open[0].id}).` };
+  }
+
+  const threshold = str(p.serviceThreshold);
+  const [{ id }] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO fleet_work_orders (
+       wo_number, vehicle_id, description, status, priority, wo_type, scheduled_date,
+       requested_by, tenant_id, created_at, updated_at
+     ) VALUES ($1, $2::uuid, $3, 'OPEN', 'MEDIUM', 'PREVENTIVE', $4::timestamptz,
+               'Preventive Maintenance Agent', $5, NOW(), NOW())
+     RETURNING id::text`,
+    woNumber,
+    vehicleId,
+    threshold ? `Scheduled preventive maintenance: ${threshold}` : 'Scheduled preventive maintenance',
+    scheduledAt.toISOString(),
+    tenantId,
+  );
+  return { ok: true, detail: { workOrderId: id, woNumber, scheduledDate: scheduledAt.toISOString() } };
+}
+
+/** Vehicle reuse: run trip B on the vehicle that runs trip A (chained trips). */
+async function linkTrips(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+  const r = obj(p.result);
+  const tripAId = str(r.tripAId);
+  const tripBId = str(r.tripBId);
+  const vehicleId = str(r.vehicleId);
+  const driverId = str(r.driverId) || null;
+  if (!tripAId || !tripBId || !vehicleId) {
+    throw new Error('LINK_TRIPS payload needs result.tripAId, result.tripBId and result.vehicleId');
+  }
+
+  const tripA = await prisma.$queryRawUnsafe<Array<{ vehicle_id: string | null; status: string | null }>>(
+    `SELECT vehicle_id, status FROM trip_schedules WHERE id = $1 AND deleted_at IS NULL`,
+    tripAId,
+  );
+  if (tripA.length === 0) return { ok: false, stale: true, reason: 'The first trip no longer exists.' };
+  if ((tripA[0].status ?? '').toUpperCase() === 'CANCELLED') {
+    return { ok: false, stale: true, reason: 'The first trip was cancelled.' };
+  }
+  if (tripA[0].vehicle_id !== vehicleId) {
+    return { ok: false, stale: true, reason: 'The first trip no longer runs on the proposed vehicle.' };
+  }
+
+  // Guarded on trip B still waiting for a vehicle: approved late, a trip
+  // someone has since resourced is left alone. A driver is set only if trip
+  // B has none.
+  const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `UPDATE trip_schedules
+        SET vehicle_id = $1, driver_id = COALESCE(driver_id, $2), updated_at = NOW()
+      WHERE id = $3 AND deleted_at IS NULL AND vehicle_id IS NULL
+        AND COALESCE(status, 'SCHEDULED') = 'SCHEDULED'
+      RETURNING id`,
+    vehicleId,
+    driverId,
+    tripBId,
+  );
+  if (updated.length === 0) {
+    return { ok: false, stale: true, reason: 'The second trip is no longer scheduled without a vehicle.' };
+  }
+  return { ok: true, detail: { tripAId, tripBId, vehicleId, driverId } };
+}
+
 const EXECUTORS: Record<GatedActionType, (tenantId: string, payload: Record<string, unknown>) => Promise<ExecutionResult>> = {
   CREATE_PREDICTIVE_WORK_ORDER: createPredictiveWorkOrder,
   ESCALATE_INCIDENT_SEVERITY: escalateIncidentSeverity,
   OFFER_DISPATCH_JOB: offerDispatchJob,
+  SUSPEND_DRIVER: suspendDriver,
+  SCHEDULE_PM_SLOT: schedulePmSlot,
+  LINK_TRIPS: linkTrips,
 };
 
 /**
