@@ -62,7 +62,6 @@ interface FleetVehicle {
   canActivateMobileTracking: boolean;
   odometerReading?: number | null;
   isAssignedToMe?: boolean;
-  vehicleUsage?: string | null;
 }
 
 const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
@@ -944,7 +943,7 @@ export default function DriverAppLauncher() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            vehicleId: boundVehicle.id,
+            vehicleId: boundVehicle?.id,
             startOdometer: odoValue,
           }),
         });
@@ -959,7 +958,7 @@ export default function DriverAppLauncher() {
       }
 
       // 4. Notify tracking provider to start real device GPS tracking
-      if (boundVehicle.canActivateMobileTracking) {
+      if (boundVehicle?.canActivateMobileTracking) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('fleet360_vehicle_changed'));
         }
