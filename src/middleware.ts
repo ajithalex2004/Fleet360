@@ -279,6 +279,17 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
   // 1. Public routes — no session required. Client-sent identity headers
   // are removed; driver-app requests get the identity of their verified
   // session cookie, if they have one.
+  if (pathname.startsWith('/api/driver/')) {
+    const driverSession = await verifyDriverAppSession(request);
+    if (driverSession) {
+      const refusal = residencyRefusal(pathname, driverSession.dataResidency);
+      if (refusal) return refusal;
+      return NextResponse.next({
+        request: { headers: withVerifiedIdentity(request.headers, driverSession) },
+      });
+    }
+  }
+
   if (isPublicRoute(pathname)) {
     // Preserve legacy targeting as an untrusted selector. Public job handlers
     // must authenticate independently before honoring it.
@@ -301,7 +312,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
   }
 
   // 2. Verify session cookie (or Bearer session token from mobile APK WebView)
-  const token = request.cookies.get('xl-session')?.value || bearerToken(request.headers);
+  const token = bearerToken(request.headers) || request.cookies.get('xl-session')?.value;
   const session = token ? await verifySession(token).catch(() => null) : null;
 
   // 3. Handle unauthenticated requests

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { getDriverTenantContext } from '@/lib/driver-session';
 import {
   updateDrayageJobExecutionStatus,
   submitJobPodEvidence,
@@ -18,11 +19,15 @@ export async function POST(
   const params = await props.params;
   const jobId = params.id;
 
+  const driverCtx = await getDriverTenantContext(req);
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const tenantId = driverCtx?.tenantId || (authz.ok ? authz.tenantId : '');
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: !authz.ok ? authz.error : 'Unauthorized' },
+      { status: !authz.ok ? authz.status : 401 },
+    );
   }
-  const { tenantId } = authz;
 
   try {
     const rawBody = await req.json().catch(() => ({}));
