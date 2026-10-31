@@ -58,6 +58,14 @@ async function logoutResponse(request: NextRequest): Promise<NextResponse> {
     });
   }
 
+    response.cookies.set('xl-driver-vehicle-id', '', {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure:   process.env.NODE_ENV === 'production',
+    maxAge:   0,
+    path:     '/',
+  });
+
   return response;
 }
 

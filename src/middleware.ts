@@ -112,15 +112,15 @@ function isDocumentNavigation(request: NextRequest): boolean {
  * getDriverTenantContext() in src/lib/driver-session.ts.
  */
 async function verifyDriverAppSession(request: NextRequest) {
+  const bearer = bearerToken(request.headers);
+  if (bearer) {
+    const session = await verifySession(bearer).catch(() => null);
+    if (session) return session;
+  }
   for (const name of ['xl-driver-session', 'xl-session']) {
     const token = request.cookies.get(name)?.value;
     if (!token) continue;
     const session = await verifySession(token).catch(() => null);
-    if (session) return session;
-  }
-  const bearer = bearerToken(request.headers);
-  if (bearer) {
-    const session = await verifySession(bearer).catch(() => null);
     if (session) return session;
   }
   return null;

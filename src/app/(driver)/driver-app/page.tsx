@@ -56,6 +56,7 @@ interface FleetVehicle {
   make: string | null;
   model: string | null;
   year?: number | null;
+  vehicleUsage?: string | null;
   deviceId: string;
   isDeviceBlank: boolean;
   canActivateMobileTracking: boolean;
@@ -71,6 +72,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -84,6 +86,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -97,6 +100,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -110,6 +114,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -123,6 +128,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -136,6 +142,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros Prime Mover',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -149,6 +156,7 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Mercedes-Benz',
     model: 'Actros 2645 LS Prime Mover (6x4)',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
@@ -162,10 +170,123 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
     make: 'Volvo',
     model: 'FH16 540 Globetrotter Tractor (6x4)',
     year: 2024,
+    vehicleUsage: 'LOGISTICS',
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
     odometerReading: 98400,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-man-3-767aaca7',
+    vehicleCode: 'PM-003',
+    licensePlate: 'DXB-767-4013',
+    make: 'MAN',
+    model: 'TGX 33.540 BBS Heavy Hauler (6x4)',
+    year: 2023,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 112300,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-scania-4-767aaca7',
+    vehicleCode: 'PM-004',
+    licensePlate: 'DXB-767-4014',
+    make: 'Scania',
+    model: 'R500 V8 Heavy Tractor (6x4)',
+    year: 2024,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 87650,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-actros-5-767aaca7',
+    vehicleCode: 'PM-005',
+    licensePlate: 'AUH-767-3021',
+    make: 'Mercedes-Benz',
+    model: 'Actros 3340 Heavy Prime Mover (6x4)',
+    year: 2023,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 134200,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-actros-1-35ad69c6',
+    vehicleCode: 'PM-101',
+    licensePlate: 'DXB-PR-4011',
+    make: 'Mercedes-Benz',
+    model: 'Actros 2645 LS Prime Mover (6x4)',
+    year: 2024,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 186000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-volvo-2-35ad69c6',
+    vehicleCode: 'PM-102',
+    licensePlate: 'DXB-PR-4012',
+    make: 'Volvo',
+    model: 'FH16 540 Globetrotter Tractor (6x4)',
+    year: 2024,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 187000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-man-3-35ad69c6',
+    vehicleCode: 'PM-103',
+    licensePlate: 'DXB-PR-4013',
+    make: 'MAN',
+    model: 'TGX 33.540 BBS Heavy Hauler (6x4)',
+    year: 2023,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 188000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-scania-4-35ad69c6',
+    vehicleCode: 'PM-104',
+    licensePlate: 'DXB-PR-4014',
+    make: 'Scania',
+    model: 'R500 V8 Heavy Tractor (6x4)',
+    year: 2024,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 189000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'pm-actros-5-35ad69c6',
+    vehicleCode: 'PM-105',
+    licensePlate: 'AUH-PR-3021',
+    make: 'Mercedes-Benz',
+    model: 'Actros 3340 Heavy Prime Mover (6x4)',
+    year: 2023,
+    vehicleUsage: 'LOGISTICS',
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 190000,
     isAssignedToMe: false,
   },
 ];
@@ -460,10 +581,18 @@ export default function DriverAppLauncher() {
     }
   }, []);
 
-  // Check active vehicle session on boot
+  // Check active vehicle session on boot (only when driver has an active authenticated session token)
   const checkActiveVehicleSession = useCallback(async () => {
     try {
-      const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), { credentials: 'include' });
+      const isAuthed = typeof window !== 'undefined' && localStorage.getItem('fleet360_driver_authenticated') === 'true';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('fleet360_session_token') : null;
+      if (!isAuthed || !token) {
+        return;
+      }
+      const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await parseJsonSafely(res);
         if (data && data.hasSession && data.vehicle) {
@@ -541,11 +670,31 @@ export default function DriverAppLauncher() {
       }
 
       const emailLower = (signedInEmail || username || '').toLowerCase().trim();
-      if (vehicles.length === 0 && emailLower.includes('trexla')) {
-        vehicles = TREXLA_FALLBACK_VEHICLES.map((v) => ({
-          ...v,
-          isAssignedToMe: emailLower === 'driver@trexla-logistics.ae' && v.vehicleCode === 'PM-001',
-        }));
+      const isLogisticsContext =
+        emailLower.includes('trexla') ||
+        emailLower.includes('biju') ||
+        emailLower.includes('jainu') ||
+        vehicles.some((v) => v.vehicleUsage === 'LOGISTICS');
+
+      if (isLogisticsContext) {
+        // Filter out non-logistics vehicles (e.g. RENTAL 96448 Honda Pilot) and ensure all Trexla LOGISTICS vehicles are present
+        vehicles = vehicles.filter(
+          (v) =>
+            v.vehicleUsage === 'LOGISTICS' ||
+            (v.vehicleCode && (v.vehicleCode.startsWith('TRX-') || v.vehicleCode.startsWith('PM-')))
+        );
+        const existingPlates = new Set(
+          vehicles.map((v) => (v.licensePlate || v.vehicleCode || '').toUpperCase())
+        );
+        for (const fb of TREXLA_FALLBACK_VEHICLES) {
+          const key = (fb.licensePlate || fb.vehicleCode || '').toUpperCase();
+          if (key && !existingPlates.has(key)) {
+            vehicles.push({ ...fb, isAssignedToMe: false });
+            existingPlates.add(key);
+          }
+        }
+      } else if (vehicles.length === 0) {
+        vehicles = TREXLA_FALLBACK_VEHICLES.map((v) => ({ ...v, isAssignedToMe: false }));
       }
 
       const activeDriverName = driver?.name || fallbackDriverName || signedInEmail || username || 'Driver';
@@ -559,14 +708,15 @@ export default function DriverAppLauncher() {
         localStorage.setItem('fleet360_driver_name', activeDriverName);
       }
 
-      // Check ONLY whether a vehicle is genuinely assigned to this driver in the database
-      const assignedVehicle =
-        vehicles.find(
-          (v) =>
-            (driver?.assignedVehicleId &&
-              (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)) ||
-            v.isAssignedToMe === true
-        ) || null;
+      // Strictly check ONLY whether a vehicle is genuinely assigned to this driver's profile in the database
+      const assignedVehicle = driver?.assignedVehicleId
+        ? vehicles.find(
+            (v) =>
+              v.id === driver?.assignedVehicleId ||
+              v.vehicleCode === driver?.assignedVehicleId ||
+              v.isAssignedToMe === true
+          ) || null
+        : null;
 
       setFleetVehicles(vehicles);
 
@@ -651,6 +801,16 @@ export default function DriverAppLauncher() {
   const doPasswordLogin = async () => {
     setPhase('authing');
     setErrorMsg(null);
+    setActiveVehicle(null);
+    setSelectedVehicle(null);
+    setHasAssignedVehicleOnProfile(false);
+    setCustomVehicleQuery('');
+    setOdometerInput('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('fleet360_active_vehicle');
+      localStorage.removeItem('fleet360_tracked_vehicle_id');
+      localStorage.removeItem('fleet360_session_token');
+    }
     const trimmedEmail = username.trim();
     if (!trimmedEmail || !password) {
       setErrorMsg('Please enter your Driver Email and Password.');
@@ -977,7 +1137,7 @@ export default function DriverAppLauncher() {
                 </select>
               </div>
 
-              {/* Blank Value Column to Enter Vehicle ID / Plate Manually */}
+              {/* Blank Value Column to Enter Vehicle ID / Plate Manually + Searchable Logistics Vehicle Dropdown */}
               {!selectedVehicle && (
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-1.5 flex items-center justify-between">
@@ -990,6 +1150,7 @@ export default function DriverAppLauncher() {
                   </label>
                   <input
                     type="text"
+                    list="logistics-vehicles-datalist"
                     required={!selectedVehicle}
                     placeholder={txt.customVehiclePlaceholder}
                     value={customVehicleQuery}
@@ -1003,34 +1164,80 @@ export default function DriverAppLauncher() {
                         const code = (v.vehicleCode || '').toLowerCase();
                         return plate === q || code === q || (compactQ.length >= 4 && plate.replace(/[^a-z0-9]/g, '') === compactQ);
                       });
-                      if (match?.odometerReading && !odometerInput) {
+                      if (match?.odometerReading) {
                         setOdometerInput(String(match.odometerReading));
                       }
                     }}
                     dir="ltr"
                     className="w-full rounded-xl border-2 border-violet-400 dark:border-violet-500/50 bg-slate-50 dark:bg-slate-950 px-4 py-3 font-mono text-base font-black uppercase text-slate-950 dark:text-white placeholder-slate-400 focus:border-violet-600 focus:outline-none text-left"
                   />
+                  <datalist id="logistics-vehicles-datalist">
+                    {fleetVehicles.map((v) => {
+                      const primary = v.licensePlate || v.vehicleCode || '';
+                      return (
+                        <option
+                          key={v.id}
+                          value={primary}
+                          label={`${v.vehicleCode || 'LOGISTICS'} — ${v.make || ''} ${v.model || ''}`}
+                        />
+                      );
+                    })}
+                  </datalist>
                   {fleetVehicles.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Available Plates:</span>
-                      {fleetVehicles.slice(0, 6).map((v) => {
-                        const label = v.licensePlate || v.vehicleCode || '';
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => {
-                              setCustomVehicleQuery(label);
-                              if (v.odometerReading) {
-                                setOdometerInput(String(v.odometerReading));
-                              }
-                            }}
-                            className="rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:border-violet-500 hover:text-violet-400 transition"
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
+                    <div className="mt-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-slate-950/90 p-2.5">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                          Logistics Vehicles ({fleetVehicles.length}) — Tap to Select:
+                        </span>
+                      </div>
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {fleetVehicles
+                          .filter((v) => {
+                            const q = customVehicleQuery.trim().toLowerCase();
+                            if (!q) return true;
+                            const plate = (v.licensePlate || '').toLowerCase();
+                            const code = (v.vehicleCode || '').toLowerCase();
+                            const model = `${v.make || ''} ${v.model || ''}`.toLowerCase();
+                            return plate.includes(q) || code.includes(q) || model.includes(q);
+                          })
+                          .map((v) => {
+                            const plateLabel = v.licensePlate || v.vehicleCode || '';
+                            const codeLabel = v.vehicleCode || 'LOGISTICS';
+                            const isMatched =
+                              customVehicleQuery.trim().toUpperCase() === plateLabel.toUpperCase() ||
+                              customVehicleQuery.trim().toUpperCase() === codeLabel.toUpperCase();
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVehicle(v);
+                                  setCustomVehicleQuery(plateLabel);
+                                  if (v.odometerReading) {
+                                    setOdometerInput(String(v.odometerReading));
+                                  }
+                                }}
+                                className={`w-full flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-left transition ${
+                                  isMatched
+                                    ? 'border-violet-500 bg-violet-600/20 text-white'
+                                    : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 hover:border-violet-500'
+                                }`}
+                              >
+                                <div>
+                                  <span className="font-mono text-xs font-black text-slate-950 dark:text-white">
+                                    {plateLabel}
+                                  </span>
+                                  <span className="ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                    {v.make} {v.model}
+                                  </span>
+                                </div>
+                                <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-violet-600 dark:text-violet-300">
+                                  {codeLabel}
+                                </span>
+                              </button>
+                            );
+                          })}
+                      </div>
                     </div>
                   )}
                 </div>

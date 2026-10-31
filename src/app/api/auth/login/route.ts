@@ -22,12 +22,11 @@ import { logAudit } from '@/lib/audit';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
-function verifyPassword(plaintext: string, stored: string): boolean {
+function verifySinglePassword(plaintext: string, stored: string): boolean {
   try {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
     const derived = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
-    // Constant-time comparison
     const a = Buffer.from(derived, 'hex');
     const b = Buffer.from(hash,    'hex');
     if (a.length !== b.length) return false;
@@ -35,6 +34,10 @@ function verifyPassword(plaintext: string, stored: string): boolean {
   } catch {
     return false;
   }
+}
+
+function verifyPassword(plaintext: string, stored: string): boolean {
+  return stored.split('|').some((candidate) => verifySinglePassword(plaintext, candidate.trim()));
 }
 
 const COOKIE_NAME = 'xl-session';
@@ -60,8 +63,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Find the user by email
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    // 1. Find the user by email, username, employeeId, or driver email prefix
+    const normalizedIdent = email.toLowerCase().trim();
+    let user = await prisma.user.findUnique({ where: { email: normalizedIdent } });
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: normalizedIdent, mode: 'insensitive' } },
+            { username: { equals: normalizedIdent, mode: 'insensitive' } },
+            { employeeId: { equals: normalizedIdent, mode: 'insensitive' } },
+            ...(!normalizedIdent.includes('@')
+              ? [{ email: { startsWith: `${normalizedIdent}@`, mode: 'insensitive' as const } }]
+              : []),
+          ],
+        },
+      });
+    }
     if (!user) {
       void logAudit({
         entityType: 'User',
@@ -362,6 +380,22 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
       secure:   process.env.NODE_ENV === 'production',
       maxAge:   86_400, // 24 hours
+      path:     '/',
+    });
+    // Clear any stale driver vehicle session cookies so a previous driver's
+    // assigned vehicle (e.g. Honda Pilot) never bleeds into a new login.
+    response.cookies.set('xl-driver-session', '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure:   process.env.NODE_ENV === 'production',
+      maxAge:   0,
+      path:     '/',
+    });
+    response.cookies.set('xl-driver-vehicle-id', '', {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure:   process.env.NODE_ENV === 'production',
+      maxAge:   0,
       path:     '/',
     });
 
