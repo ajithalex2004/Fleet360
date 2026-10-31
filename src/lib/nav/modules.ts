@@ -501,8 +501,9 @@ export const MODULES: ModuleDef[] = [
     href: '/mobile-apps',
     icon: AppWindow,
     subPages: [
-      { label: 'Booking App', href: '/m', icon: Smartphone },
       { label: 'PWA Gallery', href: '/mobile-apps', icon: AppWindow },
+      { label: 'Driver App', href: '/driver-app', icon: Truck },
+      { label: 'Booking App', href: '/m', icon: Smartphone },
       { label: 'STS Driver', href: '/bus-ops/driver', icon: BusFront },
       { label: 'STS Passenger', href: '/bus-ops/passenger', icon: UserCheck },
       { label: 'RAC Counter', href: '/rental/counter', icon: FileCheck },
