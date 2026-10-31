@@ -1639,16 +1639,28 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const activeJobByDriver = new Map<string, DrayageJob>();
   const tripsCountByDriver = new Map<string, number>();
 
+  const finishedDriverLegStatuses = new Set([
+    'COMPLETED',
+    'EMPTY_DEPOSITED',
+    'TRAILER_DETACHED',
+    'CONTAINER_DETACHED',
+    'REASSIGN_TRAILER_DETACHED',
+    'READY_FOR_PICKUP',
+    'CONTAINER_DROPPED',
+    'PENDING',
+    'CANCELLED',
+  ]);
   for (const j of jobs) {
+    const isDriverLegActive = !finishedDriverLegStatuses.has(j.status) && !j.trailerDetached;
     if (j.assignedVehicleId) {
       tripsCountByVehicle.set(j.assignedVehicleId, (tripsCountByVehicle.get(j.assignedVehicleId) || 0) + 1);
-      if (j.status !== 'COMPLETED') {
+      if (isDriverLegActive) {
         activeJobByVehicle.set(j.assignedVehicleId, j);
       }
     }
     if (j.assignedDriverId) {
       tripsCountByDriver.set(j.assignedDriverId, (tripsCountByDriver.get(j.assignedDriverId) || 0) + 1);
-      if (j.status !== 'COMPLETED') {
+      if (isDriverLegActive) {
         activeJobByDriver.set(j.assignedDriverId, j);
       }
     }
@@ -2143,10 +2155,28 @@ export async function assignDrayageJob(
   if (!job) throw new Error('Drayage job not found');
 
   const token = args.tokenNumber?.trim() || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
+  const prevStatus = String(job.status || '').toUpperCase();
+  const isReassignment =
+    Boolean(job.trailer_detached) ||
+    [
+      'PLACED_AT_YARD',
+      'PLACED_AT_RAMP',
+      'TRAILER_DETACHED',
+      'CONTAINER_DETACHED',
+      'REASSIGN_PLACED_AT_YARD',
+      'REASSIGN_PLACED_AT_RAMP',
+      'REASSIGN_TRAILER_DETACHED',
+      'READY_FOR_PICKUP',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'RE-ASSIGNED',
+    ].includes(prevStatus);
+  const nextAssignStatus = isReassignment ? 'RE-ASSIGNED' : 'ASSIGNED';
 
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
-        SET status = 'ASSIGNED',
+        SET status = $10,
+            trailer_detached = FALSE,
             assigned_vehicle_id = $3,
             assigned_vehicle_plate = $4,
             assigned_driver_id = $5,
@@ -2165,6 +2195,7 @@ export async function assignDrayageJob(
     args.trailerId,
     args.trailerPlate,
     token,
+    nextAssignStatus,
   );
 
   // Update trailer operational status

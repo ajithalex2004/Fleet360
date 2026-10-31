@@ -188,7 +188,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     suggested: 'Suggested:',
     step2Badge: 'Step 2 · Pre-Shift Assignment',
     vehiclePromptTitle: 'Enter Vehicle ID & Odometer',
-    vehiclePromptSubtitle: 'Confirm your vehicle and dashboard odometer reading before starting the Driver Checklist.',
+    vehiclePromptSubtitle: 'Confirm your vehicle and dashboard odometer reading to view your assigned jobs.',
     assignedVehicleLabel: 'Select Vehicle',
     assignedToProfile: '★ Assigned to Profile',
     noVehicleAssigned: 'No Vehicle Assigned',
@@ -198,8 +198,8 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     startingOdometerLabel: 'Starting Odometer (km) *',
     useLast: 'Use last:',
     odometerHint: 'Verify reading against the physical vehicle instrument cluster.',
-    confirmButton: 'Confirm & Start Driver Checklist',
-    startingChecklist: 'Starting Checklist…',
+    confirmButton: 'Confirm & View My Jobs',
+    startingChecklist: 'Opening My Jobs…',
     connectedVehicle: 'Connected Vehicle',
     switchVehicle: 'Switch',
     startReviewChecklist: 'Start / Review Driver Checklist',
@@ -523,7 +523,10 @@ export default function DriverAppLauncher() {
       let driver: { id?: string; name?: string; assignedVehicleId?: string | null } | null = null;
 
       try {
-        const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login?list=true'), { credentials: 'include' });
+        const token = typeof window !== 'undefined' ? localStorage.getItem('fleet360_session_token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login?list=true'), { credentials: 'include', headers });
         if (res.ok) {
           const data = await parseJsonSafely(res);
           if (data) {
@@ -734,9 +737,13 @@ export default function DriverAppLauncher() {
       let boundVehicle: FleetVehicle | null = selectedVehicle || matchedVehicleFromInput;
 
       // 1. Bind vehicle session and update vehicle odometer on backend
+      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('fleet360_session_token') : null;
+      const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (savedToken) reqHeaders['Authorization'] = `Bearer ${savedToken}`;
+
       const vehRes = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: reqHeaders,
         credentials: 'include',
         body: JSON.stringify({
           vehicleIdentifier: ident,
@@ -745,15 +752,6 @@ export default function DriverAppLauncher() {
         }),
       });
       const vehData = await parseJsonSafely(vehRes);
-
-      if (!vehRes.ok) {
-        setErrorMsg(
-          vehData?.error ||
-            `No vehicle found matching "${ident}". Please check your Vehicle ID or Plate Number.`
-        );
-        setIsStartingChecklist(false);
-        return;
-      }
 
       if (vehData?.sessionToken && typeof window !== 'undefined') {
         localStorage.setItem('fleet360_session_token', vehData.sessionToken);
@@ -807,7 +805,7 @@ export default function DriverAppLauncher() {
       }
 
       // 5. Immediately transition to Driver Checklist!
-      router.push('/driver-app/shift-checklist');
+      router.push('/driver-app/today');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to initialize shift');
       setIsStartingChecklist(false);

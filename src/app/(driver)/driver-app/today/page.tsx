@@ -1,84 +1,34 @@
+'use client';
+
 /**
  * src/app/(driver)/driver-app/today/page.tsx
  *
- * Driver's home screen — the first thing they see after login.
- *
- * Features:
- *   - Current trip assignments and roster (server-live, with an
- *     offline-cache fallback when the network is unavailable)
- *   - Full LogiXL-Connect Drayage Driver App parity:
- *     * Active Jobs vs. History tabs with L2-first job prioritization
- *     * Complete L1 / L2 / Reassign step-by-step workflow
- *     * ISO 6346 Container & Bolt Seal Number Scanner + Check-Digit Verification
- *     * Sign-on-Glass ePOD Receiver Signature Capture (FCL_DELIVERED / MT_DELIVERED)
- *     * Customs / Port Inspection Photo & PDF Document Upload
- *     * In-App Dispatcher <-> Driver Chat (Dispatch & Gate Chat)
- *   - Continuous driving CBA compliance watcher
- *   - 🚨 SOS Emergency Panic Button (Critical dispatch to operations)
- *   - 📡 Real-Time Live Location Sharing (10s telemetry pings)
- *   - 🚚 Non-Revenue Movement (NRM / Deadhead) Toggle & Ops Notification
- *   - ⚡ Geofence auto-lifecycle: auto-starts/ends a trip when the
- *     vehicle leaves the origin / enters the destination geofence,
- *     for the "driver forgot to tap Start/End" case
- *   - Timing-aware Start/End button + per-trip driving score badge
+ * Simplified LogiXL-Connect Driver App Experience:
+ * - Dashboard ("My Jobs") with Active Jobs & History tabs
+ * - Single Next-Action Job Detail View (L1, L2, and Reassignment workflows)
+ * - Direct Google Maps Turn-by-Turn Navigation for Pickup & Dropoff
+ * - 1-Tap ETC Selection Modal (1 Hr / 2 Hrs / 3 Hrs / 4 Hrs) for Placed @ Ramp
+ * - Inspection Photo / Document Attachment during Under Inspection
  */
 
-'use client';
-
-import React, { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { getAllTrips, putTrips, type OfflineTrip } from '@/lib/driver-offline/db';
-import { syncSummary, forceDrain } from '@/lib/driver-offline/sync';
-import { BackButton } from '@/components/driver-app/BackButton';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  ContainerScannerModal,
-  SignaturePadModal,
-  DrayageDispatchChatModal,
-  InspectionEvidenceModal,
-  type DrayageChatMessage,
-  type VerifiedContainerScan,
-  type CapturedEpodSignature,
-} from '@/components/driver-app/DrayageDriverModals';
-import { ALERT_LEVEL_META } from '@/lib/driver-offline/continuous-driving-watcher';
-import { useContinuousDriving } from '@/hooks/useContinuousDriving';
-import { getCurrentShift } from '@/lib/driver-session-client';
-import { getApiEndpoint } from '@/lib/api-endpoint';
-import {
-  startButtonState,
-  timingChipClass,
-  type TripStatus,
-  type StartButtonState,
-} from '@/lib/trip-state';
-import {
-  createAutoLifecycle,
-  type AutoLifecycleHandle,
-  type LatLng,
-  haversineMeters,
-} from '@/lib/driver-offline/auto-lifecycle';
-import {
-  AlertTriangle,
-  Radio,
-  Truck,
-  RotateCcw,
-  X,
-  CheckCircle2,
-  MapPin,
-  Clock,
-  Zap,
-  Flame,
+  ArrowLeft,
   Camera,
-  Check,
-  ArrowRight,
-  Anchor,
-  Timer,
-  Key,
-  ShieldCheck,
-  PenTool,
-  MessageSquare,
+  CheckCircle2,
+  Clock,
   FileText,
+  LogOut,
+  MapPin,
+  Navigation,
+  RefreshCw,
+  Truck,
+  X,
 } from 'lucide-react';
+import { getApiEndpoint } from '@/lib/api-endpoint';
 
-export interface DrayageGeofenceBoundary {
+interface GeofenceTarget {
   name: string;
   type: 'CIRCLE' | 'POLYGON';
   lat: number;
@@ -87,2359 +37,1112 @@ export interface DrayageGeofenceBoundary {
   coordinates?: Array<{ lat: number; lng: number }>;
 }
 
-export interface DriverDrayageJob {
+interface DrayageAssignment {
   id: string;
   jobCode: string;
-  jobPhase: 'L1' | 'L2' | string;
-  shipmentType: 'IMPORT' | 'EXPORT' | string;
+  jobPhase: 'L1' | 'L2';
+  shipmentType: 'IMPORT' | 'EXPORT';
   status: string;
-  priority: 'STANDARD' | 'HIGH' | 'URGENT' | string;
+  priority: string;
   customerName?: string | null;
   containerNumber: string;
   containerSize: string;
   containerType: string;
-  warehouseName: string;
   terminalName: string;
+  warehouseName: string;
+  tokenNumber?: string | null;
+  pcsTokenNumber?: string | null;
+  assignedDriverId?: string | null;
+  assignedDriverName?: string | null;
   assignedVehiclePlate: string | null;
   assignedTrailerPlate: string | null;
-  placementLocation: 'RAMP' | 'YARD' | null;
+  placementLocation: string | null;
   trailerDetached: boolean;
   etcTime: string | null;
   etcAlertStatus: string;
-  rateAmountAed: number;
-  driverAllowanceAed: number;
-  notes: string | null;
-  tokenNumber?: string | null;
-  pcsTokenNumber?: string | null;
-  pcsSlotStart?: string | null;
-  pcsSlotEnd?: string | null;
-  customsInspection?: boolean;
-  inspectionStatus?: string | null;
-  doStatus?: string | null;
-  podSignatureName?: string | null;
-  podSignedAt?: string | null;
+  rateAmountAed?: number;
+  driverAllowanceAed?: number;
+  notes?: string | null;
   podPhotoUrl?: string | null;
-  verifiedScan?: VerifiedContainerScan | null;
-  messages?: DrayageChatMessage[];
-  terminalGeofence?: DrayageGeofenceBoundary | null;
-  warehouseGeofence?: DrayageGeofenceBoundary | null;
+  terminalGeofence?: GeofenceTarget;
+  warehouseGeofence?: GeofenceTarget;
+  updatedAt?: string | null;
 }
 
-const DEFAULT_DRAYAGE_JOBS: DriverDrayageJob[] = [
-  {
-    id: 'dray-job-trx-001',
-    jobCode: 'DRY-2026-0411',
-    jobPhase: 'L1',
-    shipmentType: 'IMPORT',
-    status: 'IN_TRANSIT',
-    priority: 'URGENT',
-    customerName: 'Al Futtaim Retail & Logistics',
-    containerNumber: 'MSCU8492011',
-    containerSize: '40FT_HC',
-    containerType: 'DRY',
-    warehouseName: 'Al Futtaim Logistics Hub — JAFZA South Ramp B4',
-    terminalName: 'DP World Jebel Ali — Terminal 2 (T2)',
-    assignedVehiclePlate: 'DXB-767-4011',
-    assignedTrailerPlate: 'DXB-TR-9901',
-    placementLocation: null,
-    trailerDetached: false,
-    etcTime: null,
-    etcAlertStatus: 'ON_TIME',
-    rateAmountAed: 950,
-    driverAllowanceAed: 120,
-    notes: 'Priority FCL delivery — Place at Ramp B4 and set ETC countdown.',
-    tokenNumber: 'DT-PCS-884920',
-    pcsTokenNumber: 'DT-PCS-884920',
-    pcsSlotStart: '09:00',
-    pcsSlotEnd: '12:00',
-    customsInspection: true,
-    inspectionStatus: 'CLEARED',
-    doStatus: 'RELEASED',
-    messages: [
-      {
-        id: 'msg-init-1',
-        senderRole: 'DISPATCHER',
-        senderName: 'Trexla Control Desk',
-        message: 'Gate token DT-PCS-884920 active for T2 Lane 4. Proceed to Al Futtaim Ramp B4 after customs clearance.',
-        isUrgent: false,
-        createdAt: new Date(Date.now() - 1800000).toISOString(),
-      },
-    ],
-    terminalGeofence: {
-      name: 'DP World Jebel Ali Terminal 2',
-      type: 'CIRCLE',
-      lat: 24.9965,
-      lng: 55.0608,
-      radiusMeters: 900,
-    },
-    warehouseGeofence: {
-      name: 'Al Futtaim Logistics Hub JAFZA South',
-      type: 'CIRCLE',
-      lat: 24.9612,
-      lng: 55.0885,
-      radiusMeters: 600,
-    },
-  },
-  {
-    id: 'dray-job-trx-002',
-    jobCode: 'DRY-2026-0412',
-    jobPhase: 'L2',
-    shipmentType: 'IMPORT',
-    status: 'ACCEPTED',
-    priority: 'HIGH',
-    customerName: 'Landmark Logistics Distribution',
-    containerNumber: 'CMAU4410923',
-    containerSize: '20FT',
-    containerType: 'DRY',
-    warehouseName: 'Danube Building Materials Yard — TechnoPark',
-    terminalName: 'DP World Jebel Ali — Terminal 1 (T1)',
-    assignedVehiclePlate: 'DXB-767-4011',
-    assignedTrailerPlate: 'DXB-TR-9902',
-    placementLocation: null,
-    trailerDetached: false,
-    etcTime: null,
-    etcAlertStatus: 'ON_TIME',
-    rateAmountAed: 780,
-    driverAllowanceAed: 100,
-    notes: 'L2 Empty Container Return — Gate appointment confirmed via Dubai Trade PCS.',
-    tokenNumber: 'DT-PCS-884955',
-    pcsTokenNumber: 'DT-PCS-884955',
-    pcsSlotStart: '13:00',
-    pcsSlotEnd: '15:00',
-    customsInspection: false,
-    inspectionStatus: 'CLEARED',
-    doStatus: 'RELEASED',
-    messages: [],
-    terminalGeofence: {
-      name: 'DP World Jebel Ali Terminal 1',
-      type: 'CIRCLE',
-      lat: 24.9854,
-      lng: 55.0272,
-      radiusMeters: 900,
-    },
-    warehouseGeofence: {
-      name: 'Danube Building Materials Yard',
-      type: 'CIRCLE',
-      lat: 24.9420,
-      lng: 55.0950,
-      radiusMeters: 600,
-    },
-  },
-];
+interface NextStepMeta {
+  nextStatus: string;
+  label: string;
+  description: string;
+  color: string;
+  isDualChoice?: boolean;
+  isReassign?: boolean;
+}
 
-function isPointInsideGeofence(
-  pos: LatLng,
-  gf?: DrayageGeofenceBoundary | null,
-): boolean {
-  if (!pos || !gf) return false;
+// Terminal statuses where the driver's leg is finished and the job moves to History
+const HISTORY_STATUSES = new Set([
+  'COMPLETED',
+  'EMPTY_DEPOSITED',
+  'TRAILER_DETACHED',
+  'CONTAINER_DETACHED',
+  'REASSIGN_TRAILER_DETACHED',
+  'READY_FOR_PICKUP',
+  'CONTAINER_DROPPED',
+]);
 
-  // Polygon check using ray-casting algorithm
-  if (gf.type === 'POLYGON' && gf.coordinates && gf.coordinates.length >= 3) {
-    const x = pos.lng, y = pos.lat;
-    let inside = false;
-    const vs = gf.coordinates;
-    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-      const xi = vs[i].lng, yi = vs[i].lat;
-      const xj = vs[j].lng, yj = vs[j].lat;
-      const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
-      if (intersect) inside = !inside;
+/**
+ * Exact LogiXL-Connect Single Next-Action State Machine
+ * Matches LogiXL-Connect/mobile/src/screens/JobDetailScreen.js (getNextStep)
+ */
+function getNextStep(job: DrayageAssignment): NextStepMeta | null {
+  const status = (job.status || 'ASSIGNED').toUpperCase();
+  const isL2 = job.jobPhase === 'L2' || (job.jobCode && job.jobCode.includes('-L2'));
+  const isReassign =
+    status === 'RE-ASSIGNED' ||
+    status === 'FCL_REASSIGN' ||
+    status === 'MT_REASSIGN' ||
+    status === 'TRAILER_ATTACHED' ||
+    status === 'REASSIGN_PLACED_AT_RAMP' ||
+    status === 'REASSIGN_PLACED_AT_YARD';
+
+  if (HISTORY_STATUSES.has(status)) {
+    return null;
+  }
+
+  // 1. Reassignment Workflow (Yard <-> Ramp / Reassigned Trailer)
+  if (isReassign) {
+    switch (status) {
+      case 'RE-ASSIGNED':
+      case 'FCL_REASSIGN':
+      case 'MT_REASSIGN':
+        return {
+          nextStatus: 'TRAILER_ATTACHED',
+          label: 'Trailer Attached',
+          description: 'Confirm trailer is coupled to your tractor to begin moving container',
+          color: '#2563eb',
+          isReassign: true,
+        };
+      case 'TRAILER_ATTACHED':
+        return {
+          nextStatus: 'REASSIGN_PLACED',
+          label: 'Select Placement',
+          description: 'Choose whether container is placed at Yard or Ramp',
+          color: '#f59e0b',
+          isDualChoice: true,
+          isReassign: true,
+        };
+      case 'REASSIGN_PLACED_AT_RAMP':
+        return {
+          nextStatus: 'REASSIGN_TRAILER_DETACHED',
+          label: 'Trailer Detached',
+          description: 'Confirm trailer is uncoupled at the ramp to finish your job',
+          color: '#7c3aed',
+          isReassign: true,
+        };
+      case 'REASSIGN_PLACED_AT_YARD':
+        return {
+          nextStatus: 'READY_FOR_PICKUP',
+          label: 'Ready for Pickup',
+          description: 'Confirm container is positioned in yard and ready for pickup',
+          color: '#10b981',
+          isReassign: true,
+        };
+      default:
+        return null;
     }
-    if (inside) return true;
   }
 
-  // Radial / Circle check (using Haversine)
-  const dist = haversineMeters(pos, { lat: gf.lat, lng: gf.lng });
-  return dist <= (gf.radiusMeters || 1000);
-}
-
-interface ServerTrip {
-  id: string;
-  status: string;
-  departureTime: string;
-  arrivalTime: string;
-  direction: string | null;
-  tripNumber: string | null;
-  routeId: string;
-  routeName: string | null;
-  vehiclePlate: string | null;
-  capacity: number | null;
-  confirmedCount: number | null;
-  actualDepartureAt: string | null;
-  actualArrivalAt: string | null;
-  startedByDriverId: string | null;
-  endedByDriverId: string | null;
-  lateMinutes: number | null;
-  durationMinutes: number | null;
-  score: {
-    score: number;
-    harshBrake: number;
-    harshAccel: number;
-    speeding: number;
-    idleMinutes: number;
-  };
-  eventCount: number;
-}
-
-/** A single geocoded stop, as returned by /api/driver-app/trips/[id]/geofences. */
-interface GeofencePoint extends LatLng {
-  radiusM: number;
-  name: string | null;
-}
-
-interface GeofenceInfo {
-  origin: GeofencePoint;
-  destination: GeofencePoint;
-}
-
-const KNOWN_OFFLINE_STATUSES: readonly OfflineTrip['status'][] = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
-function isKnownTripStatus(s: string): s is OfflineTrip['status'] {
-  return (KNOWN_OFFLINE_STATUSES as readonly string[]).includes(s);
-}
-
-function scoreColor(score: number | null): { bg: string; text: string; ring: string; label: string } {
-  if (score == null) {
-    return { bg: 'bg-slate-500/15', text: 'text-slate-300', ring: 'ring-slate-500/30', label: '—' };
+  // 2. Leg 2 (L2 Empty Return: Warehouse -> Port Terminal)
+  if (isL2) {
+    switch (status) {
+      case 'ASSIGNED':
+      case 'PENDING':
+        return {
+          nextStatus: 'CONTAINER_PICKED',
+          label: 'Container Picked',
+          description: 'Confirm empty container is picked up from customer warehouse',
+          color: '#2563eb',
+        };
+      case 'CONTAINER_PICKED':
+        return {
+          nextStatus: 'EN_ROUTE_TERMINAL',
+          label: 'En Route to Terminal',
+          description: 'Start transit back to the port terminal',
+          color: '#0891b2',
+        };
+      case 'EN_ROUTE_TERMINAL':
+      case 'IN_TRANSIT':
+      case 'EMPTY_AT_PORT':
+        return {
+          nextStatus: 'ARRIVED_AT_PORT',
+          label: 'Arrived at Port',
+          description: 'Confirm arrival at the port terminal gate',
+          color: '#f59e0b',
+        };
+      case 'ARRIVED_AT_PORT':
+      case 'AT_PORT':
+        return {
+          nextStatus: 'UNDER_INSPECTION',
+          label: 'Under Inspection',
+          description: 'Container is undergoing port gate inspection',
+          color: '#7c3aed',
+        };
+      case 'UNDER_INSPECTION':
+        return {
+          nextStatus: 'CONTAINER_DROPPED',
+          label: 'Container Dropped',
+          description: 'Confirm empty container is dropped off at port terminal',
+          color: '#10b981',
+        };
+      default:
+        return null;
+    }
   }
-  if (score >= 80) return { bg: 'bg-emerald-500/15', text: 'text-emerald-300', ring: 'ring-emerald-500/30', label: String(score) };
-  if (score >= 60) return { bg: 'bg-amber-500/15',   text: 'text-amber-300',   ring: 'ring-amber-500/30',   label: String(score) };
-  return                     { bg: 'bg-rose-500/15',   text: 'text-rose-300',    ring: 'ring-rose-500/30',    label: String(score) };
-}
 
-function statusBadge(status: string): { bg: string; text: string; label: string } {
+  // 3. Leg 1 (L1 Full Container Delivery: Port Terminal -> Warehouse)
   switch (status) {
-    case 'COMPLETED':   return { bg: 'bg-emerald-500/15', text: 'text-emerald-300', label: 'Completed' };
-    case 'IN_PROGRESS': return { bg: 'bg-amber-500/15',   text: 'text-amber-300',   label: 'In progress' };
-    case 'CANCELLED':   return { bg: 'bg-rose-500/15',    text: 'text-rose-300',    label: 'Cancelled' };
-    case 'AUTO_CLOSED': return { bg: 'bg-slate-500/15',   text: 'text-slate-300',   label: 'Auto-closed' };
-    case 'SCHEDULED':   return { bg: 'bg-sky-500/15',     text: 'text-sky-300',     label: 'Scheduled' };
-    default:            return { bg: 'bg-slate-500/15',   text: 'text-slate-300',   label: status };
+    case 'ASSIGNED':
+    case 'PENDING':
+      return {
+        nextStatus: 'ACCEPTED',
+        label: 'Job Accepted',
+        description: 'Accept this job to start the container pickup process',
+        color: '#2563eb',
+      };
+    case 'ACCEPTED':
+      return {
+        nextStatus: 'CONTAINER_PICKED',
+        label: 'Container Picked',
+        description: 'Confirm container has been picked up at the port terminal',
+        color: '#0891b2',
+      };
+    case 'CONTAINER_PICKED':
+    case 'AT_PORT':
+      return {
+        nextStatus: 'UNDER_INSPECTION',
+        label: 'Under Inspection',
+        description: 'Container is under customs/port inspection (attach photos if required)',
+        color: '#7c3aed',
+      };
+    case 'UNDER_INSPECTION':
+      return {
+        nextStatus: 'EN_ROUTE_WAREHOUSE',
+        label: 'En Route to WareHouse',
+        description: 'Inspection complete — depart port en route to customer warehouse',
+        color: '#f59e0b',
+      };
+    case 'EN_ROUTE_WAREHOUSE':
+    case 'IN_TRANSIT':
+    case 'LOADED':
+      return {
+        nextStatus: 'PLACED',
+        label: 'Select Placement',
+        description: 'Arrived at warehouse — choose Placed @ Yard or Placed @ Ramp',
+        color: '#10b981',
+        isDualChoice: true,
+      };
+    case 'PLACED_AT_RAMP':
+    case 'PLACED_AT_YARD':
+      return {
+        nextStatus: 'TRAILER_DETACHED',
+        label: 'Trailer Detached',
+        description: 'Confirm trailer is detached to complete this job',
+        color: '#10b981',
+      };
+    default:
+      return null;
   }
 }
 
-/** Best-effort one-shot GPS. Returns null silently on failure. */
-function captureLocationAsync(timeoutMs: number): Promise<{ lat: number; lng: number; accuracyM: number } | null> {
-  if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracyM: pos.coords.accuracy,
-      }),
-      () => resolve(null),
-      { timeout: timeoutMs, maximumAge: 5000, enableHighAccuracy: true },
-    );
-  });
+function getStatusBadgeStyle(status: string): { bg: string; text: string; label: string } {
+  const s = (status || 'ASSIGNED').toUpperCase();
+  switch (s) {
+    case 'ASSIGNED':
+      return { bg: 'bg-amber-100 border-amber-300', text: 'text-amber-800', label: 'ASSIGNED' };
+    case 'RE-ASSIGNED':
+    case 'FCL_REASSIGN':
+    case 'MT_REASSIGN':
+      return { bg: 'bg-orange-100 border-orange-300', text: 'text-orange-800', label: 'RE-ASSIGNED' };
+    case 'ACCEPTED':
+      return { bg: 'bg-blue-100 border-blue-300', text: 'text-blue-800', label: 'ACCEPTED' };
+    case 'CONTAINER_PICKED':
+    case 'TRAILER_ATTACHED':
+      return { bg: 'bg-cyan-100 border-cyan-300', text: 'text-cyan-800', label: s.replace(/_/g, ' ') };
+    case 'UNDER_INSPECTION':
+      return { bg: 'bg-purple-100 border-purple-300', text: 'text-purple-800', label: 'UNDER INSPECTION' };
+    case 'EN_ROUTE_WAREHOUSE':
+    case 'EN_ROUTE_TERMINAL':
+    case 'IN_TRANSIT':
+      return { bg: 'bg-indigo-100 border-indigo-300', text: 'text-indigo-800', label: s.replace(/_/g, ' ') };
+    case 'PLACED_AT_RAMP':
+    case 'REASSIGN_PLACED_AT_RAMP':
+      return { bg: 'bg-emerald-100 border-emerald-300', text: 'text-emerald-800', label: 'PLACED @ RAMP' };
+    case 'PLACED_AT_YARD':
+    case 'REASSIGN_PLACED_AT_YARD':
+      return { bg: 'bg-amber-100 border-amber-300', text: 'text-amber-800', label: 'PLACED @ YARD' };
+    case 'TRAILER_DETACHED':
+    case 'CONTAINER_DETACHED':
+    case 'REASSIGN_TRAILER_DETACHED':
+    case 'READY_FOR_PICKUP':
+    case 'CONTAINER_DROPPED':
+    case 'COMPLETED':
+    case 'EMPTY_DEPOSITED':
+      return { bg: 'bg-emerald-100 border-emerald-300', text: 'text-emerald-800', label: 'COMPLETED' };
+    default:
+      return { bg: 'bg-slate-100 border-slate-300', text: 'text-slate-700', label: s.replace(/_/g, ' ') };
+  }
 }
 
-function formatH(ms: number): string {
-  const mins = Math.max(0, Math.round(ms / 60000));
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h ${m}m`;
+function getPickupAndDropoff(job: DrayageAssignment) {
+  const isL2 = job.jobPhase === 'L2' || (job.jobCode && job.jobCode.includes('-L2'));
+  const isReassign = [
+    'RE-ASSIGNED',
+    'FCL_REASSIGN',
+    'MT_REASSIGN',
+    'TRAILER_ATTACHED',
+    'REASSIGN_PLACED_AT_RAMP',
+    'REASSIGN_PLACED_AT_YARD',
+    'REASSIGN_TRAILER_DETACHED',
+    'READY_FOR_PICKUP',
+  ].includes((job.status || '').toUpperCase());
+
+  if (isReassign) {
+    return {
+      pickupName: `${job.warehouseName || 'Client Yard'} (Yard)`,
+      pickupLat: job.warehouseGeofence?.lat ?? null,
+      pickupLng: job.warehouseGeofence?.lng ?? null,
+      dropoffName: `${job.warehouseName || 'Client Warehouse'} (Ramp)`,
+      dropoffLat: job.warehouseGeofence?.lat ?? null,
+      dropoffLng: job.warehouseGeofence?.lng ?? null,
+    };
+  }
+
+  if (isL2) {
+    return {
+      pickupName: job.warehouseName || 'Customer Warehouse',
+      pickupLat: job.warehouseGeofence?.lat ?? null,
+      pickupLng: job.warehouseGeofence?.lng ?? null,
+      dropoffName: job.terminalName || 'Port Terminal',
+      dropoffLat: job.terminalGeofence?.lat ?? null,
+      dropoffLng: job.terminalGeofence?.lng ?? null,
+    };
+  }
+
+  return {
+    pickupName: job.terminalName || 'Port Terminal',
+    pickupLat: job.terminalGeofence?.lat ?? null,
+    pickupLng: job.terminalGeofence?.lng ?? null,
+    dropoffName: job.warehouseName || 'Customer Warehouse',
+    dropoffLat: job.warehouseGeofence?.lat ?? null,
+    dropoffLng: job.warehouseGeofence?.lng ?? null,
+  };
+}
+
+function openGoogleMapsNavigation(
+  locationName: string,
+  lat?: number | null,
+  lng?: number | null,
+) {
+  let destination = '';
+  if (lat != null && lng != null && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lng))) {
+    destination = `${lat},${lng}`;
+  } else if (locationName) {
+    destination = encodeURIComponent(`${locationName}, UAE`);
+  } else {
+    return;
+  }
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
+  if (typeof window !== 'undefined') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 export default function DriverTodayPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950 p-6 text-white">Loading today...</div>}>
-      <DriverTodayContent />
-    </Suspense>
-  );
-}
-
-function DriverTodayContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [offlineTrips, setOfflineTrips] = useState<OfflineTrip[] | null>(null);
-  const [serverTrips, setServerTrips] = useState<ServerTrip[] | null>(null);
-  const [drayageJobs, setDrayageJobs] = useState<DriverDrayageJob[] | null>(null);
-  const [drayageViewMode, setDrayageViewMode] = useState<'active' | 'history'>('active');
-  const [selectedRampJob, setSelectedRampJob] = useState<DriverDrayageJob | null>(null);
-  const [scannerJob, setScannerJob] = useState<DriverDrayageJob | null>(null);
-  const [epodJob, setEpodJob] = useState<{ job: DriverDrayageJob; targetStatus?: string } | null>(null);
-  const [chatJob, setChatJob] = useState<DriverDrayageJob | null>(null);
-  const [inspectionJob, setInspectionJob] = useState<DriverDrayageJob | null>(null);
-  const [submittingRamp, setSubmittingRamp] = useState<boolean>(false);
-  const [rampBanner, setRampBanner] = useState<string | null>(null);
-  const [driverGps, setDriverGps] = useState<LatLng | null>(null);
-  const firedTerminalGfRef = useRef<Set<string>>(new Set());
-  const firedWarehouseGfRef = useRef<Set<string>>(new Set());
-  const [sync, setSync] = useState<{ queued: number; failed: number } | null>(null);
-  const [syncingNow, setSyncingNow] = useState(false);
-  const [now, setNow] = useState<Date>(() => new Date());
-  const [pending, setPending] = useState<Set<string>>(new Set());
-  const [autoToasts, setAutoToasts] = useState<Array<{ id: string; tripId: string; text: string; at: number }>>([]);
-  const [geofenceMeta, setGeofenceMeta] = useState<Record<string, { armed: boolean; destinationName: string | null }>>({});
-  const [dvirBanner, setDvirBanner] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<DrayageAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 1. Live Location Sharing State
-  const [liveLocationActive, setLiveLocationActive] = useState<boolean>(true);
-  const [lastLocationPing, setLastLocationPing] = useState<string | null>(null);
+  // Ramp ETC selection modal state (LogiXL-Connect 1 Hr / 2 Hrs / 3 Hrs / 4 Hrs modal)
+  const [showEtcModal, setShowEtcModal] = useState(false);
+  const [pendingRampStatus, setPendingRampStatus] = useState<string>('PLACED_AT_RAMP');
 
-  // 2. SOS Emergency State
-  const [showSosModal, setShowSosModal] = useState<boolean>(false);
-  const [sosSending, setSosSending] = useState<boolean>(false);
-  const [sosSentNotice, setSosSentNotice] = useState<string | null>(null);
+  // Inspection photo / attachment state
+  const [attachedDocs, setAttachedDocs] = useState<Record<string, string[]>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 3. NRM (Non-Revenue Movement) State
-  const [showNrmModal, setShowNrmModal] = useState<boolean>(false);
-  const [activeNrm, setActiveNrm] = useState<{ reason: string; startedAt: string } | null>(null);
-  const [nrmFeedback, setNrmFeedback] = useState<string | null>(null);
+  // Driver & Vehicle session info from localStorage
+  const [driverName, setDriverName] = useState('Driver');
+  const [vehiclePlate, setVehiclePlate] = useState<string | null>(null);
 
-  // 4. Geofence auto-lifecycle watchers, one per SCHEDULED/IN_PROGRESS trip
-  const autoWatchersRef = useRef<Map<string, AutoLifecycleHandle>>(new Map());
-  const geofenceCacheRef = useRef<Map<string, GeofenceInfo>>(new Map());
-  const geofenceCheckedRef = useRef<Set<string>>(new Set());
-  const tenantIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedName = localStorage.getItem('fleet360_driver_name');
+    const savedEmail = localStorage.getItem('fleet360_driver_email');
+    if (savedName) setDriverName(savedName);
+    else if (savedEmail) setDriverName(savedEmail);
 
-  // Continuous-driving watcher
-  const driving = useContinuousDriving();
-
-  // Load offline DB
-  const refresh = useCallback(async () => {
     try {
-      const [trips, s] = await Promise.all([getAllTrips(), syncSummary()]);
-      setOfflineTrips(trips);
-      setSync(s);
-    } catch {
-      // IndexedDB unavailable in SSR/private browsing
+      const rawVeh = localStorage.getItem('fleet360_active_vehicle');
+      if (rawVeh) {
+        const parsed = JSON.parse(rawVeh);
+        setVehiclePlate(parsed.licensePlate || parsed.vehicleCode || null);
+      }
+    } catch {}
+  }, []);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 4000);
+  }, []);
+
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('fleet360_session_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
     }
+    return headers;
   }, []);
 
-  // Fetch online roster
-  const fetchRoster = useCallback(async () => {
-    try {
-      const r = await fetch(getApiEndpoint('/api/driver-app/today/assignments'), { credentials: 'include' });
-      if (!r.ok) {
-        setDrayageJobs((prev) => (prev && prev.length > 0 ? prev : DEFAULT_DRAYAGE_JOBS));
-        return;
-      }
-      const data = await r.json();
-      if (Array.isArray(data.trips)) {
-        setServerTrips(data.trips);
-      }
-      if (Array.isArray(data.drayageJobs) && data.drayageJobs.length > 0) {
-        setDrayageJobs(data.drayageJobs);
-      } else {
-        setDrayageJobs((prev) => (prev && prev.length > 0 ? prev : DEFAULT_DRAYAGE_JOBS));
-      }
-    } catch {
-      // Offline / APK fallback
-      setDrayageJobs((prev) => (prev && prev.length > 0 ? prev : DEFAULT_DRAYAGE_JOBS));
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-    void fetchRoster();
-  }, [refresh, fetchRoster]);
-
-  // A DVIR submission deep-links back here as ?dvir=<id> (see dvirs/new/page.tsx).
-  // Surface a confirmation banner once, then strip the query param.
-  useEffect(() => {
-    const dvirId = searchParams?.get('dvir');
-    if (!dvirId) return;
-    setDvirBanner('Pre/post-trip inspection submitted — queued for sync.');
-    router.replace('/driver-app/today');
-    const t = setTimeout(() => setDvirBanner(null), 6000);
-    return () => clearTimeout(t);
-  }, [searchParams, router]);
-
-  // Keep "now" fresh
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Periodic Background Live Location Broadcaster (every 12 seconds when active)
-  useEffect(() => {
-    if (!liveLocationActive) return;
-
-    const streamLocation = async () => {
-      const loc = await captureLocationAsync(4000);
-      if (!loc) return;
-
-      const activeTrip = serverTrips?.find((t) => t.status === 'IN_PROGRESS');
-      const plate = activeTrip?.vehiclePlate || 'DXB-767-4011';
-
+  const fetchDriverJobs = useCallback(
+    async (silent = false) => {
+      if (!silent) setRefreshing(true);
       try {
-        await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lat: loc.lat,
-            lng: loc.lng,
-            accuracy: loc.accuracyM,
-            vehiclePlate: plate,
-          }),
+        const res = await fetch(getApiEndpoint('/api/driver-app/today/assignments'), {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+          cache: 'no-store',
         });
-        setLastLocationPing(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-        void evaluateDrayageGeofences({ lat: loc.lat, lng: loc.lng });
-      } catch {
-        // Silent
-      }
-    };
-
-    void streamLocation();
-    const interval = setInterval(streamLocation, 12_000);
-    return () => clearInterval(interval);
-  }, [liveLocationActive, serverTrips]);
-
-  // Lifecycle action: tap Start or End on a trip (also called by the
-  // geofence auto-lifecycle watcher below when it detects the vehicle
-  // has left the origin / entered the destination).
-  const handleLifecycle = useCallback(async (tripId: string, action: 'START' | 'END') => {
-    if (pending.has(tripId)) return;
-    setPending((p) => new Set(p).add(tripId));
-    try {
-      const loc = await captureLocationAsync(3000).catch(() => null);
-      const r = await fetch(getApiEndpoint(`/api/driver-app/trips/${tripId}/${action.toLowerCase()}`), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loc ?? {}),
-      });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        const reason = body.reason ?? body.error ?? `Failed (${r.status})`;
-        window.alert(reason);
-        return;
-      }
-      await fetchRoster();
-    } finally {
-      setPending((p) => {
-        const n = new Set(p);
-        n.delete(tripId);
-        return n;
-      });
-    }
-  }, [pending, fetchRoster]);
-
-  const cacheTripsOffline = useCallback(async (trips: ServerTrip[]) => {
-    try {
-      if (!tenantIdRef.current) {
-        const ctx = await getCurrentShift();
-        tenantIdRef.current = ctx?.tenantId ?? null;
-      }
-      if (!tenantIdRef.current) return;
-
-      const toCache: OfflineTrip[] = trips
-        .filter((t) => isKnownTripStatus((t.status || '').toUpperCase()))
-        .map((t) => {
-          const status = (t.status || '').toUpperCase();
-          const geo = geofenceCacheRef.current.get(t.id);
-          return {
-            id: t.id,
-            tenantId: tenantIdRef.current as string,
-            routeName: t.routeName || 'Assigned Route',
-            origin: geo?.origin.name || 'Origin',
-            destination: geo?.destination.name || 'Destination',
-            scheduledDeparture: t.departureTime,
-            scheduledArrival: t.arrivalTime,
-            vehicleId: null,
-            vehiclePlate: t.vehiclePlate,
-            status: (isKnownTripStatus(status) ? status : 'SCHEDULED'),
-            stops: geo ? [
-              { id: 'origin', sequence: 0, name: geo.origin.name || 'Origin', lat: geo.origin.lat, lng: geo.origin.lng, estimatedArrival: null, arrivedAt: null },
-              { id: 'destination', sequence: 1, name: geo.destination.name || 'Destination', lat: geo.destination.lat, lng: geo.destination.lng, estimatedArrival: null, arrivedAt: null },
-            ] : [],
-            cachedAt: Date.now(),
-          };
-        });
-      if (toCache.length > 0) {
-        await putTrips(toCache);
-        await refresh();
-      }
-    } catch {
-      // Offline caching is best-effort
-    }
-  }, [refresh]);
-
-  const armAutoLifecycle = useCallback(async (trip: ServerTrip) => {
-    if (autoWatchersRef.current.has(trip.id) || geofenceCheckedRef.current.has(trip.id)) return;
-    geofenceCheckedRef.current.add(trip.id);
-    try {
-      const res = await fetch(`/api/driver-app/trips/${trip.id}/geofences`, { credentials: 'include' });
-      if (!res.ok) return;
-      const data: GeofenceInfo = await res.json();
-      if (data.origin.lat == null || data.origin.lng == null || data.destination.lat == null || data.destination.lng == null) return;
-
-      geofenceCacheRef.current.set(trip.id, data);
-
-      const handle = createAutoLifecycle({
-        tripId: trip.id,
-        origin: { lat: data.origin.lat, lng: data.origin.lng, radiusM: data.origin.radiusM, name: data.origin.name },
-        destination: { lat: data.destination.lat, lng: data.destination.lng, radiusM: data.destination.radiusM, name: data.destination.name },
-        onShouldStart: () => {
-          setAutoToasts((prev) => [...prev, {
-            id: `${trip.id}-start-${Date.now()}`,
-            tripId: trip.id,
-            text: `Left ${data.origin.name || 'the origin'} — trip auto-started`,
-            at: Date.now(),
-          }]);
-          void handleLifecycle(trip.id, 'START');
-        },
-        onShouldEnd: () => {
-          setAutoToasts((prev) => [...prev, {
-            id: `${trip.id}-end-${Date.now()}`,
-            tripId: trip.id,
-            text: `Arrived at ${data.destination.name || 'the destination'} — trip auto-ended`,
-            at: Date.now(),
-          }]);
-          void handleLifecycle(trip.id, 'END');
-        },
-      });
-      handle.start();
-      autoWatchersRef.current.set(trip.id, handle);
-      setGeofenceMeta((prev) => ({ ...prev, [trip.id]: { armed: true, destinationName: data.destination.name } }));
-    } catch {
-      // Offline
-    }
-  }, [handleLifecycle]);
-
-  const disarmAutoLifecycle = useCallback((tripId: string) => {
-    const handle = autoWatchersRef.current.get(tripId);
-    if (handle) {
-      handle.stop();
-      autoWatchersRef.current.delete(tripId);
-    }
-    setGeofenceMeta((prev) => {
-      if (!(tripId in prev)) return prev;
-      const next = { ...prev };
-      delete next[tripId];
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!serverTrips) return;
-    const activeIds = new Set(
-      serverTrips
-        .filter((t) => ['SCHEDULED', 'IN_PROGRESS'].includes((t.status || '').toUpperCase()))
-        .map((t) => t.id),
-    );
-    for (const t of serverTrips) {
-      if (activeIds.has(t.id)) void armAutoLifecycle(t);
-    }
-    for (const id of Array.from(autoWatchersRef.current.keys())) {
-      if (!activeIds.has(id)) disarmAutoLifecycle(id);
-    }
-    void cacheTripsOffline(serverTrips);
-  }, [serverTrips, armAutoLifecycle, disarmAutoLifecycle, cacheTripsOffline]);
-
-  useEffect(() => {
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      for (const handle of autoWatchersRef.current.values()) handle.stop();
-      autoWatchersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (autoToasts.length === 0) return;
-    const t = setInterval(() => {
-      setAutoToasts((prev) => prev.filter((x) => Date.now() - x.at < 8000));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [autoToasts.length]);
-
-  const handleRetrySync = useCallback(async () => {
-    setSyncingNow(true);
-    try {
-      await forceDrain();
-    } finally {
-      await refresh();
-      setSyncingNow(false);
-    }
-  }, [refresh]);
-
-  // Emergency SOS Trigger
-  const handleTriggerSos = async (emergencyType: string, notes?: string) => {
-    setSosSending(true);
-    try {
-      const loc = await captureLocationAsync(4000);
-      const activeTrip = serverTrips?.find((t) => t.status === 'IN_PROGRESS');
-
-      const res = await fetch('/api/driver-app/emergency-sos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat: loc?.lat ?? null,
-          lng: loc?.lng ?? null,
-          vehiclePlate: activeTrip?.vehiclePlate || 'DXB-767-4011',
-          emergencyType,
-          notes,
-        }),
-      });
-
-      if (!res.ok) throw new Error('Failed to dispatch SOS alert');
-      const json = await res.json();
-      setShowSosModal(false);
-      setSosSentNotice(json.message || '🚨 Emergency SOS Dispatched to Control Tower');
-      setTimeout(() => setSosSentNotice(null), 8000);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'SOS Dispatch Failed');
-    } finally {
-      setSosSending(false);
-    }
-  };
-
-  // NRM (Non-Revenue Movement) Toggle
-  const handleToggleNrm = async (reason: string, destination?: string) => {
-    const isStarting = !activeNrm;
-    try {
-      const activeTrip = serverTrips?.find((t) => t.status === 'IN_PROGRESS');
-      const res = await fetch('/api/driver-app/nrm-toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: isStarting ? 'START' : 'END',
-          reason,
-          destination,
-          vehiclePlate: activeTrip?.vehiclePlate || 'DXB-767-4011',
-        }),
-      });
-
-      if (!res.ok) throw new Error('Failed to toggle NRM');
-      const json = await res.json();
-      setShowNrmModal(false);
-      if (isStarting) {
-        setActiveNrm({ reason, startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
-        setNrmFeedback(json.message || `✓ NRM started: ${reason}. Ops team notified.`);
-      } else {
-        setActiveNrm(null);
-        setNrmFeedback(json.message || '✓ NRM run completed. Returned to standard roster.');
-      }
-      setTimeout(() => setNrmFeedback(null), 4000);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'NRM Toggle Failed');
-    }
-  };
-
-  // Drayage Status & Ramp Placement submit directly to /api/driver/jobs/[id]/status
-  const handleUpdateDrayageStatus = async (
-    jobId: string,
-    payload: {
-      status: string;
-      placementLocation?: string;
-      detachTrailer?: boolean;
-      etc?: string | null;
-      notes?: string;
-      driverName?: string;
-      photo?: string | null;
-      receiverName?: string;
-      signatureDataUri?: string;
-    },
-  ) => {
-    try {
-      setSubmittingRamp(true);
-      setDrayageJobs((prev) =>
-        (prev || []).map((j) =>
-          j.id === jobId
-            ? {
-                ...j,
-                status: payload.status,
-                placementLocation: (payload.placementLocation as 'RAMP' | 'YARD' | null) ?? j.placementLocation,
-                trailerDetached: payload.detachTrailer ?? j.trailerDetached,
-                etcTime: payload.etc ?? j.etcTime,
-                notes: payload.notes ?? j.notes,
-                podSignatureName: payload.receiverName ?? j.podSignatureName,
-                podSignedAt: payload.receiverName ? new Date().toISOString() : j.podSignedAt,
-              }
-            : j,
-        ),
-      );
-      try {
-        await fetch(getApiEndpoint(`/api/driver/jobs/${jobId}/status`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } catch {
-        // Offline / local fallback already applied above
-      }
-      setSelectedRampJob(null);
-      setRampBanner(`✓ Job status updated: ${payload.status.replace(/_/g, ' ')}`);
-      setTimeout(() => setRampBanner(null), 5000);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Status update failed');
-    } finally {
-      setSubmittingRamp(false);
-    }
-  };
-
-  // ISO 6346 & Seal Scan Handler
-  const handleConfirmScan = async (job: DriverDrayageJob, scan: VerifiedContainerScan) => {
-    setDrayageJobs((prev) =>
-      (prev || []).map((j) =>
-        j.id === job.id
-          ? {
-              ...j,
-              containerNumber: scan.scannedContainerNumber,
-              verifiedScan: scan,
-              inspectionStatus: 'CLEARED',
-            }
-          : j,
-      ),
-    );
-    setScannerJob(null);
-    setRampBanner(`✓ ISO 6346 (${scan.scannedContainerNumber}) & Bolt Seal (${scan.scannedSealNumber}) Verified`);
-    setTimeout(() => setRampBanner(null), 5000);
-    try {
-      await fetch(getApiEndpoint(`/api/driver/jobs/${job.id}/status`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'SCAN_VERIFY',
-          scannedContainerNumber: scan.scannedContainerNumber,
-          scannedSealNumber: scan.scannedSealNumber,
-        }),
-      });
-    } catch {}
-  };
-
-  // Sign-on-Glass ePOD Handler
-  const handleConfirmEpod = async (
-    job: DriverDrayageJob,
-    sig: CapturedEpodSignature,
-    targetStatus?: string,
-  ) => {
-    const label = sig.receiverRole ? `${sig.receiverName} (${sig.receiverRole})` : sig.receiverName;
-    setEpodJob(null);
-    if (targetStatus) {
-      await handleUpdateDrayageStatus(job.id, {
-        status: targetStatus,
-        receiverName: label,
-        signatureDataUri: sig.signatureDataUri,
-        notes: `Sign-on-Glass ePOD signed by ${label}`,
-      });
-      return;
-    }
-    setDrayageJobs((prev) =>
-      (prev || []).map((j) =>
-        j.id === job.id
-          ? {
-              ...j,
-              podSignatureName: label,
-              podSignedAt: sig.signedAt,
-            }
-          : j,
-      ),
-    );
-    setRampBanner(`✓ ePOD Signed by ${label}`);
-    setTimeout(() => setRampBanner(null), 5000);
-    try {
-      await fetch(getApiEndpoint(`/api/driver/jobs/${job.id}/status`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'EPOD_SIGN',
-          receiverName: label,
-          signatureDataUri: sig.signatureDataUri,
-        }),
-      });
-    } catch {}
-  };
-
-  // In-App Dispatch Chat Handler
-  const handleSendChatMessage = async (job: DriverDrayageJob, message: string, isUrgent: boolean) => {
-    const driverName =
-      (typeof window !== 'undefined' && localStorage.getItem('fleet360_driver_name')) || 'Rashid Al-Marri';
-    const newMsg: DrayageChatMessage = {
-      id: `msg-${Date.now()}`,
-      senderRole: 'DRIVER',
-      senderName: driverName,
-      message,
-      isUrgent,
-      createdAt: new Date().toISOString(),
-    };
-    setDrayageJobs((prev) =>
-      (prev || []).map((j) =>
-        j.id === job.id ? { ...j, messages: [...(j.messages || []), newMsg] } : j,
-      ),
-    );
-    setChatJob((prev) =>
-      prev && prev.id === job.id ? { ...prev, messages: [...(prev.messages || []), newMsg] } : prev,
-    );
-    try {
-      await fetch(getApiEndpoint(`/api/driver/jobs/${job.id}/status`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CHAT',
-          driverName,
-          message,
-          isUrgent,
-        }),
-      });
-    } catch {}
-  };
-
-  // Customs / Port Inspection Evidence Upload Handler
-  const handleUploadInspectionEvidence = async (
-    job: DriverDrayageJob,
-    payload: { fileName: string; notes: string; clearInspection: boolean },
-  ) => {
-    setInspectionJob(null);
-    setDrayageJobs((prev) =>
-      (prev || []).map((j) =>
-        j.id === job.id
-          ? {
-              ...j,
-              customsInspection: payload.clearInspection ? false : j.customsInspection,
-              inspectionStatus: 'CLEARED',
-              status: j.status === 'UNDER_INSPECTION' ? 'IN_TRANSIT' : j.status,
-              notes: `${payload.notes} (Evidence: ${payload.fileName})`,
-            }
-          : j,
-      ),
-    );
-    setRampBanner(`✓ Inspection Evidence (${payload.fileName}) Uploaded & Cleared`);
-    setTimeout(() => setRampBanner(null), 5000);
-    try {
-      await fetch(getApiEndpoint(`/api/driver/jobs/${job.id}/status`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: job.status === 'UNDER_INSPECTION' ? 'IN_TRANSIT' : job.status,
-          notes: `${payload.notes} (Evidence: ${payload.fileName})`,
-        }),
-      });
-    } catch {}
-  };
-
-  // ⚡ Geofence Auto-Trigger for Port Terminal (-> AT_PORT) & Consignee Warehouse (-> Auto-Prompt Ramp Placement Modal)
-  const evaluateDrayageGeofences = useCallback(
-    async (pos: LatLng) => {
-      setDriverGps(pos);
-      if (!drayageJobs || drayageJobs.length === 0) return;
-
-      for (const job of drayageJobs) {
-        // 1. Port Terminal Geofence entrance: Auto-advance to AT_PORT
-        if (
-          job.terminalGeofence &&
-          !firedTerminalGfRef.current.has(job.id) &&
-          (job.status === 'PENDING' || job.status === 'ASSIGNED' || job.status === 'ACCEPTED' || (job.jobPhase === 'L2' && job.status === 'IN_TRANSIT'))
-        ) {
-          if (isPointInsideGeofence(pos, job.terminalGeofence)) {
-            firedTerminalGfRef.current.add(job.id);
-            if (typeof navigator !== 'undefined' && navigator.vibrate) {
-              navigator.vibrate([150, 80, 150]);
-            }
-            setAutoToasts((prev) => [
-              ...prev,
-              {
-                id: `gf-term-${job.id}-${Date.now()}`,
-                tripId: job.id,
-                text: `⚓ Entered ${job.terminalGeofence?.name || 'Port Terminal'} — Auto-advanced to AT_PORT`,
-                at: Date.now(),
-              },
-            ]);
-            void handleUpdateDrayageStatus(job.id, {
-              status: 'AT_PORT',
-              notes: `Auto-advanced to AT_PORT upon entering ${job.terminalGeofence?.name || 'Port Terminal'}`,
-            });
-          }
+        if (res.ok) {
+          const data = await res.json();
+          const fetched: DrayageAssignment[] = Array.isArray(data.drayageJobs)
+            ? data.drayageJobs
+            : [];
+          setJobs(fetched);
+        } else if (res.status === 401) {
+          setJobs([]);
         }
-
-        // 2. Warehouse Geofence boundary entrance: Auto-popup Ramp Placement & Destuffing ETC prompt
-        if (
-          job.warehouseGeofence &&
-          !firedWarehouseGfRef.current.has(job.id) &&
-          (job.status === 'IN_TRANSIT' || job.status === 'LOADED')
-        ) {
-          if (isPointInsideGeofence(pos, job.warehouseGeofence)) {
-            firedWarehouseGfRef.current.add(job.id);
-            if (typeof navigator !== 'undefined' && navigator.vibrate) {
-              navigator.vibrate([200, 100, 200]);
-            }
-            setAutoToasts((prev) => [
-              ...prev,
-              {
-                id: `gf-wh-${job.id}-${Date.now()}`,
-                tripId: job.id,
-                text: `📍 Arrived at ${job.warehouseGeofence?.name || job.warehouseName} — Confirm Ramp Placement & Destuffing ETC`,
-                at: Date.now(),
-              },
-            ]);
-            setSelectedRampJob(job);
-          }
-        }
+      } catch (err) {
+        console.warn('[DriverTodayPage] Failed to fetch jobs:', err);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
     },
-    [drayageJobs, handleUpdateDrayageStatus],
+    [getAuthHeaders],
   );
 
-  // Active continuous GPS watching for drayage geofence auto-triggers
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    if (!drayageJobs || drayageJobs.length === 0) return;
+    void fetchDriverJobs(false);
+    const interval = setInterval(() => {
+      void fetchDriverJobs(true);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchDriverJobs]);
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        void evaluateDrayageGeofences({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [drayageJobs, evaluateDrayageGeofences]);
-
-  const headerDate = useMemo(() => {
-    return now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  }, [now]);
-
-  // Sort L2 jobs first (matching LogiXL-Connect DashboardScreen.js prioritization), and split Active vs. History
-  const { activeDrayageJobs, historyDrayageJobs } = useMemo(() => {
-    const all = [...(drayageJobs || [])];
-    all.sort((a, b) => {
-      const aL2 = a.jobPhase === 'L2' || a.jobCode.includes('-L2');
-      const bL2 = b.jobPhase === 'L2' || b.jobCode.includes('-L2');
+  // Split jobs into Active vs. History and sort L2 jobs first (matching LogiXL-Connect DashboardScreen.js)
+  const { activeJobs, historyJobs } = useMemo(() => {
+    const sorted = [...jobs].sort((a, b) => {
+      const aL2 = a.jobPhase === 'L2' || (a.jobCode && a.jobCode.includes('-L2'));
+      const bL2 = b.jobPhase === 'L2' || (b.jobCode && b.jobCode.includes('-L2'));
       if (aL2 && !bL2) return -1;
       if (!aL2 && bL2) return 1;
       return 0;
     });
-    const historyStatuses = new Set(['COMPLETED', 'EMPTY_DEPOSITED']);
+
     return {
-      activeDrayageJobs: all.filter((j) => !historyStatuses.has(j.status)),
-      historyDrayageJobs: all.filter((j) => historyStatuses.has(j.status)),
+      activeJobs: sorted.filter((j) => !HISTORY_STATUSES.has((j.status || '').toUpperCase())),
+      historyJobs: sorted.filter((j) => HISTORY_STATUSES.has((j.status || '').toUpperCase())),
     };
-  }, [drayageJobs]);
+  }, [jobs]);
 
-  const displayedDrayageJobs = drayageViewMode === 'active' ? activeDrayageJobs : historyDrayageJobs;
+  const selectedJob = useMemo(
+    () => jobs.find((j) => j.id === selectedJobId) || null,
+    [jobs, selectedJobId],
+  );
 
-  return (
-    <div className="mx-auto min-h-screen max-w-2xl bg-slate-950 pb-24">
-      {/* Top App Header */}
-      <header className="border-b border-white/10 bg-slate-900/95 px-4 py-3 sticky top-0 z-30 backdrop-blur">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <BackButton />
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-400">Driver Shift</div>
-              <div className="text-lg font-bold text-white truncate">{headerDate}</div>
+  const handleStatusUpdate = async (
+    job: DrayageAssignment,
+    newStatus: string,
+    etcIsoString: string | null = null,
+  ) => {
+    setSubmitting(true);
+    try {
+      const isFinishingDriverLeg = HISTORY_STATUSES.has(newStatus.toUpperCase());
+      const placementLocation = newStatus.includes('RAMP')
+        ? 'RAMP'
+        : newStatus.includes('YARD')
+        ? 'YARD'
+        : undefined;
+
+      // Optimistic local state update so UI responds immediately
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                status: newStatus,
+                placementLocation: placementLocation || j.placementLocation,
+                trailerDetached: isFinishingDriverLeg ? true : newStatus === 'TRAILER_ATTACHED' ? false : j.trailerDetached,
+                etcTime: etcIsoString || j.etcTime,
+              }
+            : j,
+        ),
+      );
+
+      const res = await fetch(getApiEndpoint(`/api/driver/jobs/${job.id}/status`), {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          action: 'STATUS_UPDATE',
+          status: newStatus,
+          placementLocation,
+          detachTrailer: isFinishingDriverLeg
+            ? true
+            : newStatus === 'TRAILER_ATTACHED'
+            ? false
+            : undefined,
+          etc: etcIsoString,
+          driverName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData?.error || 'Could not update status on server — retrying sync.');
+      } else {
+        if (isFinishingDriverLeg) {
+          showToast(`Job ${job.jobCode} completed & moved to History!`);
+          setSelectedJobId(null);
+        } else {
+          showToast(`Status updated to ${newStatus.replace(/_/g, ' ')}`);
+        }
+      }
+
+      await fetchDriverJobs(true);
+    } catch {
+      showToast('Network error while updating status.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectEtcHours = async (hours: number) => {
+    if (!selectedJob) return;
+    setShowEtcModal(false);
+    const etcDate = new Date(Date.now() + hours * 60 * 60 * 1000);
+    await handleStatusUpdate(selectedJob, pendingRampStatus, etcDate.toISOString());
+  };
+
+  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedJob) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUri) return;
+
+      setAttachedDocs((prev) => ({
+        ...prev,
+        [selectedJob.id]: [...(prev[selectedJob.id] || []), file.name],
+      }));
+
+      try {
+        await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
+          method: 'POST',
+          credentials: 'include',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            action: 'EPOD_SIGN',
+            receiverName: `${driverName} (Inspection Photo)`,
+            photo: dataUri,
+            notes: `Inspection photo/document attached: ${file.name}`,
+            driverName,
+          }),
+        });
+        showToast(`Attached "${file.name}" to ${selectedJob.jobCode}`);
+      } catch {
+        showToast(`Saved "${file.name}" locally`);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleLogout = async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('fleet360_session_token');
+      localStorage.removeItem('fleet360_active_vehicle');
+      localStorage.removeItem('fleet360_driver_authenticated');
+      window.dispatchEvent(new Event('fleet360_vehicle_changed'));
+    }
+    try {
+      await fetch(getApiEndpoint('/api/auth/logout'), { method: 'POST', credentials: 'include' });
+    } catch {}
+    router.push('/driver-app');
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VIEW 2: SIMPLIFIED JOB DETAIL SCREEN (LogiXL-Connect JobDetailScreen.js)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (selectedJob) {
+    const nextStep = getNextStep(selectedJob);
+    const badge = getStatusBadgeStyle(selectedJob.status);
+    const { pickupName, pickupLat, pickupLng, dropoffName, dropoffLat, dropoffLng } =
+      getPickupAndDropoff(selectedJob);
+    const jobDocs = attachedDocs[selectedJob.id] || [];
+    const isReassignJob = [
+      'RE-ASSIGNED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'TRAILER_ATTACHED',
+      'REASSIGN_PLACED_AT_RAMP',
+      'REASSIGN_PLACED_AT_YARD',
+    ].includes((selectedJob.status || '').toUpperCase());
+
+    return (
+      <div className="min-h-screen bg-slate-100 pb-16 text-slate-900">
+        {/* Top Bar */}
+        <header className="sticky top-0 z-30 bg-blue-600 text-white px-4 py-3.5 shadow-md flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setSelectedJobId(null)}
+            className="flex items-center gap-2 font-bold text-sm bg-blue-700/80 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition active:scale-95"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to My Jobs</span>
+          </button>
+          <span className="font-mono text-xs font-bold bg-blue-800/70 px-2.5 py-1 rounded">
+            {selectedJob.jobCode}
+          </span>
+        </header>
+
+        {toastMessage && (
+          <div className="bg-emerald-600 text-white px-4 py-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        <main className="max-w-lg mx-auto p-4 space-y-4">
+          {/* 1. Primary Blue Action Card — ONLY shows Current Status & Single Next Action */}
+          <div className="bg-blue-600 rounded-2xl p-5 text-white shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-blue-100 font-semibold uppercase tracking-wider">
+                  Current Status
+                </div>
+                <div className="mt-1 inline-block bg-white text-blue-700 font-extrabold text-sm px-3.5 py-1 rounded-full shadow-sm">
+                  {badge.label}
+                </div>
+              </div>
+              {selectedJob.tokenNumber && (
+                <div className="text-right">
+                  <div className="text-[11px] text-blue-100 font-semibold uppercase">Port Token</div>
+                  <div className="mt-1 bg-amber-300 text-slate-900 font-extrabold text-xs px-2.5 py-1 rounded-md">
+                    {selectedJob.tokenNumber}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {nextStep ? (
+              <div className="bg-white rounded-xl p-4 text-slate-900 shadow-inner space-y-3">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Next Action
+                  </div>
+                  <div className="text-lg font-extrabold text-slate-900 mt-0.5">
+                    {nextStep.label}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">{nextStep.description}</p>
+                </div>
+
+                {/* Inspection Photo / Document Attachment (Shown ONLY during UNDER_INSPECTION) */}
+                {selectedJob.status === 'UNDER_INSPECTION' && (
+                  <div className="pt-1 space-y-2 border-t border-slate-200">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      capture="environment"
+                      onChange={handlePhotoSelected}
+                      className="hidden"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Take Inspection Pic</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Attach Docs ({jobDocs.length})</span>
+                      </button>
+                    </div>
+                    {jobDocs.length > 0 && (
+                      <div className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 font-semibold">
+                        ✓ Attached: {jobDocs.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dual Placement Choice: Placed @ Yard OR Placed @ Ramp */}
+                {nextStep.isDualChoice ? (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        handleStatusUpdate(
+                          selectedJob,
+                          isReassignJob ? 'REASSIGN_PLACED_AT_YARD' : 'PLACED_AT_YARD',
+                        )
+                      }
+                      className="py-3.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-extrabold text-sm shadow-md transition active:scale-95 disabled:opacity-50"
+                    >
+                      Placed @ Yard
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => {
+                        if (isReassignJob) {
+                          void handleStatusUpdate(selectedJob, 'REASSIGN_PLACED_AT_RAMP');
+                        } else {
+                          setPendingRampStatus('PLACED_AT_RAMP');
+                          setShowEtcModal(true);
+                        }
+                      }}
+                      className="py-3.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md transition active:scale-95 disabled:opacity-50"
+                    >
+                      Placed @ Ramp
+                    </button>
+                  </div>
+                ) : (
+                  /* Single Prominent Next Action Button */
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => handleStatusUpdate(selectedJob, nextStep.nextStatus)}
+                    style={{ backgroundColor: nextStep.color }}
+                    className="w-full py-4 rounded-xl text-white font-extrabold text-base shadow-md hover:opacity-95 transition active:scale-95 disabled:opacity-50"
+                  >
+                    {submitting ? 'Updating…' : nextStep.label}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="bg-emerald-500 rounded-xl p-4 text-white text-center font-bold">
+                ✓ This job is completed
+              </div>
+            )}
+          </div>
+
+          {/* 2. Turn-by-Turn Google Maps Navigation Card */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
+            <div className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Navigation className="w-4 h-4 text-blue-600" />
+              <span>Turn-by-Turn GPS Navigation (Google Maps)</span>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase text-slate-400">
+                    Pickup Location
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 truncate">{pickupName}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openGoogleMapsNavigation(pickupName, pickupLat, pickupLng)}
+                  className="shrink-0 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition active:scale-95"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Navigate</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase text-slate-400">
+                    Dropoff Location
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 truncate">{dropoffName}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openGoogleMapsNavigation(dropoffName, dropoffLat, dropoffLng)}
+                  className="shrink-0 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition active:scale-95"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Navigate</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* 1. SOS Emergency Button */}
-            <button
-              onClick={() => setShowSosModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/40 flex items-center gap-1.5 animate-pulse transition active:scale-95"
-            >
-              <Flame className="w-4 h-4 fill-white" />
-              <span>SOS</span>
-            </button>
+          {/* 3. Job Details Card (LogiXL-Connect JobDetailScreen parity) */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-2.5 text-sm">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 pb-1 border-b border-slate-100">
+              Job Details
+            </h3>
 
-            {/* 2. Live Location Toggle */}
-            <button
-              onClick={() => setLiveLocationActive(!liveLocationActive)}
-              title={liveLocationActive ? `Live GPS streaming (Last: ${lastLocationPing || 'Active'})` : 'Live GPS paused'}
-              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 transition active:scale-95 ${
-                liveLocationActive
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
-              }`}
-            >
-              <Radio className={`w-3.5 h-3.5 ${liveLocationActive ? 'animate-pulse text-emerald-400' : ''}`} />
-              <span>{liveLocationActive ? 'Live' : 'GPS Off'}</span>
-            </button>
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Job Number</span>
+              <span className="font-bold text-slate-900">{selectedJob.jobCode}</span>
+            </div>
 
-            {/* Continuous-driving CBA chip */}
-            {driving.state && (
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Client</span>
+              <span className="font-bold text-slate-900 text-right">
+                {selectedJob.customerName || 'N/A'}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Container</span>
+              <span className="font-extrabold text-blue-700 font-mono">
+                {selectedJob.containerNumber} ({selectedJob.containerSize}{' '}
+                {selectedJob.containerType})
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Type</span>
+              <span className="font-bold text-slate-900">
+                {selectedJob.shipmentType} · {selectedJob.jobPhase}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Trip Token</span>
+              <span className="font-bold text-amber-700">
+                {selectedJob.tokenNumber || 'Not Required'}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Vehicle</span>
+              <span className="font-bold text-slate-900">
+                {vehiclePlate || selectedJob.assignedVehiclePlate || 'Assigned Tractor'}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Trailer</span>
+              <span className="font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                {selectedJob.assignedTrailerPlate || 'Not Assigned'}
+              </span>
+            </div>
+
+            {selectedJob.etcTime && (
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Offload ETC</span>
+                <span className="font-bold text-emerald-700">
+                  {new Date(selectedJob.etcTime).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between py-1.5">
+              <span className="text-slate-500 font-medium">Driver Allowance</span>
+              <span className="font-extrabold text-emerald-600 text-base">
+                AED {Number(selectedJob.driverAllowanceAed || 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </main>
+
+        {/* Simple LogiXL-Connect ETC Modal (1 Hr / 2 Hrs / 3 Hrs / 4 Hrs) */}
+        {showEtcModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  Estimated Offloading Time (ETC)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select estimated hours for warehouse offloading at the ramp:
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[1, 2, 3, 4].map((hrs) => (
+                  <button
+                    key={hrs}
+                    type="button"
+                    onClick={() => void handleSelectEtcHours(hrs)}
+                    className="py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow transition active:scale-95"
+                  >
+                    {hrs} {hrs === 1 ? 'Hour' : 'Hours'}
+                  </button>
+                ))}
+              </div>
+
               <button
                 type="button"
-                data-testid="continuous-driving-chip"
-                onClick={() => router.push('/driver-app/behavior')}
-                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95 ${
-                  driving.state.level === 'ok' ? 'bg-emerald-500/15 text-emerald-200' :
-                  driving.state.level === 'warning' ? 'bg-amber-500/15 text-amber-200' :
-                  'bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/40 animate-pulse'
-                }`}
+                onClick={() => setShowEtcModal(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs"
               >
-                <span>{ALERT_LEVEL_META[driving.state.level].emoji}</span>
-                <span>{driving.state.levelLabel}</span>
+                Cancel
               </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VIEW 1: SIMPLIFIED MY JOBS DASHBOARD (LogiXL-Connect DashboardScreen.js)
+  // ══════════════════════════════════════════════════════════════════════════
+  const displayedJobs = viewMode === 'active' ? activeJobs : historyJobs;
+
+  return (
+    <div className="min-h-screen bg-slate-100 pb-20 text-slate-900">
+      {/* Blue Header Matching LogiXL-Connect DashboardScreen */}
+      <header className="bg-blue-600 text-white px-5 pt-5 pb-4 shadow-md">
+        <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight">My Jobs</h1>
+            <p className="text-xs text-blue-100 mt-0.5 font-medium">
+              Welcome, {driverName}
+            </p>
+            {vehiclePlate && (
+              <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-700/90 border border-blue-400/40 px-2.5 py-1 rounded-lg text-xs font-bold">
+                <Truck className="w-3.5 h-3.5 text-amber-300" />
+                <span>Vehicle: {vehiclePlate}</span>
+              </div>
             )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchDriverJobs(false)}
+              title="Refresh Jobs"
+              className="p-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white transition active:scale-95"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Logout</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* SOS Sent Banner */}
-      {sosSentNotice && (
-        <div className="bg-rose-950/90 border-b border-rose-500/50 p-3.5 text-center text-xs text-rose-200 font-bold flex items-center justify-center gap-2 animate-bounce">
-          <AlertTriangle className="w-4 h-4 text-rose-400" />
-          <span>{sosSentNotice}</span>
+      {toastMessage && (
+        <div className="bg-emerald-600 text-white px-4 py-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* DVIR Submitted Confirmation */}
-      {dvirBanner && (
-        <div className="bg-emerald-950/80 border-b border-emerald-500/40 p-2.5 text-center text-xs text-emerald-200 font-semibold flex items-center justify-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{dvirBanner}</span>
-        </div>
-      )}
-
-      {/* Drayage Status / ePOD / Scan Confirmation Banner */}
-      {rampBanner && (
-        <div className="bg-sky-950/90 border-b border-sky-500/40 p-2.5 text-center text-xs text-sky-200 font-semibold flex items-center justify-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-sky-400" />
-          <span>{rampBanner}</span>
-        </div>
-      )}
-
-      {/* Offline sync status */}
-      {sync && (sync.queued > 0 || sync.failed > 0) && (
-        <div className="bg-slate-800/80 border-b border-white/10 px-4 py-2 flex items-center justify-between gap-2 text-[11px]">
-          <span className="text-slate-300">
-            {sync.failed > 0
-              ? `${sync.failed} item${sync.failed === 1 ? '' : 's'} failed to sync · ${sync.queued} queued`
-              : `${sync.queued} item${sync.queued === 1 ? '' : 's'} waiting to sync`}
-          </span>
+      {/* Active Jobs vs. History Tabs */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20">
+        <div className="max-w-lg mx-auto grid grid-cols-2">
           <button
-            onClick={handleRetrySync}
-            disabled={syncingNow}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold transition disabled:opacity-50 shrink-0"
+            type="button"
+            onClick={() => setViewMode('active')}
+            className={`py-3.5 text-sm font-extrabold border-b-2 transition ${
+              viewMode === 'active'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
           >
-            <RotateCcw className={`w-3 h-3 ${syncingNow ? 'animate-spin' : ''}`} />
-            {syncingNow ? 'Syncing…' : 'Retry sync'}
+            Active Jobs ({activeJobs.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('history')}
+            className={`py-3.5 text-sm font-extrabold border-b-2 transition ${
+              viewMode === 'history'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            History ({historyJobs.length})
           </button>
         </div>
-      )}
+      </div>
 
-      {/* NRM Feedback Toast */}
-      {nrmFeedback && (
-        <div className="bg-amber-500/20 border-b border-amber-500/40 p-2.5 text-center text-xs text-amber-200 font-semibold">
-          {nrmFeedback}
-        </div>
-      )}
-
-      {/* 3. Sticky Active NRM (Non-Revenue Movement) Banner */}
-      {activeNrm && (
-        <div className="bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border-b border-amber-500/40 p-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
-              <Truck className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-amber-300">NRM (Non-Revenue Movement) Active</div>
-              <div className="text-[11px] text-slate-300">{activeNrm.reason} · Started {activeNrm.startedAt}</div>
-            </div>
+      {/* Jobs List */}
+      <main className="max-w-lg mx-auto p-4 space-y-3.5">
+        {loading ? (
+          <div className="bg-white rounded-2xl p-8 text-center text-sm text-slate-500 shadow-sm border border-slate-200">
+            Loading your assigned jobs…
           </div>
-          <button
-            onClick={() => handleToggleNrm('', '')}
-            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition active:scale-95"
-          >
-            ⏹️ End NRM
-          </button>
-        </div>
-      )}
-
-      <main className="px-4 py-4 space-y-4">
-        {/* Container Drayage Assignments Section (Full LogiXL-Connect Driver App Parity) */}
-        {drayageJobs && drayageJobs.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
-                  <Truck className="w-4 h-4" />
-                </div>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Port Drayage Assignments ({drayageJobs.length})
-                </h2>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                L2 Prioritized · Port & Yard
-              </span>
+        ) : displayedJobs.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-200 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Truck className="w-6 h-6" />
             </div>
-
-            {/* Active Jobs vs. History Tabs (LogiXL-Connect DashboardScreen parity) */}
-            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-900 border border-white/10 text-xs">
-              <button
-                type="button"
-                onClick={() => setDrayageViewMode('active')}
-                className={`py-2 rounded-lg font-bold transition ${
-                  drayageViewMode === 'active'
-                    ? 'bg-sky-600 text-white shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Active Jobs ({activeDrayageJobs.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDrayageViewMode('history')}
-                className={`py-2 rounded-lg font-bold transition ${
-                  drayageViewMode === 'history'
-                    ? 'bg-sky-600 text-white shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Completed History ({historyDrayageJobs.length})
-              </button>
+            <div className="text-base font-bold text-slate-700">
+              {viewMode === 'active' ? 'No active jobs assigned' : 'No completed jobs in history'}
             </div>
-
-            {displayedDrayageJobs.length === 0 ? (
-              <div className="rounded-2xl bg-slate-900/50 border border-white/10 p-5 text-center text-xs text-slate-400">
-                {drayageViewMode === 'active'
-                  ? 'No active drayage assignments right now.'
-                  : 'No completed drayage jobs in history yet.'}
-              </div>
-            ) : (
-              displayedDrayageJobs.map((job) => (
-                <DrayageJobCard
-                  key={job.id}
-                  job={job}
-                  now={now}
-                  currentPosition={driverGps}
-                  onOpenRampModal={() => setSelectedRampJob(job)}
-                  onOpenScannerModal={() => setScannerJob(job)}
-                  onOpenEpodModal={(targetStatus) => setEpodJob({ job, targetStatus })}
-                  onOpenChatModal={() => setChatJob(job)}
-                  onOpenInspectionModal={() => setInspectionJob(job)}
-                  onUpdateStatus={(newStatus) =>
-                    handleUpdateDrayageStatus(job.id, { status: newStatus })
-                  }
-                  onSimulateGeofence={(simPos) => evaluateDrayageGeofences(simPos)}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Quick Operations Bar: NRM Trigger */}
-        {!activeNrm && (
-          <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/10 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-slate-300">
-              <Truck className="w-4 h-4 text-amber-400" />
-              <span>Starting a deadhead or workshop run?</span>
-            </div>
+            <p className="text-xs text-slate-500">
+              {viewMode === 'active'
+                ? 'Pull or tap Refresh when dispatch assigns or reassigns a job to you.'
+                : 'Jobs you detach or complete will immediately appear here.'}
+            </p>
             <button
-              onClick={() => setShowNrmModal(true)}
-              className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-semibold text-[11px] transition"
+              type="button"
+              onClick={() => void fetchDriverJobs(false)}
+              className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow hover:bg-blue-500 transition"
             >
-              🚚 Toggle NRM
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh Now</span>
             </button>
-          </div>
-        )}
-
-        {/* Trips Roster: server-live, offline-cache fallback, or empty state */}
-        {serverTrips && serverTrips.length > 0 ? (
-          <div className="space-y-3">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Assigned Trips Today</h2>
-            {serverTrips.map((t) => {
-              const status = (t.status || 'SCHEDULED').toUpperCase();
-              const badge = statusBadge(status);
-              const isProgress = status === 'IN_PROGRESS';
-              const meta = geofenceMeta[t.id];
-              const sc = scoreColor(t.eventCount > 0 ? t.score.score : null);
-              const btnState: StartButtonState | null = (status === 'SCHEDULED' || isProgress)
-                ? startButtonState({
-                    status: status as TripStatus,
-                    scheduledDeparture: t.departureTime,
-                    actualDeparture: t.actualDepartureAt,
-                    actualArrival: t.actualArrivalAt,
-                    durationMinutes: t.durationMinutes,
-                  })
-                : null;
-              const action = btnState?.action ?? null;
-              const msUntilDeparture = status === 'SCHEDULED' ? new Date(t.departureTime).getTime() - now.getTime() : null;
-
-              return (
-                <div
-                  key={t.id}
-                  className={`rounded-2xl border p-4 space-y-3 transition ${
-                    isProgress
-                      ? 'bg-slate-900 border-amber-500/50 shadow-lg shadow-amber-500/10'
-                      : 'bg-slate-900/60 border-white/10'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-mono text-[10px] text-cyan-400 font-bold">{t.tripNumber || t.id.slice(0, 8)}</span>
-                      <h3 className="text-base font-bold text-white mt-0.5">{t.routeName || 'Assigned Route'}</h3>
-                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{new Date(t.departureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {t.vehiclePlate && <span className="font-mono text-emerald-400 ml-2">[{t.vehiclePlate}]</span>}
-                        {msUntilDeparture != null && msUntilDeparture > 0 && (
-                          <span className="text-slate-500 ml-2">· in {formatH(msUntilDeparture)}</span>
-                        )}
-                      </div>
-                      {meta?.destinationName && (
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                          <MapPin className="w-3 h-3" />
-                          <span>→ {meta.destinationName}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {meta?.armed && (
-                        <span
-                          title="Automatic start/end detection is active for this trip"
-                          className="text-[9px] px-1.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-300 flex items-center gap-0.5"
-                        >
-                          <Zap className="w-2.5 h-2.5" /> Auto
-                        </span>
-                      )}
-                      <span
-                        title={`Driving score ${sc.label} · ${t.score.harshBrake} harsh brakes · ${t.score.harshAccel} harsh accel · ${t.score.speeding} speeding events · ${t.score.idleMinutes}m idle`}
-                        className={`text-[10px] px-2 py-1 rounded-full font-bold ring-1 ${sc.bg} ${sc.text} ${sc.ring}`}
-                      >
-                        {sc.label}
-                      </span>
-                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${badge.bg} ${badge.text}`}>
-                        {badge.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Timing-aware lifecycle control */}
-                  {action && btnState && (
-                    <div>
-                      <button
-                        onClick={() => handleLifecycle(t.id, action)}
-                        disabled={pending.has(t.id)}
-                        className={`w-full py-2.5 rounded-xl font-bold text-xs shadow-md transition disabled:opacity-50 ${
-                          action === 'START'
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                        }`}
-                      >
-                        {btnState.label}
-                      </button>
-                      <div className="flex items-center justify-between gap-2 mt-1.5">
-                        {btnState.helperLine && (
-                          <p className="text-[10px] text-slate-500">{btnState.helperLine}</p>
-                        )}
-                        {btnState.timing !== 'unknown' && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${timingChipClass(btnState.timing)}`}>
-                            {btnState.timing === 'late'
-                              ? `${btnState.deltaMinutes}m late`
-                              : btnState.timing === 'early'
-                              ? `${Math.abs(btnState.deltaMinutes)}m early`
-                              : 'On time'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : offlineTrips && offlineTrips.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
-              <Radio className="w-3.5 h-3.5" />
-              <span>Offline — showing your last synced roster ({offlineTrips.length} trip{offlineTrips.length === 1 ? '' : 's'})</span>
-            </div>
-            {offlineTrips.map((t) => {
-              const badge = statusBadge(t.status);
-              return (
-                <div key={t.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-base font-bold text-white">{t.routeName}</h3>
-                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{new Date(t.scheduledDeparture).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {t.vehiclePlate && <span className="font-mono text-emerald-400 ml-2">[{t.vehiclePlate}]</span>}
-                      </div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                        <MapPin className="w-3 h-3" />
-                        <span>{t.origin} → {t.destination}</span>
-                      </div>
-                    </div>
-                    <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${badge.bg} ${badge.text}`}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Cached {new Date(t.cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — reconnect to start/end trips.
-                  </p>
-                </div>
-              );
-            })}
           </div>
         ) : (
-          (!drayageJobs || drayageJobs.length === 0) ? (
-            <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-6 text-center text-xs text-slate-400">
-              No scheduled trips found for today.
-            </div>
-          ) : null
+          displayedJobs.map((job) => {
+            const badge = getStatusBadgeStyle(job.status);
+            const nextStep = getNextStep(job);
+            const { pickupName, pickupLat, pickupLng, dropoffName, dropoffLat, dropoffLng } =
+              getPickupAndDropoff(job);
+
+            return (
+              <div
+                key={job.id}
+                className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3"
+              >
+                {/* Card Header: Job Number, Token, Status Badge */}
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <div>
+                    <div className="text-base font-extrabold text-slate-900">{job.jobCode}</div>
+                    {job.tokenNumber && (
+                      <span className="mt-1 inline-block bg-amber-300 text-slate-900 font-extrabold text-[11px] px-2 py-0.5 rounded">
+                        TOKEN: {job.tokenNumber}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${badge.bg} ${badge.text}`}
+                  >
+                    {badge.label}
+                  </span>
+                </div>
+
+                {/* Highlighted Yellow Trailer Box (LogiXL-Connect DashboardScreen parity) */}
+                <div className="bg-amber-100 border border-amber-300 rounded-xl px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900">
+                    🚛 TRAILER: {job.assignedTrailerPlate || 'Not Assigned'}
+                  </span>
+                  <span className="text-[11px] font-bold text-amber-800">
+                    {job.jobPhase} · {job.shipmentType}
+                  </span>
+                </div>
+
+                {/* Core Details */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Client:</span>
+                    <span className="font-bold text-slate-900 text-right">
+                      {job.customerName || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Container:</span>
+                    <span className="font-extrabold text-blue-700 font-mono">
+                      {job.containerNumber} ({job.containerSize} {job.containerType})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Allowance:</span>
+                    <span className="font-extrabold text-emerald-600">
+                      AED {Number(job.driverAllowanceAed || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pickup & Dropoff with Direct Turn-by-Turn Google Maps Navigation Buttons */}
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between gap-2 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase text-slate-400">Pickup</div>
+                      <div className="text-xs font-bold text-slate-800 truncate">{pickupName}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openGoogleMapsNavigation(pickupName, pickupLat, pickupLng);
+                      }}
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition active:scale-95"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>Navigate</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase text-slate-400">Dropoff</div>
+                      <div className="text-xs font-bold text-slate-800 truncate">{dropoffName}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openGoogleMapsNavigation(dropoffName, dropoffLat, dropoffLng);
+                      }}
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition active:scale-95"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>Navigate</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Single Next Action Call-To-Action Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedJobId(job.id)}
+                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow transition active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <span>
+                    {nextStep
+                      ? `Next Action: ${nextStep.label} →`
+                      : 'View Completed Job Details →'}
+                  </span>
+                </button>
+              </div>
+            );
+          })
         )}
       </main>
-
-      {/* Auto-lifecycle toasts */}
-      {autoToasts.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md space-y-2">
-          {autoToasts.map((t) => (
-            <div
-              key={t.id}
-              className="bg-slate-900/95 border border-emerald-500/40 rounded-xl px-3 py-2 text-[11px] text-emerald-200 shadow-lg flex items-center justify-between gap-2 backdrop-blur"
-            >
-              <span className="flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                {t.text}
-              </span>
-              <button
-                onClick={() => setAutoToasts((prev) => prev.filter((x) => x.id !== t.id))}
-                className="text-slate-400 hover:text-white shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 🚨 SOS Emergency Modal */}
-      {showSosModal && (
-        <SosEmergencyModal
-          sending={sosSending}
-          onClose={() => setShowSosModal(false)}
-          onTrigger={handleTriggerSos}
-        />
-      )}
-
-      {/* 🚚 NRM (Non-Revenue Movement) Modal */}
-      {showNrmModal && (
-        <NrmMovementModal
-          onClose={() => setShowNrmModal(false)}
-          onStart={handleToggleNrm}
-        />
-      )}
-
-      {/* 📦 Ramp Placement & Destuffing ETC Modal */}
-      {selectedRampJob && (
-        <RampPlacementModal
-          job={selectedRampJob}
-          submitting={submittingRamp}
-          onClose={() => setSelectedRampJob(null)}
-          onSubmit={(payload) => handleUpdateDrayageStatus(selectedRampJob.id, payload)}
-        />
-      )}
-
-      {/* 🔍 ISO 6346 Container & Bolt Seal Scanner Modal */}
-      {scannerJob && (
-        <ContainerScannerModal
-          jobCode={scannerJob.jobCode}
-          expectedContainerNumber={scannerJob.containerNumber}
-          onClose={() => setScannerJob(null)}
-          onConfirmScan={(scan) => void handleConfirmScan(scannerJob, scan)}
-        />
-      )}
-
-      {/* ✍️ Sign-on-Glass ePOD Signature Modal */}
-      {epodJob && (
-        <SignaturePadModal
-          jobCode={epodJob.job.jobCode}
-          containerNumber={epodJob.job.containerNumber}
-          deliveryCode={epodJob.job.jobPhase === 'L2' ? 'MT_DELIVERED' : 'FCL_DELIVERED'}
-          onClose={() => setEpodJob(null)}
-          onConfirmSignature={(sig) => void handleConfirmEpod(epodJob.job, sig, epodJob.targetStatus)}
-        />
-      )}
-
-      {/* 💬 In-App Dispatch & Gate Chat Modal */}
-      {chatJob && (
-        <DrayageDispatchChatModal
-          jobCode={chatJob.jobCode}
-          containerNumber={chatJob.containerNumber}
-          messages={chatJob.messages || []}
-          onClose={() => setChatJob(null)}
-          onSendMessage={(msg, urgent) => handleSendChatMessage(chatJob, msg, urgent)}
-        />
-      )}
-
-      {/* 📷 Customs / Port Inspection Evidence Upload Modal */}
-      {inspectionJob && (
-        <InspectionEvidenceModal
-          jobCode={inspectionJob.jobCode}
-          containerNumber={inspectionJob.containerNumber}
-          onClose={() => setInspectionJob(null)}
-          onSubmitEvidence={(payload) => void handleUploadInspectionEvidence(inspectionJob, payload)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── SOS Emergency Confirmation Modal ──────────────────────────────────────
-
-function SosEmergencyModal({
-  sending,
-  onClose,
-  onTrigger,
-}: {
-  sending: boolean;
-  onClose: () => void;
-  onTrigger: (emergencyType: string, notes?: string) => void;
-}) {
-  const [emergencyType, setEmergencyType] = useState('GENERAL_BREAKDOWN');
-  const [notes, setNotes] = useState('');
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-slate-950 border-2 border-rose-500/80 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl shadow-rose-900/50 text-xs">
-        <div className="text-center space-y-1">
-          <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-rose-600/50 animate-pulse">
-            <Flame className="w-7 h-7 fill-white" />
-          </div>
-          <h2 className="text-base font-bold text-white mt-2">Emergency SOS Alert</h2>
-          <p className="text-[11px] text-rose-300">
-            This immediately flags your vehicle on the Operations Control Tower with live GPS and vehicle status.
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">Emergency Nature *</label>
-            <select
-              value={emergencyType}
-              onChange={(e) => setEmergencyType(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-rose-500"
-            >
-              <option value="GENERAL_BREAKDOWN">🚨 Major Mechanical Breakdown / Smoke</option>
-              <option value="ACCIDENT_COLLISION">💥 Road Accident / Collision</option>
-              <option value="MEDICAL_EMERGENCY">🚑 Medical Emergency / Driver Illness</option>
-              <option value="SECURITY_THREAT">⚠️ Security / Port Gate Emergency</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">Brief Description / Landmark</label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Near JAFZA South Gate 4 hard shoulder"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-rose-500"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={sending}
-            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onTrigger(emergencyType, notes)}
-            disabled={sending}
-            className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold shadow-lg shadow-rose-600/40 transition disabled:opacity-50"
-          >
-            {sending ? 'Dispatching...' : '🚨 SEND SOS'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── NRM (Non-Revenue Movement) Modal ──────────────────────────────────────
-
-function NrmMovementModal({
-  onClose,
-  onStart,
-}: {
-  onClose: () => void;
-  onStart: (reason: string, destination?: string) => void;
-}) {
-  const [reason, setReason] = useState('Depot Repositioning / Deadhead Run');
-  const [destination, setDestination] = useState('JAFZA South Yard');
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-xs">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-              <Truck className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Start Non-Revenue Run</h3>
-              <p className="text-[11px] text-slate-400">Notify operations of deadheading / repositioning</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">NRM Reason *</label>
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
-            >
-              <option value="Depot Repositioning / Deadhead Run">🔄 Depot Repositioning / Deadhead Run</option>
-              <option value="Garage / Workshop Maintenance Run">🔧 Garage / Workshop Maintenance Run</option>
-              <option value="Fuel Station Run">⛽ Fuel Station Run</option>
-              <option value="Driver Changeover / Staging">⏱️ Driver Changeover / Staging</option>
-              <option value="Emergency Standby Staging">🚨 Emergency Standby Staging</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">Destination</label>
-            <input
-              type="text"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="e.g. DIP Workshop Gate 2"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3.5 py-2 text-slate-400 hover:text-white"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onStart(reason, destination)}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-500/20 transition"
-          >
-            Start NRM
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-// ── Port Container Drayage Job Card (Full LogiXL-Connect Parity) ────────────
-
-function DrayageJobCard({
-  job,
-  now,
-  currentPosition,
-  onOpenRampModal,
-  onOpenScannerModal,
-  onOpenEpodModal,
-  onOpenChatModal,
-  onOpenInspectionModal,
-  onUpdateStatus,
-  onSimulateGeofence,
-}: {
-  job: DriverDrayageJob;
-  now: Date;
-  currentPosition: LatLng | null;
-  onOpenRampModal: () => void;
-  onOpenScannerModal: () => void;
-  onOpenEpodModal: (targetStatus?: string) => void;
-  onOpenChatModal: () => void;
-  onOpenInspectionModal: () => void;
-  onUpdateStatus: (status: string) => void;
-  onSimulateGeofence: (pos: LatLng) => void;
-}) {
-  const isL1 = job.jobPhase === 'L1';
-  const isPending = job.status === 'PENDING' || job.status === 'ASSIGNED';
-  const isAccepted = job.status === 'ACCEPTED';
-  const isAtPort = job.status === 'AT_PORT' || job.status === 'CONTAINER_PICKED' || job.status === 'ARRIVED_AT_PORT';
-  const isUnderInspection = job.status === 'UNDER_INSPECTION';
-  const isInTransit = job.status === 'IN_TRANSIT' || job.status === 'LOADED' || job.status === 'EN_ROUTE_WAREHOUSE' || job.status === 'EN_ROUTE_TERMINAL';
-  const isPlacedAtRamp = job.status === 'PLACED_AT_RAMP' || job.status === 'PLACED_AT_YARD';
-  const isDetached = job.status === 'CONTAINER_DETACHED' || job.status === 'TRAILER_DETACHED' || job.trailerDetached;
-  const isDropped = job.status === 'CONTAINER_DROPPED';
-  const isCompleted = job.status === 'COMPLETED' || job.status === 'EMPTY_DEPOSITED';
-
-  const distToPortM = useMemo(() => {
-    if (!currentPosition || !job.terminalGeofence) return null;
-    return Math.round(haversineMeters(currentPosition, { lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng }));
-  }, [currentPosition, job.terminalGeofence]);
-
-  const distToRampM = useMemo(() => {
-    if (!currentPosition || !job.warehouseGeofence) return null;
-    return Math.round(haversineMeters(currentPosition, { lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng }));
-  }, [currentPosition, job.warehouseGeofence]);
-
-  const etcRemainingMs = useMemo(() => {
-    if (!job.etcTime) return null;
-    return new Date(job.etcTime).getTime() - now.getTime();
-  }, [job.etcTime, now]);
-
-  const etcFormatted = useMemo(() => {
-    if (!job.etcTime) return null;
-    const target = new Date(job.etcTime);
-    const timeStr = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (etcRemainingMs == null) return timeStr;
-    if (etcRemainingMs <= 0) return `Elapsed (${timeStr})`;
-    const mins = Math.floor(etcRemainingMs / 60000);
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${h > 0 ? `${h}h ` : ''}${m}m left · Target ${timeStr}`;
-  }, [job.etcTime, etcRemainingMs]);
-
-  const chatCount = job.messages?.length ?? 0;
-  const hasUrgentChat = job.messages?.some((m) => m.isUrgent) ?? false;
-
-  return (
-    <div
-      className={`rounded-2xl border p-4 space-y-3 transition ${
-        isPlacedAtRamp
-          ? 'bg-slate-900 border-sky-500/50 shadow-lg shadow-sky-500/10'
-          : isInTransit || isUnderInspection
-          ? 'bg-slate-900 border-amber-500/50 shadow-lg shadow-amber-500/10'
-          : 'bg-slate-900/60 border-white/10'
-      }`}
-    >
-      {/* Top Header: Phase, Job Code, Container & Priority */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span
-              className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
-                isL1 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-              }`}
-            >
-              {isL1 ? 'L1 Import Haul' : 'L2 Empty Return'}
-            </span>
-            <span className="font-mono text-[10px] text-slate-400 font-bold">{job.jobCode}</span>
-            {job.priority === 'HIGH' || job.priority === 'URGENT' ? (
-              <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                {job.priority}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="font-mono text-base font-extrabold text-white tracking-wide">{job.containerNumber}</span>
-            <span className="text-[11px] font-mono text-cyan-400 font-semibold">
-              [{job.containerSize} {job.containerType}]
-            </span>
-          </div>
-          {job.customerName && (
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Client: <strong className="text-slate-200">{job.customerName}</strong>
-            </div>
-          )}
-        </div>
-
-        {/* Status Pill & Allowance */}
-        <div className="shrink-0 text-right">
-          <span
-            className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${
-              isCompleted
-                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                : isPlacedAtRamp
-                ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 animate-pulse'
-                : isInTransit || isUnderInspection
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                : 'bg-slate-800 text-slate-300 border-slate-700'
-            }`}
-          >
-            {job.status.replace(/_/g, ' ')}
-          </span>
-          {job.driverAllowanceAed > 0 && (
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1">
-              +AED {job.driverAllowanceAed} Allowance
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Origin / Destination Path with Configured Geofence Badges */}
-      <div className="rounded-xl bg-slate-950/60 p-2.5 border border-white/5 space-y-2 text-xs">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-2 text-slate-300 min-w-0">
-            <Anchor className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-            <span className="text-[11px] truncate text-slate-300">
-              <strong className="text-white">{isL1 ? 'Pickup (Port):' : 'Dropoff (Port):'}</strong> {job.terminalName}
-            </span>
-          </div>
-          {job.terminalGeofence && (
-            <span
-              title={`Terminal Geofence: ${job.terminalGeofence.name} (${job.terminalGeofence.radiusMeters}m radius)`}
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0"
-            >
-              ⚓ {distToPortM != null ? `${distToPortM}m` : 'Port GF'}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 pl-4 text-slate-500">
-          <ArrowRight className="w-3 h-3 text-slate-600" />
-          <span className="text-[10px]">Direct Drayage Corridor · Automated Geofence Auto-Trigger Armed</span>
-        </div>
-
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-2 text-slate-300 min-w-0">
-            <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="text-[11px] truncate text-slate-300">
-              <strong className="text-white">{isL1 ? 'Dropoff (Ramp):' : 'Pickup (Ramp):'}</strong> {job.warehouseName}
-            </span>
-          </div>
-          {job.warehouseGeofence && (
-            <span
-              title={`Ramp Geofence: ${job.warehouseGeofence.name} (${job.warehouseGeofence.type === 'POLYGON' ? 'Polygon' : `${job.warehouseGeofence.radiusMeters}m`})`}
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
-            >
-              📍 {distToRampM != null ? `${distToRampM}m` : (job.warehouseGeofence.type === 'POLYGON' ? 'Polygon Ramp' : 'Ramp GF')}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Equipment details */}
-      <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-        <div className="flex items-center gap-2">
-          <span>Tractor: <strong className="text-slate-200 font-mono">{job.assignedVehiclePlate || 'DXB-767-4011'}</strong></span>
-          <span>·</span>
-          <span>Trailer: <strong className="text-slate-200 font-mono">{job.assignedTrailerPlate || 'DXB-TR-9901'}</strong></span>
-        </div>
-        {isDetached && (
-          <span className="text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-500/30">
-            Chassis Detached
-          </span>
-        )}
-      </div>
-
-      {/* Digital Port Gate e-Token Pass Card */}
-      {job.tokenNumber && (
-        <div className="rounded-xl bg-gradient-to-br from-slate-900 via-cyan-950/40 to-slate-900 p-3 border border-cyan-500/30 space-y-2 text-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 font-bold text-cyan-300">
-              <Key className="w-3.5 h-3.5 text-cyan-400" />
-              <span>PCS Terminal Gate e-Token</span>
-            </div>
-            <span className="font-mono text-[9px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
-              GATE ACCESS CONFIRMED
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 bg-slate-950/80 p-2.5 rounded-lg border border-cyan-500/20">
-            <div className="space-y-0.5">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Appointment Pass</span>
-              <div className="font-mono font-black text-sm text-white tracking-wider">{job.tokenNumber}</div>
-              <div className="text-[10px] text-cyan-200">
-                {job.pcsSlotStart && job.pcsSlotEnd ? (
-                  <>Slot: {job.pcsSlotStart} – {job.pcsSlotEnd}</>
-                ) : (
-                  <>Terminal Window: 2-Hour Active Gate Slot</>
-                )}
-              </div>
-            </div>
-
-            <div className="text-right space-y-1">
-              <div className="h-6 w-24 bg-gradient-to-r from-white via-slate-400 to-white opacity-80 rounded flex items-center justify-center font-mono text-[8px] text-slate-950 font-bold tracking-widest">
-                ||||||||||||||||
-              </div>
-              <span className="text-[8px] font-mono text-slate-400 block">SCAN AT KIOSK</span>
-            </div>
-          </div>
-
-          {job.customsInspection && (
-            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px] flex items-center justify-between">
-              <span>⚠️ Stop at Port Customs / CPIP Bay before Terminal Exit</span>
-              <span className="font-bold text-amber-300">+AED 40 Bonus</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Active Destuffing Countdown Banner */}
-      {job.etcTime && (
-        <div
-          className={`rounded-xl p-2.5 border flex items-center justify-between gap-2 text-xs ${
-            etcRemainingMs != null && etcRemainingMs <= 0
-              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-              : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-          }`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <Timer className={`w-4 h-4 shrink-0 ${etcRemainingMs != null && etcRemainingMs > 0 ? 'animate-spin' : ''}`} />
-            <div className="truncate">
-              <span className="font-semibold text-[11px]">
-                {etcRemainingMs != null && etcRemainingMs <= 0 ? 'Destuffing Window Expired' : 'Destuffing Countdown'}
-              </span>
-              <div className="text-[10px] font-mono opacity-90">{etcFormatted}</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenRampModal}
-            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shrink-0 transition"
-          >
-            Extend
-          </button>
-        </div>
-      )}
-
-      {/* LogiXL-Connect Action Bar: ISO 6346 Scanner + Sign-on-Glass ePOD + Inspection Docs + Dispatch Chat */}
-      <div className="grid grid-cols-2 gap-1.5 pt-1">
-        {/* 1. ISO 6346 & Seal Scanner */}
-        <button
-          type="button"
-          onClick={onOpenScannerModal}
-          className={`py-2 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition ${
-            job.verifiedScan
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-              : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-300'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">
-            {job.verifiedScan ? `✓ Seal ${job.verifiedScan.scannedSealNumber}` : '🔍 Scan ISO & Seal'}
-          </span>
-        </button>
-
-        {/* 2. Sign-on-Glass ePOD */}
-        <button
-          type="button"
-          onClick={() => onOpenEpodModal()}
-          className={`py-2 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition ${
-            job.podSignatureName
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-              : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
-          }`}
-        >
-          <PenTool className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">
-            {job.podSignatureName ? `✓ Signed: ${job.podSignatureName}` : '✍️ Sign-on-Glass ePOD'}
-          </span>
-        </button>
-
-        {/* 3. Customs / Port Inspection Picture & PDF Upload */}
-        <button
-          type="button"
-          onClick={onOpenInspectionModal}
-          className="py-2 px-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition"
-        >
-          <FileText className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">📷 Inspection Proof</span>
-        </button>
-
-        {/* 4. In-App Dispatch & Gate Chat */}
-        <button
-          type="button"
-          onClick={onOpenChatModal}
-          className={`py-2 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition ${
-            hasUrgentChat
-              ? 'bg-rose-500/20 border-rose-500/50 text-rose-200 animate-pulse'
-              : 'bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30 text-indigo-300'
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">💬 Dispatch Chat ({chatCount})</span>
-        </button>
-      </div>
-
-      {/* Step-by-Step L1 / L2 Lifecycle Action Buttons (LogiXL-Connect JobDetailScreen parity) */}
-      <div className="pt-1 space-y-2">
-        {isPending && (
-          <div className="space-y-1.5">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdateStatus('ACCEPTED')}
-                className="py-2.5 rounded-xl font-bold text-xs bg-sky-600 hover:bg-sky-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <Check className="w-4 h-4" />
-                <span>Accept Job</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateStatus('AT_PORT')}
-                className="py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <Anchor className="w-4 h-4" />
-                <span>{isL1 ? 'Container Picked' : 'Pick Up Empty'}</span>
-              </button>
-            </div>
-            {job.terminalGeofence && (
-              <button
-                type="button"
-                onClick={() => job.terminalGeofence && onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
-                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1"
-              >
-                <span>⚡ Simulate Entering Port Geofence (Auto-advance to AT_PORT)</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {isAccepted && (
-          <div className="space-y-1.5">
-            <button
-              type="button"
-              onClick={() => onUpdateStatus('AT_PORT')}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
-            >
-              <Anchor className="w-4 h-4" />
-              <span>{isL1 ? 'Arrive at Port & Pick Up Container' : 'Pick Up Empty Container at Warehouse'}</span>
-            </button>
-            {job.terminalGeofence && (
-              <button
-                type="button"
-                onClick={() => job.terminalGeofence && onSimulateGeofence({ lat: job.terminalGeofence.lat, lng: job.terminalGeofence.lng })}
-                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition flex items-center justify-center gap-1"
-              >
-                <span>⚡ Simulate Entering Port Geofence (Auto-advance to AT_PORT)</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {isAtPort && (
-          <div className="space-y-1.5">
-            <div className="p-2.5 rounded-xl bg-sky-950/80 border border-sky-500/40 text-center text-xs text-sky-200 font-semibold flex items-center justify-center gap-1.5">
-              <Anchor className="w-4 h-4 text-sky-400 animate-pulse" />
-              <span>At Port Berth/Gate · Container Loaded on Chassis</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdateStatus('UNDER_INSPECTION')}
-                className="py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <span>🛃 Start Inspection</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateStatus('IN_TRANSIT')}
-                className="py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <Truck className="w-4 h-4" />
-                <span>{isL1 ? 'En Route to Ramp' : 'En Route to Terminal'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isUnderInspection && (
-          <div className="space-y-1.5">
-            <div className="p-2.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-center text-xs text-amber-200 font-semibold">
-              🛃 Under Port / Customs Inspection — Upload verification photo or proceed once cleared
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={onOpenInspectionModal}
-                className="py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <Camera className="w-4 h-4" />
-                <span>⬆️ Upload Verification</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateStatus(isL1 ? 'IN_TRANSIT' : 'CONTAINER_DROPPED')}
-                className="py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-              >
-                <Truck className="w-4 h-4" />
-                <span>{isL1 ? 'Depart for Warehouse' : 'Drop Container at Port'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isInTransit && (
-          <div className="space-y-1.5">
-            {isL1 ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={onOpenRampModal}
-                  className="py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-1.5"
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span>Placed @ Ramp</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateStatus('CONTAINER_DETACHED')}
-                  className="py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 transition flex items-center justify-center gap-1.5"
-                >
-                  <span>Placed @ Yard / Detach</span>
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onUpdateStatus('UNDER_INSPECTION')}
-                  className="py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
-                >
-                  <span>Arrived Port Inspection</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    job.podSignatureName
-                      ? onUpdateStatus('COMPLETED')
-                      : onOpenEpodModal('COMPLETED')
-                  }
-                  className="py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Drop Empty & Complete</span>
-                </button>
-              </div>
-            )}
-            {job.warehouseGeofence && isL1 && (
-              <button
-                type="button"
-                onClick={() => job.warehouseGeofence && onSimulateGeofence({ lat: job.warehouseGeofence.lat, lng: job.warehouseGeofence.lng })}
-                className="w-full py-1.5 px-2 rounded-xl text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center justify-center gap-1"
-              >
-                <span>⚡ Simulate Arriving at Ramp Geofence (Auto-pop Prompt)</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {isPlacedAtRamp && (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onOpenRampModal}
-              className="py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition flex items-center justify-center gap-1.5"
-            >
-              <Timer className="w-4 h-4" />
-              <span>{job.etcTime ? 'Update ETC / Photo' : 'Set Destuffing ETC'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateStatus('CONTAINER_DETACHED')}
-              className="py-2.5 rounded-xl font-bold text-xs bg-rose-600 hover:bg-rose-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-            >
-              <span>Detach Trailer & Release</span>
-            </button>
-          </div>
-        )}
-
-        {(isDetached || isDropped) && !isCompleted && (
-          <button
-            type="button"
-            onClick={() =>
-              job.podSignatureName
-                ? onUpdateStatus('COMPLETED')
-                : onOpenEpodModal('COMPLETED')
-            }
-            className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition flex items-center justify-center gap-1.5"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>✍️ Confirm ePOD & Complete Job Leg</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Ramp Placement & Destuffing ETC Modal ───────────────────────────────────
-
-function RampPlacementModal({
-  job,
-  submitting,
-  onClose,
-  onSubmit,
-}: {
-  job: DriverDrayageJob;
-  submitting: boolean;
-  onClose: () => void;
-  onSubmit: (payload: {
-    status: string;
-    placementLocation: string;
-    detachTrailer: boolean;
-    etc: string;
-    notes: string;
-    photo: string | null;
-  }) => void;
-}) {
-  const [hoursPreset, setHoursPreset] = useState<number | 'custom'>(2);
-  const [customDateTime, setCustomDateTime] = useState<string>(() => {
-    const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  });
-  const [placementLocation, setPlacementLocation] = useState<'RAMP' | 'YARD'>('RAMP');
-  const [detachTrailer, setDetachTrailer] = useState<boolean>(true);
-  const [rampNotes, setRampNotes] = useState<string>('');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoName, setPhotoName] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const calculatedEtc = useMemo(() => {
-    if (hoursPreset === 'custom') {
-      const parsed = new Date(customDateTime);
-      return isNaN(parsed.getTime()) ? new Date(Date.now() + 2 * 60 * 60 * 1000) : parsed;
-    }
-    return new Date(Date.now() + hoursPreset * 60 * 60 * 1000);
-  }, [hoursPreset, customDateTime]);
-
-  const etcLabel = useMemo(() => {
-    return (
-      calculatedEtc.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
-      ' (' +
-      calculatedEtc.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-      ')'
-    );
-  }, [calculatedEtc]);
-
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhotoName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhotoPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleConfirm = () => {
-    const notesSummary = [
-      rampNotes.trim(),
-      photoName ? `Photo: ${photoName}` : '',
-      detachTrailer ? 'Chassis detached' : 'Chassis kept coupled',
-    ]
-      .filter(Boolean)
-      .join(' · ');
-
-    onSubmit({
-      status: placementLocation === 'RAMP' ? 'PLACED_AT_RAMP' : 'PLACED_AT_YARD',
-      placementLocation,
-      detachTrailer,
-      etc: calculatedEtc.toISOString(),
-      notes: notesSummary || (placementLocation === 'RAMP' ? 'Placed at warehouse ramp' : 'Placed at yard'),
-      photo: photoPreview,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-      <div className="bg-slate-950 border border-sky-500/40 rounded-3xl p-5 max-w-md w-full space-y-4 shadow-2xl text-xs my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
-              <Anchor className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">Container Drayage</div>
-              <h3 className="text-sm font-bold text-white">Placed at Ramp & Destuffing ETC</h3>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Container Badge Card */}
-        <div className="rounded-2xl bg-slate-900 border border-white/10 p-3 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-mono font-bold text-sm text-cyan-300">{job.containerNumber}</span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-              {job.containerSize} {job.containerType}
-            </span>
-          </div>
-          <div className="text-slate-300 flex items-center gap-1.5 text-[11px]">
-            <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-            <span className="truncate">{job.warehouseName}</span>
-          </div>
-          <div className="text-[10px] text-slate-400 flex items-center gap-2 pt-1 border-t border-white/5">
-            <span>Chassis: <strong className="text-white font-mono">{job.assignedTrailerPlate || 'Standard Chassis'}</strong></span>
-            <span>·</span>
-            <span>Tractor: <strong className="text-white font-mono">{job.assignedVehiclePlate || 'Assigned'}</strong></span>
-          </div>
-        </div>
-
-        {/* Placement Location Selector */}
-        <div className="space-y-1.5">
-          <label className="block text-slate-300 font-semibold">Placement Location *</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setPlacementLocation('RAMP')}
-              className={`p-2.5 rounded-xl border text-center transition font-semibold ${
-                placementLocation === 'RAMP'
-                  ? 'bg-sky-500/20 border-sky-500 text-sky-200'
-                  : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-              }`}
-            >
-              📍 Loading Dock / Ramp
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlacementLocation('YARD')}
-              className={`p-2.5 rounded-xl border text-center transition font-semibold ${
-                placementLocation === 'YARD'
-                  ? 'bg-sky-500/20 border-sky-500 text-sky-200'
-                  : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-              }`}
-            >
-              🅿️ Staging Yard
-            </button>
-          </div>
-        </div>
-
-        {/* ETC Duration Presets */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="block text-slate-300 font-semibold">Destuffing Duration (ETC) *</label>
-            <span className="text-[11px] font-mono font-bold text-amber-300">ETA: {etcLabel}</span>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { val: 1, label: '+1h', sub: 'Express' },
-              { val: 2, label: '+2h', sub: 'Pallet' },
-              { val: 3, label: '+3h', sub: 'Standard' },
-              { val: 4, label: '+4h', sub: 'Floor' },
-            ].map((p) => (
-              <button
-                key={p.val}
-                type="button"
-                onClick={() => setHoursPreset(p.val)}
-                className={`py-2 px-1 rounded-xl border text-center transition ${
-                  hoursPreset === p.val
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
-                    : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="text-xs">{p.label}</div>
-                <div className="text-[9px] opacity-75">{p.sub}</div>
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setHoursPreset('custom')}
-            className={`w-full py-1.5 px-2 rounded-xl border text-[11px] text-center transition ${
-              hoursPreset === 'custom'
-                ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
-                : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-            }`}
-          >
-            Custom Target Date / Time
-          </button>
-
-          {hoursPreset === 'custom' && (
-            <input
-              type="datetime-local"
-              value={customDateTime}
-              onChange={(e) => setCustomDateTime(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-amber-500"
-            />
-          )}
-        </div>
-
-        {/* Detach Trailer Checkbox */}
-        <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={detachTrailer}
-            onChange={(e) => setDetachTrailer(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0"
-          />
-          <div className="text-[11px]">
-            <span className="text-white font-semibold">Detach Trailer / Chassis</span>
-            <p className="text-[10px] text-slate-400">Frees your tractor for next assignment while container is destuffed</p>
-          </div>
-        </label>
-
-        {/* Photo Evidence Capture */}
-        <div className="space-y-1.5">
-          <label className="block text-slate-300 font-semibold">Placement Proof / Evidence Photo</label>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhotoCapture}
-          />
-          {photoPreview ? (
-            <div className="relative rounded-xl overflow-hidden border border-emerald-500/50 bg-slate-900 p-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photoPreview} alt="Placement preview" className="w-12 h-12 rounded-lg object-cover" />
-                <div className="truncate text-[11px]">
-                  <div className="text-emerald-300 font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Photo Captured
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate">{photoName}</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setPhotoPreview(null);
-                  setPhotoName(null);
-                }}
-                className="p-1 rounded-lg text-slate-400 hover:text-rose-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2.5 rounded-xl border border-dashed border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 font-semibold flex items-center justify-center gap-2 transition"
-            >
-              <Camera className="w-4 h-4" />
-              <span>Take Container Placement Photo</span>
-            </button>
-          )}
-        </div>
-
-        {/* Bay / Notes */}
-        <div>
-          <label className="block text-slate-300 font-semibold mb-1">Ramp Bay / Warehouse Notes</label>
-          <input
-            type="text"
-            value={rampNotes}
-            onChange={(e) => setRampNotes(e.target.value)}
-            placeholder="e.g. Ramp Bay 04 - Forklift unloading active"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-sky-500"
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-2 border-t border-white/10">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={submitting}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white font-bold shadow-lg shadow-sky-600/30 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
-          >
-            {submitting ? (
-              <span>Submitting...</span>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Confirm Placement</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

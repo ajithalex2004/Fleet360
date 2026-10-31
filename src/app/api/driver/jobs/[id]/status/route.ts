@@ -112,14 +112,16 @@ export async function POST(
     const detachTrailer =
       body.detachTrailer !== undefined
         ? Boolean(body.detachTrailer)
-        : status.includes('DETACHED') || status === 'PLACED_AT_RAMP' || status === 'PLACED_AT_YARD';
+        : status === 'TRAILER_ATTACHED'
+        ? false
+        : status.includes('DETACHED') || status === 'READY_FOR_PICKUP' || status === 'CONTAINER_DROPPED';
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
-      if (body.receiverName) {
+      if (body.receiverName || body.photo) {
         await submitJobPodEvidence(tx, {
           tenantId,
           jobId,
-          receiverName: String(body.receiverName),
+          receiverName: String(body.receiverName || body.driverName || 'Driver Inspection'),
           photoUrl: body.signatureDataUri ? String(body.signatureDataUri) : (body.photo ? String(body.photo) : null),
           notes,
           actor: body.driverName ? String(body.driverName) : 'Driver Mobile App',
