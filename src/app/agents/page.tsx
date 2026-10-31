@@ -151,6 +151,9 @@ function ThresholdEditor({
   const [open, setOpen]   = useState(false);
   const [val, setVal]     = useState<string>('');
   const [saving, setSaving] = useState(false);
+  // The PATCH can be refused (thresholds are platform-wide: SUPER_ADMIN only)
+  // or rejected (out of range); the editor used to close as if it had saved.
+  const [error, setError] = useState<string | null>(null);
 
   const key = Object.keys(config).find(k =>
     !['label', 'min', 'max', 'step', 'unit', 'options'].includes(k)
@@ -160,25 +163,38 @@ function ThresholdEditor({
   const unit       = config.unit as string ?? '';
   const options    = config.options as string[] | undefined;
 
-  const handleOpen = () => { setVal(String(currentVal)); setOpen(true); };
+  const handleOpen = () => { setVal(String(currentVal)); setError(null); setOpen(true); };
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     const parsed = options ? val : (typeof currentVal === 'number' ? parseFloat(val) : val);
-    await fetch('/api/agents/thresholds', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, thresholds: { [key]: parsed } }),
-    });
-    setSaving(false);
-    setOpen(false);
-    onSaved();
+    try {
+      const res = await fetch('/api/agents/thresholds', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, thresholds: { [key]: parsed } }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        // Keep the editor open with the value, so the user sees why.
+        setError(body?.error ?? `Save failed (HTTP ${res.status}).`);
+        return;
+      }
+      setOpen(false);
+      onSaved();
+    } catch {
+      setError('Save failed: the server could not be reached.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!key) return null;
 
   return (
-    <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 flex items-center justify-between gap-2 mb-2">
+    <div className="mb-2">
+    <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 flex items-center justify-between gap-2">
       <span className="text-xs text-[var(--text-muted)] truncate">{label}</span>
       {open ? (
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -210,7 +226,7 @@ function ThresholdEditor({
             {saving ? '…' : '✓'}
           </button>
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => { setOpen(false); setError(null); }}
             className="text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
           >
             ✕
@@ -227,6 +243,10 @@ function ThresholdEditor({
           </button>
         </div>
       )}
+    </div>
+    {error && (
+      <p role="alert" className="mt-1 px-3 text-[11px] text-red-400">{error}</p>
+    )}
     </div>
   );
 }
