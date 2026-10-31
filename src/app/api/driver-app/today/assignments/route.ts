@@ -94,11 +94,16 @@ function computeScore(rows: ScoreRow[]): ScoreBreakdown {
 // Row shapes of the drayage queries below (columns as selected).
 type DrayageJobRow = {
   id: string; jobCode: string; jobPhase: string; shipmentType: string; status: string; priority: string;
+  customerName: string | null;
   containerNumber: string; containerSize: string; containerType: string;
   terminalId: string | null; terminalName: string; warehouseId: string | null; warehouseName: string;
   assignedVehiclePlate: string | null; assignedTrailerPlate: string | null; placementLocation: string | null;
   trailerDetached: boolean; etcTime: Date | string | null; etcAlertStatus: string;
   rateAmountAed: number | null; driverAllowanceAed: number | null; notes: string | null;
+  podSignatureName?: string | null; podSignedAt?: Date | string | null; podPhotoUrl?: string | null;
+};
+type DrayageMessageRow = {
+  id: string; job_id: string; sender_role: string; sender_name: string; message: string; is_urgent: boolean; created_at: Date | string;
 };
 type DrayageGeofenceRow = {
   id: string; terminal_id: string | null; terminal_name: string | null; name: string | null; type: string | null;
@@ -156,10 +161,10 @@ export async function GET(req: NextRequest) {
         ORDER BY ts.departure_time ASC
       `;
 
-      // 1b) Port Container Drayage assignments + Configured Geofences
+      // 1b) Port Container Drayage assignments + Configured Geofences + Chat Messages
       let drayageJobs: Array<Record<string, unknown>> = [];
       try {
-        const [drayageRows, gfRows, termRows, whRows] = await Promise.all([
+        const [drayageRows, gfRows, termRows, whRows, msgRows] = await Promise.all([
           tx.$queryRawUnsafe<DrayageJobRow[]>(`
             SELECT
               id,
@@ -168,6 +173,7 @@ export async function GET(req: NextRequest) {
               shipment_type AS "shipmentType",
               status,
               priority,
+              customer_name AS "customerName",
               container_number AS "containerNumber",
               container_size AS "containerSize",
               container_type AS "containerType",
@@ -190,24 +196,23 @@ export async function GET(req: NextRequest) {
               etc_alert_status AS "etcAlertStatus",
               rate_amount_aed AS "rateAmountAed",
               driver_allowance_aed AS "driverAllowanceAed",
+              pod_signature_name AS "podSignatureName",
+              pod_signed_at AS "podSignedAt",
+              pod_photo_url AS "podPhotoUrl",
               notes
             FROM logistics_drayage_jobs
             WHERE tenant_id = $1
-              AND (
-                assigned_driver_id = $2
-                OR assigned_driver_id IS NULL
-                OR assigned_driver_name = $2
-              )
               AND status NOT IN ('CANCELLED')
             ORDER BY
               CASE
-                WHEN status IN ('IN_TRANSIT', 'LOADED', 'ACCEPTED', 'PLACED_AT_RAMP') THEN 1
-                WHEN status = 'PENDING' THEN 2
+                WHEN job_phase = 'L2' AND status NOT IN ('COMPLETED') THEN 0
+                WHEN status IN ('IN_TRANSIT', 'LOADED', 'ACCEPTED', 'PLACED_AT_RAMP', 'UNDER_INSPECTION', 'CONTAINER_PICKED', 'AT_PORT') THEN 1
+                WHEN status IN ('PENDING', 'ASSIGNED') THEN 2
                 ELSE 3
               END,
               created_at DESC
-            LIMIT 10
-          `, tenantId, ctx.userId),
+            LIMIT 20
+          `, tenantId),
           tx.$queryRawUnsafe<DrayageGeofenceRow[]>(`
             SELECT id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
             FROM logistics_drayage_geofences
@@ -222,6 +227,12 @@ export async function GET(req: NextRequest) {
             SELECT id, name, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
             FROM logistics_drayage_warehouses
             WHERE tenant_id = $1
+          `, tenantId).catch(() => []),
+          tx.$queryRawUnsafe<DrayageMessageRow[]>(`
+            SELECT id, job_id, sender_role, sender_name, message, is_urgent, created_at
+            FROM logistics_drayage_messages
+            WHERE tenant_id = $1
+            ORDER BY created_at ASC
           `, tenantId).catch(() => []),
         ]);
 
@@ -278,13 +289,26 @@ export async function GET(req: NextRequest) {
             coordinates: parseGeofenceCoords(matchedWhGf?.coordinates_json || matchedWh?.geofence_coordinates_json),
           };
 
+          const jobMessages = msgRows
+            .filter((m) => m.job_id === j.id)
+            .map((m) => ({
+              id: m.id,
+              senderRole: m.sender_role,
+              senderName: m.sender_name,
+              message: m.message,
+              isUrgent: Boolean(m.is_urgent),
+              createdAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
+            }));
+
           return {
             ...j,
             rateAmountAed: Number(j.rateAmountAed || 0),
             driverAllowanceAed: Number(j.driverAllowanceAed || 0),
             etcTime: j.etcTime ? new Date(j.etcTime).toISOString() : null,
+            podSignedAt: j.podSignedAt ? new Date(j.podSignedAt).toISOString() : null,
             terminalGeofence,
             warehouseGeofence,
+            messages: jobMessages,
           };
         });
       } catch (drayageErr) {
@@ -353,4 +377,3 @@ export async function GET(req: NextRequest) {
       );
   });
 }
-

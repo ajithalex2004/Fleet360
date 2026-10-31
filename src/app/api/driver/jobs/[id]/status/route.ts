@@ -4,7 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { updateDrayageJobExecutionStatus } from '@/lib/logistics/drayage-domain';
+import {
+  updateDrayageJobExecutionStatus,
+  submitJobPodEvidence,
+  sendDispatchChatMessage,
+  clearPortInspection,
+} from '@/lib/logistics/drayage-domain';
 
 export async function POST(
   req: NextRequest,
@@ -22,7 +27,75 @@ export async function POST(
   try {
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody);
+    const action = body.action ? String(body.action) : 'STATUS_UPDATE';
 
+    // 1. In-App Dispatch <-> Driver Chat
+    if (action === 'CHAT') {
+      const msg = String(body.message ?? '').trim();
+      if (!msg) {
+        return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+      }
+      const chatRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        return sendDispatchChatMessage(tx, {
+          tenantId,
+          jobId,
+          senderRole: 'DRIVER',
+          senderName: String(body.driverName || 'Assigned Driver'),
+          message: msg,
+          isUrgent: Boolean(body.isUrgent),
+        });
+      });
+      return NextResponse.json({
+        success: true,
+        id: chatRes.id,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 2. ISO 6346 Container & Bolt Seal Verification
+    if (action === 'SCAN_VERIFY') {
+      const scannedContainer = String(body.scannedContainerNumber ?? '').trim().toUpperCase();
+      const scannedSeal = String(body.scannedSealNumber ?? '').trim().toUpperCase();
+      await withTenantRls(prisma, tenantId, async (tx) => {
+        await clearPortInspection(tx, {
+          tenantId,
+          jobId,
+          agency: 'CUSTOMS',
+          newSealNumber: scannedSeal || undefined,
+          clearedBy: String(body.driverName || 'Driver ISO 6346 Scanner'),
+          notes: `ISO 6346 Container (${scannedContainer}) & Bolt Seal (${scannedSeal}) verified via Driver Mobile App`,
+          actor: String(body.driverName || 'Driver Mobile App'),
+        });
+      });
+      return NextResponse.json({
+        success: true,
+        jobId,
+        scannedContainerNumber: scannedContainer,
+        scannedSealNumber: scannedSeal,
+        verifiedAt: new Date().toISOString(),
+      });
+    }
+
+    // 3. Sign-on-Glass ePOD Signature Submission
+    if (action === 'EPOD_SIGN') {
+      const receiverName = String(body.receiverName ?? 'Warehouse Dock Supervisor').trim();
+      const podRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        return submitJobPodEvidence(tx, {
+          tenantId,
+          jobId,
+          receiverName,
+          photoUrl: body.signatureDataUri ? String(body.signatureDataUri) : (body.photo ? String(body.photo) : null),
+          notes: body.notes ? String(body.notes) : undefined,
+          actor: String(body.driverName || 'Driver Mobile App'),
+        });
+      });
+      return NextResponse.json({
+        success: true,
+        ...podRes,
+      });
+    }
+
+    // 4. Standard Drayage Status Update (including optional ePOD signature / photo / ETC)
     const status = String(body.status ?? 'PLACED_AT_RAMP');
     const etcTime = body.etc || body.etcTime || null;
     const notes = body.notes ? String(body.notes) : undefined;
@@ -42,6 +115,16 @@ export async function POST(
         : status.includes('DETACHED') || status === 'PLACED_AT_RAMP' || status === 'PLACED_AT_YARD';
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
+      if (body.receiverName) {
+        await submitJobPodEvidence(tx, {
+          tenantId,
+          jobId,
+          receiverName: String(body.receiverName),
+          photoUrl: body.signatureDataUri ? String(body.signatureDataUri) : (body.photo ? String(body.photo) : null),
+          notes,
+          actor: body.driverName ? String(body.driverName) : 'Driver Mobile App',
+        });
+      }
       return updateDrayageJobExecutionStatus(tx, {
         tenantId,
         jobId,
