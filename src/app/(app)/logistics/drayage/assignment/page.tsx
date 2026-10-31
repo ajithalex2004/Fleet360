@@ -1133,16 +1133,15 @@ export default function DrayageAssignmentPage() {
     setTokenInput(`DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
-  // Open modal for single job
+  // Open modal for single job — clear fields so previous action values never pre-populate on Assign / Reassign
   const handleOpenAssign = (job: DrayageJob) => {
     setAssigningJob(job);
     setIsBogieAssign(false);
     setSelectedJobIds([job.id]);
-    const rec = getSmartRecommendedAssets(job, false);
-    setSelectedVehicleId(job.assignedVehicleId || rec.vehicleId);
-    setSelectedDriverId(job.assignedDriverId || rec.driverId);
-    setSelectedTrailerId(job.assignedTrailerId || rec.trailerId);
-    setTokenInput(job.tokenNumber || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`);
+    setSelectedVehicleId('');
+    setSelectedDriverId('');
+    setSelectedTrailerId('');
+    setTokenInput('');
   };
 
   // Open modal for bogie merge (strictly exactly 2 twenty-foot containers)
@@ -1170,13 +1169,14 @@ export default function DrayageAssignmentPage() {
 
   // Confirm single / bogie assignment modal
   const handleConfirmAssignment = async () => {
-    if (!selectedVehicleId || !selectedDriverId || !selectedTrailerId) {
+    const effectiveTrailerId = selectedTrailerId || assigningJob?.assignedTrailerId || '';
+    if (!selectedVehicleId || !selectedDriverId || !effectiveTrailerId) {
       showToast('error', 'Please select a Prime Mover, Driver, and Chassis');
       return;
     }
     const veh = vehicles.find((v) => v.id === selectedVehicleId);
     const drv = drivers.find((d) => d.id === selectedDriverId);
-    const tr = trailers.find((t) => t.id === selectedTrailerId);
+    const tr = trailers.find((t) => t.id === effectiveTrailerId);
 
     try {
       setSubmittingAssign(true);
@@ -1247,8 +1247,8 @@ export default function DrayageAssignmentPage() {
             vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
             driverId: selectedDriverId,
             driverName: drv?.fullName || 'Assigned Driver',
-            trailerId: selectedTrailerId,
-            trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
+            trailerId: effectiveTrailerId,
+            trailerPlate: tr?.plateNumber || assigningJob?.assignedTrailerPlate || 'DXB-TR-9901',
             tokenNumber: tokenInput,
           }),
         });
@@ -2358,13 +2358,6 @@ export default function DrayageAssignmentPage() {
                   value={selectedVehicleId}
                   onChange={(val) => {
                     setSelectedVehicleId(val);
-                    const veh = primeMovers.find((v) => v.id === val);
-                    if (veh?.assignedDriverId) {
-                      const drv = drivers.find((d) => d.id === veh.assignedDriverId);
-                      if (drv && drv.complianceOk) {
-                        setSelectedDriverId(drv.id);
-                      }
-                    }
                   }}
                   options={primeMoverSelectOptions}
                   placeholder="-- Search & Choose Prime Mover --"
