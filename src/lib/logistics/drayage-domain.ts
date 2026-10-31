@@ -2318,7 +2318,11 @@ export async function updateDrayageJobExecutionStatus(
 
   const placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
   const detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
-  const isRampPlacement = args.status === 'PLACED_AT_RAMP' || (detached && placement === 'RAMP') || args.status === 'CONTAINER_DETACHED';
+  const isRampPlacement =
+    args.status === 'PLACED_AT_RAMP' ||
+    args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+    (detached && placement === 'RAMP') ||
+    args.status === 'CONTAINER_DETACHED';
 
   // Handle ETC (Estimated Time of Completion for container offloading / destuffing)
   let effectiveEtcTime: string | null = null;
@@ -2342,7 +2346,16 @@ export async function updateDrayageJobExecutionStatus(
   if (args.status === 'IN_TRANSIT') {
     lat = 24.9850;
     lng = 55.0760;
-  } else if (['PLACED_AT_RAMP', 'PLACED_AT_YARD', 'CONTAINER_DETACHED', 'WAITING_MT_RETURN'].includes(args.status)) {
+  } else if (
+    [
+      'PLACED_AT_RAMP',
+      'REASSIGN_PLACED_AT_RAMP',
+      'PLACED_AT_YARD',
+      'REASSIGN_PLACED_AT_YARD',
+      'CONTAINER_DETACHED',
+      'WAITING_MT_RETURN',
+    ].includes(args.status)
+  ) {
     lat = 24.9642;
     lng = 55.0915;
   } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'COMPLETED'].includes(args.status)) {
@@ -2398,9 +2411,17 @@ export async function updateDrayageJobExecutionStatus(
   if (job.assigned_trailer_id) {
     let trMaster = 'IN_USE';
     let trOp = 'LOADED_FCL';
-    if (args.status === 'PLACED_AT_RAMP' || (detached && placement === 'RAMP')) {
+    if (
+      args.status === 'PLACED_AT_RAMP' ||
+      args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+      (detached && placement === 'RAMP')
+    ) {
       trOp = 'DETACHED_AT_RAMP';
-    } else if (args.status === 'PLACED_AT_YARD' || (detached && placement === 'YARD')) {
+    } else if (
+      args.status === 'PLACED_AT_YARD' ||
+      args.status === 'REASSIGN_PLACED_AT_YARD' ||
+      (detached && placement === 'YARD')
+    ) {
       trOp = 'DETACHED_AT_YARD';
     } else if (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED') {
       trMaster = 'AVAILABLE';

@@ -725,12 +725,10 @@ export default function DriverTodayPage() {
                       type="button"
                       disabled={submitting}
                       onClick={() => {
-                        if (isReassignJob) {
-                          void handleStatusUpdate(selectedJob, 'REASSIGN_PLACED_AT_RAMP');
-                        } else {
-                          setPendingRampStatus('PLACED_AT_RAMP');
-                          setShowEtcModal(true);
-                        }
+                        setPendingRampStatus(
+                          isReassignJob ? 'REASSIGN_PLACED_AT_RAMP' : 'PLACED_AT_RAMP',
+                        );
+                        setShowEtcModal(true);
                       }}
                       className="py-3.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md transition active:scale-95 disabled:opacity-50"
                     >
