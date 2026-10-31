@@ -10,7 +10,9 @@
  * Flow:
  *   1. Driver enters Username & Password (or Biometric auth).
  *   2. Immediately prompts to select/confirm Vehicle ID & enter Starting Odometer.
- *   3. Pre-selects driver assigned vehicle (e.g. Jennish John -> 96448 / VEH-000247, 67,050 km).
+ *   3. If the driver has a vehicle assigned in their profile, pre-selects it.
+ *      If the driver is NOT assigned to any vehicle, defaults to a blank value
+ *      column where the driver can enter their Vehicle ID / License Plate to login.
  *   4. Submits vehicle session & starts shift with startOdometer.
  *   5. Immediately transitions driver to the Driver Checklist (/driver-app/shift-checklist).
  */
@@ -61,57 +63,109 @@ interface FleetVehicle {
   isAssignedToMe?: boolean;
 }
 
-const DEFAULT_FLEET_VEHICLES: FleetVehicle[] = [
+const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
   {
-    id: 'a901b2c3-d4e5-4f6a-8b7c-000000004011',
+    id: '44d7babe-33dd-4769-a35a-dd9285f2b63a',
+    vehicleCode: 'TRX-001',
+    licensePlate: 'DXB-41087',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 45000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'cdf5d462-a1fa-45bd-82b9-389301e93594',
+    vehicleCode: 'TRX-002',
+    licensePlate: 'DXB-84243',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 50200,
+    isAssignedToMe: false,
+  },
+  {
+    id: '2254dd0b-04a4-459c-8081-31c99f164be0',
+    vehicleCode: 'TRX-003',
+    licensePlate: 'DXB-17959',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 55400,
+    isAssignedToMe: false,
+  },
+  {
+    id: '23304378-d25a-4d8c-ba8c-6d716b7cd1e7',
+    vehicleCode: 'TRX-004',
+    licensePlate: 'DXB-66176',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 60600,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'f935e27c-9b9d-4ecc-b36d-7a527fb22506',
+    vehicleCode: 'TRX-005',
+    licensePlate: 'DXB-18312',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 65800,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'a1d013af-6c32-4ea8-b334-3740b6b5195e',
+    vehicleCode: 'TRX-006',
+    licensePlate: 'DXB-86549',
+    make: 'Mercedes-Benz',
+    model: 'Actros Prime Mover',
+    year: 2024,
+    deviceId: '',
+    isDeviceBlank: true,
+    canActivateMobileTracking: true,
+    odometerReading: 71000,
+    isAssignedToMe: false,
+  },
+  {
+    id: 'b1000000-0000-4000-8000-000000000001',
     vehicleCode: 'PM-001',
     licensePlate: 'DXB-767-4011',
-    make: 'MERCEDES-BENZ',
-    model: 'ACTROS 2645 LS 6x4 PRIME MOVER',
+    make: 'Mercedes-Benz',
+    model: 'Actros 2645 LS Prime Mover (6x4)',
     year: 2024,
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
     odometerReading: 142850,
-    isAssignedToMe: true,
-  },
-  {
-    id: '3c779fd8-d536-475c-a38e-9919909fab84',
-    vehicleCode: 'VEH-000247',
-    licensePlate: '96448',
-    make: 'HONDA',
-    model: 'PILOT',
-    year: 2022,
-    deviceId: '',
-    isDeviceBlank: true,
-    canActivateMobileTracking: true,
-    odometerReading: 67050,
-    isAssignedToMe: true,
-  },
-  {
-    id: '4d88afc9-e647-485d-b49e-112233445566',
-    vehicleCode: 'VEH-000248',
-    licensePlate: '12845',
-    make: 'TOYOTA',
-    model: 'HIACE',
-    year: 2023,
-    deviceId: 'IMEI-8649201948',
-    isDeviceBlank: false,
-    canActivateMobileTracking: false,
-    odometerReading: 42300,
     isAssignedToMe: false,
   },
   {
-    id: '5e99bfc0-f758-596e-c50f-223344556677',
-    vehicleCode: 'VEH-000249',
-    licensePlate: '58392',
-    make: 'MERCEDES',
-    model: 'SPRINTER',
-    year: 2021,
+    id: 'pm-volvo-2-767aaca7',
+    vehicleCode: 'PM-002',
+    licensePlate: 'DXB-767-4012',
+    make: 'Volvo',
+    model: 'FH16 540 Globetrotter Tractor (6x4)',
+    year: 2024,
     deviceId: '',
     isDeviceBlank: true,
     canActivateMobileTracking: true,
-    odometerReading: 118200,
+    odometerReading: 98400,
     isAssignedToMe: false,
   },
 ];
@@ -137,8 +191,10 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehiclePromptSubtitle: 'Confirm your vehicle and dashboard odometer reading before starting the Driver Checklist.',
     assignedVehicleLabel: 'Select Vehicle',
     assignedToProfile: '★ Assigned to Profile',
-    otherVehicleOption: '✏️ Enter Other Vehicle ID / Plate…',
-    customVehicleLabel: 'Custom Vehicle Code or Plate Number',
+    noVehicleAssigned: 'No Vehicle Assigned',
+    blankVehicleOption: '— Blank / Enter Vehicle ID or Plate Manually —',
+    customVehicleLabel: 'Enter Vehicle ID / License Plate *',
+    customVehiclePlaceholder: 'Enter Vehicle ID or Plate (e.g. DXB-41087, PM-001)',
     startingOdometerLabel: 'Starting Odometer (km) *',
     useLast: 'Use last:',
     odometerHint: 'Verify reading against the physical vehicle instrument cluster.',
@@ -151,7 +207,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     statusActive: 'Status: Active & Assigned',
     notice: 'Notice',
     serverHostTitle: 'API Server Endpoint',
-    serverHostHelp: 'Enter your Fleet360 backend IP/domain (e.g. http://192.168.1.17:3000)',
+    serverHostHelp: 'Enter your Fleet360 backend IP/domain (e.g. https://fleet360-app-production.up.railway.app)',
     saveServer: 'Save Server URL',
   },
   ar: {
@@ -174,8 +230,10 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehiclePromptSubtitle: 'تحقق من مركبتك وقراءة العداد الفعلية قبل بدء فحص السائق.',
     assignedVehicleLabel: 'اختر المركبة',
     assignedToProfile: '★ مخصصة لحسابك',
-    otherVehicleOption: '✏️ إدخال لوحة أو رمز مركبة أخرى…',
-    customVehicleLabel: 'رمز أو رقم لوحة المركبة',
+    noVehicleAssigned: 'غير مخصصة لمركبة',
+    blankVehicleOption: '— فارغ / إدخال رقم المركبة أو اللوحة يدوياً —',
+    customVehicleLabel: 'أدخل رقم المركبة أو رقم اللوحة *',
+    customVehiclePlaceholder: 'مثال: DXB-41087 أو PM-001',
     startingOdometerLabel: 'عداد المسافات الأولي (كم) *',
     useLast: 'استخدام السابق:',
     odometerHint: 'تأكد من مطابقة القراءة مع شاشة عداد المركبة الفعلية.',
@@ -188,7 +246,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     statusActive: 'الحالة: نشطة ومخصصة',
     notice: 'تنبيه',
     serverHostTitle: 'عنوان خادم النظام (API)',
-    serverHostHelp: 'أدخل عنوان خادم Fleet360 (مثال: http://192.168.1.17:3000)',
+    serverHostHelp: 'أدخل عنوان خادم Fleet360',
     saveServer: 'حفظ عنوان الخادم',
   },
   hi: {
@@ -211,8 +269,10 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehiclePromptSubtitle: 'ड्राइवर चेकलिस्ट शुरू करने से पहले अपने वाहन और डैशबोर्ड ओडोमीटर की पुष्टि करें।',
     assignedVehicleLabel: 'वाहन चुनें',
     assignedToProfile: '★ प्रोफ़ाइल को सौंपा गया',
-    otherVehicleOption: '✏️ अन्य वाहन आईडी / प्लेट दर्ज करें…',
-    customVehicleLabel: 'कस्टम वाहन कोड या प्लेट नंबर',
+    noVehicleAssigned: 'कोई वाहन असाइन नहीं है',
+    blankVehicleOption: '— खाली / वाहन आईडी या प्लेट मैन्युअल दर्ज करें —',
+    customVehicleLabel: 'वाहन आईडी या लाइसेंस प्लेट दर्ज करें *',
+    customVehiclePlaceholder: 'वाहन आईडी या प्लेट दर्ज करें (उदा. DXB-41087, PM-001)',
     startingOdometerLabel: 'प्रारंभिक ओडोमीटर (किमी) *',
     useLast: 'पिछला उपयोग करें:',
     odometerHint: 'वाहन के वास्तविक क्लस्टर से रीडिंग का मिलान करें।',
@@ -225,7 +285,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     statusActive: 'स्थिति: सक्रिय और असाइन किया गया',
     notice: 'सूचना',
     serverHostTitle: 'एपीआई सर्वर एंडपॉइंट',
-    serverHostHelp: 'अपना फ़्लीट360 सर्वर URL दर्ज करें (उदा. http://192.168.1.17:3000)',
+    serverHostHelp: 'अपना फ़्लीट360 सर्वर URL दर्ज करें',
     saveServer: 'सर्वर URL सहेजें',
   },
 };
@@ -238,7 +298,7 @@ export default function DriverAppLauncher() {
   const [serverUrlInput, setServerUrlInput] = useState('');
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('fleet360_api_host') || 'http://192.168.1.17:3000';
+      const saved = localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app';
       setServerUrlInput(saved);
     } catch {}
   }, []);
@@ -249,22 +309,18 @@ export default function DriverAppLauncher() {
   // Active Vehicle Session
   const [activeVehicle, setActiveVehicle] = useState<FleetVehicle | null>(null);
 
-  // Fleet vehicles list for assignment picker
-  const [fleetVehicles, setFleetVehicles] = useState<FleetVehicle[]>(DEFAULT_FLEET_VEHICLES);
-  const [selectedVehicle, setSelectedVehicle] = useState<FleetVehicle | null>(DEFAULT_FLEET_VEHICLES[0]);
-  const [customVehicleQuery] = useState('');
-  const [odometerInput, setOdometerInput] = useState('67050');
-  const [driverInfo, setDriverInfo] = useState<{ id?: string; name?: string; assignedVehicleId?: string } | null>({
-    name: 'Jennish John',
-    assignedVehicleId: '3c779fd8-d536-475c-a38e-9919909fab84',
-  });
+  // Fleet vehicles list for assignment picker — defaults to empty/unassigned until loaded
+  const [fleetVehicles, setFleetVehicles] = useState<FleetVehicle[]>([]);
+  const [selectedVehicle, setSelectedVehicle] = useState<FleetVehicle | null>(null);
+  const [customVehicleQuery, setCustomVehicleQuery] = useState('');
+  const [odometerInput, setOdometerInput] = useState('');
+  const [hasAssignedVehicleOnProfile, setHasAssignedVehicleOnProfile] = useState(false);
+  const [driverInfo, setDriverInfo] = useState<{ id?: string; name?: string; email?: string; assignedVehicleId?: string | null } | null>(null);
   const [isStartingChecklist, setIsStartingChecklist] = useState(false);
 
-  // Vehicle Direct Login form
-
   // Driver Credentials form
-  const [username, setUsername] = useState('driver@trexla-logistics.ae');
-  const [password, setPassword] = useState('Trexla@2026!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Mobile Tracking State
@@ -431,7 +487,7 @@ export default function DriverAppLauncher() {
     setErrorMsg(null);
     try {
       await checkActiveVehicleSession();
-      const r = await fetch('/api/driver-app/auth/biometric/status', { credentials: 'include' });
+      const r = await fetch(getApiEndpoint('/api/driver-app/auth/biometric/status'), { credentials: 'include' });
       const data = await parseJsonSafely(r);
       if (data) {
         setBootInfo(data);
@@ -461,20 +517,19 @@ export default function DriverAppLauncher() {
   const { isDark, toggleTheme } = useMobileTheme();
 
   // Helper to fetch fleet vehicles and transition to vehicle-odometer prompt
-  const proceedToVehicleOdometer = async (fallbackDriverName?: string) => {
+  const proceedToVehicleOdometer = async (fallbackDriverName?: string, signedInEmail?: string) => {
     try {
       let vehicles: FleetVehicle[] = [];
-      let driver: { id?: string; name?: string; assignedVehicleId?: string } | null = null;
+      let driver: { id?: string; name?: string; assignedVehicleId?: string | null } | null = null;
 
       try {
         const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login?list=true'), { credentials: 'include' });
         if (res.ok) {
           const data = await parseJsonSafely(res);
           if (data) {
-            vehicles = data.vehicles || [];
+            vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
             if (data.driver) {
               driver = data.driver;
-              setDriverInfo(data.driver);
             }
           }
         }
@@ -482,44 +537,64 @@ export default function DriverAppLauncher() {
         // network / local asset fallback
       }
 
-      if (vehicles.length === 0) {
-        vehicles = DEFAULT_FLEET_VEHICLES;
+      const emailLower = (signedInEmail || username || '').toLowerCase().trim();
+      if (vehicles.length === 0 && emailLower.includes('trexla')) {
+        vehicles = TREXLA_FALLBACK_VEHICLES.map((v) => ({
+          ...v,
+          isAssignedToMe: emailLower === 'driver@trexla-logistics.ae' && v.vehicleCode === 'PM-001',
+        }));
       }
 
-      const activeDriverName = driver?.name || fallbackDriverName || 'Jennish John';
-      setDriverInfo({ name: activeDriverName });
+      const activeDriverName = driver?.name || fallbackDriverName || signedInEmail || username || 'Driver';
+      setDriverInfo({
+        id: driver?.id,
+        name: activeDriverName,
+        email: signedInEmail || username,
+        assignedVehicleId: driver?.assignedVehicleId ?? null,
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem('fleet360_driver_name', activeDriverName);
       }
 
-      // STRICTLY filter to ONLY assigned vehicle(s) for this driver
-      const isTrexlaDriver =
-        activeDriverName.toLowerCase().includes('rashid') ||
-        activeDriverName.toLowerCase().includes('trexla') ||
-        username.toLowerCase().includes('trexla');
+      // Check ONLY whether a vehicle is genuinely assigned to this driver in the database
+      const assignedVehicle =
+        vehicles.find(
+          (v) =>
+            (driver?.assignedVehicleId &&
+              (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)) ||
+            v.isAssignedToMe === true
+        ) || null;
 
-      const assignedOnly = vehicles.filter((v) =>
-        isTrexlaDriver
-          ? v.licensePlate === 'DXB-767-4011' || v.vehicleCode === 'PM-001'
-          : (activeDriverName.toLowerCase().includes('jennish') && (v.licensePlate === '96448' || v.vehicleCode === 'VEH-000247')) ||
-            (driver?.assignedVehicleId && (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)) ||
-            v.isAssignedToMe
-      );
+      setFleetVehicles(vehicles);
 
-      const targetList = assignedOnly.length > 0 ? assignedOnly : [DEFAULT_FLEET_VEHICLES[0]];
-      setFleetVehicles(targetList);
-      setSelectedVehicle(targetList[0]);
-      setOdometerInput(targetList[0].odometerReading ? String(targetList[0].odometerReading) : '142850');
-
-      // Pre-bind assigned vehicle so background tracking and 30s pings start immediately upon login
-      if (typeof window !== 'undefined' && targetList[0]) {
-        localStorage.setItem('fleet360_active_vehicle', JSON.stringify(targetList[0]));
-        window.dispatchEvent(new Event('fleet360_vehicle_changed'));
+      if (assignedVehicle) {
+        // Driver has a pre-assigned vehicle in their profile
+        setHasAssignedVehicleOnProfile(true);
+        setSelectedVehicle(assignedVehicle);
+        setCustomVehicleQuery(assignedVehicle.licensePlate || assignedVehicle.vehicleCode || '');
+        setOdometerInput(assignedVehicle.odometerReading ? String(assignedVehicle.odometerReading) : '');
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('fleet360_active_vehicle', JSON.stringify(assignedVehicle));
+          window.dispatchEvent(new Event('fleet360_vehicle_changed'));
+        }
+      } else {
+        // Driver is NOT assigned to any vehicle — default to BLANK value so driver enters Vehicle ID / Plate
+        setHasAssignedVehicleOnProfile(false);
+        setSelectedVehicle(null);
+        setCustomVehicleQuery('');
+        setOdometerInput('');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('fleet360_active_vehicle');
+        }
       }
 
       setPhase('vehicle-odometer');
     } catch (err) {
       console.warn('Proceed to vehicle odometer fallback:', err);
+      setHasAssignedVehicleOnProfile(false);
+      setSelectedVehicle(null);
+      setCustomVehicleQuery('');
+      setOdometerInput('');
       setPhase('vehicle-odometer');
     }
   };
@@ -538,7 +613,7 @@ export default function DriverAppLauncher() {
         if (hasHardware) {
           try {
             const startModule = await import('@simplewebauthn/browser');
-            const startRes = await fetch('/api/driver-app/auth/biometric/login/start', {
+            const startRes = await fetch(getApiEndpoint('/api/driver-app/auth/biometric/login/start'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -547,7 +622,7 @@ export default function DriverAppLauncher() {
             const options = await parseJsonSafely(startRes);
             if (options) {
               const assertion = await startModule.startAuthentication(options);
-              await fetch('/api/driver-app/auth/biometric/login/finish', {
+              await fetch(getApiEndpoint('/api/driver-app/auth/biometric/login/finish'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -560,57 +635,80 @@ export default function DriverAppLauncher() {
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_name', usernameHint || 'Jennish John');
+        localStorage.setItem('fleet360_driver_name', usernameHint || username || 'Driver');
         window.dispatchEvent(new Event('fleet360_vehicle_changed'));
       }
 
-      // Immediately ask to enter Vehicle ID & Odometer
-      await proceedToVehicleOdometer(usernameHint || 'Jennish John');
+      await proceedToVehicleOdometer(usernameHint || username || 'Driver', usernameHint || username);
     } catch {
-      await proceedToVehicleOdometer(usernameHint || 'Jennish John');
+      await proceedToVehicleOdometer(usernameHint || username || 'Driver', usernameHint || username);
     }
   };
 
   const doPasswordLogin = async () => {
     setPhase('authing');
     setErrorMsg(null);
+    const trimmedEmail = username.trim();
+    if (!trimmedEmail || !password) {
+      setErrorMsg('Please enter your Driver Email and Password.');
+      setPhase('needs-password');
+      return;
+    }
+
     try {
-      let displayName = username;
-      if (username.toLowerCase().includes('rashid') || username.toLowerCase().includes('trexla')) {
-        displayName = 'Rashid Al-Marri';
-      } else if (username.toLowerCase().includes('jennish') || username.toLowerCase().includes('jjohn')) {
-        displayName = 'Jennish John';
+      let displayName = trimmedEmail;
+
+      const r = await fetch(getApiEndpoint('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: trimmedEmail, password }),
+      });
+      const data = await parseJsonSafely(r);
+
+      if (!r.ok) {
+        setErrorMsg(data?.message || data?.error || 'Invalid email or password');
+        setPhase('needs-password');
+        return;
       }
 
-      try {
-        const r = await fetch(getApiEndpoint('/api/auth/login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ email: username.trim(), password }),
-        });
-        const data = await parseJsonSafely(r);
-        if (data && data.user) {
-          displayName = [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || data.user.email;
-        }
-      } catch {
-        // local webview / offline fallback
+      if (data?.user) {
+        displayName = [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || data.user.email || trimmedEmail;
       }
 
       if (typeof window !== 'undefined') {
+        if (data?.sessionToken) {
+          localStorage.setItem('fleet360_session_token', data.sessionToken);
+        }
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_email', username);
-        localStorage.setItem('fleet360_driver_name', displayName || 'Jennish John');
+        localStorage.setItem('fleet360_driver_email', trimmedEmail);
+        localStorage.setItem('fleet360_driver_name', displayName);
         window.dispatchEvent(new Event('fleet360_vehicle_changed'));
       }
 
-      // Immediately ask to enter Vehicle ID & Odometer
-      await proceedToVehicleOdometer(displayName);
+      // Immediately transition to Vehicle ID & Odometer step
+      await proceedToVehicleOdometer(displayName, trimmedEmail);
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Login failed');
-      setPhase('error');
+      setErrorMsg(e instanceof Error ? e.message : 'Unable to reach server. Please check your connection.');
+      setPhase('needs-password');
     }
   };
+
+  // Match typed custom vehicle query against loaded fleet vehicles for live preview
+  const matchedVehicleFromInput = React.useMemo(() => {
+    if (selectedVehicle) return selectedVehicle;
+    const q = customVehicleQuery.trim().toLowerCase();
+    if (!q) return null;
+    const compactQ = q.replace(/[^a-z0-9]/g, '');
+    return (
+      fleetVehicles.find((v) => {
+        const plate = (v.licensePlate || '').toLowerCase();
+        const code = (v.vehicleCode || '').toLowerCase();
+        const compactPlate = plate.replace(/[^a-z0-9]/g, '');
+        return plate === q || code === q || (compactQ.length >= 3 && compactPlate === compactQ);
+      }) || null
+    );
+  }, [selectedVehicle, customVehicleQuery, fleetVehicles]);
 
   // ── Submit Vehicle ID & Odometer to Start Driver Checklist ────────────────
   const handleConfirmVehicleAndOdometer = async (e: React.FormEvent) => {
@@ -620,53 +718,67 @@ export default function DriverAppLauncher() {
       : customVehicleQuery.trim();
 
     if (!ident) {
-      setErrorMsg('Please select or enter a Vehicle ID / Plate Number.');
+      setErrorMsg('Please enter a Vehicle ID / License Plate or select a vehicle.');
       return;
     }
 
     const odoValue = Number(odometerInput);
     if (!odometerInput || isNaN(odoValue) || odoValue <= 0) {
-      setErrorMsg('Please enter a valid positive Odometer reading in km.');
+      setErrorMsg('Please enter a valid positive Starting Odometer reading in km.');
       return;
     }
 
     setIsStartingChecklist(true);
     setErrorMsg(null);
     try {
-      let boundVehicle: FleetVehicle = selectedVehicle || {
-        id: '3c779fd8-d536-475c-a38e-9919909fab84',
-        vehicleCode: ident,
-        licensePlate: ident,
-        make: 'HONDA',
-        model: 'PILOT',
-        year: 2022,
-        deviceId: '',
-        isDeviceBlank: true,
-        canActivateMobileTracking: true,
-        odometerReading: odoValue,
-      };
+      let boundVehicle: FleetVehicle | null = selectedVehicle || matchedVehicleFromInput;
 
-      // 1. Try binding vehicle session and update vehicle odometer on backend
-      try {
-        const vehRes = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            vehicleIdentifier: ident,
-            odometerReading: odoValue,
-            driverEmail: username || undefined,
-          }),
-        });
-        const vehData = await parseJsonSafely(vehRes);
-        if (vehData && vehData.vehicle) {
-          boundVehicle = vehData.vehicle;
-        }
-      } catch {}
+      // 1. Bind vehicle session and update vehicle odometer on backend
+      const vehRes = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          vehicleIdentifier: ident,
+          odometerReading: odoValue,
+          driverEmail: username || undefined,
+        }),
+      });
+      const vehData = await parseJsonSafely(vehRes);
+
+      if (!vehRes.ok) {
+        setErrorMsg(
+          vehData?.error ||
+            `No vehicle found matching "${ident}". Please check your Vehicle ID or Plate Number.`
+        );
+        setIsStartingChecklist(false);
+        return;
+      }
+
+      if (vehData?.sessionToken && typeof window !== 'undefined') {
+        localStorage.setItem('fleet360_session_token', vehData.sessionToken);
+      }
+
+      if (vehData?.vehicle) {
+        boundVehicle = vehData.vehicle;
+      } else if (!boundVehicle) {
+        boundVehicle = {
+          id: ident,
+          vehicleCode: ident.toUpperCase(),
+          licensePlate: ident.toUpperCase(),
+          make: 'Fleet Vehicle',
+          model: '',
+          year: 2024,
+          deviceId: '',
+          isDeviceBlank: true,
+          canActivateMobileTracking: true,
+          odometerReading: odoValue,
+        };
+      }
 
       setActiveVehicle(boundVehicle);
 
-      // 2. Try starting / initializing active shift with this vehicle and starting odometer
+      // 2. Start / initialize active shift with this vehicle and starting odometer
       try {
         await fetch(getApiEndpoint('/api/driver-app/shift/current'), {
           method: 'POST',
@@ -684,7 +796,7 @@ export default function DriverAppLauncher() {
         localStorage.setItem('fleet360_active_vehicle', JSON.stringify(boundVehicle));
         localStorage.setItem('fleet360_start_odometer', String(odoValue));
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_name', driverInfo?.name || 'Jennish John');
+        localStorage.setItem('fleet360_driver_name', driverInfo?.name || username || 'Driver');
       }
 
       // 4. Notify tracking provider to start real device GPS tracking
@@ -706,8 +818,11 @@ export default function DriverAppLauncher() {
     stopMobileTracking();
     setActiveVehicle(null);
     setSelectedVehicle(null);
+    setCustomVehicleQuery('');
+    setOdometerInput('');
     setDriverInfo(null);
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('fleet360_session_token');
       localStorage.removeItem('fleet360_driver_tracking_active');
       localStorage.removeItem('fleet360_tracked_vehicle_id');
       localStorage.removeItem('fleet360_active_vehicle');
@@ -716,9 +831,9 @@ export default function DriverAppLauncher() {
       window.dispatchEvent(new Event('fleet360_vehicle_changed'));
     }
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch(getApiEndpoint('/api/auth/logout'), { method: 'POST', credentials: 'include' });
     } catch {}
-    setPhase('ready');
+    setPhase('needs-password');
   };
 
   return (
@@ -791,13 +906,11 @@ export default function DriverAppLauncher() {
 
       {/* Alerts */}
       {errorMsg && (
-        <div role="alert" className="my-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-300">
-          <p className="font-semibold">Notice</p>
+        <div role="alert" className="my-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-600 dark:text-rose-300">
+          <p className="font-semibold">{txt.notice}</p>
           <p>{errorMsg}</p>
         </div>
       )}
-
-      {/* GPS tracking is active silently in background without driver alerts */}
 
       {/* ── PHASE: VEHICLE ID & ODOMETER PROMPT (AFTER LOGIN) ───────────────── */}
       {phase === 'vehicle-odometer' ? (
@@ -806,78 +919,171 @@ export default function DriverAppLauncher() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-black uppercase tracking-wider text-violet-700 dark:text-violet-400 bg-violet-100 dark:bg-violet-500/10 border border-violet-300 dark:border-violet-500/20 px-2.5 py-0.5 rounded-full">
-                  Step 2 · Pre-Shift Assignment
+                  {txt.step2Badge}
                 </span>
-                {driverInfo?.name && (
-                  <span className="text-xs text-slate-800 dark:text-slate-300 font-bold truncate max-w-[170px]">
-                    👤 {driverInfo.name}
+                {(driverInfo?.email || driverInfo?.name) && (
+                  <span className="text-xs text-slate-800 dark:text-slate-300 font-bold truncate max-w-[180px]">
+                    👤 {driverInfo.name || driverInfo.email}
                   </span>
                 )}
               </div>
-              <h2 className="text-lg font-black text-slate-950 dark:text-white">Assigned Vehicle &amp; Starting Odometer</h2>
+              <h2 className="text-lg font-black text-slate-950 dark:text-white">{txt.vehiclePromptTitle}</h2>
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mt-0.5">
-                Confirm your assigned vehicle and enter current odometer before starting inspection.
+                {txt.vehiclePromptSubtitle}
               </p>
             </div>
 
             <form onSubmit={handleConfirmVehicleAndOdometer} className="space-y-4">
-              {/* Assigned Vehicle Display */}
+              {/* Assigned Vehicle Dropdown (Starts BLANK when driver has no assigned vehicle) */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Car className="h-4 w-4 text-violet-600 dark:text-violet-400" /> Assigned Vehicle
+                    <Car className="h-4 w-4 text-violet-600 dark:text-violet-400" /> {txt.assignedVehicleLabel}
                   </span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black">★ Assigned to your account</span>
+                  {hasAssignedVehicleOnProfile && selectedVehicle ? (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black">
+                      {txt.assignedToProfile}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-black uppercase">
+                      {txt.noVehicleAssigned}
+                    </span>
+                  )}
                 </label>
 
-                {fleetVehicles.length > 1 ? (
-                  <select
-                    value={selectedVehicle?.id || ''}
+                <select
+                  value={selectedVehicle?.id || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setSelectedVehicle(null);
+                      setCustomVehicleQuery('');
+                      setOdometerInput('');
+                      return;
+                    }
+                    const v = fleetVehicles.find((x) => x.id === val) || null;
+                    setSelectedVehicle(v);
+                    if (v) {
+                      setCustomVehicleQuery(v.licensePlate || v.vehicleCode || '');
+                      setOdometerInput(v.odometerReading ? String(v.odometerReading) : '');
+                    }
+                  }}
+                  className="w-full rounded-xl border-2 border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-950 px-3.5 py-3 text-sm font-bold text-slate-950 dark:text-white focus:border-violet-600 focus:outline-none"
+                >
+                  <option value="">{txt.blankVehicleOption}</option>
+                  {fleetVehicles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.licensePlate || v.vehicleCode} - {v.make} {v.model} ({v.vehicleCode || 'FLEET'}){v.isAssignedToMe ? ' ★' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Blank Value Column to Enter Vehicle ID / Plate Manually */}
+              {!selectedVehicle && (
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>{txt.customVehicleLabel}</span>
+                    {matchedVehicleFromInput && (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        ✓ Matched: {matchedVehicleFromInput.make} {matchedVehicleFromInput.model}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    required={!selectedVehicle}
+                    placeholder={txt.customVehiclePlaceholder}
+                    value={customVehicleQuery}
                     onChange={(e) => {
-                      const v = fleetVehicles.find((x) => x.id === e.target.value);
-                      setSelectedVehicle(v || null);
-                      if (v?.odometerReading) {
-                        setOdometerInput(String(v.odometerReading));
+                      const nextVal = e.target.value;
+                      setCustomVehicleQuery(nextVal);
+                      const q = nextVal.trim().toLowerCase();
+                      const compactQ = q.replace(/[^a-z0-9]/g, '');
+                      const match = fleetVehicles.find((v) => {
+                        const plate = (v.licensePlate || '').toLowerCase();
+                        const code = (v.vehicleCode || '').toLowerCase();
+                        return plate === q || code === q || (compactQ.length >= 4 && plate.replace(/[^a-z0-9]/g, '') === compactQ);
+                      });
+                      if (match?.odometerReading && !odometerInput) {
+                        setOdometerInput(String(match.odometerReading));
                       }
                     }}
-                    className="w-full rounded-xl border-2 border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-slate-950 px-3.5 py-3 text-sm font-bold text-slate-950 dark:text-white focus:border-violet-600 focus:outline-none"
-                  >
-                    {fleetVehicles.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.licensePlate || v.vehicleCode} - {v.make} {v.model} ({v.vehicleCode})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3.5 space-y-1">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-mono text-lg font-black text-slate-950 dark:text-white">
-                        {selectedVehicle?.licensePlate || '96448'}
-                      </span>
-                      <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
-                        {selectedVehicle?.vehicleCode || 'VEH-000247'}
-                      </span>
+                    dir="ltr"
+                    className="w-full rounded-xl border-2 border-violet-400 dark:border-violet-500/50 bg-slate-50 dark:bg-slate-950 px-4 py-3 font-mono text-base font-black uppercase text-slate-950 dark:text-white placeholder-slate-400 focus:border-violet-600 focus:outline-none text-left"
+                  />
+                  {fleetVehicles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Available Plates:</span>
+                      {fleetVehicles.slice(0, 6).map((v) => {
+                        const label = v.licensePlate || v.vehicleCode || '';
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              setCustomVehicleQuery(label);
+                              if (v.odometerReading) {
+                                setOdometerInput(String(v.odometerReading));
+                              }
+                            }}
+                            className="rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:border-violet-500 hover:text-violet-400 transition"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {selectedVehicle?.make || 'HONDA'} {selectedVehicle?.model || 'PILOT'} {selectedVehicle?.year ? `(${selectedVehicle.year})` : ''}
-                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Vehicle Summary Card (Only shown when a vehicle is selected or matched) */}
+              {(selectedVehicle || matchedVehicleFromInput) && (
+                <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20 p-3.5 space-y-1">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-mono text-lg font-black text-slate-950 dark:text-white">
+                      {(selectedVehicle || matchedVehicleFromInput)?.licensePlate ||
+                        (selectedVehicle || matchedVehicleFromInput)?.vehicleCode}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                      {(selectedVehicle || matchedVehicleFromInput)?.vehicleCode || ''}
+                    </span>
                   </div>
-                )}
-              </div>
+                  <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {(selectedVehicle || matchedVehicleFromInput)?.make}{' '}
+                    {(selectedVehicle || matchedVehicleFromInput)?.model}{' '}
+                    {(selectedVehicle || matchedVehicleFromInput)?.year
+                      ? `(${(selectedVehicle || matchedVehicleFromInput)?.year})`
+                      : ''}
+                  </div>
+                  <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 pt-0.5">
+                    📱 Mobile GPS tracking ready
+                  </div>
+                </div>
+              )}
 
               {/* Odometer Input */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 flex items-center gap-1.5">
-                    <Gauge className="h-4 w-4 text-cyan-600 dark:text-cyan-400" /> Current Cluster Odometer (KM) *
+                    <Gauge className="h-4 w-4 text-cyan-600 dark:text-cyan-400" /> {txt.startingOdometerLabel}
                   </label>
-                  {selectedVehicle?.odometerReading && (
+                  {(selectedVehicle?.odometerReading || matchedVehicleFromInput?.odometerReading) && (
                     <button
                       type="button"
-                      onClick={() => setOdometerInput(String(selectedVehicle.odometerReading))}
+                      onClick={() =>
+                        setOdometerInput(
+                          String(selectedVehicle?.odometerReading || matchedVehicleFromInput?.odometerReading)
+                        )
+                      }
                       className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline"
                     >
-                      Use Last: {Number(selectedVehicle.odometerReading).toLocaleString()} km
+                      {txt.useLast}{' '}
+                      {Number(
+                        selectedVehicle?.odometerReading || matchedVehicleFromInput?.odometerReading
+                      ).toLocaleString()}{' '}
+                      km
                     </button>
                   )}
                 </div>
@@ -888,7 +1094,7 @@ export default function DriverAppLauncher() {
                     required
                     min="0"
                     step="1"
-                    placeholder="e.g. 67050"
+                    placeholder="Enter current odometer reading"
                     value={odometerInput}
                     onChange={(e) => setOdometerInput(e.target.value)}
                     dir="ltr"
@@ -1039,7 +1245,7 @@ export default function DriverAppLauncher() {
                 <input
                   type="text"
                   required
-                  placeholder="jjohn@gmail.com"
+                  placeholder="jainu@trexla.ae"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   dir="ltr"
@@ -1122,7 +1328,7 @@ export default function DriverAppLauncher() {
               type="text"
               value={serverUrlInput}
               onChange={(e) => setServerUrlInput(e.target.value)}
-              placeholder="http://192.168.1.17:3000"
+              placeholder="https://fleet360-app-production.up.railway.app"
               dir="ltr"
               className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 font-mono text-xs text-white placeholder-slate-600 focus:border-violet-500 focus:outline-none text-left"
             />
@@ -1144,7 +1350,7 @@ export default function DriverAppLauncher() {
                 onClick={() => {
                   try {
                     localStorage.removeItem('fleet360_api_host');
-                    setServerUrlInput('http://192.168.1.17:3000');
+                    setServerUrlInput('https://fleet360-app-production.up.railway.app');
                   } catch {}
                   setShowServerModal(false);
                 }}

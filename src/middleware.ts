@@ -118,6 +118,11 @@ async function verifyDriverAppSession(request: NextRequest) {
     const session = await verifySession(token).catch(() => null);
     if (session) return session;
   }
+  const bearer = bearerToken(request.headers);
+  if (bearer) {
+    const session = await verifySession(bearer).catch(() => null);
+    if (session) return session;
+  }
   return null;
 }
 
@@ -173,9 +178,25 @@ function isAllowedCorsOrigin(origin: string): boolean {
   }
 }
 
+function applyCorsHeaders(res: NextResponse, origin: string | null): NextResponse {
+  if (origin && isAllowedCorsOrigin(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Access-Control-Allow-Credentials', 'true');
+    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.headers.set('Vary', 'Origin');
+  }
+  return res;
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
-  const { pathname } = request.nextUrl;
   const origin = request.headers.get('origin');
+  const res = await middlewareInner(request, origin);
+  return applyCorsHeaders(res, origin);
+}
+
+async function middlewareInner(request: NextRequest, origin: string | null): Promise<NextResponse> {
+  const { pathname } = request.nextUrl;
 
   // CORS preflight (OPTIONS) for the mobile app's WebView. Only allowlisted
   // origins get CORS headers: reflecting any Origin with Allow-Credentials
@@ -279,9 +300,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
 
-  // 2. Verify session cookie
-  const token = request.cookies.get('xl-session')?.value;
-  const session = token ? await verifySession(token) : null;
+  // 2. Verify session cookie (or Bearer session token from mobile APK WebView)
+  const token = request.cookies.get('xl-session')?.value || bearerToken(request.headers);
+  const session = token ? await verifySession(token).catch(() => null) : null;
 
   // 3. Handle unauthenticated requests
   if (!session) {

@@ -336,6 +336,7 @@ export async function POST(request: NextRequest) {
       // unconfigured — clients should handle the absence by skipping
       // Go-backend calls gracefully.
       backendToken,
+      sessionToken: token,
     };
 
     // Log successful sign in & update last_login_at
