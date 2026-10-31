@@ -1033,34 +1033,34 @@ export default function DrayageJobTrackingPage() {
       {/* ETC Modal */}
       {etcModalOpen && activeJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-3.5 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
+                <Clock className="w-5 h-5 text-amber-500" />
                 <h3 className="font-bold text-sm text-[var(--text-main)]">Set Offloading ETC (Leg 2 Trigger)</h3>
               </div>
               <button
                 onClick={() => setEtcModalOpen(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg transition-colors"
               >
                 ✕
               </button>
             </div>
 
             <div className="py-4 space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
+              <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
                 <div className="flex justify-between text-[var(--text-muted)]">
-                  <span>Container:</span>
+                  <span className="font-semibold">Container:</span>
                   <span className="font-mono font-bold text-[var(--text-main)]">{activeJob.containerNumber}</span>
                 </div>
                 <div className="flex justify-between text-[var(--text-muted)]">
-                  <span>Facility / Ramp:</span>
-                  <span className="font-medium text-[var(--text-main)]">{activeJob.warehouseName}</span>
+                  <span className="font-semibold">Facility / Ramp:</span>
+                  <span className="font-bold text-[var(--text-main)] text-right">{activeJob.warehouseName}</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-2">
+                <label className="block text-[11px] font-bold text-[var(--text-muted)] mb-2">
                   Estimated Offload Duration (Driver Mobile Preset):
                 </label>
                 <div className="grid grid-cols-4 gap-2">
@@ -1072,10 +1072,10 @@ export default function DrayageJobTrackingPage() {
                         setSelectedEtcHours(hrs);
                         setCustomEtcInput('');
                       }}
-                      className={`py-2 px-1 rounded-xl text-xs font-bold border transition-colors ${
+                      className={`py-2.5 px-1 rounded-xl text-xs font-bold border transition-all ${
                         selectedEtcHours === hrs && !customEtcInput
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500'
-                          : 'bg-[var(--bg-main)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                          : 'bg-[var(--bg-main)] text-[var(--text-main)] border-[var(--border-strong)] hover:border-amber-500/60'
                       }`}
                     >
                       +{hrs} {hrs === 1 ? 'Hour' : 'Hours'}
@@ -1085,26 +1085,26 @@ export default function DrayageJobTrackingPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
+                <label className="block text-[11px] font-bold text-[var(--text-muted)] mb-1.5">
                   Or Custom Estimated Time of Completion:
                 </label>
                 <input
                   type="datetime-local"
                   value={customEtcInput}
                   onChange={(e) => setCustomEtcInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-strong)] text-xs font-medium text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-300">
+              <div className="p-3 rounded-xl bg-blue-600/10 border border-blue-500/30 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
                 💡 When this timer expires, Fleet360&apos;s background engine will dynamically activate <strong>Leg 2 Empty Return</strong> with <strong>HIGH priority</strong> and pair it with the nearest available prime mover.
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-[var(--border-subtle)]">
               <button
                 onClick={() => setEtcModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                className="px-4 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-colors"
               >
                 Cancel
               </button>
@@ -1117,7 +1117,7 @@ export default function DrayageJobTrackingPage() {
                   setEtcModalOpen(false);
                 }}
                 disabled={updatingStatus}
-                className="px-4 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
+                className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
                 Confirm & Start Timer
               </button>

@@ -23,7 +23,9 @@ html[lang="ar"], html[dir="rtl"] {
 :root {
   /* Default: Dark Mode (Linear / Vercel style) */
   --bg-canvas: #09090b;
+  --bg-main: #09090b;
   --bg-surface: #121215;
+  --bg-card: #18181b;
   --bg-surface-elevated: #18181b;
   --bg-surface-hover: #27272a;
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -57,7 +59,9 @@ html[lang="ar"], html[dir="rtl"] {
 html.light {
   /* Light Mode (Vercel / Swiss Enterprise style) */
   --bg-canvas: #f8fafc;
+  --bg-main: #f8fafc;
   --bg-surface: #ffffff;
+  --bg-card: #ffffff;
   --bg-surface-elevated: #ffffff;
   --bg-surface-hover: #f1f5f9;
   --border-subtle: #e2e8f0;
@@ -90,7 +94,9 @@ html.light {
 
 html.dark {
   --bg-canvas: #09090b;
+  --bg-main: #09090b;
   --bg-surface: #121215;
+  --bg-card: #18181b;
   --bg-surface-elevated: #18181b;
   --bg-surface-hover: #27272a;
   --border-subtle: rgba(255, 255, 255, 0.08);
