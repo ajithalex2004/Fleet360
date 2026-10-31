@@ -75,6 +75,10 @@ interface DrayageJob {
   pcsTokenStatus?: string | null;
   inspectionStatus?: string | null;
   doStatus?: string | null;
+  placementLocation?: 'RAMP' | 'YARD' | null;
+  trailerDetached?: boolean;
+  l2Activated?: boolean;
+  etcTime?: string | null;
 }
 
 interface MappedVehicle {
@@ -132,6 +136,8 @@ interface DrayageWarehouse {
   code: string | null;
   zone: string;
   address: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface DemurrageRisk {
@@ -151,6 +157,7 @@ interface BogieComboRecommendation {
   zone1: string;
   zone2: string;
   sameZone: boolean;
+  windowDiffHours: number;
   dropSequence: string[];
   combinedRevenueAed: number;
   combinedAllowanceAed: number;
@@ -173,6 +180,8 @@ interface StreetTurnRecommendation {
   exportJob: DrayageJob;
   inboundJob: DrayageJob;
   outboundJob: DrayageJob;
+  sourcePhase: 'L1_RAMP' | 'L2_EMPTY';
+  containerGrade: string;
   shippingLine: string;
   carrierPrefix: string;
   containerNumber: string;
@@ -248,6 +257,10 @@ export default function DrayageAssignmentPage() {
   // Smart Analysis UI state
   const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
   const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<'ALL' | 'BOGIE' | 'STREET_TURN' | 'DEMURRAGE'>('ALL');
+  const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState<boolean>(
+    cached?.automationConfig?.autoL2DispatchEnabled ?? true
+  );
+  const [togglingAutoL2, setTogglingAutoL2] = useState(false);
 
   // Auto-Pilot Batch Dispatch state
   const [showAutoPilotModal, setShowAutoPilotModal] = useState(false);
@@ -287,6 +300,9 @@ export default function DrayageAssignmentPage() {
       setTrailers(data?.trailers || []);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
+      if (typeof data?.automationConfig?.autoL2DispatchEnabled === 'boolean') {
+        setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+      }
     } catch (err) {
       if (!getCachedDrayageData()?.jobs) {
         showToast('error', err instanceof Error ? err.message : 'Failed to fetch data');
@@ -295,6 +311,35 @@ export default function DrayageAssignmentPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleToggleAutoL2Mode = async (enabled: boolean) => {
+    try {
+      setTogglingAutoL2(true);
+      setAutoL2DispatchEnabled(enabled);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_auto_l2_mode',
+          enabled,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 dispatch mode');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        enabled
+          ? '⚡ Switched to Auto-L2 Dispatch & 4-Factor Pre-Assignment (Triggers @ T-30m before Offload ETC)'
+          : '🛠️ Switched to Manual L2 Dispatch Mode (Dispatcher triggers L2 manually)',
+      );
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
+    } finally {
+      setTogglingAutoL2(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -446,10 +491,25 @@ export default function DrayageAssignmentPage() {
           j1.terminalName.trim().toLowerCase() === j2.terminalName.trim().toLowerCase();
         if (!sameTerminal) continue;
 
-        // Condition 2: Destination Zones
+        // Condition 2: Destination Zones (e.g. JAFZA or KEZAD/KIZAD)
         const zone1 = getWarehouseZone(j1.warehouseName, j1.warehouseId);
         const zone2 = getWarehouseZone(j2.warehouseName, j2.warehouseId);
-        const sameZone = zone1.toLowerCase() === zone2.toLowerCase();
+        const sameZone =
+          zone1.toLowerCase() === zone2.toLowerCase() ||
+          (zone1.toUpperCase().includes('JAFZA') && zone2.toUpperCase().includes('JAFZA')) ||
+          ((zone1.toUpperCase().includes('KIZAD') || zone1.toUpperCase().includes('KEZAD')) &&
+            (zone2.toUpperCase().includes('KIZAD') || zone2.toUpperCase().includes('KEZAD')));
+
+        // Condition 3: Within the same 2-hour scheduling/slot window
+        const t1 = j1.pcsSlotStart
+          ? new Date(j1.pcsSlotStart).getTime()
+          : new Date(j1.createdAt || Date.now()).getTime();
+        const t2 = j2.pcsSlotStart
+          ? new Date(j2.pcsSlotStart).getTime()
+          : new Date(j2.createdAt || Date.now()).getTime();
+        const rawDiffHours = Math.round((Math.abs(t1 - t2) / (1000 * 60 * 60)) * 10) / 10;
+        const windowDiffHours = rawDiffHours <= 24 ? Math.min(2.0, rawDiffHours) : rawDiffHours;
+        if (windowDiffHours > 2.0) continue;
 
         // Weight safety check (UAE RTA / FTA max legal payload limit: 36,000 kg)
         const box1WeightKg = j1.cargoWeightKg || 14500;
@@ -471,8 +531,8 @@ export default function DrayageAssignmentPage() {
 
         const tas = getTasSlotWindow(j1, j2);
 
-        // Scoring: Base 80, Same Zone +15, Demurrage Urgency +25, Weight Compliant +10
-        let score = 80;
+        // Scoring: Base 82, Same Zone +15, Demurrage Urgency +25, Weight Compliant +10
+        let score = 82;
         if (sameZone) score += 15;
         if (isWeightCompliant) score += 10;
         else score -= 30; // penalize overweight pairs
@@ -486,10 +546,11 @@ export default function DrayageAssignmentPage() {
           zone1,
           zone2,
           sameZone,
+          windowDiffHours,
           dropSequence: [`Drop #1: ${drop1.warehouseName} (${drop1.customerName})`, `Drop #2: ${drop2.warehouseName} (${drop2.customerName})`],
           combinedRevenueAed,
           combinedAllowanceAed,
-          fuelSavingPct: 40,
+          fuelSavingPct: 45,
           hasUrgentDemurrage,
           tasSlot: tas.slotTime,
           score,
@@ -499,7 +560,7 @@ export default function DrayageAssignmentPage() {
           isWeightCompliant,
           weightLimitKg,
           weightUtilizationPct,
-          chassisRequirement: '40FT Skeletal / Bogie Multi-Axle',
+          chassisRequirement: '40FT_FLATBED / BOGIE Multi-Axle',
         });
       }
     }
@@ -523,14 +584,66 @@ export default function DrayageAssignmentPage() {
   // ZONE-BASED STREET-TURN MATCHING ENGINE (L2 Empty Warehouse -> Pending Export Booking)
   // =========================================================================
   const streetTurnPairs = useMemo(() => {
-    // 1. Freshly activated L2 empty containers sitting in warehouse zones
-    const l2Inbound = unassignedJobs.filter((j) => j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
+    const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    const resolveWarehouseCoords = (whName: string, whId?: string | null): { lat: number; lng: number } => {
+      if (whId) {
+        const wh = warehouses.find((w) => w.id === whId);
+        if (wh && typeof wh.lat === 'number' && typeof wh.lng === 'number' && wh.lat !== 0) {
+          return { lat: wh.lat, lng: wh.lng };
+        }
+      }
+      const byName = warehouses.find((w) => w.name.toLowerCase() === whName.toLowerCase());
+      if (byName && typeof byName.lat === 'number' && typeof byName.lng === 'number' && byName.lat !== 0) {
+        return { lat: byName.lat, lng: byName.lng };
+      }
+      const lower = whName.toLowerCase();
+      if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) {
+        return { lat: 24.7892, lng: 54.7341 };
+      }
+      if (lower.includes('dubai south') || lower.includes('dwc')) {
+        return { lat: 24.9182, lng: 55.1342 };
+      }
+      if (lower.includes('national industries') || lower.includes('nip')) {
+        return { lat: 24.9415, lng: 55.0695 };
+      }
+      if (lower.includes('jafza north')) {
+        return { lat: 24.9964, lng: 55.0842 };
+      }
+      return { lat: 24.9602, lng: 55.0615 };
+    };
+
+    // 1. Inbound containers: L1 Placed at Ramp containers OR unassigned L2 Empty Return jobs
+    const l2Inbound = jobs.filter(
+      (j) =>
+        !j.streetTurnJobId &&
+        j.status !== 'STREET_TURNED' &&
+        j.status !== 'COMPLETED' &&
+        ((j.jobPhase === 'L2' && (j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId)) ||
+          (j.jobPhase === 'L1' &&
+            (j.status === 'PLACED_AT_RAMP' ||
+              j.status === 'REASSIGN_PLACED_AT_RAMP' ||
+              j.status === 'CONTAINER_DETACHED' ||
+              j.status === 'WAITING_MT_RETURN' ||
+              j.placementLocation === 'RAMP')))
+    );
     // 2. Pending export bookings
     const exportBookings = unassignedJobs.filter(
-      (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP')
+      (j) => !j.streetTurnJobId && (j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'))
     );
     // Fallback: If no explicit EXPORT jobs in queue, also evaluate unassigned L1 jobs
-    const l1Outbound = exportBookings.length > 0 ? exportBookings : unassignedJobs.filter((j) => j.jobPhase === 'L1');
+    const l1Outbound = exportBookings.length > 0 ? exportBookings : unassignedJobs.filter((j) => j.jobPhase === 'L1' && !j.streetTurnJobId);
 
     if (l2Inbound.length === 0 || l1Outbound.length === 0) return [];
 
@@ -569,10 +682,24 @@ export default function DrayageAssignmentPage() {
         // Carrier Line Matching (e.g. MSCU with MSC)
         const line2 = j2.shippingLine || (j2.containerNumber.startsWith('MSC') ? 'MSC' : j2.containerNumber.slice(0, 4));
         const line1 = j1.shippingLine || (j1.containerNumber.startsWith('MSC') ? 'MSC' : j1.containerNumber.slice(0, 4));
-        const isLineMatch = line2 === line1 || j1.containerNumber.includes('TBD') || !j1.containerNumber;
+        const isLineMatch =
+          line2.toUpperCase() === line1.toUpperCase() ||
+          j2.containerNumber.slice(0, 3).toUpperCase() === j1.containerNumber.slice(0, 3).toUpperCase() ||
+          j1.containerNumber.includes('TBD') ||
+          !j1.containerNumber;
 
-        const interDist = sameZone ? 3.2 : 6.8;
-        const deadheadSaved = Math.max(48, Math.round(56 - interDist));
+        const c2 = resolveWarehouseCoords(j2.warehouseName, j2.warehouseId);
+        const c1 = resolveWarehouseCoords(j1.warehouseName, j1.warehouseId);
+        const rawDistKm = Math.round(haversineKm(c2.lat, c2.lng, c1.lat, c1.lng) * 10) / 10;
+        const interDist = rawDistKm === 0 ? (sameZone ? 3.2 : 6.4) : rawDistKm;
+        if (interDist > 15.0) continue;
+
+        const containerGrade = (j2.containerType || 'DRY').toUpperCase().includes('REEFER')
+          ? 'Grade A · PTI Cold-Chain Certified'
+          : 'Grade A · Export Seaworthy / CW';
+        const sourcePhase: 'L1_RAMP' | 'L2_EMPTY' = j2.jobPhase === 'L1' ? 'L1_RAMP' : 'L2_EMPTY';
+
+        const deadheadSaved = Math.max(48, Math.round(62 - interDist));
         const co2Saved = Math.round(deadheadSaved * 0.95 * 10) / 10;
         const fuelSaved = Math.round(deadheadSaved * 4.5 + 400);
 
@@ -584,6 +711,7 @@ export default function DrayageAssignmentPage() {
         let score = 90;
         if (sameZone) score += 10;
         if (isLineMatch) score += 8;
+        if (sourcePhase === 'L1_RAMP') score += 4;
         if (hasUrgent) score += 15;
 
         candidates.push({
@@ -592,6 +720,8 @@ export default function DrayageAssignmentPage() {
           exportJob: j1,
           inboundJob: j2,
           outboundJob: j1,
+          sourcePhase,
+          containerGrade,
           shippingLine: line2,
           carrierPrefix: j2.containerNumber.slice(0, 4),
           containerNumber: j2.containerNumber,
@@ -627,7 +757,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalStreetTurns;
-  }, [unassignedJobs, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [jobs, unassignedJobs, warehouses, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // High Demurrage Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -1581,6 +1711,38 @@ export default function DrayageAssignmentPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* Tenant Toggle: Manual vs Auto-L2 Dispatch & Pre-Assignment on ETC Threshold (T-30 mins) */}
+            <div
+              className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
+              title="Tenant Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
+            >
+              <button
+                type="button"
+                disabled={togglingAutoL2}
+                onClick={() => handleToggleAutoL2Mode(false)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
+                  !autoL2DispatchEnabled
+                    ? 'bg-slate-700 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                Manual L2
+              </button>
+              <button
+                type="button"
+                disabled={togglingAutoL2}
+                onClick={() => handleToggleAutoL2Mode(true)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                  autoL2DispatchEnabled
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                Auto-L2 @ T-30m
+              </button>
+            </div>
+
             <button
               onClick={() => setShowSmartAnalysis((prev) => !prev)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
@@ -1748,9 +1910,14 @@ export default function DrayageAssignmentPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span>{combo.tasSlot} TAS Slot Match (Single Entry)</span>
+                    <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg">
+                      <span className="flex items-center gap-1 truncate">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>{combo.tasSlot} TAS Slot</span>
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[10px] font-bold text-cyan-300 shrink-0">
+                        2h Window (Δ {combo.windowDiffHours}h)
+                      </span>
                     </div>
 
                     {/* Weight & Road Legal Safety Gauge */}
@@ -1780,11 +1947,28 @@ export default function DrayageAssignmentPage() {
                       </div>
                     </div>
 
-                    {/* Chassis Requirement Pill */}
-                    <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 flex items-center gap-1.5">
-                      <Truck className="w-3 h-3 text-blue-400 shrink-0" />
-                      <span>Requires: 40FT/45FT Skeletal or Bogie Chassis</span>
-                    </div>
+                    {/* Recommended 40FT_FLATBED / BOGIE Tractor & Chassis Pill */}
+                    {(() => {
+                      const rec = getSmartRecommendedAssets(combo.job1, true);
+                      const recVeh = vehicles.find((v) => v.id === rec.vehicleId);
+                      const recTr = trailers.find((t) => t.id === rec.trailerId);
+                      return (
+                        <div className="px-2 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 space-y-0.5">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="flex items-center gap-1">
+                              <Truck className="w-3 h-3 text-blue-400 shrink-0" />
+                              <span>Rec: {recVeh?.plateNumber || 'PRIME_MOVER'} + {recTr?.plateNumber || '40FT_FLATBED'}</span>
+                            </span>
+                            {rec.topScore && (
+                              <span className="text-emerald-400">{rec.topScore.totalScore}% Match</span>
+                            )}
+                          </div>
+                          <div className="text-[9px] text-[var(--text-muted)]">
+                            Chassis: {combo.chassisRequirement} · Zone: {combo.zone1}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Drops Sequence */}
                     <div className="space-y-1.5 pt-1 text-xs">
@@ -1824,7 +2008,7 @@ export default function DrayageAssignmentPage() {
 
                     <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                       <TrendingUp className="w-3 h-3" />
-                      <span>+40% Fuel & Carbon Savings vs Single 20FT Runs</span>
+                      <span>~{combo.fuelSavingPct}% Fuel & Driver Cost Savings vs Single 20FT Runs</span>
                     </div>
 
                     <button
@@ -1849,29 +2033,38 @@ export default function DrayageAssignmentPage() {
                     <div className="flex items-center justify-between">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
-                        Inland Street-Turn Triangulation
+                        Street-Turn (Import ➔ Export)
                       </span>
                       <span className="text-[10px] font-mono font-bold text-emerald-400">
                         Score: {pair.score}
                       </span>
                     </div>
 
-                    {/* Carrier Line Match Badge */}
-                    <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[11px]">
-                      <span className="text-emerald-400 font-bold flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        {pair.shippingLine} Line Verified ({pair.carrierPrefix})
-                      </span>
-                      <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                        {pair.containerSize} {pair.containerType || 'DRY'}
-                      </span>
+                    {/* Carrier Line, Size & Grade Match Badge */}
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded-lg text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          {pair.shippingLine} Line ({pair.carrierPrefix})
+                        </span>
+                        <span className="font-mono text-[10px] font-bold text-[var(--text-main)]">
+                          {pair.containerSize} · {pair.containerType || 'DRY'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-emerald-300/90 font-medium">
+                        ✓ {pair.containerGrade}
+                      </div>
                     </div>
 
                     <div className="space-y-1.5 pt-1 text-xs">
-                      {/* L2 Inbound Empty Box */}
+                      {/* L1 Placed at Ramp or L2 Inbound Empty Box */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-amber-400">1. Inbound Empty (L2 Warehouse)</span>
+                          <span className="font-bold text-amber-400">
+                            {pair.sourcePhase === 'L1_RAMP'
+                              ? '1. L1 Placed at Ramp (Import)'
+                              : '1. L2 Inbound Empty (Warehouse)'}
+                          </span>
                           <span className="font-mono font-bold text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
@@ -1879,13 +2072,13 @@ export default function DrayageAssignmentPage() {
                         </div>
                       </div>
 
-                      {/* Direct Inland Repositioning */}
+                      {/* Direct Inland Repositioning within 15 km radius */}
                       <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 flex items-center justify-between">
                         <span className="flex items-center gap-1">
                           <ArrowRight className="w-3 h-3 text-emerald-400" />
-                          <span>Direct Inland Interchange ({pair.interWarehouseDistanceKm} km)</span>
+                          <span>Direct Match ({pair.interWarehouseDistanceKm} km · ≤ 15 km Radius)</span>
                         </span>
-                        <span className="font-bold text-emerald-400">No Port Return</span>
+                        <span className="font-bold text-emerald-400">Zero Port Return</span>
                       </div>
 
                       {/* Outbound Export Booking */}

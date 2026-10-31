@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  Radio, Compass, Truck, Layers,
+  Radio, Compass, Truck, Layers, Zap,
 } from 'lucide-react';
 
 const DrayageCorridorLiveMap = dynamic(
@@ -168,18 +168,15 @@ export default function DrayageJobTrackingPage() {
   const [targetStatusForEtc, setTargetStatusForEtc] = useState<'PLACED_AT_RAMP' | 'CONTAINER_DETACHED'>('PLACED_AT_RAMP');
   const [selectedEtcHours, setSelectedEtcHours] = useState(3);
   const [customEtcInput, setCustomEtcInput] = useState('');
+  const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState(true);
+  const [togglingAutoL2, setTogglingAutoL2] = useState(false);
   const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => clearInterval(timer);
-  }, []);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 4500);
   };
 
   const loadData = useCallback(async () => {
@@ -199,6 +196,9 @@ export default function DrayageJobTrackingPage() {
       setWarehouses(data.warehouses || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
+      if (typeof data.automationConfig?.autoL2DispatchEnabled === 'boolean') {
+        setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+      }
 
       if (allJobs.length > 0 && !selectedJobId) {
         setSelectedJobId(allJobs[0].id);
@@ -209,6 +209,78 @@ export default function DrayageJobTrackingPage() {
       setLoading(false);
     }
   }, [selectedJobId]);
+
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      setTick((t) => t + 1);
+      if (autoL2DispatchEnabled) {
+        const hasPendingT30Job = jobs.some(
+          (j) =>
+            j.jobPhase === 'L1' &&
+            !j.l2Activated &&
+            j.placementLocation !== 'YARD' &&
+            j.etcTime &&
+            new Date(j.etcTime).getTime() - Date.now() <= 30 * 60 * 1000,
+        );
+        if (hasPendingT30Job) {
+          try {
+            const res = await fetch('/api/logistics/drayage', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'check_etc_timers',
+                thresholdMinutes: 30,
+                preAssignTractor: true,
+              }),
+            });
+            if (res.ok) {
+              const checkRes = await res.json();
+              if (Array.isArray(checkRes.activated) && checkRes.activated.length > 0) {
+                const first = checkRes.activated[0];
+                showToast(
+                  'success',
+                  `⚡ Auto-L2 @ T-30m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`,
+                );
+                await loadData();
+              }
+            }
+          } catch {
+            // Silent background poll
+          }
+        }
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [autoL2DispatchEnabled, jobs, loadData]);
+
+  // Toggle Tenant Manual vs Auto-L2 (T-30m) Dispatch Mode
+  const handleToggleAutoL2Mode = async (enabled: boolean) => {
+    try {
+      setTogglingAutoL2(true);
+      setAutoL2DispatchEnabled(enabled);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_auto_l2_mode',
+          enabled,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 dispatch mode');
+      showToast(
+        'success',
+        enabled
+          ? '⚡ Switched to Auto-L2 Dispatch & 4-Factor Pre-Assignment (Triggers @ T-30m before ETC)'
+          : '🛠️ Switched to Manual L2 Dispatch Mode (Dispatcher triggers L2 manually)',
+      );
+      await loadData();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
+    } finally {
+      setTogglingAutoL2(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -287,7 +359,7 @@ export default function DrayageJobTrackingPage() {
     }
   };
 
-  // Trigger L2 Empty Return
+  // Trigger L2 Empty Return (with 4-Factor Telematics Pre-Assignment)
   const handleTriggerL2 = async () => {
     if (!activeJob) return;
     try {
@@ -295,11 +367,23 @@ export default function DrayageJobTrackingPage() {
       const res = await fetch('/api/logistics/drayage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'activate_l2', l1JobId: activeJob.id }),
+        body: JSON.stringify({
+          action: 'activate_l2',
+          l1JobId: activeJob.id,
+          preAssignTractor: true,
+          triggerSource: autoL2DispatchEnabled ? 'AUTO_T30' : 'MANUAL_DISPATCH',
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to activate L2 empty return');
-      showToast('success', `L2 Empty Return job ${data.l2JobCode} activated!`);
+      showToast(
+        'success',
+        `L2 Empty Return ${data.l2JobCode} activated${
+          data.preAssigned && data.vehiclePlate
+            ? ` · 4-Factor Pre-Assigned to ${data.vehiclePlate} (${data.driverName} · ${data.matchScorePct}% Match)`
+            : '!'
+        }`,
+      );
       await loadData();
       if (data.l2JobId) setSelectedJobId(data.l2JobId);
     } catch (err) {
@@ -418,6 +502,38 @@ export default function DrayageJobTrackingPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* Tenant Toggle: Manual vs Auto-L2 Dispatch & Pre-Assignment on ETC Threshold (T-30 mins) */}
+            <div
+              className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
+              title="Tenant Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
+            >
+              <button
+                type="button"
+                disabled={togglingAutoL2}
+                onClick={() => handleToggleAutoL2Mode(false)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
+                  !autoL2DispatchEnabled
+                    ? 'bg-slate-700 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                Manual L2
+              </button>
+              <button
+                type="button"
+                disabled={togglingAutoL2}
+                onClick={() => handleToggleAutoL2Mode(true)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                  autoL2DispatchEnabled
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                Auto-L2 @ T-30m
+              </button>
+            </div>
+
             <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm">
               <button
                 type="button"
@@ -687,11 +803,15 @@ export default function DrayageJobTrackingPage() {
                         <Clock className="w-4 h-4 animate-pulse" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-amber-400">Destuffing & Offload Timer (ETC)</span>
                           {activeJob.etcTime && new Date(activeJob.etcTime).getTime() <= Date.now() ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                              ⚠️ EXPIRED - AUTO-L2 TRIGGER PENDING
+                              ⚠️ EXPIRED - L2 READY
+                            </span>
+                          ) : activeJob.etcTime && new Date(activeJob.etcTime).getTime() - Date.now() <= 30 * 60 * 1000 ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                              ⚡ T-30M THRESHOLD ACTIVE · 4-FACTOR PRE-ASSIGN
                             </span>
                           ) : activeJob.etcTime ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -702,6 +822,22 @@ export default function DrayageJobTrackingPage() {
                               NO ETC SET
                             </span>
                           )}
+                          <button
+                            type="button"
+                            disabled={togglingAutoL2}
+                            onClick={() => handleToggleAutoL2Mode(!autoL2DispatchEnabled)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                              autoL2DispatchEnabled
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                                : 'bg-slate-700/60 text-slate-300 border-slate-500/40 hover:bg-slate-700'
+                            }`}
+                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 @ T-30m and Manual L2 Dispatch"
+                          >
+                            <Zap className="w-2.5 h-2.5" />
+                            {autoL2DispatchEnabled
+                              ? 'Mode: Auto-L2 & 4-Factor Pre-Assign @ T-30m (Click for Manual)'
+                              : 'Mode: Manual L2 Dispatch (Click for Auto-L2 @ T-30m)'}
+                          </button>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                           {activeJob.etcTime ? (
@@ -713,6 +849,12 @@ export default function DrayageJobTrackingPage() {
                                   ? 'Offloading completed - Dynamic L2 activation triggered'
                                   : `${Math.max(1, Math.round((new Date(activeJob.etcTime).getTime() - Date.now()) / 60000))} mins remaining`}
                               </span>
+                              {' · '}
+                              <span className="text-emerald-400 font-medium">
+                                {autoL2DispatchEnabled
+                                  ? 'Auto-triggers L2 & 4-Factor tractor pre-assignment at T-30m'
+                                  : 'Manual L2 trigger mode active'}
+                              </span>
                             </>
                           ) : (
                             'Set ETC from driver mobile app or click button below to activate Leg 2 automation'
@@ -721,7 +863,25 @@ export default function DrayageJobTrackingPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!activeJob.l2Activated && (
+                        <button
+                          onClick={async () => {
+                            const t25Iso = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+                            await handleUpdateStatus(
+                              activeJob.status === 'IN_TRANSIT' ? 'PLACED_AT_RAMP' : activeJob.status,
+                              'RAMP',
+                              activeJob.trailerDetached,
+                              t25Iso,
+                            );
+                          }}
+                          disabled={updatingStatus}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 text-xs font-bold transition-colors"
+                          title="Set Offload ETC to T-25 mins to test T-30m Auto-L2 Dispatch & 4-Factor Pre-Assignment"
+                        >
+                          ⚡ Set ETC T-25m (Test T-30m)
+                        </button>
+                      )}
                       <button
                         onClick={() => handleExtendEtc(60)}
                         disabled={updatingStatus}
@@ -750,7 +910,7 @@ export default function DrayageJobTrackingPage() {
                             disabled={updatingStatus || !canTriggerL2}
                             title={
                               canTriggerL2
-                                ? 'Activate L2 Empty Return job now'
+                                ? 'Activate L2 Empty Return job now & pre-assign nearest tractor via 4-Factor Telematics'
                                 : 'Requires container Placed at Ramp with Offloading ETC set'
                             }
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
@@ -760,7 +920,7 @@ export default function DrayageJobTrackingPage() {
                             }`}
                           >
                             <RefreshCw className="w-3 h-3" />
-                            Trigger L2 Now
+                            Trigger L2 & Pre-Assign
                           </button>
                         );
                       })()}

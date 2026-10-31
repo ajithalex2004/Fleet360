@@ -13,6 +13,7 @@ import {
   activateL2EmptyReturnJob,
   extendDrayageJobEtcTime,
   checkAndAutoActivateExpiredEtcJobs,
+  setTenantAutoL2DispatchMode,
   ensureDrayageSchema,
   verifyPortEdiForJob,
   appendDrayageItineraryLeg,
@@ -320,14 +321,26 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        case 'toggle_auto_l2_mode': {
+          return setTenantAutoL2DispatchMode(tx, {
+            tenantId,
+            enabled: Boolean(body.enabled),
+          });
+        }
+
         case 'check_etc_timers': {
-          return checkAndAutoActivateExpiredEtcJobs(tx, tenantId);
+          return checkAndAutoActivateExpiredEtcJobs(tx, tenantId, {
+            thresholdMinutes: body.thresholdMinutes !== undefined ? Number(body.thresholdMinutes) : 30,
+            preAssignTractor: body.preAssignTractor !== undefined ? Boolean(body.preAssignTractor) : true,
+          });
         }
 
         case 'activate_l2': {
           return activateL2EmptyReturnJob(tx, {
             tenantId,
             l1JobId: String(body.l1JobId),
+            preAssignTractor: body.preAssignTractor !== undefined ? Boolean(body.preAssignTractor) : undefined,
+            triggerSource: body.triggerSource === 'AUTO_T30' ? 'AUTO_T30' : 'MANUAL',
           });
         }
 
