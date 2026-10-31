@@ -41,17 +41,17 @@ type DriverRef = {
   assignedVehicleId?: string | null;
 };
 
-async function resolveCallerAuth(req: NextRequest): Promise<{ ok: true; tenantId: string; userId: string } | { ok: false; status: number }> {
+async function resolveCallerAuth(req: NextRequest): Promise<{ ok: boolean; tenantId: string; userId: string; status: number }> {
   // Prefer explicit Bearer token / driver session via getDriverTenantContext first
   const driverCtx = await getDriverTenantContext(req);
   if (driverCtx?.userId && driverCtx?.tenantId) {
-    return { ok: true, tenantId: driverCtx.tenantId, userId: driverCtx.userId };
+    return { ok: true, tenantId: driverCtx.tenantId, userId: driverCtx.userId, status: 200 };
   }
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok || !authz.userId) {
-    return { ok: false, status: authz.ok ? 401 : authz.status };
+    return { ok: false, tenantId: '', userId: '', status: authz.ok ? 401 : authz.status };
   }
-  return { ok: true, tenantId: authz.tenantId, userId: authz.userId };
+  return { ok: true, tenantId: authz.tenantId, userId: authz.userId, status: 200 };
 }
 
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {

@@ -62,6 +62,7 @@ interface FleetVehicle {
   canActivateMobileTracking: boolean;
   odometerReading?: number | null;
   isAssignedToMe?: boolean;
+  vehicleUsage?: string | null;
 }
 
 const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
