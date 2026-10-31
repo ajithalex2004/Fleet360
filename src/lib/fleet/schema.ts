@@ -11,7 +11,10 @@ export const FLEET_SCHEMA: SchemaSpec = { tables: [
     'fleet_transfers',
     'fleet_vehicle_insurance',
     'fleet_nui_reasons',
-  ] };
+  ],
+  // 20261105090000_fleet_nui_reasons_per_tenant
+  columns: [['fleet_nui_reasons', 'tenant_id']],
+};
 
 export function ensureFleetSchema(): Promise<void> {
   return provisionSchemaOnce('fleet', FLEET_SCHEMA, _runDdl);
@@ -157,7 +160,8 @@ async function _runDdl(): Promise<void> {
       -- ── fleet_nui_reasons ───────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS fleet_nui_reasons (
         id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        code                    TEXT        NOT NULL,
+        tenant_id               TEXT        DEFAULT NULLIF(current_setting('app.tenant_id', true), ''),
+        code                   TEXT        NOT NULL,
         name                    TEXT        NOT NULL,
         reason_type             TEXT        NOT NULL,
         description             TEXT,
@@ -205,6 +209,8 @@ async function _runDdl(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fnr_code       ON fleet_nui_reasons(code);
       CREATE INDEX IF NOT EXISTS idx_fnr_type       ON fleet_nui_reasons(reason_type);
       CREATE INDEX IF NOT EXISTS idx_fnr_active     ON fleet_nui_reasons(is_active);
+      ALTER TABLE fleet_nui_reasons ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT NULLIF(current_setting('app.tenant_id', true), '');
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_fnr_tenant_code ON fleet_nui_reasons (tenant_id, UPPER(code));
       BEGIN
         ALTER TABLE fleet_transfers ALTER COLUMN vehicle_id TYPE TEXT;
         ALTER TABLE fleet_transfers ADD COLUMN IF NOT EXISTS approved_by TEXT;
