@@ -1372,14 +1372,19 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(next_service_km, 55000) AS next_service_km,
               registration_expiry,
               insurance_expiry,
+              assigned_driver_id,
               COALESCE(updated_at, NOW() - INTERVAL '3.5 hours') AS updated_at
          FROM vehicles
-        WHERE tenant_id = $1
-          AND deleted_at IS NULL
+        WHERE deleted_at IS NULL
           AND (
             vehicle_usage = 'LOGISTICS'
-            OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
-            OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
+            OR (
+              tenant_id = $1
+              AND (
+                type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
+                OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
+              )
+            )
           )
         ORDER BY CASE WHEN status = 'AVAILABLE' THEN 0 ELSE 1 END, plate_number ASC
         LIMIT 60`,
@@ -1398,8 +1403,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(driver_type, 'LOGISTICS') AS assignment_type,
               assigned_vehicle_id
          FROM drivers
-        WHERE tenant_id = $1
-          AND deleted_at IS NULL
+        WHERE deleted_at IS NULL
+          AND (tenant_id = $1 OR driver_type = 'LOGISTICS')
         ORDER BY CASE WHEN driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, first_name ASC NULLS LAST
         LIMIT 60`,
       tenantId,
@@ -1666,9 +1671,41 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
   }
 
+  // Build bidirectional lookup of logged-in driver <-> vehicle from `vehicles.assigned_driver_id` and `drivers.assigned_vehicle_id`
+  const driverNameById = new Map<string, string>();
+  const vehicleIdByDriverId = new Map<string, string>();
+  const driverIdByVehicleId = new Map<string, string>();
+
+  for (const d of rawDrivers) {
+    const dId = String(d.id);
+    const first = String(d.first_name ?? '').trim();
+    const last = String(d.last_name ?? '').trim();
+    const fullName = `${first} ${last}`.trim() || String(d.name ?? 'Logistics Driver');
+    driverNameById.set(dId, fullName);
+    if (d.assigned_vehicle_id) {
+      const vId = String(d.assigned_vehicle_id);
+      vehicleIdByDriverId.set(dId, vId);
+      driverIdByVehicleId.set(vId, dId);
+    }
+  }
+  for (const v of rawVehicles) {
+    const vId = String(v.id);
+    if (v.assigned_driver_id) {
+      const dId = String(v.assigned_driver_id);
+      driverIdByVehicleId.set(vId, dId);
+      vehicleIdByDriverId.set(dId, vId);
+    }
+  }
+
   const vehicles: MappedFleetVehicle[] = rawVehicles.map((v: Record<string, unknown>, idx: number) => {
     const id = String(v.id);
     const activeJob = activeJobByVehicle.get(id);
+    const loggedInDriverId = driverIdByVehicleId.get(id) ?? null;
+    const resolvedDriverId = loggedInDriverId ?? activeJob?.assignedDriverId ?? null;
+    const resolvedDriverName =
+      (loggedInDriverId ? driverNameById.get(loggedInDriverId) ?? null : null) ??
+      activeJob?.assignedDriverName ??
+      null;
     return {
       id,
       plateNumber: String(v.plate_number),
@@ -1684,8 +1721,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       nextServiceKm: v.next_service_km != null ? Number(v.next_service_km) : 55000,
       registrationExpiry: v.registration_expiry instanceof Date ? v.registration_expiry.toISOString() : null,
       insuranceExpiry: v.insurance_expiry instanceof Date ? v.insurance_expiry.toISOString() : null,
-      assignedDriverId: activeJob?.assignedDriverId ?? null,
-      assignedDriverName: activeJob?.assignedDriverName ?? null,
+      assignedDriverId: resolvedDriverId,
+      assignedDriverName: resolvedDriverName,
       activeJobCode: activeJob?.jobCode ?? null,
       lat: activeJob?.currentLat ?? (v.current_lat != null ? Number(v.current_lat) : (25.0080 + (idx % 5) * 0.008)),
       lng: activeJob?.currentLng ?? (v.current_lng != null ? Number(v.current_lng) : (55.0640 + (idx % 5) * 0.009)),
@@ -1703,6 +1740,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const licExpiry = d.license_expiry instanceof Date ? d.license_expiry.toISOString() : null;
     const isExpired = licExpiry ? new Date(licExpiry).getTime() < Date.now() : false;
     const activeJob = activeJobByDriver.get(id);
+    const loggedInVehicleId = vehicleIdByDriverId.get(id) ?? null;
     return {
       id,
       employeeId: d.employee_id ? String(d.employee_id) : null,
@@ -1714,7 +1752,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       licenseExpiry: licExpiry,
       status: activeJob ? 'ON_TRIP' : String(d.status ?? 'ACTIVE'),
       assignmentType: d.assignment_type ? String(d.assignment_type) : 'LOGISTICS',
-      assignedVehicleId: d.assigned_vehicle_id ? String(d.assigned_vehicle_id) : (activeJob?.assignedVehicleId ?? null),
+      assignedVehicleId: loggedInVehicleId ?? (activeJob?.assignedVehicleId ?? null),
       activeJobCode: activeJob?.jobCode ?? null,
       complianceOk: !isExpired && String(d.status ?? 'ACTIVE') === 'ACTIVE',
       completedTripsToday: tripsCountByDriver.get(id) || 0,

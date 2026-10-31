@@ -200,32 +200,47 @@ export async function POST(req: NextRequest) {
           : null;
       const validOdo =
         odoNum !== null && !Number.isNaN(odoNum) && odoNum > 0 ? odoNum : null;
-      if (validOdo !== null) {
-        await prisma.vehicle.update({
-          where: { id: vehicle.id },
-          data: { odometerReading: BigInt(Math.round(validOdo)) },
-        });
-      }
+
+      // Clear this driver from any other vehicle they were previously logged into
+      await prisma.vehicle
+        .updateMany({
+          where: { assignedDriverId: driver.id, id: { not: vehicle.id } },
+          data: { assignedDriverId: null },
+        })
+        .catch(() => {});
+
+      // Bind the logged-in driver (and odometer reading if provided) to this vehicle
+      await prisma.vehicle.update({
+        where: { id: vehicle.id },
+        data: {
+          assignedDriverId: driver.id,
+          ...(validOdo !== null ? { odometerReading: BigInt(Math.round(validOdo)) } : {}),
+        },
+      });
 
       if (canActivateMobileTracking) {
-        const lastKnown = await prisma.busGpsPing.findFirst({
-          where: { vehicleId: vehicle.id, tenantId },
-          orderBy: { occurredAt: 'desc' },
-          select: { latitude: true, longitude: true, headingDeg: true },
-        });
-        await prisma.busGpsPing.create({
-          data: {
-            tenantId,
-            vehicleId: vehicle.id,
-            latitude: lastKnown?.latitude ?? 25.2048,
-            longitude: lastKnown?.longitude ?? 55.2708,
-            speedKmh: 0,
-            headingDeg: lastKnown?.headingDeg ?? 0,
-            accuracyM: 5,
-            occurredAt: new Date(),
-            source: 'DRIVER_APP',
-          },
-        });
+        try {
+          const lastKnown = await prisma.busGpsPing.findFirst({
+            where: { vehicleId: vehicle.id, tenantId },
+            orderBy: { occurredAt: 'desc' },
+            select: { latitude: true, longitude: true, headingDeg: true },
+          });
+          await prisma.busGpsPing.create({
+            data: {
+              tenantId,
+              vehicleId: vehicle.id,
+              latitude: lastKnown?.latitude ?? 25.2048,
+              longitude: lastKnown?.longitude ?? 55.2708,
+              speedKmh: 0,
+              headingDeg: lastKnown?.headingDeg ?? 0,
+              accuracyM: 5,
+              occurredAt: new Date(),
+              source: 'DRIVER_APP',
+            },
+          });
+        } catch {
+          // Ignore if bus_gps_pings table is not present
+        }
       }
 
       return {

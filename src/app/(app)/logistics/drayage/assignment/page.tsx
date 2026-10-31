@@ -1082,20 +1082,30 @@ export default function DrayageAssignmentPage() {
   // Selectable Prime Mover dropdown options with 4-Factor badges and breakdowns
   const primeMoverSelectOptions = useMemo(() => {
     if (scoredPrimeMovers.length > 0) {
-      return scoredPrimeMovers.map((s) => ({
-        value: s.vehicle.id,
-        label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model} [${s.totalScore}% Match]`,
-        sublabel: `📍 ${s.distanceKm}km (${s.proximityScore}pts) • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today • 🛡️ Fuel: ${s.fuelPct}%`,
-        badge: `${s.totalScore}% Match`,
-      }));
+      return scoredPrimeMovers.map((s) => {
+        const drvName =
+          s.vehicle.assignedDriverName ||
+          drivers.find((d) => d.id === s.vehicle.assignedDriverId || d.assignedVehicleId === s.vehicle.id)?.fullName;
+        return {
+          value: s.vehicle.id,
+          label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model}${drvName ? ` (${drvName})` : ''} [${s.totalScore}% Match]`,
+          sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}📍 ${s.distanceKm}km (${s.proximityScore}pts) • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today`,
+          badge: drvName ? `👤 ${drvName}` : `${s.totalScore}% Match`,
+        };
+      });
     }
-    return primeMovers.map((v) => ({
-      value: v.id,
-      label: `${v.plateNumber} · ${v.make} ${v.model}`,
-      sublabel: `Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
-      badge: v.status,
-    }));
-  }, [scoredPrimeMovers, primeMovers]);
+    return primeMovers.map((v) => {
+      const drvName =
+        v.assignedDriverName ||
+        drivers.find((d) => d.id === v.assignedDriverId || d.assignedVehicleId === v.id)?.fullName;
+      return {
+        value: v.id,
+        label: `${v.plateNumber} · ${v.make} ${v.model}${drvName ? ` (${drvName})` : ''}`,
+        sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
+        badge: drvName ? `👤 ${drvName}` : v.status,
+      };
+    });
+  }, [scoredPrimeMovers, primeMovers, drivers]);
 
   // =========================================================================
   // ACTIONS: USE THIS PAIR (MANUAL 1-CLICK ASSIGNMENT)
@@ -2358,6 +2368,18 @@ export default function DrayageAssignmentPage() {
                   value={selectedVehicleId}
                   onChange={(val) => {
                     setSelectedVehicleId(val);
+                    if (!val) {
+                      setSelectedDriverId('');
+                      return;
+                    }
+                    const veh = vehicles.find((v) => v.id === val);
+                    const loggedInDrv =
+                      (veh?.assignedDriverId
+                        ? drivers.find((d) => d.id === veh.assignedDriverId)
+                        : null) || drivers.find((d) => d.assignedVehicleId === val);
+                    if (loggedInDrv) {
+                      setSelectedDriverId(loggedInDrv.id);
+                    }
                   }}
                   options={primeMoverSelectOptions}
                   placeholder="-- Search & Choose Prime Mover --"
@@ -2448,13 +2470,35 @@ export default function DrayageAssignmentPage() {
                 </div>
                 <SearchableSelect
                   value={selectedDriverId}
-                  onChange={(val) => setSelectedDriverId(val)}
-                  options={drivers.map((d) => ({
-                    value: d.id,
-                    label: d.fullName,
-                    sublabel: `Trips Today: ${d.completedTripsToday ?? 0} • ${d.phone ? `Phone: ${d.phone} • ` : ''}Status: ${d.status}`,
-                    badge: (d.completedTripsToday ?? 0) === 0 ? 'Fresh Driver' : `${d.completedTripsToday} Trips`,
-                  }))}
+                  onChange={(val) => {
+                    setSelectedDriverId(val);
+                    if (val && !selectedVehicleId) {
+                      const drv = drivers.find((d) => d.id === val);
+                      const loggedInVeh =
+                        (drv?.assignedVehicleId
+                          ? vehicles.find((v) => v.id === drv.assignedVehicleId)
+                          : null) || vehicles.find((v) => v.assignedDriverId === val);
+                      if (loggedInVeh) {
+                        setSelectedVehicleId(loggedInVeh.id);
+                      }
+                    }
+                  }}
+                  options={drivers.map((d) => {
+                    const loggedInVeh =
+                      (d.assignedVehicleId
+                        ? vehicles.find((v) => v.id === d.assignedVehicleId)
+                        : null) || vehicles.find((v) => v.assignedDriverId === d.id);
+                    return {
+                      value: d.id,
+                      label: loggedInVeh ? `${d.fullName} (${loggedInVeh.plateNumber})` : d.fullName,
+                      sublabel: `${loggedInVeh ? `🚛 Logged into: ${loggedInVeh.plateNumber} • ` : ''}Trips Today: ${d.completedTripsToday ?? 0} • ${d.phone ? `Phone: ${d.phone} • ` : ''}Status: ${d.status}`,
+                      badge: loggedInVeh
+                        ? `🚛 ${loggedInVeh.plateNumber}`
+                        : (d.completedTripsToday ?? 0) === 0
+                        ? 'Fresh Driver'
+                        : `${d.completedTripsToday} Trips`,
+                    };
+                  })}
                   placeholder="-- Search & Choose Driver --"
                   searchPlaceholder="Type driver name, mobile number..."
                   isClearable
