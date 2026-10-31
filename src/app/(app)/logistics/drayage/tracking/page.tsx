@@ -108,6 +108,31 @@ interface DispatchMessage {
   createdAt: string;
 }
 
+function getOperationalStageIndex(status: string, trailerDetached?: boolean): number {
+  const s = (status || '').toUpperCase();
+  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+    return 6;
+  }
+  if (
+    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP', 'WAITING_MT_RETURN'].includes(s)
+  ) {
+    return 5;
+  }
+  if (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
+    return trailerDetached ? 5 : 4;
+  }
+  if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'EMPTY_AT_PORT'].includes(s)) {
+    return 3;
+  }
+  if (['LOADED', 'CONTAINER_PICKED', 'UNDER_INSPECTION', 'TRAILER_ATTACHED'].includes(s)) {
+    return 2;
+  }
+  if (['AT_PORT', 'ARRIVED_AT_PORT'].includes(s)) {
+    return 1;
+  }
+  return 0;
+}
+
 export default function DrayageJobTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<DrayageJob[]>([]);
@@ -588,16 +613,32 @@ export default function DrayageJobTrackingPage() {
                       <Plus className="w-3.5 h-3.5 text-blue-400" />
                       Add Intermediate Leg
                     </button>
-                    {activeJob.jobPhase === 'L1' && !activeJob.l2Activated && (
-                      <button
-                        onClick={handleTriggerL2}
-                        disabled={updatingStatus}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Trigger L2 Empty Return
-                      </button>
-                    )}
+                    {activeJob.jobPhase === 'L1' && !activeJob.l2Activated && (() => {
+                      const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                      const canTriggerL2 =
+                        currentStage >= 4 &&
+                        activeJob.placementLocation !== 'YARD' &&
+                        Boolean(activeJob.etcTime);
+                      return (
+                        <button
+                          onClick={handleTriggerL2}
+                          disabled={updatingStatus || !canTriggerL2}
+                          title={
+                            canTriggerL2
+                              ? 'Activate L2 Empty Return job now'
+                              : 'Locked: Requires container Placed at Ramp with Offloading ETC set'
+                          }
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                            canTriggerL2
+                              ? 'bg-amber-500/15 border-amber-500/30 text-amber-500 hover:bg-amber-500/25 cursor-pointer'
+                              : 'bg-slate-500/10 border-[var(--border-subtle)] text-[var(--text-muted)] opacity-45 cursor-not-allowed'
+                          }`}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Trigger L2 Empty Return
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -697,81 +738,156 @@ export default function DrayageJobTrackingPage() {
                       >
                         +2 Hours
                       </button>
-                      {!activeJob.l2Activated && (
-                        <button
-                          onClick={handleTriggerL2}
-                          disabled={updatingStatus}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          Trigger L2 Now
-                        </button>
-                      )}
+                      {!activeJob.l2Activated && (() => {
+                        const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                        const canTriggerL2 =
+                          currentStage >= 4 &&
+                          activeJob.placementLocation !== 'YARD' &&
+                          Boolean(activeJob.etcTime);
+                        return (
+                          <button
+                            onClick={handleTriggerL2}
+                            disabled={updatingStatus || !canTriggerL2}
+                            title={
+                              canTriggerL2
+                                ? 'Activate L2 Empty Return job now'
+                                : 'Requires container Placed at Ramp with Offloading ETC set'
+                            }
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
+                              canTriggerL2
+                                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 cursor-pointer'
+                                : 'bg-slate-500/20 text-[var(--text-muted)] opacity-50 cursor-not-allowed'
+                            }`}
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Trigger L2 Now
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
 
                 {/* Execution Stage Action Buttons */}
-                <div className="pt-2">
-                  <div className="text-[11px] font-bold text-[var(--text-main)] mb-2 flex items-center justify-between">
-                    <span>Operational Stage Actions:</span>
-                    <span className="text-[10px] text-[var(--text-muted)]">Click button to advance workflow</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => handleUpdateStatus('AT_PORT')}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500 hover:text-blue-400 transition-colors"
-                    >
-                      1. Gated In Port
-                    </button>
-                    <button
-                      onClick={() => handleUpdateStatus('LOADED')}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500 hover:text-blue-400 transition-colors"
-                    >
-                      2. Container Loaded
-                    </button>
-                    <button
-                      onClick={() => handleUpdateStatus('IN_TRANSIT')}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500 hover:text-blue-400 transition-colors"
-                    >
-                      3. In Transit (E11)
-                    </button>
-                    <button
-                      onClick={() => {
+                {(() => {
+                  const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                  const stages: Array<{
+                    stageNum: number;
+                    label: string;
+                    variant?: 'default' | 'amber' | 'emerald';
+                    onClick: () => void;
+                  }> = [
+                    {
+                      stageNum: 1,
+                      label: '1. Gated In Port',
+                      onClick: () => handleUpdateStatus('AT_PORT'),
+                    },
+                    {
+                      stageNum: 2,
+                      label: '2. Container Loaded',
+                      onClick: () => handleUpdateStatus('LOADED'),
+                    },
+                    {
+                      stageNum: 3,
+                      label: '3. In Transit (E11)',
+                      onClick: () => handleUpdateStatus('IN_TRANSIT'),
+                    },
+                    {
+                      stageNum: 4,
+                      label: '4. Placed at Ramp',
+                      onClick: () => {
                         setTargetStatusForEtc('PLACED_AT_RAMP');
                         setEtcModalOpen(true);
-                      }}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500 hover:text-blue-400 transition-colors"
-                    >
-                      4. Placed at Ramp
-                    </button>
-                    <button
-                      onClick={() => {
+                      },
+                    },
+                    {
+                      stageNum: 5,
+                      label: '5. Detach Trailer',
+                      variant: 'amber',
+                      onClick: () => {
                         if (activeJob.jobPhase === 'L1' && !activeJob.etcTime) {
                           setTargetStatusForEtc('CONTAINER_DETACHED');
                           setEtcModalOpen(true);
                         } else {
                           handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true);
                         }
-                      }}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors"
-                    >
-                      5. Detach Trailer
-                    </button>
-                    <button
-                      onClick={() => handleUpdateStatus('EMPTY_DEPOSITED', undefined, false)}
-                      disabled={updatingStatus}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25 transition-colors"
-                    >
-                      6. Complete & Deposit MT
-                    </button>
-                  </div>
-                </div>
+                      },
+                    },
+                    {
+                      stageNum: 6,
+                      label: '6. Complete & Deposit MT',
+                      variant: 'emerald',
+                      onClick: () => handleUpdateStatus('EMPTY_DEPOSITED', undefined, false),
+                    },
+                  ];
+
+                  return (
+                    <div className="pt-2">
+                      <div className="text-[11px] font-bold text-[var(--text-main)] mb-2 flex items-center justify-between">
+                        <span>Operational Stage Actions:</span>
+                        <span className="text-[10px] text-[var(--text-muted)]">
+                          {currentStage >= 6
+                            ? 'Workflow completed'
+                            : `Current Stage: ${currentStage}/6 · Only Stage ${currentStage + 1} is enabled`}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {stages.map((st) => {
+                          const isPast = st.stageNum < currentStage;
+                          const isCurrent = st.stageNum === currentStage;
+                          const isNext = st.stageNum === currentStage + 1;
+                          const isFuture = st.stageNum > currentStage + 1;
+
+                          let btnClass =
+                            'px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all inline-flex items-center gap-1.5 ';
+                          if (isPast) {
+                            btnClass +=
+                              'bg-slate-500/5 border-[var(--border-subtle)] text-[var(--text-muted)] opacity-45 cursor-not-allowed line-through';
+                          } else if (isCurrent) {
+                            btnClass +=
+                              'bg-blue-500/15 border-blue-500/50 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/30 cursor-not-allowed';
+                          } else if (isNext) {
+                            if (st.variant === 'amber') {
+                              btnClass +=
+                                'bg-amber-600 text-white border-amber-500 hover:bg-amber-500 shadow-sm cursor-pointer';
+                            } else if (st.variant === 'emerald') {
+                              btnClass +=
+                                'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-sm cursor-pointer';
+                            } else {
+                              btnClass +=
+                                'bg-blue-600 text-white border-blue-500 hover:bg-blue-500 shadow-sm cursor-pointer';
+                            }
+                          } else if (isFuture) {
+                            btnClass +=
+                              'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-35 cursor-not-allowed';
+                          }
+
+                          const tooltip = isPast
+                            ? 'Completed stage (locked — cannot revert to a previous status)'
+                            : isCurrent
+                            ? 'Current active stage'
+                            : isNext
+                            ? 'Click to advance to the immediate next stage'
+                            : `Locked: Complete Stage ${currentStage + 1} first`;
+
+                          return (
+                            <button
+                              key={st.stageNum}
+                              onClick={isNext ? st.onClick : undefined}
+                              disabled={updatingStatus || !isNext}
+                              title={tooltip}
+                              className={btnClass}
+                            >
+                              {isPast && <span aria-hidden="true">✓</span>}
+                              {isCurrent && <span aria-hidden="true">●</span>}
+                              <span>{st.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Port EDI Verification Panel */}

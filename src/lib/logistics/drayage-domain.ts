@@ -2332,6 +2332,31 @@ export async function assignDrayageJob(
   return { ok: true, tokenNumber: token };
 }
 
+function getDrayageOperationalStageIndex(status: string, trailerDetached?: boolean): number {
+  const s = (status || '').toUpperCase();
+  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+    return 6;
+  }
+  if (
+    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP', 'WAITING_MT_RETURN'].includes(s)
+  ) {
+    return 5;
+  }
+  if (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
+    return trailerDetached ? 5 : 4;
+  }
+  if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'EMPTY_AT_PORT'].includes(s)) {
+    return 3;
+  }
+  if (['LOADED', 'CONTAINER_PICKED', 'UNDER_INSPECTION', 'TRAILER_ATTACHED'].includes(s)) {
+    return 2;
+  }
+  if (['AT_PORT', 'ARRIVED_AT_PORT'].includes(s)) {
+    return 1;
+  }
+  return 0;
+}
+
 export async function updateDrayageJobExecutionStatus(
   db: DrayageDbClient,
   args: {
@@ -2354,8 +2379,27 @@ export async function updateDrayageJobExecutionStatus(
   const job = jobRows[0];
   if (!job) throw new Error('Drayage job not found');
 
+  const currentStatus = String(job.status || '');
   const placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
   const detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
+
+  if (args.status !== currentStatus) {
+    const currentStage = getDrayageOperationalStageIndex(currentStatus, Boolean(job.trailer_detached));
+    const targetStage = getDrayageOperationalStageIndex(args.status, detached);
+    if (currentStage >= 1 && targetStage >= 1) {
+      if (targetStage < currentStage) {
+        throw new Error(
+          `Cannot revert job status backward from ${currentStatus} (Stage ${currentStage}) to ${args.status} (Stage ${targetStage}).`,
+        );
+      }
+      const isDispatchConsole = !args.actor || args.actor === 'Dispatch Console';
+      if (isDispatchConsole && targetStage > currentStage + 1) {
+        throw new Error(
+          `Sequential stage progression required: cannot skip from Stage ${currentStage} (${currentStatus}) directly to Stage ${targetStage} (${args.status}).`,
+        );
+      }
+    }
+  }
   const isRampPlacement =
     args.status === 'PLACED_AT_RAMP' ||
     args.status === 'REASSIGN_PLACED_AT_RAMP' ||
@@ -2511,6 +2555,14 @@ export async function activateL2EmptyReturnJob(
   const l1 = jobRows[0];
   if (!l1) throw new Error('L1 Job not found');
   if (l1.l2_activated) throw new Error('L2 Empty Return is already activated for this container');
+
+  const l1Stage = getDrayageOperationalStageIndex(String(l1.status || ''), Boolean(l1.trailer_detached));
+  const l1Placement = String(l1.placement_location || '').toUpperCase();
+  if (l1Stage < 4 || l1Placement === 'YARD' || !l1.etc_time) {
+    throw new Error(
+      'L2 Empty Return can only be triggered after the container is Placed at Ramp with an Offloading ETC set.',
+    );
+  }
 
   const l2Id = `job-l2-${crypto.randomUUID().slice(0, 10)}`;
   const l2Code = String(l1.job_code).replace('L1', 'L2') || `DRY-L2-${Math.floor(1000 + Math.random() * 9000)}`;
