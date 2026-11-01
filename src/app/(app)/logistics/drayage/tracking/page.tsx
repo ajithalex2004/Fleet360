@@ -30,6 +30,10 @@ import {
   Clock,
   Plus,
   Settings,
+  Copy,
+  ExternalLink,
+  Mail,
+  Share2,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
@@ -131,6 +135,18 @@ interface DrayageJob {
     slotRiskStatus: 'SLOT_MISS_RISK' | 'TIGHT_BUFFER' | 'ON_TIME';
     recommendation: string;
   };
+  customerPortal?: {
+    trackingToken: string;
+    shareablePath: string;
+    jobCode: string;
+    containerNumber: string;
+    customerName: string;
+    customerWhatsApp: string;
+    customerEmail: string;
+    autoAlertsEnabled: boolean;
+    lastAlertSentAt: string | null;
+    lastAlertSummary: string | null;
+  };
 }
 
 interface StatusLog {
@@ -218,6 +234,11 @@ export default function DrayageJobTrackingPage() {
   const [togglingAutoL2, setTogglingAutoL2] = useState(false);
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [customerWhatsAppInput, setCustomerWhatsAppInput] = useState('+971 50 482 9104');
+  const [customerEmailInput, setCustomerEmailInput] = useState('logistics-ops@shipper.ae');
+  const [customerAutoAlerts, setCustomerAutoAlerts] = useState(true);
+  const [sendingCustomerAlert, setSendingCustomerAlert] = useState(false);
+  const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);
   const [, setTick] = useState(0);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -344,6 +365,66 @@ export default function DrayageJobTrackingPage() {
   const activeJob = useMemo(() => {
     return jobs.find((j) => j.id === selectedJobId) || jobs[0] || null;
   }, [jobs, selectedJobId]);
+
+  useEffect(() => {
+    if (activeJob?.customerPortal) {
+      setCustomerWhatsAppInput(activeJob.customerPortal.customerWhatsApp || '+971 50 482 9104');
+      setCustomerEmailInput(activeJob.customerPortal.customerEmail || 'logistics-ops@shipper.ae');
+      setCustomerAutoAlerts(Boolean(activeJob.customerPortal.autoAlertsEnabled ?? true));
+    }
+  }, [activeJob?.id, activeJob?.customerPortal]);
+
+  const handleCopyCustomerTrackingLink = () => {
+    if (!activeJob?.customerPortal?.shareablePath || typeof window === 'undefined') return;
+    const fullUrl = `${window.location.origin}${activeJob.customerPortal.shareablePath}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedTrackingLink(true);
+    showToast('success', `Copied read-only Customer Tracking Link for ${activeJob.jobCode} (${activeJob.containerNumber})`);
+    setTimeout(() => setCopiedTrackingLink(false), 3000);
+  };
+
+  const handleSendCustomerMilestoneAlert = async (savePrefsOnly = false) => {
+    if (!activeJob) return;
+    try {
+      setSendingCustomerAlert(true);
+      await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_customer_alert_preferences',
+          jobId: activeJob.id,
+          customerWhatsApp: customerWhatsAppInput,
+          customerEmail: customerEmailInput,
+          autoAlertsEnabled: customerAutoAlerts,
+        }),
+      });
+      if (!savePrefsOnly) {
+        const res = await fetch('/api/logistics/drayage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send_customer_milestone_alert',
+            jobId: activeJob.id,
+            customerWhatsApp: customerWhatsAppInput,
+            customerEmail: customerEmailInput,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to send customer milestone alert');
+        showToast(
+          'success',
+          `📲 Sent WhatsApp (${data.whatsappTo}) & Email (${data.emailTo}) Milestone Alert with Live Tracking Portal link!`,
+        );
+      } else {
+        showToast('success', 'Saved Customer WhatsApp & Email milestone notification settings.');
+      }
+      await loadData();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error sending customer milestone alert');
+    } finally {
+      setSendingCustomerAlert(false);
+    }
+  };
 
   const jobLogs = useMemo(() => {
     if (!activeJob) return [];
@@ -897,7 +978,30 @@ export default function DrayageJobTrackingPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeJob.customerPortal?.shareablePath && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleCopyCustomerTrackingLink}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-xs font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors"
+                          title="Copy read-only token-secured Customer Tracking Portal link"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          {copiedTrackingLink ? 'Link Copied!' : 'Copy Customer Link'}
+                        </button>
+                        <a
+                          href={activeJob.customerPortal.shareablePath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-xs font-bold text-blue-300 hover:bg-blue-600/30 transition-colors"
+                          title="Open Zero-Login Read-Only Customer Tracking Portal in a new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Customer Portal
+                        </a>
+                      </>
+                    )}
                     <button
                       onClick={() => setShowLegModal(true)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500/40 transition-colors"
@@ -1442,6 +1546,119 @@ export default function DrayageJobTrackingPage() {
                   );
                 })()}
               </div>
+
+              {/* Live Customer Tracking Link (Shareable Portal) & Automated WhatsApp/Email Milestone Alerts */}
+              {activeJob.customerPortal && (
+                <Panel
+                  title="Live Customer Tracking Link (Shareable Portal) & Automated Milestone Alerts"
+                  subtitle={`Read-only, token-secured customer portal for ${activeJob.jobCode} (${activeJob.containerNumber}) with live corridor map, 6-stage timeline, Offloading ETC & automated WhatsApp/Email notifications`}
+                  icon={Share2}
+                  accent="emerald"
+                  actions={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyCustomerTrackingLink}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        {copiedTrackingLink ? 'Tracking Link Copied!' : 'Copy Shareable Link'}
+                      </button>
+                      <a
+                        href={activeJob.customerPortal.shareablePath}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-xs font-bold text-blue-300 hover:bg-blue-600/30 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open Customer Portal
+                      </a>
+                    </div>
+                  }
+                >
+                  <div className="space-y-3 text-xs">
+                    {/* Token-Secured Shareable URL Bar */}
+                    <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">
+                          Zero-Login Token-Secured Customer Portal URL ({activeJob.jobCode} · {activeJob.containerNumber})
+                        </span>
+                        <code className="text-[11px] font-mono text-[var(--text-main)] break-all">
+                          {typeof window !== 'undefined'
+                            ? `${window.location.origin}${activeJob.customerPortal.shareablePath}`
+                            : activeJob.customerPortal.shareablePath}
+                        </code>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                        HMAC-SHA256 Verified · Read-Only
+                      </span>
+                    </div>
+
+                    {/* Customer WhatsApp & Email Milestone Alert Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                      <div className="md:col-span-4">
+                        <label className="block text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">
+                          Customer WhatsApp (Milestone Alerts)
+                        </label>
+                        <input
+                          type="text"
+                          value={customerWhatsAppInput}
+                          onChange={(e) => setCustomerWhatsAppInput(e.target.value)}
+                          placeholder="+971 50 482 9104"
+                          className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="md:col-span-4">
+                        <label className="block text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">
+                          Customer Email (Milestone & e-POD)
+                        </label>
+                        <input
+                          type="email"
+                          value={customerEmailInput}
+                          onChange={(e) => setCustomerEmailInput(e.target.value)}
+                          placeholder="operations@customer.ae"
+                          className="w-full px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="md:col-span-4 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={sendingCustomerAlert}
+                          onClick={() => void handleSendCustomerMilestoneAlert(false)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-sm"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          {sendingCustomerAlert ? 'Dispatching...' : 'Send WhatsApp & Email Alert'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
+                      <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-[var(--text-main)] font-medium">
+                        <input
+                          type="checkbox"
+                          checked={customerAutoAlerts}
+                          onChange={(e) => {
+                            setCustomerAutoAlerts(e.target.checked);
+                          }}
+                          className="rounded border-[var(--border-subtle)] text-emerald-500"
+                        />
+                        <span>
+                          Auto-trigger WhatsApp & Email milestone alerts on every stage change (Gated In, Container Loaded, In Transit, Placed at Ramp, Completed)
+                        </span>
+                      </label>
+
+                      {activeJob.customerPortal.lastAlertSummary && (
+                        <span className="text-[10px] font-mono text-emerald-400 truncate max-w-md">
+                          Last Alert: {activeJob.customerPortal.lastAlertSummary}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Panel>
+              )}
 
               {/* Port EDI Verification Panel */}
               <Panel

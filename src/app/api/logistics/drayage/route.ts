@@ -38,6 +38,8 @@ import {
   rebookPcsTokenForTrafficDelay,
   swapTractorForPortSlotRescue,
   simulatePortSlotTrafficRisk,
+  dispatchDrayageCustomerMilestoneAlert,
+  updateDrayageCustomerAlertPreferences,
 } from '@/lib/logistics/drayage-domain';
 
 let drayageSchemaEnsured = false;
@@ -1085,6 +1087,27 @@ export async function POST(req: NextRequest) {
             tenantId,
             jobId: String(body.jobId),
             actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'send_customer_milestone_alert': {
+          return dispatchDrayageCustomerMilestoneAlert(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            milestoneStatus: body.milestoneStatus ? String(body.milestoneStatus) : undefined,
+            customWhatsApp: body.customerWhatsApp ? String(body.customerWhatsApp) : undefined,
+            customEmail: body.customerEmail ? String(body.customerEmail) : undefined,
+            triggerSource: 'MANUAL_DISPATCH',
+          });
+        }
+
+        case 'update_customer_alert_preferences': {
+          return updateDrayageCustomerAlertPreferences(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            customerWhatsApp: String(body.customerWhatsApp || '+971 50 482 9104'),
+            customerEmail: String(body.customerEmail || 'logistics-ops@shipper.ae'),
+            autoAlertsEnabled: Boolean(body.autoAlertsEnabled),
           });
         }
 
