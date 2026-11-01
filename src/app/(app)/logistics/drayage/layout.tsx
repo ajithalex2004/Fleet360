@@ -8,6 +8,7 @@ import {
   Layers, Wallet, BarChart3, Truck, MapPin, FileSpreadsheet,
   ChevronRight, Globe,
 } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const DRAYAGE_TABS = [
   { href: '/logistics/drayage', label: 'Dashboard', icon: Anchor, exact: true },
@@ -27,6 +28,7 @@ const DRAYAGE_TABS = [
 
 export default function DrayageLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { tLabel } = useLanguage();
 
   const isTabActive = (tab: (typeof DRAYAGE_TABS)[number]) => {
     if (tab.exact) {
@@ -41,10 +43,10 @@ export default function DrayageLayout({ children }: { children: React.ReactNode 
       <div className="border-b border-[var(--border-subtle)] pb-4">
         <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-2 font-medium">
           <Link href="/logistics" className="hover:text-[var(--text-main)] transition-colors">
-            Logistics
+            {tLabel('Logistics')}
           </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-main)] font-semibold">Port & Container Drayage</span>
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] rtl:rotate-180" />
+          <span className="text-[var(--text-main)] font-semibold">{tLabel('Port & Container Drayage')}</span>
         </div>
 
         {/* Sub-Navigation Strip (Native Fleet360 Theme) */}
@@ -63,7 +65,7 @@ export default function DrayageLayout({ children }: { children: React.ReactNode 
                 }`}
               >
                 <Icon className={`w-3.5 h-3.5 ${active ? 'text-blue-400' : 'text-[var(--text-muted)]'}`} />
-                <span>{tab.label}</span>
+                <span>{tLabel(tab.label)}</span>
               </Link>
             );
           })}
