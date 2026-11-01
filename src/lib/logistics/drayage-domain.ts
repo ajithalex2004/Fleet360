@@ -625,6 +625,45 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     ).catch(() => {});
   }
 
+  // Purge the 3 sample allowance rows (DRY-L1-1001, DRY-L1-1002, DRY-L1-1004) and reset hardcoded gate fees/bonuses once
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_allowances
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'alw-1-%'
+          OR id LIKE 'alw-2-%'
+          OR job_code IN ('DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1004')
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  const alwPurgeMarkerId = `sys-purge-allowances-v1-${tenantId}`;
+  const alwPurgeRows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id FROM logistics_drayage_alerts WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    alwPurgeMarkerId,
+    tenantId,
+  ).catch(() => []);
+
+  if (alwPurgeRows.length === 0) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_allowances
+          SET port_gate_fee_aed = 0,
+              bogie_bonus_aed = 0,
+              street_turn_bonus_aed = 0,
+              inspection_bonus_aed = 0,
+              total_amount_aed = allowance_amount_aed + overnight_halt_aed
+        WHERE tenant_id = $1 AND status = 'PENDING'`,
+      tenantId,
+    ).catch(() => {});
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
+       VALUES ($1, $2, 'SYSTEM_ALLOWANCES_PURGED_V1', true, NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      alwPurgeMarkerId,
+      tenantId,
+    ).catch(() => {});
+  }
+
   const cliCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_clients WHERE tenant_id = $1`,
     tenantId,
@@ -1193,19 +1232,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
       );
     }
 
-    // Seed driver allowances for the 2 assigned jobs
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_allowances (
-        id, tenant_id, job_id, job_code, driver_id, driver_name, vehicle_plate,
-        container_number, trip_phase, route_summary, allowance_amount_aed, port_gate_fee_aed,
-        overnight_halt_aed, total_amount_aed, status
-      ) VALUES
-      ($1,$2,$3,'DRY-L1-1001',$4,$5,$6,'MSCU8492014','L1','Jebel Ali T1 → JAFZA South Gate 5',160,35,0,195,'PENDING'),
-      ($7,$2,$8,'DRY-L1-1002',$9,$10,$11,'MAEU5910283','L1','Jebel Ali T2 → NIP Mega DC',150,35,50,235,'APPROVED')
-      ON CONFLICT (id) DO NOTHING`,
-      `alw-1-${tenantId.slice(0, 8)}`, tenantId, `job-1-${tenantId.slice(0, 8)}`, d1Id ?? 'drv-1', d1Name, v1Plate,
-      `alw-2-${tenantId.slice(0, 8)}`, `job-2-${tenantId.slice(0, 8)}`, d2Id ?? 'drv-2', d2Name, v2Plate,
-    );
+    // Sample driver allowances (DRY-L1-1001, DRY-L1-1002, DRY-L1-1004) are not seeded automatically.
   }
 
   // Ensure Street-Turn and Dual-20FT Bogie candidate jobs exist for this tenant
@@ -3913,37 +3940,26 @@ export async function extendContainerDeliveryOrder(
 
 export function computeDriverAllowanceComponents(job: Record<string, unknown>) {
   const allowanceAmountAed = Number(job.driver_allowance_aed ?? 150);
-  const termName = String(job.terminal_name ?? '').toLowerCase();
   const notes = String(job.notes ?? '');
   const status = String(job.status ?? '');
   const phase = String(job.job_phase ?? 'L1');
 
-  // DP World Gate Pass = AED 35, AD Ports Khalifa Maqta Gate Pass = AED 40
-  const portGateFeeAed = termName.includes('khalifa') || termName.includes('ad ports') ? 40 : 35;
+  // Port Gate Pass Fee defaults to 0 AED (decided by the operations team)
+  const portGateFeeAed = 0;
 
-  // Dual-20FT Bogie Pairing Bonus (+AED 75 per paired dispatch)
+  // Efficiency & Inspection bonuses default to 0 AED (configured per item by the operations team)
   const isBogie = Boolean(job.bogie_job_id) || notes.toLowerCase().includes('bogie');
-  const bogieBonusAed = isBogie ? 75 : 0;
+  const bogieBonusAed = 0;
 
-  // Street-Turn Triangulation Bonus (+AED 65 for zero-deadhead inland repositioning)
   const isStreetTurn =
     Boolean(job.street_turn_job_id) ||
     status === 'STREET_TURNED' ||
     notes.toLowerCase().includes('street-turn') ||
     notes.toLowerCase().includes('street turn');
-  const streetTurnBonusAed = isStreetTurn ? 65 : 0;
+  const streetTurnBonusAed = 0;
 
-  // Regulatory Inspection Bay Surcharge (+AED 40 for Customs / DM / Boxcare / Merc staging)
-  const hasInspection =
-    Boolean(job.customs_inspection) ||
-    Boolean(job.municipality_inspection) ||
-    Boolean(job.cpip_inspection) ||
-    Boolean(job.merc_inspection) ||
-    Boolean(job.boxcare_inspection);
-  const inspectionBonusAed = hasInspection ? 40 : 0;
-
-  // Overnight Halt / Detached Ramp Compensation
-  const overnightHaltAed = notes.toLowerCase().includes('overnight') ? 50 : 0;
+  const inspectionBonusAed = 0;
+  const overnightHaltAed = 0;
 
   const totalAmountAed =
     allowanceAmountAed +
@@ -3984,6 +4000,7 @@ export async function calculateMissingAllowances(db: DrayageDbClient, tenantId: 
          ON a.job_id = j.id AND a.tenant_id = j.tenant_id
       WHERE j.tenant_id = $1
         AND j.assigned_driver_id IS NOT NULL
+        AND j.job_code NOT IN ('DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1004')
         AND a.id IS NULL`,
     tenantId,
   );
@@ -4020,53 +4037,7 @@ export async function calculateMissingAllowances(db: DrayageDbClient, tenantId: 
     createdCount++;
   }
 
-  // Also synchronize any PENDING allowances whose linked job has gained Bogie, Street-Turn, or Inspection bonuses
-  const pendingAllowances = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT a.id AS allowance_id, a.overnight_halt_aed AS existing_halt, j.*
-       FROM logistics_drayage_allowances a
-       JOIN logistics_drayage_jobs j
-         ON j.id = a.job_id AND j.tenant_id = a.tenant_id
-      WHERE a.tenant_id = $1
-        AND a.status = 'PENDING'`,
-    tenantId,
-  );
-
-  let syncedCount = 0;
-  for (const row of pendingAllowances) {
-    const calc = computeDriverAllowanceComponents(row);
-    const halt = Math.max(Number(row.existing_halt ?? 0), calc.overnightHaltAed);
-    const total =
-      calc.allowanceAmountAed +
-      calc.portGateFeeAed +
-      halt +
-      calc.bogieBonusAed +
-      calc.streetTurnBonusAed +
-      calc.inspectionBonusAed;
-
-    await db.$executeRawUnsafe(
-      `UPDATE logistics_drayage_allowances
-          SET route_summary = $3,
-              port_gate_fee_aed = $4,
-              overnight_halt_aed = $5,
-              bogie_bonus_aed = $6,
-              street_turn_bonus_aed = $7,
-              inspection_bonus_aed = $8,
-              total_amount_aed = $9
-        WHERE id = $1 AND tenant_id = $2`,
-      String(row.allowance_id),
-      tenantId,
-      calc.routeSummary,
-      calc.portGateFeeAed,
-      halt,
-      calc.bogieBonusAed,
-      calc.streetTurnBonusAed,
-      calc.inspectionBonusAed,
-      total,
-    );
-    syncedCount++;
-  }
-
-  return { ok: true, createdCount, syncedCount };
+  return { ok: true, createdCount, syncedCount: 0 };
 }
 
 export async function adjustDriverAllowance(

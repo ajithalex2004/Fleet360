@@ -16,13 +16,113 @@ import {
   FileSpreadsheet,
   CreditCard,
   Award,
-  Sparkles,
+
   X,
   FileText,
   Truck,
   Eye,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+
+type BonusCategory =
+  | 'BOGIE'
+  | 'STREET_TURN'
+  | 'CUSTOMS_BAY'
+  | 'MUNICIPALITY'
+  | 'CPIP_BOXCARE'
+  | 'EXTRA_DROP'
+  | 'CUSTOM';
+
+interface BonusLineItem {
+  id: string;
+  category: BonusCategory;
+  label: string;
+  amountAed: number;
+}
+
+const BONUS_CATEGORY_OPTIONS: Array<{ value: BonusCategory; label: string }> = [
+  { value: 'BOGIE', label: '2x20FT Bogie' },
+  { value: 'STREET_TURN', label: 'Street-Turn' },
+  { value: 'CUSTOMS_BAY', label: 'Customs Bay' },
+  { value: 'MUNICIPALITY', label: 'Municipality Inspection' },
+  { value: 'CPIP_BOXCARE', label: 'CPIP / Boxcare Inspection' },
+  { value: 'EXTRA_DROP', label: 'Extra Drop / Multi-Stop' },
+  { value: 'CUSTOM', label: 'Other / Custom Bonus Item' },
+];
+
+const ITEMS_TAG_RE = /\s*\[ITEMS:(\[[\s\S]*?\])\]/;
+
+function parseBonusItemsFromAllowance(alw: {
+  bogieBonusAed?: number;
+  streetTurnBonusAed?: number;
+  inspectionBonusAed?: number;
+  adjustmentNotes?: string | null;
+}): BonusLineItem[] {
+  const rawNotes = alw.adjustmentNotes || '';
+  const match = rawNotes.match(ITEMS_TAG_RE);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((it, idx) => ({
+          id: String(it.id || `item-${idx + 1}`),
+          category: (it.category || 'CUSTOMS_BAY') as BonusCategory,
+          label: String(it.label || 'Customs Bay'),
+          amountAed: Number(it.amountAed || 0),
+        }));
+      }
+    } catch {
+      // fall through
+    }
+  }
+  const reconstructed: BonusLineItem[] = [];
+  if ((alw.bogieBonusAed || 0) > 0) {
+    reconstructed.push({
+      id: 'item-bogie',
+      category: 'BOGIE',
+      label: '2x20FT Bogie',
+      amountAed: Number(alw.bogieBonusAed || 0),
+    });
+  }
+  if ((alw.streetTurnBonusAed || 0) > 0) {
+    reconstructed.push({
+      id: 'item-street-turn',
+      category: 'STREET_TURN',
+      label: 'Street-Turn',
+      amountAed: Number(alw.streetTurnBonusAed || 0),
+    });
+  }
+  if ((alw.inspectionBonusAed || 0) > 0) {
+    reconstructed.push({
+      id: 'item-customs',
+      category: 'CUSTOMS_BAY',
+      label: 'Customs Bay',
+      amountAed: Number(alw.inspectionBonusAed || 0),
+    });
+  }
+  return reconstructed;
+}
+
+function stripBonusItemsTag(notes?: string | null): string {
+  if (!notes) return '';
+  return notes.replace(ITEMS_TAG_RE, '').trim();
+}
+
+function encodeBonusItemsTag(humanNotes: string, items: BonusLineItem[]): string {
+  const cleanNotes = stripBonusItemsTag(humanNotes);
+  const activeItems = items.filter((it) => Number(it.amountAed) > 0);
+  if (activeItems.length === 0) return cleanNotes;
+  const serialized = JSON.stringify(
+    activeItems.map((it) => ({
+      category: it.category,
+      label: it.label,
+      amountAed: Number(it.amountAed || 0),
+    })),
+  );
+  return cleanNotes ? `${cleanNotes} [ITEMS:${serialized}]` : `[ITEMS:${serialized}]`;
+}
 
 interface DrayageDriverAllowance {
   id: string;
@@ -87,11 +187,12 @@ export default function DrayagePaymentsPage() {
   // Adjustment Modal State
   const [editingAllowance, setEditingAllowance] = useState<DrayageDriverAllowance | null>(null);
   const [editBaseAed, setEditBaseAed] = useState(150);
-  const [editGateAed, setEditGateAed] = useState(35);
+  const [editGateAed, setEditGateAed] = useState(0);
+  const [editBonusItems, setEditBonusItems] = useState<BonusLineItem[]>([]);
   const [editHaltAed, setEditHaltAed] = useState(0);
-  const [editBogieAed, setEditBogieAed] = useState(0);
-  const [editStreetTurnAed, setEditStreetTurnAed] = useState(0);
-  const [editInspectionAed, setEditInspectionAed] = useState(0);
+
+
+
   const [editNotes, setEditNotes] = useState('');
   const [savingAdjustment, setSavingAdjustment] = useState(false);
 
@@ -205,12 +306,18 @@ export default function DrayagePaymentsPage() {
   const openAdjustmentModal = (alw: DrayageDriverAllowance) => {
     setEditingAllowance(alw);
     setEditBaseAed(alw.allowanceAmountAed || 150);
-    setEditGateAed(alw.portGateFeeAed ?? 35);
+    setEditGateAed(alw.portGateFeeAed ?? 0);
+    const parsedItems = parseBonusItemsFromAllowance(alw);
+    setEditBonusItems(
+      parsedItems.length > 0
+        ? parsedItems
+        : [{ id: `item-${Date.now()}`, category: 'CUSTOMS_BAY', label: 'Customs Bay', amountAed: 0 }],
+    );
     setEditHaltAed(alw.overnightHaltAed ?? 0);
-    setEditBogieAed(alw.bogieBonusAed ?? 0);
-    setEditStreetTurnAed(alw.streetTurnBonusAed ?? 0);
-    setEditInspectionAed(alw.inspectionBonusAed ?? 0);
-    setEditNotes(alw.adjustmentNotes || '');
+
+
+
+    setEditNotes(stripBonusItemsTag(alw.adjustmentNotes));
   };
 
   // Save Allowance Adjustment
@@ -228,10 +335,10 @@ export default function DrayagePaymentsPage() {
           allowanceAmountAed: editBaseAed,
           portGateFeeAed: editGateAed,
           overnightHaltAed: editHaltAed,
-          bogieBonusAed: editBogieAed,
-          streetTurnBonusAed: editStreetTurnAed,
-          inspectionBonusAed: editInspectionAed,
-          adjustmentNotes: editNotes,
+          bogieBonusAed: editBonusItems.filter((it) => it.category === 'BOGIE').reduce((s, it) => s + Number(it.amountAed || 0), 0),
+          streetTurnBonusAed: editBonusItems.filter((it) => it.category === 'STREET_TURN').reduce((s, it) => s + Number(it.amountAed || 0), 0),
+          inspectionBonusAed: editBonusItems.filter((it) => it.category !== 'BOGIE' && it.category !== 'STREET_TURN').reduce((s, it) => s + Number(it.amountAed || 0), 0),
+          adjustmentNotes: encodeBonusItemsTag(editNotes, editBonusItems),
         }),
       });
       const data = await res.json();
@@ -555,40 +662,15 @@ export default function DrayagePaymentsPage() {
           value={`AED ${totalBonusesAed.toLocaleString()}`}
           icon={Award}
           accent="violet"
-          sub="+75 Bogie · +65 Street-Turn · +40 Customs"
+          sub="Operational Efficiency & Inspection Bonuses"
         />
         <KpiCard
           label="Port Gate Reimbursements"
           value={`AED ${totalGateFeesAed.toLocaleString()}`}
           icon={ShieldCheck}
           accent="blue"
-          sub="DP World (AED 35) & AD Ports (AED 40)"
+          sub="Port gate pass fees (AED 0 default)"
         />
-      </div>
-
-      {/* Bonus & Rate Policy Reference Strip */}
-      <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-          <span className="font-bold text-[var(--text-main)]">Active Tariff & Incentive Rules:</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-medium">
-            DP World Gate Pass: <strong className="font-mono">+AED 35</strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-medium">
-            AD Ports Maqta Gate: <strong className="font-mono">+AED 40</strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-medium">
-            2x20FT Bogie Combo Bonus: <strong className="font-mono">+AED 75</strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-medium">
-            Street-Turn Triangulation: <strong className="font-mono">+AED 65</strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium">
-            Customs Inspection Bay: <strong className="font-mono">+AED 40</strong>
-          </span>
-        </div>
       </div>
 
       {activeView === 'LEDGER' ? (
@@ -669,9 +751,9 @@ export default function DrayagePaymentsPage() {
               {(
                 [
                   { id: 'ALL', label: 'All Trips' },
-                  { id: 'BOGIE', label: '2x20FT Bogie (+75)' },
-                  { id: 'STREET_TURN', label: 'Street-Turn (+65)' },
-                  { id: 'INSPECTION', label: 'Customs Bay (+40)' },
+                  { id: 'BOGIE', label: '2x20FT Bogie' },
+                  { id: 'STREET_TURN', label: 'Street-Turn' },
+                  { id: 'INSPECTION', label: 'Customs Bay' },
                   { id: 'OVERNIGHT', label: 'Overnight Halt' },
                 ] as const
               ).map((bf) => (
@@ -782,8 +864,8 @@ export default function DrayagePaymentsPage() {
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)]">
                             {new Date(a.createdAt).toLocaleDateString()}
-                            {a.adjustmentNotes && (
-                              <span className="ml-1.5 text-amber-400" title={a.adjustmentNotes}>
+                            {stripBonusItemsTag(a.adjustmentNotes) && (
+                              <span className="ml-1.5 text-amber-400" title={stripBonusItemsTag(a.adjustmentNotes)}>
                                 · 📝 Note
                               </span>
                             )}
@@ -807,21 +889,20 @@ export default function DrayagePaymentsPage() {
                             <span className="text-[10px] text-[var(--text-muted)]">Standard Trip</span>
                           ) : (
                             <div className="flex flex-wrap gap-1">
-                              {a.bogieBonusAed > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono">
-                                  +AED {a.bogieBonusAed} Bogie
+                              {parseBonusItemsFromAllowance(a).map((item) => (
+                                <span
+                                  key={item.id}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border font-mono ${
+                                    item.category === 'BOGIE'
+                                      ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                                      : item.category === 'STREET_TURN'
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  }`}
+                                >
+                                  +AED {item.amountAed} {item.label}
                                 </span>
-                              )}
-                              {a.streetTurnBonusAed > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
-                                  +AED {a.streetTurnBonusAed} Street-Turn
-                                </span>
-                              )}
-                              {a.inspectionBonusAed > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
-                                  +AED {a.inspectionBonusAed} Customs
-                                </span>
-                              )}
+                              ))}
                             </div>
                           )}
                         </td>
@@ -1025,51 +1106,120 @@ export default function DrayagePaymentsPage() {
                 </div>
               </div>
 
-              {/* Quick Preset Bonus Toggles */}
+              {/* Dynamic Operational Efficiency & Inspection Bonus Dropdown + Amount Rows */}
               <div className="space-y-2">
-                <label className="font-semibold text-[var(--text-muted)] block">
-                  Operational Efficiency & Inspection Bonuses:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-muted)] block">
+                    Operational Efficiency &amp; Inspection Bonuses:
+                  </label>
                   <button
                     type="button"
-                    onClick={() => setEditBogieAed(editBogieAed > 0 ? 0 : 75)}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      editBogieAed > 0
-                        ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300'
-                        : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                    }`}
+                    onClick={() =>
+                      setEditBonusItems((prev) => [
+                        ...prev,
+                        {
+                          id: `item-${Date.now()}-${prev.length}`,
+                          category: 'CUSTOMS_BAY',
+                          label: 'Customs Bay',
+                          amountAed: 0,
+                        },
+                      ])
+                    }
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-bold transition-colors"
                   >
-                    <div className="font-bold text-[11px]">2x20FT Bogie</div>
-                    <div className="font-mono text-xs mt-0.5">+AED {editBogieAed || 75}</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setEditStreetTurnAed(editStreetTurnAed > 0 ? 0 : 65)}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      editStreetTurnAed > 0
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                    }`}
-                  >
-                    <div className="font-bold text-[11px]">Street-Turn</div>
-                    <div className="font-mono text-xs mt-0.5">+AED {editStreetTurnAed || 65}</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setEditInspectionAed(editInspectionAed > 0 ? 0 : 40)}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      editInspectionAed > 0
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                        : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                    }`}
-                  >
-                    <div className="font-bold text-[11px]">Customs Bay</div>
-                    <div className="font-mono text-xs mt-0.5">+AED {editInspectionAed || 40}</div>
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Item
                   </button>
                 </div>
+
+                {editBonusItems.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-dashed border-[var(--border-subtle)] text-center text-[11px] text-[var(--text-muted)]">
+                    No bonus or inspection items added. Click <strong>+ Add Item</strong> to add 2x20FT Bogie, Street-Turn, Customs Bay, or other bonus items.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {editBonusItems.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2"
+                      >
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-7">
+                            <select
+                              value={item.category}
+                              onChange={(e) => {
+                                const newCat = e.target.value as BonusLineItem['category'];
+                                const opt = BONUS_CATEGORY_OPTIONS.find((o) => o.value === newCat);
+                                setEditBonusItems((prev) =>
+                                  prev.map((row, i) =>
+                                    i === idx
+                                      ? {
+                                          ...row,
+                                          category: newCat,
+                                          label: newCat === 'CUSTOM' ? '' : opt?.label || 'Bonus Item',
+                                        }
+                                      : row,
+                                  ),
+                                );
+                              }}
+                              className="w-full px-2.5 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold outline-none focus:border-blue-500"
+                            >
+                              {BONUS_CATEGORY_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-4 relative">
+                            <span className="absolute left-2.5 top-2 text-[10px] font-mono text-[var(--text-muted)]">
+                              AED
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="Amount"
+                              value={item.amountAed}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setEditBonusItems((prev) =>
+                                  prev.map((row, i) => (i === idx ? { ...row, amountAed: val } : row)),
+                                );
+                              }}
+                              className="w-full pl-9 pr-2.5 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono text-xs outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditBonusItems((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              title="Remove item"
+                              className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        {item.category === 'CUSTOM' && (
+                          <input
+                            type="text"
+                            value={item.label}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditBonusItems((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, label: val } : row)),
+                              );
+                            }}
+                            placeholder="Enter custom bonus / inspection item name..."
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs outline-none focus:border-blue-500"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1090,9 +1240,7 @@ export default function DrayagePaymentsPage() {
                       Number(editBaseAed || 0) +
                       Number(editGateAed || 0) +
                       Number(editHaltAed || 0) +
-                      Number(editBogieAed || 0) +
-                      Number(editStreetTurnAed || 0) +
-                      Number(editInspectionAed || 0)
+                      editBonusItems.reduce((sum, it) => sum + Number(it.amountAed || 0), 0)
                     ).toLocaleString()}
                   </div>
                 </div>
