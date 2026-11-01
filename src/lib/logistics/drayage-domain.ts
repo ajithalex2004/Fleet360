@@ -573,87 +573,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   if (seededTenants.has(tenantId)) return;
   await ensureDrayageSchema(db);
 
-  const termCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM logistics_drayage_terminals WHERE tenant_id = $1`,
-    tenantId,
-  );
-  const termCount = Number(termCountRows[0]?.cnt ?? 0);
-
-  if (termCount === 0) {
-    const defaultTerminals = [
-      {
-        id: `term-ja1-${tenantId.slice(0, 8)}`,
-        name: 'Jebel Ali Port - Terminal 1 (DP World)',
-        code: 'DPW-JA-T1',
-        portName: 'Jebel Ali Port',
-        emirate: 'Dubai',
-        lat: 25.0112,
-        lng: 55.0612,
-        radius: 1800,
-        dry: 5,
-        reefer: 3,
-      },
-      {
-        id: `term-ja2-${tenantId.slice(0, 8)}`,
-        name: 'Jebel Ali Port - Terminal 2 (Mega Vessel Berth)',
-        code: 'DPW-JA-T2',
-        portName: 'Jebel Ali Port',
-        emirate: 'Dubai',
-        lat: 25.0245,
-        lng: 55.0488,
-        radius: 2000,
-        dry: 5,
-        reefer: 3,
-      },
-      {
-        id: `term-ja3-${tenantId.slice(0, 8)}`,
-        name: 'Jebel Ali Port - Terminal 3 (Automated)',
-        code: 'DPW-JA-T3',
-        portName: 'Jebel Ali Port',
-        emirate: 'Dubai',
-        lat: 24.9960,
-        lng: 55.0390,
-        radius: 1600,
-        dry: 5,
-        reefer: 3,
-      },
-      {
-        id: `term-kp-${tenantId.slice(0, 8)}`,
-        name: 'Khalifa Port Container Terminal (AD Ports)',
-        code: 'ADP-KP-T1',
-        portName: 'Khalifa Port',
-        emirate: 'Abu Dhabi',
-        lat: 24.8055,
-        lng: 54.6462,
-        radius: 2200,
-        dry: 5,
-        reefer: 3,
-      },
-      {
-        id: `term-pr-${tenantId.slice(0, 8)}`,
-        name: 'Mina Rashid / Port Khorfakkan Hub',
-        code: 'DPW-PR-T1',
-        portName: 'Port Rashid',
-        emirate: 'Dubai',
-        lat: 25.2684,
-        lng: 55.2762,
-        radius: 1400,
-        dry: 5,
-        reefer: 3,
-      },
-    ];
-
-    for (const t of defaultTerminals) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO logistics_drayage_terminals (
-          id, tenant_id, name, code, port_name, emirate, lat, lng,
-          geofence_radius_meters, free_days_dry, free_days_reefer, status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'ACTIVE')
-        ON CONFLICT (id) DO NOTHING`,
-        t.id, tenantId, t.name, t.code, t.portName, t.emirate, t.lat, t.lng, t.radius, t.dry, t.reefer,
-      );
-    }
-  }
+  // Automatic port terminal seeding is disabled: terminals are created and managed manually by users.
 
   const cliCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_clients WHERE tenant_id = $1`,
@@ -1306,64 +1226,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   }
 
   // Seed default geofences if none exist
-  const gfCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM logistics_drayage_geofences WHERE tenant_id = $1`,
-    tenantId,
-  );
-  if (Number(gfCountRows[0]?.cnt ?? 0) === 0) {
-    const defaultGeofences = [
-      {
-        id: `gf-ja1-${tenantId.slice(0, 8)}`,
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 1 (DP World)',
-        name: 'Jebel Ali T1 Gate 3 & Berth Geofence',
-        type: 'CIRCLE',
-        lat: 25.0112,
-        lng: 55.0612,
-        radius: 1800,
-      },
-      {
-        id: `gf-ja2-${tenantId.slice(0, 8)}`,
-        termId: `term-ja2-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 2 (Mega Vessel Berth)',
-        name: 'Jebel Ali T2 Automated OCR Gate Zone',
-        type: 'CIRCLE',
-        lat: 25.0245,
-        lng: 55.0488,
-        radius: 2000,
-      },
-      {
-        id: `gf-kp-${tenantId.slice(0, 8)}`,
-        termId: `term-kp-${tenantId.slice(0, 8)}`,
-        termName: 'Khalifa Port Container Terminal (AD Ports)',
-        name: 'Khalifa Port Semi-Automated Yard Perimeter',
-        type: 'CIRCLE',
-        lat: 24.8055,
-        lng: 54.6462,
-        radius: 2200,
-      },
-      {
-        id: `gf-jafza-${tenantId.slice(0, 8)}`,
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
-        name: 'JAFZA South Bonded Ramps #1–#12 Geofence',
-        type: 'POLYGON',
-        lat: 24.9642,
-        lng: 55.0915,
-        radius: 850,
-      },
-    ];
-    for (const g of defaultGeofences) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO logistics_drayage_geofences (
-          id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        ON CONFLICT (id) DO NOTHING`,
-        g.id, tenantId, g.termId, g.termName, g.name, g.type, g.lat, g.lng, g.radius,
-        JSON.stringify([{ lat: g.lat, lng: g.lng }]),
-      );
-    }
-  }
+  // Automatic terminal geofence seeding is disabled alongside automatic terminal seeding.
 
   // Seed default status logs & dispatch chat messages if none exist
   const logCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
