@@ -56,14 +56,16 @@ export async function POST(
     if (action === 'SCAN_VERIFY') {
       const scannedContainer = String(body.scannedContainerNumber ?? '').trim().toUpperCase();
       const scannedSeal = String(body.scannedSealNumber ?? '').trim().toUpperCase();
+      const scannedEir = String(body.scannedEirNumber ?? '').trim().toUpperCase();
+      const scanStage = String(body.scanStage ?? 'CONTAINER_LOADED').trim();
       await withTenantRls(prisma, tenantId, async (tx) => {
         await clearPortInspection(tx, {
           tenantId,
           jobId,
           agency: 'CUSTOMS',
           newSealNumber: scannedSeal || undefined,
-          clearedBy: String(body.driverName || 'Driver ISO 6346 Scanner'),
-          notes: `ISO 6346 Container (${scannedContainer}) & Bolt Seal (${scannedSeal}) verified via Driver Mobile App`,
+          clearedBy: String(body.driverName || 'Driver Gemini Vision OCR Scanner'),
+          notes: `Gemini Vision OCR [${scanStage}]: Container (${scannedContainer})${scannedSeal ? `, Customs Seal (${scannedSeal})` : ''}${scannedEir ? `, EIR Gate Slip (${scannedEir})` : ''} verified via Driver Mobile App`,
           actor: String(body.driverName || 'Driver Mobile App'),
         });
       });
@@ -72,6 +74,8 @@ export async function POST(
         jobId,
         scannedContainerNumber: scannedContainer,
         scannedSealNumber: scannedSeal,
+        scannedEirNumber: scannedEir,
+        scanStage,
         verifiedAt: new Date().toISOString(),
       });
     }
@@ -79,26 +83,50 @@ export async function POST(
     // 3. Sign-on-Glass ePOD Signature Submission
     if (action === 'EPOD_SIGN') {
       const receiverName = String(body.receiverName ?? 'Warehouse Dock Supervisor').trim();
+      const rampBayNumber = body.rampBayNumber ? String(body.rampBayNumber).trim() : '';
+      const sealCargoPhotoUrl = body.sealCargoPhotoUrl ? String(body.sealCargoPhotoUrl) : null;
+      const combinedNotes = [
+        rampBayNumber ? `Ramp Bay: ${rampBayNumber}` : '',
+        body.notes ? String(body.notes) : '',
+        sealCargoPhotoUrl ? 'Timestamped Seal/Cargo Photo Captured' : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
       const podRes = await withTenantRls(prisma, tenantId, async (tx) => {
         return submitJobPodEvidence(tx, {
           tenantId,
           jobId,
-          receiverName,
-          photoUrl: body.signatureDataUri ? String(body.signatureDataUri) : (body.photo ? String(body.photo) : null),
-          notes: body.notes ? String(body.notes) : undefined,
+          receiverName: rampBayNumber ? `${receiverName} (${rampBayNumber})` : receiverName,
+          photoUrl: body.signatureDataUri
+            ? String(body.signatureDataUri)
+            : body.photo
+            ? String(body.photo)
+            : sealCargoPhotoUrl,
+          notes: combinedNotes || undefined,
           actor: String(body.driverName || 'Driver Mobile App'),
         });
       });
       return NextResponse.json({
         success: true,
+        rampBayNumber,
         ...podRes,
       });
     }
 
-    // 4. Standard Drayage Status Update (including optional ePOD signature / photo / ETC)
+    // 4. Standard Drayage Status Update (including optional ePOD signature / photo / ETC / Ramp Bay)
     const status = String(body.status ?? 'PLACED_AT_RAMP');
     const etcTime = body.etc || body.etcTime || null;
-    const notes = body.notes ? String(body.notes) : undefined;
+    const rampBayNumber = body.rampBayNumber ? String(body.rampBayNumber).trim() : '';
+    const sealCargoPhotoUrl = body.sealCargoPhotoUrl ? String(body.sealCargoPhotoUrl) : null;
+    const rawNotes = body.notes ? String(body.notes) : '';
+    const notes = [
+      rampBayNumber ? `Ramp Bay: ${rampBayNumber}` : '',
+      rawNotes,
+      sealCargoPhotoUrl ? `Timestamped Seal/Cargo Photo Attached` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || undefined;
     const placementLocation =
       body.placementLocation === 'YARD'
         ? 'YARD'
@@ -117,12 +145,17 @@ export async function POST(
         : status.includes('DETACHED') || status === 'READY_FOR_PICKUP' || status === 'CONTAINER_DROPPED';
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
-      if (body.receiverName || body.photo) {
+      if (body.receiverName || body.photo || body.signatureDataUri || sealCargoPhotoUrl) {
+        const baseReceiver = String(body.receiverName || body.driverName || 'Warehouse Dock Supervisor').trim();
         await submitJobPodEvidence(tx, {
           tenantId,
           jobId,
-          receiverName: String(body.receiverName || body.driverName || 'Driver Inspection'),
-          photoUrl: body.signatureDataUri ? String(body.signatureDataUri) : (body.photo ? String(body.photo) : null),
+          receiverName: rampBayNumber ? `${baseReceiver} (${rampBayNumber})` : baseReceiver,
+          photoUrl: body.signatureDataUri
+            ? String(body.signatureDataUri)
+            : body.photo
+            ? String(body.photo)
+            : sealCargoPhotoUrl,
           notes,
           actor: body.driverName ? String(body.driverName) : 'Driver Mobile App',
         });
