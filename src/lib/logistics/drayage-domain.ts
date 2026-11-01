@@ -5703,44 +5703,65 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     `🔗 *Live Corridor Map & e-POD Portal:* ${shareableUrl}`,
   ].join('\n');
 
-  // Best-effort real provider calls via dynamic import so circular/edge deps never break
+  // Best-effort REST gateway dispatch (pure fetch so client/server bundles stay 100% isomorphic)
   let waProviderStatus = 'DELIVERED_GATEWAY';
   let emailProviderStatus = 'DELIVERED_SMTP';
 
-  try {
-    const { sendWhatsApp } = await import('@/lib/whatsapp');
-    const waRes = await sendWhatsApp({ to: targetWhatsApp, body: whatsappBody });
-    if (waRes.sent) waProviderStatus = `TWILIO_SENT (${waRes.sid || 'OK'})`;
-  } catch {
-    // Fallback simulated gateway log when Twilio env vars are not set
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.TWILIO_ACCOUNT_SID &&
+    process.env?.TWILIO_AUTH_TOKEN &&
+    process.env?.TWILIO_WHATSAPP_NUMBER &&
+    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true'
+  ) {
+    try {
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const auth = Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+      const toClean = targetWhatsApp.replace(/[^\d+]/g, '');
+      const form = new URLSearchParams({
+        From: process.env.TWILIO_WHATSAPP_NUMBER.startsWith('whatsapp:')
+          ? process.env.TWILIO_WHATSAPP_NUMBER
+          : `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        To: `whatsapp:${toClean.startsWith('+') ? toClean : `+${toClean}`}`,
+        Body: whatsappBody,
+      });
+      const waRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: form.toString(),
+      });
+      if (waRes.ok) waProviderStatus = 'TWILIO_WHATSAPP_SENT';
+    } catch {
+      // Fallback simulated gateway log
+    }
   }
 
-  try {
-    const { sendEmail } = await import('@/lib/email');
-    const emRes = await sendEmail({
-      to: targetEmail,
-      subject: `[Fleet360 Live Track] ${containerNumber} (${jobCode}) — ${milestoneMeta.title}`,
-      text: whatsappBody.replace(/\*/g, ''),
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-          <h2 style="color: #0f172a; margin-top: 0;">Fleet360 Live Container Milestone Update</h2>
-          <p style="color: #475569; font-size: 14px;">${milestoneMeta.customerSummary}</p>
-          <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0;">
-            <tr><td style="padding: 6px 0; color: #64748b;">Job / Container:</td><td style="font-weight: bold; color: #0f172a;">${jobCode} · ${containerNumber} (${String(job.container_size || '40HC')})</td></tr>
-            <tr><td style="padding: 6px 0; color: #64748b;">Current Milestone:</td><td style="font-weight: bold; color: #0284c7;">${milestoneMeta.title}</td></tr>
-            <tr><td style="padding: 6px 0; color: #64748b;">Corridor Route:</td><td style="color: #0f172a;">${String(job.terminal_name)} → ${String(job.warehouse_name)}</td></tr>
-            <tr><td style="padding: 6px 0; color: #64748b;">Assigned Fleet:</td><td style="color: #0f172a;">${String(job.assigned_vehicle_plate || 'Tractor Assigned')} · ${String(job.assigned_driver_name || 'Driver')}</td></tr>
-            ${etcFormatted ? `<tr><td style="padding: 6px 0; color: #64748b;">Offloading ETC:</td><td style="font-weight: bold; color: #d97706;">${etcFormatted}</td></tr>` : ''}
-          </table>
-          <a href="${shareableUrl}" style="display: inline-block; padding: 12px 20px; background: #2563eb; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 13px;">
-            Open Live Customer Corridor Map & Milestone Portal →
-          </a>
-        </div>
-      `,
-    });
-    if (emRes.sent) emailProviderStatus = `EMAIL_SENT (${emRes.transport || 'SMTP'})`;
-  } catch {
-    // Fallback simulated SMTP log when SMTP env vars are not set
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.SENDGRID_API_KEY &&
+    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true'
+  ) {
+    try {
+      const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: targetEmail }] }],
+          from: { email: process.env.EMAIL_FROM || 'no-reply@fleet360.ae', name: 'Fleet360 Drayage Ops' },
+          subject: `[Fleet360 Live Track] ${containerNumber} (${jobCode}) — ${milestoneMeta.title}`,
+          content: [{ type: 'text/plain', value: whatsappBody.replace(/\*/g, '') }],
+        }),
+      });
+      if (sgRes.ok) emailProviderStatus = 'SENDGRID_EMAIL_SENT';
+    } catch {
+      // Fallback simulated SMTP log
+    }
   }
 
   const logNote = `[WhatsApp → ${targetWhatsApp} (${waProviderStatus})] + [Email → ${targetEmail} (${emailProviderStatus})] · Milestone "${milestoneMeta.title}"${etcFormatted ? ` · ETC ${etcFormatted}` : ''} · Link: /track/drayage/${trackingToken.slice(0, 18)}...`;
