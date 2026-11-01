@@ -388,7 +388,7 @@ export default function DrayageDashboardPage() {
                     <Layers className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-[var(--text-main)]">Available Chassis</div>
+                    <div className="text-xs font-semibold text-[var(--text-main)]">Available Trailers</div>
                     <div className="text-[10px] text-[var(--text-muted)]">Skeletal & flatbed trailers</div>
                   </div>
                 </div>

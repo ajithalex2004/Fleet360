@@ -1979,7 +1979,7 @@ export default function DrayageAssignmentPage() {
           sub={`of ${drivers.length} compliant drivers`}
         />
         <KpiCard
-          label="Available Chassis"
+          label="Available Trailers"
           value={availableTrailers.length}
           icon={Layers}
           accent="cyan"
