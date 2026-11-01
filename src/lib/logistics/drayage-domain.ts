@@ -2361,7 +2361,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         tenantId,
         type: 'DEMURRAGE_CRITICAL',
         severity: 'URGENT',
-        title: `Ocean Demurrage Overdue (${c.demurrage.overdueDays}d) — ${c.containerNumber}`,
+        title: `Demurrage Overdue (${c.demurrage.overdueDays}d) — ${c.containerNumber}`,
         message: `${c.containerType} container at ${c.terminalName} has accrued AED ${c.demurrage.accruedPenaltyAed.toLocaleString()} (${c.demurrage.tierLabel} @ AED ${c.demurrage.dailyRateAed}/day). Immediate gate-out or empty return required.`,
         terminalName: c.terminalName,
         containerId: c.id,

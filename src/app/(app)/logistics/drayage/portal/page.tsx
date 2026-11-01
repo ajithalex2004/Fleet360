@@ -803,7 +803,7 @@ export default function ConsigneeTrackingPortalPage() {
               </div>
             </Panel>
 
-            {/* Card 2: Delivery Order (DO) & Ocean Demurrage Countdown Clock */}
+            {/* Card 2: Delivery Order (DO) & Demurrage Countdown Clock */}
             <Panel
               title="Delivery Order (DO) & Port Demurrage Countdown"
               subtitle="Monitor shipping line free days, DO validity, and detention exposure"

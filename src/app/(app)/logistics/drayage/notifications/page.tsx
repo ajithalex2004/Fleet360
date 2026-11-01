@@ -175,7 +175,7 @@ export default function DrayageNotificationsPage() {
       {/* Page Header */}
       <PageHeader
         title="Drayage Notifications & Intelligent Command"
-        subtitle="Automated alerts for Delivery Order (DO) expiries, ocean demurrage fines, and detached chassis awaiting return"
+        subtitle="Automated alerts for Delivery Order (DO) expiries, demurrage fines, and detached chassis awaiting return"
         icon={Bell}
         accent="rose"
         actions={

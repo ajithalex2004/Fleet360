@@ -471,7 +471,7 @@ export default function DrayageContainersPage() {
           sub="Expiring within 2 days"
         />
         <KpiCard
-          label="In Ocean Demurrage"
+          label="In Demurrage"
           value={overdueCount}
           icon={AlertTriangle}
           accent="rose"

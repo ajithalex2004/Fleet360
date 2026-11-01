@@ -1,12 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import UserSwitcher from '@/components/UserSwitcher';
 import BranchSelector from '@/components/BranchSelector';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
+import { ArrowLeft, LayoutGrid, Search } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Props {
   moduleName: string;
@@ -41,16 +44,28 @@ function AuthSlot() {
   );
 }
 
-import { ArrowLeft, Search } from 'lucide-react';
-import { BACK_BUTTON } from '@/lib/ui/toggle';
-
 export default function PlatformHomeBar({
   moduleName,
   moduleIcon = 'M',
   accentColor = 'from-blue-500 to-indigo-600',
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { tenant } = usePermissions();
   const { tLabel } = useLanguage();
+
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    const segments = (pathname || '').split('/').filter(Boolean);
+    if (segments.length > 1) {
+      router.push('/' + segments.slice(0, -1).join('/'));
+    } else {
+      router.push('/platform');
+    }
+  };
 
   const openPalette = () => {
     if (typeof window !== 'undefined') {
@@ -60,13 +75,23 @@ export default function PlatformHomeBar({
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] z-50 backdrop-blur-md flex-shrink-0 transition-colors">
-      {/* Left: back to platform home + Command Palette */}
+      {/* Left: Back button + FLEET360 platform home + Command Palette */}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleBack}
+          title={tLabel('Go Back')}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-main)] text-[var(--text-main)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] shadow-sm px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer group"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5 rtl:rotate-180 transition-transform" />
+          <span className="hidden sm:inline whitespace-nowrap">{tLabel('Back')}</span>
+        </button>
+
         <Link
           href="/platform"
           className={`${BACK_BUTTON} group min-w-0 tracking-wide`}
         >
-          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5 rtl:rotate-180 transition-transform" />
+          <LayoutGrid className="w-3.5 h-3.5 flex-shrink-0 transition-transform" />
           <span className="hidden lg:inline whitespace-nowrap">FLEET360</span>
           <span className="lg:hidden">{tLabel('Home')}</span>
         </Link>

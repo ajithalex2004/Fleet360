@@ -181,7 +181,7 @@ export default function DrayageDashboardPage() {
       {/* Page Header */}
       <PageHeader
         title="Port & Container Drayage"
-        subtitle="Operational command center: ocean demurrage clocks, FCL haulage, L2 empty returns & live master sync"
+        subtitle="Operational command center: demurrage clocks, FCL haulage, L2 empty returns & live master sync"
         icon={Anchor}
         accent="blue"
         actions={
@@ -253,7 +253,7 @@ export default function DrayageDashboardPage() {
 
       {/* Main Grid: Demurrage Clock & Fleet Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ocean Demurrage & Free-Days Clock Panel */}
+        {/* Demurrage & Free-Days Clock Panel */}
         <div className="lg:col-span-2">
           <Panel
             title="Demurrage & Port Free-Days"
