@@ -29,8 +29,14 @@ import {
   MessageSquare,
   Clock,
   Plus,
+  Settings,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  type DrayageAutomationConfig,
+} from '@/lib/logistics/drayage-domain';
 import type {
   DrayageCorridorTerminal,
   DrayageCorridorWarehouse,
@@ -210,6 +216,8 @@ export default function DrayageJobTrackingPage() {
   const [customEtcInput, setCustomEtcInput] = useState('');
   const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState(true);
   const [togglingAutoL2, setTogglingAutoL2] = useState(false);
+  const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
   const [, setTick] = useState(0);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -236,8 +244,14 @@ export default function DrayageJobTrackingPage() {
       setWarehouses(data.warehouses || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
-      if (typeof data.automationConfig?.autoL2DispatchEnabled === 'boolean') {
-        setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+      if (data.automationConfig) {
+        setAutomationConfig({
+          ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+          ...data.automationConfig,
+        });
+        if (typeof data.automationConfig.autoL2DispatchEnabled === 'boolean') {
+          setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+        }
       }
 
       if (allJobs.length > 0 && !selectedJobId) {
@@ -251,25 +265,26 @@ export default function DrayageJobTrackingPage() {
   }, [selectedJobId]);
 
   useEffect(() => {
+    const thresholdMins = automationConfig.thresholdMinutes || 30;
     const timer = setInterval(async () => {
       setTick((t) => t + 1);
       if (autoL2DispatchEnabled) {
-        const hasPendingT30Job = jobs.some(
+        const hasPendingThresholdJob = jobs.some(
           (j) =>
             j.jobPhase === 'L1' &&
             !j.l2Activated &&
             j.placementLocation !== 'YARD' &&
             j.etcTime &&
-            new Date(j.etcTime).getTime() - Date.now() <= 30 * 60 * 1000,
+            new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000,
         );
-        if (hasPendingT30Job) {
+        if (hasPendingThresholdJob) {
           try {
             const res = await fetch('/api/logistics/drayage', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 action: 'check_etc_timers',
-                thresholdMinutes: 30,
+                thresholdMinutes: thresholdMins,
                 preAssignTractor: true,
               }),
             });
@@ -279,7 +294,7 @@ export default function DrayageJobTrackingPage() {
                 const first = checkRes.activated[0];
                 showToast(
                   'success',
-                  `⚡ Auto-L2 @ T-30m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`,
+                  `⚡ Auto-L2 @ T-${thresholdMins}m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`,
                 );
                 await loadData();
               }
@@ -291,7 +306,7 @@ export default function DrayageJobTrackingPage() {
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [autoL2DispatchEnabled, jobs, loadData]);
+  }, [autoL2DispatchEnabled, automationConfig.thresholdMinutes, jobs, loadData]);
 
   // Toggle Tenant Manual vs Auto-L2 (T-30m) Dispatch Mode
   const handleToggleAutoL2Mode = async (enabled: boolean) => {
@@ -681,9 +696,19 @@ export default function DrayageJobTrackingPage() {
                 }`}
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
-                Auto-L2 @ T-30m
+                Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setConfigModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
+              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+            >
+              <Settings className="w-3.5 h-3.5 text-sky-400" />
+              Engine Config
+            </button>
 
             <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm">
               <button
@@ -1177,9 +1202,9 @@ export default function DrayageJobTrackingPage() {
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
                               ⚠️ EXPIRED - L2 READY
                             </span>
-                          ) : activeJob.etcTime && new Date(activeJob.etcTime).getTime() - Date.now() <= 30 * 60 * 1000 ? (
+                          ) : activeJob.etcTime && new Date(activeJob.etcTime).getTime() - Date.now() <= (automationConfig.thresholdMinutes || 30) * 60 * 1000 ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                              ⚡ T-30M THRESHOLD ACTIVE · 4-FACTOR PRE-ASSIGN
+                              ⚡ T-{automationConfig.thresholdMinutes || 30}M THRESHOLD ACTIVE · 4-FACTOR PRE-ASSIGN
                             </span>
                           ) : activeJob.etcTime ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -1199,12 +1224,12 @@ export default function DrayageJobTrackingPage() {
                                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
                                 : 'bg-slate-700/60 text-slate-300 border-slate-500/40 hover:bg-slate-700'
                             }`}
-                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 @ T-30m and Manual L2 Dispatch"
+                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 and Manual L2 Dispatch"
                           >
                             <Zap className="w-2.5 h-2.5" />
                             {autoL2DispatchEnabled
-                              ? 'Mode: Auto-L2 & 4-Factor Pre-Assign @ T-30m (Click for Manual)'
-                              : 'Mode: Manual L2 Dispatch (Click for Auto-L2 @ T-30m)'}
+                              ? `Mode: Auto-L2 & 4-Factor Pre-Assign @ T-${automationConfig.thresholdMinutes || 30}m (Click for Manual)`
+                              : `Mode: Manual L2 Dispatch (Click for Auto-L2 @ T-${automationConfig.thresholdMinutes || 30}m)`}
                           </button>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
@@ -1220,7 +1245,7 @@ export default function DrayageJobTrackingPage() {
                               {' · '}
                               <span className="text-emerald-400 font-medium">
                                 {autoL2DispatchEnabled
-                                  ? 'Auto-triggers L2 & 4-Factor tractor pre-assignment at T-30m'
+                                  ? `Auto-triggers L2 & 4-Factor tractor pre-assignment at T-${automationConfig.thresholdMinutes || 30}m`
                                   : 'Manual L2 trigger mode active'}
                               </span>
                             </>
@@ -1769,6 +1794,22 @@ export default function DrayageJobTrackingPage() {
           </div>
         </div>
       )}
+
+      {/* Super Admin Drayage Configuration Modal */}
+      <DrayageSuperAdminConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        config={automationConfig}
+        onSaved={(updated) => {
+          setAutomationConfig(updated);
+          setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
+          showToast(
+            'success',
+            `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+          );
+          loadData();
+        }}
+      />
     </div>
   );
 }

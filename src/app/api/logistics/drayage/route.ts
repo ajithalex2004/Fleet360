@@ -14,6 +14,8 @@ import {
   extendDrayageJobEtcTime,
   checkAndAutoActivateExpiredEtcJobs,
   setTenantAutoL2DispatchMode,
+  getTenantAutomationConfig,
+  saveTenantAutomationConfig,
   ensureDrayageSchema,
   verifyPortEdiForJob,
   appendDrayageItineraryLeg,
@@ -331,9 +333,23 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        case 'get_automation_config': {
+          const config = await getTenantAutomationConfig(tx, tenantId);
+          return { ok: true, automationConfig: config };
+        }
+
+        case 'update_automation_config': {
+          const res = await saveTenantAutomationConfig(tx, {
+            tenantId,
+            config: body.config && typeof body.config === 'object' ? body.config : body,
+            actor: body.actor ? String(body.actor) : 'Super Admin',
+          });
+          return res;
+        }
+
         case 'check_etc_timers': {
           return checkAndAutoActivateExpiredEtcJobs(tx, tenantId, {
-            thresholdMinutes: body.thresholdMinutes !== undefined ? Number(body.thresholdMinutes) : 30,
+            thresholdMinutes: body.thresholdMinutes !== undefined ? Number(body.thresholdMinutes) : undefined,
             preAssignTractor: body.preAssignTractor !== undefined ? Boolean(body.preAssignTractor) : true,
           });
         }

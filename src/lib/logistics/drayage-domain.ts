@@ -286,7 +286,32 @@ export interface DrayagePortSlotPrediction {
 export interface DrayageAutomationConfig {
   autoL2DispatchEnabled: boolean;
   thresholdMinutes: number;
+  weightProximityPct: number;
+  weightIdlenessPct: number;
+  weightWorkloadPct: number;
+  weightAvailabilityPct: number;
+  streetTurnRadiusKm: number;
+  streetTurnStrictCarrierMatch: boolean;
+  bogieWindowHours: number;
+  bogieMaxPayloadKg: number;
+  criticalRiskWindowHours: number;
+  updatedAt?: string;
+  updatedBy?: string;
 }
+
+export const DEFAULT_DRAYAGE_AUTOMATION_CONFIG: DrayageAutomationConfig = {
+  autoL2DispatchEnabled: true,
+  thresholdMinutes: 30,
+  weightProximityPct: 60,
+  weightIdlenessPct: 25,
+  weightWorkloadPct: 10,
+  weightAvailabilityPct: 5,
+  streetTurnRadiusKm: 15,
+  streetTurnStrictCarrierMatch: true,
+  bogieWindowHours: 2.0,
+  bogieMaxPayloadKg: 36000,
+  criticalRiskWindowHours: 24,
+};
 
 export interface StreetTurnMatch {
   id: string;
@@ -1922,16 +1947,18 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
   }
 
-  const statusLogs: DrayageStatusLog[] = statusLogRows.map((l: Record<string, unknown>) => ({
-    id: String(l.id),
-    tenantId: String(l.tenant_id),
-    jobId: String(l.job_id),
-    jobCode: String(l.job_code),
-    status: String(l.status),
-    notes: String(l.notes ?? ''),
-    actor: String(l.actor ?? 'Dispatch Console'),
-    timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
-  }));
+  const statusLogs: DrayageStatusLog[] = statusLogRows
+    .filter((l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG')
+    .map((l: Record<string, unknown>) => ({
+      id: String(l.id),
+      tenantId: String(l.tenant_id),
+      jobId: String(l.job_id),
+      jobCode: String(l.job_code),
+      status: String(l.status),
+      notes: String(l.notes ?? ''),
+      actor: String(l.actor ?? 'Dispatch Console'),
+      timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
+    }));
 
   const messages: DrayageDispatchMessage[] = messageRows.map((m: Record<string, unknown>) => ({
     id: String(m.id),
@@ -1946,27 +1973,28 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
-  const configAutoL2Row = ackRows.find((r: Record<string, unknown>) => String(r.alert_key) === 'CONFIG_AUTO_L2_DISPATCH_T30');
-  const autoL2DispatchEnabled = configAutoL2Row ? Boolean(configAutoL2Row.acknowledged) : true;
+  const automationConfig = await getTenantAutomationConfig(db, tenantId);
+  const autoL2DispatchEnabled = automationConfig.autoL2DispatchEnabled;
+  const thresholdMins = automationConfig.thresholdMinutes;
 
-  // If tenant has Auto-L2 @ T-30m enabled, check if any L1 job Placed at Ramp is within 30 minutes of ETC
+  // If tenant has Auto-L2 enabled, check if any L1 job Placed at Ramp is within configured thresholdMinutes of ETC
   if (autoL2DispatchEnabled) {
     const nowMs = Date.now();
-    const t30ThresholdMs = nowMs + 30 * 60 * 1000;
+    const tThresholdMs = nowMs + thresholdMins * 60 * 1000;
     const dueT30Jobs = jobs.filter((j) => {
       if (j.jobPhase !== 'L1' || j.l2Activated || !j.etcTime) return false;
       const stage = getDrayageOperationalStageIndex(j.status, j.trailerDetached);
       if (stage < 4 || (j.placementLocation || '').toUpperCase() === 'YARD') return false;
       const etcMs = new Date(j.etcTime).getTime();
-      return !isNaN(etcMs) && etcMs <= t30ThresholdMs;
+      return !isNaN(etcMs) && etcMs <= tThresholdMs;
     });
 
     if (dueT30Jobs.length > 0) {
       await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
-        thresholdMinutes: 30,
+        thresholdMinutes: thresholdMins,
         preAssignTractor: true,
       }).catch((err) => {
-        console.error('[getDrayageWorkspaceData] Auto-L2 T-30m trigger error:', err);
+        console.error('[getDrayageWorkspaceData] Auto-L2 threshold trigger error:', err);
       });
     }
   }
@@ -2051,7 +2079,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       else primaryRiskFactor = 'DO_EXPIRY';
     }
 
-    const within24hPenaltyWindow = !isCompleted && minHoursRemaining <= 24;
+    const criticalWindowHrs = automationConfig.criticalRiskWindowHours || 24;
+    const within24hPenaltyWindow = !isCompleted && minHoursRemaining <= criticalWindowHrs;
     const dailyCombinedPenaltyAed = portDailyDemurrageAed + lineDailyDetentionAed;
     const overdueDaysCount = minHoursRemaining < 0 ? Math.max(1, Math.ceil(Math.abs(minHoursRemaining) / 24)) : 0;
     const accruedExposureAed =
@@ -2067,9 +2096,9 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       ? 'SAFE'
       : minHoursRemaining <= 0
       ? 'EXPIRED'
-      : minHoursRemaining <= 24
+      : minHoursRemaining <= criticalWindowHrs
       ? 'CRITICAL_24H'
-      : minHoursRemaining <= 48
+      : minHoursRemaining <= criticalWindowHrs * 2
       ? 'WARNING_48H'
       : 'SAFE';
 
@@ -2404,10 +2433,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       totalTrailersCount: trailers.length,
       unacknowledgedAlertsCount: alerts.filter(a => !a.acknowledged).length,
     },
-    automationConfig: {
-      autoL2DispatchEnabled,
-      thresholdMinutes: 30,
-    },
+    automationConfig,
     terminals,
     warehouses,
     trailers,
@@ -2945,36 +2971,197 @@ export function computeHaversineKm(lat1: number, lon1: number, lat2: number, lon
   return R * c;
 }
 
-export async function getTenantAutoL2DispatchEnabled(db: DrayageDbClient, tenantId: string): Promise<boolean> {
-  const rows = await db
-    .$queryRawUnsafe<Array<{ acknowledged: boolean }>>(
-      `SELECT acknowledged FROM logistics_drayage_alerts WHERE tenant_id = $1 AND alert_key = 'CONFIG_AUTO_L2_DISPATCH_T30' LIMIT 1`,
-      tenantId,
-    )
-    .catch(() => []);
-  if (rows.length === 0) return true;
-  return Boolean(rows[0].acknowledged);
+export async function getTenantAutomationConfig(
+  db: DrayageDbClient,
+  tenantId: string,
+): Promise<DrayageAutomationConfig> {
+  const cfgId = `cfg-engine-${tenantId.slice(0, 16)}`;
+  const [logRows, alertRows] = await Promise.all([
+    db
+      .$queryRawUnsafe<Array<{ notes: string; actor: string; created_at: Date | string }>>(
+        `SELECT notes, actor, created_at FROM logistics_drayage_status_logs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        cfgId,
+        tenantId,
+      )
+      .catch(() => []),
+    db
+      .$queryRawUnsafe<Array<{ acknowledged: boolean }>>(
+        `SELECT acknowledged FROM logistics_drayage_alerts WHERE tenant_id = $1 AND alert_key = 'CONFIG_AUTO_L2_DISPATCH_T30' LIMIT 1`,
+        tenantId,
+      )
+      .catch(() => []),
+  ]);
+
+  let parsed: Partial<DrayageAutomationConfig> = {};
+  if (logRows[0]?.notes) {
+    try {
+      parsed = JSON.parse(String(logRows[0].notes)) as Partial<DrayageAutomationConfig>;
+    } catch {
+      parsed = {};
+    }
+  }
+
+  const autoL2FromAlert = alertRows.length > 0 ? Boolean(alertRows[0].acknowledged) : undefined;
+  const autoL2DispatchEnabled =
+    typeof parsed.autoL2DispatchEnabled === 'boolean'
+      ? parsed.autoL2DispatchEnabled
+      : autoL2FromAlert !== undefined
+      ? autoL2FromAlert
+      : DEFAULT_DRAYAGE_AUTOMATION_CONFIG.autoL2DispatchEnabled;
+
+  const thresholdMinutes = Math.min(
+    180,
+    Math.max(5, Number(parsed.thresholdMinutes ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.thresholdMinutes)),
+  );
+  const weightProximityPct = Math.min(
+    100,
+    Math.max(0, Number(parsed.weightProximityPct ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.weightProximityPct)),
+  );
+  const weightIdlenessPct = Math.min(
+    100,
+    Math.max(0, Number(parsed.weightIdlenessPct ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.weightIdlenessPct)),
+  );
+  const weightWorkloadPct = Math.min(
+    100,
+    Math.max(0, Number(parsed.weightWorkloadPct ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.weightWorkloadPct)),
+  );
+  const weightAvailabilityPct = Math.min(
+    100,
+    Math.max(0, Number(parsed.weightAvailabilityPct ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.weightAvailabilityPct)),
+  );
+  const streetTurnRadiusKm = Math.min(
+    100,
+    Math.max(1, Number(parsed.streetTurnRadiusKm ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.streetTurnRadiusKm)),
+  );
+  const streetTurnStrictCarrierMatch =
+    typeof parsed.streetTurnStrictCarrierMatch === 'boolean'
+      ? parsed.streetTurnStrictCarrierMatch
+      : DEFAULT_DRAYAGE_AUTOMATION_CONFIG.streetTurnStrictCarrierMatch;
+  const bogieWindowHours = Math.min(
+    12,
+    Math.max(0.5, Number(parsed.bogieWindowHours ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.bogieWindowHours)),
+  );
+  const bogieMaxPayloadKg = Math.min(
+    60000,
+    Math.max(15000, Number(parsed.bogieMaxPayloadKg ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.bogieMaxPayloadKg)),
+  );
+  const criticalRiskWindowHours = Math.min(
+    120,
+    Math.max(4, Number(parsed.criticalRiskWindowHours ?? DEFAULT_DRAYAGE_AUTOMATION_CONFIG.criticalRiskWindowHours)),
+  );
+
+  return {
+    autoL2DispatchEnabled,
+    thresholdMinutes,
+    weightProximityPct,
+    weightIdlenessPct,
+    weightWorkloadPct,
+    weightAvailabilityPct,
+    streetTurnRadiusKm,
+    streetTurnStrictCarrierMatch,
+    bogieWindowHours,
+    bogieMaxPayloadKg,
+    criticalRiskWindowHours,
+    updatedAt: logRows[0]?.created_at ? new Date(String(logRows[0].created_at)).toISOString() : undefined,
+    updatedBy: logRows[0]?.actor ? String(logRows[0].actor) : undefined,
+  };
 }
 
-export async function setTenantAutoL2DispatchMode(
+export async function saveTenantAutomationConfig(
   db: DrayageDbClient,
-  args: { tenantId: string; enabled: boolean },
-): Promise<{ ok: boolean; autoL2DispatchEnabled: boolean; thresholdMinutes: number; autoActivatedCount?: number }> {
+  args: {
+    tenantId: string;
+    config: Partial<DrayageAutomationConfig>;
+    actor?: string;
+  },
+): Promise<{ ok: boolean; automationConfig: DrayageAutomationConfig; autoActivatedCount?: number }> {
   await ensureDrayageSchema(db);
-  const id = `cfg-autol2-${args.tenantId.slice(0, 12)}`;
+  const current = await getTenantAutomationConfig(db, args.tenantId);
+
+  let prox = Math.max(0, Math.round(Number(args.config.weightProximityPct ?? current.weightProximityPct)));
+  let idle = Math.max(0, Math.round(Number(args.config.weightIdlenessPct ?? current.weightIdlenessPct)));
+  let work = Math.max(0, Math.round(Number(args.config.weightWorkloadPct ?? current.weightWorkloadPct)));
+  let avail = Math.max(0, Math.round(Number(args.config.weightAvailabilityPct ?? current.weightAvailabilityPct)));
+  const sum = prox + idle + work + avail;
+  if (sum > 0 && sum !== 100) {
+    // Normalize weights to total 100%
+    prox = Math.round((prox / sum) * 100);
+    idle = Math.round((idle / sum) * 100);
+    work = Math.round((work / sum) * 100);
+    avail = Math.max(0, 100 - (prox + idle + work));
+  } else if (sum === 0) {
+    prox = 60;
+    idle = 25;
+    work = 10;
+    avail = 5;
+  }
+
+  const nextConfig: DrayageAutomationConfig = {
+    autoL2DispatchEnabled:
+      typeof args.config.autoL2DispatchEnabled === 'boolean'
+        ? args.config.autoL2DispatchEnabled
+        : current.autoL2DispatchEnabled,
+    thresholdMinutes: Math.min(
+      180,
+      Math.max(5, Math.round(Number(args.config.thresholdMinutes ?? current.thresholdMinutes))),
+    ),
+    weightProximityPct: prox,
+    weightIdlenessPct: idle,
+    weightWorkloadPct: work,
+    weightAvailabilityPct: avail,
+    streetTurnRadiusKm: Math.min(
+      100,
+      Math.max(1, Math.round(Number(args.config.streetTurnRadiusKm ?? current.streetTurnRadiusKm) * 10) / 10),
+    ),
+    streetTurnStrictCarrierMatch:
+      typeof args.config.streetTurnStrictCarrierMatch === 'boolean'
+        ? args.config.streetTurnStrictCarrierMatch
+        : current.streetTurnStrictCarrierMatch,
+    bogieWindowHours: Math.min(
+      12,
+      Math.max(0.5, Math.round(Number(args.config.bogieWindowHours ?? current.bogieWindowHours) * 10) / 10),
+    ),
+    bogieMaxPayloadKg: Math.min(
+      60000,
+      Math.max(15000, Math.round(Number(args.config.bogieMaxPayloadKg ?? current.bogieMaxPayloadKg))),
+    ),
+    criticalRiskWindowHours: Math.min(
+      120,
+      Math.max(4, Math.round(Number(args.config.criticalRiskWindowHours ?? current.criticalRiskWindowHours))),
+    ),
+    updatedAt: new Date().toISOString(),
+    updatedBy: args.actor || 'Super Admin',
+  };
+
+  const cfgId = `cfg-engine-${args.tenantId.slice(0, 16)}`;
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor, created_at)
+     VALUES ($1, $2, 'SYSTEM_CONFIG', 'SUPER_ADMIN_ENGINE_CONFIG', 'ENGINE_CONFIG_UPDATED', $3, $4, NOW())
+     ON CONFLICT (id) DO UPDATE
+        SET notes = EXCLUDED.notes,
+            actor = EXCLUDED.actor,
+            created_at = NOW()`,
+    cfgId,
+    args.tenantId,
+    JSON.stringify(nextConfig),
+    nextConfig.updatedBy,
+  );
+
+  // Keep CONFIG_AUTO_L2_DISPATCH_T30 in sync
+  const alertId = `cfg-autol2-${args.tenantId.slice(0, 12)}`;
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
      VALUES ($1, $2, 'CONFIG_AUTO_L2_DISPATCH_T30', $3, NOW())
      ON CONFLICT (id) DO UPDATE SET acknowledged = $3, updated_at = NOW()`,
-    id,
+    alertId,
     args.tenantId,
-    Boolean(args.enabled),
+    nextConfig.autoL2DispatchEnabled,
   );
 
   let autoActivatedCount = 0;
-  if (args.enabled) {
+  if (nextConfig.autoL2DispatchEnabled) {
     const res = await checkAndAutoActivateExpiredEtcJobs(db, args.tenantId, {
-      thresholdMinutes: 30,
+      thresholdMinutes: nextConfig.thresholdMinutes,
       preAssignTractor: true,
     }).catch(() => ({ checked: 0, activated: [] }));
     autoActivatedCount = res.activated.length;
@@ -2982,9 +3169,30 @@ export async function setTenantAutoL2DispatchMode(
 
   return {
     ok: true,
-    autoL2DispatchEnabled: Boolean(args.enabled),
-    thresholdMinutes: 30,
+    automationConfig: nextConfig,
     autoActivatedCount,
+  };
+}
+
+export async function getTenantAutoL2DispatchEnabled(db: DrayageDbClient, tenantId: string): Promise<boolean> {
+  const cfg = await getTenantAutomationConfig(db, tenantId);
+  return cfg.autoL2DispatchEnabled;
+}
+
+export async function setTenantAutoL2DispatchMode(
+  db: DrayageDbClient,
+  args: { tenantId: string; enabled: boolean },
+): Promise<{ ok: boolean; autoL2DispatchEnabled: boolean; thresholdMinutes: number; autoActivatedCount?: number }> {
+  const saved = await saveTenantAutomationConfig(db, {
+    tenantId: args.tenantId,
+    config: { autoL2DispatchEnabled: Boolean(args.enabled) },
+    actor: 'Tenant Dispatch Admin',
+  });
+  return {
+    ok: true,
+    autoL2DispatchEnabled: saved.automationConfig.autoL2DispatchEnabled,
+    thresholdMinutes: saved.automationConfig.thresholdMinutes,
+    autoActivatedCount: saved.autoActivatedCount,
   };
 }
 
@@ -3064,13 +3272,19 @@ export async function findBest4FactorAssetsForRampPickup(
   const pool = candidateVehicles.length > 0 ? candidateVehicles : primeMovers;
   if (pool.length === 0 || rawDrivers.length === 0) return null;
 
+  const tenantCfg = await getTenantAutomationConfig(db, args.tenantId);
+  const wProx = tenantCfg.weightProximityPct / 100;
+  const wIdle = tenantCfg.weightIdlenessPct / 100;
+  const wWork = tenantCfg.weightWorkloadPct / 100;
+  const wAvail = tenantCfg.weightAvailabilityPct / 100;
+
   const scored = pool.map((v) => {
     const vId = String(v.id);
     const vLat = v.current_lat != null && Number(v.current_lat) !== 0 ? Number(v.current_lat) : 24.985;
     const vLng = v.current_lng != null && Number(v.current_lng) !== 0 ? Number(v.current_lng) : 55.076;
     const distanceKm = computeHaversineKm(vLat, vLng, args.targetLat, args.targetLng);
 
-    // 1. Proximity (60%)
+    // 1. Proximity (Default 60%, Super Admin configurable)
     let proximityScore = 100;
     if (distanceKm <= 3) proximityScore = 100;
     else if (distanceKm <= 10) proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
@@ -3078,7 +3292,7 @@ export async function findBest4FactorAssetsForRampPickup(
     else if (distanceKm <= 70) proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
     else proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
 
-    // 2. Idleness (25%)
+    // 2. Idleness (Default 25%, Super Admin configurable)
     let idleHours = 2.4;
     if (v.updated_at) {
       const ts = new Date(String(v.updated_at)).getTime();
@@ -3100,16 +3314,16 @@ export async function findBest4FactorAssetsForRampPickup(
     const dId = String(boundDrv.id);
     const tripsToday = tripsByDriver.get(dId) || 0;
 
-    // 3. Workload (10%)
+    // 3. Workload (Default 10%, Super Admin configurable)
     const workloadScore = tripsToday === 0 ? 100 : tripsToday === 1 ? 90 : tripsToday === 2 ? 75 : 50;
 
-    // 4. Availability (5%)
+    // 4. Availability (Default 5%, Super Admin configurable)
     const fuelPct = Number(v.fuel_level_pct ?? v.fuel_level ?? 85);
     const fuelScore = fuelPct >= 70 ? 100 : fuelPct >= 50 ? 80 : 55;
     const availabilityScore = Math.round(0.7 * fuelScore + 30);
 
     const totalScore = Math.round(
-      0.6 * proximityScore + 0.25 * idlenessScore + 0.1 * workloadScore + 0.05 * availabilityScore,
+      wProx * proximityScore + wIdle * idlenessScore + wWork * workloadScore + wAvail * availabilityScore,
     );
 
     const driverFullName =
@@ -4015,7 +4229,9 @@ export async function findStreetTurnCandidates(
     for (const exp of exportJobs) {
       if (inbound.id === exp.id) continue;
 
-      // 1. 15 km Radius Haversine Proximity Check
+      // 1. Super Admin Configurable Radius Haversine Proximity Check (Default <= 15 km)
+      const maxRadiusKm = workspace.automationConfig?.streetTurnRadiusKm ?? 15.0;
+      const strictCarrier = workspace.automationConfig?.streetTurnStrictCarrierMatch ?? true;
       const c1 = resolveWarehouseCoords(inbound);
       const c2 = resolveWarehouseCoords(exp);
       const rawDistKm = computeHaversineKm(c1.lat, c1.lng, c2.lat, c2.lng);
@@ -4024,7 +4240,7 @@ export async function findStreetTurnCandidates(
       const sameZone = zoneL2.toLowerCase() === zoneExp.toLowerCase();
       const interDist = Math.round((rawDistKm < 0.5 ? (sameZone ? 2.8 : 6.4) : rawDistKm) * 10) / 10;
 
-      if (interDist > 15.0) continue;
+      if (interDist > maxRadiusKm) continue;
 
       // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match
       const sizeMatch =
@@ -4039,7 +4255,7 @@ export async function findStreetTurnCandidates(
       const l2Line = detectShippingLine(inbound.containerNumber, inbound.shippingLine);
       const expLine = detectShippingLine(exp.containerNumber, exp.shippingLine);
       const isLineMatch = l2Line === expLine || exp.containerNumber.includes('TBD') || !exp.containerNumber;
-      if (!isLineMatch && expLine !== 'GENERIC_LINE' && expLine !== 'CARRIER_DEFAULT') continue;
+      if (strictCarrier && !isLineMatch && expLine !== 'GENERIC_LINE' && expLine !== 'CARRIER_DEFAULT') continue;
 
       const deadheadKmSaved = Math.max(44, Math.round(58 - interDist));
       const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
@@ -4237,16 +4453,18 @@ export async function findBogiePairCandidates(
       const zone2 = getWarehouseZoneName(j2.warehouseName);
       const sameZone = zone1.toLowerCase() === zone2.toLowerCase();
 
-      // Check 2-hour scheduling / slot window
+      // Check Super Admin configurable scheduling / slot window (Default 2.0h) & RTA Payload Limit (Default 36,000 kg)
+      const maxWindowHours = workspace.automationConfig?.bogieWindowHours ?? 2.0;
       const t1Ms = new Date(j1.pcsSlotStart || j1.createdAt).getTime();
       const t2Ms = new Date(j2.pcsSlotStart || j2.createdAt).getTime();
       const rawWindowHours = Math.abs(t1Ms - t2Ms) / 3600000;
-      const windowDiffHours = Math.round(Math.min(2.0, rawWindowHours) * 10) / 10;
+      const windowDiffHours = Math.round(Math.min(maxWindowHours, rawWindowHours) * 10) / 10;
+      if (windowDiffHours > maxWindowHours) continue;
 
       const box1WeightKg = j1.cargoWeightKg || 14500;
       const box2WeightKg = j2.cargoWeightKg || 16200;
       const totalPayloadKg = box1WeightKg + box2WeightKg;
-      const weightLimitKg = 36000;
+      const weightLimitKg = workspace.automationConfig?.bogieMaxPayloadKg ?? 36000;
       const isWeightCompliant = totalPayloadKg <= weightLimitKg;
       const weightUtilizationPct = Math.round((totalPayloadKg / weightLimitKg) * 100);
 

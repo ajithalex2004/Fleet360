@@ -25,6 +25,7 @@ import {
   ArrowUpDown,
   Leaf,
   Scale,
+  Settings,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -34,6 +35,11 @@ import {
   getCachedDrayageData,
   invalidateDrayageClientCache,
 } from '@/lib/logistics/drayage-client-cache';
+import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  type DrayageAutomationConfig,
+} from '@/lib/logistics/drayage-domain';
 
 interface DrayageJob {
   id: string;
@@ -297,6 +303,11 @@ export default function DrayageAssignmentPage() {
   // Smart Analysis UI state
   const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
   const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<'ALL' | 'BOGIE' | 'STREET_TURN' | 'DEMURRAGE'>('ALL');
+  const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(() => ({
+    ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+    ...(cached?.automationConfig || {}),
+  }));
+  const [configModalOpen, setConfigModalOpen] = useState(false);
   const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState<boolean>(
     cached?.automationConfig?.autoL2DispatchEnabled ?? true
   );
@@ -340,8 +351,14 @@ export default function DrayageAssignmentPage() {
       setTrailers(data?.trailers || []);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
-      if (typeof data?.automationConfig?.autoL2DispatchEnabled === 'boolean') {
-        setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+      if (data?.automationConfig) {
+        setAutomationConfig({
+          ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+          ...data.automationConfig,
+        });
+        if (typeof data.automationConfig.autoL2DispatchEnabled === 'boolean') {
+          setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+        }
       }
     } catch (err) {
       if (!getCachedDrayageData()?.jobs) {
@@ -588,7 +605,8 @@ export default function DrayageAssignmentPage() {
           ((zone1.toUpperCase().includes('KIZAD') || zone1.toUpperCase().includes('KEZAD')) &&
             (zone2.toUpperCase().includes('KIZAD') || zone2.toUpperCase().includes('KEZAD')));
 
-        // Condition 3: Within the same 2-hour scheduling/slot window
+        // Condition 3: Within the configured scheduling/slot window (default 2.0h)
+        const maxWindowHrs = automationConfig.bogieWindowHours || 2.0;
         const t1 = j1.pcsSlotStart
           ? new Date(j1.pcsSlotStart).getTime()
           : new Date(j1.createdAt || Date.now()).getTime();
@@ -596,14 +614,14 @@ export default function DrayageAssignmentPage() {
           ? new Date(j2.pcsSlotStart).getTime()
           : new Date(j2.createdAt || Date.now()).getTime();
         const rawDiffHours = Math.round((Math.abs(t1 - t2) / (1000 * 60 * 60)) * 10) / 10;
-        const windowDiffHours = rawDiffHours <= 24 ? Math.min(2.0, rawDiffHours) : rawDiffHours;
-        if (windowDiffHours > 2.0) continue;
+        const windowDiffHours = rawDiffHours <= 24 ? Math.min(maxWindowHrs, rawDiffHours) : rawDiffHours;
+        if (windowDiffHours > maxWindowHrs) continue;
 
-        // Weight safety check (UAE RTA / FTA max legal payload limit: 36,000 kg)
+        // Weight safety check (configurable UAE RTA / FTA max legal payload limit, default 36,000 kg)
         const box1WeightKg = j1.cargoWeightKg || 14500;
         const box2WeightKg = j2.cargoWeightKg || 16200;
         const totalPayloadKg = box1WeightKg + box2WeightKg;
-        const weightLimitKg = 36000;
+        const weightLimitKg = automationConfig.bogieMaxPayloadKg || 36000;
         const isWeightCompliant = totalPayloadKg <= weightLimitKg;
         const weightUtilizationPct = Math.round((totalPayloadKg / weightLimitKg) * 100);
 
@@ -666,7 +684,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalCombos;
-  }, [unassignedJobs, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [unassignedJobs, automationConfig.bogieWindowHours, automationConfig.bogieMaxPayloadKg, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
   // ZONE-BASED STREET-TURN MATCHING ENGINE (L2 Empty Warehouse -> Pending Export Booking)
@@ -780,7 +798,8 @@ export default function DrayageAssignmentPage() {
         const c1 = resolveWarehouseCoords(j1.warehouseName, j1.warehouseId);
         const rawDistKm = Math.round(haversineKm(c2.lat, c2.lng, c1.lat, c1.lng) * 10) / 10;
         const interDist = rawDistKm === 0 ? (sameZone ? 3.2 : 6.4) : rawDistKm;
-        if (interDist > 15.0) continue;
+        const maxRadiusKm = automationConfig.streetTurnRadiusKm || 15.0;
+        if (interDist > maxRadiusKm) continue;
 
         const containerGrade = (j2.containerType || 'DRY').toUpperCase().includes('REEFER')
           ? 'Grade A · PTI Cold-Chain Certified'
@@ -845,7 +864,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalStreetTurns;
-  }, [jobs, unassignedJobs, warehouses, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [jobs, unassignedJobs, warehouses, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // High Demurrage, Line Detention (<24h) & Port Slot Miss Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -1158,12 +1177,16 @@ export default function DrayageAssignmentPage() {
 
       const availabilityScore = Math.round(0.5 * fuelScore + 0.3 * maintScore + 0.2 * roadworthyScore);
 
-      // Composite Weighted Calculation: 60% Prox + 25% Idle + 10% Workload + 5% Avail
+      // Composite Weighted Calculation using Tenant Super Admin Policy Weights (Defaults: 60% Prox + 25% Idle + 10% Workload + 5% Avail)
+      const wProx = (automationConfig.weightProximityPct ?? 60) / 100;
+      const wIdle = (automationConfig.weightIdlenessPct ?? 25) / 100;
+      const wWork = (automationConfig.weightWorkloadPct ?? 10) / 100;
+      const wAvail = (automationConfig.weightAvailabilityPct ?? 5) / 100;
       const totalScore = Math.round(
-        0.60 * proximityScore +
-        0.25 * idlenessScore +
-        0.10 * workloadScore +
-        0.05 * availabilityScore
+        wProx * proximityScore +
+        wIdle * idlenessScore +
+        wWork * workloadScore +
+        wAvail * availabilityScore
       );
 
       return {
@@ -1182,7 +1205,12 @@ export default function DrayageAssignmentPage() {
         rankBadge: '',
       };
     },
-    []
+    [
+      automationConfig.weightProximityPct,
+      automationConfig.weightIdlenessPct,
+      automationConfig.weightWorkloadPct,
+      automationConfig.weightAvailabilityPct,
+    ]
   );
 
   // =========================================================================
@@ -1835,9 +1863,19 @@ export default function DrayageAssignmentPage() {
                 }`}
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
-                Auto-L2 @ T-30m
+                Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setConfigModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
+              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+            >
+              <Settings className="w-3.5 h-3.5 text-sky-400" />
+              Engine Config
+            </button>
 
             <button
               onClick={() => setShowSmartAnalysis((prev) => !prev)}
@@ -2168,11 +2206,11 @@ export default function DrayageAssignmentPage() {
                         </div>
                       </div>
 
-                      {/* Direct Inland Repositioning within 15 km radius */}
+                      {/* Direct Inland Repositioning within configured radius */}
                       <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 flex items-center justify-between">
                         <span className="flex items-center gap-1">
                           <ArrowRight className="w-3 h-3 text-emerald-400" />
-                          <span>Direct Match ({pair.interWarehouseDistanceKm} km · ≤ 15 km Radius)</span>
+                          <span>Direct Match ({pair.interWarehouseDistanceKm} km · ≤ {automationConfig.streetTurnRadiusKm || 15} km Radius)</span>
                         </span>
                         <span className="font-bold text-emerald-400">Zero Port Return</span>
                       </div>
@@ -2791,7 +2829,7 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                          <span>Proximity (60%)</span>
+                          <span>Proximity ({automationConfig.weightProximityPct ?? 60}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
                           {currentVehicleScore.distanceKm} km
@@ -2802,7 +2840,7 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
-                          <span>Idleness (25%)</span>
+                          <span>Idleness ({automationConfig.weightIdlenessPct ?? 25}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
                           {currentVehicleScore.idleHours}h dwell
@@ -2813,7 +2851,7 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <TrendingUp className="w-3 h-3 text-indigo-400 shrink-0" />
-                          <span>Workload (10%)</span>
+                          <span>Workload ({automationConfig.weightWorkloadPct ?? 10}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
                           {currentVehicleScore.tripsToday} trip(s) today
@@ -2824,7 +2862,7 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3 text-purple-400 shrink-0" />
-                          <span>Availability (5%)</span>
+                          <span>Availability ({automationConfig.weightAvailabilityPct ?? 5}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
                           {currentVehicleScore.fuelPct}% fuel
@@ -3027,6 +3065,23 @@ export default function DrayageAssignmentPage() {
           </div>
         </div>
       )}
+
+      {/* Super Admin Drayage Configuration Modal */}
+      <DrayageSuperAdminConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        config={automationConfig}
+        onSaved={(updated) => {
+          setAutomationConfig(updated);
+          setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
+          invalidateDrayageClientCache();
+          showToast(
+            'success',
+            `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+          );
+          loadData(true);
+        }}
+      />
     </div>
   );
 }
