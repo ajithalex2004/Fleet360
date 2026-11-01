@@ -1,10 +1,16 @@
 'use client';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Settings, Activity } from 'lucide-react';
+import { Settings, Activity, Zap, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  type DrayageAutomationConfig,
+} from '@/lib/logistics/drayage-domain';
+import { invalidateDrayageClientCache } from '@/lib/logistics/drayage-client-cache';
 
 type Tenant = { id: string };
 type User   = { id: string };
@@ -22,6 +28,68 @@ export default function AdminOverview() {
   const roles       = useFetchedData<Role[]>(  '/api/admin/roles');
   const permissions = useFetchedData<Perm[]>(  '/api/admin/permissions');
 
+  // Super Admin Drayage Engine Config State
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
+  const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState<boolean>(true);
+  const [togglingAutoL2, setTogglingAutoL2] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    fetch('/api/logistics/drayage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get_automation_config' }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.automationConfig) {
+          setAutomationConfig({
+            ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+            ...data.automationConfig,
+          });
+          if (typeof data.automationConfig.autoL2DispatchEnabled === 'boolean') {
+            setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [isSuperAdmin]);
+
+  const handleToggleAutoL2Mode = async (enabled: boolean) => {
+    try {
+      setTogglingAutoL2(true);
+      setAutoL2DispatchEnabled(enabled);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_auto_l2_mode',
+          enabled,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 dispatch mode');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        enabled
+          ? `⚡ Switched to Auto-L2 Dispatch & 4-Factor Pre-Assignment (Triggers @ T-${automationConfig.thresholdMinutes || 30}m before Offload ETC)`
+          : '🛠️ Switched to Manual L2 Dispatch Mode (Dispatcher triggers L2 manually)',
+      );
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
+    } finally {
+      setTogglingAutoL2(false);
+    }
+  };
+
   const stats = {
     tenants:     tenants.data?.length     ?? 0,
     users:       users.data?.length       ?? 0,
@@ -38,11 +106,74 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg text-xs font-semibold ${
+            toast.type === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+              : 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       <PageHeader
         title="Platform Administration"
         subtitle="Multi-tenant access control for Fleet360"
         icon={Settings}
         accent="rose"
+        actions={
+          isSuperAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
+                title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
+              >
+                <button
+                  type="button"
+                  disabled={togglingAutoL2}
+                  onClick={() => handleToggleAutoL2Mode(false)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
+                    !autoL2DispatchEnabled
+                      ? 'bg-slate-700 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  Manual L2
+                </button>
+                <button
+                  type="button"
+                  disabled={togglingAutoL2}
+                  onClick={() => handleToggleAutoL2Mode(true)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                    autoL2DispatchEnabled
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConfigModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
+                title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+              >
+                <Settings className="w-3.5 h-3.5 text-sky-400" />
+                Engine Config
+              </button>
+            </div>
+          ) : undefined
+        }
       />
 
       {/* Stats — instant on re-visit, fast first paint via Data Cache + CDN */}
@@ -107,6 +238,23 @@ export default function AdminOverview() {
           </Link>
         </div>
       </div>
+      )}
+
+      {isSuperAdmin && (
+        <DrayageSuperAdminConfigModal
+          open={configModalOpen}
+          onClose={() => setConfigModalOpen(false)}
+          currentConfig={automationConfig}
+          onSaved={(updated) => {
+            setAutomationConfig(updated);
+            setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
+            invalidateDrayageClientCache();
+            showToast(
+              'success',
+              `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+            );
+          }}
+        />
       )}
     </div>
   );

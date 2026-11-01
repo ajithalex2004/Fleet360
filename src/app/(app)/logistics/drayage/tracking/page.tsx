@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
   type DrayageAutomationConfig,
@@ -195,7 +196,10 @@ function getOperationalStageIndex(status: string, trailerDetached?: boolean): nu
 }
 
 export default function DrayageJobTrackingPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const [loading, setLoading] = useState(true);
+  const [showUrgentDemurrage, setShowUrgentDemurrage] = useState(false);
   const [jobs, setJobs] = useState<DrayageJob[]>([]);
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [messages, setMessages] = useState<DispatchMessage[]>([]);
@@ -748,10 +752,11 @@ export default function DrayageJobTrackingPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Tenant Toggle: Manual vs Auto-L2 Dispatch & Pre-Assignment on ETC Threshold (T-30 mins) */}
+            {/* Super Admin Only: Manual vs Auto-L2 Dispatch & Engine Config */}
+            {isSuperAdmin && (
             <div
               className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
-              title="Tenant Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
+              title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
             >
               <button
                 type="button"
@@ -779,7 +784,9 @@ export default function DrayageJobTrackingPage() {
                 Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
               </button>
             </div>
+            )}
 
+            {isSuperAdmin && (
             <button
               type="button"
               onClick={() => setConfigModalOpen(true)}
@@ -788,6 +795,21 @@ export default function DrayageJobTrackingPage() {
             >
               <Settings className="w-3.5 h-3.5 text-sky-400" />
               Engine Config
+            </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowUrgentDemurrage((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                showUrgentDemurrage
+                  ? 'bg-rose-600 text-white shadow-rose-500/20'
+                  : 'bg-[var(--bg-surface)] border border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
+              }`}
+              title="Click to show or hide Urgent Demurrage & Port Slot Risk Intelligence"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Urgent Demurrage Alert</span>
             </button>
 
             <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm">
@@ -1075,8 +1097,9 @@ export default function DrayageJobTrackingPage() {
                 </div>
 
                 {/* =========================================================================
-                    DEMURRAGE, DETENTION & PORT SLOT RISK INTELLIGENCE PANEL
+                    DEMURRAGE, DETENTION & PORT SLOT RISK INTELLIGENCE PANEL (Shown on clicking Urgent Demurrage Alert)
                     ========================================================================= */}
+                {showUrgentDemurrage && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {/* 1. Demurrage & Free-Time Countdown Radar */}
                   {activeJob.riskRadar && (
@@ -1290,6 +1313,7 @@ export default function DrayageJobTrackingPage() {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Offloading ETC Countdown & Management */}
                 {activeJob.jobPhase === 'L1' && (activeJob.etcTime || activeJob.placementLocation === 'RAMP' || activeJob.status === 'PLACED_AT_RAMP' || activeJob.trailerDetached) && (
@@ -1318,6 +1342,7 @@ export default function DrayageJobTrackingPage() {
                               NO ETC SET
                             </span>
                           )}
+                          {isSuperAdmin && (
                           <button
                             type="button"
                             disabled={togglingAutoL2}
@@ -1327,13 +1352,14 @@ export default function DrayageJobTrackingPage() {
                                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
                                 : 'bg-slate-700/60 text-slate-300 border-slate-500/40 hover:bg-slate-700'
                             }`}
-                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 and Manual L2 Dispatch"
+                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 and Manual L2 Dispatch (Super Admin)"
                           >
                             <Zap className="w-2.5 h-2.5" />
                             {autoL2DispatchEnabled
                               ? `Mode: Auto-L2 & 4-Factor Pre-Assign @ T-${automationConfig.thresholdMinutes || 30}m (Click for Manual)`
                               : `Mode: Manual L2 Dispatch (Click for Auto-L2 @ T-${automationConfig.thresholdMinutes || 30}m)`}
                           </button>
+                          )}
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                           {activeJob.etcTime ? (

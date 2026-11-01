@@ -36,6 +36,7 @@ import {
   invalidateDrayageClientCache,
 } from '@/lib/logistics/drayage-client-cache';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
   type DrayageAutomationConfig,
@@ -290,6 +291,8 @@ interface Vehicle4FactorScore {
 }
 
 export default function DrayageAssignmentPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const cached = getCachedDrayageData();
   const [loading, setLoading] = useState(!cached?.jobs);
   const [jobs, setJobs] = useState<DrayageJob[]>(cached?.jobs || []);
@@ -1835,10 +1838,11 @@ export default function DrayageAssignmentPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Tenant Toggle: Manual vs Auto-L2 Dispatch & Pre-Assignment on ETC Threshold (T-30 mins) */}
+            {/* Super Admin Only: Manual vs Auto-L2 Dispatch & Engine Config */}
+            {isSuperAdmin && (
             <div
               className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
-              title="Tenant Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
+              title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
             >
               <button
                 type="button"
@@ -1866,7 +1870,9 @@ export default function DrayageAssignmentPage() {
                 Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
               </button>
             </div>
+            )}
 
+            {isSuperAdmin && (
             <button
               type="button"
               onClick={() => setConfigModalOpen(true)}
@@ -1875,6 +1881,33 @@ export default function DrayageAssignmentPage() {
             >
               <Settings className="w-3.5 h-3.5 text-sky-400" />
               Engine Config
+            </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE') {
+                  setSmartAnalysisFilter('ALL');
+                } else {
+                  setShowSmartAnalysis(true);
+                  setSmartAnalysisFilter('DEMURRAGE');
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE'
+                  ? 'bg-rose-600 text-white shadow-rose-500/20'
+                  : 'bg-[var(--bg-surface)] border border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
+              }`}
+              title="Show Urgent Demurrage & Port Slot Risk Alerts"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Urgent Demurrage Alert</span>
+              {urgentDemurrageJobs.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-bold ml-0.5">
+                  {urgentDemurrageJobs.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -2019,7 +2052,7 @@ export default function DrayageAssignmentPage() {
                     : 'text-rose-400 hover:text-rose-300'
                 }`}
               >
-                Urgent Demurrage ({urgentDemurrageJobs.length})
+                Urgent Demurrage Alert ({urgentDemurrageJobs.length})
               </button>
             </div>
           </div>
@@ -2265,8 +2298,8 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View */}
-            {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'DEMURRAGE') &&
+            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View (Shown ONLY when Urgent Demurrage Alert button is clicked) */}
+            {smartAnalysisFilter === 'DEMURRAGE' &&
               urgentDemurrageJobs.map((job) => {
                 const risk = getDemurrageRisk(job);
                 const radar = job.riskRadar;
@@ -2394,11 +2427,16 @@ export default function DrayageAssignmentPage() {
               })}
 
             {/* Empty state when no matches found */}
-            {bogieCombos.length === 0 && streetTurnPairs.length === 0 && (
+            {((smartAnalysisFilter === 'DEMURRAGE' && urgentDemurrageJobs.length === 0) ||
+              (smartAnalysisFilter !== 'DEMURRAGE' && bogieCombos.length === 0 && streetTurnPairs.length === 0)) && (
               <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
                 <h4 className="text-xs font-bold text-[var(--text-main)]">Queue Optimized</h4>
-                <p className="text-xs text-[var(--text-muted)]">No pending pairing conflicts found in current queue.</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {smartAnalysisFilter === 'DEMURRAGE'
+                    ? 'No urgent demurrage or port slot risk alerts in current queue.'
+                    : 'No pending pairing conflicts found in current queue.'}
+                </p>
               </div>
             )}
           </div>
