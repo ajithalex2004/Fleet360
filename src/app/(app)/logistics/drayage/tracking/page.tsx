@@ -32,7 +32,6 @@ import {
   Settings,
   Copy,
   ExternalLink,
-  Mail,
   Share2,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';

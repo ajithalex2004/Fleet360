@@ -7,8 +7,6 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  ExternalLink,
-  Mail,
   MapPin,
   MessageSquare,
   Navigation,
@@ -16,8 +14,13 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Truck,
 } from 'lucide-react';
+import type {
+  DrayageCorridorTerminal,
+  DrayageCorridorWarehouse,
+  DrayageCorridorGeofence,
+  DrayageCorridorVehicle,
+} from '@/components/logistics/drayage/DrayageCorridorLiveMap';
 
 const DrayageCorridorLiveMap = dynamic(
   () => import('@/components/logistics/drayage/DrayageCorridorLiveMap'),
@@ -52,11 +55,67 @@ interface StatusLogItem {
   timestamp: string;
 }
 
+interface PortalPayload {
+  portalReadOnly: boolean;
+  verifiedToken: string;
+  refreshedAt: string;
+  currentStageIndex: number;
+  job: {
+    id: string;
+    jobCode: string;
+    jobPhase: 'L1' | 'L2';
+    shipmentType: string;
+    status: string;
+    priority: string;
+    customerName: string;
+    terminalName: string;
+    warehouseName: string;
+    containerNumber: string;
+    containerSize: string;
+    containerType: string;
+    shippingLine: string;
+    tokenNumber: string | null;
+    assignedVehiclePlate: string | null;
+    assignedDriverName: string | null;
+    assignedTrailerPlate: string | null;
+    placementLocation: 'RAMP' | 'YARD' | null;
+    trailerDetached: boolean;
+    l2Activated: boolean;
+    etcTime: string | null;
+    currentLat: number | null;
+    currentLng: number | null;
+    podSignatureName: string | null;
+    podSignedAt: string | null;
+    podPhotoUrl: string | null;
+    portSlotPrediction?: {
+      predictedGateArrivalLabel: string;
+      totalEtaMinutes: number;
+      corridorName: string;
+    };
+    customerPortal?: {
+      customerWhatsApp: string;
+      customerEmail: string;
+      autoAlertsEnabled: boolean;
+    };
+    createdAt: string;
+    updatedAt: string;
+  };
+  milestones: MilestoneStep[];
+  statusLogs: StatusLogItem[];
+  alertLogs: StatusLogItem[];
+  corridorMap: {
+    terminals: DrayageCorridorTerminal[];
+    warehouses: DrayageCorridorWarehouse[];
+    geofences: DrayageCorridorGeofence[];
+    vehicles: DrayageCorridorVehicle[];
+  };
+}
+
 export default function CustomerDrayageTrackingPortalPage() {
   const params = useParams();
   const token = String(params?.token || '');
 
-  const [portalData, setPortalData] = useState<any | null>(null);
+  const [portalData, setPortalData] = useState<PortalPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -540,7 +599,7 @@ export default function CustomerDrayageTrackingPortalPage() {
             </span>
           </div>
           <DrayageCorridorLiveMap
-            jobs={[job]}
+            jobs={[{ ...job, rateAmountAed: 0 }]}
             terminals={portalData.corridorMap?.terminals || []}
             warehouses={portalData.corridorMap?.warehouses || []}
             geofences={portalData.corridorMap?.geofences || []}
