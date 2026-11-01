@@ -574,6 +574,56 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   await ensureDrayageSchema(db);
 
   // Automatic port terminal seeding is disabled: terminals are created and managed manually by users.
+  // Purge any legacy auto-seeded terminals & perform a one-time reset of pre-existing terminals so the list starts empty.
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_geofences
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'gf-ja%'
+          OR id LIKE 'gf-kp%'
+          OR id LIKE 'gf-pr%'
+          OR terminal_id LIKE 'term-ja%'
+          OR terminal_id LIKE 'term-kp%'
+          OR terminal_id LIKE 'term-pr%'
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_terminals
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'term-ja%'
+          OR id LIKE 'term-kp%'
+          OR id LIKE 'term-pr%'
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  const purgeMarkerId = `sys-purge-terminals-v1-${tenantId}`;
+  const purgeMarkerRows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id FROM logistics_drayage_alerts WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    purgeMarkerId,
+    tenantId,
+  ).catch(() => []);
+
+  if (purgeMarkerRows.length === 0) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM logistics_drayage_geofences WHERE tenant_id = $1 AND (terminal_id IS NOT NULL OR id LIKE 'gf-term-%')`,
+      tenantId,
+    ).catch(() => {});
+    await db.$executeRawUnsafe(
+      `DELETE FROM logistics_drayage_terminals WHERE tenant_id = $1`,
+      tenantId,
+    ).catch(() => {});
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
+       VALUES ($1, $2, 'SYSTEM_TERMINALS_PURGED_V1', true, NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      purgeMarkerId,
+      tenantId,
+    ).catch(() => {});
+  }
 
   const cliCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
     `SELECT COUNT(*) AS cnt FROM logistics_drayage_clients WHERE tenant_id = $1`,

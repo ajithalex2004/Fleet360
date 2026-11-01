@@ -231,7 +231,10 @@ export default function DrayageTerminalMapPage() {
       setWarehouses(data?.warehouses || []);
       setClients(data?.clients || []);
       setCustomers(data?.customers || []);
-      if (terms.length > 0) {
+      if (terms.length === 0) {
+        setSelectedTerminal(null);
+        setMapEditGeofenceId(null);
+      } else if (terms.length > 0) {
         if (!selectedTerminal) {
           setSelectedTerminal(terms[0]);
           const firstGf = gfs.find((g) => g.terminalId === terms[0].id || g.terminalName === terms[0].name);
@@ -785,6 +788,14 @@ export default function DrayageTerminalMapPage() {
           </div>
 
           <div className="space-y-3">
+            {terminals.length === 0 && (
+              <div className="p-4 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] text-center">
+                <p className="text-xs font-semibold text-[var(--text-main)] mb-1">No Port Terminals Added</p>
+                <p className="text-[11px] text-[var(--text-muted)] mb-3">
+                  Click &quot;+ Add Terminal&quot; above to manually create a port terminal.
+                </p>
+              </div>
+            )}
             {terminals.map((t) => {
               const selected = selectedTerminal?.id === t.id;
               return (
