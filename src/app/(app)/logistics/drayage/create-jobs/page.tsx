@@ -767,7 +767,7 @@ export default function DrayageCreateJobsPage() {
                       <div className="sm:col-span-7 space-y-1">
                         <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-blue-400" />
-                          <span>Delivery Date *</span>
+                          <span>Discharge/Delivery Date *</span>
                         </label>
                         <input
                           type="date"

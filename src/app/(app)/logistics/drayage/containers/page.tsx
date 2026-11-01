@@ -919,7 +919,7 @@ export default function DrayageContainersPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Discharge Date</label>
+                  <label className="font-semibold text-[var(--text-muted)]">Discharge/Delivery Date</label>
                   <input
                     type="date"
                     value={dischargeDate}

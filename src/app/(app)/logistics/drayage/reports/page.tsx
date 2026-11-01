@@ -279,7 +279,7 @@ export default function DrayageReportsPage() {
                   <th className="py-2.5 px-3 font-semibold">Container Number</th>
                   <th className="py-2.5 px-3 font-semibold">Customer</th>
                   <th className="py-2.5 px-3 font-semibold">Terminal</th>
-                  <th className="py-2.5 px-3 font-semibold">Discharge Date</th>
+                  <th className="py-2.5 px-3 font-semibold">Discharge/Delivery Date</th>
                   <th className="py-2.5 px-3 font-semibold">Days in Port</th>
                   <th className="py-2.5 px-3 font-semibold">Overdue Days</th>
                   <th className="py-2.5 px-3 font-semibold font-mono">Fine (AED)</th>

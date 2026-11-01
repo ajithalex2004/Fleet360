@@ -2545,44 +2545,96 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
     const cntNum = item.containerNumber.trim().toUpperCase();
     if (!cntNum) continue;
 
-    const containerId = `cnt-${crypto.randomUUID().slice(0, 12)}`;
+    const existingCnt = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM logistics_drayage_containers WHERE tenant_id = $1 AND UPPER(container_number) = $2 ORDER BY created_at DESC LIMIT 1`,
+      input.tenantId,
+      cntNum,
+    ).catch(() => []);
+
+    const containerId = existingCnt[0]?.id || `cnt-${crypto.randomUUID().slice(0, 12)}`;
     const jobId = `job-${crypto.randomUUID().slice(0, 12)}`;
     const jobCode = `DRY-L1-${Math.floor(1000 + Math.random() * 9000)}`;
     const dischargeIso = item.dischargeDate ? new Date(item.dischargeDate).toISOString() : new Date().toISOString();
     const doExpiryIso = item.doExpiryDate ? new Date(item.doExpiryDate).toISOString() : null;
 
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_containers (
-        id, tenant_id, container_number, size, container_type, shipment_type, status,
-        customer_id, customer_name, terminal_id, terminal_name, warehouse_id, warehouse_name,
-        do_expiry_date, discharge_date, seal_number, weight_kg,
-        customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,'AT_PORT_DISCHARGED',$7,$8,$9,$10,$11,$12,
-        $13::timestamptz,$14::timestamptz,$15,$16,$17,$18,$19,$20,$21
-      )`,
-      containerId,
-      input.tenantId,
-      cntNum,
-      item.size || '40HC',
-      item.containerType || 'DRY',
-      input.shipmentType || 'IMPORT',
-      input.customerId ?? null,
-      input.customerName,
-      input.terminalId ?? null,
-      input.terminalName,
-      input.warehouseId ?? null,
-      input.warehouseName,
-      doExpiryIso,
-      dischargeIso,
-      item.sealNumber ?? `SL-${Math.floor(100000 + Math.random() * 900000)}`,
-      item.weightKg ?? 22000,
-      Boolean(item.customsInspection),
-      Boolean(item.municipalityInspection),
-      Boolean(item.cpipInspection),
-      Boolean(item.mercInspection),
-      Boolean(item.boxcareInspection),
-    );
+    if (existingCnt[0]?.id) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_containers
+            SET size = $3,
+                container_type = $4,
+                shipment_type = $5,
+                customer_id = $6,
+                customer_name = $7,
+                terminal_id = $8,
+                terminal_name = $9,
+                warehouse_id = $10,
+                warehouse_name = $11,
+                do_expiry_date = COALESCE($12::timestamptz, do_expiry_date),
+                discharge_date = COALESCE($13::timestamptz, discharge_date),
+                seal_number = COALESCE($14, seal_number),
+                weight_kg = COALESCE($15, weight_kg),
+                customs_inspection = $16,
+                municipality_inspection = $17,
+                cpip_inspection = $18,
+                merc_inspection = $19,
+                boxcare_inspection = $20,
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        containerId,
+        input.tenantId,
+        item.size || '40HC',
+        item.containerType || 'DRY',
+        input.shipmentType || 'IMPORT',
+        input.customerId ?? null,
+        input.customerName,
+        input.terminalId ?? null,
+        input.terminalName,
+        input.warehouseId ?? null,
+        input.warehouseName,
+        doExpiryIso,
+        dischargeIso,
+        item.sealNumber ?? null,
+        item.weightKg ?? 22000,
+        Boolean(item.customsInspection),
+        Boolean(item.municipalityInspection),
+        Boolean(item.cpipInspection),
+        Boolean(item.mercInspection),
+        Boolean(item.boxcareInspection),
+      );
+    } else {
+      await db.$executeRawUnsafe(
+        `INSERT INTO logistics_drayage_containers (
+          id, tenant_id, container_number, size, container_type, shipment_type, status,
+          customer_id, customer_name, terminal_id, terminal_name, warehouse_id, warehouse_name,
+          do_expiry_date, discharge_date, seal_number, weight_kg,
+          customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,'AT_PORT_DISCHARGED',$7,$8,$9,$10,$11,$12,
+          $13::timestamptz,$14::timestamptz,$15,$16,$17,$18,$19,$20,$21
+        )`,
+        containerId,
+        input.tenantId,
+        cntNum,
+        item.size || '40HC',
+        item.containerType || 'DRY',
+        input.shipmentType || 'IMPORT',
+        input.customerId ?? null,
+        input.customerName,
+        input.terminalId ?? null,
+        input.terminalName,
+        input.warehouseId ?? null,
+        input.warehouseName,
+        doExpiryIso,
+        dischargeIso,
+        item.sealNumber ?? `SL-${Math.floor(100000 + Math.random() * 900000)}`,
+        item.weightKg ?? 22000,
+        Boolean(item.customsInspection),
+        Boolean(item.municipalityInspection),
+        Boolean(item.cpipInspection),
+        Boolean(item.mercInspection),
+        Boolean(item.boxcareInspection),
+      );
+    }
 
     await db.$executeRawUnsafe(
       `INSERT INTO logistics_drayage_jobs (
