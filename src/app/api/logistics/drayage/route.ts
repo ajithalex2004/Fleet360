@@ -33,6 +33,9 @@ import {
   bookPcsToken,
   clearPortInspection,
   revalidateDeliveryOrder,
+  rebookPcsTokenForTrafficDelay,
+  swapTractorForPortSlotRescue,
+  simulatePortSlotTrafficRisk,
 } from '@/lib/logistics/drayage-domain';
 
 let drayageSchemaEnsured = false;
@@ -1039,6 +1042,32 @@ export async function POST(req: NextRequest) {
             containerId: body.containerId ? String(body.containerId) : undefined,
             jobId: body.jobId ? String(body.jobId) : undefined,
             extendDays: body.extendDays ? Number(body.extendDays) : 5,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'rebook_pcs_slot': {
+          return rebookPcsTokenForTrafficDelay(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            reason: body.reason ? String(body.reason) : undefined,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'swap_slot_rescue_tractor': {
+          return swapTractorForPortSlotRescue(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            vehicleId: body.vehicleId ? String(body.vehicleId) : undefined,
+            actor: body.actor ? String(body.actor) : undefined,
+          });
+        }
+
+        case 'simulate_slot_traffic_delay': {
+          return simulatePortSlotTrafficRisk(tx, {
+            tenantId,
+            jobId: String(body.jobId),
             actor: body.actor ? String(body.actor) : undefined,
           });
         }

@@ -79,6 +79,46 @@ interface DrayageJob {
   trailerDetached?: boolean;
   l2Activated?: boolean;
   etcTime?: string | null;
+  riskRadar?: {
+    portFreeTimeExpiry: string;
+    portDemurrageHoursRemaining: number;
+    portFreeDaysAllowed: number;
+    portDailyDemurrageAed: number;
+    lineDetentionExpiry: string;
+    lineDetentionHoursRemaining: number;
+    lineFreeDaysAllowed: number;
+    lineDailyDetentionAed: number;
+    doExpiryDate: string;
+    doHoursRemaining: number;
+    minHoursRemaining: number;
+    primaryRiskFactor: 'PORT_DEMURRAGE' | 'LINE_DETENTION' | 'DO_EXPIRY' | 'SAFE';
+    within24hPenaltyWindow: boolean;
+    autoEscalatedCritical: boolean;
+    dailyCombinedPenaltyAed: number;
+    accruedExposureAed: number;
+    status: 'EXPIRED' | 'CRITICAL_24H' | 'WARNING_48H' | 'SAFE';
+  };
+  portSlotPrediction?: {
+    hasActiveToken: boolean;
+    tokenNumber: string | null;
+    pcsProvider: 'DP_WORLD_DUBAI_TRADE' | 'AD_PORTS_MAQTA';
+    slotStart: string;
+    slotEnd: string;
+    slotWindowLabel: string;
+    corridorName: string;
+    trafficCondition: 'HEAVY_CONGESTION' | 'MODERATE_FLOW' | 'FREE_FLOW';
+    avgCorridorSpeedKmh: number;
+    distanceToPortKm: number;
+    drivingEtaMinutes: number;
+    gateQueueWaitMinutes: number;
+    totalEtaMinutes: number;
+    predictedGateArrivalIso: string;
+    predictedGateArrivalLabel: string;
+    slotBufferMinutes: number;
+    willMissSlot: boolean;
+    slotRiskStatus: 'SLOT_MISS_RISK' | 'TIGHT_BUFFER' | 'ON_TIME';
+    recommendation: string;
+  };
 }
 
 interface MappedVehicle {
@@ -338,6 +378,54 @@ export default function DrayageAssignmentPage() {
       showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
     } finally {
       setTogglingAutoL2(false);
+    }
+  };
+
+  const handleRebookJobPcsSlot = async (jobId: string) => {
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rebook_pcs_slot',
+          jobId,
+          actor: 'Port Slot Risk Intelligence',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to rebook PCS slot');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        `🔄 Auto-Rebooked PCS Token ${data.tokenNumber} for ${data.jobCode} · New Gate Slot: ${data.slotWindowLabel}!`,
+      );
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error rebooking PCS slot');
+    }
+  };
+
+  const handleSwapJobRescueTractor = async (jobId: string) => {
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'swap_slot_rescue_tractor',
+          jobId,
+          actor: 'Port Slot Risk Intelligence',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to swap rescue tractor');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        `🚛 Swapped ${data.jobCode} to nearer Prime Mover ${data.vehiclePlate} (${data.driverName} · ${data.matchScorePct}% 4-Factor Match)!`,
+      );
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error swapping rescue tractor');
     }
   };
 
@@ -759,13 +847,21 @@ export default function DrayageAssignmentPage() {
     return finalStreetTurns;
   }, [jobs, unassignedJobs, warehouses, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
-  // High Demurrage Risk Jobs
+  // High Demurrage, Line Detention (<24h) & Port Slot Miss Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
-    return unassignedJobs.filter((j) => {
+    return jobs.filter((j) => {
+      if (['COMPLETED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'STREET_TURNED', 'CANCELLED'].includes(j.status)) {
+        return false;
+      }
       const r = getDemurrageRisk(j);
-      return r.level === 'CRITICAL' || r.level === 'EXPIRED';
+      return (
+        Boolean(j.riskRadar?.within24hPenaltyWindow) ||
+        Boolean(j.portSlotPrediction?.willMissSlot) ||
+        r.level === 'CRITICAL' ||
+        r.level === 'EXPIRED'
+      );
     });
-  }, [unassignedJobs, getDemurrageRisk]);
+  }, [jobs, getDemurrageRisk]);
 
   // =========================================================================
   // FLEET DATA GRID (SMART DATA TABLE) COLUMNS
@@ -2131,43 +2227,128 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 3. Urgent Demurrage Risk View */}
-            {smartAnalysisFilter === 'DEMURRAGE' &&
+            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View */}
+            {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'DEMURRAGE') &&
               urgentDemurrageJobs.map((job) => {
                 const risk = getDemurrageRisk(job);
+                const radar = job.riskRadar;
+                const slotPred = job.portSlotPrediction;
                 return (
                   <div
-                    key={job.id}
+                    key={`RISK-${job.id}`}
                     className="rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 p-4 space-y-3 flex flex-col justify-between shadow-sm"
                   >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                          {risk.badgeText}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+                          {radar?.within24hPenaltyWindow
+                            ? '🚨 CRITICAL <24H FREE-TIME RADAR'
+                            : slotPred?.willMissSlot
+                            ? `⏱️ PORT SLOT MISS (${Math.abs(slotPred.slotBufferMinutes)}M LATE)`
+                            : risk.badgeText}
                         </span>
                         <span className="font-mono text-xs font-bold text-rose-400">{job.jobCode}</span>
                       </div>
 
-                      <div className="text-xs space-y-1">
-                        <div className="font-bold font-mono text-[var(--text-main)] text-sm">
-                          {job.containerNumber} ({job.containerSize})
+                      <div className="text-xs space-y-0.5">
+                        <div className="font-bold font-mono text-[var(--text-main)] text-sm flex items-center justify-between">
+                          <span>{job.containerNumber} ({job.containerSize} · {job.containerType})</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-sans font-bold">
+                            PRIORITY: CRITICAL
+                          </span>
                         </div>
-                        <div className="text-[var(--text-muted)]">
+                        <div className="text-[11px] text-[var(--text-muted)] truncate">
                           {job.customerName} · {job.terminalName} ➔ {job.warehouseName}
                         </div>
-                        <div className="text-[11px] text-amber-300 font-semibold">
-                          Estimated Penalty Risk: AED 450/day if delayed
-                        </div>
                       </div>
+
+                      {/* Demurrage & Free-Time Countdown Radar (3 Columns) */}
+                      {radar && (
+                        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                            <span className="text-[9px] text-[var(--text-muted)] block">Port Demurrage</span>
+                            <strong className={`font-mono ${radar.portDemurrageHoursRemaining <= 24 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {radar.portDemurrageHoursRemaining <= 0
+                                ? `Overdue`
+                                : `${radar.portDemurrageHoursRemaining}h left`}
+                            </strong>
+                            <span className="block text-[9px] text-[var(--text-muted)]">
+                              AED {radar.portDailyDemurrageAed}/d
+                            </span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                            <span className="text-[9px] text-[var(--text-muted)] block">Line Detention</span>
+                            <strong className={`font-mono ${radar.lineDetentionHoursRemaining <= 24 ? 'text-rose-400' : 'text-amber-400'}`}>
+                              {radar.lineDetentionHoursRemaining <= 0
+                                ? `Overdue`
+                                : `${radar.lineDetentionHoursRemaining}h left`}
+                            </strong>
+                            <span className="block text-[9px] text-[var(--text-muted)]">
+                              AED {radar.lineDailyDetentionAed}/d
+                            </span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                            <span className="text-[9px] text-[var(--text-muted)] block">DO Expiry</span>
+                            <strong className={`font-mono ${radar.doHoursRemaining <= 24 ? 'text-rose-400' : 'text-blue-400'}`}>
+                              {radar.doHoursRemaining <= 0 ? 'Expired' : `${radar.doHoursRemaining}h left`}
+                            </strong>
+                            <span className="block text-[9px] text-[var(--text-muted)]">
+                              {new Date(radar.doExpiryDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Port Appointment Window & Gate Queue Predictor */}
+                      {slotPred && (
+                        <div
+                          className={`p-2 rounded-lg border text-[10px] space-y-1 ${
+                            slotPred.willMissSlot
+                              ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                              : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between font-bold">
+                            <span>Gate Slot: {slotPred.slotWindowLabel}</span>
+                            <span className={slotPred.willMissSlot ? 'text-rose-400' : 'text-emerald-400'}>
+                              ETA: {slotPred.predictedGateArrivalLabel} ({slotPred.willMissSlot ? `${Math.abs(slotPred.slotBufferMinutes)}m Late` : `+${slotPred.slotBufferMinutes}m Buffer`})
+                            </span>
+                          </div>
+                          <div className="text-[9px] opacity-90">
+                            {slotPred.corridorName} · {slotPred.distanceToPortKm}km @ {slotPred.avgCorridorSpeedKmh}km/h + {slotPred.gateQueueWaitMinutes}m Gate Queue
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-2 border-t border-[var(--border-subtle)]">
+                    <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleRebookJobPcsSlot(job.id)}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-bold hover:bg-amber-400 transition-colors shadow-sm"
+                          title="Auto-rebook DP World / AD Ports PCS token to next 2-hour window matching live E11/E311 ETA"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Auto-Rebook Token
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSwapJobRescueTractor(job.id)}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                          title="Swap to nearest available tractor via 4-Factor Telematics to rescue port slot"
+                        >
+                          <Truck className="w-3 h-3" />
+                          Swap Tractor (4-Factor)
+                        </button>
+                      </div>
                       <button
+                        type="button"
                         onClick={() => handleOpenAssign(job)}
                         className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 transition-colors shadow-sm"
                       >
                         <AlertCircle className="w-3.5 h-3.5" />
-                        Prioritize & Assign Now
+                        Prioritize & Custom Assign
                       </button>
                     </div>
                   </div>
