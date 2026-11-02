@@ -36,7 +36,13 @@ export async function GET(req: NextRequest) {
         const customerType = searchParams.get('customerType');
         const search       = searchParams.get('search');
 
-        let whereClause = `WHERE c.deleted_at IS NULL`;
+        // Clean up any legacy Drayage Client rows (`cli-%`) that were previously mirrored into `customers`
+        await tx.$executeRawUnsafe(
+          `DELETE FROM customers WHERE tenant_id = $1 AND id LIKE 'cli-%'`,
+          tenantId,
+        ).catch(() => {});
+
+        let whereClause = `WHERE c.deleted_at IS NULL AND c.id NOT LIKE 'cli-%'`;
         if (status)       whereClause += ` AND c.status = '${status.replace(/'/g,"''")}'`;
         if (customerType) whereClause += ` AND c.customer_type = '${customerType.replace(/'/g,"''")}'`;
         if (search) {
@@ -299,31 +305,6 @@ export async function POST(req: NextRequest) {
             await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_create_lessee`).catch(() => {});
             console.warn('Could not auto-create lessee:', e);
           }
-        }
-
-        // Also mirror into logistics_drayage_clients if that table exists so Drayage Client Master stays unified
-        await tx.$executeRawUnsafe(`SAVEPOINT sp_mirror_drayage_client`);
-        try {
-          await tx.$executeRawUnsafe(
-            `INSERT INTO logistics_drayage_clients (
-              id, tenant_id, name, code, contact_person, contact_no, street_address, city,
-              trn, trade_license, default_trip_amount_aed, default_driver_allowance_aed, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1550,150,NOW())
-            ON CONFLICT (id) DO NOTHING`,
-            id,
-            tenantId,
-            String(body.nameEn).trim(),
-            String(body.customerCode || 'CUST'),
-            body.contactPerson ? String(body.contactPerson).trim() : null,
-            body.mobileNumber ? String(body.mobileNumber).trim() : null,
-            body.addressLine1 ? String(body.addressLine1).trim() : null,
-            body.city ? String(body.city).trim() : 'Dubai',
-            body.taxRegistrationNumber ? String(body.taxRegistrationNumber).trim() : null,
-            body.tradeLicense ? String(body.tradeLicense).trim() : null,
-          );
-          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_mirror_drayage_client`);
-        } catch {
-          await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_mirror_drayage_client`).catch(() => {});
         }
 
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${id}'`);

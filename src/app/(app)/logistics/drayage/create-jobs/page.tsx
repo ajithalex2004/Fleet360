@@ -173,22 +173,11 @@ export default function DrayageCreateJobsPage() {
         setLoading(true);
       }
       const data = await fetchDrayageWorkspaceCached({ forceFresh });
-      const rawCustomers: CustomerOption[] = Array.isArray(data?.customers) ? data.customers : [];
+      const rawCustomers: CustomerOption[] = Array.isArray(data?.customers)
+        ? data.customers.filter((c: CustomerOption) => !String(c?.id || '').startsWith('cli-'))
+        : [];
       const rawClients: DrayageClientOption[] = Array.isArray(data?.clients) ? data.clients : [];
-      // Merge Customer Master and Drayage Client Master (deduplicated by ID and case-insensitive name)
-      const seenIds = new Set(rawCustomers.map((c) => c.id));
-      const seenNames = new Set(rawCustomers.map((c) => c.name.trim().toLowerCase()));
-      const mergedCustomers: CustomerOption[] = [...rawCustomers];
-      for (const cli of rawClients) {
-        if (!cli?.id || !cli?.name) continue;
-        const normName = cli.name.trim().toLowerCase();
-        if (!seenIds.has(cli.id) && !seenNames.has(normName)) {
-          seenIds.add(cli.id);
-          seenNames.add(normName);
-          mergedCustomers.push({ id: cli.id, name: cli.name });
-        }
-      }
-      setCustomers(mergedCustomers);
+      setCustomers(rawCustomers);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
       setClients(rawClients);
@@ -208,7 +197,12 @@ export default function DrayageCreateJobsPage() {
   // Auto-populate Contract Rate and Driver Allowance from Warehouse Master or Client Master when selected
   useEffect(() => {
     const wh = warehouses.find((w) => w.id === selectedWarehouseId);
-    const cli = clients.find((c) => c.id === selectedCustomerId);
+    const cli = clients.find(
+      (c) =>
+        c.id === selectedWarehouseId ||
+        (wh?.customerId && c.id === wh.customerId) ||
+        (wh?.customerName && c.name.trim().toLowerCase() === wh.customerName.trim().toLowerCase()),
+    );
     if (wh && Number(wh.tripAmountAed) > 0) {
       setRateAmountAed(Number(wh.tripAmountAed));
     } else if (cli && Number(cli.defaultTripAmountAed) > 0) {
@@ -219,7 +213,7 @@ export default function DrayageCreateJobsPage() {
     } else if (cli && Number(cli.defaultDriverAllowanceAed) > 0) {
       setDriverAllowanceAed(Number(cli.defaultDriverAllowanceAed));
     }
-  }, [selectedWarehouseId, selectedCustomerId, warehouses, clients]);
+  }, [selectedWarehouseId, warehouses, clients]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -555,14 +549,14 @@ export default function DrayageCreateJobsPage() {
       return;
     }
 
-    const custObj =
-      customers.find((c) => c.id === selectedCustomerId) ||
-      clients.find((c) => c.id === selectedCustomerId);
+    const custObj = customers.find((c) => c.id === selectedCustomerId);
     const termObj = terminals.find((t) => t.id === selectedTerminalId);
-    const whObj = warehouses.find((w) => w.id === selectedWarehouseId);
+    const whObj =
+      warehouses.find((w) => w.id === selectedWarehouseId) ||
+      clients.find((c) => c.id === selectedWarehouseId);
 
     if (!custObj?.name?.trim()) {
-      showToast('error', 'Please select a Consignor / Customer before creating jobs');
+      showToast('error', 'Please select a Customer (Consignor/Shipper) before creating jobs');
       return;
     }
     if (!termObj?.name?.trim()) {
@@ -570,7 +564,7 @@ export default function DrayageCreateJobsPage() {
       return;
     }
     if (!whObj?.name?.trim()) {
-      showToast('error', 'Please select a Consignee Destination Warehouse before creating jobs');
+      showToast('error', 'Please select a Consignee (Client/End User) before creating jobs');
       return;
     }
 
@@ -638,7 +632,7 @@ export default function DrayageCreateJobsPage() {
     return customers.map((c) => ({
       value: c.id,
       label: c.name,
-      sublabel: 'Consignor / Merchant Account',
+      sublabel: 'Customer (Consignor / Shipper)',
     }));
   }, [customers]);
 
@@ -651,21 +645,47 @@ export default function DrayageCreateJobsPage() {
   }, [terminals]);
 
   const warehouseOptions = useMemo<SearchableSelectOption[]>(() => {
-    const selCustName = customers.find((c) => c.id === selectedCustomerId)?.name || 'Selected Consignor';
-    return warehouses.map((w) => {
-      const isMapped = Boolean(w.customerId && w.customerId === selectedCustomerId);
+    const whItems: SearchableSelectOption[] = warehouses.map((w) => {
+      const hasClientName =
+        w.customerName &&
+        w.customerName !== 'Enterprise Shipper' &&
+        w.customerName !== 'General / Shared Hub';
       return {
         value: w.id,
-        label: `${w.name} (${w.zone})`,
-        group: isMapped ? `Mapped Consignee Hubs for ${selCustName}` : `Other Consignee Facilities & Shared Hubs`,
-        sublabel:
-          w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub'
-            ? `Linked to ${w.customerName}`
-            : undefined,
+        label: hasClientName ? `${w.customerName} — ${w.name} (${w.zone})` : `${w.name} (${w.zone})`,
+        group: 'Consignee Facilities & Client Warehouses',
+        sublabel: hasClientName ? `Client: ${w.customerName} • Facility: ${w.name}` : w.zone,
         badge: w.zone,
       };
     });
-  }, [warehouses, selectedCustomerId, customers]);
+
+    const clientIdsWithWarehouse = new Set(
+      warehouses.map((w) => w.customerId).filter(Boolean),
+    );
+    const clientNamesWithWarehouse = new Set(
+      warehouses
+        .map((w) => (w.customerName || '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    for (const cli of clients) {
+      if (!cli?.id || !cli?.name) continue;
+      const normName = cli.name.trim().toLowerCase();
+      if (!clientIdsWithWarehouse.has(cli.id) && !clientNamesWithWarehouse.has(normName)) {
+        whItems.push({
+          value: cli.id,
+          label: `${cli.name}${cli.city ? ` (${cli.city})` : ''}`,
+          group: 'Registered Clients (Client Master)',
+          sublabel: cli.streetAddress
+            ? `Client Master • ${cli.streetAddress}`
+            : `Client Master • Code: ${cli.code || 'CLIENT'}`,
+          badge: cli.city || 'Dubai',
+        });
+      }
+    }
+
+    return whItems;
+  }, [warehouses, clients]);
 
   return (
     <div className="space-y-6">
@@ -923,27 +943,23 @@ export default function DrayageCreateJobsPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* 1. Consignor (Customer / Shipper) */}
+                {/* 1. Customer (Consignor/Shipper) */}
                 <div className="space-y-1.5">
                   <label className="font-semibold text-[var(--text-main)] block">
-                    Consignor <span className="font-normal text-[var(--text-muted)]">(Customer / Shipper)</span>
+                    Customer <span className="font-normal text-[var(--text-muted)]">(Consignor/Shipper)</span>
                   </label>
                   <SearchableSelect
                     value={selectedCustomerId}
                     onChange={(newCustId) => {
                       setSelectedCustomerId(newCustId);
-                      const firstMapped = warehouses.find((w) => w.customerId === newCustId);
-                      if (firstMapped) {
-                        setSelectedWarehouseId(firstMapped.id);
-                      }
                     }}
                     options={customerOptions}
-                    placeholder="Search or select consignor customer..."
+                    placeholder="Search or select customer (consignor/shipper)..."
                     searchPlaceholder="Type customer name, code..."
                     addonAction={{
                       label: 'New',
                       icon: Plus,
-                      title: 'Create New Consignor Customer',
+                      title: 'Create New Customer (Consignor/Shipper)',
                       variant: 'blue',
                       onClick: () => setShowCustomerModal(true),
                     }}
@@ -966,11 +982,11 @@ export default function DrayageCreateJobsPage() {
                   <p className="text-[10px] text-[var(--text-muted)]">Primary container yard gate-in & discharge facility</p>
                 </div>
 
-                {/* 3. Consignee (Client Destination Warehouse / Facility) */}
+                {/* 3. Consignee (Client/End User) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-[var(--text-main)] block">
-                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client Destination/Facility)</span>
+                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client/End User)</span>
                     </label>
                     <Link
                       href="/logistics/drayage/terminal-map"
@@ -985,20 +1001,20 @@ export default function DrayageCreateJobsPage() {
                     value={selectedWarehouseId}
                     onChange={(newWhId) => setSelectedWarehouseId(newWhId)}
                     options={warehouseOptions}
-                    placeholder="Search destination warehouse or ramp..."
-                    searchPlaceholder="Type warehouse name, JAFZA, DIC..."
+                    placeholder="Search consignee client or facility..."
+                    searchPlaceholder="Type client name, warehouse, JAFZA, DIC..."
                     accent="emerald"
                     addonAction={{
                       label: 'New',
                       icon: Plus,
-                      title: 'Add Consignee Destination',
+                      title: 'Add Consignee (Client/End User)',
                       variant: 'emerald',
                       onClick: () => {
                         setShowWarehouseModal(true);
                       },
                     }}
                   />
-                  <p className="text-[10px] text-[var(--text-muted)]">Consignee offload ramp & electronic POD delivery point</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">Consignee client facility, offload ramp & electronic POD delivery point</p>
                 </div>
               </div>
             </div>
@@ -1517,23 +1533,15 @@ export default function DrayageCreateJobsPage() {
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}
         clients={clients}
-        defaultClientId={selectedCustomerId || null}
+        defaultClientId={null}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli, ...prev]);
-          setCustomers((prev) =>
-            prev.some((c) => c.id === newCli.id || c.name.trim().toLowerCase() === newCli.name.trim().toLowerCase())
-              ? prev
-              : [{ id: newCli.id, name: newCli.name }, ...prev],
-          );
         }}
         onSaved={async (savedWh) => {
           invalidateDrayageClientCache();
           await loadMasters(true);
           if (savedWh.id) {
             setSelectedWarehouseId(savedWh.id);
-          }
-          if (savedWh.customerId) {
-            setSelectedCustomerId(savedWh.customerId);
           }
           if (savedWh.tripAmountAed) {
             setRateAmountAed(savedWh.tripAmountAed);

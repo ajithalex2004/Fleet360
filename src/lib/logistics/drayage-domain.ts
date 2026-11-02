@@ -1091,6 +1091,16 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     tenantId,
   ).catch(() => {});
 
+  // Clean up any legacy cross-mirrored rows between customers (Consignors/Shippers) and logistics_drayage_clients (Clients/End Users)
+  await db.$executeRawUnsafe(
+    `DELETE FROM customers WHERE tenant_id = $1 AND id LIKE 'cli-%'`,
+    tenantId,
+  ).catch(() => {});
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_clients WHERE tenant_id = $1 AND id NOT LIKE 'cli-%' AND id IN (SELECT id FROM customers WHERE tenant_id = $1)`,
+    tenantId,
+  ).catch(() => {});
+
   seededTenants.add(tenantId);
 }
 
@@ -1203,6 +1213,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
          FROM customers
         WHERE tenant_id = $1
           AND deleted_at IS NULL
+          AND id NOT LIKE 'cli-%'
         ORDER BY name_en ASC
         LIMIT 60`,
       tenantId,
@@ -1548,11 +1559,11 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     };
   });
 
-  // 8. Mapped Fleet360 Customers (from `customers` table + merged with `logistics_drayage_clients`)
+  // 8. Mapped Fleet360 Customers (strictly from `customers` table — Consignors / Shippers only)
   const customers: MappedFleetCustomer[] = rawCustomers.map((c: Record<string, unknown>) => ({
     id: String(c.id),
     customerCode: c.customer_code ? String(c.customer_code) : null,
-    name: String(c.name_en ?? 'Enterprise Client'),
+    name: String(c.name_en ?? 'Enterprise Shipper'),
     nameAr: c.name_ar ? String(c.name_ar) : null,
     customerType: String(c.customer_type ?? 'CORPORATE'),
     email: c.email ? String(c.email) : null,
@@ -1560,26 +1571,6 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     city: c.city ? String(c.city) : 'Dubai',
     tradeLicense: c.trade_license ? String(c.trade_license) : null,
   }));
-  const seenCustIds = new Set(customers.map((c) => c.id));
-  const seenCustNames = new Set(customers.map((c) => c.name.trim().toLowerCase()));
-  for (const cli of clients) {
-    const normName = cli.name.trim().toLowerCase();
-    if (!seenCustIds.has(cli.id) && !seenCustNames.has(normName)) {
-      seenCustIds.add(cli.id);
-      seenCustNames.add(normName);
-      customers.push({
-        id: cli.id,
-        customerCode: cli.code || null,
-        name: cli.name,
-        nameAr: null,
-        customerType: 'CORPORATE',
-        email: null,
-        phone: cli.contactNo || null,
-        city: cli.city || 'Dubai',
-        tradeLicense: cli.tradeLicense || null,
-      });
-    }
-  }
 
   // 9. Driver Allowances
   const allowances: DrayageDriverAllowance[] = allowanceRows.map((a: Record<string, unknown>) => ({

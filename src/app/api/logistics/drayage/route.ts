@@ -814,41 +814,6 @@ export async function POST(req: NextRequest) {
             notes,
           );
 
-          // Mirror into customers table as well so Customer Master and Drayage Client Master stay unified
-          await tx.$executeRawUnsafe(`SAVEPOINT sp_mirror_customer`);
-          try {
-            await tx.$executeRawUnsafe(
-              `INSERT INTO customers (
-                id, tenant_id, created_at, updated_at, customer_code, customer_type,
-                name_en, contact_person, mobile_number, address_line1, city, country,
-                tax_registration_number, trade_license, status
-              ) VALUES ($1,$2,NOW(),NOW(),$3,'CORPORATE',$4,$5,$6,$7,$8,'UAE',$9,$10,'ACTIVE')
-              ON CONFLICT (id) DO UPDATE
-                 SET name_en = EXCLUDED.name_en,
-                     customer_code = EXCLUDED.customer_code,
-                     contact_person = EXCLUDED.contact_person,
-                     mobile_number = EXCLUDED.mobile_number,
-                     address_line1 = EXCLUDED.address_line1,
-                     city = EXCLUDED.city,
-                     tax_registration_number = EXCLUDED.tax_registration_number,
-                     trade_license = EXCLUDED.trade_license,
-                     updated_at = NOW()`,
-              id,
-              tenantId,
-              code,
-              name,
-              contactPerson,
-              contactNo,
-              streetAddress,
-              city,
-              trn,
-              tradeLicense,
-            );
-            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_mirror_customer`);
-          } catch {
-            await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_mirror_customer`).catch(() => {});
-          }
-
           return { ok: true, id };
         }
 

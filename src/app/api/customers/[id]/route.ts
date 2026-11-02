@@ -147,42 +147,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       await tx.$executeRawUnsafe(`UPDATE customers SET ${sets.join(', ')} WHERE id = '${params.id}'`);
 
-      // Mirror key fields to logistics_drayage_clients inside a SAVEPOINT so Drayage Client Master stays unified
-      await tx.$executeRawUnsafe(`SAVEPOINT sp_sync_drayage_client`);
-      try {
-        const updatedRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-          `SELECT * FROM customers WHERE id = $1 LIMIT 1`,
-          params.id,
-        );
-        const c = updatedRows[0];
-        if (c) {
-          await tx.$executeRawUnsafe(
-            `UPDATE logistics_drayage_clients
-                SET name = COALESCE($1, name),
-                    contact_person = $2,
-                    contact_no = $3,
-                    street_address = $4,
-                    city = COALESCE($5, city),
-                    trn = $6,
-                    trade_license = $7,
-                    updated_at = NOW()
-              WHERE id = $8 AND tenant_id = $9`,
-            c.name_en ? String(c.name_en) : null,
-            c.contact_person ? String(c.contact_person) : null,
-            c.mobile_number ? String(c.mobile_number) : null,
-            c.address_line1 ? String(c.address_line1) : null,
-            c.city ? String(c.city) : null,
-            c.tax_registration_number ? String(c.tax_registration_number) : null,
-            c.trade_license ? String(c.trade_license) : null,
-            params.id,
-            tenantId,
-          );
-        }
-        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_sync_drayage_client`);
-      } catch {
-        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_sync_drayage_client`).catch(() => {});
-      }
-
       const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${params.id}'`);
       return NextResponse.json((rows as any[])[0]);
     } catch (e) {
