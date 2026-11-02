@@ -165,7 +165,7 @@ export default function DrayageContainersPage() {
           warehouseName,
           doExpiryDate,
           dischargeDate,
-          sealNumber: sealNumber || `SL-${Math.floor(100000 + Math.random() * 900000)}`,
+          sealNumber: sealNumber || '',
           weightKg: Number(weightKg),
           customsInspection,
           municipalityInspection,

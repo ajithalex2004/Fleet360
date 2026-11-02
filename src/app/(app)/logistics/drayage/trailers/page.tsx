@@ -124,7 +124,7 @@ export default function DrayageTrailersPage() {
   const [capacityTons, setCapacityTons] = useState(45);
   const [masterStatus, setMasterStatus] = useState<'AVAILABLE' | 'IN_USE' | 'MAINTENANCE'>('AVAILABLE');
   const [operationalStatus, setOperationalStatus] = useState('EMPTY');
-  const [currentLocation, setCurrentLocation] = useState('Jebel Ali Main Yard');
+  const [currentLocation, setCurrentLocation] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);

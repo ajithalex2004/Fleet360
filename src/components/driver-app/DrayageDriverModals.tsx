@@ -73,7 +73,7 @@ export function ContainerScannerModal({
   onConfirmScan: (scan: VerifiedContainerScan) => void;
 }) {
   const [containerInput, setContainerInput] = useState(expectedContainerNumber || '');
-  const [sealInput, setSealInput] = useState(initialSealNumber || `SL-DPW-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [sealInput, setSealInput] = useState(initialSealNumber || '');
   const [scanPhotoName, setScanPhotoName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 

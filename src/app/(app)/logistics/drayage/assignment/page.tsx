@@ -1376,7 +1376,7 @@ export default function DrayageAssignmentPage() {
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
-    setTokenInput(`DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`);
+    setTokenInput(combo.job1.tokenNumber || '');
   };
 
   const handleSwapBogieSequence = () => {
@@ -1397,7 +1397,7 @@ export default function DrayageAssignmentPage() {
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
-    setTokenInput(`DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`);
+    setTokenInput(pair.inboundJob.tokenNumber || '');
   };
 
   // Open modal for single job — clear fields so previous action values never pre-populate on Assign / Reassign
@@ -1431,7 +1431,7 @@ export default function DrayageAssignmentPage() {
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
-    setTokenInput(`DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`);
+    setTokenInput(firstJob.tokenNumber || '');
   };
 
   // Confirm single / bogie assignment modal
@@ -1602,7 +1602,7 @@ export default function DrayageAssignmentPage() {
 
       const { veh, drv, score: topScored } = best;
       const tr = availT.shift()!;
-      const token = `DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`;
+      const token = st.inboundJob.tokenNumber || '';
 
       assignedIds.add(st.inboundJob.id);
       assignedIds.add(st.outboundJob.id);
@@ -1646,7 +1646,7 @@ export default function DrayageAssignmentPage() {
       // For 2x20FT Bogie, match 40FT/45FT Flatbed or Skeletal chassis
       const trIdx = availT.findIndex((t) => t.trailerType.includes('FLATBED') || t.trailerType.includes('40FT') || !t.trailerType.includes('20FT'));
       const tr = trIdx >= 0 ? availT.splice(trIdx, 1)[0] : availT.shift()!;
-      const token = `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`;
+      const token = bg.job1.tokenNumber || '';
 
       assignedIds.add(bg.job1.id);
       assignedIds.add(bg.job2.id);
@@ -1697,7 +1697,7 @@ export default function DrayageAssignmentPage() {
         trIdx = availT.findIndex((t) => (t.trailerType.includes('40FT') || t.trailerType.includes('45FT')) && !t.trailerType.includes('REEFER'));
       }
       const tr = trIdx >= 0 ? availT.splice(trIdx, 1)[0] : availT.shift()!;
-      const token = `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
+      const token = job.tokenNumber || '';
       const risk = getDemurrageRisk(job);
       const tas = getTasSlotWindow(job);
 
@@ -3002,18 +3002,7 @@ export default function DrayageAssignmentPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="font-semibold text-[var(--text-muted)]">Port Gate Token / Appointment Code</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const term = (assigningJob?.terminalName || '').toUpperCase();
-                      const prefix = term.includes('KHALIFA') ? 'ATLP-KP' : term.includes('TERMINAL 2') ? 'DPW-T2' : 'DPW-T1';
-                      setTokenInput(`${prefix}-${Math.floor(100000 + Math.random() * 900000)}`);
-                    }}
-                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1"
-                  >
-                    <Key className="w-3 h-3" />
-                    ⚡ Auto-Generate PCS Token
-                  </button>
+
                 </div>
                 <input
                   type="text"

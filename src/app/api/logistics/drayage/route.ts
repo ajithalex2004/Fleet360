@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
                 driverName: String(body.driverName ?? 'Assigned Driver'),
                 trailerId: String(body.trailerId),
                 trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
-                tokenNumber: String(body.tokenNumber || `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}`),
+                tokenNumber: String(body.tokenNumber ?? ''),
               });
             }
           }
@@ -277,7 +277,7 @@ export async function POST(req: NextRequest) {
             const jobIds = Array.isArray(d.jobIds) ? d.jobIds.map(String) : [];
             if (jobIds.length === 0) continue;
 
-            const token = d.tokenNumber || (d.type === 'BOGIE' ? `DPW-BG-${Math.floor(1000 + Math.random() * 9000)}` : `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`);
+            const token = String(d.tokenNumber ?? '');
 
             for (const jId of jobIds) {
               const noteText = d.notes || (d.type === 'BOGIE' ? `Dual-20FT Bogie Combo (${token})` : d.type === 'STREET_TURN' ? `Terminal Street Turn Pair (${token})` : undefined);
@@ -457,7 +457,7 @@ export async function POST(req: NextRequest) {
               String(item.warehouseName ?? 'JAFZA South Bonded Fulfillment Hub (Gate 5)'),
               doExp,
               disch,
-              String(item.sealNumber ?? `SL-${Math.floor(100000 + Math.random() * 900000)}`),
+              item.sealNumber ? String(item.sealNumber).trim() : null,
               Number(item.weightKg ?? 22000),
               Boolean(item.customsInspection),
               Boolean(item.municipalityInspection),

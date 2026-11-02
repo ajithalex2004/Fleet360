@@ -219,7 +219,7 @@ export default function DrayageJobTrackingPage() {
   const [legType, setLegType] = useState('CUSTOMS_INSPECTION');
   const [legPickup, setLegPickup] = useState('');
   const [legDropoff, setLegDropoff] = useState('');
-  const [legRate, setLegRate] = useState(250);
+  const [legRate, setLegRate] = useState(0);
   const [submittingLeg, setSubmittingLeg] = useState(false);
 
   // Chat input
@@ -237,8 +237,8 @@ export default function DrayageJobTrackingPage() {
   const [togglingAutoL2, setTogglingAutoL2] = useState(false);
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
   const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [customerWhatsAppInput, setCustomerWhatsAppInput] = useState('+971 50 482 9104');
-  const [customerEmailInput, setCustomerEmailInput] = useState('logistics-ops@shipper.ae');
+  const [customerWhatsAppInput, setCustomerWhatsAppInput] = useState('');
+  const [customerEmailInput, setCustomerEmailInput] = useState('');
   const [customerAutoAlerts, setCustomerAutoAlerts] = useState(true);
   const [sendingCustomerAlert, setSendingCustomerAlert] = useState(false);
   const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);

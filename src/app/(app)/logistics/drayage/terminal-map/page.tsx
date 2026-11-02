@@ -177,14 +177,14 @@ export default function DrayageTerminalMapPage() {
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null);
   const [termName, setTermName] = useState('');
   const [termCode, setTermCode] = useState('');
-  const [termPortName, setTermPortName] = useState('Jebel Ali Port');
+  const [termPortName, setTermPortName] = useState('');
   const [termEmirate, setTermEmirate] = useState('Dubai');
   const [termLat, setTermLat] = useState(25.0112);
   const [termLng, setTermLng] = useState(55.0612);
   const [termRadius, setTermRadius] = useState(1500);
   const [termFreeDry, setTermFreeDry] = useState(5);
   const [termFreeReefer, setTermFreeReefer] = useState(3);
-  const [termOperatingHours, setTermOperatingHours] = useState('24/7 Gate Operations');
+  const [termOperatingHours, setTermOperatingHours] = useState('');
   const [submittingTerm, setSubmittingTerm] = useState(false);
 
   // Warehouse Modal State (Add / Edit)
