@@ -181,7 +181,9 @@ export default function DrayageTerminalMapPage() {
   const [termEmirate, setTermEmirate] = useState('Dubai');
   const [termLat, setTermLat] = useState(25.0112);
   const [termLng, setTermLng] = useState(55.0612);
+  const [termGeofenceType, setTermGeofenceType] = useState<'CIRCLE' | 'POLYGON'>('CIRCLE');
   const [termRadius, setTermRadius] = useState(1500);
+  const [termPolygonCoords, setTermPolygonCoords] = useState<Array<{ lat: number; lng: number }>>([]);
   const [termFreeDry, setTermFreeDry] = useState(5);
   const [termFreeReefer, setTermFreeReefer] = useState(3);
   const [termOperatingHours, setTermOperatingHours] = useState('');
@@ -270,7 +272,9 @@ export default function DrayageTerminalMapPage() {
     setTermEmirate('Dubai');
     setTermLat(25.0112);
     setTermLng(55.0612);
+    setTermGeofenceType('CIRCLE');
     setTermRadius(1500);
+    setTermPolygonCoords([]);
     setTermFreeDry(5);
     setTermFreeReefer(3);
     setTermOperatingHours('24/7 Gate Operations');
@@ -279,6 +283,16 @@ export default function DrayageTerminalMapPage() {
   };
 
   const handleOpenEditTerminal = (t: DrayageTerminal) => {
+    const matchingGf = geofences.find((g) => g.terminalId === t.id) || geofences.find((g) => g.terminalName === t.name);
+    const isPoly = matchingGf?.type === 'POLYGON' || t.geofenceRadiusMeters === 0;
+    let parsedCoords: Array<{ lat: number; lng: number }> = [];
+    if (matchingGf?.coordinatesJson) {
+      try {
+        const parsed = JSON.parse(matchingGf.coordinatesJson);
+        if (Array.isArray(parsed)) parsedCoords = parsed;
+      } catch {}
+    }
+
     setEditingTerminalId(t.id);
     setTermName(t.name);
     setTermCode(t.code);
@@ -286,14 +300,15 @@ export default function DrayageTerminalMapPage() {
     setTermEmirate(t.emirate);
     setTermLat(t.lat);
     setTermLng(t.lng);
-    setTermRadius(t.geofenceRadiusMeters);
+    setTermGeofenceType(isPoly ? 'POLYGON' : 'CIRCLE');
+    setTermRadius(isPoly ? 0 : (t.geofenceRadiusMeters || matchingGf?.radiusMeters || 1500));
+    setTermPolygonCoords(isPoly ? parsedCoords : []);
     setTermFreeDry(t.freeDaysDry);
     setTermFreeReefer(t.freeDaysReefer);
     setTermOperatingHours(t.operatingHours);
     setShowTerminalModal(true);
 
     // Map automatically points to that particular geofence / terminal location
-    const matchingGf = geofences.find((g) => g.terminalId === t.id) || geofences.find((g) => g.terminalName === t.name);
     const targetLat = matchingGf ? matchingGf.centerLat : t.lat;
     const targetLng = matchingGf ? matchingGf.centerLng : t.lng;
     setFocusMapLocation({ lat: targetLat, lng: targetLng, zoom: 14.5, title: t.name });
@@ -313,6 +328,7 @@ export default function DrayageTerminalMapPage() {
 
     try {
       setSubmittingTerm(true);
+      const effectiveRadius = termGeofenceType === 'POLYGON' ? 0 : Number(termRadius);
       const res = await fetch('/api/logistics/drayage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -325,7 +341,9 @@ export default function DrayageTerminalMapPage() {
           emirate: termEmirate.trim() || 'Dubai',
           lat: Number(termLat),
           lng: Number(termLng),
-          geofenceRadiusMeters: Number(termRadius),
+          geofenceType: termGeofenceType,
+          geofenceRadiusMeters: effectiveRadius,
+          geofenceCoordinates: termGeofenceType === 'POLYGON' ? termPolygonCoords : [],
           freeDaysDry: Number(termFreeDry),
           freeDaysReefer: Number(termFreeReefer),
           operatingHours: termOperatingHours.trim() || '24/7 Gate Operations',
@@ -395,15 +413,37 @@ export default function DrayageTerminalMapPage() {
       title: termName || 'Terminal Location',
       lat: termLat,
       lng: termLng,
-      radiusMeters: termRadius || 1500,
-      geofenceType: 'CIRCLE',
-      onApply: (res: { lat: number; lng: number; radiusMeters: number; geofenceType: 'CIRCLE' | 'POLYGON' }) => {
+      radiusMeters: termGeofenceType === 'POLYGON' ? 0 : (termRadius || 1500),
+      geofenceType: termGeofenceType,
+      coordinates: termPolygonCoords,
+      onApply: (res: {
+        lat: number;
+        lng: number;
+        radiusMeters: number;
+        geofenceType: 'CIRCLE' | 'POLYGON';
+        coordinates?: Array<{ lat: number; lng: number }>;
+      }) => {
         setTermLat(Number(res.lat.toFixed(6)));
         setTermLng(Number(res.lng.toFixed(6)));
-        setTermRadius(res.radiusMeters || 1500);
+        if (res.geofenceType === 'POLYGON') {
+          setTermGeofenceType('POLYGON');
+          setTermRadius(0);
+          setTermPolygonCoords(res.coordinates || []);
+          showToast(
+            'success',
+            `Polygon geofence plotted: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)} (${res.coordinates?.length || 0} vertices · Radius: 0m)`
+          );
+        } else {
+          setTermGeofenceType('CIRCLE');
+          setTermRadius(res.radiusMeters || 1500);
+          setTermPolygonCoords([]);
+          showToast(
+            'success',
+            `Circle geofence plotted: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)} (${res.radiusMeters || 1500}m)`
+          );
+        }
         setPlotContext(null);
         setShowTerminalModal(true);
-        showToast('success', `Geofence coordinates applied: ${res.lat.toFixed(5)}, ${res.lng.toFixed(5)} (${res.radiusMeters}m)`);
       },
       onCancel: () => {
         setPlotContext(null);
@@ -876,10 +916,22 @@ export default function DrayageTerminalMapPage() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)] text-[10px]">
+                  <div className="grid grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)] text-[10px]">
+                    <div>
+                      <span className="text-[var(--text-muted)] block">Perimeter</span>
+                      <strong className="font-mono text-blue-400">
+                        {(geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name)?.type === 'POLYGON' || t.geofenceRadiusMeters === 0)
+                          ? 'Polygon'
+                          : 'Circle'}
+                      </strong>
+                    </div>
                     <div>
                       <span className="text-[var(--text-muted)] block">Radius</span>
-                      <strong className="font-mono text-[var(--text-main)]">{t.geofenceRadiusMeters}m</strong>
+                      <strong className="font-mono text-[var(--text-main)]">
+                        {(geofences.find((g) => g.terminalId === t.id || g.terminalName === t.name)?.type === 'POLYGON' || t.geofenceRadiusMeters === 0)
+                          ? '0m'
+                          : `${t.geofenceRadiusMeters}m`}
+                      </strong>
                     </div>
                     <div>
                       <span className="text-[var(--text-muted)] block">Dry Free</span>
@@ -927,7 +979,7 @@ export default function DrayageTerminalMapPage() {
               </div>
 
               {/* Coordinates & Technical Specs */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
                   <span className="text-[10px] uppercase text-[var(--text-muted)] block">GPS Coordinates</span>
                   <strong className="font-mono text-[var(--text-main)]">
@@ -935,9 +987,19 @@ export default function DrayageTerminalMapPage() {
                   </strong>
                 </div>
                 <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                  <span className="text-[10px] uppercase text-[var(--text-muted)] block">Geofence Perimeter Type</span>
+                  <strong className="font-mono text-purple-400">
+                    {(geofences.find((g) => g.terminalId === selectedTerminal.id || g.terminalName === selectedTerminal.name)?.type === 'POLYGON' || selectedTerminal.geofenceRadiusMeters === 0)
+                      ? 'Polygon'
+                      : 'Circle'}
+                  </strong>
+                </div>
+                <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
                   <span className="text-[10px] uppercase text-[var(--text-muted)] block">Geofence Radius</span>
                   <strong className="font-mono text-blue-400">
-                    {selectedTerminal.geofenceRadiusMeters.toLocaleString()} Meters
+                    {(geofences.find((g) => g.terminalId === selectedTerminal.id || g.terminalName === selectedTerminal.name)?.type === 'POLYGON' || selectedTerminal.geofenceRadiusMeters === 0)
+                      ? '0 Meters'
+                      : `${selectedTerminal.geofenceRadiusMeters.toLocaleString()} Meters`}
                   </strong>
                 </div>
                 <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
@@ -998,11 +1060,11 @@ export default function DrayageTerminalMapPage() {
                             ? 'bg-purple-500/10 border border-purple-500/20 text-purple-400'
                             : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
                         }`}>
-                          {gf.type === 'POLYGON' ? '⬡ Polygon' : '⚪ Circular'}
+                          {gf.type === 'POLYGON' ? '⬡ Polygon' : '⚪ Circle'}
                         </span>
                       </td>
                       <td className="py-3 px-3 font-mono font-medium">
-                        {gf.type === 'POLYGON' ? 'Custom Bounds' : `${gf.radiusMeters}m`}
+                        {gf.type === 'POLYGON' ? '0m' : `${gf.radiusMeters}m`}
                       </td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -1159,14 +1221,43 @@ export default function DrayageTerminalMapPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Geofence Perimeter Type</label>
+                  <select
+                    value={termGeofenceType}
+                    onChange={(e) => {
+                      const val = e.target.value as 'CIRCLE' | 'POLYGON';
+                      setTermGeofenceType(val);
+                      if (val === 'POLYGON') {
+                        setTermRadius(0);
+                      } else {
+                        setTermRadius((prev) => (prev > 0 ? prev : 1500));
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-blue-500"
+                  >
+                    <option value="CIRCLE">Circle</option>
+                    <option value="POLYGON">Polygon</option>
+                  </select>
+                </div>
                 <div className="space-y-1">
                   <label className="font-semibold text-[var(--text-muted)]">Geofence Radius (m)</label>
                   <input
                     type="number"
-                    value={termRadius}
-                    onChange={(e) => setTermRadius(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                    min={0}
+                    value={termGeofenceType === 'POLYGON' ? 0 : termRadius}
+                    readOnly={termGeofenceType === 'POLYGON'}
+                    onChange={(e) => {
+                      if (termGeofenceType === 'POLYGON') {
+                        setTermRadius(0);
+                      } else {
+                        setTermRadius(Number(e.target.value));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 ${
+                      termGeofenceType === 'POLYGON' ? 'opacity-70 cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
                 <div className="space-y-1">
@@ -1314,23 +1405,41 @@ export default function DrayageTerminalMapPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)]">Geometry Type</label>
+                  <label className="font-semibold text-[var(--text-muted)]">Geofence Perimeter Type</label>
                   <select
                     value={geofenceType}
-                    onChange={(e) => setGeofenceType(e.target.value as Parameters<typeof setGeofenceType>[0])}
+                    onChange={(e) => {
+                      const val = e.target.value as 'CIRCLE' | 'POLYGON';
+                      setGeofenceType(val);
+                      if (val === 'POLYGON') {
+                        setGeofenceRadius(0);
+                      } else {
+                        setGeofenceRadius((prev) => (prev > 0 ? prev : 1500));
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   >
-                    <option value="CIRCLE">Circular Perimeter</option>
-                    <option value="POLYGON">Polygon Ramp Zone</option>
+                    <option value="CIRCLE">Circle</option>
+                    <option value="POLYGON">Polygon</option>
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-semibold text-[var(--text-muted)]">Radius (Meters)</label>
                   <input
                     type="number"
-                    value={geofenceRadius}
-                    onChange={(e) => setGeofenceRadius(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                    min={0}
+                    value={geofenceType === 'POLYGON' ? 0 : geofenceRadius}
+                    readOnly={geofenceType === 'POLYGON'}
+                    onChange={(e) => {
+                      if (geofenceType === 'POLYGON') {
+                        setGeofenceRadius(0);
+                      } else {
+                        setGeofenceRadius(Number(e.target.value));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 ${
+                      geofenceType === 'POLYGON' ? 'opacity-70 cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
               </div>

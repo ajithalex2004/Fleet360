@@ -457,7 +457,7 @@ export default function DrayageGeofenceMap({
       shape: 'POLYGON',
       centerLat: avgLat,
       centerLng: avgLng,
-      radiusMeters: 1000,
+      radiusMeters: 0,
       coordinates: points,
     });
     setDraftName(`Polygon Ramp Zone (${points.length} Vertices)`);
@@ -1144,7 +1144,7 @@ export default function DrayageGeofenceMap({
       plotContext.onApply({
         lat: avgLat,
         lng: avgLng,
-        radiusMeters: 1000,
+        radiusMeters: 0,
         geofenceType: 'POLYGON',
         coordinates: points,
       });

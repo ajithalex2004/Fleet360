@@ -528,6 +528,8 @@ export async function POST(req: NextRequest) {
 
         case 'save_geofence': {
           const id = body.id ? String(body.id) : `gf-${crypto.randomUUID().slice(0, 10)}`;
+          const gfShape = body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
+          const effectiveRadius = gfShape === 'POLYGON' ? 0 : Number(body.radiusMeters ?? 1500);
           const coords = Array.isArray(body.coordinates)
             ? JSON.stringify(body.coordinates)
             : String(body.coordinatesJson ?? '[]');
@@ -549,10 +551,10 @@ export async function POST(req: NextRequest) {
             body.terminalId ? String(body.terminalId) : null,
             String(body.terminalName ?? 'Jebel Ali Port - Terminal 1 (DP World)'),
             String(body.name ?? 'Port Gate Zone'),
-            body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE',
+            gfShape,
             Number(body.centerLat ?? 25.0112),
             Number(body.centerLng ?? 55.0612),
-            Number(body.radiusMeters ?? 1500),
+            effectiveRadius,
             coords,
           );
 
@@ -570,8 +572,8 @@ export async function POST(req: NextRequest) {
                 WHERE (id = $1 OR customer_id = $1) AND tenant_id = $2`,
               String(body.terminalId),
               tenantId,
-              body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE',
-              Number(body.radiusMeters ?? 1000),
+              gfShape,
+              effectiveRadius,
               coords,
               Number(body.centerLat ?? 25.0112),
               Number(body.centerLng ?? 55.0612),
@@ -589,7 +591,7 @@ export async function POST(req: NextRequest) {
               tenantId,
               Number(body.centerLat ?? 25.0112),
               Number(body.centerLng ?? 55.0612),
-              Number(body.radiusMeters ?? 1500),
+              effectiveRadius,
             ).catch(() => {});
           }
 
@@ -617,7 +619,12 @@ export async function POST(req: NextRequest) {
           const termEmirate = String(body.emirate ?? 'Dubai').trim();
           const termLat = Number(body.lat ?? 25.0112);
           const termLng = Number(body.lng ?? 55.0612);
-          const termRadius = Number(body.geofenceRadiusMeters ?? 1500);
+          const termGfType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
+          const termRadius = termGfType === 'POLYGON' ? 0 : Number(body.geofenceRadiusMeters ?? 1500);
+          const hasPolyCoords = Array.isArray(body.geofenceCoordinates) && body.geofenceCoordinates.length >= 3;
+          const coordsJson = hasPolyCoords
+            ? JSON.stringify(body.geofenceCoordinates)
+            : JSON.stringify([{ lat: termLat, lng: termLng }]);
 
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_terminals (
@@ -658,43 +665,71 @@ export async function POST(req: NextRequest) {
           ).catch(() => []);
 
           if (existingGfRows.length > 0) {
-            await tx.$executeRawUnsafe(
-              `UPDATE logistics_drayage_geofences
-                  SET terminal_name = $1,
-                      name = $2,
-                      center_lat = $3,
-                      center_lng = $4,
-                      radius_meters = $5
-                WHERE id = $6 AND tenant_id = $7`,
-              termName,
-              `${termName} Perimeter Geofence`,
-              termLat,
-              termLng,
-              termRadius,
-              existingGfRows[0].id,
-              tenantId,
-            ).catch(() => {});
+            if (hasPolyCoords || termGfType === 'CIRCLE') {
+              await tx.$executeRawUnsafe(
+                `UPDATE logistics_drayage_geofences
+                    SET terminal_name = $1,
+                        name = $2,
+                        type = $3,
+                        center_lat = $4,
+                        center_lng = $5,
+                        radius_meters = $6,
+                        coordinates_json = $7
+                  WHERE id = $8 AND tenant_id = $9`,
+                termName,
+                `${termName} Perimeter Geofence`,
+                termGfType,
+                termLat,
+                termLng,
+                termRadius,
+                coordsJson,
+                existingGfRows[0].id,
+                tenantId,
+              ).catch(() => {});
+            } else {
+              await tx.$executeRawUnsafe(
+                `UPDATE logistics_drayage_geofences
+                    SET terminal_name = $1,
+                        name = $2,
+                        type = $3,
+                        center_lat = $4,
+                        center_lng = $5,
+                        radius_meters = $6
+                  WHERE id = $7 AND tenant_id = $8`,
+                termName,
+                `${termName} Perimeter Geofence`,
+                termGfType,
+                termLat,
+                termLng,
+                termRadius,
+                existingGfRows[0].id,
+                tenantId,
+              ).catch(() => {});
+            }
           } else {
             const gfId = `gf-${id}`;
             await tx.$executeRawUnsafe(
               `INSERT INTO logistics_drayage_geofences (
                 id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
-              ) VALUES ($1,$2,$3,$4,$5,'CIRCLE',$6,$7,$8,$9)
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
               ON CONFLICT (id) DO UPDATE
                  SET terminal_name = EXCLUDED.terminal_name,
                      name = EXCLUDED.name,
+                     type = EXCLUDED.type,
                      center_lat = EXCLUDED.center_lat,
                      center_lng = EXCLUDED.center_lng,
-                     radius_meters = EXCLUDED.radius_meters`,
+                     radius_meters = EXCLUDED.radius_meters,
+                     coordinates_json = EXCLUDED.coordinates_json`,
               gfId,
               tenantId,
               id,
               termName,
               `${termName} Perimeter Geofence`,
+              termGfType,
               termLat,
               termLng,
               termRadius,
-              JSON.stringify([{ lat: termLat, lng: termLng }]),
+              coordsJson,
             ).catch(() => {});
           }
 
