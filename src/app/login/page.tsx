@@ -446,8 +446,11 @@ export default function LoginPage() {
               </div>
 
               <button
-                onClick={() => { window.location.href = '/onboarding'; }}
-                className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/90 hover:border-slate-300 text-slate-700 hover:text-slate-900 text-sm font-semibold rounded-xl transition-all"
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="Self-service organisation onboarding is currently disabled"
+                className="w-full py-2.5 bg-slate-100 border border-slate-200 text-slate-400 text-sm font-semibold rounded-xl cursor-not-allowed opacity-60 select-none"
               >
                 {tLabel('Create your organisation')}
               </button>
