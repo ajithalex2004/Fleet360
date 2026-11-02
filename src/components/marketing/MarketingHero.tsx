@@ -1,187 +1,592 @@
+'use client';
+
+import React, { useState } from 'react';
 import Link from 'next/link';
 import type { HomepageSnapshot } from '@/lib/public-homepage';
-import styles from './MarketingHero.module.css';
 
 const Arrow = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M5 12h13M14 7l5 5-5 5" />
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h13M14 7l5 5-5 5" />
   </svg>
 );
 
-const Brand = () => (
-  <Link className={styles.brand} href="/" aria-label="Fleet360 home">
-    <span>FLEET</span><strong>360</strong>
-  </Link>
-);
-
-function NetworkScene() {
-  return (
-    <div className={styles.scene} aria-hidden="true">
-      <div className={styles.horizon} />
-      <svg className={styles.map} viewBox="0 0 1000 760" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <linearGradient id="route" x1="0" x2="1">
-            <stop offset="0" stopColor="#baff69" stopOpacity="0" />
-            <stop offset=".26" stopColor="#9dff42" />
-            <stop offset="1" stopColor="#e0ff9f" />
-          </linearGradient>
-          <linearGradient id="road" x1="0" y1="0" x2="1" y2="1">
-            <stop stopColor="#82907c" stopOpacity=".03" />
-            <stop offset=".5" stopColor="#b3c6a8" stopOpacity=".34" />
-            <stop offset="1" stopColor="#82907c" stopOpacity=".03" />
-          </linearGradient>
-          <radialGradient id="core">
-            <stop offset="0" stopColor="#d9ffad" />
-            <stop offset=".18" stopColor="#91ff32" />
-            <stop offset="1" stopColor="#91ff32" stopOpacity="0" />
-          </radialGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="6" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <pattern id="blocks" width="54" height="42" patternUnits="userSpaceOnUse" patternTransform="rotate(-18)">
-            <rect width="38" height="24" x="8" y="8" rx="2" fill="#e9c680" fillOpacity=".07" stroke="#f2d49a" strokeOpacity=".08" />
-          </pattern>
-        </defs>
-
-        <path className={styles.coast} d="M70 45C278 104 274 262 414 318c122 48 183-50 300-1 101 43 125 142 233 164v279H0V137c25-45 35-71 70-92Z" />
-        <path className={styles.cityGrid} d="M326 40h674v720H84c102-59 167-150 219-245 61-111 61-210 23-475Z" />
-
-        <g className={styles.roads} fill="none" stroke="url(#road)">
-          <path d="M124 706C276 597 344 531 468 422S682 172 966 69" />
-          <path d="M166 760C319 644 399 588 529 500S750 329 1006 259" />
-          <path d="M417 760c58-144 107-223 205-335s174-186 302-266" />
-          <path d="M255 96c133 112 193 188 216 298 28 135 29 221 16 366" />
-          <path d="M354 39c81 96 134 180 168 292 36 121 85 250 223 429" />
-          <path d="M143 469c191-2 342-18 467-78 139-66 242-129 390-145" />
-          <path d="M79 580c173-12 301-36 425-108 131-76 273-156 496-168" />
-        </g>
-
-        <g className={styles.routeGlow} fill="none" stroke="url(#route)" strokeLinecap="round" filter="url(#glow)">
-          <path d="M112 705C268 604 345 529 467 423S676 180 949 76" />
-          <path d="M168 758C322 647 402 589 530 501S754 330 994 264" />
-          <path d="M417 760c59-145 108-225 205-335s174-186 302-266" />
-        </g>
-
-        <g className={styles.skyline}>
-          <path d="M660 281v-96h13v96m15 0V117h18v164m13 0V153h14v128m13 0V61h18v220m15 0V133h17v148m18 0V89h14v192m19 0V167h18v114m16 0V125h14v156m20 0v-88h13v88" />
-          <path className={styles.spire} d="M746 281V54l9-39 9 39v227" />
-        </g>
-
-        <g className={styles.nodes} filter="url(#glow)">
-          <circle cx="468" cy="423" r="34" fill="url(#core)" />
-          <circle cx="468" cy="423" r="7" />
-          <circle cx="622" cy="425" r="5" />
-          <circle cx="793" cy="304" r="5" />
-          <circle cx="905" cy="165" r="5" />
-          <circle cx="530" cy="501" r="5" />
-          <circle cx="418" cy="649" r="5" />
-          <circle cx="286" cy="597" r="5" />
-        </g>
-
-        <g className={styles.incident} filter="url(#glow)">
-          <circle cx="823" cy="416" r="7" />
-          <circle cx="823" cy="416" r="24" fill="none" />
-          <circle cx="823" cy="416" r="46" fill="none" />
-        </g>
-      </svg>
-
-      <div className={`${styles.signal} ${styles.signalVehicle}`}>
-        <span>Vehicles</span><strong>392</strong><small>on route</small>
-      </div>
-      <div className={`${styles.signal} ${styles.signalDepot}`}>
-        <span>Depot</span><strong>Jebel Ali</strong><small>18 vehicles</small>
-      </div>
-      <div className={`${styles.signal} ${styles.signalIncident}`}>
-        <span>Incident</span><strong>E11 southbound</strong><small>response coordinated</small>
-      </div>
-      <div className={styles.orchestrator}>
-        <span>Fleet360</span><strong>Orchestrator</strong><i />
-      </div>
-    </div>
-  );
+interface StageTabDef {
+  id: number;
+  shortLabel: string;
+  badge: string;
+  title: string;
+  subtitle: string;
+  metrics: Array<{ code: string; detail: string; status: string; tone: 'cyan' | 'emerald' | 'purple' | 'amber' }>;
 }
 
-const metrics = [
-  { value: '392', label: 'Vehicles live', icon: 'vehicle' },
-  { value: '78%', label: 'Fleet utilization', icon: 'signal' },
-  { value: '99.7%', label: 'Uptime this month', icon: 'shield' },
-  { value: '28%', label: 'Lower operating costs', icon: 'cost' },
+const STAGE_TABS: StageTabDef[] = [
+  {
+    id: 0,
+    shortLabel: '1. Drayage Radar',
+    badge: 'TAB 1 · LIVE CORRIDOR RADAR (/logistics/drayage/tracking)',
+    title: 'Real-Time Coupled Prime Movers & Detached Ramp Chassis',
+    subtitle: 'Track moving tractors on E11/E311 alongside uncoupled skeletal trailers dropped at customer ramps with live offload ETC countdowns.',
+    metrics: [
+      {
+        code: 'DXB-767-4011',
+        detail: 'Coupled w/ DXB-TR-9901 · MSCU8492014 · 72 km/h on E11',
+        status: 'IN_TRANSIT',
+        tone: 'cyan',
+      },
+      {
+        code: 'DXB-767-4012',
+        detail: '2×20FT Bogie Tether · 36.8T Payload on E311 Spine',
+        status: 'BOGIE_PAIRED',
+        tone: 'emerald',
+      },
+      {
+        code: 'DXB-TR-9902',
+        detail: 'Detached at NIP Mega DC Ramp 07 · Live Offload ETC: 01h 42m',
+        status: 'DETACHED_AT_RAMP',
+        tone: 'purple',
+      },
+    ],
+  },
+  {
+    id: 1,
+    shortLabel: '2. PCS Gate Tokens',
+    badge: 'TAB 2 · PCS & GATE AUTOMATION (/logistics/drayage/containers)',
+    title: 'Dubai Trade & AD Ports ATLP e-Token & Customs Clearance',
+    subtitle: 'Book automated terminal gate slots, clear multi-agency Customs/Municipality/CPIP inspections, and guard against Delivery Order (eDO) expiry.',
+    metrics: [
+      {
+        code: 'DT-TKN-884120',
+        detail: 'DP World Jebel Ali T1 · Automated Gate Slot 08:00–09:00 GST',
+        status: 'SLOT_BOOKED',
+        tone: 'cyan',
+      },
+      {
+        code: 'CPIP Seal #DM-99812',
+        detail: 'Multi-Agency Customs & Dubai Municipality Inspection Cleared',
+        status: 'CLEARED',
+        tone: 'emerald',
+      },
+      {
+        code: 'eDO Validity Guard',
+        detail: '72h Remaining · Automated Revalidation Workflow Ready',
+        status: 'VALID_EDO',
+        tone: 'amber',
+      },
+    ],
+  },
+  {
+    id: 2,
+    shortLabel: '3. AI Co-Pilot',
+    badge: 'TAB 3 · GOVERNED AI ORCHESTRATOR (/agents)',
+    title: '6 Specialized AI Agents Coordinating Dispatch & Maintenance',
+    subtitle: 'Policy-controlled AI agents detect exceptions, triangulate empty containers to exports, and automate driver trip settlements.',
+    metrics: [
+      {
+        code: 'Dispatch AI Agent',
+        detail: 'Matched Import Empty HLXU9034118 to Export (-42 km Deadhead)',
+        status: 'STREET_TURN',
+        tone: 'emerald',
+      },
+      {
+        code: 'Maintenance AI Agent',
+        detail: 'Predictive DPF Service Scheduled at Jebel Ali Workshop',
+        status: 'READY_99.7%',
+        tone: 'cyan',
+      },
+      {
+        code: 'Finance Settlement AI',
+        detail: 'Auto-Verified AED 145 Driver Bogie + Port Gate Allowance',
+        status: 'RECONCILED',
+        tone: 'purple',
+      },
+    ],
+  },
 ];
 
-function MetricIcon({ type }: { type: string }) {
-  if (type === 'vehicle') return <path d="M3 13V8l2-4h9l3 4h2a2 2 0 0 1 2 2v3h-2m-12 0H3m4 0a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0M6 8h10" />;
-  if (type === 'signal') return <path d="M4 19v-4h3v4m3 0V9h3v10m3 0V4h3v15M2 21h20" />;
-  if (type === 'shield') return <path d="M12 2l8 4v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-4Zm-4 10 2.5 2.5L16 9" />;
-  return <path d="M4 6c0-2 3.6-4 8-4s8 2 8 4-3.6 4-8 4-8-2-8-4Zm0 0v6c0 2 3.6 4 8 4s8-2 8-4V6M4 12v6c0 2 3.6 4 8 4s8-2 8-4v-6" />;
-}
+const RADAR_UNITS = [
+  {
+    id: 'u0',
+    plate: 'DXB-767-4011',
+    label: 'DXB-767-4011 (72km/h)',
+    summary: 'Prime Mover Coupled w/ DXB-TR-9901 · Container MSCU8492014 · E11 → D53 Corridor · Fuel 84%',
+    cx: 175,
+    cy: 96,
+    color: '#3B82F6',
+    textColor: '#f8fafc',
+  },
+  {
+    id: 'u1',
+    plate: 'DXB-767-4012',
+    label: '2×20FT BOGIE',
+    summary: 'Volvo FH16 Coupled w/ 45FT Chassis DXB-TR-9905 · CMAU2210941 + TGHU1904422 (36.8T) · E311 Spine',
+    cx: 295,
+    cy: 102,
+    color: '#06B6D4',
+    textColor: '#67e8f9',
+  },
+  {
+    id: 'u2',
+    plate: 'DXB-767-4013',
+    label: 'STREET-TURN (-42km)',
+    summary: 'Scania R500 · Import Empty HLXU9034118 Triangulated to Export Booking DRY-EXP-1001 · D57 Expo Rd',
+    cx: 270,
+    cy: 162,
+    color: '#10B981',
+    textColor: '#6ee7b7',
+  },
+  {
+    id: 'u3',
+    plate: 'DXB-TR-9902',
+    label: 'DETACHED RAMP 07',
+    summary: 'Standalone Skeletal Chassis Pinned at NIP Mega DC Bay Ramp 07 · Live Offload ETC: 01h 42m remaining',
+    cx: 395,
+    cy: 84,
+    color: '#A855F7',
+    textColor: '#e9d5ff',
+  },
+];
+
+const BENTO_CARDS = [
+  {
+    index: '01 // PORT & DRAYAGE',
+    accent: 'text-cyan-400',
+    borderHover: 'hover:border-cyan-500/40',
+    title: 'Coupled & Detached Telemetry',
+    description:
+      'Real-time tracking of Prime Movers on E11/E311 and uncoupled skeletal trailers at customer ramps with live ETC offload timers.',
+    href: '/logistics/drayage/tracking',
+  },
+  {
+    index: '02 // PCS GATE AUTOMATION',
+    accent: 'text-emerald-400',
+    borderHover: 'hover:border-emerald-500/40',
+    title: 'Dubai Trade & Maqta ATLP',
+    description:
+      'Automated gate slot booking, Customs/Municipality/CPIP seal clearance, and proactive Delivery Order (eDO) expiry protection.',
+    href: '/logistics/drayage/containers',
+  },
+  {
+    index: '03 // BOGIE & STREET-TURN',
+    accent: 'text-indigo-400',
+    borderHover: 'hover:border-indigo-500/40',
+    title: 'Zero Empty Port Deadhead',
+    description:
+      'Pair 2×20ft containers on 45ft heavy chassis (up to 42T) and triangulate import empty containers directly to export bookings.',
+    href: '/logistics/drayage/assignment',
+  },
+  {
+    index: '04 // MULTI-VERTICAL SAAS',
+    accent: 'text-amber-400',
+    borderHover: 'hover:border-amber-500/40',
+    title: 'Modular Tenant Provisioning',
+    description:
+      'Onboard standalone Port Drayage tenants or full-suite Enterprise Fleets with strict PostgreSQL RLS multi-tenant isolation.',
+    href: '/platform',
+  },
+];
 
 export default function MarketingHero({ snapshot }: { snapshot: HomepageSnapshot }) {
-  return (
-    <main className={styles.page}>
-      <section className={styles.hero} aria-labelledby="hero-title">
-        <NetworkScene />
-        <div className={styles.vignette} />
+  const [activeTab, setActiveTab] = useState<number>(0);
+  const [selectedRadarUnit, setSelectedRadarUnit] = useState<number>(0);
 
-        <header className={styles.header}>
-          <Brand />
-          <nav className={styles.desktopNav} aria-label="Primary navigation">
-            <Link href="/platform">Platform</Link>
-            <Link href="/agents">AI agents</Link>
-            <Link href="/ai-platform">Governed AI</Link>
-            <Link href="/login">Sign in <Arrow /></Link>
-          </nav>
-          <details className={styles.mobileNav}>
-            <summary aria-label="Open navigation"><span /><span /><span /></summary>
-            <nav aria-label="Mobile navigation">
-              <Link href="/platform">Platform</Link>
-              <Link href="/agents">AI agents</Link>
-              <Link href="/ai-platform">Governed AI</Link>
-              <Link href="/login">Sign in</Link>
+  const currentStage = STAGE_TABS[activeTab] ?? STAGE_TABS[0];
+  const currentUnit = RADAR_UNITS[selectedRadarUnit] ?? RADAR_UNITS[0];
+
+  const toneBadgeClass = (tone: 'cyan' | 'emerald' | 'purple' | 'amber') => {
+    if (tone === 'emerald') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+    if (tone === 'purple') return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+    if (tone === 'amber') return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+    return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+  };
+
+  return (
+    <main className="bg-slate-950 text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200">
+      <section
+        aria-labelledby="hero-title"
+        className="relative overflow-hidden border-b border-slate-800/80 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cyan-950/45 via-slate-950 to-slate-950"
+      >
+        {/* Ambient Spatial Light Beams */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-40 right-10 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-40 -left-20 h-96 w-96 rounded-full bg-blue-600/10 blur-3xl"
+        />
+
+        {/* Floating Spatial Glass Header */}
+        <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/75 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4 text-xs">
+            <Link href="/" aria-label="Fleet360 home" className="flex items-center gap-3 group">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 font-mono text-sm font-black text-slate-950 shadow-md shadow-cyan-500/20 transition-transform group-hover:scale-105">
+                F3
+              </div>
+              <span className="text-sm font-black tracking-widest text-white">
+                FLEET<span className="text-cyan-400">360</span>
+              </span>
+              <span className="hidden sm:inline-block rounded-full border border-cyan-400/30 bg-cyan-500/15 px-2.5 py-0.5 font-mono text-xs font-semibold text-cyan-300">
+                AI MOBILITY OS
+              </span>
+            </Link>
+
+            <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-7 font-medium text-slate-300">
+              <Link href="/platform" className="transition-colors hover:text-cyan-400">
+                Platform
+              </Link>
+              <Link href="/logistics/drayage" className="transition-colors hover:text-cyan-400">
+                Port &amp; Container Drayage
+              </Link>
+              <Link href="/agents" className="transition-colors hover:text-cyan-400">
+                6 Governed AI Agents
+              </Link>
+              <Link href="/ai-platform" className="transition-colors hover:text-cyan-400">
+                Governed AI &amp; GCC
+              </Link>
             </nav>
-          </details>
+
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/login"
+                data-analytics-cta="hero_signin"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2 font-semibold text-slate-200 transition-all hover:border-cyan-400/50 hover:bg-slate-800 hover:text-white"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/operations-review"
+                data-analytics-cta="hero_header_operations_review"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 font-bold text-white shadow-lg shadow-cyan-500/20 transition-all hover:from-blue-500 hover:to-cyan-400"
+              >
+                <span>Book Operations Review</span>
+                <Arrow />
+              </Link>
+            </div>
+          </div>
         </header>
 
-        <div className={styles.heroInner}>
-          <div className={styles.statusRow} aria-label="Platform qualities">
-            <span>Live operations</span>
-            <span>UAE-ready</span>
-            <span>Multi-tenant control</span>
-          </div>
+        {/* Main Hero Grid: Left Copy + Right Interactive 3-Tab Live Product Stage */}
+        <div className="mx-auto max-w-7xl px-6 py-10 lg:py-16 space-y-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            {/* Left Column: Hero Messaging, CTAs & Live Telemetry Counters */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-semibold text-cyan-300">
+                <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                <span>NEW: Standalone Port Drayage + Dubai Trade / ATLP e-Token Automation</span>
+              </div>
 
-          <div className={styles.copy}>
-            <p className={styles.eyebrow}>The intelligent command layer</p>
-            <h1 id="hero-title">
-              Smart Mobility Hub.
-              <span>AI-Orchestrated Fleet360 Intelligence.</span>
-            </h1>
-            <p className={styles.lede}>
-              Unify your entire fleet, drivers, routes, maintenance, finance, and compliance in one intelligent platform—where specialized AI agents orchestrate operational intelligence and complete control.
-            </p>
-            <div className={styles.actions}>
-              <Link className={styles.primaryAction} href="/operations-review" data-analytics-cta="hero_operations_review">
-                Book an operations review <Arrow />
-              </Link>
-              <Link className={styles.secondaryAction} href="/platform" data-analytics-cta="hero_platform">
-                Explore the platform <Arrow />
-              </Link>
+              <div className="space-y-4">
+                <p className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-400">
+                  Smart Mobility Hub · Multi-Tenant Command Layer
+                </p>
+                <h1
+                  id="hero-title"
+                  className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.12]"
+                >
+                  One Autonomous Command Layer for{' '}
+                  <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                    Every Vehicle, Container &amp; Route.
+                  </span>
+                </h1>
+                <p className="text-base lg:text-lg text-slate-300 font-medium leading-relaxed">
+                  Unify Prime Movers, Skeletal Chassis &amp; Container Tracking powered by Governed AI agents
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3.5 pt-1 text-xs sm:text-sm">
+                <Link
+                  href="/operations-review"
+                  data-analytics-cta="hero_operations_review"
+                  className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 font-black text-slate-950 shadow-lg shadow-cyan-400/20 transition-all hover:bg-cyan-300"
+                >
+                  <span>Book an operations review</span>
+                  <Arrow />
+                </Link>
+                <Link
+                  href="/platform"
+                  data-analytics-cta="hero_platform"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-5 py-3 font-semibold text-slate-200 transition-all hover:border-cyan-400 hover:text-white"
+                >
+                  <span>Explore the platform</span>
+                  <Arrow />
+                </Link>
+              </div>
+
+              {/* Live Operations Snapshot Ribbon */}
+              <div
+                aria-label={`${snapshot.source === 'configured' ? 'Live' : 'Illustrative'} operations snapshot`}
+                className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-slate-800/80 text-xs"
+              >
+                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3">
+                  <div className="font-mono text-xl font-black text-cyan-400">
+                    {snapshot.vehiclesLive.toLocaleString()}+
+                  </div>
+                  <div className="text-slate-400 mt-0.5">Vehicles Live</div>
+                </div>
+                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3">
+                  <div className="font-mono text-xl font-black text-emerald-400">{snapshot.uptime}%</div>
+                  <div className="text-slate-400 mt-0.5">Fleet Uptime SLA</div>
+                </div>
+                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3">
+                  <div className="font-mono text-xl font-black text-blue-400">-{snapshot.lowerOperatingCosts}%</div>
+                  <div className="text-slate-400 mt-0.5">Operating Costs</div>
+                </div>
+                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3">
+                  <div className="font-mono text-xl font-black text-indigo-400">{snapshot.fleetUtilization}%</div>
+                  <div className="text-slate-400 mt-0.5">Fleet Utilization</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Interactive 3-Tab Live Product Stage */}
+            <div className="lg:col-span-6 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-4 sm:p-5 shadow-2xl backdrop-blur-xl space-y-4">
+              {/* Stage Header & 3 Interactive Mode Tabs */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-mono font-bold tracking-wider text-cyan-400">
+                    LIVE INTERACTIVE PRODUCT STAGE
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Interactive product stage views">
+                  {STAGE_TABS.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`rounded-lg px-2.5 py-1.5 font-bold transition-all text-xs ${
+                          isActive
+                            ? 'bg-cyan-400 text-slate-950 shadow-sm'
+                            : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {tab.shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Interactive UAE Freight Corridor Radar Canvas */}
+              <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative">
+                <svg
+                  viewBox="0 0 540 220"
+                  className="w-full h-[205px] block select-none"
+                  aria-label="UAE Drayage Corridor Live Radar Map"
+                >
+                  <defs>
+                    <pattern id="heroRadarGrid" width="36" height="36" patternUnits="userSpaceOnUse">
+                      <path d="M 36 0 L 0 0 0 36" fill="none" stroke="#1e293b" strokeWidth="0.8" />
+                    </pattern>
+                  </defs>
+                  <rect width="540" height="220" fill="#060b14" />
+                  <rect width="540" height="220" fill="url(#heroRadarGrid)" />
+
+                  {/* Arabian Gulf Coast Contour */}
+                  <path d="M 0,0 L 210,0 L 145,75 L 75,140 L 0,190 Z" fill="#0c192c" opacity="0.7" />
+                  <text x="16" y="26" fill="#38bdf8" opacity="0.5" fontSize="11" fontFamily="monospace">
+                    JEBEL ALI MARITIME APPROACH
+                  </text>
+
+                  {/* E11 Corridor */}
+                  <polyline
+                    points="25,180 165,105 335,60 510,22"
+                    fill="none"
+                    stroke="#3B82F6"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    opacity="0.8"
+                  />
+                  <text x="148" y="88" fill="#60A5FA" fontSize="11" fontWeight="bold">
+                    E11 Corridor
+                  </text>
+
+                  {/* E311 Central Spine */}
+                  <polyline
+                    points="85,205 255,132 410,76 520,38"
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    opacity="0.8"
+                  />
+                  <text x="258" y="122" fill="#34D399" fontSize="11" fontWeight="bold">
+                    E311 Spine
+                  </text>
+
+                  {/* D53 Al Yalayis Connector */}
+                  <polyline
+                    points="115,82 175,96 295,102 395,84"
+                    fill="none"
+                    stroke="#818CF8"
+                    strokeWidth="2.5"
+                    strokeDasharray="5,4"
+                    opacity="0.85"
+                  />
+
+                  {/* Cyan Dashed Tether for 2x20FT Bogie */}
+                  <line
+                    x1="295"
+                    y1="102"
+                    x2="395"
+                    y2="84"
+                    stroke="#22D3EE"
+                    strokeWidth="2.5"
+                    strokeDasharray="6,4"
+                  />
+
+                  {/* Emerald Flightpath for Street-Turn */}
+                  <path
+                    d="M 270,162 Q 345,130 435,172"
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth="2.5"
+                    strokeDasharray="6,4"
+                  />
+
+                  {/* Port & Ramp Geofence Rings */}
+                  <circle
+                    cx="115"
+                    cy="82"
+                    r="24"
+                    fill="#0284c7"
+                    fillOpacity="0.15"
+                    stroke="#38bdf8"
+                    strokeWidth="1.2"
+                    strokeDasharray="4,3"
+                  />
+                  <text x="72" y="52" fill="#7dd3fc" fontSize="11" fontWeight="bold">
+                    DP World Jebel Ali
+                  </text>
+
+                  <circle
+                    cx="395"
+                    cy="84"
+                    r="22"
+                    fill="#9333ea"
+                    fillOpacity="0.15"
+                    stroke="#c084fc"
+                    strokeWidth="1.2"
+                    strokeDasharray="4,3"
+                  />
+
+                  {/* Interactive Asset Markers */}
+                  {RADAR_UNITS.map((u, idx) => {
+                    const isSel = selectedRadarUnit === idx;
+                    return (
+                      <g
+                        key={u.id}
+                        onClick={() => setSelectedRadarUnit(idx)}
+                        style={{ cursor: 'pointer' }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Inspect ${u.plate}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') setSelectedRadarUnit(idx);
+                        }}
+                      >
+                        {isSel && (
+                          <circle
+                            cx={u.cx}
+                            cy={u.cy}
+                            r="16"
+                            fill="none"
+                            stroke="#ffffff"
+                            strokeWidth="2"
+                            strokeDasharray="4,2"
+                          />
+                        )}
+                        <circle
+                          cx={u.cx}
+                          cy={u.cy}
+                          r={isSel ? 9 : 7.5}
+                          fill={u.color}
+                          stroke="#ffffff"
+                          strokeWidth="2"
+                        />
+                        <text
+                          x={u.cx}
+                          y={idx % 2 === 0 ? u.cy + 21 : u.cy - 13}
+                          textAnchor="middle"
+                          fill={u.textColor}
+                          fontSize="11"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {u.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Selected Radar Pin Live Telemetry Bar */}
+                <div className="border-t border-slate-800 bg-slate-900/95 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono font-bold text-cyan-300">
+                      {currentUnit.plate}
+                    </span>
+                    <span className="text-slate-300">{currentUnit.summary}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Stage Content Panel */}
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-cyan-400">{currentStage.badge}</span>
+                  <Link
+                    href="/logistics/drayage/tracking"
+                    className="font-semibold text-blue-400 hover:text-cyan-300 transition-colors"
+                  >
+                    Open Full Radar Console →
+                  </Link>
+                </div>
+                <div className="text-sm font-bold text-white">{currentStage.title}</div>
+                <p className="text-slate-400 leading-relaxed">{currentStage.subtitle}</p>
+
+                <div className="space-y-1.5 pt-1">
+                  {currentStage.metrics.map((m) => (
+                    <div
+                      key={m.code}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/90 px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-cyan-300">{m.code}</span>
+                        <span className="text-slate-200">{m.detail}</span>
+                      </div>
+                      <span
+                        className={`rounded border px-2 py-0.5 font-mono text-xs font-bold ${toneBadgeClass(m.tone)}`}
+                      >
+                        {m.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className={styles.scrollCue} aria-hidden="true"><span /> Scroll to explore</div>
-        </div>
-
-        <div className={styles.metrics} aria-label={`${snapshot.source === 'configured' ? 'Live' : 'Illustrative'} operations snapshot`}>
-          <span className={styles.metricsLabel}>{snapshot.source === 'configured' ? 'Live command view' : 'Illustrative command view'}</span>
-          {metrics.map((metric) => {
-            const value = metric.icon === 'vehicle' ? snapshot.vehiclesLive.toLocaleString() : metric.icon === 'signal' ? `${snapshot.fleetUtilization}%` : metric.icon === 'shield' ? `${snapshot.uptime}%` : `${snapshot.lowerOperatingCosts}%`;
-            return (
-            <div className={styles.metric} key={metric.label}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><MetricIcon type={metric.icon} /></svg>
-              <div><strong>{value}</strong><span>{metric.label}</span></div>
-            </div>
-            );
-          })}
+          {/* 4-Card Spatial Glass Bento Grid Below Hero */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            {BENTO_CARDS.map((card) => (
+              <Link
+                key={card.index}
+                href={card.href}
+                className={`group rounded-2xl border border-slate-800/90 bg-slate-900/75 p-5 backdrop-blur-md transition-all hover:-translate-y-0.5 ${card.borderHover} space-y-2`}
+              >
+                <div className={`font-mono text-xs font-bold ${card.accent}`}>{card.index}</div>
+                <div className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                  {card.title}
+                </div>
+                <p className="text-slate-400 leading-relaxed">{card.description}</p>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
     </main>

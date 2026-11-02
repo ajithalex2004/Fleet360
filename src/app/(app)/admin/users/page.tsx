@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import { SWITCH_OFF } from '@/lib/ui/toggle';
 import UserAccessDialog from '@/components/admin/UserAccessDialog';
@@ -15,6 +17,7 @@ interface User {
   userType?: string;
   department?: string;
   position?: string;
+  mobileNumber?: string | null;
   isActive: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
@@ -98,7 +101,14 @@ export default function UsersPage() {
       ? `Disable ${name}? They will be signed out and unable to sign in until enabled again.`
       : `Enable ${name}? They will be able to sign in again.`;
     if (!confirm(ask)) return;
-    const res = await fetch(`/api/admin/users/${u.id}`, {
+    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    const res = targetTenantId
+      ? await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update-member', userId: u.id, isActive: !u.isActive }),
+        })
+      : await fetch(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !u.isActive }),
@@ -145,14 +155,16 @@ export default function UsersPage() {
       email:      u.email,
       username:   u.username,
       position:   u.position   ?? '',
-      userType:   u.userType   ?? 'STAFF',
-      newPassword: '',
+      userType:     u.userType   ?? 'STAFF',
+      mobileNumber: u.mobileNumber ?? '',
+      newPassword:  '',
     });
     setFormError('');
     setLines(null);
     // Reporting lines in this company, for the Direct Manager / Department
     // Head approvers (Admin > Workflows).
-    fetch(`/api/admin/users/${u.id}`)
+    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    fetch(targetTenantId ? `/api/admin/tenants/${targetTenantId}/users?userId=${u.id}` : `/api/admin/users/${u.id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setLines({
         managerUserId: d?.reportingLines?.managerUserId ?? '',
@@ -172,11 +184,31 @@ export default function UsersPage() {
         lastName:   editForm.lastName,
         email:      editForm.email,
         username:   editForm.username,
-        position:   editForm.position,
-        userType:   editForm.userType,
+        position:     editForm.position,
+        userType:     editForm.userType,
+        mobileNumber: editForm.mobileNumber || null,
         // Sent once loaded: '' clears a line.
         ...(lines ? { managerUserId: lines.managerUserId, departmentHeadUserId: lines.departmentHeadUserId } : {}),
       };
+      const targetTenantId = showEdit.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+      if (targetTenantId) {
+        const res = await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update-member',
+            userId: showEdit.id,
+            ...profilePayload,
+            ...(editForm.newPassword ? { newPassword: editForm.newPassword } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || d.error || 'Failed to update');
+        }
+        setShowEdit(null); load();
+        return;
+      }
       const res = await fetch(`/api/admin/users/${showEdit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -269,7 +301,14 @@ export default function UsersPage() {
                         {!u.firstName && !u.lastName && <span className="text-[var(--text-muted)]">—</span>}
                       </td>
                       <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{u.username}</td>
-                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{u.email}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
+                        <div>{u.email}</div>
+                        {u.mobileNumber && (
+                          <div className="mt-1">
+                            <PhoneCell value={u.mobileNumber} />
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <div className="flex flex-col gap-1">
                           {(u.memberships ?? []).map(m => (
@@ -422,6 +461,14 @@ export default function UsersPage() {
                   <p className="text-xs text-[var(--text-faint)] pt-1">
                     Set per company from its Department list in <strong>Modules</strong>.
                   </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Mobile Number</label>
+                  <PhoneInput
+                    value={editForm.mobileNumber ?? ''}
+                    onChange={(val) => setEditForm((p) => ({ ...p, mobileNumber: val }))}
+                    placeholder="50 123 4567"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Position</label>

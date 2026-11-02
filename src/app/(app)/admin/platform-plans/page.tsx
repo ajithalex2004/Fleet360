@@ -226,7 +226,7 @@ export default function PlatformPlansPage() {
       ) : (
         <div className="space-y-2">
           {plans.length === 0 && (
-            <div className="text-[var(--text-muted)] text-sm">No plans yet. Click "+ New Plan" to create one.</div>
+            <div className="text-[var(--text-muted)] text-sm">No plans yet. Click &quot;+ New Plan&quot; to create one.</div>
           )}
           {plans.map(p => (
             <div key={p.code}>
@@ -390,7 +390,7 @@ function PlanForm({
         <div className="flex items-end gap-4">
           <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
             <input type="checkbox" checked={form.highlight} onChange={e => set('highlight', e.target.checked)} />
-            Show "Popular" badge
+            Show &quot;Popular&quot; badge
           </label>
           {!isNew && (
             <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">

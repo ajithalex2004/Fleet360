@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   UserCog, Users, CheckCircle2, Clock, AlertOctagon, Activity, RefreshCw, Plus,
-  IdCard, Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
+  Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
 } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui/page-theme';
 
@@ -18,21 +18,28 @@ interface ComplianceSummary {
 interface ComplianceIssue {
   id: string;
   name: string;
-  licenseNumber: string;
-  driverType: string | null;
-  status: string;
-  compliance: {
-    license: string;
-    emiratesId: string;
-    passport: string;
-    visa: string;
-    alertLevel: string;
+  licenseNumber?: string | null;
+  driverType?: string | null;
+  status?: string;
+  alertLevel?: string;
+  docs?: {
+    license?: string;
+    emiratesId?: string;
+    passport?: string;
+    visa?: string;
   };
-  licenseExpiry: string | null;
-  emiratesIdExpiry: string | null;
-  passportExpiry: string | null;
-  visaExpiry: string | null;
-  assignedVehicle: { licensePlate: string; make: string; model: string } | null;
+  compliance?: {
+    license?: string;
+    emiratesId?: string;
+    passport?: string;
+    visa?: string;
+    alertLevel?: string;
+  };
+  licenseExpiry?: string | null;
+  emiratesIdExpiry?: string | null;
+  passportExpiry?: string | null;
+  visaExpiry?: string | null;
+  assignedVehicle?: { licensePlate: string; make: string; model: string } | null;
 }
 
 interface ComplianceData {
@@ -40,9 +47,10 @@ interface ComplianceData {
   issues: ComplianceIssue[];
 }
 
-function fmtDate(s: string | null) {
+function fmtDate(s?: string | null) {
   if (!s) return '—';
   const d = new Date(s);
+  if (isNaN(d.getTime())) return '—';
   const diff = Math.ceil((d.getTime() - Date.now()) / 86400000);
   const label = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   if (diff < 0)  return `${label} (${Math.abs(diff)}d ago)`;
@@ -50,14 +58,14 @@ function fmtDate(s: string | null) {
   return label;
 }
 
-function DocCell({ status, date }: { status: string; date: string | null }) {
+function DocCell({ status, date }: { status?: string; date?: string | null }) {
   const map = {
-    valid:         { Icon: Check,    cls: 'text-emerald-400' },
+    valid:         { Icon: Check,         cls: 'text-emerald-400' },
     expiring_soon: { Icon: AlertTriangle, cls: 'text-amber-400' },
-    expired:       { Icon: X,        cls: 'text-rose-400' },
-    missing:       { Icon: Minus,    cls: 'text-[var(--text-faint)]' },
+    expired:       { Icon: X,             cls: 'text-rose-400' },
+    missing:       { Icon: Minus,         cls: 'text-[var(--text-faint)]' },
   } as const;
-  const { Icon, cls } = map[status as keyof typeof map] ?? map.missing;
+  const { Icon, cls } = map[(status || 'missing') as keyof typeof map] ?? map.missing;
   return (
     <td className="py-3 align-top">
       <Icon className={`w-4 h-4 ${cls}`} />
@@ -87,9 +95,13 @@ export default function DriverDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const s = data?.summary ?? { total: 0, ok: 0, warning: 0, critical: 0, incomplete: 0 };
-  const issues = data?.issues ?? [];
-  const criticalIssues = issues.filter(d => d.compliance.alertLevel === 'critical');
-  const warningIssues  = issues.filter(d => d.compliance.alertLevel === 'warning');
+  const issues = Array.isArray(data?.issues) ? data.issues : [];
+  const getLevel = (d: ComplianceIssue) => d?.compliance?.alertLevel || d?.alertLevel || 'incomplete';
+  const getDoc = (d: ComplianceIssue, key: 'license' | 'emiratesId' | 'passport' | 'visa') =>
+    d?.compliance?.[key] || d?.docs?.[key] || 'missing';
+
+  const criticalIssues = issues.filter(d => getLevel(d) === 'critical');
+  const warningIssues  = issues.filter(d => getLevel(d) === 'warning');
 
   const okPct   = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 0;
   const warnPct = s.total > 0 ? Math.round((s.warning / s.total) * 100) : 0;
@@ -185,12 +197,12 @@ export default function DriverDashboard() {
                         <tr key={d.id} className="hover:bg-[var(--bg-surface-hover)]">
                           <td className="py-3 align-top">
                             <div className="font-medium text-[var(--text-main)]">{d.name}</div>
-                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber}</div>
+                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber || '—'}</div>
                           </td>
-                          <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
-                          <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
-                          <DocCell status={d.compliance.passport}   date={d.passportExpiry} />
-                          <DocCell status={d.compliance.visa}       date={d.visaExpiry} />
+                          <DocCell status={getDoc(d, 'license')}    date={d.licenseExpiry} />
+                          <DocCell status={getDoc(d, 'emiratesId')} date={d.emiratesIdExpiry} />
+                          <DocCell status={getDoc(d, 'passport')}   date={d.passportExpiry} />
+                          <DocCell status={getDoc(d, 'visa')}       date={d.visaExpiry} />
                         </tr>
                       ))}
                     </tbody>
@@ -223,12 +235,12 @@ export default function DriverDashboard() {
                         <tr key={d.id} className="hover:bg-[var(--bg-surface-hover)]">
                           <td className="py-3 align-top">
                             <div className="font-medium text-[var(--text-main)]">{d.name}</div>
-                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber}</div>
+                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber || '—'}</div>
                           </td>
-                          <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
-                          <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
-                          <DocCell status={d.compliance.passport}   date={d.passportExpiry} />
-                          <DocCell status={d.compliance.visa}       date={d.visaExpiry} />
+                          <DocCell status={getDoc(d, 'license')}    date={d.licenseExpiry} />
+                          <DocCell status={getDoc(d, 'emiratesId')} date={d.emiratesIdExpiry} />
+                          <DocCell status={getDoc(d, 'passport')}   date={d.passportExpiry} />
+                          <DocCell status={getDoc(d, 'visa')}       date={d.visaExpiry} />
                         </tr>
                       ))}
                     </tbody>

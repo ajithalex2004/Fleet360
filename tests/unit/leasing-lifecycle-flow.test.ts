@@ -1,18 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+interface StoreEntity {
+  id?: string;
+  tenantId?: unknown;
+  status?: unknown;
+  vehicleId?: unknown;
+  contractId?: unknown;
+  quotationId?: unknown;
+  invoiceId?: unknown;
+  lesseeId?: unknown;
+  deletedAt?: unknown;
+  [key: string]: unknown;
+}
+
 // In-memory tenant store to simulate database state across the lifecycle stages
 const store = {
-  quotations: new Map<string, any>(),
-  contracts: new Map<string, any>(),
-  contractVehicles: new Map<string, any>(),
-  invoices: new Map<string, any>(),
-  lessees: new Map<string, any>(),
-  vehicles: new Map<string, any>(),
-  receipts: new Map<string, any>(),
-  paymentIntents: new Map<string, any>(),
-  allocationOccurrences: new Map<string, any>(),
-  returns: new Map<string, any>(),
+  quotations: new Map<string, StoreEntity>(),
+  contracts: new Map<string, StoreEntity>(),
+  contractVehicles: new Map<string, StoreEntity>(),
+  invoices: new Map<string, StoreEntity>(),
+  lessees: new Map<string, StoreEntity>(),
+  vehicles: new Map<string, StoreEntity>(),
+  receipts: new Map<string, StoreEntity>(),
+  paymentIntents: new Map<string, StoreEntity>(),
+  allocationOccurrences: new Map<string, StoreEntity>(),
+  returns: new Map<string, StoreEntity>(),
 };
 
 function resetStore() {
@@ -113,7 +126,7 @@ vi.mock('@/lib/prisma', () => {
       $transaction: vi.fn(async (cb) => {
         const mockTx = {
           $executeRawUnsafe: vi.fn().mockResolvedValue(1),
-          $queryRawUnsafe: vi.fn().mockImplementation(async (query: string, ...args: any[]) => {
+          $queryRawUnsafe: vi.fn().mockImplementation(async (query: string, ...args: unknown[]) => {
             const match = query.match(/set_config\('app\.tenant_id',\s*'([^']+)'/);
             if (match) {
               return [{ v: match[1] }];
@@ -420,11 +433,11 @@ vi.mock('@/lib/sentry', () => ({
 }));
 
 // Import route handlers
-import { POST as createQuotation, GET as listQuotations } from '@/app/api/leasing/quotations/route';
+import { POST as createQuotation } from '@/app/api/leasing/quotations/route';
 import { POST as approveQuotation } from '@/app/api/leasing/quotations/[id]/approve/route';
 import { POST as createContract } from '@/app/api/leasing/contracts-v2/route';
 import { PATCH as updateContract } from '@/app/api/leasing/contracts-v2/[id]/route';
-import { POST as addVehicle, GET as listVehicles } from '@/app/api/leasing/contracts-v2/[id]/vehicles/route';
+import { POST as addVehicle } from '@/app/api/leasing/contracts-v2/[id]/vehicles/route';
 import { POST as createInvoice } from '@/app/api/leasing/invoices/route';
 import { POST as recordPayment } from '@/app/api/leasing/invoices/[id]/record-payment/route';
 
@@ -485,7 +498,7 @@ describe('Leasing Lifecycle Flow & Business Rules (Unit)', () => {
 
     // Quotation is atomically marked CONVERTED
     const storedQuo = store.quotations.get(quotation.id);
-    expect(storedQuo.status).toBe('CONVERTED');
+    expect(storedQuo?.status).toBe('CONVERTED');
 
     // 4. Allocate Real Fleet Vehicle (inheriting rate and updating vehicle state)
     const vehRes = await addVehicle(
@@ -507,8 +520,8 @@ describe('Leasing Lifecycle Flow & Business Rules (Unit)', () => {
 
     // Confirm real fleet vehicle updated to RESERVED
     const storedVeh = store.vehicles.get('veh-real-alpha-1');
-    expect(storedVeh.status).toBe('RESERVED');
-    expect(storedVeh.lifecycleStage).toBe('ALLOCATED');
+    expect(storedVeh?.status).toBe('RESERVED');
+    expect(storedVeh?.lifecycleStage).toBe('ALLOCATED');
 
     // 5. Activate Contract (now valid because vehicle count >= 1)
     const actRes = await updateContract(

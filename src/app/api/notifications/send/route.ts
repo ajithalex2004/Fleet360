@@ -31,8 +31,7 @@ export async function POST(request: Request) {
 
             // 1. Fetch Email Configuration
             // Safety check: verify if the model exists on the client (handles pending prisma generate)
-            // @ts-ignore - Runtime safety check
-            if (!tx.integrationConfig) {
+            if (!('integrationConfig' in tx) || !tx.integrationConfig) {
                 console.warn('[Email] Prisma Client out of sync (missing integrationConfig). Mocking success.');
                 return NextResponse.json({ success: true, mock: true, warning: 'DB_SYNC_REQUIRED' });
             }

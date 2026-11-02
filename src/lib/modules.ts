@@ -39,6 +39,7 @@ export type ModuleKey =
   | 'bus-ops'
   | 'school-bus'
   | 'logistics'
+  | 'drayage'
   | 'incidents'
   | 'fleet'
   | 'driver-mgmt'
@@ -245,6 +246,22 @@ export const MODULES: readonly ModuleDef[] = [
     // Dropped '/api/trips' — folder doesn't exist. Trip endpoints live
     // under /api/logistics/trips/*.
     apiPathPrefixes: ['/api/logistics'],
+  },
+  {
+    key: 'drayage',
+    name: 'Port & Container Drayage',
+    shortName: 'Drayage',
+    description: 'Port container drayage jobs, DP World gate tokens, demurrage & free-days clock, and container terminal operations',
+    href: '/logistics/drayage',
+    iconName: 'Package',
+    gradient: 'from-blue-600 to-indigo-600',
+    glow: 'shadow-blue-500/20',
+    border: 'border-blue-500/30',
+    tags: ['Containers', 'Port Terminal', 'DP World', 'Demurrage', 'Gate Pass'],
+    subscription: 'toggleable',
+    accountPrefixes: ['LOGISTICS'],
+    status: 'live',
+    apiPathPrefixes: ['/api/logistics/drayage'],
   },
   {
     key: 'incidents',
@@ -488,6 +505,9 @@ export const LEGACY_MODULE_ALIASES: Readonly<Record<string, ModuleKey>> = {
   staff: 'bus-ops',
   ambulance: 'incidents',
   school_bus: 'school-bus',
+  'port-drayage': 'drayage',
+  'port_drayage': 'drayage',
+  'container-drayage': 'drayage',
 };
 
 /** Resolve any string (canonical or legacy alias) to a ModuleKey, or null. */
@@ -516,6 +536,9 @@ export function normalizeTenantModules(
   requested: readonly unknown[],
 ): { ok: true; modules: string[] } | { ok: false; error: string } {
   const out = new Set<string>(SYSTEM_MODULE_KEYS);
+  // Always-on modules are part of every tenant's set (that is what
+  // always-on means); a change had commented this out, so saving a tenant's
+  // modules silently dropped e.g. Service Tickets.
   for (const m of MODULES) if (m.subscription === 'always-on') out.add(m.key);
   for (const raw of requested) {
     if (typeof raw !== 'string') return { ok: false, error: 'Module keys must be strings' };

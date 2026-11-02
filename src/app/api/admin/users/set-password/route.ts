@@ -15,6 +15,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { userScopeDenied } from '@/lib/admin/user-scope';
 import { withAuditedAction } from '@/lib/audited-action';
+import { validatePasswordPolicy } from '@/lib/password-policy';
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('hex');
@@ -34,8 +35,12 @@ async function handlePOST(request: NextRequest) {
     if (!userId || !password) {
       return NextResponse.json({ error: 'userId and password are required' }, { status: 400 });
     }
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+    const pwCheck = validatePasswordPolicy(password);
+    if (!pwCheck.ok) {
+      return NextResponse.json(
+        { error: 'Password must meet policy: ' + pwCheck.error },
+        { status: 400 }
+      );
     }
 
     // Compute the hash OUTSIDE the transaction. pbkdf2 with 100k iterations is

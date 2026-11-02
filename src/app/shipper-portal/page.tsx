@@ -119,7 +119,7 @@ export default function ShipperPortalDashboard() {
           <h2 className="text-lg font-bold text-white mb-2">Place your first shipment request</h2>
           <p className="text-slate-400 text-sm max-w-md mx-auto mb-6">
             Fill in pickup, delivery and cargo details. Your operator will acknowledge and
-            assign a carrier — you'll see status updates here as the shipment progresses.
+            assign a carrier — you&apos;ll see status updates here as the shipment progresses.
           </p>
           <Link href="/shipper-portal/shipments/new"
             className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:opacity-90">

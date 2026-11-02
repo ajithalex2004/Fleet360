@@ -6,6 +6,7 @@
  */
 
 import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
+import { erpFetch } from '../erp-fetch';
 import {
   CanonicalEntityType,
   CanonicalInvoice,
@@ -16,7 +17,7 @@ import { applyFieldMappings, reverseFieldMappings } from '../canonical-models';
 
 export class GenericRestAdapter extends BaseEnterpriseAdapter {
   private getEndpointForEntity(entityType: CanonicalEntityType): string {
-    const customEndpoints = this.connection.authCredentials?.endpoints || {};
+    const customEndpoints = (this.connection.authCredentials?.endpoints as Record<string, string> | undefined) || {};
     if (customEndpoints[entityType]) {
       return customEndpoints[entityType];
     }
@@ -45,19 +46,26 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
     const url = `${this.connection.baseUrl.replace(/\/$/, '')}/health`;
 
     try {
-      const res = await fetch(url, {
+      const res = await erpFetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(6000),
+        timeoutMs: 6000,
       });
 
       const latencyMs = Date.now() - start;
-      if (res.ok || res.status === 404) {
-        // 404 on health endpoint still proves reachability & auth handshake
+      if (res.ok) {
         return {
           success: true,
           latencyMs,
           message: `Connected successfully to ${this.connection.systemName} (${res.status} OK).`,
+        };
+      }
+      if (res.status === 404) {
+        // The host answered but has no /health: reachable, credentials unproven.
+        return {
+          success: true,
+          latencyMs,
+          message: `${this.connection.systemName} is reachable but has no /health endpoint (404); credentials were not verified.`,
         };
       }
 
@@ -88,11 +96,11 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
     const mappedPayload = applyFieldMappings(canonicalPayload, this.connection.fieldMappings);
 
     try {
-      const res = await fetch(url, {
+      const res = await erpFetch(url, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(mappedPayload),
-        signal: AbortSignal.timeout(10000),
+        timeoutMs: 10000,
       });
 
       const latencyMs = Date.now() - start;
@@ -111,7 +119,8 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         };
       }
 
-      const externalRef = responseJson.id || responseJson.externalId || responseJson.referenceNumber || entityId;
+      // Only what the ERP returned: our own entityId is not an external reference.
+      const externalRef = responseJson.id || responseJson.externalId || responseJson.referenceNumber;
 
       // Financial impact only applies to Invoice / Work Order payloads —
       // Roster and Shipment PO entities don't carry a monetary amount here.
@@ -128,7 +137,7 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         systemType: this.connection.systemType,
         entityType,
         status: 'SUCCESS',
-        externalReferenceId: String(externalRef),
+        externalReferenceId: externalRef !== undefined && externalRef !== null ? String(externalRef) : undefined,
         financialImpactAed,
         durationMs: latencyMs,
         retryCount: 0,
@@ -157,10 +166,10 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
     const url = `${this.connection.baseUrl.replace(/\/$/, '')}${endpoint}${queryString ? `?${queryString}` : ''}`;
 
     try {
-      const res = await fetch(url, {
+      const res = await erpFetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(8000),
+        timeoutMs: 8000,
       });
 
       if (!res.ok) {

@@ -281,17 +281,28 @@ export class RoutingIntelligenceService {
   }
 
   /**
-   * Generates cache lookup keys
+   * Generates cache lookup keys.
+   *
+   * Cached values are computed with a detour factor and average speed, so
+   * both are part of the key: a call with non-default values used to get
+   * whatever an earlier call had cached for the same pair. Default values
+   * add nothing to the key, so existing entries for default calls stay valid.
    */
   private buildCacheKey(
     origin: CanonicalLocation,
     dest: CanonicalLocation,
     tier: RoutingCacheTier,
+    params: { detourFactor?: number; avgSpeedKmh?: number } = {},
   ): string {
+    const detour = params.detourFactor ?? DEFAULT_DETOUR_FACTOR;
+    const speed = params.avgSpeedKmh ?? DEFAULT_AVG_SPEED_KMH;
+    const suffix = detour !== DEFAULT_DETOUR_FACTOR || speed !== DEFAULT_AVG_SPEED_KMH
+      ? `:df${detour}:sp${speed}`
+      : '';
     if (origin.canonicalLocationId && dest.canonicalLocationId) {
-      return `CAN:${origin.canonicalLocationId}::${dest.canonicalLocationId}:${tier}`;
+      return `CAN:${origin.canonicalLocationId}::${dest.canonicalLocationId}:${tier}${suffix}`;
     }
-    return `GEO:${origin.geohash}::${dest.geohash}:${tier}`;
+    return `GEO:${origin.geohash}::${dest.geohash}:${tier}${suffix}`;
   }
 
   /**
@@ -306,7 +317,7 @@ export class RoutingIntelligenceService {
     const origin = 'geohash' in originInput ? originInput : this.canonicalizeLocation(originInput);
     const dest = 'geohash' in destInput ? destInput : this.canonicalizeLocation(destInput);
 
-    const cacheKey = this.buildCacheKey(origin, dest, tier);
+    const cacheKey = this.buildCacheKey(origin, dest, tier, options);
 
     // 1. Check L1 Memory Cache
     const l1 = getL1(cacheKey);
@@ -505,7 +516,7 @@ export class RoutingIntelligenceService {
         durations[i][j] = durMin;
 
         const resolvedProvider: 'google' | 'mapbox' | 'haversine' | 'osrm' = providerPref;
-        const cacheKey = this.buildCacheKey(orig, dst, tier);
+        const cacheKey = this.buildCacheKey(orig, dst, tier, { detourFactor, avgSpeedKmh: avgSpeed });
 
         // Populate L1 Memory Cache immediately
         setL1(cacheKey, {

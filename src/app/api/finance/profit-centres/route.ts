@@ -107,9 +107,9 @@ export async function GET(req: NextRequest) {
       const params: unknown[] = [tenantId];
       let pi = 2;
       const activeOnly = sp.get('activeOnly');
-      const module     = sp.get('module');
+      const moduleParam = sp.get('module');
       if (activeOnly === 'true') { where += ` AND is_active = TRUE`; }
-      if (module)                { where += ` AND module = $${pi++}`; params.push(module); }
+      if (moduleParam)           { where += ` AND module = $${pi++}`; params.push(moduleParam); }
 
       const rows = await tx.$queryRawUnsafe<Row[]>(
         `SELECT * FROM finance_profit_centres ${where} ORDER BY module, code`,

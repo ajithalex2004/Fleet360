@@ -8,9 +8,9 @@
  *  - Calculates Straight-Through Processing (STP) vs HITL review counts.
  */
 
-import zlib from 'zlib';
 import { prisma } from '@/lib/prisma';
 import { executeDocumentControlPipeline, PipelineExecutionResult } from './index';
+import { readZipEntries, ZIP_LIMITS } from './zip-reader';
 
 export interface BatchJobDocumentInput {
   fileName: string;
@@ -76,85 +76,35 @@ export interface BatchJobSummary {
 }
 
 /**
- * Lightweight in-memory Zip unpacker using Node.js native zlib.
- * Parses standard PKZIP 2.0 headers (PK\x03\x04).
+ * Unpacks a ZIP upload into batch documents, within ZIP_LIMITS
+ * (zip-reader.ts). Throws ZipLimitError for an archive over the limits.
  */
 export function unpackZipBuffer(buffer: Buffer): BatchJobDocumentInput[] {
-  const files: BatchJobDocumentInput[] = [];
-  let offset = 0;
+  return readZipEntries(buffer).map(({ name, data }) => {
+    const lowerName = name.toLowerCase();
+    const isText = lowerName.endsWith('.txt') || lowerName.endsWith('.json') || lowerName.endsWith('.csv');
+    const isPdf = lowerName.endsWith('.pdf');
+    const isImg = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
 
-  while (offset < buffer.length - 30) {
-    // Check for Local File Header Signature: 0x04034b50 ("PK\x03\x04")
-    if (
-      buffer[offset] === 0x50 &&
-      buffer[offset + 1] === 0x4b &&
-      buffer[offset + 2] === 0x03 &&
-      buffer[offset + 3] === 0x04
-    ) {
-      const compressionMethod = buffer.readUInt16LE(offset + 8);
-      const compressedSize = buffer.readUInt32LE(offset + 18);
-      const fileNameLength = buffer.readUInt16LE(offset + 26);
-      const extraFieldLength = buffer.readUInt16LE(offset + 28);
+    const mimeType = isPdf
+      ? 'application/pdf'
+      : isImg
+      ? lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg'
+      : isText
+      ? 'text/plain'
+      : 'application/octet-stream';
 
-      const fileNameStart = offset + 30;
-      const fileNameEnd = fileNameStart + fileNameLength;
-      const fileName = buffer.toString('utf8', fileNameStart, fileNameEnd);
+    const docText = isText
+      ? data.toString('utf8')
+      : data.toString('utf8', 0, Math.min(data.length, 10000));
 
-      const fileDataStart = fileNameEnd + extraFieldLength;
-      const fileDataEnd = fileDataStart + compressedSize;
-
-      // Skip directory entries and hidden/OS metadata (e.g., __MACOSX)
-      if (!fileName.endsWith('/') && !fileName.includes('__MACOSX') && !fileName.startsWith('.')) {
-        let fileContentBuffer: Buffer | null = null;
-
-        if (compressionMethod === 0) {
-          // Stored (no compression)
-          fileContentBuffer = buffer.subarray(fileDataStart, fileDataEnd);
-        } else if (compressionMethod === 8) {
-          // Deflated
-          try {
-            const compressedSlice = buffer.subarray(fileDataStart, fileDataEnd);
-            fileContentBuffer = zlib.inflateRawSync(compressedSlice);
-          } catch (zlibErr) {
-            console.warn(`[BatchWorker] Failed to inflate entry "${fileName}":`, zlibErr);
-          }
-        }
-
-        if (fileContentBuffer) {
-          const lowerName = fileName.toLowerCase();
-          const isText = lowerName.endsWith('.txt') || lowerName.endsWith('.json') || lowerName.endsWith('.csv');
-          const isPdf = lowerName.endsWith('.pdf');
-          const isImg = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
-
-          const mimeType = isPdf
-            ? 'application/pdf'
-            : isImg
-            ? lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg'
-            : isText
-            ? 'text/plain'
-            : 'application/octet-stream';
-
-          const docText = isText
-            ? fileContentBuffer.toString('utf8')
-            : fileContentBuffer.toString('utf8', 0, Math.min(fileContentBuffer.length, 10000));
-
-          files.push({
-            fileName: fileName.split('/').pop() || fileName,
-            documentText: docText,
-            imageBase64: isImg ? fileContentBuffer.toString('base64') : undefined,
-            mimeType,
-          });
-        }
-      }
-
-      // Advance to next record: Header (30) + Name + Extra + CompressedData
-      offset = fileDataEnd;
-    } else {
-      offset++;
-    }
-  }
-
-  return files;
+    return {
+      fileName: name.split('/').pop() || name,
+      documentText: docText,
+      imageBase64: isImg ? data.toString('base64') : undefined,
+      mimeType,
+    };
+  });
 }
 
 /**
@@ -165,6 +115,10 @@ export async function executeBatchJob(input: BatchProcessingInput): Promise<Batc
   let docsToProcess: BatchJobDocumentInput[] = [];
 
   if (input.zipBufferBase64) {
+    // Base64 is 4/3 of the bytes; refuse an oversized archive before decoding it.
+    if (input.zipBufferBase64.length > Math.ceil((ZIP_LIMITS.maxTotalBytes * 4) / 3)) {
+      throw new Error(`Zip archive exceeds ${ZIP_LIMITS.maxTotalBytes} bytes`);
+    }
     try {
       const zipBuf = Buffer.from(input.zipBufferBase64, 'base64');
       docsToProcess = unpackZipBuffer(zipBuf);

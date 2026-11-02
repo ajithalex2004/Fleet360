@@ -87,7 +87,7 @@ function NotifyModal({ absentStudents, onClose, onNotified }: {
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--border-subtle)]">
-          <h2 className="text-[var(--text-main)] font-semibold">Notify Absent Students' Guardians</h2>
+          <h2 className="text-[var(--text-main)] font-semibold">Notify Absent Students&apos; Guardians</h2>
           <p className="text-[var(--text-muted)] text-xs mt-1">{unnotified.length} guardian(s) will be notified via WhatsApp/SMS</p>
         </div>
 

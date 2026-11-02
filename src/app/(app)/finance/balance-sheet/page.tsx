@@ -185,7 +185,7 @@ export default function BalanceSheetPage() {
 
                 {/* Equity */}
                 <tr className="border-t border-[var(--border-subtle)] bg-purple-900/5">
-                  <td className="px-6 py-2 text-xs font-bold uppercase tracking-wider text-purple-400" colSpan={2}>SHAREHOLDERS' EQUITY</td>
+                  <td className="px-6 py-2 text-xs font-bold uppercase tracking-wider text-purple-400" colSpan={2}>SHAREHOLDERS&apos; EQUITY</td>
                 </tr>
                 {data.equity.lines.map(line => (
                   <tr key={line.code} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
@@ -199,7 +199,7 @@ export default function BalanceSheetPage() {
                   </tr>
                 ))}
                 <tr className="border-b border-[var(--border-strong)] bg-purple-900/10">
-                  <td className="px-6 py-2 font-bold text-sm text-purple-200">Total Shareholders' Equity</td>
+                  <td className="px-6 py-2 font-bold text-sm text-purple-200">Total Shareholders&apos; Equity</td>
                   <td className="px-6 py-2 text-right font-bold text-sm text-purple-300">
                     {fmt(data.equity.totalEquity)}
                   </td>

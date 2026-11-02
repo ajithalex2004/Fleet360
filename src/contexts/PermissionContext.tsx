@@ -10,6 +10,7 @@ interface TenantInfo {
   plan?: string;
   defaultLanguage?: string;
   enabledModules: string[];
+  navPermissions?: Record<string, boolean>;
 }
 
 interface UserInfo {
@@ -26,6 +27,8 @@ interface PermissionContextType {
   user: UserInfo | null;
   tenant: TenantInfo | null;
   permissions: string[];
+  impersonatedBy: string | null;
+  isSuperAdminOrImpersonating: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
   // Permission checks
@@ -50,18 +53,21 @@ interface SessionCache {
   user: UserInfo;
   tenant: TenantInfo;
   permissions: string[];
+  impersonatedBy?: string | null;
   ts: number;            // epoch ms when cached
 }
 
 interface AuthMeResponse {
   userId?: string;
   tenantId?: string;
+  impersonatedBy?: string | null;
 }
 
 interface SessionResponse {
   user: UserInfo;
   tenant: TenantInfo;
   permissions?: string[];
+  impersonatedBy?: string | null;
 }
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -73,8 +79,8 @@ function getCached(): SessionCache | null {
   return _cache;
 }
 
-function setCache(user: UserInfo, tenant: TenantInfo, permissions: string[]) {
-  _cache = { user, tenant, permissions, ts: Date.now() };
+function setCache(user: UserInfo, tenant: TenantInfo, permissions: string[], impersonatedBy: string | null = null) {
+  _cache = { user, tenant, permissions, impersonatedBy, ts: Date.now() };
 }
 
 function clearCache() { _cache = null; }
@@ -86,7 +92,7 @@ function clearCache() { _cache = null; }
 // snapshot while we revalidate in the background. The server still authorises
 // every API call, so a briefly-stale client snapshot is safe.
 const SESSION_KEY = 'xl_mobility_session';
-const SNAPSHOT_KEY = 'xl_mobility_session_snapshot';
+const SNAPSHOT_KEY = 'xl_mobility_session_snapshot_v2';
 
 function hasStoredSession(): boolean {
   try {
@@ -105,8 +111,8 @@ function getPersistedSnapshot(): SessionCache | null {
     return snap?.user && snap?.tenant ? snap : null;
   } catch { return null; }
 }
-function setPersistedSnapshot(user: UserInfo, tenant: TenantInfo, permissions: string[]) {
-  try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ user, tenant, permissions, ts: Date.now() })); } catch { /* ignore */ }
+function setPersistedSnapshot(user: UserInfo, tenant: TenantInfo, permissions: string[], impersonatedBy: string | null = null) {
+  try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ user, tenant, permissions, impersonatedBy, ts: Date.now() })); } catch { /* ignore */ }
 }
 function clearPersistedSnapshot() { try { localStorage.removeItem(SNAPSHOT_KEY); } catch { /* ignore */ } }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,15 +145,18 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   const [user, setUser]               = useState<UserInfo | null>(null);
   const [tenant, setTenant]           = useState<TenantInfo | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(null);
   const [isLoading, setIsLoading]     = useState(true);
 
   const applySessionData = useCallback((data: SessionResponse) => {
     const perms = data.permissions ?? [];
+    const imp = data.impersonatedBy ?? null;
     setUser(data.user);
     setTenant(data.tenant);
     setPermissions(perms);
-    setCache(data.user, data.tenant, perms);
-    setPersistedSnapshot(data.user, data.tenant, perms);
+    setImpersonatedBy(imp);
+    setCache(data.user, data.tenant, perms, imp);
+    setPersistedSnapshot(data.user, data.tenant, perms, imp);
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: data.user.id, tenantId: data.tenant.id }));
     } catch { /* ignore */ }
@@ -177,7 +186,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
     let stored = localStorage.getItem(SESSION_KEY);
     if (!stored) {
-      const meRes = await fetchWithTimeout('/api/auth/me', { cache: 'no-store' }, 5_000).catch(() => null);
+      const meRes = await fetchWithTimeout('/api/auth/me', { cache: 'no-store' }, 15_000).catch(() => null);
       if (meRes?.ok) {
         const me = await meRes.json().catch(() => null) as AuthMeResponse | null;
         if (me?.userId && me.tenantId) {
@@ -218,11 +227,13 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     const data = await res.json();
 
     const perms = data.permissions ?? [];
+    const imp = data.impersonatedBy ?? null;
     setUser(data.user);
     setTenant(data.tenant);
     setPermissions(perms);
-    setCache(data.user, data.tenant, perms);  // ← save to module-level cache
-    setPersistedSnapshot(data.user, data.tenant, perms);  // ← persist for instant reloads
+    setImpersonatedBy(imp);
+    setCache(data.user, data.tenant, perms, imp);  // ← save to module-level cache
+    setPersistedSnapshot(data.user, data.tenant, perms, imp);  // ← persist for instant reloads
   }, [applySessionData]);
 
   const loadSession = useCallback(async (forceRefresh = false, silent = false) => {
@@ -234,6 +245,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
         setUser(hit.user);
         setTenant(hit.tenant);
         setPermissions(hit.permissions);
+        setImpersonatedBy(hit.impersonatedBy ?? null);
         setIsLoading(false);
         return;
       }
@@ -248,7 +260,8 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       setUser(snap.user);
       setTenant(snap.tenant);
       setPermissions(snap.permissions);
-      setCache(snap.user, snap.tenant, snap.permissions);
+      setImpersonatedBy(snap.impersonatedBy ?? null);
+      setCache(snap.user, snap.tenant, snap.permissions, snap.impersonatedBy ?? null);
       setIsLoading(false);
     } else if (!silent) {
       setIsLoading(true);
@@ -288,6 +301,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       setUser(null);
       setTenant(null);
       setPermissions([]);
+      setImpersonatedBy(null);
       setIsLoading(false);
     };
 
@@ -346,29 +360,57 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   }, [loadSession]);
 
   const switchTenant = useCallback(async (tenantId: string) => {
-    // Read user.id from the module-level cache (always-stable) rather than the
-    // React `user` state — keeping the React-state dep out makes this closure
-    // identity stable across every render.
-    const cachedUser = getCached()?.user;
-    if (!cachedUser?.id) return;
-    clearCache(); clearPersistedSnapshot();  // tenant change must fetch fresh permissions
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: cachedUser.id, tenantId }));
+    const cached = getCached();
+    const isSuperOrImpersonating =
+      cached?.user?.roleCode === 'SUPER_ADMIN' || Boolean(cached?.impersonatedBy);
+    if (!isSuperOrImpersonating) return;
+
     try {
-      await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: cachedUser.id, tenantId }),
-      });
+      let currentHomeTenantId = cached?.impersonatedBy ? null : cached?.tenant?.id ?? null;
+      if (cached?.impersonatedBy) {
+        const stopRes = await fetch('/api/admin/impersonate/stop', { method: 'POST' });
+        if (!stopRes.ok) {
+          const stopErr = await stopRes.json().catch(() => ({}));
+          throw new Error(stopErr?.error ?? 'Failed to restore Super Admin session');
+        }
+        const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (meRes.ok) {
+          const me = (await meRes.json().catch(() => null)) as AuthMeResponse | null;
+          currentHomeTenantId = me?.tenantId ?? null;
+        }
+      }
+
+      if (tenantId && tenantId !== currentHomeTenantId) {
+        const impRes = await fetch('/api/admin/impersonate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantId }),
+        });
+        if (!impRes.ok) {
+          const impErr = await impRes.json().catch(() => ({}));
+          throw new Error(impErr?.error ?? 'Could not switch tenant');
+        }
+      }
     } catch (err) {
-      console.warn('[PermissionContext] Cookie session sync failed on tenant switch', err);
+      console.warn('[PermissionContext] Tenant switch failed', err);
+      throw err;
     }
+
+    clearCache();
+    clearPersistedSnapshot();
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
     await loadSession(true);
   }, [loadSession]);
 
   const refreshPermissions = useCallback(() => loadSession(true), [loadSession]);
 
+  const isSuperAdminOrImpersonating =
+    user?.roleCode === 'SUPER_ADMIN' || Boolean(impersonatedBy);
+
   const ctx: PermissionContextType = {
     user, tenant, permissions,
+    impersonatedBy,
+    isSuperAdminOrImpersonating,
     isLoading,
     isAuthenticated: !!user && !!tenant,
     can:        (m, a, r) => hasPermission(permissions, m, a, r),
@@ -392,6 +434,8 @@ export function usePermissions(): PermissionContextType {
       user: null,
       tenant: null,
       permissions: [],
+      impersonatedBy: null,
+      isSuperAdminOrImpersonating: false,
       isLoading: false,
       isAuthenticated: false,
       can: () => false,

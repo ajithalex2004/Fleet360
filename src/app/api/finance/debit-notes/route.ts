@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
       const sp     = req.nextUrl.searchParams;
       const status  = sp.get('status');
-      const module  = sp.get('module');
+      const moduleParam = sp.get('module');
       const from    = sp.get('from');
       const to      = sp.get('to');
       const page    = Math.max(1,   parseInt(sp.get('page')  ?? '1'));
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
       where += ` AND tenant_id = $${pi++}`; params.push(tenantId);
       if (status)           { where += ` AND status = $${pi++}`;    params.push(status); }
-      if (module)           { where += ` AND module = $${pi++}`;    params.push(module); }
+      if (moduleParam)      { where += ` AND module = $${pi++}`;    params.push(moduleParam); }
       if (from)             { where += ` AND issue_date >= $${pi++}::date`; params.push(from); }
       if (to)               { where += ` AND issue_date <= $${pi++}::date`; params.push(to); }
 

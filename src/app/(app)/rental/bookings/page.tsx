@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import SlideOverDrawer, { DrawerTab, DrawerAction } from '@/components/ui/SlideOverDrawer';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { 
   Calendar, 
   Car, 
@@ -558,19 +559,34 @@ export default function BookingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Customer *</label>
-                  <select name="customerId" value={formData.customerId} onChange={e => setFormData(p => ({...p, customerId: e.target.value}))} required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs focus:border-emerald-500 focus:outline-none">
-                    <option value="">Select customer</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={formData.customerId}
+                    onChange={(val) => setFormData(p => ({ ...p, customerId: val }))}
+                    placeholder="Select customer..."
+                    searchPlaceholder="Type customer name, phone, or email..."
+                    accent="emerald"
+                    isClearable
+                    options={customers.map(c => ({
+                      value: c.id,
+                      label: c.fullName,
+                      sublabel: [c.phone, c.email].filter(Boolean).join(" • ") || undefined,
+                      badge: c.nationality,
+                    }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Vehicle Category *</label>
-                  <select name="vehicleCategory" value={formData.vehicleCategory} onChange={e => setFormData(p => ({...p, vehicleCategory: e.target.value}))} required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs focus:border-emerald-500 focus:outline-none">
-                    <option value="">Select category</option>
-                    {VEHICLE_CATEGORIES.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={formData.vehicleCategory}
+                    onChange={(val) => setFormData(p => ({ ...p, vehicleCategory: val }))}
+                    placeholder="Select category..."
+                    searchPlaceholder="Type category..."
+                    accent="emerald"
+                    options={VEHICLE_CATEGORIES.map(v => ({
+                      value: v,
+                      label: v,
+                    }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Pickup Date *</label>

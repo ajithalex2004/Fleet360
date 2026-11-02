@@ -73,7 +73,7 @@ export default function TransportPage() {
               : 'bg-slate-800/50 text-slate-300 border border-white/10'
           }`}
         >
-          Today's Trips
+          Today&apos;s Trips
         </button>
         <button
           onClick={() => setViewMode('weekly')}

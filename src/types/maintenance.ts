@@ -235,6 +235,7 @@ export interface MaintenanceRequest {
     // New Fields
     odometer?: number;
     garageId?: string;
+    garageName?: string;
     candidateGarageIds?: string[]; // For RFQ
     maintenanceType?: MaintenanceType;
     priority?: MaintenancePriority;

@@ -91,7 +91,7 @@ export default function DriverTripQrPage({ params }: { params: Promise<{ id: str
       </button>
 
       <div className="bg-slate-800/30 border border-white/5 rounded-xl p-4 text-xs text-slate-400">
-        Each token is valid for 15 minutes and bound to this trip. Passengers must already be on the manifest — scanning a stranger's badge does nothing.
+        Each token is valid for 15 minutes and bound to this trip. Passengers must already be on the manifest — scanning a stranger&apos;s badge does nothing.
       </div>
     </div>
   );

@@ -262,7 +262,7 @@ export default function DriverTripDetailPage({ params }: { params: Promise<{ id:
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Link href="/bus-ops/driver" className="text-xs text-violet-400 hover:underline">← Today's trips</Link>
+        <Link href="/bus-ops/driver" className="text-xs text-violet-400 hover:underline">← Today&apos;s trips</Link>
         <div className="flex gap-2">
           <a
             href={`/api/bus-ops/schedules/${id}/manifest/pdf?lang=en&download=1`}
@@ -353,8 +353,8 @@ export default function DriverTripDetailPage({ params }: { params: Promise<{ id:
             <span>Sharing location · last ping {Math.round((Date.now() - gpsLastSentAt) / 1000)}s ago</span>
           )}
           {gpsStatus === 'active' && !gpsLastSentAt && <span>Waiting for GPS fix…</span>}
-          {gpsStatus === 'denied' && <span>Location access denied. Passengers won't see live ETA. Open browser settings → allow location.</span>}
-          {gpsStatus === 'unsupported' && <span>This device doesn't support live tracking.</span>}
+          {gpsStatus === 'denied' && <span>Location access denied. Passengers won&apos;t see live ETA. Open browser settings → allow location.</span>}
+          {gpsStatus === 'unsupported' && <span>This device doesn&apos;t support live tracking.</span>}
           {gpsStatus === 'error' && <span>Location error. Retrying…</span>}
         </div>
       )}

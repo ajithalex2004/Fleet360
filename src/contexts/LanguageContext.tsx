@@ -122,6 +122,12 @@ export const arabicLabels: Record<string, string> = {
   'Alerts & Monitoring':    'التنبيهات والمراقبة',
   'Data Masters':           'بيانات المرجع',
   'Administration':         'الإدارة العامة',
+  'Platform (Super Admin)': 'إدارة المنصة (المسؤول العام)',
+  'Organization & Masters': 'الهيكل التنظيمي والبيانات الرئيسية',
+  'Identity & Access':      'المستخدمين والصلاحيات',
+  'Operations & Workflows': 'العمليات وسير العمل',
+  'Communications & Alerts':'الاتصالات والتنبيهات',
+  'Subscription & Integrations': 'الاشتراك والتكاملات',
   'Receivables':            'المستحقات',
   'UAE Compliance':         'الامتثال الإماراتي',
   'Multi-Branch':           'متعدد الفروع',
@@ -457,6 +463,7 @@ export const arabicLabels: Record<string, string> = {
   'Lead channels':          'قنوات استقطاب العملاء',
   'CRM & leads':            'إدارة علاقات العملاء والفرص',
   'Transfers':              'نقل المركبات',
+  'NUI Reason Master':      'دليل أسباب عدم الاستخدام',
   'Vehicle exchanges':      'تبديل المركبات',
   'Handover':               'التسليم والاستلام',
   'Field operations':       'العمليات الميدانية',
@@ -693,6 +700,7 @@ export const arabicLabels: Record<string, string> = {
   'Live map':               'الخريطة المباشرة',
   'Seat availability':      'توفر المقاعد',
   'Allocations':            'التخصيصات',
+  'Fleet Allocations':      'تخصيصات الأسطول',
   'Control tower':          'برج المراقبة والتحكم',
   'Dispatch board':         'لوحة الترحيل',
   'Freight marketplace':    'سوق الشحن',
@@ -836,6 +844,7 @@ export const arabicLabels: Record<string, string> = {
   'Admin':                  'لوحة الإدارة',
   'Users':                  'المستخدمون',
   'Roles & permissions':    'الأدوار والصلاحيات',
+  'Region, Department & Section': 'المنطقة والقسم والشعبة',
   'Departments':            'الأقسام',
   'Branches & regions':     'الفروع والمناطق',
   'Billing & subscriptions':'الاشتراكات والفوترة',
@@ -913,12 +922,242 @@ export const arabicLabels: Record<string, string> = {
   'Create your organisation': 'إنشاء مؤسستك',
   'Fleet Management Platform': 'منصة إدارة الأساطيل',
   'Multi-Tenant Platform':  'منصة متعددة المستأجرين',
+  'Go Back':                'رجوع للخلف',
+  'Tenant Admin':           'مسؤول المؤسسة',
+
+  // ── Port & Container Drayage (Complete Arabic Localization) ───────────────
+  'Port & Container Drayage': 'نقل الحاويات والموانئ',
+  'Operational command center: demurrage clocks, FCL haulage, L2 empty returns & live master sync': 'مركز القيادة التشغيلي: عدادات الأرضيات، نقل الحاويات الكاملة، إرجاع الفوارغ (L2) والمزامنة الفورية',
+  'Create Jobs':            'إنشاء المهام',
+  'Job Assignment':         'تعيين المهام',
+  'Job Tracking':           'تتبع المهام',
+  'Consignee Portal':       'بوابة المستلم',
+  'Job History':            'سجل المهام',
+  'Containers':             'الحاويات',
+  'Demurrage & Port Free-Days': 'غرامات الأرضيات وأيام السماح بالميناء',
+  'Trailers':               'المقطورات',
+  'Client Master':          'سجل العملاء',
+  'Terminal & Consignee':   'الموانئ والمستودعات',
+  'Active Containers':      'الحاويات النشطة',
+  'Under management':       'قيد الإدارة',
+  'Free Time < 48h':        'وقت السماح أقل من 48 ساعة',
+  'Approaching demurrage':  'تقترب من غرامة الأرضيات',
+  'In Demurrage':           'خاضعة لغرامة الأرضيات',
+  'Accruing port fines':    'تتراكم عليها رسوم الميناء',
+  'Accrued Demurrage':      'غرامات الأرضيات المتراكمة',
+  'Exposure to date':       'إجمالي الغرامات حتى تاريخه',
+  'Total Drayage Jobs':     'إجمالي مهام النقل',
+  'Drayage Revenue':        'إيرادات نقل الحاويات',
+  'Contracted billings':    'الفواتير التعاقدية',
+  'Tiered penalisation tracking (Dry 5d, Reefer 3d) based on discharge timestamp': 'تتبع الغرامات التصاعدية (5 أيام جاف، 3 أيام مبرد) بناءً على تاريخ التفريغ',
+  'Configure Free-Days & Tiers': 'إعداد أيام السماح والشرائح',
+  'Container':              'الحاوية',
+  'Port Terminal':          'محطة الميناء',
+  'Discharged':             'تاريخ التفريغ',
+  'Free Clock':             'عداد السماح',
+  'Accrued Fine':           'الغرامة المتراكمة',
+  'Overdue':                'متأخر',
+  'Expiring':               'ينتهي قريباً',
+  'Safe':                   'آمن',
+  'Returned':               'تم الإرجاع',
+  'RETURNED':               'تم الإرجاع',
+  'SAFE':                   'آمن',
+  'WARNING':                'تحذير',
+  'CRITICAL_OVERDUE':       'تأخير حرج',
+  'CRITICAL':               'حرج',
+  'URGENT':                 'عاجل',
+  'HIGH':                   'عالي',
+  'STANDARD':               'عادي',
+  'IMPORT':                 'استيراد',
+  'EXPORT':                 'تصدير',
+  'Import':                 'استيراد',
+  'Export':                 'تصدير',
+  'DRY':                    'جاف',
+  'REEFER':                 'مبرد',
+  'Dry':                    'جاف',
+  'Reefer':                 'مبرد',
+  'IN_TRANSIT':             'قيد النقل',
+  'AT_PORT_DISCHARGED':     'في الميناء (تم التفريغ)',
+  'PLACED_AT_RAMP':         'تم الوضع على الرصيف',
+  'PLACED_IN_YARD':         'تم الوضع في الساحة',
+  'CONTAINER_DETACHED':     'تم فصل الحاوية',
+  'TRAILER_DETACHED':       'تم فصل المقطورة',
+  'EMPTY_DEPOSITED':        'تم إيداع الحاوية الفارغة',
+  'ASSIGNED':               'تم التعيين',
+  'AT_PORT':                'في الميناء',
+  'LOADED':                 'تم التحميل',
+  'Showing high-risk containers': 'عرض الحاويات عالية المخاطر',
+  'Live Drayage Fleet':     'أسطول نقل الحاويات المباشر',
+  'Prime movers & drivers': 'رؤوس القاطرات والسائقون',
+  'On Active Trips':        'في رحلات نشطة',
+  'En route or at terminal/ramp': 'في الطريق أو في الميناء / الرصيف',
+  'Available Prime Movers': 'رؤوس القاطرات المتاحة',
+  'Ready for token dispatch': 'جاهزة للترحيل برمز الميناء',
+  'Available Trailers':     'المقطورات المتاحة',
+  'Available Chassis':      'المقطورات المتاحة',
+  'Skeletal & flatbed trailers': 'مقطورات هيكلية ومسطحة',
+  'Go to Job Assignment':   'الانتقال إلى تعيين المهام',
+  'Go to Job Assignment →': 'الانتقال إلى تعيين المهام ←',
+  'Recent Drayage Jobs & Turnaround Workflow': 'أحدث مهام نقل الحاويات وسير عمل الدوران',
+  'Track L1 import delivery and trigger L2 empty returns upon ramp/yard completion': 'تتبع تسليم الاستيراد (L1) وتفعيل إرجاع الفوارغ (L2) فور اكتمال التفريغ',
+  'Job Code & Phase':       'رمز المهمة والمرحلة',
+  'Customer & Route':       'العميل والمسار',
+  'Assigned Assets':        'الأصول المعينة',
+  'Rate':                   'التعريفة',
+  'Actions':                'الإجراءات',
+  'Unassigned':             'غير معين',
+  'Driver assigned':        'تم تعيين السائق',
+  'Trigger L2 Now':         'تفعيل المرحلة الثانية L2 الآن',
+  'Track':                  'تتبع',
+  'Showing latest jobs':    'عرض أحدث المهام',
+  'Open Job History & Invoicing': 'فتح سجل المهام والفوترة',
+  'Open Job History & Invoicing →': 'فتح سجل المهام والفوترة ←',
+
+  // ── Drayage Sub-Pages (Notifications, Create Jobs, Assignment, Tracking, etc.) ──
+  'Drayage Alert & Notification Center': 'مركز تنبيهات وإشعارات نقل الحاويات',
+  'Proactive alerts for DO expiry, port demurrage, detention, slot miss risk, and detached trailers': 'تنبيهات استباقية لانتهاء إذن التسليم، وغرامات الأرضيات، ومخاطر فوات المواعيد، والمقطورات المفصولة',
+  'Acknowledge':            'تأكيد الاستلام',
+  'Acknowledged':           'تم التأكيد',
+  'Acknowledge All':        'تأكيد استلام الكل',
+  'All Alerts':             'جميع التنبيهات',
+  'Unacknowledged':         'غير مؤكدة',
+  'Create Drayage Jobs':    'إنشاء مهام نقل الحاويات',
+  'Batch FCL Import / Export job creation with automated container & DO validation': 'إنشاء دفعات مهام استيراد وتصدير الحاويات مع التحقق التلقائي من إذن التسليم',
+  'New Job':                'مهمة جديدة',
+  '+ New Job':              '+ مهمة جديدة',
+  'Add Container':          'إضافة حاوية',
+  '+ Add Container':        '+ إضافة حاوية',
+  'Add New Container to Inventory': 'إضافة حاوية جديدة إلى المخزون',
+  'Container Number':       'رقم الحاوية',
+  'Container Number *':     'رقم الحاوية *',
+  'Size':                   'الحجم',
+  'Gross Weight (kg)':      'الوزن الإجمالي (كجم)',
+  'Discharge Date':         'تاريخ التفريغ',
+  'Discharge/Delivery Date':'تاريخ التفريغ / التسليم',
+  'DO Expiry Date':         'تاريخ انتهاء إذن التسليم (DO)',
+  'Seal Number':            'رقم الختم الجمركي',
+  'Shipment Type':          'نوع الشحنة',
+  'Customer / Consignee':   'العميل / المستلم',
+  'Delivery Warehouse':     'مستودع التسليم',
+  'Pickup Terminal':        'محطة الاستلام بالميناء',
+  'Port Token Number':      'رقم رمز الميناء (Token)',
+  'Drayage Job Assignment & Smart Dispatch': 'تعيين مهام نقل الحاويات والترحيل الذكي',
+  'Assign Prime Movers, Drivers & Skeletal Trailers — with Dual-20ft Bogie & Street-Turn AI optimization': 'تعيين رؤوس القاطرات والسائقين والمقطورات — مع التحسين الذكي للمقطورات المزدوجة وإعادة التوجيه المباشر',
+  'Smart Analysis':         'التحليل الذكي',
+  'Manual L2':              'المرحلة الثانية يدوي',
+  'Auto-L2 @ T-30m':        'تلقائي L2 قبل 30د',
+  'Engine Config':          'إعدادات المحرك',
+  'Pending Dispatch':       'بانتظار الترحيل',
+  'Active Trips':           'الرحلات النشطة',
+  'Detached at Ramp/Yard':  'مفصولة في الرصيف / الساحة',
+  'Assign Resources':       'تعيين الموارد',
+  'Reassign':               'إعادة تعيين',
+  'Prime Mover':            'رأس القاطرة',
+  'Driver':                 'السائق',
+  'Trailer':                'المقطورة',
+  'Live Corridor Tracking & Offload ETC': 'التتبع المباشر للمسار ووقت انتهاء التفريغ المتوقع',
+  'Real-time GPS corridor telemetry, geofence entry/exit, ramp destuffing countdown & dispatcher chat': 'تتبع GPS المباشر، دخول وخروج السياج الجغرافي، العد التنازلي للتفريغ ومحادثة المرحّلين',
+  'Urgent Demurrage Alert': 'تنبيه غرامات الأرضيات العاجل',
+  'Container Inventory & Demurrage Ledger': 'مخزون الحاويات وسجل غرامات الأرضيات',
+  'Full lifecycle tracking of FCL containers, PCS gate tokens, customs inspections, and free-time countdowns': 'تتبع دورة حياة الحاويات الكاملة، رموز بوابات الميناء، الفحوصات الجمركية والعد التنازلي لأيام السماح',
+  'Driver Allowances & Finance Settlement': 'بدلات السائقين والتسويات المالية',
+  'Trip allowances, port gate fees, overnight halts, bogie/street-turn bonuses & WPS payout ledger': 'بدلات الرحلات، رسوم بوابات الميناء، المبيت الليلي، مكافآت الدمج وسجل مدفوعات حماية الأجور WPS',
+  'Drayage Analytics & Corridor BI': 'تحليلات نقل الحاويات وذكاء المسارات',
+  'Turnaround velocity, port dwell times, demurrage savings, street-turn ratios & fleet utilization': 'سرعة الدوران، أوقات الانتظار بالميناء، وفورات الغرامات، نسب التوجيه المباشر واستغلال الأسطول',
+  'Skeletal & Flatbed Trailer Fleet': 'أسطول المقطورات الهيكلية والمسطحة',
+  'Track 20ft/40ft/45ft skeletal, flatbed, lowbed & reefer chassis across ports, ramps, and yards': 'تتبع المقطورات الهيكلية والمسطحة والمنخفضة والمبردة (20/40/45 قدم) عبر الموانئ والأرصفة والساحات',
+  'Add Trailer':            'إضافة مقطورة',
+  '+ Add Trailer':          '+ إضافة مقطورة',
+  'Client Master & Tariff Defaults': 'سجل العملاء والتعريفات الافتراضية',
+  'Manage enterprise consignees, TRN & trade licenses, default trip rates, driver allowances, and linked warehouses': 'إدارة العملاء والمستلمين، الأرقام الضريبية والرخص التجارية، أسعار الرحلات الافتراضية والمستودعات المرتبطة',
+  'Add Client':             'إضافة عميل',
+  '+ Add Client':           '+ إضافة عميل',
+  'Port Terminals & Consignee Geofences': 'محطات الموانئ والسياج الجغرافي للمستلمين',
+  'Interactive GIS corridor map, port terminal free-day rules, and automated geofence triggers': 'خريطة المسارات التفاعلية، قواعد أيام السماح في محطات الموانئ، وتفعيلات السياج الجغرافي التلقائية',
+  'Port Terminals':         'محطات الموانئ',
+  'Add Terminal':           'إضافة محطة ميناء',
+  '+ Add Terminal':         '+ إضافة محطة ميناء',
+  'No Port Terminals Added':'لم تتم إضافة محطات موانئ',
+  'Consignee Warehouses':   'مستودعات المستلمين',
+  'Add Warehouse':          'إضافة مستودع',
+  '+ Add Warehouse':        '+ إضافة مستودع',
+  'Drayage Reports & Executive Exports': 'تقارير نقل الحاويات والتصدير التنفيذي',
+  'Export operational manifests, demurrage exposure ledgers, driver allowance sheets, and SLA reports': 'تصدير بيانات التشغيل، سجلات غرامات الأرضيات، كشوف بدلات السائقين وتقارير مستوى الخدمة',
+  'Customer Shareable Tracking Portal': 'بوابة تتبع الشحنات المشتركة للعملاء',
+  'Generate read-only, token-secured live tracking links and automated WhatsApp/Email milestone alerts': 'إنشاء روابط تتبع مباشرة محمية برمز للقراءة فقط مع تنبيهات تلقائية عبر واتساب والبريد الإلكتروني',
+  'Copy Tracking Link':     'نسخ رابط التتبع',
+  'Open Portal Preview':    'معاينة بوابة العميل',
+  'Send Milestone Alert':   'إرسال تنبيه المرحلة',
+  'All Statuses':           'جميع الحالات',
+  'All Terminals':          'جميع محطات الميناء',
+  'All Customers':          'جميع العملاء',
+  'All Phases':             'جميع المراحل',
+  'Reset':                  'إعادة ضبط',
+  'Apply':                  'تطبيق',
+  'Confirm':                'تأكيد',
+  'Update':                 'تحديث',
+  'Download CSV':           'تحميل CSV',
+  'Export CSV':             'تصدير CSV',
+  'Export PDF':             'تصدير PDF',
 };
 
 // Normalized lowercase map for case-insensitive lookup
 const lowerArabicMap: Record<string, string> = {};
 for (const [k, v] of Object.entries(arabicLabels)) {
   lowerArabicMap[k.toLowerCase().trim()] = v;
+}
+
+const originalTextNodeMap = new WeakMap<Text, string>();
+const ARABIC_CHAR_RE = /[\u0600-\u06FF]/;
+
+function translatePhraseToArabic(english: string): string {
+  if (!english || typeof english !== 'string') return english;
+  const trimmed = english.trim();
+  if (!trimmed) return english;
+  if (arabicLabels[trimmed]) return arabicLabels[trimmed];
+  const lower = trimmed.toLowerCase();
+  if (lowerArabicMap[lower]) return lowerArabicMap[lower];
+  const stripped = lower.replace(/[:.→←]+$/, '').trim();
+  if (lowerArabicMap[stripped]) return lowerArabicMap[stripped];
+
+  // Dynamic patterns (counts, days, tiers, active/pending, etc.)
+  let m = trimmed.match(/^(\d+)\s+Active\s*\/\s*(\d+)\s+Pending$/i);
+  if (m) return `${m[1]} نشط / ${m[2]} معلق`;
+
+  m = trimmed.match(/^View all\s+(\d+)\s+containers$/i);
+  if (m) return `عرض جميع الحاويات (${m[1]})`;
+
+  m = trimmed.match(/^Day\s+(\d+)\s+in port$/i);
+  if (m) return `اليوم ${m[1]} في الميناء`;
+
+  m = trimmed.match(/^(\d+)d\s+Overdue$/i);
+  if (m) return `متأخر ${m[1]} يوم`;
+
+  m = trimmed.match(/^(\d+)d\s+Remaining$/i);
+  if (m) return `متبقي ${m[1]} يوم`;
+
+  m = trimmed.match(/^of\s+(\d+)d\s+free$/i);
+  if (m) return `من أصل ${m[1]} أيام سماح`;
+
+  m = trimmed.match(/^Tier\s+(\d+)\s*\((.+)\)$/i);
+  if (m) return `الشريحة ${m[1]} (${m[2].replace(/Days?/i, 'أيام').replace(/Overdue/i, 'تأخير')})`;
+
+  m = trimmed.match(/^Auto-Optimize All\s*\((\d+)\)$/i);
+  if (m) return `تحسين تلقائي للكل (${m[1]})`;
+
+  m = trimmed.match(/^(\d+)\s+Ports?$/i);
+  if (m) return `${m[1]} موانئ`;
+
+  m = trimmed.match(/^(\d+)\s+Geofences?$/i);
+  if (m) return `${m[1]} سياج جغرافي`;
+
+  m = trimmed.match(/^(\d+)\s+Warehouses?$/i);
+  if (m) return `${m[1]} مستودعات`;
+
+  m = trimmed.match(/^(\d+)\s+Clients?$/i);
+  if (m) return `${m[1]} عملاء`;
+
+  return english;
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
@@ -946,6 +1185,95 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     document.documentElement.dir  = language === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = language;
     localStorage.setItem('xlai_language', language);
+
+    if (typeof document === 'undefined' || !document.body) return;
+
+    const applyDomTranslation = () => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          const tag = parent.tagName;
+          if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEXTAREA' || tag === 'CODE') {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+
+      let current = walker.nextNode() as Text | null;
+      while (current) {
+        const raw = current.nodeValue ?? '';
+        const trimmed = raw.trim();
+        if (trimmed) {
+          if (language === 'ar') {
+            if (!ARABIC_CHAR_RE.test(trimmed)) {
+              originalTextNodeMap.set(current, raw);
+            }
+            const sourceEn = originalTextNodeMap.get(current) ?? raw;
+            const translated = translatePhraseToArabic(sourceEn.trim());
+            if (translated !== sourceEn.trim()) {
+              const leading = sourceEn.match(/^\s*/)?.[0] ?? '';
+              const trailing = sourceEn.match(/\s*$/)?.[0] ?? '';
+              const nextVal = `${leading}${translated}${trailing}`;
+              if (current.nodeValue !== nextVal) {
+                current.nodeValue = nextVal;
+              }
+            }
+          } else {
+            const orig = originalTextNodeMap.get(current);
+            if (orig && current.nodeValue !== orig) {
+              current.nodeValue = orig;
+            }
+          }
+        }
+        current = walker.nextNode() as Text | null;
+      }
+
+      const elements = document.body.querySelectorAll<HTMLElement>('[placeholder], [title]');
+      elements.forEach((el) => {
+        const ph = el.getAttribute('placeholder');
+        if (ph) {
+          if (language === 'ar') {
+            if (!ARABIC_CHAR_RE.test(ph)) {
+              el.setAttribute('data-en-placeholder', ph);
+            }
+            const src = el.getAttribute('data-en-placeholder') ?? ph;
+            const tr = translatePhraseToArabic(src);
+            if (tr !== src && el.getAttribute('placeholder') !== tr) {
+              el.setAttribute('placeholder', tr);
+            }
+          } else {
+            const orig = el.getAttribute('data-en-placeholder');
+            if (orig && el.getAttribute('placeholder') !== orig) {
+              el.setAttribute('placeholder', orig);
+            }
+          }
+        }
+      });
+    };
+
+    applyDomTranslation();
+
+    let rafId: number | null = null;
+    const observer = new MutationObserver(() => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        applyDomTranslation();
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: false,
+    });
+
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
   }, [language]);
 
   const setLanguage = (lang: Language) => setLanguageState(lang);
@@ -963,7 +1291,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (lowerArabicMap[lower]) return lowerArabicMap[lower];
     const stripped = lower.replace(/[:.]$/, '').trim();
     if (lowerArabicMap[stripped]) return lowerArabicMap[stripped];
-    return english;
+    return translatePhraseToArabic(english);
   };
 
   return (

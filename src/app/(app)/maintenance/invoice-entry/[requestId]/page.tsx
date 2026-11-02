@@ -267,7 +267,7 @@ export default function InvoiceEntryPage() {
                 {lineItems.length === 0 ? (
                     <div className="p-12 text-center text-[var(--text-faint)]">
                         <p className="font-medium">No line items added</p>
-                        <p className="text-sm text-[var(--text-muted)] mt-1">Click "Add Line Item" to get started</p>
+                        <p className="text-sm text-[var(--text-muted)] mt-1">Click &quot;Add Line Item&quot; to get started</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">

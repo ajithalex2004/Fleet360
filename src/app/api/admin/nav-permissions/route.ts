@@ -25,14 +25,42 @@ import { withAuditedAction } from '@/lib/audited-action';
 // exporting anything else fails next build's route-shape validation.
 // Nothing outside this file imports these.
 const TOGGLEABLE_NAV_KEYS = [
+  // Organization & Masters
+  'hierarchy',
   'branches',
-  'billing',
+  'nui-reasons',
+  'company-profile',
+
+  // Operations & Workflows
+  'service-config',
   'workflows',
-  'esign',
-  'whatsapp',
   'dispatch',
+  'shipper-portal-config',
+  'partner-onboarding',
+
+  // Communications & Alerts
+  'notifications',
+  'email-templates',
+  'whatsapp',
+  'esign',
+  'alerts',
+
+  // Commercial & Governance
+  'billing',
   'audit-logs',
+  'integrations',
 ] as const;
+
+// Organization & Masters + Audit Log default to true unless disabled;
+// Operations & Workflows, Communications & Alerts, and Subscription & Integrations
+// default to false (hidden from Tenant Admin unless Super Admin grants access).
+const DEFAULT_ENABLED_NAV_KEYS = new Set<string>([
+  'hierarchy',
+  'branches',
+  'nui-reasons',
+  'company-profile',
+  'audit-logs',
+]);
 
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 
@@ -71,9 +99,10 @@ export async function GET(request: NextRequest) {
     )
   );
 
-  // Build a full map — keys not in DB default to false
+  // Build a full map — Organization & Masters / Audit Log default to true;
+  // Operations & Workflows, Communications & Alerts, Subscription & Integrations default to false
   const map: Record<string, boolean> = {};
-  for (const key of TOGGLEABLE_NAV_KEYS) map[key] = false;
+  for (const key of TOGGLEABLE_NAV_KEYS) map[key] = DEFAULT_ENABLED_NAV_KEYS.has(key);
   for (const row of rows) map[row.nav_key] = row.enabled;
 
   return NextResponse.json({ tenantId: targetId, permissions: map });
@@ -101,9 +130,24 @@ async function handlePUT(request: NextRequest) {
     return NextResponse.json({ error: 'tenantId and permissions required' }, { status: 400 });
   }
 
-  // Upsert each toggleable key
+  // Upsert each toggleable key + any dynamic Menu (mod:*), Category (cat:*), Sub-Menu (sub:*), or Other-User (other:*) key
+  const allKeysToSave = new Set<string>([
+    ...TOGGLEABLE_NAV_KEYS,
+    ...Object.keys(permissions).filter(
+      (k) =>
+        k.startsWith('cat:') ||
+        k.startsWith('mod:') ||
+        k.startsWith('sub:') ||
+        k.startsWith('other:') ||
+        k === 'overview' ||
+        k === 'users' ||
+        k === 'roles',
+    ),
+  ]);
+
   await withTenantRls(prisma, targetTenantId, async (tx) => {
-    for (const key of TOGGLEABLE_NAV_KEYS) {
+    for (const key of allKeysToSave) {
+      if (!(key in permissions) && !(TOGGLEABLE_NAV_KEYS as readonly string[]).includes(key)) continue;
       const enabled = permissions[key] === true;
       await tx.$executeRawUnsafe(
         `INSERT INTO tenant_admin_nav_permissions (id, tenant_id, nav_key, enabled, updated_at)

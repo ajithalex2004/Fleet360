@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
     EnhancedMaintenanceRequest,
     Estimate,
@@ -306,18 +307,20 @@ export default function SelectGaragePage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Select Driver</label>
-                                <select
+                                <SearchableSelect
                                     value={selectedDriverId}
-                                    onChange={(e) => setSelectedDriverId(e.target.value)}
-                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                                >
-                                    <option value="">Select a driver...</option>
-                                    {drivers.filter(d => d.availability === 'AVAILABLE').map(driver => (
-                                        <option key={driver.id} value={driver.id}>
-                                            {driver.name} - {driver.licenseNumber}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => setSelectedDriverId(val)}
+                                    placeholder="Select a driver..."
+                                    searchPlaceholder="Search driver name or license..."
+                                    accent="blue"
+                                    isClearable
+                                    options={drivers.filter(d => d.availability === "AVAILABLE").map(driver => ({
+                                        value: driver.id,
+                                        label: `${driver.name} — ${driver.licenseNumber}`,
+                                        sublabel: driver.contactNumber ? `Contact: ${driver.contactNumber}` : undefined,
+                                        badge: "Available",
+                                    }))}
+                                />
                             </div>
 
                             {selectedDriverId && (

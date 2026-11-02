@@ -18,7 +18,7 @@ import {
   ModelProviderType,
   AgentRunTelemetry,
 } from '../types';
-import { calculateTokenCost } from '../telemetry';
+import { calculateTokenCost, recordAiInvocation } from '../telemetry';
 
 export interface GatewayMessage {
   role: 'system' | 'user' | 'assistant';
@@ -38,6 +38,10 @@ export interface GatewayOptions {
   responseFormat?: 'text' | 'json';
   maxRetries?: number;
   retryBaseDelayMs?: number;
+  agentId?: string;
+  eventType?: string;
+  entityId?: string;
+  recordTelemetry?: boolean;
 }
 
 export interface GatewayVisionOptions extends GatewayOptions {
@@ -208,9 +212,31 @@ export class AIGatewayService {
    * 1. Multi-Turn / Tool Chat Completion with Fallback Stack & Caching
    */
   async chat(messages: GatewayMessage[], options: GatewayOptions = {}): Promise<GatewayResponse> {
+    const callStarted = Date.now();
     const alias = options.capabilityAlias ?? 'ECONOMY_TEXT';
     const tenantId = options.tenantId ?? 'default';
     const cacheKey = hashPromptKey(messages, alias, tenantId);
+    const dispatchTelemetry = (res: GatewayResponse) => {
+      if (options.recordTelemetry !== false) {
+        void recordAiInvocation({
+          tenantId: options.tenantId,
+          agentId: options.agentId ?? 'ai-gateway',
+          eventType: options.eventType ?? 'CHAT_COMPLETION',
+          entityId: options.entityId,
+          modelAlias: res.capabilityAlias,
+          modelProvider: res.provider,
+          inputTokens: res.inputTokens,
+          outputTokens: res.outputTokens,
+          cachedTokens: res.cachedTokens,
+          costUsd: res.costUsd,
+          costAed: res.costAed,
+          status: res.fromFallback ? 'FAILED' : 'COMPLETED',
+          durationMs: Date.now() - callStarted,
+        });
+      }
+      return res;
+    };
+
 
     // Check L1 In-Memory Cache
     if (!options.forceFresh) {
@@ -254,7 +280,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].openai;
         const res = await this.callOpenAI(messages, model, options, openAiKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (openAiErr) {
         console.warn('[ai-gateway] OpenAI call failed, initiating fallback chain:', openAiErr);
       }
@@ -267,7 +293,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].gemini;
         const res = await this.callGemini(messages, model, options, geminiKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (geminiErr) {
         console.warn('[ai-gateway] Gemini call failed, attempting Anthropic fallback:', geminiErr);
       }
@@ -280,7 +306,7 @@ export class AIGatewayService {
         const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].anthropic;
         const res = await this.callAnthropic(messages, model, options, anthropicKey);
         this.cacheResponse(cacheKey, res, options.cacheTtlMs);
-        return res;
+        return dispatchTelemetry(res);
       } catch (anthropicErr) {
         console.warn('[ai-gateway] Anthropic call failed, resorting to canned fallback:', anthropicErr);
       }
@@ -298,7 +324,7 @@ export class AIGatewayService {
       costAed: 0,
     };
 
-    return {
+    return dispatchTelemetry({
       content: fallbackText,
       capabilityAlias: 'DETERMINISTIC_RULES',
       model: 'deterministic-fallback',
@@ -313,7 +339,7 @@ export class AIGatewayService {
       costAvoidedUsd: 0,
       costAvoidedAed: 0,
       telemetry,
-    };
+    });
   }
 
   /**
@@ -393,7 +419,11 @@ export class AIGatewayService {
     const alias = options.capabilityAlias ?? (options.detail === 'high' ? 'VISION_HIGH_ACCURACY' : 'VISION_FAST');
     const openAiKey = process.env.OPENAI_API_KEY;
 
-    if (!openAiKey) {
+    const geminiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
+    if ((!openAiKey || openAiKey.startsWith('dev-')) && geminiKey) {
+      return this.callGeminiVision(images, prompt, options, alias, geminiKey);
+    }
+    if (!openAiKey || openAiKey.startsWith('dev-')) {
       throw new Error('Vision is unavailable: OPENAI_API_KEY is not set');
     }
 
@@ -437,6 +467,9 @@ export class AIGatewayService {
     });
 
     if (!res.ok) {
+      if (geminiKey) {
+        return this.callGeminiVision(images, prompt, options, alias, geminiKey);
+      }
       throw new Error(`OpenAI Vision error ${res.status}: ${await res.text()}`);
     }
 
@@ -483,6 +516,79 @@ export class AIGatewayService {
    */
   clearCache(): void {
     MEMORY_GATEWAY_CACHE.clear();
+  }
+
+  private async callGeminiVision(
+    images: string[],
+    prompt: string,
+    options: GatewayVisionOptions,
+    alias: CapabilityAlias,
+    geminiKey: string,
+  ): Promise<GatewayResponse> {
+    const geminiModel = 'gemini-2.0-flash';
+    const parts: Array<Record<string, unknown>> = [
+      { text: options.systemPrompt ? `${options.systemPrompt}\n\n${prompt}` : prompt },
+    ];
+    for (const img of images) {
+      const m = /^data:([^;]+);base64,(.+)$/i.exec(img);
+      if (m) {
+        parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+      } else if (!img.startsWith('http')) {
+        parts.push({ inline_data: { mime_type: 'image/jpeg', data: img } });
+      }
+    }
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          temperature: options.temperature ?? 0,
+          maxOutputTokens: options.maxTokens ?? 1024,
+        },
+      }),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 45_000),
+    });
+
+    if (!geminiRes.ok) {
+      throw new Error(`Gemini Vision error ${geminiRes.status}: ${await geminiRes.text()}`);
+    }
+
+    const gData = await geminiRes.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    const content = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    const inputTokens = gData.usageMetadata?.promptTokenCount ?? 500;
+    const outputTokens = gData.usageMetadata?.candidatesTokenCount ?? 200;
+    const cost = calculateTokenCost(alias, inputTokens, outputTokens);
+
+    return {
+      content,
+      capabilityAlias: alias,
+      model: geminiModel,
+      provider: 'gemini',
+      inputTokens,
+      outputTokens,
+      cachedTokens: 0,
+      isCacheHit: false,
+      fromFallback: false,
+      costUsd: cost.costUsd,
+      costAed: cost.costAed,
+      costAvoidedUsd: 0,
+      costAvoidedAed: 0,
+      telemetry: {
+        modelAlias: alias,
+        modelProvider: 'gemini',
+        inputTokens,
+        outputTokens,
+        cachedTokens: 0,
+        costUsd: cost.costUsd,
+        costAed: cost.costAed,
+      },
+    };
   }
 
   // ── Private Provider Implementations ───────────────────────────────────────

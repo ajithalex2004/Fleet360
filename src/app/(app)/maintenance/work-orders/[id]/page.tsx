@@ -677,7 +677,7 @@ export default function WorkOrderPage() {
             }
         }
 
-        let updates: Partial<WorkOrder> = { status: newStatus };
+        const updates: Partial<WorkOrder> = { status: newStatus };
 
         if (newStatus === WorkOrderStatus.COMPLETED) {
             updates.actualCompletionDate = new Date().toISOString();

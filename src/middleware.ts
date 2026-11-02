@@ -112,6 +112,11 @@ function isDocumentNavigation(request: NextRequest): boolean {
  * getDriverTenantContext() in src/lib/driver-session.ts.
  */
 async function verifyDriverAppSession(request: NextRequest) {
+  const bearer = bearerToken(request.headers);
+  if (bearer) {
+    const session = await verifySession(bearer).catch(() => null);
+    if (session) return session;
+  }
   for (const name of ['xl-driver-session', 'xl-session']) {
     const token = request.cookies.get(name)?.value;
     if (!token) continue;
@@ -157,8 +162,59 @@ function partnerHomeRedirect(request: NextRequest): NextResponse {
   return NextResponse.redirect(url);
 }
 
+/**
+ * Origins allowed cross-origin with credentials: the driver app's WebView
+ * (capacitor.config.ts server.hostname 'localhost2': https on Android,
+ * capacitor:// on iOS) and the web app's own origin.
+ */
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (['https://localhost2', 'capacitor://localhost2', 'https://localhost', 'capacitor://localhost'].includes(origin)) {
+    return true;
+  }
+  try {
+    return !!process.env.NEXT_PUBLIC_APP_URL && new URL(process.env.NEXT_PUBLIC_APP_URL).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+function applyCorsHeaders(res: NextResponse, origin: string | null): NextResponse {
+  if (origin && isAllowedCorsOrigin(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Access-Control-Allow-Credentials', 'true');
+    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.headers.set('Vary', 'Origin');
+  }
+  return res;
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const origin = request.headers.get('origin');
+  const res = await middlewareInner(request, origin);
+  return applyCorsHeaders(res, origin);
+}
+
+async function middlewareInner(request: NextRequest, origin: string | null): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+
+  // CORS preflight (OPTIONS) for the mobile app's WebView. Only allowlisted
+  // origins get CORS headers: reflecting any Origin with Allow-Credentials
+  // let every website make credentialed requests to the whole API from a
+  // signed-in user's browser. x-tenant-id is not offered: identity headers
+  // are set by this middleware, never by clients.
+  if (request.method === 'OPTIONS') {
+    const corsHeaders = new Headers();
+    if (origin && isAllowedCorsOrigin(origin)) {
+      corsHeaders.set('Access-Control-Allow-Origin', origin);
+      corsHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      corsHeaders.set('Access-Control-Allow-Credentials', 'true');
+      corsHeaders.set('Access-Control-Max-Age', '86400');
+      corsHeaders.set('Vary', 'Origin');
+    }
+    return new NextResponse(null, { status: 204, headers: corsHeaders });
+  }
 
   // Identity headers (x-tenant-id, x-user-id, x-user-role, …) are only
   // trustworthy when middleware sets them from a verified credential. Every
@@ -223,6 +279,17 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // 1. Public routes — no session required. Client-sent identity headers
   // are removed; driver-app requests get the identity of their verified
   // session cookie, if they have one.
+  if (pathname.startsWith('/api/driver/')) {
+    const driverSession = await verifyDriverAppSession(request);
+    if (driverSession) {
+      const refusal = residencyRefusal(pathname, driverSession.dataResidency);
+      if (refusal) return refusal;
+      return NextResponse.next({
+        request: { headers: withVerifiedIdentity(request.headers, driverSession) },
+      });
+    }
+  }
+
   if (isPublicRoute(pathname)) {
     // Preserve legacy targeting as an untrusted selector. Public job handlers
     // must authenticate independently before honoring it.
@@ -244,9 +311,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
 
-  // 2. Verify session cookie
-  const token = request.cookies.get('xl-session')?.value;
-  const session = token ? await verifySession(token) : null;
+  // 2. Verify session cookie (or Bearer session token from mobile APK WebView)
+  const token = bearerToken(request.headers) || request.cookies.get('xl-session')?.value;
+  const session = token ? await verifySession(token).catch(() => null) : null;
 
   // 3. Handle unauthenticated requests
   if (!session) {
@@ -312,6 +379,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // 4a. Authorization dry run (src/lib/authz/dry-run.ts): answer the admin
   // gate and policy decision in headers without running anything.
+  const effectiveAuthzRole = session.impersonatedBy ? 'SUPER_ADMIN' : session.role;
   if (pathname.startsWith('/api/') && request.headers.get(DRY_RUN_HEADER) === '1') {
     const level = isAdminApiPath(pathname) ? requiredAdminLevel(pathname, request.method) : null;
     const headers = dryRunHeaders({
@@ -319,9 +387,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       mode: authzMode(),
       decision: decide(
         { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
-        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+        { role: effectiveAuthzRole, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
       ),
-      adminGateRefusal: level && !roleSatisfies(session.role, level) ? level : null,
+      adminGateRefusal: level && !roleSatisfies(effectiveAuthzRole, level) ? level : null,
     });
     return new NextResponse(null, { status: 204, headers });
   }
@@ -331,7 +399,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // unlisted admin routes require SUPER_ADMIN.
   if (isAdminApiPath(pathname)) {
     const level = requiredAdminLevel(pathname, request.method);
-    if (level && !roleSatisfies(session.role, level)) {
+    if (level && !roleSatisfies(effectiveAuthzRole, level)) {
       return NextResponse.json(
         {
           error: 'Forbidden',
@@ -354,7 +422,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (mode !== 'off') {
       const decision = decide(
         { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
-        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+        { role: effectiveAuthzRole, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
       );
       // Sessions issued before the permission claim existed hold none until
       // they roll over (24 h); in report mode that is expected, not signal.

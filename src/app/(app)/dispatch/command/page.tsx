@@ -54,7 +54,7 @@ interface MergePair {
   estimatedSavingKm: number; mergeReasons: string[];
   routingSource: string;
 }
-interface CtxMenu  { x: number; y: number; kind: 'job'|'vehicle'|'driver'|'map'|'exception'; target: any; }
+interface CtxMenu  { x: number; y: number; kind: 'job'|'vehicle'|'driver'|'map'|'exception'; target: unknown; }
 interface Candidate{ driver_id: string; driver_name: string; vehicle_reg?: string; eta_minutes: number; score: number; }
 interface LogEntry { time: string; msg: string; kind: 'info'|'warn'|'error'|'success'; }
 
@@ -123,7 +123,7 @@ function ago(iso?:string){
 
 /* ═══════════════════ CONTEXT MENU ═══════════════════ */
 function CtxMenu({ m, onSelect, onClose }:{
-  m:CtxMenu; onSelect:(a:string,t:any)=>void; onClose:()=>void;
+  m:CtxMenu; onSelect:(a:string,t:unknown)=>void; onClose:()=>void;
 }) {
   const items = m.kind==='job'?JOB_CTX:m.kind==='vehicle'?VEH_CTX:m.kind==='driver'?DRVR_CTX:m.kind==='map'?MAP_CTX:EXC_CTX;
   useEffect(()=>{
@@ -136,7 +136,7 @@ function CtxMenu({ m, onSelect, onClose }:{
       style={{ left:Math.min(m.x,window.innerWidth-240), top:Math.min(m.y,window.innerHeight-items.length*40-20) }}>
       <div className="px-4 py-2.5 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)]">
         <p className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">
-          {m.kind==='job'?`Job ${m.target?.id?.slice(0,8)}…`:m.kind==='vehicle'?m.target?.vehicle_reg??'Vehicle':m.kind==='driver'?m.target?.driver_name??'Driver':m.kind==='map'?'Map Actions':'Exception'}
+          {m.kind==='job'?`Job ${(m.target as { id?: string } | null)?.id?.slice(0,8)}…`:m.kind==='vehicle'?(m.target as { vehicle_reg?: string } | null)?.vehicle_reg??'Vehicle':m.kind==='driver'?(m.target as { driver_name?: string } | null)?.driver_name??'Driver':m.kind==='map'?'Map Actions':'Exception'}
         </p>
       </div>
       {items.map(item=>(
@@ -483,7 +483,7 @@ export default function CommandCentre() {
       // Filter out SCHOOL_BUS and AMBULANCE — each has a dedicated dispatch board:
       //   SCHOOL_BUS → /school-bus/dispatch
       //   AMBULANCE  → /incidents/ambulance/dispatch
-      setJobs((jr.data??[]).filter((j:Job)=>j.service_type!=='SCHOOL_BUS'&&j.service_type!=='AMBULANCE' as any));
+      setJobs((jr.data??[]).filter((j:Job)=>j.service_type!=='SCHOOL_BUS' && (j.service_type as string) !== 'AMBULANCE'));
       setDrivers(dr.data??[]);
     } finally { setLoading(false); }
   },[]);
@@ -586,7 +586,7 @@ export default function CommandCentre() {
   });
 
   /* ── Actions ── */
-  const handleCtxAction=useCallback(async(action:string,target:any)=>{
+  const handleCtxAction=useCallback(async(action:string,target:unknown)=>{
     if(action==='Assign Vehicle'){
       setDrawer({job:target as Job,candidates:[],loading:true});
       await new Promise(r=>setTimeout(r,600));
@@ -656,7 +656,7 @@ export default function CommandCentre() {
     }
   };
 
-  const openCtx=(e:React.MouseEvent,kind:CtxMenu['kind'],target:any)=>{
+  const openCtx=(e:React.MouseEvent,kind:CtxMenu['kind'],target:unknown)=>{
     e.preventDefault(); e.stopPropagation();
     setCtxMenu({x:e.clientX,y:e.clientY,kind,target});
   };

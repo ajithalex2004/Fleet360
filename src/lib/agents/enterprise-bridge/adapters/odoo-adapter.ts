@@ -7,6 +7,7 @@
  */
 
 import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
+import { erpFetch } from '../erp-fetch';
 import {
   CanonicalEntityType,
   CanonicalInvoice,
@@ -38,12 +39,13 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
       id: Date.now(),
     };
 
-    const res = await fetch(url, {
+    const res = await erpFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000),
+      timeoutMs: 10000,
     });
+    if (!res.ok) throw new Error(`Odoo JSON-RPC HTTP ${res.status}`);
 
     const data = await res.json();
     if (data.error) {
@@ -57,19 +59,22 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
     const start = Date.now();
     try {
       const url = `${this.connection.baseUrl.replace(/\/$/, '')}/web/health`;
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      const res = await erpFetch(url, { method: 'GET', timeoutMs: 5000 });
       const latencyMs = Date.now() - start;
+      if (!res.ok) {
+        return { success: false, latencyMs, message: `Odoo health check failed: HTTP ${res.status}.` };
+      }
       return {
         success: true,
         latencyMs,
         message: `Connected to Odoo backend successfully (${res.status} OK).`,
       };
-    } catch {
-      // Fallback ping to jsonrpc
+    } catch (err) {
+      // Unreachable is a failed test. It used to report success here.
       return {
-        success: true,
+        success: false,
         latencyMs: Date.now() - start,
-        message: `Connected to Odoo JSON-RPC endpoint.`,
+        message: `Could not reach Odoo: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
@@ -106,7 +111,12 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
         financialImpactAed = workOrder.estimatedCostAed || 0;
       }
 
-      const odooId = await this.executeKw<number>(model, 'create', [vals]).catch(() => 101);
+      // A failed create is a failed sync: it used to fall back to the id 101
+      // and report SUCCESS, so the sync log showed records Odoo never had.
+      const odooId = await this.executeKw<number>(model, 'create', [vals]);
+      if (typeof odooId !== 'number' || !Number.isInteger(odooId) || odooId <= 0) {
+        throw new Error(`Odoo returned no record id for ${model}.create`);
+      }
 
       const latencyMs = Date.now() - start;
       return {

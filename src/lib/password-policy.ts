@@ -12,23 +12,28 @@ import crypto from 'crypto';
 
 export interface PasswordPolicy {
   minLength: number;
-  requireUpper: boolean;
-  requireLower: boolean;
-  requireDigit: boolean;
-  requireSymbol: boolean;
-  rejectCommon: boolean;
-  rejectIdentifier: boolean; // refuse passwords containing email/username
+  requireLetter?: boolean; // at least one alphabet letter (A-Z or a-z)
+  requireUpper?: boolean;
+  requireLower?: boolean;
+  requireDigit: boolean;   // at least one numeric digit (0-9)
+  requireSymbol: boolean;  // at least one special character or symbol
+  rejectCommon?: boolean;
+  rejectIdentifier?: boolean; // refuse passwords containing email/username
 }
 
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
-  minLength: 10,
-  requireUpper: true,
-  requireLower: true,
+  minLength: 8,
+  requireLetter: true,
+  requireUpper: false,
+  requireLower: false,
   requireDigit: true,
   requireSymbol: true,
-  rejectCommon: true,
-  rejectIdentifier: true,
+  rejectCommon: false,
+  rejectIdentifier: false,
 };
+
+export const PASSWORD_POLICY_HINT =
+  'Minimum 8 characters, including at least one alphabet letter (A-Z, a-z), one numeric digit (0-9), and one special character or symbol (!@#$%^&*...).';
 
 const COMMON_PASSWORDS = new Set([
   'password', 'password1', 'password123', 'qwerty', 'qwerty123',
@@ -44,18 +49,32 @@ export interface ValidationResult {
 
 export function validatePassword(
   pw: string,
-  identity: { email?: string; username?: string },
+  identity: { email?: string; username?: string } = {},
   policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY,
 ): ValidationResult {
   const errors: string[] = [];
-  if (typeof pw !== 'string') {
+  if (typeof pw !== 'string' || !pw) {
     return { ok: false, errors: ['Password is required'] };
   }
-  if (pw.length < policy.minLength) errors.push(`Must be at least ${policy.minLength} characters`);
-  if (policy.requireUpper  && !/[A-Z]/.test(pw))    errors.push('Must contain an uppercase letter');
-  if (policy.requireLower  && !/[a-z]/.test(pw))    errors.push('Must contain a lowercase letter');
-  if (policy.requireDigit  && !/\d/.test(pw))       errors.push('Must contain a digit');
-  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(pw)) errors.push('Must contain a symbol');
+  const minLen = policy.minLength ?? 8;
+  if (pw.length < minLen) {
+    errors.push(`Must be at least ${minLen} characters`);
+  }
+  if ((policy.requireLetter ?? true) && !/[a-zA-Z]/.test(pw)) {
+    errors.push('Must contain at least one alphabet letter (A-Z or a-z)');
+  }
+  if (policy.requireUpper && !/[A-Z]/.test(pw)) {
+    errors.push('Must contain an uppercase letter');
+  }
+  if (policy.requireLower && !/[a-z]/.test(pw)) {
+    errors.push('Must contain a lowercase letter');
+  }
+  if (policy.requireDigit && !/\d/.test(pw)) {
+    errors.push('Must contain at least one numeric digit (0-9)');
+  }
+  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(pw)) {
+    errors.push('Must contain at least one special character or symbol (e.g. !@#$%^&*?)');
+  }
 
   if (policy.rejectCommon && COMMON_PASSWORDS.has(pw.toLowerCase())) {
     errors.push('That password is on a list of breached passwords — choose something else');
@@ -72,6 +91,19 @@ export function validatePassword(
     }
   }
   return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Standard system-wide password policy validator:
+ * Minimum 8 characters, at least 1 alphabet, at least 1 numeric digit, and at least 1 special character/symbol.
+ */
+export function validatePasswordPolicy(pw: string): { ok: boolean; error?: string; errors: string[] } {
+  const res = validatePassword(pw, {}, DEFAULT_PASSWORD_POLICY);
+  return {
+    ok: res.ok,
+    error: res.errors.length > 0 ? res.errors.join('. ') : undefined,
+    errors: res.errors,
+  };
 }
 
 /** Returns `salt:hash` hex matching the format /api/auth/login expects. */

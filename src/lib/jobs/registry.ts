@@ -81,9 +81,18 @@ import {
   runDocumentLifecycleSweep,
 } from '@/lib/jobs/sweep-adapters';
 
+import { runHealthWatchdogJob } from '@/lib/health/alerting';
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: JobDef[] = [
+  {
+    name:           'health-watchdog',
+    description:    'System health probe & automated alerting watchdog (Slack/Discord Webhook & Email)',
+    handler:        runHealthWatchdogJob,
+    maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN'],
+  },
   { name: 'bus-rider-notifications', description: 'Deliver tenant rider messages with durable claims and bounded retries', handler: runBusRiderNotifications, maxDurationSec: 120, allowedRoles: ['SUPER_ADMIN'] },
   {
     name:           'auto-close-trips',

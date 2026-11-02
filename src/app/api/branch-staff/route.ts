@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
     try {
 
         const sp          = new URL(req.url).searchParams;
-        const module      = sp.get('module');
-        const denied      = access(branchStaffModules(module), 'view', '/api/branch-staff');
+        const moduleParam = sp.get('module');
+        const denied      = access(branchStaffModules(moduleParam), 'view', '/api/branch-staff');
         if (denied) return denied;
         const branch_name = sp.get('branch_name');
         const role        = sp.get('role');
@@ -58,8 +58,8 @@ export async function GET(req: NextRequest) {
         const conditions: string[] = ['deleted_at IS NULL'];
         const params: unknown[]    = [];
 
-        if (module) {
-          params.push(module);
+        if (moduleParam) {
+          params.push(moduleParam);
           conditions.push(`(module = $${params.length} OR module = 'BOTH')`);
         }
         if (branch_name) {

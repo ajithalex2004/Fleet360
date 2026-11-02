@@ -18,8 +18,8 @@ import { isServerRunning, makeRequest } from '../setup';
 
 let serverUp = false;
 let testStaffId: string | null = null;
-let testEmployeeId = 'E2E-PUSH-STAFF';
-let testEndpoint = 'https://fcm.googleapis.com/fcm/send/E2E-PUSH-ENDPOINT';
+const testEmployeeId = 'E2E-PUSH-STAFF';
+const testEndpoint = 'https://fcm.googleapis.com/fcm/send/E2E-PUSH-ENDPOINT';
 
 beforeAll(async () => {
   serverUp = await isServerRunning();

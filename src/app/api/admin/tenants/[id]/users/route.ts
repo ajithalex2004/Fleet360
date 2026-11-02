@@ -2,12 +2,24 @@ export const dynamic = 'force-dynamic';
 
 import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
+import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { checkGrantableRole } from '@/lib/admin-scope';
 import { withAuditedAction } from '@/lib/audited-action';
+import { reportingLineValue, userScopeDenied } from '@/lib/admin/user-scope';
+import { validatePasswordPolicy } from '@/lib/password-policy';
+
+const CACHE_TAG = 'users:list';
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -32,6 +44,26 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }
 
   try {
+    const singleUserId = req.nextUrl.searchParams.get('userId');
+    if (singleUserId) {
+      const ut = await withTenantRls(prisma, params.id, (tx) =>
+        tx.userTenant.findUnique({
+          where: { userId_tenantId: { userId: singleUserId, tenantId: params.id } },
+          include: { user: true, role: true },
+        }),
+      );
+      if (!ut) {
+        return NextResponse.json({ error: 'User not found in tenant' }, { status: 404 });
+      }
+      return NextResponse.json({
+        ...ut.user,
+        reportingLines: {
+          managerUserId: ut.managerUserId ?? null,
+          departmentHeadUserId: ut.departmentHeadUserId ?? null,
+        },
+      });
+    }
+
     // Single joined query — avoids 2 sequential DB round-trips
     // UserTenant has RLS, Role has RLS, User is global. We use withTenantRls
     // so the join is constrained to the target tenant's memberships.
@@ -81,7 +113,112 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
 
   try {
     const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
+    const body = stripTenantOwnershipFields(bodyRaw);
+
+    if (body.action === 'update-member') {
+      const {
+        userId, username, email, firstName, lastName,
+        department, position, mobileNumber, hierarchy,
+        userType, employeeId, isActive,
+        managerUserId, departmentHeadUserId, newPassword,
+      } = body as {
+        userId?: string;
+        username?: string;
+        email?: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        department?: string | null;
+        position?: string | null;
+        mobileNumber?: string | null;
+        hierarchy?: string | null;
+        userType?: string;
+        employeeId?: string | null;
+        isActive?: boolean;
+        managerUserId?: string | null;
+        departmentHeadUserId?: string | null;
+        newPassword?: string;
+      };
+
+      if (!userId) {
+        return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+      }
+
+      let passwordHash: string | null = null;
+      if (typeof newPassword === 'string' && newPassword.trim()) {
+        const pwCheck = validatePasswordPolicy(newPassword.trim());
+        if (!pwCheck.ok) {
+          return NextResponse.json(
+            { error: 'Password must meet policy: ' + pwCheck.error },
+            { status: 400 },
+          );
+        }
+        passwordHash = hashPassword(newPassword.trim());
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = { updatedAt: new Date() };
+      if (username     !== undefined) data.username     = username;
+      if (email        !== undefined) data.email        = email;
+      if (firstName    !== undefined) data.firstName    = firstName;
+      if (lastName     !== undefined) data.lastName     = lastName;
+      if (department   !== undefined) data.department   = department;
+      if (position     !== undefined) data.position     = position;
+      if (mobileNumber !== undefined) data.mobileNumber = mobileNumber;
+      if (hierarchy    !== undefined) data.hierarchy    = hierarchy;
+      if (userType     !== undefined) data.userType     = userType;
+      if (employeeId   !== undefined) data.employeeId   = employeeId;
+      if (isActive     !== undefined) data.isActive     = isActive;
+
+      const lines: { managerUserId?: string | null; departmentHeadUserId?: string | null } = {};
+      const accountChange = [username, email, isActive, userType, passwordHash].some((v) => v !== undefined && v !== null);
+
+      const result = await withPlatformAdmin(prisma, async (tx) => {
+        const denied = await userScopeDenied(
+          tx,
+          req.headers,
+          params.id,
+          userId,
+          accountChange ? 'account' : 'member',
+        );
+        if (denied) return { denied };
+
+        for (const [key, value, label] of [
+          ['managerUserId', managerUserId, 'Manager'],
+          ['departmentHeadUserId', departmentHeadUserId, 'Department head'],
+        ] as const) {
+          if (value === undefined) continue;
+          const checked = await reportingLineValue(tx, params.id, userId, value, label);
+          if (!checked.ok) return { denied: NextResponse.json({ error: checked.error }, { status: 400 }) };
+          lines[key] = checked.value;
+        }
+
+        const user = await tx.user.update({ where: { id: userId }, data });
+        if (passwordHash) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
+            passwordHash,
+            userId,
+          );
+        }
+        if (Object.keys(lines).length) {
+          await tx.userTenant.updateMany({ where: { userId, tenantId: params.id }, data: lines });
+        }
+        return { user };
+      });
+
+      if (result.denied) return result.denied;
+
+      if (isActive === false || passwordHash) {
+        await revokeSessionsSafely({
+          userId,
+          reason: isActive === false ? 'user-deactivated' : 'password-set-by-admin',
+          revokedBy: authz.userId,
+        });
+      }
+      revalidateCache([CACHE_TAG]);
+      return NextResponse.json(result.user);
+    }
+
     const { userId, roleId } = body;
 
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -127,13 +264,13 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
       await revokeSessionsSafely({ userId, tenantId: params.id, reason: 'role-changed', revokedBy: authz.userId });
     }
     return NextResponse.json(ut, { status: 201 });
-    } catch (e) {
+  } catch (e) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
     if (errorCode(e) === 'P2002') {
-      return NextResponse.json({ error: 'User is already assigned to this tenant' }, { status: 409 });
+      return NextResponse.json({ error: 'Username or email is already taken, or user is already assigned' }, { status: 409 });
     }
     return NextResponse.json(
-      { error: errorMessage(e, 'Failed to assign user to tenant') },
+      { error: errorMessage(e, 'Failed to update tenant user') },
       { status: 500 }
     );
   }

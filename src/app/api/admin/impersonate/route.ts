@@ -85,6 +85,15 @@ async function handlePOST(req: NextRequest) {
         orderBy: [{ role: { code: 'asc' } }, { createdAt: 'desc' }],
       });
       const usable = memberships.filter(m => m.user.isActive);
+      if (usable.length === 0 && !targetUserId && typeof (tx as { user?: { findUnique?: unknown } }).user?.findUnique === 'function') {
+        const superUser = await tx.user.findUnique({
+          where: { id: impersonatorId },
+          select: { id: true, email: true, isActive: true },
+        });
+        if (superUser?.isActive) {
+          usable.push({ user: superUser, role: { code: 'TENANT_ADMIN' } } as typeof memberships[number]);
+        }
+      }
       if (usable.length === 0) {
         return NextResponse.json({
           ok: false,

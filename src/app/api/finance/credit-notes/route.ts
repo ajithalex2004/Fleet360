@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
       const sp      = req.nextUrl.searchParams;
       const status  = sp.get('status');
-      const module  = sp.get('module');
+      const moduleParam = sp.get('module');
       const page    = Math.max(1, parseInt(sp.get('page')  ?? '1'));
       const limit   = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset  = (page - 1) * limit;
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       const params: unknown[] = [tenantId];
       let pi = 2;
       if (status) { where += ` AND status = $${pi++}`;  params.push(status); }
-      if (module) { where += ` AND module = $${pi++}`;  params.push(module); }
+      if (moduleParam) { where += ` AND module = $${pi++}`;  params.push(moduleParam); }
 
       const [rows, counts] = await Promise.all([
         tx.$queryRawUnsafe<CnRow[]>(

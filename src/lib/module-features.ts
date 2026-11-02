@@ -163,6 +163,11 @@ export const MODULE_FEATURES: readonly ModuleFeatureDef[] = [
   f('assets', 'assets.ble-tracking', 'BLE Tracking', 'Bluetooth tag and gateway tracking of assets', false),
   f('assets', 'assets.calibration', 'Calibration & Insurance', 'Calibration schedules and insurance on high-value assets', true),
   f('assets', 'assets.stock-management', 'Stock Management', 'Stock levels, issues and reverse logistics', true),
+
+  // ── Port & Container Drayage ──
+  f('drayage', 'drayage.demurrage-clock', 'Demurrage & Free-Days Clock', 'Free-day countdowns and demurrage risk per container', true),
+  f('drayage', 'drayage.batch-dispatch', 'Smart Batch Dispatch', 'Dual-20ft bogie bundling and batch dispatch of drayage jobs', true),
+  f('drayage', 'drayage.edi-clearance', 'EDI Clearance Check', 'Customs and delivery-order status from the port EDI provider', false),
 ];
 
 // ── Derived lookups ────────────────────────────────────────────────────────

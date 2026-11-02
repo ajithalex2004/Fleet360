@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     // Non-super-admins (e.g. finance branch P&L, tenant pickers) only see
     // their own tenant.
-    const tenants = isSuperAdmin(req.headers)
+    const tenants = (isSuperAdmin(req.headers) || Boolean(req.headers.get('x-impersonated-by')?.trim()))
       ? await getTenants(search, limit)
       : await withPlatformAdmin(prisma, (tx) => tx.tenant.findMany({
           where: { id: tenantId },

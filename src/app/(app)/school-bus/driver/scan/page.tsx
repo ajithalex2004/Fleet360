@@ -69,7 +69,7 @@ function ScanInner() {
       </Link>
       <div>
         <h1 className="text-2xl font-bold">Scan</h1>
-        <p className="text-sm text-[var(--text-muted)]">Scan a student's RFID card or enter their student code.</p>
+        <p className="text-sm text-[var(--text-muted)]">Scan a student&apos;s RFID card or enter their student code.</p>
       </div>
 
       <div>
