@@ -80,15 +80,41 @@ export async function GET(req: NextRequest) {
           tenant: { include: { modules: { where: { isEnabled: true } } } },
         },
       });
+      const impersonatedBy =
+        cookieSession?.impersonatedBy ?? req.headers.get('x-impersonated-by') ?? null;
+
+      let effectiveRoleCode = userTenant?.role?.code ?? '';
+      let effectiveRoleName = userTenant?.role?.name ?? '';
+      let tenantRecord = userTenant?.tenant ?? null;
+
       if (!userTenant || !userTenant.isActive) {
-        return sessionResponse({ error: 'User has no active access to this tenant' }, 403);
+        if (impersonatedBy || cookieSession?.role === 'SUPER_ADMIN' || req.headers.get('x-user-role') === 'SUPER_ADMIN') {
+          const fallbackTenant = await tx.tenant.findUnique({
+            where: { id: tenantId },
+            include: { modules: { where: { isEnabled: true } } },
+          });
+          if (!fallbackTenant) {
+            return sessionResponse({ error: 'Tenant not found' }, 404);
+          }
+          tenantRecord = fallbackTenant;
+          effectiveRoleCode = cookieSession?.role || 'TENANT_ADMIN';
+          effectiveRoleName = effectiveRoleCode === 'SUPER_ADMIN' ? 'Super Admin' : 'Tenant Admin';
+        } else {
+          return sessionResponse({ error: 'User has no active access to this tenant' }, 403);
+        }
+      }
+
+      if (!tenantRecord) {
+        return sessionResponse({ error: 'Tenant not found' }, 404);
       }
 
       // The same effective permissions the session carries and the
       // authorization policy decides with (src/lib/authz/session-permissions.ts):
       // tenant overrides and custom roles from the database, system roles from
       // the code catalogue, the wildcard only for the platform SUPER_ADMIN.
-      const permStrings = await resolveSessionPermissions(tx as never, userId, tenantId);
+      const permStrings = userTenant?.isActive
+        ? await resolveSessionPermissions(tx as never, userId, tenantId)
+        : (cookieSession?.permissions?.length ? cookieSession.permissions : ['*:*:*']);
 
       // Fetch per-tenant Admin menu navigation permissions (controlled by Super Admin in Admin -> Tenants -> Admin Access)
       const navPermRows = await tx
@@ -108,23 +134,24 @@ export async function GET(req: NextRequest) {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            roleCode: userTenant.role.code,
-            roleName: userTenant.role.name,
+            roleCode: effectiveRoleCode,
+            roleName: effectiveRoleName,
           },
           tenant: {
-            id: userTenant.tenant.id,
-            name: userTenant.tenant.name,
-            code: userTenant.tenant.code,
-            plan: userTenant.tenant.plan,
-            defaultLanguage: userTenant.tenant.defaultLanguage ?? 'en',
+            id: tenantRecord.id,
+            name: tenantRecord.name,
+            code: tenantRecord.code,
+            plan: tenantRecord.plan,
+            defaultLanguage: tenantRecord.defaultLanguage ?? 'en',
             // Module policies (default / per tenant / tier) applied to the stored switches.
             enabledModules: await tenantModulesFor(
-              userTenant.tenant.modules.filter(m => (m as { isEnabled?: boolean | null }).isEnabled !== false).map(m => m.module),
-              userTenant.tenant.plan,
+              tenantRecord.modules.filter(m => (m as { isEnabled?: boolean | null }).isEnabled !== false).map(m => m.module),
+              tenantRecord.plan,
             ),
             navPermissions,
           },
           permissions: [...new Set(permStrings)],
+          impersonatedBy,
         },
         {
           headers: {
