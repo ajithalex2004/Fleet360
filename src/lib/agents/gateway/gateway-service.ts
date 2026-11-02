@@ -522,7 +522,7 @@ export class AIGatewayService {
     images: string[],
     prompt: string,
     options: GatewayVisionOptions,
-    alias: CapabilityAlias,
+    alias: ModelCapabilityAlias,
     geminiKey: string,
   ): Promise<GatewayResponse> {
     const geminiModel = 'gemini-2.0-flash';
