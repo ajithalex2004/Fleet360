@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withWebhookTenant, withTenantRls } from '@/lib/rls';
+import { withWebhookTenant, type TxClient } from '@/lib/rls';
 import {
   getChannel,
   normalizeChannelPayload,
@@ -20,7 +20,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ channel: string }> }) {
@@ -28,7 +28,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   const { channel: channelParam } = await params;
   const descriptor = getChannel(channelParam);
@@ -176,7 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
 }
 
 async function findOrCreateChannelCustomer(
-  tx: { rentalCustomer: { findFirst: Function; create: Function } },
+  tx: TxClient,
   tenantId: string,
   n: NormalizedChannelBooking,
 ) {

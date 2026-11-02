@@ -5,26 +5,20 @@ export const dynamic = 'force-dynamic';
  * ----------------------------------------------
  * Universal Inbound Webhook Ingestion Engine:
  *  - Receives external ERP events (Roster updates, Work order status, Purchase orders).
- *  - Validates connection & optional secret.
+ *  - Requires the connection's own webhook secret (x-webhook-secret or Bearer).
  *  - Translates payload into Canonical Agent Event and dispatches relevant Fleet360 AI Agent.
  */
-import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { dispatch } from '@/lib/agents/orchestrator';
+import { getAgentsForEvent } from '@/lib/agents/registry';
+import type { AgentId } from '@/lib/agents/types';
+import { secretsMatch, webhookSecretOf } from '@/lib/agents/enterprise-bridge/connection-secrets';
 
 export const runtime = 'nodejs';
-
-function safeCompare(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await ensureAgentSchema();
@@ -46,40 +40,46 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const connection = rawConnections[0];
     const tenantId = connection.tenant_id;
 
-    // ── Enforce Authentication on Webhook Calls ──────────────────────────────
-    // Resolve expected secrets from auth_credentials or connection headers
-    const creds = typeof connection.auth_credentials === 'string'
-      ? JSON.parse(connection.auth_credentials)
-      : (connection.auth_credentials || {});
-    const customHeaders = typeof connection.headers === 'string'
-      ? JSON.parse(connection.headers)
-      : (connection.headers || {});
-
-    const expectedSecret =
-      creds.webhookSecret ||
-      creds.apiKey ||
-      creds.token ||
-      creds.secret ||
-      customHeaders['x-webhook-secret'] ||
-      process.env.ENTERPRISE_WEBHOOK_SECRET;
-
-    if (expectedSecret) {
-      const incomingSecret =
-        req.headers.get('x-webhook-secret') ||
-        req.headers.get('x-api-key') ||
-        req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
-        req.nextUrl.searchParams.get('secret');
-
-      if (!incomingSecret || !safeCompare(incomingSecret, expectedSecret)) {
-        return NextResponse.json(
-          { error: 'Unauthorized enterprise webhook request' },
-          { status: 401 }
-        );
-      }
+    // ── Authentication: the connection's own webhook secret, always ─────────
+    // It used to accept the ERP's API key or token, a header value, or a
+    // server-wide env secret, and to skip the check entirely when none was
+    // set, so a connection without a secret took unauthenticated requests.
+    // The secret is read from headers only: a ?secret= query parameter ends
+    // up in access logs.
+    const expectedSecret = webhookSecretOf(connection.auth_credentials);
+    if (!expectedSecret) {
+      return NextResponse.json(
+        { error: 'Unauthorized enterprise webhook request', message: 'This connection has no webhook secret. Rotate one in Fleet360 to receive webhooks.' },
+        { status: 401 }
+      );
+    }
+    const incomingSecret =
+      req.headers.get('x-webhook-secret') ||
+      req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+      '';
+    if (!incomingSecret || !secretsMatch(incomingSecret, expectedSecret)) {
+      return NextResponse.json(
+        { error: 'Unauthorized enterprise webhook request' },
+        { status: 401 }
+      );
     }
 
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody) as Record<string, any>;
+
+    // Only agents that handle inbound ERP events may be named; any other
+    // agent id used to be dispatched as given.
+    let dispatchAgent: AgentId | null = null;
+    if (body.targetAgent !== undefined) {
+      const allowed: string[] = (await getAgentsForEvent('enterprise.external_event')).map((a) => a.id);
+      if (typeof body.targetAgent !== 'string' || !allowed.includes(body.targetAgent)) {
+        return NextResponse.json(
+          { error: 'Bad Request', message: `targetAgent must be one of: ${allowed.join(', ') || '(none)'}` },
+          { status: 400 }
+        );
+      }
+      dispatchAgent = body.targetAgent as AgentId;
+    }
 
     // Audit log inbound webhook event under tenant RLS
     await withTenantRls(prisma, tenantId, async (tx) => {
@@ -103,9 +103,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
 
     // Dispatch to Agent Orchestrator if actionable event
-    if (body.targetAgent) {
+    if (dispatchAgent) {
       await dispatch({
-        agent_id: body.targetAgent,
+        agent_id: dispatchAgent,
         tenant_id: tenantId,
         event_type: 'enterprise.external_event',
         entity_id: body.entityId,

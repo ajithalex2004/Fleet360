@@ -130,6 +130,10 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'route-optimizer': m('bus-ops'),
   'school-bus': m('school-bus'),
   logistics: m('logistics'),
+  // Drayage job execution updates (/api/driver/jobs/[id]/status) — staff
+  // session, not the driver-app device session; part of the drayage /
+  // logistics workflow, so logistics edit is required to change a job.
+  driver: m('logistics'),
   // A price calculation for the caller's tenant, also asked by shipper-portal
   // tokens (no staff permissions); the Go handler scopes to the tenant.
   'logistics/rates/quote': SELF,

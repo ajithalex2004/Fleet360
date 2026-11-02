@@ -577,7 +577,7 @@ export default function RequestDetailsPage() {
                                                     ))}
                                                     {getFilteredJobs().length === 0 && (
                                                         <p className="text-sm text-slate-500 text-center py-8">
-                                                            No jobs found matching "{jobSearchQuery}"
+                                                            No jobs found matching &quot;{jobSearchQuery}&quot;
                                                         </p>
                                                     )}
                                                 </div>

@@ -500,13 +500,25 @@ Amount: AED 4,200.00`;
     });
   });
 
+  // Stub raw queries to return no rows, except withTenantRls's own
+  // `SELECT set_config('app.tenant_id', '<id>', true) AS v`, which must echo
+  // the tenant back or the RLS helper refuses to run (a plain
+  // mockResolvedValue([]) made every request here fail with
+  // "set_config returned 'null'").
+  function stubRawQueriesKeepingRls() {
+    vi.spyOn(prisma, '$queryRawUnsafe').mockImplementation((async (sql: string) => {
+      const m = /set_config\('app\.tenant_id', '([^']*)'/.exec(String(sql));
+      return m ? [{ v: m[1] }] : [];
+    }) as typeof prisma.$queryRawUnsafe);
+  }
+
   describe('Capability 12: Scheduled Cron Lifecycle Sweep Endpoint (/api/documents/intelligence/cron/lifecycle-sweep)', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
 
     it.skipIf(NO_TEST_DB)('processes GET requests with tenant parameter and triggers sweep', async () => {
-      vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValue([]);
+      stubRawQueriesKeepingRls();
 
       const req = new NextRequest('http://localhost/api/documents/intelligence/cron/lifecycle-sweep?tenantId=tenant-corp', {
         method: 'GET',
@@ -523,7 +535,7 @@ Amount: AED 4,200.00`;
     });
 
     it.skipIf(NO_TEST_DB)('processes POST requests and parses tenantId from request body', async () => {
-      vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValue([]);
+      stubRawQueriesKeepingRls();
 
       const req = new NextRequest('http://localhost/api/documents/intelligence/cron/lifecycle-sweep', {
         method: 'POST',

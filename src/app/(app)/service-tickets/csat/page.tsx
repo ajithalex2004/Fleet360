@@ -206,7 +206,7 @@ export default function ServiceTicketsCsatPage() {
                     </div>
 
                     <p className="text-xs text-slate-200 leading-relaxed italic">
-                      "{fb.comment || 'Service resolved quickly, smooth roadside recovery.'}"
+                      &quot;{fb.comment || 'Service resolved quickly, smooth roadside recovery.'}&quot;
                     </p>
                   </div>
 

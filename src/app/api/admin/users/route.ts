@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import { cacheRead, revalidateCache } from '@/lib/server-cache';
@@ -111,18 +111,19 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+
 
   try {
     const { searchParams } = new URL(req.url);
     // Non-super-admins (user switcher, session bar) only see their own
     // tenant's members; without a tenant filter this lists every user on
     // the platform.
-    const tenantId   = isSuperAdmin(req.headers)
+    const isImpersonating = Boolean(req.headers.get('x-impersonated-by')?.trim());
+    const tenantId   = isSuperAdmin(req.headers) && !isImpersonating
       ? searchParams.get('tenantId')
       : authz.tenantId;
     const isActive   = searchParams.get('isActive');
-    const module     = searchParams.get('module') as ModuleName | null;
+    const moduleParam = searchParams.get('module') as ModuleName | null;
     const search     = searchParams.get('search');
 
     // Build where clause
@@ -182,10 +183,10 @@ export async function GET(req: NextRequest) {
       const users = await getUsers(isActive, search);
 
       // Filter by module access if requested (in-memory, post-fetch)
-      const filtered = module
+      const filtered = moduleParam
         ? users.filter(u => {
             const ma = u.moduleAccess as Record<string, boolean> | null;
-            return !ma || ma[module] !== false; // null = full access (backward compat)
+            return !ma || ma[moduleParam] !== false; // null = full access (backward compat)
           })
         : users;
 
@@ -208,7 +209,7 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+
 
   try {
     const bodyRaw = await req.json();

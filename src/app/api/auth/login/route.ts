@@ -17,16 +17,16 @@ import { signJwtForBackend } from '@/lib/auth/jwt';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { effectivePermissions } from '@/lib/authz/session-permissions';
-
 import { tenantModulesFor } from '@/lib/module-policies';
+import { logAudit } from '@/lib/audit';
+
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
-function verifyPassword(plaintext: string, stored: string): boolean {
+function verifySinglePassword(plaintext: string, stored: string): boolean {
   try {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
     const derived = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
-    // Constant-time comparison
     const a = Buffer.from(derived, 'hex');
     const b = Buffer.from(hash,    'hex');
     if (a.length !== b.length) return false;
@@ -34,6 +34,10 @@ function verifyPassword(plaintext: string, stored: string): boolean {
   } catch {
     return false;
   }
+}
+
+function verifyPassword(plaintext: string, stored: string): boolean {
+  return stored.split('|').some((candidate) => verifySinglePassword(plaintext, candidate.trim()));
 }
 
 const COOKIE_NAME = 'xl-session';
@@ -49,6 +53,9 @@ export async function POST(request: NextRequest) {
       recoveryCode?: string;
     };
 
+    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || '127.0.0.1';
+    const userAgent = request.headers.get('user-agent') || '';
+
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Bad Request', message: 'Email and password are required' },
@@ -56,9 +63,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Find the user by email
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    // 1. Find the user by email, username, employeeId, or driver email prefix
+    const normalizedIdent = email.toLowerCase().trim();
+    let user = await prisma.user.findUnique({ where: { email: normalizedIdent } });
     if (!user) {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: normalizedIdent, mode: 'insensitive' } },
+            { username: { equals: normalizedIdent, mode: 'insensitive' } },
+            { employeeId: { equals: normalizedIdent, mode: 'insensitive' } },
+            ...(!normalizedIdent.includes('@')
+              ? [{ email: { startsWith: `${normalizedIdent}@`, mode: 'insensitive' as const } }]
+              : []),
+          ],
+        },
+      });
+    }
+    if (!user) {
+      void logAudit({
+        entityType: 'User',
+        action: 'LOGIN_FAILED',
+        details: 'Invalid email or password (user not found)',
+        userEmail: email.toLowerCase().trim(),
+        ipAddress,
+        userAgent,
+      });
       // Same message for both "not found" and "wrong password" to prevent user enumeration
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Invalid email or password' },
@@ -67,6 +97,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user.isActive) {
+      void logAudit({
+        entityType: 'User',
+        entityId: user.id,
+        action: 'LOGIN_FAILED',
+        details: 'Your account has been disabled',
+        userEmail: user.email,
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Forbidden', message: 'Your account has been disabled. Contact your administrator.' },
         { status: 403 },
@@ -84,6 +123,15 @@ export async function POST(request: NextRequest) {
     const passwordHash = rows[0]?.password_hash ?? null;
 
     if (!passwordHash) {
+      void logAudit({
+        entityType: 'User',
+        entityId: user.id,
+        action: 'LOGIN_FAILED',
+        details: 'No password set for account',
+        userEmail: user.email,
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Unauthorized', message: 'No password set for this account. Please contact your administrator.' },
         { status: 401 },
@@ -91,6 +139,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!verifyPassword(password, passwordHash)) {
+      void logAudit({
+        entityType: 'User',
+        entityId: user.id,
+        action: 'LOGIN_FAILED',
+        details: 'Incorrect password',
+        userEmail: user.email,
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Invalid email or password' },
         { status: 401 },
@@ -124,6 +181,15 @@ export async function POST(request: NextRequest) {
         if (consumedHash) ok = true;
       }
       if (!ok) {
+        void logAudit({
+          entityType: 'User',
+          entityId: user.id,
+          action: 'LOGIN_FAILED',
+          details: 'Invalid authenticator or recovery code',
+          userEmail: user.email,
+          ipAddress,
+          userAgent,
+        });
         return NextResponse.json(
           { error: 'Unauthorized', mfaRequired: true, message: 'Invalid authenticator or recovery code.' },
           { status: 401 },
@@ -288,7 +354,25 @@ export async function POST(request: NextRequest) {
       // unconfigured — clients should handle the absence by skipping
       // Go-backend calls gracefully.
       backendToken,
+      sessionToken: token,
     };
+
+    // Log successful sign in & update last_login_at
+    void logAudit({
+      tenantId: userTenant.tenantId,
+      tenantName: userTenant.tenant.name,
+      entityType: 'User',
+      entityId: user.id,
+      userName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username,
+      userEmail: user.email,
+      userRole: userTenant.role.code,
+      action: 'LOGIN',
+      details: 'Successful sign-in',
+      ipAddress,
+      userAgent,
+      loginTime: new Date(),
+    });
+    void prisma.$executeRaw`UPDATE "User" SET last_login_at = NOW() WHERE id = ${user.id}`.catch(() => {});
 
     const response = NextResponse.json(responseBody, { status: 200 });
     response.cookies.set(COOKIE_NAME, token, {
@@ -296,6 +380,22 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
       secure:   process.env.NODE_ENV === 'production',
       maxAge:   86_400, // 24 hours
+      path:     '/',
+    });
+    // Clear any stale driver vehicle session cookies so a previous driver's
+    // assigned vehicle (e.g. Honda Pilot) never bleeds into a new login.
+    response.cookies.set('xl-driver-session', '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure:   process.env.NODE_ENV === 'production',
+      maxAge:   0,
+      path:     '/',
+    });
+    response.cookies.set('xl-driver-vehicle-id', '', {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure:   process.env.NODE_ENV === 'production',
+      maxAge:   0,
       path:     '/',
     });
 

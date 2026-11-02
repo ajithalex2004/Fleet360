@@ -171,13 +171,13 @@ export async function PATCH(
         }
         const postedBy = body.postedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager';
         const amount   = parseFloat(String(current.total_amount ?? 0));
-        const module   = (current.module as string) ?? 'GENERAL';
+        const payableModule = (current.module as string) ?? 'GENERAL';
         const desc     = (current.description as string) ?? String(current.payable_number);
 
         // Auto-create a DRAFT journal entry: debit Expense account, credit AP control account
-        const expenseCode = module === 'MAINTENANCE' ? '5100' :
-                            module === 'LOGISTICS'    ? '5200' :
-                            module === 'LEASING'      ? '5300' : '5900';
+        const expenseCode = payableModule === 'MAINTENANCE' ? '5100' :
+                            payableModule === 'LOGISTICS'    ? '5200' :
+                            payableModule === 'LEASING'      ? '5300' : '5900';
         let je: { id: string; number: string } | null = null;
         try {
           je = await createDraftJournalEntry({

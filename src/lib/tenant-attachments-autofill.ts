@@ -110,7 +110,7 @@ export async function autofillAttachment(
   type: AutofillTypeInfo,
   today = new Date().toISOString().slice(0, 10),
 ): Promise<AutofillResult> {
-  if (!process.env.OPENAI_API_KEY) return { status: 'unavailable', reason: 'Document reading is not configured.' };
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY && !process.env.GOOGLE_AI_API_KEY) return { status: 'unavailable', reason: 'Document reading is not configured.' };
   try {
     const res = await aiGateway.vision(
       [documentDataUrl(file.base64, file.mimeType)],

@@ -25,6 +25,8 @@ import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
   vehicleId: z.string().uuid().optional(),
+  startOdometer: z.union([z.number(), z.string()]).optional(),
+  endOdometer: z.union([z.number(), z.string()]).optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -43,6 +45,8 @@ export async function GET(req: NextRequest) {
       const rows = await tx.$queryRaw<Array<{
         id: string;
         vehicle_id: string | null;
+        start_odometer: number | string | null;
+        end_odometer: number | string | null;
         started_at: Date;
         ended_at: Date | null;
         status: string;
@@ -51,7 +55,7 @@ export async function GET(req: NextRequest) {
         checklist_signature_svg: string | null;
         notes: string | null;
       }>>`
-        SELECT id, vehicle_id, started_at, ended_at, status,
+        SELECT id, vehicle_id, start_odometer, end_odometer, started_at, ended_at, status,
                checklist, checklist_signed_at, checklist_signature_svg, notes
         FROM shifts
         WHERE tenant_id = ${ctx.tenantId}::uuid
@@ -68,6 +72,8 @@ export async function GET(req: NextRequest) {
         shift: {
           id: r.id,
           vehicleId: r.vehicle_id,
+          startOdometer: r.start_odometer != null ? Number(r.start_odometer) : null,
+          endOdometer: r.end_odometer != null ? Number(r.end_odometer) : null,
           startedAt: r.started_at.toISOString(),
           endedAt: r.ended_at?.toISOString() ?? null,
           status: r.status,
@@ -118,14 +124,16 @@ export async function POST(req: NextRequest) {
       `;
 
       const newId = crypto.randomUUID();
+      const startOdo = body.startOdometer != null && body.startOdometer !== '' ? Number(body.startOdometer) : null;
       await tx.$executeRaw`
         INSERT INTO shifts (
-          id, tenant_id, driver_id, vehicle_id, started_at, status, notes, created_at, updated_at
+          id, tenant_id, driver_id, vehicle_id, start_odometer, started_at, status, notes, created_at, updated_at
         ) VALUES (
           ${newId}::uuid,
           ${ctx.tenantId}::uuid,
           ${ctx.userId}::uuid,
           ${body.vehicleId ?? null}::uuid,
+          ${startOdo},
           NOW(),
           'ACTIVE',
           ${body.notes ?? null},
@@ -134,13 +142,21 @@ export async function POST(req: NextRequest) {
         )
       `;
 
-      const rows = await tx.$queryRaw<Array<{ id: string; started_at: Date; status: string }>>`
-        SELECT id, started_at, status FROM shifts
+      if (body.vehicleId && startOdo && !isNaN(startOdo) && startOdo > 0) {
+        await tx.$executeRaw`
+          UPDATE vehicles SET odometer_reading = ${startOdo}, updated_at = NOW() WHERE id = ${body.vehicleId}::uuid
+        `.catch(() => {});
+      }
+
+      const rows = await tx.$queryRaw<Array<{ id: string; vehicle_id: string | null; start_odometer: number | string | null; started_at: Date; status: string }>>`
+        SELECT id, vehicle_id, start_odometer, started_at, status FROM shifts
         WHERE id = ${newId}::uuid
       `;
       return NextResponse.json({
         shift: {
           id: rows[0].id,
+          vehicleId: rows[0].vehicle_id,
+          startOdometer: rows[0].start_odometer != null ? Number(rows[0].start_odometer) : null,
           startedAt: rows[0].started_at.toISOString(),
           status: rows[0].status,
         },

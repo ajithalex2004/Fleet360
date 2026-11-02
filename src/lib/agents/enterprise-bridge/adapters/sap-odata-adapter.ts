@@ -8,6 +8,7 @@
  */
 
 import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
+import { erpFetch } from '../erp-fetch';
 import {
   CanonicalEntityType,
   CanonicalInvoice,
@@ -32,13 +33,17 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
     const headers = this.getAuthHeaders();
     headers['X-CSRF-Token'] = 'Fetch';
 
-    const res = await fetch(url, {
+    const res = await erpFetch(url, {
       method: 'GET',
       headers,
-      signal: AbortSignal.timeout(6000),
+      timeoutMs: 6000,
     });
 
-    const token = res.headers.get('x-csrf-token') || 'FETCH_TOKEN_MOCK';
+    // No token means no handshake: a 401 or an error page used to fall back
+    // to a made-up token and report the connection healthy.
+    if (!res.ok) throw new Error(`SAP $metadata HTTP ${res.status}`);
+    const token = res.headers.get('x-csrf-token');
+    if (!token || token.toLowerCase() === 'required') throw new Error('SAP did not issue a CSRF token');
     const cookie = res.headers.get('set-cookie') || '';
 
     this.csrfToken = token;
@@ -62,12 +67,12 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
   async testConnection(): Promise<{ success: boolean; latencyMs: number; message: string }> {
     const start = Date.now();
     try {
-      const { token } = await this.fetchCsrfToken();
+      await this.fetchCsrfToken();
       const latencyMs = Date.now() - start;
       return {
         success: true,
         latencyMs,
-        message: `Connected to SAP S/4HANA. CSRF Token handshake valid (${token ? 'Secured' : 'Open'}).`,
+        message: `Connected to SAP S/4HANA. CSRF token handshake valid.`,
       };
     } catch (err) {
       return {
@@ -112,11 +117,11 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         financialImpactAed = workOrder.estimatedCostAed || 0;
       }
 
-      const res = await fetch(url, {
+      const res = await erpFetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(sapPayload),
-        signal: AbortSignal.timeout(10000),
+        timeoutMs: 10000,
       });
 
       const latencyMs = Date.now() - start;
@@ -135,7 +140,7 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         };
       }
 
-      const sapRef = respJson?.d?.CustomerInvoice || respJson?.d?.ServiceOrder || entityId;
+      const sapRef = respJson?.d?.CustomerInvoice || respJson?.d?.ServiceOrder || respJson?.d?.PurchaseOrder;
 
       return {
         syncId: `SAP-SYNC-${Date.now()}`,
@@ -143,7 +148,7 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         systemType: 'SAP_S4HANA',
         entityType,
         status: 'SUCCESS',
-        externalReferenceId: String(sapRef),
+        externalReferenceId: sapRef ? String(sapRef) : undefined,
         financialImpactAed,
         durationMs: latencyMs,
         retryCount: 0,
@@ -178,7 +183,7 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
 
     try {
       const headers = this.getAuthHeaders();
-      const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(8000) });
+      const res = await erpFetch(url, { method: 'GET', headers, timeoutMs: 8000 });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 
       const data = await res.json();

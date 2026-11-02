@@ -45,6 +45,10 @@ function loadDotEnv() {
     const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (!match) continue;
     const [, key, raw] = match;
+    if (key === 'DATABASE_URL' && process.env[key]?.startsWith('postgresql+psycopg://')) {
+      process.env[key] = raw.replace(/^["']|["']$/g, '');
+      continue;
+    }
     if (process.env[key] !== undefined) continue;
     process.env[key] = raw.replace(/^["']|["']$/g, '');
   }

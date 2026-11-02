@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       const sp     = req.nextUrl.searchParams;
       const status  = sp.get('status');
       const paymentStatus = sp.get('paymentStatus');
-      const module  = sp.get('module');
+      const moduleParam = sp.get('module');
       const vendor  = sp.get('vendor');
       const search  = sp.get('search')?.trim();
       const from    = sp.get('from');
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       where += ` AND tenant_id = $${pi++}`;          params.push(tenantId);
       if (status)           { where += ` AND status = $${pi++}`;             params.push(status); }
       if (paymentStatus)    { where += ` AND payment_status = $${pi++}`;     params.push(paymentStatus); }
-      if (module)           { where += ` AND module = $${pi++}`;             params.push(module); }
+      if (moduleParam)      { where += ` AND module = $${pi++}`;             params.push(moduleParam); }
       if (vendor)           { where += ` AND vendor_name ILIKE $${pi++}`;    params.push(`%${vendor}%`); }
       if (search) {
         where += ` AND (payable_number ILIKE $${pi} OR vendor_name ILIKE $${pi} OR description ILIKE $${pi})`;

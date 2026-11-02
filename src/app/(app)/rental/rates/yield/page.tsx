@@ -302,7 +302,7 @@ export default function YieldAnalyzerPage() {
             Yield engine layers, in order: BASE → LOR (length-of-rental) → WEEKEND
             uplift → LEAD_TIME (early-bird vs last-minute) → UTILIZATION surge/discount
             → EVENT calendar (festivals, F1, DSF) → CHANNEL (per-channel adjustment).
-            Each layer's multiplier compounds.
+            Each layer&apos;s multiplier compounds.
           </p>
         </div>
       )}

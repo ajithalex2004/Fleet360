@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
 
         const direction = searchParams.get('direction');
-        const module = searchParams.get('module');
+        const moduleParam = searchParams.get('module');
         const intent = searchParams.get('intent');
         const resolved = searchParams.get('resolved');
         const from_number = searchParams.get('from_number');
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
         let idx = 1;
 
         if (direction) { conditions.push(`direction = $${idx++}`); params.push(direction); }
-        if (module) { conditions.push(`module = $${idx++}`); params.push(module); }
+        if (moduleParam) { conditions.push(`module = $${idx++}`); params.push(moduleParam); }
         if (intent) { conditions.push(`intent = $${idx++}`); params.push(intent); }
         if (resolved !== null && resolved !== '') {
           conditions.push(`resolved = $${idx++}`);

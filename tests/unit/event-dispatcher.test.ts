@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eventDispatcher, publishEvent } from '@/lib/agents/dispatcher';
 import { registerAgent, unregisterAgent, getAgentsForEvent, getAgent } from '@/lib/agents/registry';
-import { AgentEvent, AgentRunResult, AgentDefinition, AgentId } from '@/lib/agents/types';
+import { AgentEvent, AgentRunResult, AgentDefinition, AgentId, AgentEventType } from '@/lib/agents/types';
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -24,7 +24,7 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     const invalidEvent: AgentEvent = {
       agent_id: 'dispatch-optimiser',
       tenant_id: '',
-      event_type: 'vehicle.breakdown' as any,
+      event_type: 'vehicle.breakdown' as unknown as AgentEventType,
     };
 
     await expect(publishEvent(invalidEvent)).rejects.toThrow(/tenant_id is required/);
@@ -41,15 +41,15 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
 
   it('supports dynamic agent registration and unregistration with subscription filtering', async () => {
     const testAgent: AgentDefinition = {
-      id: 'test-telematics-agent' as any,
+      id: 'test-telematics-agent' as unknown as AgentId,
       name: 'Test Telematics Agent',
       description: 'Test telematics agent',
       version: '1.0.0',
       agentType: 'BATCH',
-      subscribedEvents: ['telematics.speeding' as any, 'telematics.geofence_exit' as any],
+      subscribedEvents: ['telematics.speeding' as unknown as AgentEventType, 'telematics.geofence_exit' as unknown as AgentEventType],
       supportsEntityScan: false,
       run: async (event: AgentEvent): Promise<AgentRunResult> => ({
-        agentId: 'test-telematics-agent' as any,
+        agentId: 'test-telematics-agent' as unknown as AgentId,
         tenantId: event.tenant_id,
         eventType: event.event_type,
         status: 'COMPLETED',
@@ -71,9 +71,9 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     // Publish event
     const results = await publishEvent(
       {
-        agent_id: 'test-telematics-agent' as any,
+        agent_id: 'test-telematics-agent' as unknown as AgentId,
         tenant_id: 'tenant-uae-101',
-        event_type: 'telematics.speeding' as any,
+        event_type: 'telematics.speeding' as unknown as AgentEventType,
         entity_id: 'veh-789',
       },
       { skipIdempotency: true },
@@ -118,12 +118,12 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
 
   it('isolates agent execution errors and prevents whole fan-out failure', async () => {
     const crashingAgent: AgentDefinition = {
-      id: 'crashing-sub-agent' as any,
+      id: 'crashing-sub-agent' as unknown as AgentId,
       name: 'Crashing Sub Agent',
       description: 'Crashing test agent',
       version: '1.0.0',
       agentType: 'BATCH',
-      subscribedEvents: ['crash.test.event' as any],
+      subscribedEvents: ['crash.test.event' as unknown as AgentEventType],
       supportsEntityScan: false,
       run: async () => {
         throw new Error('Database connection failed unexpectedly');
@@ -131,15 +131,15 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     };
 
     const healthyAgent: AgentDefinition = {
-      id: 'healthy-sub-agent' as any,
+      id: 'healthy-sub-agent' as unknown as AgentId,
       name: 'Healthy Sub Agent',
       description: 'Healthy test agent',
       version: '1.0.0',
       agentType: 'BATCH',
-      subscribedEvents: ['crash.test.event' as any],
+      subscribedEvents: ['crash.test.event' as unknown as AgentEventType],
       supportsEntityScan: false,
       run: async (event: AgentEvent): Promise<AgentRunResult> => ({
-        agentId: 'healthy-sub-agent' as any,
+        agentId: 'healthy-sub-agent' as unknown as AgentId,
         tenantId: event.tenant_id,
         eventType: event.event_type,
         status: 'COMPLETED',
@@ -155,9 +155,9 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
 
     const results = await publishEvent(
       {
-        agent_id: 'healthy-sub-agent' as any,
+        agent_id: 'healthy-sub-agent' as unknown as AgentId,
         tenant_id: 'tenant-ad-99',
-        event_type: 'crash.test.event' as any,
+        event_type: 'crash.test.event' as unknown as AgentEventType,
       },
       { skipIdempotency: true },
     );

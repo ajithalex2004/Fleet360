@@ -101,6 +101,15 @@ export async function GET(req: NextRequest) {
       const evVehicles    = fleetRows
         .filter(r => ['ELECTRIC', 'EV'].includes(r.fuel_type))
         .reduce((s, r) => s + n(r.cnt), 0);
+      const hybridVehicles = fleetRows
+        .filter(r => ['HYBRID'].includes(r.fuel_type))
+        .reduce((s, r) => s + n(r.cnt), 0);
+      const dieselVehicles = fleetRows
+        .filter(r => ['DIESEL'].includes(r.fuel_type))
+        .reduce((s, r) => s + n(r.cnt), 0);
+      const petrolVehicles = fleetRows
+        .filter(r => ['PETROL', 'GASOLINE'].includes(r.fuel_type))
+        .reduce((s, r) => s + n(r.cnt), 0);
       const totalCapacity = fleetRows.reduce((s, r) => s + n(r.capacity), 0);
       const evPct         = totalVehicles > 0 ? (evVehicles / totalVehicles) * 100 : 0;
 
@@ -256,7 +265,7 @@ export async function GET(req: NextRequest) {
       type InvRow = { digital: bigint; total: bigint };
       const [invRow] = await tx.$queryRawUnsafe<InvRow[]>(
         `SELECT
-           COUNT(*) FILTER (WHERE payment_status = 'PAID' OR sent_at IS NOT NULL) AS digital,
+           COUNT(*) FILTER (WHERE payment_status IN ('PAID', 'ISSUED', 'PARTIAL')) AS digital,
            COUNT(*)                                                                 AS total
          FROM finance_invoices
          WHERE created_at >= $1::date
@@ -420,14 +429,28 @@ export async function GET(req: NextRequest) {
         fleet: {
           total_vehicles:   totalVehicles,
           ev_vehicles:      evVehicles,
+          ev_count:         evVehicles,
+          hybrid_count:     hybridVehicles,
+          diesel_count:     dieselVehicles,
+          petrol_count:     petrolVehicles,
           ev_pct:           Math.round(evPct * 10) / 10,
+          ev_percent:       Math.round(evPct * 10) / 10,
           total_capacity:   totalCapacity,
           utilisation_pct:  Math.round(utilisationPct * 10) / 10,
+          total_km:         Math.round(totalKmActual),
+          ev_km:            Math.round(evKmDriven),
+          diesel_litres:    Math.round(fuelByType['DIESEL'] ?? 0),
+          petrol_litres:    Math.round((fuelByType['PETROL'] ?? 0) + (fuelByType['GASOLINE'] ?? 0)),
+          scope1_kg:        Math.round(scope1Final * 100) / 100,
+          scope2_kg:        Math.round(scope2 * 100) / 100,
         },
         scope: {
           scope1_kg: Math.round(scope1Final * 100) / 100,
           scope2_kg: Math.round(scope2 * 100) / 100,
           scope3_avoided_kg: Math.round(scope3 * 100) / 100,
+          scope1: { total_kg: Math.round(scope1Final * 100) / 100 },
+          scope2: { total_kg: Math.round(scope2 * 100) / 100 },
+          scope3: { total_kg: Math.round(scope3 * 100) / 100 },
         },
         modal_shift: {
           trips_consolidated:    tripCount,

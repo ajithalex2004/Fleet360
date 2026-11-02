@@ -1003,7 +1003,7 @@ export default function RoutesPage() {
 
             <div className="px-6 py-4 space-y-3 text-sm">
               <p className="text-[var(--text-muted)]">
-                This route will be soft-deleted — it disappears from the list and can't be undone from the UI.
+                This route will be soft-deleted — it disappears from the list and can&apos;t be undone from the UI.
               </p>
               {(deleteConfirm.schedules?.length ?? 0) > 0 && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-200">

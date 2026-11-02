@@ -120,7 +120,7 @@ export default function TripHistoryPage() {
 
         {trips !== null && trips.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-slate-900 p-4 text-sm text-slate-400">
-            No trips in your history. Trip roster sync is on the roadmap — for now, the admin app's trip scheduler is the source of truth.
+            No trips in your history. Trip roster sync is on the roadmap — for now, the admin app&apos;s trip scheduler is the source of truth.
           </div>
         )}
 

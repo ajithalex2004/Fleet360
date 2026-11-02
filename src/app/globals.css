@@ -23,7 +23,9 @@ html[lang="ar"], html[dir="rtl"] {
 :root {
   /* Default: Dark Mode (Linear / Vercel style) */
   --bg-canvas: #09090b;
+  --bg-main: #09090b;
   --bg-surface: #121215;
+  --bg-card: #18181b;
   --bg-surface-elevated: #18181b;
   --bg-surface-hover: #27272a;
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -57,7 +59,9 @@ html[lang="ar"], html[dir="rtl"] {
 html.light {
   /* Light Mode (Vercel / Swiss Enterprise style) */
   --bg-canvas: #f8fafc;
+  --bg-main: #f8fafc;
   --bg-surface: #ffffff;
+  --bg-card: #ffffff;
   --bg-surface-elevated: #ffffff;
   --bg-surface-hover: #f1f5f9;
   --border-subtle: #e2e8f0;
@@ -90,7 +94,9 @@ html.light {
 
 html.dark {
   --bg-canvas: #09090b;
+  --bg-main: #09090b;
   --bg-surface: #121215;
+  --bg-card: #18181b;
   --bg-surface-elevated: #18181b;
   --bg-surface-hover: #27272a;
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -122,9 +128,18 @@ body {
 }
 
 /* ── Scrollbars ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.45) transparent;
+}
+
+html.light * {
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -132,20 +147,54 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #52525b;
-  border-radius: 4px;
+  background: rgba(113, 113, 122, 0.45);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
 
 html.light ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(148, 163, 184, 0.55);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: rgba(113, 113, 122, 0.8);
 }
 
 html.light ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(100, 116, 139, 0.8);
+}
+
+/* ── Dedicated visible scrollbar for the Sidebar Menu Bar ── */
+.sidebar-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(113, 113, 122, 0.7) rgba(255, 255, 255, 0.04);
+}
+html.light .sidebar-scrollbar {
+  scrollbar-color: rgba(100, 116, 139, 0.65) rgba(226, 232, 240, 0.6);
+}
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.6);
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.7);
+  border-radius: 9999px;
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.65);
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.95);
+}
+html.light .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.9);
 }
 
 /* ── Universal Form Inputs ── */
@@ -223,4 +272,41 @@ html.light .modern-card, html.light .obsidian-glass, html.light .glass-panel-obs
   body { background: white !important; color: black !important; }
   .print\:hidden { display: none !important; }
   .print\:block  { display: block !important; }
+}
+
+
+/* ── Running Text / Marquee Animation for Lengthy Buttons & Labels ── */
+@keyframes running-text-scroll {
+  0%, 15% {
+    transform: translateX(0%);
+  }
+  50%, 65% {
+    transform: translateX(var(--marquee-distance, -45%));
+  }
+  85%, 100% {
+    transform: translateX(0%);
+  }
+}
+
+.running-label-wrap {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.running-label-inner {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* Run smoothly on hover of the parent button or row */
+.group:hover .running-label-inner.is-overflowing,
+.running-label-wrap:hover .running-label-inner.is-overflowing,
+button:hover .running-label-inner.is-overflowing,
+a:hover .running-label-inner.is-overflowing {
+  animation: running-text-scroll 5s ease-in-out infinite;
 }

@@ -14,6 +14,7 @@ import {
   type AttachmentDrafts, type AttachmentTypeOption,
 } from '@/components/TenantAttachmentFields';
 import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import { clearClientSession } from '@/lib/client-session';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -439,6 +440,7 @@ export default function TenantsPage() {
         alert(data?.error ?? 'Could not impersonate.');
         return;
       }
+      clearClientSession();
       window.location.href = '/platform';
     } catch {
       alert('Network error — could not impersonate.');

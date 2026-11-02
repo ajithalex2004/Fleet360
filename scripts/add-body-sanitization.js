@@ -1,17 +1,14 @@
 #!/usr/bin/env node
-/**
- * Add Body Sanitization to Migrated Routes
- *
- * Adds stripTenantOwnershipFields() to POST/PUT/PATCH handlers
- * that already use withTenantRls but are missing body sanitization.
- *
- * Usage:
- *   node scripts/add-body-sanitization.js <route-file>
- *   node scripts/add-body-sanitization.js --batch "src/app/api/**/*.ts"
- */
+// Add Body Sanitization to Migrated Routes
+//
+// Adds stripTenantOwnershipFields() to POST/PUT/PATCH handlers
+// that already use withTenantRls but are missing body sanitization.
+//
+// Usage:
+//   node scripts/add-body-sanitization.js <route-file>
+//   node scripts/add-body-sanitization.js --batch "src/app/api/**/*.ts"
 
 const fs = require('fs');
-const path = require('path');
 
 const MUTATION_METHODS = ['POST', 'PUT', 'PATCH'];
 
@@ -59,7 +56,7 @@ function addImportIfMissing(content, importName, importPath) {
   );
 }
 
-function addBodySanitization(content, dryRun = false) {
+function addBodySanitization(content) {
   let modified = false;
 
   // Add import if missing
@@ -107,7 +104,7 @@ function processFile(filePath, dryRun = false) {
   }
 
   const originalContent = fs.readFileSync(filePath, 'utf8');
-  const { content, modified } = addBodySanitization(originalContent, dryRun);
+  const { content, modified } = addBodySanitization(originalContent);
 
   if (!modified) {
     console.log('⊘ No changes needed');
