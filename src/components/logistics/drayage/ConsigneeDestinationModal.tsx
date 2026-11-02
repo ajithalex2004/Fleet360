@@ -288,9 +288,10 @@ export function ConsigneeDestinationModal({
       setTripAmountAed(initialData.tripAmountAed ?? 1550);
       setContactPerson(initialData.contactPerson || '');
       setContactPhone(initialData.contactPhone || '');
+      const initType = initialData.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
       setGeofenceConfigured(Boolean(initialData.geofenceConfigured));
-      setGeofenceType(initialData.geofenceType || 'CIRCLE');
-      setGeofenceRadiusMeters(initialData.geofenceRadiusMeters ?? 800);
+      setGeofenceType(initType);
+      setGeofenceRadiusMeters(initType === 'POLYGON' ? 0 : (initialData.geofenceRadiusMeters ?? 800));
       setGeofenceCoordinatesJson(initialData.geofenceCoordinatesJson || '[]');
     } else {
       const selectedClient = clients.find((c) => c.id === defaultClientId) || clients[0];
@@ -509,13 +510,21 @@ export function ConsigneeDestinationModal({
     cleanupDrawingMode();
     setPlotType('CIRCLE');
     plotTypeRef.current = 'CIRCLE';
-    renderCircleOverlay(plotCoordinatesRef.current, plotRadiusRef.current);
+    setGeofenceType('CIRCLE');
+    if (plotRadiusRef.current <= 0) {
+      setPlotRadius(800);
+      plotRadiusRef.current = 800;
+    }
+    setGeofenceRadiusMeters(plotRadiusRef.current || 800);
+    renderCircleOverlay(plotCoordinatesRef.current, plotRadiusRef.current || 800);
   };
 
   const handleSelectPolygon = () => {
     cleanupDrawingMode();
     setPlotType('POLYGON');
     plotTypeRef.current = 'POLYGON';
+    setGeofenceType('POLYGON');
+    setGeofenceRadiusMeters(0);
 
     let coords = plotPolygonCoordsRef.current;
     const center = plotCoordinatesRef.current;
@@ -895,21 +904,13 @@ export function ConsigneeDestinationModal({
   const handleApplyPlotLocation = async () => {
     let finalLat = plotCoordinates.lat;
     let finalLng = plotCoordinates.lng;
-    let finalRadius = plotRadius;
+    let finalRadius = plotType === 'POLYGON' ? 0 : (plotRadius || 800);
 
     if (plotType === 'POLYGON' && plotPolygonCoords.length >= 3) {
       const centroid = getPolygonCentroid(plotPolygonCoords);
       finalLat = centroid.lat;
       finalLng = centroid.lng;
-
-      // Compute bounding radius in meters from centroid to furthest vertex
-      let maxDistMeters = 0;
-      for (const pt of plotPolygonCoords) {
-        const dMeters = getPointsDistanceKm(centroid.lat, centroid.lng, pt.lat, pt.lng) * 1000;
-        if (dMeters > maxDistMeters) maxDistMeters = dMeters;
-      }
-      finalRadius = Math.max(100, Math.round(maxDistMeters));
-
+      finalRadius = 0;
       setGeofenceCoordinatesJson(JSON.stringify(plotPolygonCoords));
     }
 
@@ -1025,7 +1026,7 @@ export function ConsigneeDestinationModal({
         contactPhone: contactPhone.trim() || undefined,
         geofenceConfigured,
         geofenceType,
-        geofenceRadiusMeters: Number(geofenceRadiusMeters) || 800,
+        geofenceRadiusMeters: geofenceType === 'POLYGON' ? 0 : (Number(geofenceRadiusMeters) || 800),
         geofenceCoordinatesJson: geofenceCoordinatesJson || '[]',
         tripAmountAed: Number(tripAmountAed) || 1550,
         driverAllowanceAed: Number(driverAllowanceAed) || 150,
@@ -1327,29 +1328,46 @@ export function ConsigneeDestinationModal({
                 <div className="space-y-2.5 pt-2 border-t border-[var(--border-subtle)] animate-in fade-in duration-150">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[var(--text-muted)] font-semibold">Perimeter Type</label>
+                      <label className="text-[10px] text-[var(--text-muted)] font-semibold">Geofence Perimeter Type</label>
                       <select
                         value={geofenceType}
-                        onChange={(e) => setGeofenceType(e.target.value as 'CIRCLE' | 'POLYGON')}
+                        onChange={(e) => {
+                          const nextType = e.target.value as 'CIRCLE' | 'POLYGON';
+                          setGeofenceType(nextType);
+                          if (nextType === 'POLYGON') {
+                            setGeofenceRadiusMeters(0);
+                          } else {
+                            setGeofenceRadiusMeters((prev) => (prev > 0 ? prev : 800));
+                          }
+                        }}
                         className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
                       >
-                        <option value="CIRCLE">Circular Perimeter (Radius)</option>
-                        <option value="POLYGON">Custom Polygon Bounds</option>
+                        <option value="CIRCLE">Circle</option>
+                        <option value="POLYGON">Polygon</option>
                       </select>
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-[10px] text-[var(--text-muted)] font-semibold">
-                        {geofenceType === 'POLYGON' ? 'Bounding Radius (meters)' : 'Geofence Radius (meters)'}
+                        Geofence Radius (meters)
                       </label>
                       <input
                         type="number"
-                        step="50"
-                        min="100"
+                        step={geofenceType === 'POLYGON' ? 1 : 50}
+                        min={0}
                         max="5000"
-                        value={geofenceRadiusMeters}
-                        onChange={(e) => setGeofenceRadiusMeters(Number(e.target.value))}
-                        className="w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                        value={geofenceType === 'POLYGON' ? 0 : geofenceRadiusMeters}
+                        readOnly={geofenceType === 'POLYGON'}
+                        onChange={(e) => {
+                          if (geofenceType === 'POLYGON') {
+                            setGeofenceRadiusMeters(0);
+                          } else {
+                            setGeofenceRadiusMeters(Number(e.target.value));
+                          }
+                        }}
+                        className={`w-full px-2.5 py-1.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500 ${
+                          geofenceType === 'POLYGON' ? 'opacity-70 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                   </div>

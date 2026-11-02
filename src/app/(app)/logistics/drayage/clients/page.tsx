@@ -778,7 +778,7 @@ export default function DrayageClientMasterPage() {
                         {wh.geofenceConfigured ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold text-[11px]">
                             <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Configured ({wh.geofenceRadiusMeters || 800}m)</span>
+                            <span>Configured ({wh.geofenceType === 'POLYGON' ? 'Polygon · 0m' : `${wh.geofenceRadiusMeters || 800}m`})</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-medium text-[11px]">
@@ -957,7 +957,7 @@ export default function DrayageClientMasterPage() {
                               {wh.geofenceConfigured ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-[11px]">
                                   <ShieldCheck className="w-3.5 h-3.5" />
-                                  <span>Yes ({wh.geofenceRadiusMeters || 800}m)</span>
+                                  <span>Yes ({wh.geofenceType === 'POLYGON' ? 'Polygon · 0m' : `${wh.geofenceRadiusMeters || 800}m`})</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold text-[11px]">

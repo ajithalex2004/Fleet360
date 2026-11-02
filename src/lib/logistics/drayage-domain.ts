@@ -1274,7 +1274,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     contactPhone: r.contact_phone ? String(r.contact_phone) : null,
     geofenceConfigured: Boolean(r.geofence_configured),
     geofenceType: (r.geofence_type === 'POLYGON' ? 'POLYGON' : 'CIRCLE') as 'CIRCLE' | 'POLYGON',
-    geofenceRadiusMeters: Number(r.geofence_radius_meters ?? 800),
+    geofenceRadiusMeters: r.geofence_type === 'POLYGON' ? Number(r.geofence_radius_meters ?? 0) : Number(r.geofence_radius_meters ?? 800),
     geofenceCoordinatesJson: r.geofence_coordinates_json ? String(r.geofence_coordinates_json) : '[]',
     tripAmountAed: r.trip_amount_aed != null ? Number(r.trip_amount_aed) : null,
     driverAllowanceAed: r.driver_allowance_aed != null ? Number(r.driver_allowance_aed) : null,

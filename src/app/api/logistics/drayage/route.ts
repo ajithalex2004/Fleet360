@@ -834,7 +834,7 @@ export async function POST(req: NextRequest) {
           const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
           const geofenceConfigured = Boolean(body.geofenceConfigured);
           const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
-          const geofenceRadiusMeters = safeNum(body.geofenceRadiusMeters, 800);
+          const geofenceRadiusMeters = geofenceType === 'POLYGON' ? safeNum(body.geofenceRadiusMeters, 0) : safeNum(body.geofenceRadiusMeters, 800);
           const geofenceCoords = Array.isArray(body.geofenceCoordinates)
             ? JSON.stringify(body.geofenceCoordinates)
             : String(body.geofenceCoordinatesJson || '[]');
