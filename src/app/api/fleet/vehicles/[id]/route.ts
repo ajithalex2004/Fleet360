@@ -11,8 +11,16 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+const serializeVal = (v: unknown): unknown => {
+  if (typeof v === 'bigint') return Number(v);
+  if (v instanceof Date) return v.toISOString();
+  if (v !== null && typeof v === 'object' && 'toNumber' in v && typeof (v as { toNumber: unknown }).toNumber === 'function') {
+    return (v as { toNumber: () => number }).toNumber();
+  }
+  return v;
+};
 const rowToCamel = (r: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
+  Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), serializeVal(v)]));
 
 let schemaEnsured = false;
 
@@ -96,7 +104,7 @@ export async function PUT(
   }
   const { tenantId } = authz;
 
-  await ensureFleetSchema();
+  await ensureFleetSchema().catch(() => {});
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
       const { id } = await params;
@@ -109,6 +117,9 @@ export async function PUT(
         id,
       );
       const prev = prevRows[0] || null;
+      if (!prev) {
+        return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
+      }
 
       const fieldMap: Record<string, string> = {
         vehicleCode: 'vehicle_code',
@@ -168,6 +179,44 @@ export async function PUT(
         'mulkiyaExpiry',
       ]);
 
+      const numericFields = new Set([
+        'year',
+        'yearOfManufacture',
+        'stopModeCommFrequency',
+        'purchasePrice',
+        'odometerReading',
+      ]);
+
+      const nullableEmptyStringFields = new Set([
+        'vin',
+        'chassisNo',
+        'licensePlate',
+        'registrationNo',
+        'plateNumber',
+        'plateCode',
+        'plateCategory',
+        'emirate',
+        'vehicleTypeId',
+        'vehicleUsage',
+        'hierarchyId',
+        'hierarchyName',
+        'regionId',
+        'regionName',
+        'departmentId',
+        'departmentName',
+        'unitId',
+        'unitName',
+        'branchId',
+        'branchName',
+        'zoneId',
+        'deviceId',
+        'simCardNo',
+        'acquisitionType',
+        'fuelLevel',
+        'assignedDriverId',
+        'category',
+      ]);
+
       const setClauses: string[] = [];
       const queryParams: unknown[] = [new Date()];
       setClauses.push(`updated_at = $1`);
@@ -176,8 +225,8 @@ export async function PUT(
       for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
         if (assignedColumns.has(snakeKey)) continue;
         if (Object.prototype.hasOwnProperty.call(body, camelKey)) {
-          let val = body[camelKey];
-          // If this key is empty but an alias has value, prefer the non-empty one
+          let val: unknown = body[camelKey];
+          // Prefer registrationExpiryDate / insuranceExpiryDate if provided by the form
           if (!val) {
             if (camelKey === 'registrationExpiryDate' && body.registrationExpiry) val = body.registrationExpiry;
             if (camelKey === 'registrationExpiry' && body.registrationExpiryDate) val = body.registrationExpiryDate;
@@ -185,16 +234,36 @@ export async function PUT(
             if (camelKey === 'insuranceExpiry' && body.insuranceExpiryDate) val = body.insuranceExpiryDate;
           }
           if (dateFields.has(camelKey)) {
-            if (val) {
+            if (val && typeof val === 'string' && val.trim()) {
               const parsedDate = new Date(val);
               val = isNaN(parsedDate.getTime()) ? null : parsedDate;
+            } else if (val instanceof Date) {
+              val = isNaN(val.getTime()) ? null : val;
             } else {
+              val = null;
+            }
+          } else if (numericFields.has(camelKey)) {
+            if (val === '' || val === null || val === undefined) {
+              val = null;
+            } else {
+              const n = Number(val);
+              val = isNaN(n) ? null : n;
+            }
+          } else if (nullableEmptyStringFields.has(camelKey)) {
+            if (typeof val === 'string' && val.trim() === '') {
               val = null;
             }
           }
           assignedColumns.add(snakeKey);
           queryParams.push(val);
           setClauses.push(`${snakeKey} = $${queryParams.length}`);
+
+          // Keep current_mileage synced when odometerReading is updated
+          if (snakeKey === 'odometer_reading' && val !== null && !assignedColumns.has('current_mileage')) {
+            assignedColumns.add('current_mileage');
+            queryParams.push(val);
+            setClauses.push(`current_mileage = $${queryParams.length}`);
+          }
         }
       }
 
@@ -217,7 +286,7 @@ export async function PUT(
             vehicleId: id,
             eventType: 'STAGE_TRANSITION',
             fromStage: (prev.lifecycle_stage as string) || null,
-            toStage: body.lifecycleStage,
+            toStage: body.lifecycleStage as string,
             description: `Lifecycle stage transitioned from ${prev.lifecycle_stage || 'INITIAL'} to ${body.lifecycleStage}`,
             performedBy: 'Fleet Master Update',
           }).catch(() => {});
@@ -230,7 +299,8 @@ export async function PUT(
             performedBy: 'Fleet Master Update',
           }).catch(() => {});
         }
-        if (body.assignedDriverId !== undefined && body.assignedDriverId !== prev.assigned_driver_id) {
+        const nextDriverId = typeof body.assignedDriverId === 'string' ? (body.assignedDriverId.trim() || null) : body.assignedDriverId;
+        if (body.assignedDriverId !== undefined && nextDriverId !== prev.assigned_driver_id) {
           // Keep Driver.assignedVehicleId synchronized bidirectionally
           if (prev.assigned_driver_id) {
             await tx.$executeRawUnsafe(
@@ -239,19 +309,19 @@ export async function PUT(
               tenantId,
             ).catch(() => {});
           }
-          if (body.assignedDriverId) {
+          if (nextDriverId) {
             // Clear any other driver that had this vehicle
             await tx.$executeRawUnsafe(
               `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1 AND id::text != $2 AND tenant_id = $3`,
               id,
-              body.assignedDriverId,
+              nextDriverId,
               tenantId,
             ).catch(() => {});
             // Set the new driver's assigned vehicle
             await tx.$executeRawUnsafe(
               `UPDATE drivers SET assigned_vehicle_id = $1 WHERE id::text = $2 AND tenant_id = $3`,
               id,
-              body.assignedDriverId,
+              nextDriverId,
               tenantId,
             ).catch(() => {});
           } else {
@@ -266,8 +336,8 @@ export async function PUT(
           await recordLifecycleEvent(tx, {
             vehicleId: id,
             eventType: 'DRIVER_ALLOCATION',
-            description: body.assignedDriverId
-              ? `Vehicle assigned to driver (ID: ${body.assignedDriverId})`
+            description: nextDriverId
+              ? `Vehicle assigned to driver (ID: ${nextDriverId})`
               : 'Driver unassigned from vehicle',
             performedBy: 'Fleet Master Update',
           }).catch(() => {});
@@ -277,7 +347,7 @@ export async function PUT(
             vehicleId: id,
             eventType: 'ODOMETER_UPDATE',
             description: `Odometer reading updated to ${Number(body.odometerReading).toLocaleString()} km (prev: ${Number(prev.odometer_reading || 0).toLocaleString()} km)`,
-            metadata: { prev: prev.odometer_reading, current: body.odometerReading },
+            metadata: { prev: Number(prev.odometer_reading || 0), current: Number(body.odometerReading) },
             performedBy: 'Fleet Master Update',
           }).catch(() => {});
         }
@@ -297,8 +367,9 @@ export async function PUT(
       revalidateCache([FLEET_STATS_TAG]);
       return NextResponse.json(rowToCamel(rows[0]));
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to update vehicle';
       console.error('Error updating vehicle:', e);
-      return NextResponse.json({ error: 'Failed to update vehicle' }, { status: 500 });
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
   });
 }

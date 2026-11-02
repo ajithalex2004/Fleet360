@@ -14,8 +14,22 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+const serializeVal = (v: unknown): unknown => {
+  if (typeof v === 'bigint') return Number(v);
+  if (v instanceof Date) return v.toISOString();
+  if (v !== null && typeof v === 'object' && 'toNumber' in v && typeof (v as { toNumber: unknown }).toNumber === 'function') {
+    return (v as { toNumber: () => number }).toNumber();
+  }
+  return v;
+};
 const rowToCamel = (r: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
+  Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), serializeVal(v)]));
+
+const emptyToNull = (v: unknown): unknown => {
+  if (v === undefined || v === null) return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  return v;
+};
 
 let fleetSchemaEnsured = false;
 
@@ -148,7 +162,7 @@ export async function POST(req: NextRequest) {
       const id = crypto.randomUUID();
       const now = new Date();
 
-      let vehicleCode = body.vehicleCode ?? body.vehicle_code ?? null;
+      let vehicleCode = emptyToNull(body.vehicleCode ?? body.vehicle_code) as string | null;
       if (!vehicleCode) {
         const seqResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
           `SELECT COUNT(*) as count FROM vehicles`,
@@ -183,46 +197,46 @@ export async function POST(req: NextRequest) {
         id,
         tenantId,
         vehicleCode,
-        body.make ?? null,
-        body.model ?? null,
-        body.type ?? null,
-        body.year ?? null,
-        body.vin || null,
-        body.chassisNo ?? null,
-        body.color ?? null,
+        emptyToNull(body.make),
+        emptyToNull(body.model),
+        emptyToNull(body.type) ?? 'SEDAN',
+        body.year != null && body.year !== '' ? Number(body.year) : null,
+        emptyToNull(body.vin),
+        emptyToNull(body.chassisNo),
+        emptyToNull(body.color),
         body.seatingCapacity ?? body.seating_capacity ?? null,
-        body.zoneId ?? body.zone_id ?? null,
-        body.licensePlate || null,
-        body.registrationNo ?? null,
-        body.plateNumber ?? null,
-        body.plateCode ?? null,
-        body.plateCategory ?? null,
-        body.emirate ?? null,
-        body.vehicleTypeId ?? null,
-        body.vehicleUsage ?? null,
-        body.hierarchyId ?? null,
-        body.hierarchyName ?? null,
-        body.branchId ?? null,
-        body.branchName ?? null,
-        body.regionId ?? null,
-        body.regionName ?? null,
-        body.departmentId ?? null,
-        body.departmentName ?? null,
-        body.unitId ?? null,
-        body.unitName ?? null,
-        body.deviceId ?? null,
-        body.simCardNo ?? null,
-        body.lifecycleStage ?? 'ACTIVE',
-        body.purchaseDate || null,
-        body.purchasePrice ?? null,
-        body.acquisitionType ?? null,
-        body.odometerReading ?? null,
-        body.fuelLevel ?? null,
-        body.status ?? 'AVAILABLE',
-        body.notes ?? null,
-        body.category ?? null,
-        regExp,
-        insExp,
+        emptyToNull(body.zoneId ?? body.zone_id),
+        emptyToNull(body.licensePlate || body.plateNumber),
+        emptyToNull(body.registrationNo),
+        emptyToNull(body.plateNumber),
+        emptyToNull(body.plateCode),
+        emptyToNull(body.plateCategory),
+        emptyToNull(body.emirate),
+        emptyToNull(body.vehicleTypeId),
+        emptyToNull(body.vehicleUsage),
+        emptyToNull(body.hierarchyId),
+        emptyToNull(body.hierarchyName),
+        emptyToNull(body.branchId),
+        emptyToNull(body.branchName),
+        emptyToNull(body.regionId),
+        emptyToNull(body.regionName),
+        emptyToNull(body.departmentId),
+        emptyToNull(body.departmentName),
+        emptyToNull(body.unitId),
+        emptyToNull(body.unitName),
+        emptyToNull(body.deviceId),
+        emptyToNull(body.simCardNo),
+        emptyToNull(body.lifecycleStage) ?? 'ACTIVE',
+        emptyToNull(body.purchaseDate),
+        body.purchasePrice != null && body.purchasePrice !== '' ? Number(body.purchasePrice) : null,
+        emptyToNull(body.acquisitionType),
+        body.odometerReading != null && body.odometerReading !== '' ? Number(body.odometerReading) : 0,
+        emptyToNull(body.fuelLevel),
+        emptyToNull(body.status) ?? 'AVAILABLE',
+        emptyToNull(body.notes),
+        emptyToNull(body.category),
+        regExp && !isNaN(regExp.getTime()) ? regExp : null,
+        insExp && !isNaN(insExp.getTime()) ? insExp : null,
         now,
         now,
       );
@@ -232,10 +246,10 @@ export async function POST(req: NextRequest) {
         eventType: 'ACTIVATION',
         description: `Vehicle registered in Fleet Master (${body.make || ''} ${body.model || ''})`.trim(),
         referenceNo: vehicleCode,
-        toStage: body.lifecycleStage ?? 'ACTIVE',
+        toStage: (body.lifecycleStage as string) ?? 'ACTIVE',
         performedBy: 'System / Vehicle Registration',
         eventDate: body.purchaseDate || now,
-        notes: body.notes ?? null,
+        notes: (body.notes as string) ?? null,
       }).catch(() => {});
 
       revalidateCache([FLEET_STATS_TAG]);

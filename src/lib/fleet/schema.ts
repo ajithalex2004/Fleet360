@@ -3,7 +3,8 @@ import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
 /** Tables/columns this module needs; checked by the schema readiness report. */
-export const FLEET_SCHEMA: SchemaSpec = { tables: [
+export const FLEET_SCHEMA: SchemaSpec = {
+  tables: [
     'vehicle_types',
     'fleet_work_orders',
     'fleet_lifecycle_events',
@@ -13,7 +14,12 @@ export const FLEET_SCHEMA: SchemaSpec = { tables: [
     'fleet_nui_reasons',
   ],
   // 20261105090000_fleet_nui_reasons_per_tenant
-  columns: [['fleet_nui_reasons', 'tenant_id']],
+  columns: [
+    ['fleet_nui_reasons', 'tenant_id'],
+    ['vehicles', 'region_id'],
+    ['vehicles', 'year_of_manufacture'],
+    ['vehicles', 'stop_mode_comm_frequency'],
+  ],
 };
 
 export function ensureFleetSchema(): Promise<void> {
@@ -232,6 +238,8 @@ async function _runDdl(): Promise<void> {
         ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS department_name TEXT;
         ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_id TEXT;
         ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_name TEXT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS year_of_manufacture INT;
+        ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS stop_mode_comm_frequency INT;
       EXCEPTION WHEN OTHERS THEN NULL;
       END;
     END

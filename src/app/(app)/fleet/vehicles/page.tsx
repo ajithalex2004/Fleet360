@@ -397,7 +397,7 @@ export default function VehiclesPage() {
     try {
       const needVehicleTypes = !_cachedVehicleTypes || _cachedVehicleTypes.length === 0;
       const [vRes, vtRes] = await Promise.all([
-        fetch('/api/fleet/vehicles?' + params),
+        fetch('/api/fleet/vehicles?' + params, { cache: 'no-store' }),
         needVehicleTypes ? fetch('/api/fleet/vehicle-types?limit=200') : Promise.resolve(null),
       ]);
       const vData = await vRes.json();
@@ -677,7 +677,8 @@ export default function VehiclesPage() {
     const hasIns = docs.some(d => d.id === 'insurance-doc' || d.documentType === 'INSURANCE');
     if (!hasReg) docs = [DEFAULT_DOCUMENTS[0], ...docs];
     if (!hasIns) docs = [docs[0], DEFAULT_DOCUMENTS[1], ...docs.slice(1)];
-    setForm({ ...v, documents: docs });
+    setForm({ ...v, registrationExpiryDate: v.registrationExpiryDate || v.registrationExpiry || '', insuranceExpiryDate: v.insuranceExpiryDate || v.insuranceExpiry || '', documents: docs });
+    setError('');
     setDetectedInfo(null);
     setDetectedDismissed(true);
     setTab('basic');
@@ -948,11 +949,13 @@ export default function VehiclesPage() {
       const { mulkiyaCopyUrl, ...cleanForm } = form;
       const payload = {
         ...cleanForm,
+        registrationExpiry: cleanForm.registrationExpiryDate || cleanForm.registrationExpiry || null,
+        insuranceExpiry: cleanForm.insuranceExpiryDate || cleanForm.insuranceExpiry || null,
         notes: payloadNotes,
       };
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Save failed'); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? d.message ?? 'Save failed'); return; }
       setShowModal(false); 
       fetchData();
     } catch { setError('Network error'); }
@@ -3025,7 +3028,8 @@ export default function VehiclesPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3">
+                {error && <span className="text-xs text-rose-400 font-semibold bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/30 max-w-xs truncate">{error}</span>}
                 <button onClick={() => setShowModal(false)} className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
                 <button onClick={handleSave} disabled={saving}
                   className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm">

@@ -49,7 +49,7 @@ export type AppModule = ModuleKey | 'admin';
  *   - the array keeps its narrow tuple type for `.includes()` ergonomics
  *   - widening AppModule to add a new key won't silently break the allowlist
  */
-export const TRIAL_FREE_MODULES = ['fleet'] as const satisfies readonly ModuleKey[];
+export const TRIAL_FREE_MODULES = ['fleet', 'driver-mgmt'] as const satisfies readonly ModuleKey[];
 
 /**
  * Returns true if the user can perform write operations (POST/PUT/PATCH/DELETE)

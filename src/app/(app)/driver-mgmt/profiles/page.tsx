@@ -225,7 +225,7 @@ export default function DriverProfilesPage() {
     if (typeFilter)   params.set('driverType', typeFilter);
     if (expiringOnly) params.set('expiring', 'true');
     try {
-      const res = await fetch('/api/drivers?' + params);
+      const res = await fetch('/api/drivers?' + params, { cache: 'no-store' });
       const data = await res.json();
       setDrivers(Array.isArray(data) ? data : (data.data ?? []));
       setError('');
@@ -320,6 +320,7 @@ export default function DriverProfilesPage() {
 
     setForm({
       ...d,
+      name: d.name || [d.firstName, d.lastName].filter(Boolean).join(' '),
       driverCategory: d.driverCategory || d.licenseType || 'LIGHT_DUTY',
       issuingAuthority: d.issuingAuthority || 'RTA / Police Licensing',
       additionalDocuments: docs,
@@ -419,8 +420,20 @@ export default function DriverProfilesPage() {
       const pDoc = (form.additionalDocuments || []).find(d => d.documentType === 'PASSPORT');
       const vDoc = (form.additionalDocuments || []).find(d => d.documentType === 'VISA');
 
+      const fullName = (form.name || [form.firstName, form.lastName].filter(Boolean).join(' ')).trim();
+      const nameParts = fullName.split(/\s+/);
+      const cleanDocs = (form.additionalDocuments || []).map(doc => {
+        const { fileData: _omitFileData, ...rest } = doc;
+        void _omitFileData;
+        return rest;
+      });
+
       const payload = {
         ...form,
+        name:           fullName,
+        firstName:      nameParts[0] || form.firstName || '',
+        lastName:       nameParts.slice(1).join(' '),
+        additionalDocuments: cleanDocs,
         passportNumber: pDoc?.documentNumber || form.passportNumber || null,
         passportExpiry: pDoc?.expiryDate || form.passportExpiry || null,
         visaExpiry:     vDoc?.expiryDate || form.visaExpiry || null,

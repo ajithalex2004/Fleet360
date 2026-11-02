@@ -19,9 +19,18 @@ import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
 type Params = { params: Promise<{ id: string }> };
 
 function parseSafeDate(val: unknown): Date | null {
-  if (!val) return null;
+  if (!val || (typeof val === 'string' && !val.trim())) return null;
   const d = new Date(val as string);
   return isNaN(d.getTime()) ? null : d;
+}
+
+function emptyToNull(val: unknown): string | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+  return String(val);
 }
 
 function serialize(obj: unknown): unknown {
@@ -154,125 +163,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         additionalDocuments,
       } = body;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any = {};
-
-      if (name            !== undefined) data.name            = name;
-      if (firstName       !== undefined) data.firstName       = firstName;
-      if (lastName        !== undefined) data.lastName        = lastName;
-      if (email           !== undefined) data.email           = email;
-      if (contactNumber   !== undefined) data.contactNumber   = contactNumber;
-      if (nationality     !== undefined) data.nationality     = nationality;
-      if (dob !== undefined) data.dob = parseSafeDate(dob);
-      if (licenseNumber   !== undefined) data.licenseNumber   = licenseNumber;
-      if (licenseExpiry !== undefined) data.licenseExpiry = parseSafeDate(licenseExpiry);
-      if (driverCategory  !== undefined || licenseType !== undefined) {
-        data.licenseType = driverCategory || licenseType;
-      }
-      if (emiratesId      !== undefined) data.emiratesId      = emiratesId;
-      if (emiratesIdExpiry !== undefined) data.emiratesIdExpiry = parseSafeDate(emiratesIdExpiry);
-      if (passportNumber  !== undefined) data.passportNumber  = passportNumber;
-      if (passportExpiry !== undefined) data.passportExpiry = parseSafeDate(passportExpiry);
-      if (visaExpiry !== undefined) data.visaExpiry = parseSafeDate(visaExpiry);
-      if (status          !== undefined) data.status          = status;
-      if (driverType      !== undefined) data.driverType      = driverType;
-      if (hierarchy       !== undefined) data.hierarchy       = hierarchy;
-      if (communicationLanguage !== undefined) data.communicationLanguage = communicationLanguage;
-      if (dateOfJoin !== undefined) data.dateOfJoin = parseSafeDate(dateOfJoin);
-      if (dallasId        !== undefined) data.dallasId        = dallasId;
-      if (garageId        !== undefined) data.garageId        = garageId;
-
-      const updated = await tx.driver.update({ where: { id }, data });
-
-      // Update extra columns (employee_id, driver_category, issuing_authority, additional_documents)
-      if (employeeId !== undefined || driverCategory !== undefined || issuingAuthority !== undefined || additionalDocuments !== undefined) {
-        await tx.$executeRawUnsafe(
-          `UPDATE drivers SET 
-             employee_id = COALESCE($1, employee_id), 
-             driver_category = COALESCE($2, driver_category),
-             issuing_authority = COALESCE($3, issuing_authority),
-             additional_documents = COALESCE($4::jsonb, additional_documents)
-           WHERE id::text = $5`,
-          employeeId ?? null,
-          driverCategory ?? null,
-          issuingAuthority ?? null,
-          additionalDocuments !== undefined ? JSON.stringify(additionalDocuments) : null,
-          id,
-        ).catch((err) => { console.warn('Failed to update extra driver fields:', err); });
-      }
-
-      // If password provided or driver details changed, update / create linked User Profile
-      let linkedUser = await tx.user.findFirst({
-        where: {
-          OR: [
-            ...(updated.email ? [{ email: { equals: updated.email, mode: 'insensitive' as const } }] : []),
-            ...(employeeId ? [{ employeeId }] : []),
-            ...(updated.contactNumber ? [{ mobileNumber: updated.contactNumber }] : []),
-          ],
-        },
-      });
-
-      if (!linkedUser && (password || email)) {
-        const cleanLic = (updated.licenseNumber || id.slice(0, 8)).toLowerCase().replace(/[^a-z0-9]/g, '');
-        const targetEmail = (updated.email && updated.email.trim())
-          ? updated.email.trim().toLowerCase()
-          : `driver.${cleanLic}@fleet360.internal`;
-        const targetUsername = updated.email ? updated.email.split('@')[0] : `driver_${cleanLic}`;
-
-        const newUserId = crypto.randomUUID();
-        linkedUser = await tx.user.create({
-          data: {
-            id: newUserId,
-            username: targetUsername,
-            email: targetEmail,
-            firstName: updated.firstName || (updated.name ? updated.name.split(' ')[0] : 'Driver'),
-            lastName: updated.lastName || '',
-            mobileNumber: updated.contactNumber || null,
-            userType: 'DRIVER',
-            position: 'Driver',
-            employeeId: employeeId || null,
-            hierarchy: updated.hierarchy || null,
-            isActive: updated.status !== 'INACTIVE',
-            updatedAt: new Date(),
-          },
-        });
-
-        // A driver role, in this tenant or global. The two OR filters were
-        // written as duplicate keys, so only the tenant one applied, and the
-        // fallback took any role at all: a new driver user could be given
-        // whichever role came first, an admin role included. No driver role
-        // means no membership rather than a guessed one.
-        const role = await tx.role.findFirst({
-          where: {
-            AND: [
-              { OR: [{ code: 'DRIVER' }, { name: { contains: 'Driver', mode: 'insensitive' } }] },
-              { OR: [{ tenantId }, { tenantId: null }] },
-            ],
-          },
-        });
-
-        if (role) {
-          await tx.userTenant.upsert({
-            where: { userId_tenantId: { userId: linkedUser.id, tenantId } },
-            update: { roleId: role.id, isActive: true },
-            create: { userId: linkedUser.id, tenantId, roleId: role.id, isActive: true },
-          });
-        }
-      } else if (linkedUser) {
-        // Sync contact & hierarchy updates
-        await tx.user.update({
-          where: { id: linkedUser.id },
-          data: {
-            mobileNumber: updated.contactNumber ?? linkedUser.mobileNumber,
-            employeeId: employeeId ?? linkedUser.employeeId,
-            hierarchy: updated.hierarchy ?? linkedUser.hierarchy,
-            userType: 'DRIVER',
-            isActive: updated.status !== 'INACTIVE',
-          },
-        });
-      }
-
-      // Validate password if provided
+      // Validate password upfront before any DB mutations
       if (password && typeof password === 'string' && password.trim()) {
         const pwCheck = validatePasswordPolicy(password.trim());
         if (!pwCheck.ok) {
@@ -280,24 +171,163 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
       }
 
-      // If password provided, update password hash
-      if (password && typeof password === 'string' && password.trim() && linkedUser) {
-        const hashed = hashPassword(password.trim());
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = {};
+
+      if (name !== undefined && typeof name === 'string') {
+        const trimmedName = name.trim();
+        data.name = trimmedName;
+        // Derive firstName & lastName from full name so table and Driver App stay in sync
+        const parts = trimmedName.split(/\s+/);
+        data.firstName = parts[0] || '';
+        data.lastName = parts.slice(1).join(' ');
+      } else {
+        if (firstName !== undefined) data.firstName = typeof firstName === 'string' ? firstName.trim() : firstName;
+        if (lastName  !== undefined) data.lastName  = typeof lastName === 'string' ? lastName.trim() : lastName;
+        if (firstName !== undefined || lastName !== undefined) {
+          data.name = [data.firstName, data.lastName].filter(Boolean).join(' ') || null;
+        }
+      }
+
+      if (email           !== undefined) data.email           = emptyToNull(email);
+      if (contactNumber   !== undefined) data.contactNumber   = emptyToNull(contactNumber);
+      if (nationality     !== undefined) data.nationality     = emptyToNull(nationality);
+      if (dob             !== undefined) data.dob             = parseSafeDate(dob);
+      if (licenseNumber   !== undefined) data.licenseNumber   = emptyToNull(licenseNumber) ?? '';
+      if (licenseExpiry   !== undefined) data.licenseExpiry   = parseSafeDate(licenseExpiry);
+      if (driverCategory  !== undefined || licenseType !== undefined) {
+        data.licenseType = emptyToNull(driverCategory || licenseType);
+      }
+      if (emiratesId      !== undefined) data.emiratesId      = emptyToNull(emiratesId);
+      if (emiratesIdExpiry !== undefined) data.emiratesIdExpiry = parseSafeDate(emiratesIdExpiry);
+      if (passportNumber  !== undefined) data.passportNumber  = emptyToNull(passportNumber);
+      if (passportExpiry  !== undefined) data.passportExpiry  = parseSafeDate(passportExpiry);
+      if (visaExpiry      !== undefined) data.visaExpiry      = parseSafeDate(visaExpiry);
+      if (status          !== undefined) data.status          = emptyToNull(status) ?? 'ACTIVE';
+      if (driverType      !== undefined) data.driverType      = emptyToNull(driverType) ?? 'PERMANENT';
+      if (hierarchy       !== undefined) data.hierarchy       = emptyToNull(hierarchy);
+      if (communicationLanguage !== undefined) data.communicationLanguage = emptyToNull(communicationLanguage);
+      if (dateOfJoin      !== undefined) data.dateOfJoin      = parseSafeDate(dateOfJoin);
+      if (dallasId        !== undefined) data.dallasId        = emptyToNull(dallasId);
+      if (garageId        !== undefined) data.garageId        = emptyToNull(garageId);
+
+      const updated = await tx.driver.update({ where: { id }, data });
+
+      const cleanEmployeeId = employeeId !== undefined ? emptyToNull(employeeId) : undefined;
+      const cleanCategory = driverCategory !== undefined ? emptyToNull(driverCategory) : undefined;
+      const cleanAuthority = issuingAuthority !== undefined ? emptyToNull(issuingAuthority) : undefined;
+
+      // Update extra columns (employee_id, driver_category, issuing_authority, additional_documents)
+      if (cleanEmployeeId !== undefined || cleanCategory !== undefined || cleanAuthority !== undefined || additionalDocuments !== undefined) {
         await tx.$executeRawUnsafe(
-          `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
-          hashed,
-          linkedUser.id,
-        );
+          `UPDATE drivers SET 
+             employee_id = CASE WHEN $6 THEN $1 ELSE employee_id END, 
+             driver_category = COALESCE($2, driver_category),
+             issuing_authority = COALESCE($3, issuing_authority),
+             additional_documents = COALESCE($4::jsonb, additional_documents)
+           WHERE id::text = $5`,
+          cleanEmployeeId ?? null,
+          cleanCategory ?? null,
+          cleanAuthority ?? null,
+          additionalDocuments !== undefined ? JSON.stringify(additionalDocuments) : null,
+          id,
+          cleanEmployeeId !== undefined,
+        ).catch((err) => { console.warn('Failed to update extra driver fields:', err); });
+      }
+
+      // Synchronize / provision linked User Profile without risking rollback of driver update on non-critical conflicts
+      let linkedUser: { id: string; email: string; username: string | null } | null = null;
+      try {
+        const lookupOr: Prisma.UserWhereInput[] = [
+          ...(updated.email ? [{ email: { equals: updated.email, mode: 'insensitive' as const } }] : []),
+          ...(cleanEmployeeId ? [{ employeeId: cleanEmployeeId }] : []),
+          ...(updated.contactNumber ? [{ mobileNumber: updated.contactNumber }] : []),
+        ];
+
+        const existingUser = lookupOr.length > 0
+          ? await tx.user.findFirst({ where: { OR: lookupOr } })
+          : null;
+
+        if (!existingUser && (password || updated.email)) {
+          const cleanLic = (updated.licenseNumber || id.slice(0, 8)).toLowerCase().replace(/[^a-z0-9]/g, '');
+          const targetEmail = (updated.email && updated.email.trim())
+            ? updated.email.trim().toLowerCase()
+            : `driver.${cleanLic}@fleet360.internal`;
+          const targetUsername = updated.email ? updated.email.split('@')[0] : `driver_${cleanLic}`;
+
+          const newUserId = crypto.randomUUID();
+          const createdUser = await tx.user.create({
+            data: {
+              id: newUserId,
+              username: targetUsername,
+              email: targetEmail,
+              firstName: updated.firstName || (updated.name ? updated.name.split(' ')[0] : 'Driver'),
+              lastName: updated.lastName || '',
+              mobileNumber: updated.contactNumber || null,
+              userType: 'DRIVER',
+              position: 'Driver',
+              employeeId: cleanEmployeeId || null,
+              hierarchy: updated.hierarchy || null,
+              isActive: updated.status !== 'INACTIVE',
+              updatedAt: new Date(),
+            },
+          });
+          linkedUser = { id: createdUser.id, email: createdUser.email, username: createdUser.username };
+
+          const role = await tx.role.findFirst({
+            where: {
+              AND: [
+                { OR: [{ code: 'DRIVER' }, { name: { contains: 'Driver', mode: 'insensitive' } }] },
+                { OR: [{ tenantId }, { tenantId: null }] },
+              ],
+            },
+          });
+
+          if (role) {
+            await tx.userTenant.upsert({
+              where: { userId_tenantId: { userId: createdUser.id, tenantId } },
+              update: { roleId: role.id, isActive: true },
+              create: { userId: createdUser.id, tenantId, roleId: role.id, isActive: true },
+            });
+          }
+        } else if (existingUser) {
+          const updatedUser = await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              firstName: updated.firstName || existingUser.firstName,
+              lastName: updated.lastName ?? existingUser.lastName,
+              mobileNumber: updated.contactNumber ?? existingUser.mobileNumber,
+              employeeId: cleanEmployeeId !== undefined ? cleanEmployeeId : existingUser.employeeId,
+              hierarchy: updated.hierarchy ?? existingUser.hierarchy,
+              userType: 'DRIVER',
+              isActive: updated.status !== 'INACTIVE',
+              updatedAt: new Date(),
+            },
+          });
+          linkedUser = { id: updatedUser.id, email: updatedUser.email, username: updatedUser.username };
+        }
+
+        // If password provided, update password hash
+        if (password && typeof password === 'string' && password.trim() && linkedUser) {
+          const hashed = hashPassword(password.trim());
+          await tx.$executeRawUnsafe(
+            `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
+            hashed,
+            linkedUser.id,
+          );
+        }
+      } catch (userSyncErr) {
+        console.warn('[Driver Hub] Non-fatal linked user sync warning:', userSyncErr);
       }
 
       return NextResponse.json(
         serialize({
           ...updated,
-          employeeId: employeeId ?? null,
-          driverCategory: driverCategory || updated.licenseType || 'LIGHT_DUTY',
-          issuingAuthority: issuingAuthority ?? null,
+          employeeId: cleanEmployeeId ?? null,
+          driverCategory: cleanCategory || updated.licenseType || 'LIGHT_DUTY',
+          issuingAuthority: cleanAuthority ?? null,
           additionalDocuments: additionalDocuments ?? [],
-          linkedUser: linkedUser ? { id: linkedUser.id, email: linkedUser.email, username: linkedUser.username } : null,
+          linkedUser,
           compliance: complianceFlags(updated),
         })
       );
