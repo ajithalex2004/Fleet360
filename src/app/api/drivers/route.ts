@@ -78,6 +78,31 @@ export async function GET(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
+      // Purge legacy auto-seeded sample drivers and restore any real drivers that were soft-deactivated so they remain visible under INACTIVE status
+      await tx.$executeRawUnsafe(
+        `DELETE FROM drivers
+          WHERE tenant_id = $1
+            AND (
+              id::text LIKE 'drv-salim-%'
+              OR id::text LIKE 'drv-rashid-%'
+              OR id::text LIKE 'drv-tariq-%'
+              OR id::text LIKE 'drv-imran-%'
+              OR name ILIKE 'Rashid Al-Marri'
+            )`,
+        tenantId,
+      ).catch(() => {});
+
+      await tx.$executeRawUnsafe(
+        `UPDATE drivers
+            SET status = 'INACTIVE',
+                deleted_at = NULL,
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND deleted_at IS NOT NULL
+            AND COALESCE(status, 'ACTIVE') = 'ACTIVE'`,
+        tenantId,
+      ).catch(() => {});
+
       const sp       = request.nextUrl.searchParams;
       const status   = sp.get('status');
       const type     = sp.get('driverType');
@@ -121,7 +146,7 @@ export async function GET(request: NextRequest) {
         employee_id: string | null;
         driver_category: string | null;
         issuing_authority: string | null;
-        additional_documents: any | null;
+        additional_documents: unknown;
       }>>(
         `SELECT id::text, employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL`,
         tenantId,

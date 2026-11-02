@@ -174,7 +174,7 @@ export default function DrayageTrailersPage() {
 
   const handleOpenAdd = () => {
     setEditingTrailer(null);
-    setPlateNumber(`DXB-TR-${Math.floor(1000 + Math.random() * 9000)}`);
+    setPlateNumber('');
     const initialType = trailerTypes[0]?.code || '40FT_SKELETAL';
     const initialCapacity = trailerTypes[0]?.defaultCapacityTons || 45;
     const initialStatus = operationalStatuses[0]?.code || 'EMPTY';

@@ -569,7 +569,82 @@ export function getWarehouseZoneName(name?: string | null): string {
   return 'Dubai Logistics Corridor';
 }
 
+export async function purgeLegacySampleDrayageRecords(db: DrayageDbClient, tenantId: string) {
+  // Purge sample allowances, including Rashid Al-Marri / Salim Al Harthi / Biju Trexla sample rows and any allowance whose job or driver was deleted
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_allowances
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'alw-1-%'
+          OR id LIKE 'alw-2-%'
+          OR driver_name ILIKE '%Rashid Al-Marri%'
+          OR driver_name ILIKE '%Salim Al Harthi%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  // Purge sample jobs and any L2 child jobs generated from them
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_jobs
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'job-1-%' OR id LIKE 'job-2-%' OR id LIKE 'job-3-%'
+          OR id LIKE 'job-4-%' OR id LIKE 'job-5-%' OR id LIKE 'job-6-%'
+          OR id LIKE 'job-l2-1001-%' OR id LIKE 'job-exp-1001-%'
+          OR assigned_driver_name ILIKE '%Rashid Al-Marri%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  // Purge sample containers from Container Master
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_containers
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'cnt-1-%' OR id LIKE 'cnt-2-%' OR id LIKE 'cnt-3-%' OR id LIKE 'cnt-4-%'
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  // Purge sample seeded drivers (Rashid Al-Marri, etc.) so removed drivers never reappear
+  await db.$executeRawUnsafe(
+    `DELETE FROM drivers
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'drv-salim-%'
+          OR id LIKE 'drv-rashid-%'
+          OR id LIKE 'drv-tariq-%'
+          OR id LIKE 'drv-imran-%'
+          OR name ILIKE 'Rashid Al-Marri'
+        )`,
+    tenantId,
+  ).catch(() => {});
+}
+
 export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, tenantId: string) {
+  await purgeLegacySampleDrayageRecords(db, tenantId);
   if (seededTenants.has(tenantId)) return;
   await ensureDrayageSchema(db);
 
@@ -888,31 +963,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
-  // Ensure dedicated Heavy Duty Drayage Drivers exist
-  const heavyDriverCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL AND (license_type = 'HEAVY' OR license_type IS NULL)`,
-    tenantId,
-  ).catch(() => [{ cnt: 0 }]);
-
-  if (Number(heavyDriverCountRows[0]?.cnt ?? 0) === 0) {
-    const defaultDrivers = [
-      { id: `drv-salim-${tenantId.slice(0, 8)}`, name: 'Salim Al Harthi', phone: '+971 50 128 4491' },
-      { id: `drv-rashid-${tenantId.slice(0, 8)}`, name: 'Rashid Al-Marri', phone: '+971 52 391 8840' },
-      { id: `drv-tariq-${tenantId.slice(0, 8)}`, name: 'Tariq Mahmood', phone: '+971 55 490 2210' },
-      { id: `drv-imran-${tenantId.slice(0, 8)}`, name: 'Imran Khan', phone: '+971 56 718 3392' },
-    ];
-    for (const d of defaultDrivers) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO drivers (
-          id, tenant_id, name, contact_number, license_type, status, created_at, updated_at
-        )
-        SELECT $1,$2,$3,$4,'HEAVY','ACTIVE',NOW(),NOW()
-        WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $2)
-        ON CONFLICT DO NOTHING`,
-        d.id, tenantId, d.name, d.phone,
-      ).catch(() => {});
-    }
-  }
+  // Automatic seeding of sample drivers (Salim Al Harthi, Rashid Al-Marri, etc.) is disabled.
 
   // Purge sample jobs (DRY-L1-1001..1006, DRY-L2-1001..1006, DRY-EXP-1001), their dependencies, and their containers from Container Master
   await db.$executeRawUnsafe(
@@ -3693,14 +3744,46 @@ export function computeDriverAllowanceComponents(job: Record<string, unknown>) {
 
 export async function calculateMissingAllowances(db: DrayageDbClient, tenantId: string) {
   await ensureDrayageSchema(db);
+  await purgeLegacySampleDrayageRecords(db, tenantId);
+
+  // Also remove any PENDING allowances whose assigned driver or job no longer exists
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_allowances a
+      WHERE a.tenant_id = $1
+        AND a.status = 'PENDING'
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM logistics_drayage_jobs j
+             WHERE j.id = a.job_id AND j.tenant_id = a.tenant_id
+          )
+          OR NOT EXISTS (
+            SELECT 1 FROM drivers d
+             WHERE d.id::text = a.driver_id
+               AND d.tenant_id = a.tenant_id
+               AND d.deleted_at IS NULL
+               AND COALESCE(d.status, 'ACTIVE') = 'ACTIVE'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
+
   const jobsWithoutAllowance = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `SELECT j.*
        FROM logistics_drayage_jobs j
+       INNER JOIN drivers d
+         ON d.id::text = j.assigned_driver_id
+        AND d.tenant_id = j.tenant_id
+        AND d.deleted_at IS NULL
+        AND COALESCE(d.status, 'ACTIVE') = 'ACTIVE'
        LEFT JOIN logistics_drayage_allowances a
          ON a.job_id = j.id AND a.tenant_id = j.tenant_id
       WHERE j.tenant_id = $1
         AND j.assigned_driver_id IS NOT NULL
-        AND j.job_code NOT IN ('DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1004')
+        AND j.job_code NOT IN (
+          'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+          'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+          'DRY-EXP-1001'
+        )
         AND a.id IS NULL`,
     tenantId,
   );

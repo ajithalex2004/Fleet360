@@ -156,20 +156,6 @@ const statusColor: Record<string, string> = {
   ON_LEAVE:  'bg-amber-500/20 text-amber-400 border border-amber-500/30',
 };
 
-const docIcon: Record<string, string> = {
-  valid:         '✓',
-  expiring_soon: '⚠',
-  expired:       '✗',
-  missing:       '—',
-};
-
-const docCls: Record<string, string> = {
-  valid:         'text-emerald-400',
-  expiring_soon: 'text-amber-400',
-  expired:       'text-rose-400',
-  missing:       'text-[var(--text-faint)]',
-};
-
 const EMPTY_FORM: Partial<Driver> & { password?: string; confirmPassword?: string } = {
   name: '', firstName: '', lastName: '', email: '', contactNumber: '', nationality: '',
   licenseNumber: '', driverCategory: 'LIGHT_DUTY', licenseType: 'LIGHT_DUTY',

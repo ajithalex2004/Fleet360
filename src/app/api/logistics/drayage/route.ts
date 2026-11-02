@@ -115,6 +115,13 @@ export async function POST(req: NextRequest) {
 
       switch (action) {
         case 'create_jobs': {
+          if (!String(body.customerName ?? '').trim() || !String(body.terminalName ?? '').trim() || !String(body.warehouseName ?? '').trim()) {
+            throw new Error('Customer, Port Terminal, and Destination Warehouse are mandatory to create a job.');
+          }
+          const rawContainers = Array.isArray(body.containers) ? body.containers : [];
+          if (rawContainers.length === 0 || rawContainers.some((c: Record<string, unknown>) => !String(c.containerNumber ?? '').trim())) {
+            throw new Error('At least one valid Container Number is mandatory to create a job.');
+          }
           return createDrayageJobsBatch(tx, {
             tenantId,
             shipmentType: body.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT',
@@ -415,7 +422,9 @@ export async function POST(req: NextRequest) {
           const createdIds: string[] = [];
           for (const item of items) {
             const cntNum = String(item.containerNumber ?? '').trim().toUpperCase();
-            if (!cntNum) continue;
+            if (!cntNum) {
+              throw new Error('Container Number is mandatory.');
+            }
             const id = `cnt-${crypto.randomUUID().slice(0, 12)}`;
             const doExp = item.doExpiryDate
               ? new Date(String(item.doExpiryDate)).toISOString()
@@ -462,6 +471,10 @@ export async function POST(req: NextRequest) {
         }
 
         case 'create_trailer': {
+          const plateNum = String(body.plateNumber ?? '').trim().toUpperCase();
+          if (!plateNum) {
+            throw new Error('Trailer Plate Number is mandatory.');
+          }
           const id = `tr-${crypto.randomUUID().slice(0, 10)}`;
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_trailers (
@@ -594,8 +607,11 @@ export async function POST(req: NextRequest) {
         case 'create_terminal':
         case 'save_terminal': {
           const id = body.id ? String(body.id) : `term-${crypto.randomUUID().slice(0, 10)}`;
-          const termName = String(body.name ?? 'New Port Terminal').trim();
-          const termCode = String(body.code ?? 'DPW-JA-T1').toUpperCase().trim();
+          const termName = String(body.name ?? '').trim();
+          const termCode = String(body.code ?? '').toUpperCase().trim();
+          if (!termName || !termCode) {
+            throw new Error('Terminal Name and Terminal Code are mandatory.');
+          }
           const termPort = String(body.portName ?? 'Jebel Ali Port').trim();
           const termEmirate = String(body.emirate ?? 'Dubai').trim();
           const termLat = Number(body.lat ?? 25.0112);
@@ -701,8 +717,11 @@ export async function POST(req: NextRequest) {
         case 'create_client':
         case 'save_client': {
           const id = body.id ? String(body.id) : `cli-${crypto.randomUUID().slice(0, 10)}`;
-          const name = String(body.name ?? 'Enterprise Client').trim();
-          const code = String(body.code ?? 'CLI').trim().toUpperCase();
+          const name = String(body.name ?? '').trim();
+          const code = String(body.code ?? '').trim().toUpperCase();
+          if (!name || !code) {
+            throw new Error('Client Name and Client Code are mandatory.');
+          }
           const contactPerson = body.contactPerson ? String(body.contactPerson).trim() : null;
           const contactNo = body.contactNo ? String(body.contactNo).trim() : null;
           const streetAddress = body.streetAddress ? String(body.streetAddress).trim() : null;
@@ -760,6 +779,9 @@ export async function POST(req: NextRequest) {
 
         case 'create_warehouse':
         case 'save_warehouse': {
+          if (!String(body.name ?? '').trim()) {
+            throw new Error('Facility / Warehouse Name is mandatory.');
+          }
           const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
           const geofenceConfigured = Boolean(body.geofenceConfigured);
           const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
@@ -862,6 +884,9 @@ export async function POST(req: NextRequest) {
         case 'create_mapped_vehicle': {
           const id = crypto.randomUUID();
           const plate = String(body.plateNumber ?? '').trim().toUpperCase();
+          if (!plate) {
+            throw new Error('Vehicle Plate Number is mandatory.');
+          }
           await tx.$executeRawUnsafe(
             `INSERT INTO vehicles (
               id, tenant_id, plate_number, license_plate, registration_no,
@@ -879,7 +904,10 @@ export async function POST(req: NextRequest) {
 
         case 'create_mapped_driver': {
           const id = crypto.randomUUID();
-          const firstName = String(body.firstName ?? '').trim() || 'Driver';
+          const firstName = String(body.firstName ?? '').trim();
+          if (!firstName || !String(body.phone ?? '').trim() || !String(body.licenseNumber ?? '').trim()) {
+            throw new Error('Driver First Name, Phone Number, and License Number are mandatory.');
+          }
           const lastName = String(body.lastName ?? '').trim();
           const fullName = `${firstName} ${lastName}`.trim();
           const licExpiry = body.licenseExpiry

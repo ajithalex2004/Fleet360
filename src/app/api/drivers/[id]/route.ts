@@ -328,15 +328,23 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const permanent = _req.nextUrl.searchParams.get('permanent') === 'true';
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
       const { id } = await params;
+      if (permanent) {
+        await tx.driver.update({
+          where: { id },
+          data:  { status: 'RETIRING', deletedAt: new Date() },
+        });
+        return NextResponse.json({ success: true, message: 'Driver permanently deleted' });
+      }
       await tx.driver.update({
         where: { id },
-        data:  { deletedAt: new Date() },
+        data:  { status: 'INACTIVE', deletedAt: null },
       });
-      return NextResponse.json({ success: true, message: 'Driver deactivated' });
+      return NextResponse.json({ success: true, message: 'Driver deactivated (Status set to INACTIVE)' });
     } catch (e) {
       console.error('[Driver Hub] DELETE /api/drivers/[id]:', e);
       return NextResponse.json({ error: 'Failed to deactivate driver' }, { status: 500 });

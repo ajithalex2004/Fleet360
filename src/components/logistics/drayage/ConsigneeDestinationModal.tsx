@@ -296,7 +296,7 @@ export function ConsigneeDestinationModal({
       const selectedClient = clients.find((c) => c.id === defaultClientId) || clients[0];
       const initialCid = selectedClient?.id || '';
       const initialCName = selectedClient?.name || '';
-      setName(initialCName ? `${initialCName} - Facility / Ramp` : '');
+      setName('');
       setCode('');
       setCustomerId(initialCid);
       setCustomerName(initialCName);

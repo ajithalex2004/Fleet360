@@ -162,7 +162,7 @@ export default function DrayageCreateJobsPage() {
   const [containers, setContainers] = useState<ContainerItem[]>([
     {
       id: 'c-init-1',
-      containerNumber: 'MSCU' + Math.floor(1000000 + Math.random() * 9000000),
+      containerNumber: '',
       size: '40HC',
       containerType: 'DRY',
       dischargeDate: new Date().toISOString().slice(0, 10),
@@ -170,7 +170,7 @@ export default function DrayageCreateJobsPage() {
       deliveryTime: '09:00',
       doExpiryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
       doExpiryTime: '18:00',
-      sealNumber: 'SL-' + Math.floor(100000 + Math.random() * 900000),
+      sealNumber: '',
       weightKg: 22400,
       customsInspection: true,
       municipalityInspection: false,
@@ -228,7 +228,7 @@ export default function DrayageCreateJobsPage() {
         containerType: isReefer ? 'REEFER' : 'DRY',
         dischargeDate: new Date().toISOString().slice(0, 10),
         doExpiryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-        sealNumber: 'SL-' + Math.floor(100000 + Math.random() * 900000),
+        sealNumber: '',
         weightKg: 22000,
         customsInspection: true,
         municipalityInspection: false,
