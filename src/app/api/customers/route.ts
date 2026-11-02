@@ -156,9 +156,10 @@ export async function POST(req: NextRequest) {
         }
 
         const now = new Date().toISOString();
+        const safeTenantId = tenantId.replace(/'/g, "''");
         await tx.$executeRawUnsafe(`
           INSERT INTO customers (
-            id, created_at, updated_at, customer_code, customer_type, priority,
+            id, tenant_id, created_at, updated_at, customer_code, customer_type, priority,
             account_code, trade_license, name_en, name_ar, description_en, description_ar,
             email, mobile_number, mobile_country_code, communication_language,
             region_id, department_id, unit_id,
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest) {
             notification_sms_code, notification_sms,
             marketing_communications, booking_notifications, status
           ) VALUES (
-            '${id}', '${now}', '${now}',
+            '${id}', '${safeTenantId}', '${now}', '${now}',
             ${body.customerCode ? `'${body.customerCode.replace(/'/g,"''")}'` : 'NULL'},
             '${body.customerType}',
             ${body.priority ? `'${body.priority}'` : 'NULL'},
@@ -231,9 +232,9 @@ export async function POST(req: NextRequest) {
           try {
             const lesseeId = randomUUID();
             await tx.$executeRawUnsafe(`
-              INSERT INTO lessees (id, created_at, updated_at, name, type, trade_license, contact_person, email, phone, customer_id)
+              INSERT INTO lessees (id, tenant_id, created_at, updated_at, name, type, trade_license, contact_person, email, phone, customer_id)
               VALUES (
-                '${lesseeId}', '${now}', '${now}',
+                '${lesseeId}', '${safeTenantId}', '${now}', '${now}',
                 '${body.nameEn.replace(/'/g,"''")}',
                 '${body.customerType === 'INDIVIDUAL' ? 'individual' : 'corporate'}',
                 ${body.tradeLicense ? `'${body.tradeLicense.replace(/'/g,"''")}'` : 'NULL'},
@@ -247,6 +248,29 @@ export async function POST(req: NextRequest) {
           } catch (e) {
             console.warn('Could not auto-create lessee:', e);
           }
+        }
+
+        // Also mirror into logistics_drayage_clients if that table exists so Drayage Client Master stays unified
+        try {
+          await tx.$executeRawUnsafe(
+            `INSERT INTO logistics_drayage_clients (
+              id, tenant_id, name, code, contact_person, contact_no, street_address, city,
+              trn, trade_license, default_trip_amount_aed, default_driver_allowance_aed, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1550,150,NOW())
+            ON CONFLICT (id) DO NOTHING`,
+            id,
+            tenantId,
+            String(body.nameEn).trim(),
+            String(body.customerCode || 'CUST'),
+            body.contactPerson ? String(body.contactPerson).trim() : null,
+            body.mobileNumber ? String(body.mobileNumber).trim() : null,
+            body.addressLine1 ? String(body.addressLine1).trim() : null,
+            body.city ? String(body.city).trim() : 'Dubai',
+            body.taxRegistrationNumber ? String(body.taxRegistrationNumber).trim() : null,
+            body.tradeLicense ? String(body.tradeLicense).trim() : null,
+          );
+        } catch {
+          // Non-fatal if drayage schema is not yet initialized
         }
 
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${id}'`);

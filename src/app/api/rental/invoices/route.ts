@@ -102,12 +102,12 @@ export async function POST(req: NextRequest) {
         const now = new Date().toISOString();
 
         await tx.$executeRawUnsafe(
-          "INSERT INTO rental_invoices (id,created_at,updated_at,invoice_no,agreement_id,customer_id," +
+          "INSERT INTO rental_invoices (id,tenant_id,created_at,updated_at,invoice_no,agreement_id,customer_id," +
           "invoice_type,invoice_date,due_date,period_from,period_to,currency,subtotal,discount_amount," +
           "taxable_amount,tax_rate,tax_amount,total_amount,paid_amount,balance_due,status,is_corporate," +
           "corporate_account_id,billing_mode,payment_terms_days,notes,internal_notes) " +
-          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)",
-          id, now, now,
+          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)",
+          id, tenantId, now, now,
           invoiceData.invoiceNo, invoiceData.agreementId, invoiceData.customerId,
           invoiceData.invoiceType ?? 'STANDARD',
           invoiceData.invoiceDate ?? now,
@@ -131,9 +131,9 @@ export async function POST(req: NextRequest) {
         for (const li of lineItems) {
           const liId = crypto.randomUUID();
           await tx.$executeRawUnsafe(
-            "INSERT INTO rental_invoice_line_items (id,invoice_id,line_type,description,quantity,unit_price,unit_label,discount_pct,taxable,amount,sort_order,reference_id) " +
-            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
-            liId, id, li.lineType, li.description,
+            "INSERT INTO rental_invoice_line_items (id,tenant_id,invoice_id,line_type,description,quantity,unit_price,unit_label,discount_pct,taxable,amount,sort_order,reference_id) " +
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+            liId, tenantId, id, li.lineType, li.description,
             li.quantity ?? 1, li.unitPrice ?? 0,
             li.unitLabel ?? 'day', li.discountPct ?? 0,
             li.taxable ?? true, li.amount ?? 0,

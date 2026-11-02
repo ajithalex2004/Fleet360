@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
         }
 
         await tx.$executeRawUnsafe(`
-          INSERT INTO vehicle_locations (vehicle_id, lat, lng, heading, speed_kmh, accuracy_m, recorded_at, source)
-          VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'GPS')
+          INSERT INTO vehicle_locations (vehicle_id, tenant_id, lat, lng, heading, speed_kmh, accuracy_m, recorded_at, source)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'GPS')
           ON CONFLICT (vehicle_id) DO UPDATE SET
             lat         = EXCLUDED.lat,
             lng         = EXCLUDED.lng,
@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
             source      = 'GPS'
         `,
           String(vehicleId),
+          tenantId,
           Number(lat),
           Number(lng),
           heading  != null ? Number(heading)  : null,

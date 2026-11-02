@@ -123,18 +123,20 @@ export async function POST(req: NextRequest) {
           if (rawContainers.length === 0 || rawContainers.some((c: Record<string, unknown>) => !String(c.containerNumber ?? '').trim())) {
             throw new Error('At least one valid Container Number is mandatory to create a job.');
           }
+          const parsedRate = Number(body.rateAmountAed);
+          const parsedAllow = Number(body.driverAllowanceAed);
           return createDrayageJobsBatch(tx, {
             tenantId,
             shipmentType: body.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT',
             priority: body.priority || 'STANDARD',
             customerId: body.customerId ?? null,
-            customerName: body.customerName || 'Enterprise Shipper',
+            customerName: String(body.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper',
             warehouseId: body.warehouseId ?? null,
-            warehouseName: body.warehouseName || 'JAFZA South Bonded Hub',
+            warehouseName: String(body.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub',
             terminalId: body.terminalId ?? null,
-            terminalName: body.terminalName || 'Jebel Ali Port - Terminal 1',
-            rateAmountAed: Number(body.rateAmountAed ?? 1550),
-            driverAllowanceAed: Number(body.driverAllowanceAed ?? 150),
+            terminalName: String(body.terminalName || 'Jebel Ali Port - Terminal 1').trim() || 'Jebel Ali Port - Terminal 1',
+            rateAmountAed: Number.isFinite(parsedRate) && parsedRate >= 0 ? parsedRate : 1550,
+            driverAllowanceAed: Number.isFinite(parsedAllow) && parsedAllow >= 0 ? parsedAllow : 150,
             notes: body.notes ?? null,
             containers: Array.isArray(body.containers) ? body.containers : [],
           });

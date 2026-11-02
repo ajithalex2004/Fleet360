@@ -173,10 +173,25 @@ export default function DrayageCreateJobsPage() {
         setLoading(true);
       }
       const data = await fetchDrayageWorkspaceCached({ forceFresh });
-      setCustomers(data?.customers || []);
+      const rawCustomers: CustomerOption[] = Array.isArray(data?.customers) ? data.customers : [];
+      const rawClients: DrayageClientOption[] = Array.isArray(data?.clients) ? data.clients : [];
+      // Merge Customer Master and Drayage Client Master (deduplicated by ID and case-insensitive name)
+      const seenIds = new Set(rawCustomers.map((c) => c.id));
+      const seenNames = new Set(rawCustomers.map((c) => c.name.trim().toLowerCase()));
+      const mergedCustomers: CustomerOption[] = [...rawCustomers];
+      for (const cli of rawClients) {
+        if (!cli?.id || !cli?.name) continue;
+        const normName = cli.name.trim().toLowerCase();
+        if (!seenIds.has(cli.id) && !seenNames.has(normName)) {
+          seenIds.add(cli.id);
+          seenNames.add(normName);
+          mergedCustomers.push({ id: cli.id, name: cli.name });
+        }
+      }
+      setCustomers(mergedCustomers);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
-      setClients(data?.clients || []);
+      setClients(rawClients);
     } catch (err) {
       if (!getCachedDrayageData()?.customers?.length) {
         showToast('error', err instanceof Error ? err.message : 'Failed to load master data');
@@ -540,9 +555,30 @@ export default function DrayageCreateJobsPage() {
       return;
     }
 
-    const custObj = customers.find((c) => c.id === selectedCustomerId);
+    const custObj =
+      customers.find((c) => c.id === selectedCustomerId) ||
+      clients.find((c) => c.id === selectedCustomerId);
     const termObj = terminals.find((t) => t.id === selectedTerminalId);
     const whObj = warehouses.find((w) => w.id === selectedWarehouseId);
+
+    if (!custObj?.name?.trim()) {
+      showToast('error', 'Please select a Consignor / Customer before creating jobs');
+      return;
+    }
+    if (!termObj?.name?.trim()) {
+      showToast('error', 'Please select a Port Terminal before creating jobs');
+      return;
+    }
+    if (!whObj?.name?.trim()) {
+      showToast('error', 'Please select a Consignee Destination Warehouse before creating jobs');
+      return;
+    }
+
+    const safeRateAed = Number.isFinite(Number(rateAmountAed)) && Number(rateAmountAed) >= 0 ? Number(rateAmountAed) : 1550;
+    const safeDriverAllowanceAed =
+      Number.isFinite(Number(driverAllowanceAed)) && Number(driverAllowanceAed) >= 0
+        ? Number(driverAllowanceAed)
+        : 150;
 
     try {
       setSubmitting(true);
@@ -554,30 +590,30 @@ export default function DrayageCreateJobsPage() {
           shipmentType,
           priority,
           customerId: selectedCustomerId || null,
-          customerName: custObj?.name || '',
+          customerName: custObj.name.trim(),
           terminalId: selectedTerminalId || null,
-          terminalName: termObj?.name || '',
+          terminalName: termObj.name.trim(),
           warehouseId: selectedWarehouseId || null,
-          warehouseName: whObj?.name || '',
-          rateAmountAed: Number(rateAmountAed),
-          driverAllowanceAed: Number(driverAllowanceAed),
+          warehouseName: whObj.name.trim(),
+          rateAmountAed: safeRateAed,
+          driverAllowanceAed: safeDriverAllowanceAed,
           notes,
           containers: containers.map((c) => ({
             containerNumber: c.containerNumber.trim().toUpperCase(),
-            size: c.size,
-            containerType: c.containerType,
-            dischargeDate: c.deliveryDate || c.dischargeDate,
-            deliveryDate: c.deliveryDate || c.dischargeDate,
+            size: c.size || '40HC',
+            containerType: c.containerType || 'DRY',
+            dischargeDate: c.deliveryDate || c.dischargeDate || '',
+            deliveryDate: c.deliveryDate || c.dischargeDate || '',
             deliveryTime: c.deliveryTime || '',
-            doExpiryDate: c.doExpiryDate,
+            doExpiryDate: c.doExpiryDate || '',
             doExpiryTime: c.doExpiryTime || '',
-            sealNumber: c.sealNumber,
-            weightKg: Number(c.weightKg),
-            customsInspection: c.customsInspection,
-            municipalityInspection: c.municipalityInspection,
-            cpipInspection: c.cpipInspection,
-            mercInspection: c.mercInspection,
-            boxcareInspection: c.boxcareInspection,
+            sealNumber: c.sealNumber || '',
+            weightKg: Number.isFinite(Number(c.weightKg)) && Number(c.weightKg) > 0 ? Number(c.weightKg) : 22000,
+            customsInspection: Boolean(c.customsInspection),
+            municipalityInspection: Boolean(c.municipalityInspection),
+            cpipInspection: Boolean(c.cpipInspection),
+            mercInspection: Boolean(c.mercInspection),
+            boxcareInspection: Boolean(c.boxcareInspection),
           })),
         }),
       });
@@ -1484,6 +1520,11 @@ export default function DrayageCreateJobsPage() {
         defaultClientId={selectedCustomerId || null}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli, ...prev]);
+          setCustomers((prev) =>
+            prev.some((c) => c.id === newCli.id || c.name.trim().toLowerCase() === newCli.name.trim().toLowerCase())
+              ? prev
+              : [{ id: newCli.id, name: newCli.name }, ...prev],
+          );
         }}
         onSaved={async (savedWh) => {
           invalidateDrayageClientCache();

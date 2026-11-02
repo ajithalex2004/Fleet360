@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         const id   = crypto.randomUUID();
         const now  = new Date().toISOString();
 
-        const { cols, params, values } = pricingRuleToRow(body, id, now);
+        const { cols, params, values } = pricingRuleToRow(body, id, now, tenantId);
         await tx.$executeRawUnsafe(
           "INSERT INTO pricing_rules (" + cols + ") VALUES (" + params + ")",
           ...values

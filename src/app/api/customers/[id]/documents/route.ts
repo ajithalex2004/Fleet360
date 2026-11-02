@@ -49,10 +49,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!body.docName?.trim()) return NextResponse.json({ error: 'Document name is required' }, { status: 400 });
         const id  = randomUUID();
         const now = new Date().toISOString();
+        const safeTenantId = tenantId.replace(/'/g, "''");
         await tx.$executeRawUnsafe(`
-          INSERT INTO customer_documents (id, created_at, customer_id, doc_name, doc_type, file_name, file_url, uploaded_by, notes)
+          INSERT INTO customer_documents (id, tenant_id, created_at, customer_id, doc_name, doc_type, file_name, file_url, uploaded_by, notes)
           VALUES (
-            '${id}', '${now}', '${params.id}',
+            '${id}', '${safeTenantId}', '${now}', '${params.id}',
             '${body.docName.replace(/'/g,"''")}',
             ${body.docType    ? `'${body.docType}'`                          : 'NULL'},
             ${body.fileName   ? `'${body.fileName.replace(/'/g,"''")}'`     : 'NULL'},

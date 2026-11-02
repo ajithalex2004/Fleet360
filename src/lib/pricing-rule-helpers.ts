@@ -66,9 +66,14 @@ export function pricingRuleToRow(
   body: Record<string, unknown>,
   id: string,
   now: string,
+  tenantId?: string,
 ): { cols: string; params: string; values: unknown[] } {
-  const colList: string[]  = ['id', 'created_at', 'updated_at'];
-  const values: unknown[]  = [id, now, now];
+  const colList: string[]  = tenantId
+    ? ['id', 'tenant_id', 'created_at', 'updated_at']
+    : ['id', 'created_at', 'updated_at'];
+  const values: unknown[]  = tenantId
+    ? [id, tenantId, now, now]
+    : [id, now, now];
 
   for (const [camel, snake] of Object.entries(PRICING_FIELD_MAP)) {
     if (body[camel] !== undefined && body[camel] !== null) {

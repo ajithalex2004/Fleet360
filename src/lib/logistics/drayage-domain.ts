@@ -1548,7 +1548,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     };
   });
 
-  // 8. Mapped Fleet360 Customers (from `customers` table)
+  // 8. Mapped Fleet360 Customers (from `customers` table + merged with `logistics_drayage_clients`)
   const customers: MappedFleetCustomer[] = rawCustomers.map((c: Record<string, unknown>) => ({
     id: String(c.id),
     customerCode: c.customer_code ? String(c.customer_code) : null,
@@ -1560,6 +1560,26 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     city: c.city ? String(c.city) : 'Dubai',
     tradeLicense: c.trade_license ? String(c.trade_license) : null,
   }));
+  const seenCustIds = new Set(customers.map((c) => c.id));
+  const seenCustNames = new Set(customers.map((c) => c.name.trim().toLowerCase()));
+  for (const cli of clients) {
+    const normName = cli.name.trim().toLowerCase();
+    if (!seenCustIds.has(cli.id) && !seenCustNames.has(normName)) {
+      seenCustIds.add(cli.id);
+      seenCustNames.add(normName);
+      customers.push({
+        id: cli.id,
+        customerCode: cli.code || null,
+        name: cli.name,
+        nameAr: null,
+        customerType: 'CORPORATE',
+        email: null,
+        phone: cli.contactNo || null,
+        city: cli.city || 'Dubai',
+        tradeLicense: cli.tradeLicense || null,
+      });
+    }
+  }
 
   // 9. Driver Allowances
   const allowances: DrayageDriverAllowance[] = allowanceRows.map((a: Record<string, unknown>) => ({
@@ -2222,6 +2242,16 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
   await ensureDrayageSchema(db);
   const createdJobs: string[] = [];
 
+  const safeFinite = (val: unknown, fallback: number): number => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const safeIsoOrNull = (val: unknown): string | null => {
+    if (!val || typeof val !== 'string' || !val.trim()) return null;
+    const d = new Date(val.trim());
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
   // Resolve terminal coordinates for initial pin
   const termRows = input.terminalId
     ? await db.$queryRawUnsafe<Array<{ lat: number; lng: number }>>(
@@ -2229,11 +2259,17 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         input.terminalId, input.tenantId,
       )
     : [];
-  const startLat = termRows[0]?.lat != null ? Number(termRows[0].lat) : 25.0112;
-  const startLng = termRows[0]?.lng != null ? Number(termRows[0].lng) : 55.0612;
+  const startLat = safeFinite(termRows[0]?.lat, 25.0112);
+  const startLng = safeFinite(termRows[0]?.lng, 55.0612);
+
+  const safeCustomerName = String(input.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper';
+  const safeTerminalName = String(input.terminalName || 'Jebel Ali Port - Terminal 1').trim() || 'Jebel Ali Port - Terminal 1';
+  const safeWarehouseName = String(input.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub';
+  const safeShipmentType = input.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  const safePriority = String(input.priority || 'STANDARD').trim() || 'STANDARD';
 
   for (const item of input.containers) {
-    const cntNum = item.containerNumber.trim().toUpperCase();
+    const cntNum = String(item.containerNumber ?? '').trim().toUpperCase();
     if (!cntNum) continue;
 
     const existingCnt = await db.$queryRawUnsafe<Array<{ id: string }>>(
@@ -2245,8 +2281,13 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
     const containerId = existingCnt[0]?.id || `cnt-${crypto.randomUUID().slice(0, 12)}`;
     const jobId = `job-${crypto.randomUUID().slice(0, 12)}`;
     const jobCode = `DRY-L1-${Math.floor(1000 + Math.random() * 9000)}`;
-    const dischargeIso = item.dischargeDate ? new Date(item.dischargeDate).toISOString() : new Date().toISOString();
-    const doExpiryIso = item.doExpiryDate ? new Date(item.doExpiryDate).toISOString() : null;
+    const dischargeIso = safeIsoOrNull(item.dischargeDate) ?? new Date().toISOString();
+    const doExpiryIso = safeIsoOrNull(item.doExpiryDate);
+    const safeSize = String(item.size || '40HC').trim() || '40HC';
+    const safeCntType = String(item.containerType || 'DRY').trim() || 'DRY';
+    const safeWeightKg = safeFinite(item.weightKg, 22000) > 0 ? safeFinite(item.weightKg, 22000) : 22000;
+    const safeRateAed = safeFinite(input.rateAmountAed, safeCntType === 'REEFER' ? 2100 : 1550);
+    const safeDriverAllowAed = safeFinite(input.driverAllowanceAed, 150);
 
     if (existingCnt[0]?.id) {
       await db.$executeRawUnsafe(
@@ -2273,19 +2314,19 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
           WHERE id = $1 AND tenant_id = $2`,
         containerId,
         input.tenantId,
-        item.size || '40HC',
-        item.containerType || 'DRY',
-        input.shipmentType || 'IMPORT',
+        safeSize,
+        safeCntType,
+        safeShipmentType,
         input.customerId ?? null,
-        input.customerName,
+        safeCustomerName,
         input.terminalId ?? null,
-        input.terminalName,
+        safeTerminalName,
         input.warehouseId ?? null,
-        input.warehouseName,
+        safeWarehouseName,
         doExpiryIso,
         dischargeIso,
-        item.sealNumber ?? null,
-        item.weightKg ?? 22000,
+        item.sealNumber ? String(item.sealNumber).trim() : null,
+        safeWeightKg,
         Boolean(item.customsInspection),
         Boolean(item.municipalityInspection),
         Boolean(item.cpipInspection),
@@ -2306,19 +2347,21 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         containerId,
         input.tenantId,
         cntNum,
-        item.size || '40HC',
-        item.containerType || 'DRY',
-        input.shipmentType || 'IMPORT',
+        safeSize,
+        safeCntType,
+        safeShipmentType,
         input.customerId ?? null,
-        input.customerName,
+        safeCustomerName,
         input.terminalId ?? null,
-        input.terminalName,
+        safeTerminalName,
         input.warehouseId ?? null,
-        input.warehouseName,
+        safeWarehouseName,
         doExpiryIso,
         dischargeIso,
-        item.sealNumber ?? `SL-${Math.floor(100000 + Math.random() * 900000)}`,
-        item.weightKg ?? 22000,
+        item.sealNumber && String(item.sealNumber).trim()
+          ? String(item.sealNumber).trim()
+          : `SL-${Math.floor(100000 + Math.random() * 900000)}`,
+        safeWeightKg,
         Boolean(item.customsInspection),
         Boolean(item.municipalityInspection),
         Boolean(item.cpipInspection),
@@ -2342,21 +2385,21 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
       jobId,
       input.tenantId,
       jobCode,
-      input.shipmentType || 'IMPORT',
-      input.priority || 'STANDARD',
+      safeShipmentType,
+      safePriority,
       input.customerId ?? null,
-      input.customerName,
+      safeCustomerName,
       input.warehouseId ?? null,
-      input.warehouseName,
+      safeWarehouseName,
       input.terminalId ?? null,
-      input.terminalName,
+      safeTerminalName,
       containerId,
       cntNum,
-      item.size || '40HC',
-      item.containerType || 'DRY',
+      safeSize,
+      safeCntType,
       doExpiryIso,
-      input.rateAmountAed ?? (item.containerType === 'REEFER' ? 2100 : 1550),
-      input.driverAllowanceAed ?? 150,
+      safeRateAed,
+      safeDriverAllowAed,
       Boolean(item.customsInspection),
       Boolean(item.municipalityInspection),
       Boolean(item.cpipInspection),

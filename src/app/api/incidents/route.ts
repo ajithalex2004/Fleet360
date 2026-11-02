@@ -38,11 +38,12 @@ export async function POST(req: NextRequest) {
 
         const incident = await tx.$executeRawUnsafe(
           `INSERT INTO operations.incidents
-             (id, incident_no, incident_type, severity, status, description, location,
+             (id, tenant_id, incident_no, incident_type, severity, status, description, location,
               vehicle_id, driver_id, incident_date, created_at, updated_at)
            VALUES
-             (gen_random_uuid(), $1, $2, $3, 'OPEN', $4, $5, $6, $7, $8, NOW(), NOW())
+             (gen_random_uuid(), $1, $2, $3, $4, 'OPEN', $5, $6, $7, $8, $9, NOW(), NOW())
            RETURNING id, incident_no`,
+          tenantId,
           incidentNo,
           incidentType,
           severity,
@@ -55,10 +56,10 @@ export async function POST(req: NextRequest) {
           // Fallback: try without optional foreign key columns (in case they don't exist)
           return tx.$executeRawUnsafe(
             `INSERT INTO operations.incidents
-               (id, incident_no, incident_type, severity, status, description, location, incident_date, created_at, updated_at)
+               (id, tenant_id, incident_no, incident_type, severity, status, description, location, incident_date, created_at, updated_at)
              VALUES
-               (gen_random_uuid(), $1, $2, $3, 'OPEN', $4, $5, $6, NOW(), NOW())`,
-            incidentNo, incidentType, severity,
+               (gen_random_uuid(), $1, $2, $3, $4, 'OPEN', $5, $6, $7, NOW(), NOW())`,
+            tenantId, incidentNo, incidentType, severity,
             description ?? null, location ?? null,
             incidentDate ? new Date(incidentDate) : today,
           );
