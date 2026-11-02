@@ -45,6 +45,20 @@ import {
 
 let drayageSchemaEnsured = false;
 
+function safeNum(val: unknown, fallback: number): number {
+  if (val === null || val === undefined || val === '') return fallback;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safeIso(val: unknown, fallbackMsOffset = 0): string {
+  if (val && typeof val === 'string' && val.trim()) {
+    const d = new Date(val.trim());
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date(Date.now() + fallbackMsOffset).toISOString();
+}
+
 interface WorkspaceCacheEntry {
   timestamp: number;
   data: unknown;
@@ -429,12 +443,9 @@ export async function POST(req: NextRequest) {
               throw new Error('Container Number is mandatory.');
             }
             const id = `cnt-${crypto.randomUUID().slice(0, 12)}`;
-            const doExp = item.doExpiryDate
-              ? new Date(String(item.doExpiryDate)).toISOString()
-              : new Date(Date.now() + 5 * 86400000).toISOString();
-            const disch = item.dischargeDate
-              ? new Date(String(item.dischargeDate)).toISOString()
-              : new Date().toISOString();
+            const doExp = safeIso(item.doExpiryDate, 5 * 86400000);
+            const disch = safeIso(item.dischargeDate, 0);
+            const weightKg = safeNum(item.weightKg, 22000) > 0 ? safeNum(item.weightKg, 22000) : 22000;
             await tx.$executeRawUnsafe(
               `INSERT INTO logistics_drayage_containers (
                 id, tenant_id, container_number, size, container_type, shipment_type, status,
@@ -448,20 +459,20 @@ export async function POST(req: NextRequest) {
               id,
               tenantId,
               cntNum,
-              String(item.size ?? '40HC'),
-              String(item.containerType ?? 'DRY'),
-              String(item.shipmentType ?? 'IMPORT'),
-              String(item.status ?? 'AT_PORT_DISCHARGED'),
+              String(item.size || '40HC').trim() || '40HC',
+              String(item.containerType || 'DRY').trim() || 'DRY',
+              String(item.shipmentType || 'IMPORT').trim() || 'IMPORT',
+              String(item.status || 'AT_PORT_DISCHARGED').trim() || 'AT_PORT_DISCHARGED',
               item.customerId ? String(item.customerId) : null,
-              String(item.customerName ?? 'Al-Futtaim Logistics LLC'),
+              String(item.customerName || 'Al-Futtaim Logistics LLC').trim() || 'Al-Futtaim Logistics LLC',
               item.terminalId ? String(item.terminalId) : null,
-              String(item.terminalName ?? 'Jebel Ali Port - Terminal 1 (DP World)'),
+              String(item.terminalName || 'Jebel Ali Port - Terminal 1 (DP World)').trim() || 'Jebel Ali Port - Terminal 1 (DP World)',
               item.warehouseId ? String(item.warehouseId) : null,
-              String(item.warehouseName ?? 'JAFZA South Bonded Fulfillment Hub (Gate 5)'),
+              String(item.warehouseName || 'JAFZA South Bonded Fulfillment Hub (Gate 5)').trim() || 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
               doExp,
               disch,
               item.sealNumber ? String(item.sealNumber).trim() : null,
-              Number(item.weightKg ?? 22000),
+              weightKg,
               Boolean(item.customsInspection),
               Boolean(item.municipalityInspection),
               Boolean(item.cpipInspection),
@@ -486,12 +497,12 @@ export async function POST(req: NextRequest) {
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
             id,
             tenantId,
-            String(body.plateNumber ?? '').trim().toUpperCase(),
-            String(body.trailerType ?? '40FT_SKELETAL'),
-            Number(body.capacityTons ?? 45),
-            String(body.masterStatus ?? 'AVAILABLE'),
-            String(body.operationalStatus ?? 'EMPTY'),
-            String(body.currentLocation ?? 'Jebel Ali Main Yard'),
+            plateNum,
+            String(body.trailerType || '40FT_SKELETAL').trim() || '40FT_SKELETAL',
+            safeNum(body.capacityTons, 45),
+            String(body.masterStatus || 'AVAILABLE').trim() || 'AVAILABLE',
+            String(body.operationalStatus || 'EMPTY').trim() || 'EMPTY',
+            String(body.currentLocation || 'Jebel Ali Main Yard').trim() || 'Jebel Ali Main Yard',
           );
           return { ok: true, id };
         }
@@ -510,11 +521,11 @@ export async function POST(req: NextRequest) {
             String(body.id),
             tenantId,
             String(body.plateNumber ?? '').trim().toUpperCase(),
-            String(body.trailerType ?? '40FT_SKELETAL'),
-            Number(body.capacityTons ?? 45),
-            String(body.masterStatus ?? 'AVAILABLE'),
-            String(body.operationalStatus ?? 'EMPTY'),
-            String(body.currentLocation ?? 'Jebel Ali Main Yard'),
+            String(body.trailerType || '40FT_SKELETAL').trim() || '40FT_SKELETAL',
+            safeNum(body.capacityTons, 45),
+            String(body.masterStatus || 'AVAILABLE').trim() || 'AVAILABLE',
+            String(body.operationalStatus || 'EMPTY').trim() || 'EMPTY',
+            String(body.currentLocation || 'Jebel Ali Main Yard').trim() || 'Jebel Ali Main Yard',
           );
           return { ok: true };
         }
@@ -617,12 +628,12 @@ export async function POST(req: NextRequest) {
           if (!termName || !termCode) {
             throw new Error('Terminal Name and Terminal Code are mandatory.');
           }
-          const termPort = String(body.portName ?? 'Jebel Ali Port').trim();
-          const termEmirate = String(body.emirate ?? 'Dubai').trim();
-          const termLat = Number(body.lat ?? 25.0112);
-          const termLng = Number(body.lng ?? 55.0612);
+          const termPort = String(body.portName || 'Jebel Ali Port').trim() || 'Jebel Ali Port';
+          const termEmirate = String(body.emirate || 'Dubai').trim() || 'Dubai';
+          const termLat = safeNum(body.lat, 25.0112);
+          const termLng = safeNum(body.lng, 55.0612);
           const termGfType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
-          const termRadius = termGfType === 'POLYGON' ? 0 : Number(body.geofenceRadiusMeters ?? 1500);
+          const termRadius = termGfType === 'POLYGON' ? 0 : safeNum(body.geofenceRadiusMeters, 1500);
           const hasPolyCoords = Array.isArray(body.geofenceCoordinates) && body.geofenceCoordinates.length >= 3;
           const coordsJson = hasPolyCoords
             ? JSON.stringify(body.geofenceCoordinates)
@@ -654,9 +665,9 @@ export async function POST(req: NextRequest) {
             termLat,
             termLng,
             termRadius,
-            Number(body.freeDaysDry ?? 5),
-            Number(body.freeDaysReefer ?? 3),
-            String(body.operatingHours ?? '24/7 Gate Operations').trim(),
+            safeNum(body.freeDaysDry, 5),
+            safeNum(body.freeDaysReefer, 3),
+            String(body.operatingHours || '24/7 Gate Operations').trim() || '24/7 Gate Operations',
           );
 
           // Automatically upsert an associated perimeter geofence for this port terminal
@@ -763,11 +774,11 @@ export async function POST(req: NextRequest) {
           const contactPerson = body.contactPerson ? String(body.contactPerson).trim() : null;
           const contactNo = body.contactNo ? String(body.contactNo).trim() : null;
           const streetAddress = body.streetAddress ? String(body.streetAddress).trim() : null;
-          const city = String(body.city ?? 'Dubai').trim();
+          const city = String(body.city || 'Dubai').trim() || 'Dubai';
           const trn = body.trn ? String(body.trn).trim() : null;
           const tradeLicense = body.tradeLicense ? String(body.tradeLicense).trim() : null;
-          const defaultTripAmountAed = Number(body.defaultTripAmountAed ?? 1550);
-          const defaultDriverAllowanceAed = Number(body.defaultDriverAllowanceAed ?? 150);
+          const defaultTripAmountAed = safeNum(body.defaultTripAmountAed, 1550);
+          const defaultDriverAllowanceAed = safeNum(body.defaultDriverAllowanceAed, 150);
           const notes = body.notes ? String(body.notes).trim() : null;
 
           await tx.$executeRawUnsafe(
@@ -803,6 +814,39 @@ export async function POST(req: NextRequest) {
             notes,
           );
 
+          // Mirror into customers table as well so Customer Master and Drayage Client Master stay unified
+          try {
+            await tx.$executeRawUnsafe(
+              `INSERT INTO customers (
+                id, tenant_id, created_at, updated_at, customer_code, customer_type,
+                name_en, contact_person, mobile_number, address_line1, city, country,
+                tax_registration_number, trade_license, status
+              ) VALUES ($1,$2,NOW(),NOW(),$3,'CORPORATE',$4,$5,$6,$7,$8,'UAE',$9,$10,'ACTIVE')
+              ON CONFLICT (id) DO UPDATE
+                 SET name_en = EXCLUDED.name_en,
+                     customer_code = EXCLUDED.customer_code,
+                     contact_person = EXCLUDED.contact_person,
+                     mobile_number = EXCLUDED.mobile_number,
+                     address_line1 = EXCLUDED.address_line1,
+                     city = EXCLUDED.city,
+                     tax_registration_number = EXCLUDED.tax_registration_number,
+                     trade_license = EXCLUDED.trade_license,
+                     updated_at = NOW()`,
+              id,
+              tenantId,
+              code,
+              name,
+              contactPerson,
+              contactNo,
+              streetAddress,
+              city,
+              trn,
+              tradeLicense,
+            );
+          } catch {
+            // Ignore if customer_code unique constraint or optional schema mismatch
+          }
+
           return { ok: true, id };
         }
 
@@ -823,12 +867,12 @@ export async function POST(req: NextRequest) {
           const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
           const geofenceConfigured = Boolean(body.geofenceConfigured);
           const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
-          const geofenceRadiusMeters = Number(body.geofenceRadiusMeters ?? 800);
+          const geofenceRadiusMeters = safeNum(body.geofenceRadiusMeters, 800);
           const geofenceCoords = Array.isArray(body.geofenceCoordinates)
             ? JSON.stringify(body.geofenceCoordinates)
-            : String(body.geofenceCoordinatesJson ?? '[]');
-          const tripAmountAed = body.tripAmountAed != null ? Number(body.tripAmountAed) : 1550;
-          const driverAllowanceAed = body.driverAllowanceAed != null ? Number(body.driverAllowanceAed) : 150;
+            : String(body.geofenceCoordinatesJson || '[]');
+          const tripAmountAed = safeNum(body.tripAmountAed, 1550);
+          const driverAllowanceAed = safeNum(body.driverAllowanceAed, 150);
 
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_warehouses (
@@ -858,14 +902,14 @@ export async function POST(req: NextRequest) {
             id,
             tenantId,
             body.customerId ? String(body.customerId) : null,
-            String(body.customerName ?? 'Enterprise Shipper').trim(),
-            String(body.name ?? 'Distribution Hub').trim(),
+            String(body.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper',
+            String(body.name || 'Distribution Hub').trim() || 'Distribution Hub',
             body.code ? String(body.code).trim().toUpperCase() : null,
-            String(body.zone ?? 'JAFZA South').trim(),
-            String(body.address ?? 'Jebel Ali Free Zone, Dubai').trim(),
-            Number(body.lat ?? 24.9642),
-            Number(body.lng ?? 55.0915),
-            Number(body.rampsCount ?? 8),
+            String(body.zone || 'JAFZA South').trim() || 'JAFZA South',
+            String(body.address || 'Jebel Ali Free Zone, Dubai').trim() || 'Jebel Ali Free Zone, Dubai',
+            safeNum(body.lat, 24.9642),
+            safeNum(body.lng, 55.0915),
+            safeNum(body.rampsCount, 8),
             body.contactPerson ? String(body.contactPerson).trim() : null,
             body.contactPhone ? String(body.contactPhone).trim() : null,
             geofenceConfigured,
