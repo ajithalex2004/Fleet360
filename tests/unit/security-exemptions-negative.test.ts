@@ -172,9 +172,11 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       const res = await enterpriseWebhookPOST(req, {
         params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000099' }),
       });
-      expect(res.status).toBe(404);
+      // Same answer as a wrong secret: the path is public, so it must not
+      // reveal which connection ids exist.
+      expect(res.status).toBe(401);
       const json = await res.json();
-      expect(json.error).toBe('Invalid or inactive enterprise connection');
+      expect(json.error).toBe('Unauthorized enterprise webhook request');
     });
 
     it('rejects enterprise webhook for valid connection UUID when secret/signature is missing or wrong', async () => {

@@ -112,6 +112,14 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // exists for — every gateway POST was 401'd by the middleware before
   // reaching the signature check.
   '/api/bus-ops/gateway/',
+  // Inbound ERP webhooks (Enterprise Bridge). The ERP has no Fleet360
+  // session; the handler is the auth boundary: it requires the connection's
+  // own webhook secret (x-webhook-secret or Bearer, constant-time compare),
+  // answers 401 alike for an unknown connection and a wrong secret, derives
+  // the tenant from the connection row, and dispatches only agents that
+  // subscribe to enterprise.external_event. Without this entry the endpoint
+  // was unreachable by the ERPs it exists for.
+  '/api/integrations/enterprise/webhook/',
   // Push handlers authenticate themselves: signed operator session linked
   // to staff for subscriptions/tests, scheduler secret or admin session for
   // scheduling. Only the VAPID public key is anonymous.

@@ -209,3 +209,39 @@ describe('bounded ZIP reader', () => {
     expect(() => readZipEntries(buildZip(total), { maxEntries: 10, maxEntryBytes: 100, maxTotalBytes: 150 })).toThrow(/exceed/);
   });
 });
+
+describe('enterprise webhook is reachable without a session, and reveals nothing', () => {
+  it('only the webhook path is public', async () => {
+    const { isPublicPath } = await import('@/lib/auth-route-policies');
+    expect(isPublicPath(`/api/integrations/enterprise/webhook/${CONN_ID}`)).toBe(true);
+    expect(isPublicPath('/api/integrations/enterprise/connections')).toBe(false);
+    expect(isPublicPath(`/api/integrations/enterprise/connections/${CONN_ID}/webhook-secret`)).toBe(false);
+    expect(isPublicPath('/api/integrations/enterprise/sync')).toBe(false);
+  });
+
+  it('answers an unknown connection, one without a secret and a wrong secret identically', async () => {
+    const bodies: string[] = [];
+    h.connection = null;
+    let res = await webhook({ 'x-webhook-secret': SECRET });
+    expect(res.status).toBe(401);
+    bodies.push(JSON.stringify(await res.json()));
+
+    h.connection = { id: CONN_ID, tenant_id: 't', is_active: true, auth_credentials: {} };
+    res = await webhook({ 'x-webhook-secret': SECRET });
+    expect(res.status).toBe(401);
+    bodies.push(JSON.stringify(await res.json()));
+
+    h.connection = { id: CONN_ID, tenant_id: 't', is_active: true, auth_credentials: { webhookSecret: SECRET } };
+    res = await webhook({ 'x-webhook-secret': 'whsec_wrong_wrong_wrong_wrong_wrong' });
+    expect(res.status).toBe(401);
+    bodies.push(JSON.stringify(await res.json()));
+
+    expect(new Set(bodies).size).toBe(1);
+  });
+
+  it('refuses a malformed connection id before touching the database', async () => {
+    const req = new Request('http://localhost/api/integrations/enterprise/webhook/not-a-uuid', { method: 'POST', body: '{}' });
+    const res = await webhookPOST(Object.assign(req, { nextUrl: new URL(req.url) }) as never, { params: Promise.resolve({ id: 'not-a-uuid' }) });
+    expect(res.status).toBe(401);
+  });
+});

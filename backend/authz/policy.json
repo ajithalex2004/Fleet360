@@ -281,7 +281,8 @@
   ]
  },
  "trialFreeModules": [
-  "fleet"
+  "fleet",
+  "driver-mgmt"
  ],
  "superAdminRole": "SUPER_ADMIN",
  "tenantAdminRole": "TENANT_ADMIN",
