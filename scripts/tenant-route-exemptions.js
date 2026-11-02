@@ -70,6 +70,20 @@ const RULE_EXEMPTIONS = [
     dataScope: 'None (response headers only)', owner: 'Mobile App Team',
     test: 'tests/unit/driver-app-live-location.test.ts',
   },
+  {
+    file: 'src/app/api/driver-app/customer-tracking/route.ts', method: 'GET', type: 'missing_auth',
+    reason: 'Shareable drayage tracking link opened by the consignee / shipper, who has no Fleet360 account. The tenant, job and container come only from an HMAC-SHA256 token (verifyDrayageCustomerTrackingToken, key DRAYAGE_TRACKING_SECRET or SESSION_SECRET, no built-in default); every read runs under withTenantRls for that tenant and is limited to that one job.',
+    authMechanism: 'HMAC-signed capability token (trk_…) in the query string',
+    dataScope: 'The single drayage job named by the token, customer-facing fields only', owner: 'Drayage Team',
+    test: 'tests/unit/drayage-customer-tracking.test.ts',
+  },
+  {
+    file: 'src/app/api/driver-app/customer-tracking/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Same capability token as GET. Lets the token holder set the alert recipients for that one job and confirm offloading complete; nothing else. Recipients must be given explicitly (no default number or address).',
+    authMechanism: 'HMAC-signed capability token (trk_…) in the body',
+    dataScope: 'The single drayage job named by the token', owner: 'Drayage Team',
+    test: 'tests/unit/drayage-customer-tracking.test.ts',
+  },
   // ── Device ingest ──────────────────────────────────────────────────────────
   {
     file: 'src/app/api/assets/ble/ingest/route.ts', method: 'POST', type: 'missing_auth',

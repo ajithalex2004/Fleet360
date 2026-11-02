@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { getDriverTenantContext } from '@/lib/driver-session';
 
 interface OcrExtractionResult {
   containerNumber: string;
@@ -56,6 +58,15 @@ function cleanJsonResponse(raw: string): Record<string, unknown> | null {
 }
 
 export async function POST(req: NextRequest) {
+  // Signed-in callers only (a driver token from the APK, or a verified
+  // session): this spends the platform's Gemini / OpenAI keys per call and
+  // used to answer anyone.
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const driverCtx = authz.ok ? null : await getDriverTenantContext(req);
+  if (!authz.ok && !driverCtx) {
+    return NextResponse.json({ error: 'Sign in to scan documents.' }, { status: 401 });
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const imageDataUri = String(body.imageDataUri || body.image || '');

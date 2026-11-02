@@ -41,56 +41,35 @@ type DriverRef = {
   assignedVehicleId?: string | null;
 };
 
-async function resolveCallerAuth(req: NextRequest): Promise<{ ok: boolean; tenantId: string; userId: string; status: number }> {
-  // Prefer explicit Bearer token / driver session via getDriverTenantContext first
+type CallerAuth = { ok: true; tenantId: string; userId: string } | { ok: false; status: number };
+
+/**
+ * The caller: a signed driver token (the APK sends it as a Bearer token or
+ * the xl-driver-session cookie) first, else the request's verified identity.
+ * Each handler passes in its own requireAuthorizedTenant() result.
+ */
+async function resolveCallerAuth(
+  req: NextRequest,
+  authz: ReturnType<typeof requireAuthorizedTenant>,
+): Promise<CallerAuth> {
   const driverCtx = await getDriverTenantContext(req);
   if (driverCtx?.userId && driverCtx?.tenantId) {
-    return { ok: true, tenantId: driverCtx.tenantId, userId: driverCtx.userId, status: 200 };
+    return { ok: true, tenantId: driverCtx.tenantId, userId: driverCtx.userId };
   }
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok || !authz.userId) {
-    return { ok: false, tenantId: '', userId: '', status: authz.ok ? 401 : authz.status };
+    return { ok: false, status: authz.ok ? 401 : authz.status };
   }
-  return { ok: true, tenantId: authz.tenantId, userId: authz.userId, status: 200 };
+  return { ok: true, tenantId: authz.tenantId, userId: authz.userId };
 }
 
+/**
+ * The caller's own driver profile, by id. Sessions minted here carry the
+ * driver id. There is deliberately no email or mobile-number fallback: a
+ * user who could set their number to a driver's would sign in as that driver.
+ */
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {
-  const direct = await prisma.driver.findFirst({
-    where: { id: userId, tenantId, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      driverType: true,
-      assignedVehicleId: true,
-    },
-  });
-  if (direct) return direct;
-
-  // Fallback: if Driver and User were created with distinct UUIDs, match by User email / mobileNumber
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true, mobileNumber: true },
-  });
-  if (!user) return null;
-
-  const orConditions: Array<Record<string, unknown>> = [];
-  if (user.email) {
-    orConditions.push({ email: { equals: user.email, mode: 'insensitive' } });
-  }
-  if (user.mobileNumber) {
-    orConditions.push({ contactNumber: user.mobileNumber });
-  }
-  if (orConditions.length === 0) return null;
-
   return prisma.driver.findFirst({
-    where: {
-      tenantId,
-      deletedAt: null,
-      OR: orConditions,
-    },
+    where: { id: userId, tenantId, deletedAt: null },
     select: {
       id: true,
       name: true,
@@ -114,7 +93,7 @@ const effectivePlate = (v: {
 }) => v.licensePlate || v.plateNumber || v.registrationNo || v.vehicleCode || null;
 
 export async function POST(req: NextRequest) {
-  const authz = await resolveCallerAuth(req);
+  const authz = await resolveCallerAuth(req, requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }));
   if (!authz.ok) {
     return NextResponse.json(
       { error: 'Sign in first, then choose your vehicle.' },
@@ -138,7 +117,9 @@ export async function POST(req: NextRequest) {
     const compact = vehicleIdentifier.replace(/[^a-zA-Z0-9]/g, '');
 
     const outcome = await withTenantRls(prisma, tenantId, async () => {
-      let vehicle = await prisma.vehicle.findFirst({
+      // Exact matches in the caller's own tenant only (a partial-match
+      // fallback across every tenant's LOGISTICS vehicles was removed).
+      const vehicle = await prisma.vehicle.findFirst({
         where: {
           tenantId,
           deletedAt: null,
@@ -159,33 +140,6 @@ export async function POST(req: NextRequest) {
         select: { ...VEHICLE_SELECT, assignedDriverId: true },
       });
 
-      if (!vehicle) {
-        vehicle = await prisma.vehicle.findFirst({
-          where: {
-            deletedAt: null,
-            OR: [{ tenantId }, { vehicleUsage: 'LOGISTICS' }],
-            AND: [
-              {
-                OR: [
-                  { vehicleCode: { contains: vehicleIdentifier, mode: 'insensitive' } },
-                  { licensePlate: { contains: vehicleIdentifier, mode: 'insensitive' } },
-                  { plateNumber: { contains: vehicleIdentifier, mode: 'insensitive' } },
-                  { registrationNo: { contains: vehicleIdentifier, mode: 'insensitive' } },
-                  ...(compact && compact.length >= 3
-                    ? [
-                        { licensePlate: { contains: compact, mode: 'insensitive' as const } },
-                        { plateNumber: { contains: compact, mode: 'insensitive' as const } },
-                        { vehicleCode: { contains: compact, mode: 'insensitive' as const } },
-                      ]
-                    : []),
-                ],
-              },
-            ],
-          },
-          select: { ...VEHICLE_SELECT, assignedDriverId: true },
-        });
-      }
-
       if (!vehicle) return { kind: 'no-vehicle' as const };
 
       const driver = await callerDriver(userId, tenantId);
@@ -204,7 +158,7 @@ export async function POST(req: NextRequest) {
       // Clear this driver from any other vehicle they were previously logged into
       await prisma.vehicle
         .updateMany({
-          where: { assignedDriverId: driver.id, id: { not: vehicle.id } },
+          where: { tenantId, assignedDriverId: driver.id, id: { not: vehicle.id } },
           data: { assignedDriverId: null },
         })
         .catch(() => {});
@@ -326,7 +280,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const authz = await resolveCallerAuth(req);
+  const authz = await resolveCallerAuth(req, requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl }));
   if (!authz.ok) {
     return NextResponse.json({ hasSession: false });
   }
@@ -345,21 +299,15 @@ export async function GET(req: NextRequest) {
         : null;
 
       if (req.nextUrl.searchParams.get('list') === 'true') {
-        const isLogisticsDriver =
-          driver?.driverType?.toUpperCase() === 'LOGISTICS' ||
-          tenantId === '767aaca7-a588-4b2f-ae32-5111b09db0ce';
+        const isLogisticsDriver = driver?.driverType?.toUpperCase() === 'LOGISTICS';
 
+        // The caller's own tenant only: the list used to include every
+        // tenant's LOGISTICS vehicles.
         let vehicles = await prisma.vehicle.findMany({
           where: {
+            tenantId,
             deletedAt: null,
-            ...(isLogisticsDriver
-              ? {
-                  OR: [
-                    { tenantId, vehicleUsage: 'LOGISTICS' },
-                    { vehicleUsage: 'LOGISTICS' },
-                  ],
-                }
-              : { tenantId }),
+            ...(isLogisticsDriver ? { vehicleUsage: 'LOGISTICS' } : {}),
           },
           select: { ...VEHICLE_SELECT, assignedDriverId: true },
           orderBy: [{ vehicleCode: 'asc' }, { licensePlate: 'asc' }],

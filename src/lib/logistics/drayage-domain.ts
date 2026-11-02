@@ -5358,12 +5358,12 @@ export async function simulatePortSlotTrafficRisk(
 // ============================================================================
 
 function getDrayageTrackingTokenSecret(): string {
-  return (
-    process.env.DRAYAGE_TRACKING_SECRET ||
-    process.env.SESSION_SECRET ||
-    process.env.JWT_SECRET ||
-    'fleet360-drayage-live-customer-portal-hmac-secret-2026'
-  );
+  // No built-in fallback: a secret in the repository would let anyone mint a
+  // tracking token for any tenant's job. SESSION_SECRET stays a fallback so
+  // links already shared with customers keep working.
+  const secret = process.env.DRAYAGE_TRACKING_SECRET || process.env.SESSION_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('DRAYAGE_TRACKING_SECRET (or SESSION_SECRET) must be set to sign tracking links');
+  return secret;
 }
 
 /**
