@@ -5252,23 +5252,17 @@ export function resolveCustomerMilestoneContacts(args: {
   const matchedWh = args.warehouses?.find((w) => w.customerName.toLowerCase() === custLower);
   const matchedCustomer = args.customers?.find((c) => c.name.toLowerCase() === custLower);
 
-  const slug =
-    custLower
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 24) || 'shipper';
-
   const whatsapp =
     waMatch?.[1]?.trim() ||
     matchedClient?.contactNo ||
     matchedWh?.contactPhone ||
     matchedCustomer?.phone ||
-    '+971 50 482 9104';
+    '';
 
   const email =
     emMatch?.[1]?.trim() ||
     matchedCustomer?.email ||
-    `logistics-ops@${slug}.ae`;
+    '';
 
   const autoAlertsEnabled = autoMatch ? autoMatch[1] === 'ON' : true;
 
@@ -5590,44 +5584,52 @@ export async function getPublicCustomerTrackingByToken(
     (l) => l.jobId === matchedJob.id || l.jobCode === matchedJob.jobCode,
   );
 
+  const matchedContainer = workspace.containers.find(
+    (c) =>
+      c.id === matchedJob.containerId ||
+      c.containerNumber.toUpperCase() === matchedJob.containerNumber.toUpperCase(),
+  );
+  const resolvedSealNumber = matchedContainer?.sealNumber || null;
+  const resolvedWeightKg = matchedContainer?.weightKg || null;
+
   const stageDefinitions = [
     {
       stageNum: 1,
       code: 'AT_PORT',
-      title: 'Gated In Port Terminal',
+      title: 'Gate-In',
       subtitle: `${matchedJob.terminalName} · Token ${matchedJob.tokenNumber || matchedJob.pcsTokenNumber || 'Verified'}`,
     },
     {
       stageNum: 2,
       code: 'LOADED',
-      title: 'Container Loaded & Seal Verified',
+      title: 'Loaded at Terminal',
       subtitle: `Container ${matchedJob.containerNumber} (${matchedJob.containerSize} ${matchedJob.containerType}) mounted on chassis`,
     },
     {
       stageNum: 3,
-      code: 'IN_TRANSIT',
-      title: 'In Transit on UAE Freight Corridor',
-      subtitle: `${matchedJob.portSlotPrediction?.corridorName || 'E11 / E311 Freight Corridor'} → ${matchedJob.warehouseName}`,
+      code: 'CUSTOMS_CLEARED',
+      title: 'Customs Cleared',
+      subtitle: `Port Customs & Inspection Cleared${resolvedSealNumber ? ` · Seal ${resolvedSealNumber}` : ''}`,
     },
     {
       stageNum: 4,
-      code: 'PLACED_AT_RAMP',
-      title: 'Placed at Customer Warehouse Ramp',
-      subtitle: `Positioned at ${matchedJob.warehouseName} (${matchedJob.placementLocation || 'RAMP'}) · Offloading ETC Timer Active`,
+      code: 'IN_TRANSIT',
+      title: 'En Route',
+      subtitle: `${matchedJob.portSlotPrediction?.corridorName || 'E11 / E311 Freight Corridor'} → ${matchedJob.warehouseName}`,
     },
     {
       stageNum: 5,
-      code: 'CONTAINER_DETACHED',
-      title: 'Offloading / Empty Return Readiness',
-      subtitle: matchedJob.trailerDetached
-        ? 'Chassis detached at customer bay · Auto-L2 Empty Return scheduled'
-        : 'Live destuffing at customer ramp prior to empty return',
+      code: 'PLACED_AT_RAMP',
+      title: 'At Warehouse',
+      subtitle: `Positioned at ${matchedJob.warehouseName} (${matchedJob.placementLocation || 'RAMP'}) · Offloading / Destuffing`,
     },
     {
       stageNum: 6,
-      code: 'EMPTY_DEPOSITED',
-      title: 'Completed & Empty Returned to Port',
-      subtitle: `Empty container returned to ${matchedJob.terminalName} & EIR issued`,
+      code: 'EPOD_SIGNED',
+      title: 'ePOD Signed',
+      subtitle: matchedJob.podSignatureName
+        ? `Signed by ${matchedJob.podSignatureName} · Delivery & Seal Verified`
+        : `Electronic Proof of Delivery (ePOD) & Seal Verification at ${matchedJob.warehouseName}`,
     },
   ];
 
@@ -5684,6 +5686,9 @@ export async function getPublicCustomerTrackingByToken(
       etcTime: matchedJob.etcTime,
       currentLat: matchedJob.currentLat,
       currentLng: matchedJob.currentLng,
+      sealNumber: resolvedSealNumber,
+      weightKg: resolvedWeightKg,
+      inspectionStatus: matchedJob.inspectionStatus || 'CLEARED',
       podSignatureName: matchedJob.podSignatureName,
       podSignedAt: matchedJob.podSignedAt,
       podPhotoUrl: matchedJob.podPhotoUrl,

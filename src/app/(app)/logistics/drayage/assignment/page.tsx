@@ -26,6 +26,11 @@ import {
   Leaf,
   Scale,
   Settings,
+  Copy,
+  ExternalLink,
+  Share2,
+  MessageSquare,
+  Mail,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -86,6 +91,13 @@ interface DrayageJob {
   trailerDetached?: boolean;
   l2Activated?: boolean;
   etcTime?: string | null;
+  customerPortal?: {
+    trackingToken: string;
+    shareablePath: string;
+    customerWhatsApp: string;
+    customerEmail: string;
+    autoAlertsEnabled: boolean;
+  };
   riskRadar?: {
     portFreeTimeExpiry: string;
     portDemurrageHoursRemaining: number;
@@ -311,6 +323,68 @@ export default function DrayageAssignmentPage() {
     ...(cached?.automationConfig || {}),
   }));
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [sharingTrackingJob, setSharingTrackingJob] = useState<DrayageJob | null>(null);
+  const [shareWhatsAppInput, setShareWhatsAppInput] = useState('');
+  const [shareEmailInput, setShareEmailInput] = useState('');
+  const [sendingShareAlert, setSendingShareAlert] = useState(false);
+  const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
+
+  const getJobShareablePath = useCallback((job: DrayageJob) => {
+    if (job.customerPortal?.shareablePath) return job.customerPortal.shareablePath;
+    return `/logistics/drayage/tracking`;
+  }, []);
+
+  const handleCopyJobTrackingLink = useCallback((job: DrayageJob) => {
+    if (typeof window === 'undefined') return;
+    const path = getJobShareablePath(job);
+    const fullUrl = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedJobId(job.id);
+    setToast({ type: 'success', message: `Copied live tracking link for ${job.containerNumber} (${job.jobCode})!` });
+    setTimeout(() => {
+      setCopiedJobId(null);
+      setToast(null);
+    }, 3500);
+  }, [getJobShareablePath]);
+
+  const handleOpenShareTrackingModal = useCallback((job: DrayageJob) => {
+    setSharingTrackingJob(job);
+    setShareWhatsAppInput(job.customerPortal?.customerWhatsApp || '');
+    setShareEmailInput(job.customerPortal?.customerEmail || '');
+  }, []);
+
+  const handleDispatchTrackingAlert = async () => {
+    if (!sharingTrackingJob) return;
+    try {
+      setSendingShareAlert(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_customer_milestone_alert',
+          jobId: sharingTrackingJob.id,
+          customWhatsApp: shareWhatsAppInput.trim(),
+          customEmail: shareEmailInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to dispatch tracking link');
+      setToast({
+        type: 'success',
+        message: `Sent live tracking link for ${sharingTrackingJob.containerNumber} via WhatsApp & Email!`,
+      });
+      setTimeout(() => setToast(null), 4000);
+      setSharingTrackingJob(null);
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Error sending tracking link',
+      });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setSendingShareAlert(false);
+    }
+  };
   const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState<boolean>(
     cached?.automationConfig?.autoL2DispatchEnabled ?? true
   );
@@ -1012,15 +1086,45 @@ export default function DrayageAssignmentPage() {
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: 'Tracking Portal & Actions',
       align: 'right',
       sortable: false,
       filter: false,
       render: (job) => {
         const isAssigned = Boolean(job.assignedVehicleId);
+        const sharePath = getJobShareablePath(job);
+        const isCopied = copiedJobId === job.id;
         return (
           <div className="flex items-center justify-end gap-1.5">
             <button
+              type="button"
+              onClick={() => handleCopyJobTrackingLink(job)}
+              title="Copy No-Login Shareable Customer Tracking Link"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 text-[11px] font-semibold transition-colors"
+            >
+              <Copy className="w-3 h-3" />
+              <span>{isCopied ? 'Copied!' : 'Copy Link'}</span>
+            </button>
+            <a
+              href={sharePath}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open No-Login Customer Tracking Portal in a new tab"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 text-[11px] font-semibold transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              <span>Portal</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => handleOpenShareTrackingModal(job)}
+              title="One-Click Share Live Tracking Link via WhatsApp or Email"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 text-[11px] font-semibold transition-colors"
+            >
+              <Share2 className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
               onClick={() => handleOpenAssign(job)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors"
             >
@@ -1030,7 +1134,7 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk]);
+  ], [getDemurrageRisk, getJobShareablePath, copiedJobId, handleCopyJobTrackingLink, handleOpenShareTrackingModal]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -3094,6 +3198,133 @@ export default function DrayageAssignmentPage() {
       )}
 
       {/* Super Admin Drayage Configuration Modal */}
+      {/* One-Click Share Live Customer Tracking Link (WhatsApp / Email) Modal */}
+      {sharingTrackingJob && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/40 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-emerald-400" />
+                  Share Live Customer Tracking Link (No-Login Portal)
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Container <strong className="font-mono text-[var(--text-main)]">{sharingTrackingJob.containerNumber}</strong> ({sharingTrackingJob.jobCode}) · {sharingTrackingJob.customerName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSharingTrackingJob(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    Tokenized Read-Only Portal Link
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
+                    HMAC-SHA256 Verified
+                  </span>
+                </div>
+                <code className="block text-[11px] font-mono text-[var(--text-main)] break-all">
+                  {typeof window !== 'undefined'
+                    ? `${window.location.origin}${getJobShareablePath(sharingTrackingJob)}`
+                    : getJobShareablePath(sharingTrackingJob)}
+                </code>
+                <div className="flex items-center gap-2 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyJobTrackingLink(sharingTrackingJob)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy Tracking Link
+                  </button>
+                  <a
+                    href={getJobShareablePath(sharingTrackingJob)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 font-bold hover:bg-blue-600/30 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open Portal
+                  </a>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)] block">
+                    Consignee WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={shareWhatsAppInput}
+                    onChange={(e) => setShareWhatsAppInput(e.target.value)}
+                    placeholder="+971 50 000 0000"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)] block">
+                    Consignee Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={shareEmailInput}
+                    onChange={(e) => setShareEmailInput(e.target.value)}
+                    placeholder="operations@customer.ae"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://wa.me/${shareWhatsAppInput.replace(/[^\d]/g, '')}?text=${encodeURIComponent(
+                      `📦 *Fleet360 Live Container Tracking*\n• *Job:* ${sharingTrackingJob.jobCode}\n• *Container:* ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.containerSize})\n• *Status:* ${sharingTrackingJob.status}\n• *Route:* ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\n🔗 *Track Live Milestones & Download Signed ePOD:* ${typeof window !== 'undefined' ? window.location.origin + getJobShareablePath(sharingTrackingJob) : getJobShareablePath(sharingTrackingJob)}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 font-bold hover:bg-emerald-600/30 transition-colors"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Open WhatsApp
+                  </a>
+                  <a
+                    href={`mailto:${encodeURIComponent(shareEmailInput)}?subject=${encodeURIComponent(
+                      `Live Container Tracking & Signed ePOD — ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode})`
+                    )}&body=${encodeURIComponent(
+                      `Hello,\n\nTrack live container milestone progress (Gate-In → Loaded at Terminal → Customs Cleared → En Route → At Warehouse → ePOD Signed) and download the signed ePOD + Seal photos for Container ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode}):\n\n${typeof window !== 'undefined' ? window.location.origin + getJobShareablePath(sharingTrackingJob) : getJobShareablePath(sharingTrackingJob)}\n\nRoute: ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\nCurrent Status: ${sharingTrackingJob.status}`
+                    )}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/40 text-sky-400 font-bold hover:bg-sky-600/30 transition-colors"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    Open Email
+                  </a>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={sendingShareAlert}
+                  onClick={handleDispatchTrackingAlert}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  {sendingShareAlert ? 'Sending Alert...' : 'Send Automated Alert'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <DrayageSuperAdminConfigModal
         open={configModalOpen}
         onClose={() => setConfigModalOpen(false)}
