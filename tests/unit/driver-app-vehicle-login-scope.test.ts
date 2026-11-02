@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
 
 // vehicle-login binds the caller to one of their own tenant's vehicles, by
 // exact code or plate, as their own driver profile. ocr-scan needs a caller.
@@ -36,14 +37,9 @@ vi.mock('@/lib/tenant-context', async (importOriginal) => {
 const { POST: loginPOST, GET: loginGET } = await import('@/app/api/driver-app/auth/vehicle-login/route');
 const { POST: ocrPOST } = await import('@/app/api/driver-app/ocr-scan/route');
 
-const post = (url: string, body: unknown) => {
-  const { NextRequest } = require('next/server.js');
-  return new NextRequest(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-};
-const get = (url: string) => {
-  const { NextRequest } = require('next/server.js');
-  return new NextRequest(url);
-};
+const post = (url: string, body: unknown) =>
+  new NextRequest(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const get = (url: string) => new NextRequest(url);
 
 describe('driver vehicle login stays in the caller\'s tenant', () => {
   beforeEach(() => {
