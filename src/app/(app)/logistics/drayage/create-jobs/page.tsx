@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import {
   PlusCircle,
   Package,
@@ -18,6 +19,10 @@ import {
   X,
   Calendar,
   Clock,
+  Sparkles,
+  FileSpreadsheet,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui/page-theme';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/SearchableSelect';
@@ -48,6 +53,8 @@ interface WarehouseOption {
   customerName: string;
   name: string;
   zone: string;
+  tripAmountAed?: number;
+  driverAllowanceAed?: number;
 }
 
 interface ContainerItem {
@@ -69,6 +76,39 @@ interface ContainerItem {
   boxcareInspection: boolean;
 }
 
+interface ExtractionSummary {
+  fileName: string;
+  provider: string;
+  containerCount: number;
+  blOrDoNumber?: string;
+  shippingLine?: string;
+  matchedCustomer?: string;
+  matchedTerminal?: string;
+  matchedWarehouse?: string;
+  confidencePct?: number;
+}
+
+function createEmptyContainerRow(id: string, defaultType: ContainerItem['containerType'] = 'DRY'): ContainerItem {
+  return {
+    id,
+    containerNumber: '',
+    size: '40HC',
+    containerType: defaultType,
+    dischargeDate: '',
+    deliveryDate: '',
+    deliveryTime: '',
+    doExpiryDate: '',
+    doExpiryTime: '',
+    sealNumber: '',
+    weightKg: 0,
+    customsInspection: false,
+    municipalityInspection: false,
+    cpipInspection: false,
+    mercInspection: false,
+    boxcareInspection: false,
+  };
+}
+
 export default function DrayageCreateJobsPage() {
   const router = useRouter();
   const cached = getCachedDrayageData();
@@ -76,19 +116,27 @@ export default function DrayageCreateJobsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Form State
+  // Master Data State
   const [customers, setCustomers] = useState<CustomerOption[]>(cached?.customers || []);
   const [terminals, setTerminals] = useState<TerminalOption[]>(cached?.terminals || []);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>(cached?.warehouses || []);
+  const [clients, setClients] = useState<DrayageClientOption[]>(cached?.clients || []);
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(cached?.customers?.[0]?.id || '');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(cached?.warehouses?.[0]?.id || '');
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string>(cached?.terminals?.[0]?.id || '');
+  // Form State (Starts empty — no random/dummy pre-fills; rates populate from Master on selection)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+  const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [shipmentType, setShipmentType] = useState<'IMPORT' | 'EXPORT'>('IMPORT');
   const [priority, setPriority] = useState<'STANDARD' | 'HIGH' | 'URGENT'>('STANDARD');
-  const [rateAmountAed, setRateAmountAed] = useState<number>(1550);
-  const [driverAllowanceAed, setDriverAllowanceAed] = useState<number>(150);
+  const [rateAmountAed, setRateAmountAed] = useState<number>(0);
+  const [driverAllowanceAed, setDriverAllowanceAed] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
+
+  // AI OCR & Manifest File Upload State
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [extractingFile, setExtractingFile] = useState(false);
+  const [extractionSummary, setExtractionSummary] = useState<ExtractionSummary | null>(null);
 
   // Quick Customer Creation Modal State
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -102,9 +150,61 @@ export default function DrayageCreateJobsPage() {
   const [newCustomerCity, setNewCustomerCity] = useState('Dubai');
   const [savingCustomer, setSavingCustomer] = useState(false);
 
-  // Consignee Destination Modal State & Clients
+  // Consignee Destination Modal State
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
-  const [clients, setClients] = useState<DrayageClientOption[]>(cached?.clients || []);
+
+  // Bulk Paste State
+  const [showBulkPaste, setShowBulkPaste] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+
+  // Container rows (Starts with 1 completely blank row — no dummy values)
+  const [containers, setContainers] = useState<ContainerItem[]>([
+    createEmptyContainerRow('c-init-1'),
+  ]);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4500);
+  };
+
+  const loadMasters = useCallback(async (forceFresh = false) => {
+    try {
+      if (!getCachedDrayageData()?.customers?.length) {
+        setLoading(true);
+      }
+      const data = await fetchDrayageWorkspaceCached({ forceFresh });
+      setCustomers(data?.customers || []);
+      setTerminals(data?.terminals || []);
+      setWarehouses(data?.warehouses || []);
+      setClients(data?.clients || []);
+    } catch (err) {
+      if (!getCachedDrayageData()?.customers?.length) {
+        showToast('error', err instanceof Error ? err.message : 'Failed to load master data');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMasters();
+  }, [loadMasters]);
+
+  // Auto-populate Contract Rate and Driver Allowance from Warehouse Master or Client Master when selected
+  useEffect(() => {
+    const wh = warehouses.find((w) => w.id === selectedWarehouseId);
+    const cli = clients.find((c) => c.id === selectedCustomerId);
+    if (wh && Number(wh.tripAmountAed) > 0) {
+      setRateAmountAed(Number(wh.tripAmountAed));
+    } else if (cli && Number(cli.defaultTripAmountAed) > 0) {
+      setRateAmountAed(Number(cli.defaultTripAmountAed));
+    }
+    if (wh && Number(wh.driverAllowanceAed) > 0) {
+      setDriverAllowanceAed(Number(wh.driverAllowanceAed));
+    } else if (cli && Number(cli.defaultDriverAllowanceAed) > 0) {
+      setDriverAllowanceAed(Number(cli.defaultDriverAllowanceAed));
+    }
+  }, [selectedWarehouseId, selectedCustomerId, warehouses, clients]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,88 +254,11 @@ export default function DrayageCreateJobsPage() {
     }
   };
 
-  // Bulk Paste State
-  const [showBulkPaste, setShowBulkPaste] = useState(false);
-  const [bulkText, setBulkText] = useState('');
-
-  // Container rows
-  const [containers, setContainers] = useState<ContainerItem[]>([
-    {
-      id: 'c-init-1',
-      containerNumber: '',
-      size: '40HC',
-      containerType: 'DRY',
-      dischargeDate: new Date().toISOString().slice(0, 10),
-      deliveryDate: new Date().toISOString().slice(0, 10),
-      deliveryTime: '09:00',
-      doExpiryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-      doExpiryTime: '18:00',
-      sealNumber: '',
-      weightKg: 22400,
-      customsInspection: true,
-      municipalityInspection: false,
-      cpipInspection: true,
-      mercInspection: false,
-      boxcareInspection: true,
-    },
-  ]);
-
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  const loadMasters = useCallback(async (forceFresh = false) => {
-    try {
-      if (!getCachedDrayageData()?.customers?.length) {
-        setLoading(true);
-      }
-      const data = await fetchDrayageWorkspaceCached({ forceFresh });
-      const custs = data?.customers || [];
-      const terms = data?.terminals || [];
-      const whs = data?.warehouses || [];
-      const clis = data?.clients || [];
-
-      setCustomers(custs);
-      setTerminals(terms);
-      setWarehouses(whs);
-      setClients(clis);
-
-      setSelectedCustomerId((prev) => prev || (custs[0]?.id ?? ''));
-      setSelectedTerminalId((prev) => prev || (terms[0]?.id ?? ''));
-      setSelectedWarehouseId((prev) => prev || (whs[0]?.id ?? ''));
-    } catch (err) {
-      if (!getCachedDrayageData()?.customers?.length) {
-        showToast('error', err instanceof Error ? err.message : 'Failed to load master data');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadMasters();
-  }, [loadMasters]);
-
   const handleAddContainerRow = () => {
     const isReefer = containers[containers.length - 1]?.containerType === 'REEFER';
     setContainers((prev) => [
       ...prev,
-      {
-        id: `c-${Date.now()}-${Math.random()}`,
-        containerNumber: '',
-        size: '40HC',
-        containerType: isReefer ? 'REEFER' : 'DRY',
-        dischargeDate: new Date().toISOString().slice(0, 10),
-        doExpiryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-        sealNumber: '',
-        weightKg: 22000,
-        customsInspection: true,
-        municipalityInspection: false,
-        cpipInspection: false,
-        mercInspection: false,
-        boxcareInspection: false,
-      },
+      createEmptyContainerRow(`c-${Date.now()}-${Math.random()}`, isReefer ? 'REEFER' : 'DRY'),
     ]);
   };
 
@@ -263,28 +286,215 @@ export default function DrayageCreateJobsPage() {
     }
 
     const newRows: ContainerItem[] = lines.map((num, idx) => ({
-      id: `c-bulk-${Date.now()}-${idx}`,
+      ...createEmptyContainerRow(`c-bulk-${Date.now()}-${idx}`),
       containerNumber: num,
-      size: '40HC',
-      containerType: 'DRY',
-      dischargeDate: new Date().toISOString().slice(0, 10),
-      deliveryDate: new Date().toISOString().slice(0, 10),
-      deliveryTime: '09:00',
-      doExpiryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-      doExpiryTime: '18:00',
-      sealNumber: 'SL-' + Math.floor(100000 + Math.random() * 900000),
-      weightKg: 22000,
-      customsInspection: true,
-      municipalityInspection: false,
-      cpipInspection: false,
-      mercInspection: false,
-      boxcareInspection: false,
     }));
 
     setContainers((prev) => (prev[0]?.containerNumber ? [...prev, ...newRows] : newRows));
     setBulkText('');
     setShowBulkPaste(false);
-    showToast('success', `Imported ${newRows.length} containers into manifest!`);
+    showToast('success', `Imported ${newRows.length} container(s) into manifest!`);
+  };
+
+  // Download pre-formatted Excel (.xlsx) manifest template
+  const handleDownloadManifestTemplate = () => {
+    const templateHeaders = [
+      [
+        'Container Number',
+        'Size',
+        'Cargo Type',
+        'Seal Number',
+        'Gross Weight (KG)',
+        'Delivery Date (YYYY-MM-DD)',
+        'Delivery Time (HH:MM)',
+        'DO Expiry Date (YYYY-MM-DD)',
+        'DO Cutoff Time (HH:MM)',
+        'Dubai Customs',
+        'Municipality DM',
+        'CPIP',
+        'Merc Fumigation',
+        'Boxcare',
+        'DO / BL Number',
+        'Shipping Line',
+        'Consignor / Customer',
+        'Port Terminal',
+        'Consignee Warehouse',
+        'Special Instructions',
+      ],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(templateHeaders);
+    ws['!cols'] = templateHeaders[0].map((h) => ({ wch: Math.max(h.length + 4, 16) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Container Manifest');
+    const arrayBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const blob = new Blob([arrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Fleet360-Drayage-Manifest-Template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Upload & Extract DO / BL / Manifest file via /api/logistics/drayage/ocr-manifest
+  const handleProcessManifestFile = async (file: File) => {
+    try {
+      setExtractingFile(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/logistics/drayage/ocr-manifest', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.manifest) {
+        throw new Error(data.error || 'Failed to extract containers from document');
+      }
+
+      const manifest = data.manifest as {
+        blOrDoNumber?: string;
+        shippingLine?: string;
+        customerName?: string;
+        terminalName?: string;
+        warehouseName?: string;
+        shipmentType?: 'IMPORT' | 'EXPORT';
+        notes?: string;
+        provider: string;
+        fileName: string;
+        confidencePct?: number;
+        containers: Array<{
+          containerNumber: string;
+          size: ContainerItem['size'];
+          containerType: ContainerItem['containerType'];
+          sealNumber: string;
+          weightKg: number;
+          dischargeDate: string;
+          deliveryDate: string;
+          deliveryTime: string;
+          doExpiryDate: string;
+          doExpiryTime: string;
+          customsInspection: boolean;
+          municipalityInspection: boolean;
+          cpipInspection: boolean;
+          mercInspection: boolean;
+          boxcareInspection: boolean;
+        }>;
+      };
+
+      const extractedRows: ContainerItem[] = (manifest.containers || []).map((c, idx) => ({
+        id: `c-ocr-${Date.now()}-${idx}`,
+        containerNumber: c.containerNumber || '',
+        size: c.size || '40HC',
+        containerType: c.containerType || 'DRY',
+        sealNumber: c.sealNumber || '',
+        weightKg: Number(c.weightKg) || 0,
+        dischargeDate: c.dischargeDate || c.deliveryDate || '',
+        deliveryDate: c.deliveryDate || c.dischargeDate || '',
+        deliveryTime: c.deliveryTime || '',
+        doExpiryDate: c.doExpiryDate || '',
+        doExpiryTime: c.doExpiryTime || '',
+        customsInspection: Boolean(c.customsInspection),
+        municipalityInspection: Boolean(c.municipalityInspection),
+        cpipInspection: Boolean(c.cpipInspection),
+        mercInspection: Boolean(c.mercInspection),
+        boxcareInspection: Boolean(c.boxcareInspection),
+      }));
+
+      if (extractedRows.length === 0) {
+        throw new Error('No container records were detected in the uploaded document.');
+      }
+
+      setContainers((prev) =>
+        prev.length === 1 && !prev[0].containerNumber.trim()
+          ? extractedRows
+          : [...prev, ...extractedRows],
+      );
+
+      if (manifest.shipmentType === 'IMPORT' || manifest.shipmentType === 'EXPORT') {
+        setShipmentType(manifest.shipmentType);
+      }
+
+      // Fuzzy match extracted customer, terminal, and warehouse against Masters
+      let matchedCustLabel: string | undefined;
+      if (manifest.customerName) {
+        const q = manifest.customerName.toLowerCase();
+        const foundCust = customers.find(
+          (c) => c.name.toLowerCase().includes(q) || q.includes(c.name.toLowerCase()),
+        );
+        if (foundCust) {
+          setSelectedCustomerId(foundCust.id);
+          matchedCustLabel = foundCust.name;
+        }
+      }
+
+      let matchedTermLabel: string | undefined;
+      if (manifest.terminalName) {
+        const q = manifest.terminalName.toLowerCase();
+        const foundTerm = terminals.find(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            q.includes(t.name.toLowerCase()) ||
+            t.portName.toLowerCase().includes(q),
+        );
+        if (foundTerm) {
+          setSelectedTerminalId(foundTerm.id);
+          matchedTermLabel = foundTerm.name;
+        }
+      }
+
+      let matchedWhLabel: string | undefined;
+      if (manifest.warehouseName) {
+        const q = manifest.warehouseName.toLowerCase();
+        const foundWh = warehouses.find(
+          (w) => w.name.toLowerCase().includes(q) || q.includes(w.name.toLowerCase()),
+        );
+        if (foundWh) {
+          setSelectedWarehouseId(foundWh.id);
+          matchedWhLabel = foundWh.name;
+        }
+      }
+
+      if (manifest.notes || manifest.blOrDoNumber || manifest.shippingLine) {
+        const noteParts = [
+          manifest.blOrDoNumber ? `DO/BL: ${manifest.blOrDoNumber}` : '',
+          manifest.shippingLine ? `Carrier: ${manifest.shippingLine}` : '',
+          manifest.notes || '',
+        ].filter(Boolean);
+        const combined = Array.from(new Set(noteParts)).join(' | ');
+        if (combined) {
+          setNotes((prev) => (prev ? `${prev} | ${combined}` : combined));
+        }
+      }
+
+      setExtractionSummary({
+        fileName: manifest.fileName || file.name,
+        provider: manifest.provider,
+        containerCount: extractedRows.length,
+        blOrDoNumber: manifest.blOrDoNumber || undefined,
+        shippingLine: manifest.shippingLine || undefined,
+        matchedCustomer: matchedCustLabel,
+        matchedTerminal: matchedTermLabel,
+        matchedWarehouse: matchedWhLabel,
+        confidencePct: manifest.confidencePct,
+      });
+
+      showToast(
+        'success',
+        `Extracted ${extractedRows.length} container(s) from "${file.name}" into manifest!`,
+      );
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error extracting manifest');
+    } finally {
+      setExtractingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -310,11 +520,11 @@ export default function DrayageCreateJobsPage() {
           shipmentType,
           priority,
           customerId: selectedCustomerId || null,
-          customerName: custObj?.name || 'Enterprise Client',
+          customerName: custObj?.name || '',
           terminalId: selectedTerminalId || null,
-          terminalName: termObj?.name || 'Jebel Ali Port - Terminal 1',
+          terminalName: termObj?.name || '',
           warehouseId: selectedWarehouseId || null,
-          warehouseName: whObj?.name || 'Distribution Center',
+          warehouseName: whObj?.name || '',
           rateAmountAed: Number(rateAmountAed),
           driverAllowanceAed: Number(driverAllowanceAed),
           notes,
@@ -324,9 +534,9 @@ export default function DrayageCreateJobsPage() {
             containerType: c.containerType,
             dischargeDate: c.deliveryDate || c.dischargeDate,
             deliveryDate: c.deliveryDate || c.dischargeDate,
-            deliveryTime: c.deliveryTime || '09:00',
+            deliveryTime: c.deliveryTime || '',
             doExpiryDate: c.doExpiryDate,
-            doExpiryTime: c.doExpiryTime || '18:00',
+            doExpiryTime: c.doExpiryTime || '',
             sealNumber: c.sealNumber,
             weightKg: Number(c.weightKg),
             customsInspection: c.customsInspection,
@@ -378,9 +588,10 @@ export default function DrayageCreateJobsPage() {
         value: w.id,
         label: `${w.name} (${w.zone})`,
         group: isMapped ? `Mapped Consignee Hubs for ${selCustName}` : `Other Consignee Facilities & Shared Hubs`,
-        sublabel: w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub'
-          ? `Linked to ${w.customerName}`
-          : undefined,
+        sublabel:
+          w.customerName && w.customerName !== 'Enterprise Shipper' && w.customerName !== 'General / Shared Hub'
+            ? `Linked to ${w.customerName}`
+            : undefined,
         badge: w.zone,
       };
     });
@@ -409,11 +620,33 @@ export default function DrayageCreateJobsPage() {
       {/* Page Header */}
       <PageHeader
         title="Create Container Drayage Jobs"
-        subtitle="Provision FCL haulage jobs mapped to Customer, Port Terminal, and Warehouse destinations"
+        subtitle="Provision FCL haulage jobs via AI Document OCR, Excel/CSV Manifest Import, or manual entry"
         icon={PlusCircle}
         accent="blue"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadManifestTemplate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+              title="Download pre-formatted Excel (.xlsx) manifest template"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              Excel Template (.xlsx)
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extractingFile}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/15 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/25 transition-colors disabled:opacity-50"
+            >
+              {extractingFile ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              {extractingFile ? 'Scanning Document...' : 'Upload DO / Manifest (OCR)'}
+            </button>
             <button
               type="button"
               onClick={() => setShowBulkPaste(!showBulkPaste)}
@@ -433,6 +666,138 @@ export default function DrayageCreateJobsPage() {
           </div>
         }
       />
+
+      {/* Hidden File Input for OCR & Spreadsheet Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleProcessManifestFile(f);
+        }}
+      />
+
+      {/* AI Document OCR & Automated Manifest Ingestion Dropzone */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingFile(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingFile(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingFile(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleProcessManifestFile(f);
+        }}
+        onClick={() => !extractingFile && fileInputRef.current?.click()}
+        className={`relative rounded-2xl border-2 border-dashed p-5 transition-all cursor-pointer ${
+          isDraggingFile
+            ? 'border-blue-400 bg-blue-500/10 shadow-lg'
+            : 'border-blue-500/30 bg-[var(--bg-surface)] hover:border-blue-400/60 hover:bg-[var(--bg-surface-hover)]/40'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0">
+              {extractingFile ? (
+                <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-blue-400" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-[var(--text-main)]">
+                  AI Document OCR & Automated Manifest Ingestion (Zero-Typing Job Creation)
+                </h3>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  PDF • Excel (.xlsx) • CSV • Image OCR
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                {extractingFile
+                  ? 'Extracting containers, seal numbers, weights, DO cutoff dates, and matching Master records...'
+                  : 'Drag & drop a Shipping Line Delivery Order (PDF/Image), Dubai Trade Gate Pass, or Excel/CSV Manifest here — or click to browse.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={handleDownloadManifestTemplate}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-emerald-500/40 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              Template (.xlsx)
+            </button>
+            <button
+              type="button"
+              disabled={extractingFile}
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              {extractingFile ? 'Processing...' : 'Select File'}
+            </button>
+          </div>
+        </div>
+
+        {/* Extraction Result Summary Banner */}
+        {extractionSummary && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mt-4 pt-3.5 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-xs"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {extractionSummary.containerCount} Container(s) Extracted from {extractionSummary.fileName}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-muted)]">
+                Engine: {extractionSummary.provider}
+                {extractionSummary.confidencePct ? ` (${extractionSummary.confidencePct}%)` : ''}
+              </span>
+              {extractionSummary.blOrDoNumber && (
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-[11px] font-mono text-blue-400 font-semibold">
+                  DO/BL: {extractionSummary.blOrDoNumber}
+                </span>
+              )}
+              {extractionSummary.shippingLine && (
+                <span className="px-2 py-0.5 rounded bg-violet-500/10 border border-violet-500/30 text-[11px] font-semibold text-violet-400">
+                  Line: {extractionSummary.shippingLine}
+                </span>
+              )}
+              {extractionSummary.matchedCustomer && (
+                <span className="px-2 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-[11px] font-semibold text-sky-400">
+                  Matched Client: {extractionSummary.matchedCustomer}
+                </span>
+              )}
+              {extractionSummary.matchedTerminal && (
+                <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] font-semibold text-amber-400">
+                  Matched Terminal: {extractionSummary.matchedTerminal}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setExtractionSummary(null)}
+              className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Bulk Paste Modal */}
       {showBulkPaste && (
@@ -454,7 +819,7 @@ export default function DrayageCreateJobsPage() {
             rows={3}
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            placeholder="e.g. MSCU8492014, MAEU5910283, CMAU3019482, HLXU9041128"
+            placeholder="Paste container numbers separated by comma or newline..."
             className="w-full text-xs font-mono p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
           />
           <div className="flex justify-end">
@@ -474,7 +839,7 @@ export default function DrayageCreateJobsPage() {
         {/* Shipment Details Panel */}
         <Panel
           title="Shipment & Commercial Parameters"
-          subtitle="Configure haulage route stakeholders, consignor billing account, consignee destination, and commercial rates"
+          subtitle="Configure haulage route stakeholders, consignor billing account, consignee destination, and Master-driven commercial rates"
           icon={FileText}
           accent="blue"
           className="overflow-visible"
@@ -635,7 +1000,7 @@ export default function DrayageCreateJobsPage() {
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Gate pass required at DPW Gate 3; weighbridge ticket required upon discharge; consignee ramp 4"
+                placeholder="Enter gate pass instructions, weighbridge notes, or DO reference..."
                 className="w-full px-3.5 py-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs"
               />
             </div>
@@ -681,8 +1046,8 @@ export default function DrayageCreateJobsPage() {
                   )}
                 </div>
 
-                {/* ── Tier 1: Container Physical Specifications (4 Spacious Columns) ── */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
+                {/* ── Tier 1: Container Physical Specifications (5 Columns) ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
                   {/* Container Number */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between">
@@ -693,7 +1058,7 @@ export default function DrayageCreateJobsPage() {
                       type="text"
                       value={c.containerNumber}
                       onChange={(e) => updateContainer(c.id, { containerNumber: e.target.value.toUpperCase() })}
-                      placeholder="e.g. MSCU8492014"
+                      placeholder="Enter container number"
                       className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500 text-xs shadow-inner"
                     />
                   </div>
@@ -738,13 +1103,29 @@ export default function DrayageCreateJobsPage() {
                       type="text"
                       value={c.sealNumber}
                       onChange={(e) => updateContainer(c.id, { sealNumber: e.target.value })}
-                      placeholder="e.g. SL-984210"
+                      placeholder="Enter seal number"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 text-xs"
+                    />
+                  </div>
+
+                  {/* Gross Weight (KG) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between">
+                      <span>Gross Weight</span>
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">KG</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={c.weightKg || ''}
+                      onChange={(e) => updateContainer(c.id, { weightKg: Number(e.target.value) || 0 })}
+                      placeholder="0"
                       className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 text-xs"
                     />
                   </div>
                 </div>
 
-                {/* ── Tier 2: Schedule & Expiry Timings (2 Spacious Half-Width Cards with Full Date & Time Pickers) ── */}
+                {/* ── Tier 2: Schedule & Expiry Timings (2 Spacious Half-Width Cards) ── */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                   {/* Card 1: Target Delivery Schedule */}
                   <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
@@ -784,7 +1165,7 @@ export default function DrayageCreateJobsPage() {
                         </label>
                         <input
                           type="time"
-                          value={c.deliveryTime || '09:00'}
+                          value={c.deliveryTime || ''}
                           onChange={(e) => updateContainer(c.id, { deliveryTime: e.target.value })}
                           className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium font-mono cursor-pointer"
                         />
@@ -830,7 +1211,7 @@ export default function DrayageCreateJobsPage() {
                         </label>
                         <input
                           type="time"
-                          value={c.doExpiryTime || '18:00'}
+                          value={c.doExpiryTime || ''}
                           onChange={(e) => updateContainer(c.id, { doExpiryTime: e.target.value })}
                           className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium font-mono cursor-pointer"
                         />
@@ -946,7 +1327,7 @@ export default function DrayageCreateJobsPage() {
                   required
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  placeholder="e.g. Al-Futtaim Logistics LLC, DHL Global Forwarding"
+                  placeholder="Enter company name"
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 />
               </div>
@@ -990,7 +1371,7 @@ export default function DrayageCreateJobsPage() {
                     type="text"
                     value={newCustomerContact}
                     onChange={(e) => setNewCustomerContact(e.target.value)}
-                    placeholder="e.g. Ahmed Al-Mansoor"
+                    placeholder="Enter contact person"
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1000,7 +1381,7 @@ export default function DrayageCreateJobsPage() {
                     type="tel"
                     value={newCustomerPhone}
                     onChange={(e) => setNewCustomerPhone(e.target.value)}
-                    placeholder="+971 50 123 4567"
+                    placeholder="+971 50 000 0000"
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1012,7 +1393,7 @@ export default function DrayageCreateJobsPage() {
                   type="email"
                   value={newCustomerEmail}
                   onChange={(e) => setNewCustomerEmail(e.target.value)}
-                  placeholder="logistics@customer.ae"
+                  placeholder="Enter email address"
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 />
               </div>
@@ -1034,7 +1415,7 @@ export default function DrayageCreateJobsPage() {
                     type="text"
                     value={newCustomerLicense}
                     onChange={(e) => setNewCustomerLicense(e.target.value)}
-                    placeholder="CN-1234567"
+                    placeholder="Enter trade license"
                     className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                   />
                 </div>
