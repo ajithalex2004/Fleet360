@@ -277,7 +277,7 @@ export function parseMulkiyaText(text: string): MulkiaAutofillResult {
     else if (catPart.includes('EXPORT')) result.plateCategory = 'EXPORT';
   } else {
     // Fallback simple plate number and code
-    const fallbackPlate = text.match(/Plate\s*No\.?\s*[:\s]*(\d{1,6})/i) || text.match(/\b(\d{4,6})\b/);
+    const fallbackPlate = text.match(/Plate\s*(?:No|Number)\.?\s*[:\s]*(\d{1,6})/i);
     if (fallbackPlate) result.plateNumber = fallbackPlate[1];
   }
 
@@ -306,7 +306,7 @@ export function parseMulkiyaText(text: string): MulkiaAutofillResult {
     result.chassisNo = chMatch[1].trim();
   } else {
     const genericVin = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
-    if (genericVin) result.chassisNo = genericVin[1];
+    if (genericVin && !/^\d{17}$/.test(genericVin[1]) && /[A-HJ-NPR-Z]/.test(genericVin[1]) && /\d/.test(genericVin[1])) result.chassisNo = genericVin[1];
   }
 
   // 7. Registration Expiry Date: e.g. 10 JUN 27
@@ -412,7 +412,7 @@ export async function autofillMulkia(file: {
       if (text && text.trim().length > 20) {
         const parsed = parseMulkiyaText(text);
         const count = countExtractedFields(parsed);
-        if (count >= 2) {
+        if (count >= 6 && parsed.plateNumber && parsed.chassisNo && parsed.registrationExpiryDate) {
           return parsed;
         }
       }
@@ -458,8 +458,8 @@ export async function autofillMulkia(file: {
     '4. Dates must be converted to YYYY-MM-DD format (UAE convention is DD/MM/YYYY or DD-MMM-YY).',
     '5. Registration Expiry Date (انتهاء الملكية / Expiry Date).',
     '6. Insurance Expiry Date (انتهاء التأمين / Insurance Expiry) if present.',
-    '7. Plate number is digits (e.g. "12345"), plate code is the letter/code (e.g. "A", "C", "1", "10").',
-    '8. Make (e.g. "Toyota", "Nissan", "Honda"), Model (e.g. "Camry", "Sunny", "Pilot"), Year (e.g. 2018).',
+    '7. Plate number is only the numeric plate digits printed on the card; plate code is the letter or category number printed on the card. Never guess or invent values—use null if not explicitly printed.',
+    '8. Make, Model, and 4-digit Year must be read verbatim from the card (or null if not printed).',
     '',
     'Reply with ONLY valid JSON with no markdown wrapping or other text:',
     '{',
@@ -560,7 +560,7 @@ export async function autofillVehicleDocument(
       const text = extractPdfText(pdfBuf);
       if (text && text.trim().length > 20) {
         const parsed = parseVehicleDocumentText(text, docContextHint);
-        if (parsed.documentNumber || parsed.expiryDate || parsed.issuingAuthority) {
+        if (parsed.documentNumber && parsed.expiryDate) {
           return parsed;
         }
       }

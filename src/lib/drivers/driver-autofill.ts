@@ -88,8 +88,8 @@ export function parseLicenseText(text: string): DrivingLicenseAutofillResult {
   };
 
   // 1. License Number
-  const licMatch = text.match(/(?:Licen[sc]e\s*(?:No|Number)|رقم\s*الرخصة)[^\w\d]*([A-Z0-9\-\/]{5,20})/i) ||
-                   text.match(/\b([0-9]{7,9})\b/);
+  const licMatch = text.match(/(?:Licen[sc]e\s*(?:No|Number)|رقم\s*الرخصة)[^\w\d]*([A-Z0-9\-\/]{5,20})/i);
+
   if (licMatch) result.licenseNumber = licMatch[1].replace(/[\s\-_]/g, '').trim();
 
   // 2. Name
@@ -154,7 +154,7 @@ export async function autofillDrivingLicense(file: {
       const text = extractPdfText(pdfBuf);
       if (text && text.trim().length > 30) {
         const parsed = parseLicenseText(text);
-        if (parsed.licenseNumber || (parsed.fullName && parsed.licenseExpiry)) {
+        if (parsed.licenseNumber && parsed.fullName && parsed.licenseExpiry) {
           return parsed;
         }
       }
@@ -194,7 +194,7 @@ export async function autofillDrivingLicense(file: {
     '',
     'Field Guidelines:',
     '1. "licenseNumber": Exact alphanumeric license number.',
-    '2. "fullName": Driver full name in English (e.g. "Jennish John" or "Ahmed Mohammed Al-Mansouri").',
+    '2. "fullName": Driver full name in English exactly as printed on the license (or null if not visible). Never guess or invent names.',
     '3. "firstName": First name.',
     '4. "lastName": Last / family name.',
     '5. "nationality": Driver nationality (e.g. "United Arab Emirates", "India", "Oman", "Pakistan", "Egypt", "Philippines").',
@@ -293,8 +293,9 @@ export async function autofillDriverDocument(
       if (text && text.trim().length > 30) {
         // Emirates ID pattern: 784-YYYY-XXXXXXX-X
         const eidMatch = text.match(/\b(784[\-\s]?\d{4}[\-\s]?\d{7}[\-\s]?\d)\b/);
-        if (eidMatch) {
+
           const exp = text.match(/(?:Expiry|Valid\s*until)[\s\S]*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+          if (eidMatch && exp) {
           return {
             status: 'ok',
             documentType: 'EMIRATES_ID',
@@ -329,7 +330,7 @@ export async function autofillDriverDocument(
     '',
     'Extract:',
     '1. "documentType": One of "EMIRATES_ID", "PASSPORT", "VISA", "PERMIT".',
-    '2. "documentNumber": The primary document number (e.g. 784-1988-1234567-1 for Emirates ID, passport number, visa number, or permit reference).',
+    '2. "documentNumber": The primary document number printed on the document (or null if not visible). Never invent or guess numbers.',
     '3. "fullName": Holder name if present.',
     '4. "nationality": Country of citizenship if present.',
     '5. "dob": Date of birth in YYYY-MM-DD.',

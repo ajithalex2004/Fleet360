@@ -419,28 +419,67 @@ export default function DrayageCreateJobsPage() {
         setShipmentType(manifest.shipmentType);
       }
 
-      // Fuzzy match extracted customer, terminal, and warehouse against Masters
-      let matchedCustLabel: string | undefined;
-      if (manifest.customerName) {
-        const q = manifest.customerName.toLowerCase();
-        const foundCust = customers.find(
-          (c) => c.name.toLowerCase().includes(q) || q.includes(c.name.toLowerCase()),
-        );
-        if (foundCust) {
-          setSelectedCustomerId(foundCust.id);
-          matchedCustLabel = foundCust.name;
+      // Token-based Master matching (prevents generic words like "LLC" or "Dubai" from false-matching)
+      const STOPWORDS = new Set([
+        'llc', 'fze', 'fzco', 'ltd', 'co', 'company', 'trading', 'logistics',
+        'general', 'enterprise', 'enterprises', 'group', 'uae', 'dubai', 'abu', 'dhabi',
+      ]);
+      const tokenizeDistinctive = (s: string): string[] =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+
+      const findBestMasterMatch = <T,>(
+        query: string | undefined,
+        items: T[],
+        getLabel: (item: T) => string,
+      ): T | undefined => {
+        if (!query || query.trim().length < 3) return undefined;
+        const normQuery = query.trim().toLowerCase();
+        // 1. Exact case-insensitive match
+        const exact = items.find((it) => getLabel(it).trim().toLowerCase() === normQuery);
+        if (exact) return exact;
+
+        const qTokens = tokenizeDistinctive(query);
+        if (qTokens.length === 0) return undefined;
+
+        let bestItem: T | undefined;
+        let bestScore = 0;
+        for (const it of items) {
+          const cTokens = tokenizeDistinctive(getLabel(it));
+          if (cTokens.length === 0) continue;
+          const matched = qTokens.filter((qt) =>
+            cTokens.some((ct) => ct === qt || (qt.length >= 4 && ct.startsWith(qt)) || (ct.length >= 4 && qt.startsWith(ct))),
+          );
+          const score = matched.length / Math.max(Math.min(qTokens.length, cTokens.length), 1);
+          if (matched.length >= 1 && score > bestScore && score >= 0.65) {
+            bestScore = score;
+            bestItem = it;
+          }
         }
+        return bestItem;
+      };
+
+      let matchedCustLabel: string | undefined;
+      const foundCust = findBestMasterMatch(manifest.customerName, customers, (c) => c.name);
+      if (foundCust) {
+        setSelectedCustomerId(foundCust.id);
+        matchedCustLabel = foundCust.name;
       }
 
       let matchedTermLabel: string | undefined;
       if (manifest.terminalName) {
-        const q = manifest.terminalName.toLowerCase();
-        const foundTerm = terminals.find(
-          (t) =>
-            t.name.toLowerCase().includes(q) ||
-            q.includes(t.name.toLowerCase()) ||
-            t.portName.toLowerCase().includes(q),
-        );
+        const q = manifest.terminalName.toUpperCase();
+        const termNumMatch = q.match(/\b(?:TERMINAL\s*|T)([1234])\b/);
+        const foundTerm =
+          (termNumMatch
+            ? terminals.find((t) =>
+                new RegExp(`\\b(?:TERMINAL\\s*|T)${termNumMatch[1]}\\b`, 'i').test(t.name),
+              )
+            : undefined) ||
+          findBestMasterMatch(manifest.terminalName, terminals, (t) => `${t.name} ${t.portName}`);
         if (foundTerm) {
           setSelectedTerminalId(foundTerm.id);
           matchedTermLabel = foundTerm.name;
@@ -448,15 +487,10 @@ export default function DrayageCreateJobsPage() {
       }
 
       let matchedWhLabel: string | undefined;
-      if (manifest.warehouseName) {
-        const q = manifest.warehouseName.toLowerCase();
-        const foundWh = warehouses.find(
-          (w) => w.name.toLowerCase().includes(q) || q.includes(w.name.toLowerCase()),
-        );
-        if (foundWh) {
-          setSelectedWarehouseId(foundWh.id);
-          matchedWhLabel = foundWh.name;
-        }
+      const foundWh = findBestMasterMatch(manifest.warehouseName, warehouses, (w) => w.name);
+      if (foundWh) {
+        setSelectedWarehouseId(foundWh.id);
+        matchedWhLabel = foundWh.name;
       }
 
       if (manifest.notes || manifest.blOrDoNumber || manifest.shippingLine) {
