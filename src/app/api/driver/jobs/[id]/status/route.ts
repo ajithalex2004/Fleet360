@@ -9,6 +9,7 @@ import {
   submitJobPodEvidence,
   sendDispatchChatMessage,
   clearPortInspection,
+  submitDriverExpenseReceipt,
 } from '@/lib/logistics/drayage-domain';
 
 export async function POST(
@@ -111,6 +112,29 @@ export async function POST(
         success: true,
         rampBayNumber,
         ...podRes,
+      });
+    }
+
+    // 3b. Driver Expense Receipt & Voice Note Submission (auto-synced to Driver Payments Approval screen)
+    if (action === 'EXPENSE_RECEIPT') {
+      const receiptRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        return submitDriverExpenseReceipt(tx, {
+          tenantId,
+          jobId,
+          driverName: body.driverName ? String(body.driverName) : undefined,
+          receiptCategory: String(body.receiptCategory || 'PORT_GATE_PASS'),
+          receiptLabel: String(body.receiptLabel || 'Port Gate Pass Receipt'),
+          amountAed: Number(body.amountAed || 0),
+          receiptNumber: body.receiptNumber ? String(body.receiptNumber) : undefined,
+          notes: body.notes ? String(body.notes) : undefined,
+          receiptPhotoUrl: body.receiptPhotoUrl ? String(body.receiptPhotoUrl) : null,
+          voiceNoteDataUrl: body.voiceNoteDataUrl ? String(body.voiceNoteDataUrl) : null,
+          voiceNoteDurationSec: body.voiceNoteDurationSec ? Number(body.voiceNoteDurationSec) : 0,
+        });
+      });
+      return NextResponse.json({
+        success: true,
+        ...receiptRes,
       });
     }
 

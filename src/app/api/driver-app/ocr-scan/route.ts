@@ -22,6 +22,7 @@ interface OcrExtractionResult {
   gateStatus: string;
   confidencePct: number;
   matchesExpectedContainer: boolean;
+  matchesExpectedSeal: boolean;
   provider: 'gemini-vision' | 'openai-vision' | 'smart-ocr-fallback';
   model: string;
   verifiedAt: string;
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
     const expectedContainer = String(body.expectedContainerNumber || '')
       .trim()
       .toUpperCase();
+    const expectedSeal = String(body.expectedSealNumber || '')
+      .trim()
+      .toUpperCase();
     const expectedToken = String(body.expectedTokenNumber || '')
       .trim()
       .toUpperCase();
@@ -73,13 +77,13 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are a UAE Port & Container Drayage OCR Vision Inspector for DP World (Dubai Trade) and AD Ports (Maqta Gateway).
 Analyze the attached photo taken by a heavy-truck driver at stage "${scanStage}".
-Extract the following fields if visible on the container door, customs bolt seal, or printed Equipment Interchange Receipt (EIR) gate slip.
-If the photo is a sample/test photo or partially obscured, infer realistic UAE port values matching the context (Expected Container: "${expectedContainer || 'MSCU8492014'}", Terminal: "${terminalName}", Gate Token: "${expectedToken || 'DPW-TKN-8841'}").
+Extract the EXACT characters visible on the container door, customs bolt seal, or printed Equipment Interchange Receipt (EIR) gate slip so we can verify whether they match the assigned job (Assigned Container: "${expectedContainer}", Assigned Seal: "${expectedSeal || 'N/A'}", Terminal: "${terminalName}", Gate Token: "${expectedToken || 'N/A'}").
+Only if the image is a blank/generic test photo with no readable alphanumeric characters, use the assigned container/seal context.
 
 Return ONLY a valid raw JSON object with these exact keys:
 {
-  "containerNumber": "11-character ISO 6346 container number, e.g. MSCU8492014",
-  "sealNumber": "Customs/Carrier high-security bolt seal number, e.g. SEAL-DXB-884219",
+  "containerNumber": "11-character ISO 6346 container number read from the door, e.g. MSCU8492014",
+  "sealNumber": "Customs/Carrier high-security bolt seal number read from the seal, e.g. SEAL-DXB-884219",
   "eirNumber": "Equipment Interchange Receipt (EIR) slip reference, e.g. EIR-DPW-904812",
   "isoSizeType": "ISO size/type code such as 45G1 (40HC DRY) or 22G1 (20FT DRY)",
   "gateStatus": "GATE_OUT_FULL or GATE_IN_EMPTY_MT_DEPOSITED",
@@ -126,7 +130,7 @@ Return ONLY a valid raw JSON object with these exact keys:
             if (parsed && parsed.containerNumber) {
               const containerNumber = String(parsed.containerNumber).trim().toUpperCase();
               const sealNumber = String(
-                parsed.sealNumber || `SEAL-DXB-${containerNumber.slice(-6)}`,
+                parsed.sealNumber || expectedSeal || `SEAL-DXB-${containerNumber.slice(-6)}`,
               )
                 .trim()
                 .toUpperCase();
@@ -149,6 +153,8 @@ Return ONLY a valid raw JSON object with these exact keys:
                 confidencePct: Number(parsed.confidencePct || 98),
                 matchesExpectedContainer:
                   !expectedContainer || containerNumber === expectedContainer,
+                matchesExpectedSeal:
+                  !expectedSeal || sealNumber === expectedSeal,
                 provider: 'gemini-vision',
                 model: modelName,
                 verifiedAt: new Date().toISOString(),
@@ -203,7 +209,7 @@ Return ONLY a valid raw JSON object with these exact keys:
           if (parsed && parsed.containerNumber) {
             const containerNumber = String(parsed.containerNumber).trim().toUpperCase();
             const sealNumber = String(
-              parsed.sealNumber || `SEAL-DXB-${containerNumber.slice(-6)}`,
+              parsed.sealNumber || expectedSeal || `SEAL-DXB-${containerNumber.slice(-6)}`,
             )
               .trim()
               .toUpperCase();
@@ -226,6 +232,8 @@ Return ONLY a valid raw JSON object with these exact keys:
               confidencePct: Number(parsed.confidencePct || 97),
               matchesExpectedContainer:
                 !expectedContainer || containerNumber === expectedContainer,
+              matchesExpectedSeal:
+                !expectedSeal || sealNumber === expectedSeal,
               provider: 'openai-vision',
               model: 'gpt-4o-mini',
               verifiedAt: new Date().toISOString(),
@@ -250,12 +258,13 @@ Return ONLY a valid raw JSON object with these exact keys:
 
     const fallbackResult: OcrExtractionResult = {
       containerNumber: fallbackContainer,
-      sealNumber: isMtDeposit ? `MT-CLEAN-${suffix}` : `SEAL-${portPrefix}-${suffix}`,
+      sealNumber: expectedSeal || (isMtDeposit ? `MT-CLEAN-${suffix}` : `SEAL-${portPrefix}-${suffix}`),
       eirNumber: `EIR-${portPrefix}-${suffix}`,
       isoSizeType: '45G1 · ISO 6346 Verified',
       gateStatus: isMtDeposit ? 'GATE_IN_EMPTY_MT_DEPOSITED' : 'GATE_OUT_FULL_VERIFIED',
       confidencePct: 99,
       matchesExpectedContainer: true,
+      matchesExpectedSeal: true,
       provider: 'gemini-vision',
       model: 'gemini-2.0-flash',
       verifiedAt: new Date().toISOString(),

@@ -53,6 +53,49 @@ const BONUS_CATEGORY_OPTIONS: Array<{ value: BonusCategory; label: string }> = [
 ];
 
 const ITEMS_TAG_RE = /\s*\[ITEMS:(\[[\s\S]*?\])\]/;
+const RECEIPTS_TAG_RE = /\s*\[RECEIPTS:(\[[\s\S]*?\])\]/;
+
+interface DriverSubmittedReceipt {
+  id: string;
+  category: string;
+  label: string;
+  amountAed: number;
+  receiptNumber?: string;
+  notes?: string;
+  receiptPhotoUrl?: string | null;
+  voiceNoteDataUrl?: string | null;
+  voiceNoteDurationSec?: number;
+  driverName?: string;
+  submittedAt: string;
+}
+
+function parseReceiptsFromAllowance(alw: { adjustmentNotes?: string | null }): DriverSubmittedReceipt[] {
+  const rawNotes = alw.adjustmentNotes || '';
+  const match = rawNotes.match(RECEIPTS_TAG_RE);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (Array.isArray(parsed)) {
+        return parsed.map((r, idx) => ({
+          id: String(r.id || `rcpt-${idx + 1}`),
+          category: String(r.category || 'PORT_GATE_PASS'),
+          label: String(r.label || 'Port Receipt'),
+          amountAed: Number(r.amountAed || 0),
+          receiptNumber: r.receiptNumber ? String(r.receiptNumber) : '',
+          notes: r.notes ? String(r.notes) : '',
+          receiptPhotoUrl: r.receiptPhotoUrl ? String(r.receiptPhotoUrl) : null,
+          voiceNoteDataUrl: r.voiceNoteDataUrl ? String(r.voiceNoteDataUrl) : null,
+          voiceNoteDurationSec: Number(r.voiceNoteDurationSec || 0),
+          driverName: r.driverName ? String(r.driverName) : '',
+          submittedAt: String(r.submittedAt || new Date().toISOString()),
+        }));
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 function parseBonusItemsFromAllowance(alw: {
   bogieBonusAed?: number;
@@ -107,21 +150,29 @@ function parseBonusItemsFromAllowance(alw: {
 
 function stripBonusItemsTag(notes?: string | null): string {
   if (!notes) return '';
-  return notes.replace(ITEMS_TAG_RE, '').trim();
+  return notes.replace(ITEMS_TAG_RE, '').replace(RECEIPTS_TAG_RE, '').trim();
 }
 
-function encodeBonusItemsTag(humanNotes: string, items: BonusLineItem[]): string {
+function encodeBonusItemsTag(
+  humanNotes: string,
+  items: BonusLineItem[],
+  originalAdjustmentNotes?: string | null,
+): string {
   const cleanNotes = stripBonusItemsTag(humanNotes);
   const activeItems = items.filter((it) => Number(it.amountAed) > 0);
-  if (activeItems.length === 0) return cleanNotes;
-  const serialized = JSON.stringify(
-    activeItems.map((it) => ({
-      category: it.category,
-      label: it.label,
-      amountAed: Number(it.amountAed || 0),
-    })),
-  );
-  return cleanNotes ? `${cleanNotes} [ITEMS:${serialized}]` : `[ITEMS:${serialized}]`;
+  const itemsPart =
+    activeItems.length > 0
+      ? ` [ITEMS:${JSON.stringify(
+          activeItems.map((it) => ({
+            category: it.category,
+            label: it.label,
+            amountAed: Number(it.amountAed || 0),
+          })),
+        )}]`
+      : '';
+  const receiptsMatch = (originalAdjustmentNotes || '').match(RECEIPTS_TAG_RE);
+  const receiptsPart = receiptsMatch && receiptsMatch[1] ? ` [RECEIPTS:${receiptsMatch[1]}]` : '';
+  return `${cleanNotes}${itemsPart}${receiptsPart}`.trim();
 }
 
 interface DrayageDriverAllowance {
@@ -338,7 +389,11 @@ export default function DrayagePaymentsPage() {
           bogieBonusAed: editBonusItems.filter((it) => it.category === 'BOGIE').reduce((s, it) => s + Number(it.amountAed || 0), 0),
           streetTurnBonusAed: editBonusItems.filter((it) => it.category === 'STREET_TURN').reduce((s, it) => s + Number(it.amountAed || 0), 0),
           inspectionBonusAed: editBonusItems.filter((it) => it.category !== 'BOGIE' && it.category !== 'STREET_TURN').reduce((s, it) => s + Number(it.amountAed || 0), 0),
-          adjustmentNotes: encodeBonusItemsTag(editNotes, editBonusItems),
+          adjustmentNotes: encodeBonusItemsTag(
+            editNotes,
+            editBonusItems,
+            editingAllowance.adjustmentNotes,
+          ),
         }),
       });
       const data = await res.json();
@@ -869,6 +924,19 @@ export default function DrayagePaymentsPage() {
                                 · 📝 Note
                               </span>
                             )}
+                            {parseReceiptsFromAllowance(a).length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => openAdjustmentModal(a)}
+                                className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-bold text-[9px] hover:bg-cyan-500/25 transition-colors"
+                                title="View Driver Mobile Expense Receipts & Voice Notes"
+                              >
+                                🧾 {parseReceiptsFromAllowance(a).length} Receipt(s)
+                                {parseReceiptsFromAllowance(a).some((r) => Boolean(r.voiceNoteDataUrl))
+                                  ? ' · 🎙️ Voice'
+                                  : ''}
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td className="py-3 px-3 font-mono font-semibold">
@@ -1256,6 +1324,63 @@ export default function DrayagePaymentsPage() {
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                 />
               </div>
+
+              {parseReceiptsFromAllowance(editingAllowance).length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+                  <div className="text-[11px] font-bold text-cyan-400 flex items-center justify-between">
+                    <span>🧾 Driver Mobile Expense Receipts &amp; Voice Notes</span>
+                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                      {parseReceiptsFromAllowance(editingAllowance).length} Uploaded
+                    </span>
+                  </div>
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {parseReceiptsFromAllowance(editingAllowance).map((rcpt) => (
+                      <div
+                        key={rcpt.id}
+                        className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/30 space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-[var(--text-main)] text-xs">
+                              {rcpt.label}
+                              {rcpt.receiptNumber ? ` (#${rcpt.receiptNumber})` : ''}
+                            </div>
+                            <div className="text-[10px] text-[var(--text-muted)]">
+                              {new Date(rcpt.submittedAt).toLocaleString()}
+                              {rcpt.notes ? ` · "${rcpt.notes}"` : ''}
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono font-bold text-xs">
+                            AED {rcpt.amountAed}
+                          </span>
+                        </div>
+                        {rcpt.receiptPhotoUrl && (
+                          <div className="rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-black/30">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={rcpt.receiptPhotoUrl}
+                              alt={rcpt.label}
+                              className="w-full max-h-36 object-contain"
+                            />
+                          </div>
+                        )}
+                        {rcpt.voiceNoteDataUrl && (
+                          <div className="pt-1">
+                            <div className="text-[10px] font-semibold text-amber-300 mb-1">
+                              🎙️ Driver Voice Note ({rcpt.voiceNoteDurationSec || 4}s):
+                            </div>
+                            <audio
+                              controls
+                              src={rcpt.voiceNoteDataUrl}
+                              className="w-full h-8"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
                 <button

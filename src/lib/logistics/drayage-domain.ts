@@ -3877,6 +3877,212 @@ export async function adjustDriverAllowance(
   };
 }
 
+export async function submitDriverExpenseReceipt(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    driverName?: string;
+    receiptCategory:
+      | 'PORT_GATE_PASS'
+      | 'WEIGHBRIDGE_SLIP'
+      | 'CUSTOMS_INSPECTION'
+      | 'TIRE_ROADSIDE_REPAIR'
+      | 'TOLL_SALIK_DARB'
+      | 'OVERNIGHT_HALT'
+      | string;
+    receiptLabel: string;
+    amountAed: number;
+    receiptNumber?: string;
+    notes?: string;
+    receiptPhotoUrl?: string | null;
+    voiceNoteDataUrl?: string | null;
+    voiceNoteDurationSec?: number;
+  },
+) {
+  await ensureDrayageSchema(db);
+
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) {
+    throw new Error('Assigned drayage job not found');
+  }
+
+  let alwRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_allowances WHERE job_id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+
+  if (alwRows.length === 0) {
+    const calc = computeDriverAllowanceComponents(job);
+    const newAlwId = `alw-${crypto.randomUUID().slice(0, 12)}`;
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_allowances (
+        id, tenant_id, job_id, job_code, driver_id, driver_name, vehicle_plate,
+        container_number, trip_phase, route_summary, allowance_amount_aed, port_gate_fee_aed,
+        overnight_halt_aed, bogie_bonus_aed, street_turn_bonus_aed, inspection_bonus_aed,
+        total_amount_aed, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'PENDING')`,
+      newAlwId,
+      args.tenantId,
+      String(job.id),
+      String(job.job_code),
+      String(job.assigned_driver_id ?? 'DRV-MOBILE'),
+      String(args.driverName || job.assigned_driver_name || 'Assigned Driver'),
+      job.assigned_vehicle_plate ? String(job.assigned_vehicle_plate) : null,
+      String(job.container_number),
+      String(job.job_phase ?? 'L1'),
+      calc.routeSummary,
+      calc.allowanceAmountAed,
+      calc.portGateFeeAed,
+      calc.overnightHaltAed,
+      calc.bogieBonusAed,
+      calc.streetTurnBonusAed,
+      calc.inspectionBonusAed,
+      calc.totalAmountAed,
+    );
+    alwRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM logistics_drayage_allowances WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      newAlwId,
+      args.tenantId,
+    );
+  }
+
+  const alw = alwRows[0];
+  const allowanceId = String(alw.id);
+  const amount = Math.max(0, Number(args.amountAed || 0));
+  const category = String(args.receiptCategory || 'PORT_GATE_PASS').toUpperCase();
+  const label = String(args.receiptLabel || 'Port Gate Pass Receipt').trim();
+
+  let portGateFeeAed = Number(alw.port_gate_fee_aed || 0);
+  let overnightHaltAed = Number(alw.overnight_halt_aed || 0);
+  let inspectionBonusAed = Number(alw.inspection_bonus_aed || 0);
+  const allowanceAmountAed = Number(alw.allowance_amount_aed || 150);
+  const bogieBonusAed = Number(alw.bogie_bonus_aed || 0);
+  const streetTurnBonusAed = Number(alw.street_turn_bonus_aed || 0);
+
+  if (category === 'PORT_GATE_PASS') {
+    portGateFeeAed += amount;
+  } else if (category === 'OVERNIGHT_HALT') {
+    overnightHaltAed += amount;
+  } else {
+    inspectionBonusAed += amount;
+  }
+
+  const totalAmountAed =
+    allowanceAmountAed +
+    portGateFeeAed +
+    overnightHaltAed +
+    bogieBonusAed +
+    streetTurnBonusAed +
+    inspectionBonusAed;
+
+  // Parse existing [ITEMS:...] and [RECEIPTS:...] from adjustment_notes
+  const rawNotes = String(alw.adjustment_notes || '');
+  const itemsRe = /\s*\[ITEMS:(\[[\s\S]*?\])\]/;
+  const receiptsRe = /\s*\[RECEIPTS:(\[[\s\S]*?\])\]/;
+
+  let existingItems: Array<Record<string, unknown>> = [];
+  const itemsMatch = rawNotes.match(itemsRe);
+  if (itemsMatch && itemsMatch[1]) {
+    try {
+      const parsed = JSON.parse(itemsMatch[1]);
+      if (Array.isArray(parsed)) existingItems = parsed;
+    } catch {
+      existingItems = [];
+    }
+  }
+
+  let existingReceipts: Array<Record<string, unknown>> = [];
+  const receiptsMatch = rawNotes.match(receiptsRe);
+  if (receiptsMatch && receiptsMatch[1]) {
+    try {
+      const parsed = JSON.parse(receiptsMatch[1]);
+      if (Array.isArray(parsed)) existingReceipts = parsed;
+    } catch {
+      existingReceipts = [];
+    }
+  }
+
+  const receiptId = `rcpt-${Date.now().toString(36)}`;
+  if (category !== 'PORT_GATE_PASS' && category !== 'OVERNIGHT_HALT' && amount > 0) {
+    existingItems.push({
+      id: receiptId,
+      category: category === 'CUSTOMS_INSPECTION' ? 'CUSTOMS_BAY' : 'CUSTOM',
+      label,
+      amountAed: amount,
+    });
+  }
+
+  const newReceiptEntry = {
+    id: receiptId,
+    category,
+    label,
+    amountAed: amount,
+    receiptNumber: args.receiptNumber ? String(args.receiptNumber).trim() : '',
+    notes: args.notes ? String(args.notes).trim() : '',
+    receiptPhotoUrl: args.receiptPhotoUrl || null,
+    voiceNoteDataUrl: args.voiceNoteDataUrl || null,
+    voiceNoteDurationSec: Number(args.voiceNoteDurationSec || 0),
+    driverName: String(args.driverName || job.assigned_driver_name || 'Assigned Driver'),
+    submittedAt: new Date().toISOString(),
+  };
+  existingReceipts.push(newReceiptEntry);
+
+  const cleanHumanNotes = rawNotes
+    .replace(itemsRe, '')
+    .replace(receiptsRe, '')
+    .trim();
+  const receiptHumanLine = `Driver Receipt (${label}: AED ${amount}${args.receiptNumber ? ` #${args.receiptNumber}` : ''}${args.notes ? ` - ${args.notes}` : ''}${args.voiceNoteDataUrl ? ' + Voice Note' : ''})`;
+  const mergedHuman = cleanHumanNotes
+    ? `${cleanHumanNotes} | ${receiptHumanLine}`
+    : receiptHumanLine;
+
+  const itemsTag = existingItems.length > 0 ? ` [ITEMS:${JSON.stringify(existingItems)}]` : '';
+  const receiptsTag = ` [RECEIPTS:${JSON.stringify(existingReceipts)}]`;
+  const finalAdjustmentNotes = `${mergedHuman}${itemsTag}${receiptsTag}`.trim();
+
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_allowances
+        SET port_gate_fee_aed = $3,
+            overnight_halt_aed = $4,
+            inspection_bonus_aed = $5,
+            total_amount_aed = $6,
+            adjustment_notes = $7
+      WHERE id = $1 AND tenant_id = $2`,
+    allowanceId,
+    args.tenantId,
+    portGateFeeAed,
+    overnightHaltAed,
+    inspectionBonusAed,
+    totalAmountAed,
+    finalAdjustmentNotes,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'DRIVER_EXPENSE_RECEIPT', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    `${receiptHumanLine} synced to Driver Payments Approval Ledger.`,
+    String(args.driverName || job.assigned_driver_name || 'Driver Mobile App'),
+  );
+
+  return {
+    ok: true,
+    allowanceId,
+    receipt: newReceiptEntry,
+    totalAmountAed,
+  };
+}
+
 export async function settleDriverAllowancesPayout(
   db: DrayageDbClient,
   args: {

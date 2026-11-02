@@ -24,6 +24,7 @@ import {
   extendContainerDeliveryOrder,
   calculateMissingAllowances,
   adjustDriverAllowance,
+  submitDriverExpenseReceipt,
   settleDriverAllowancesPayout,
   recordDrayageStatusLog,
   findStreetTurnCandidates,
@@ -932,6 +933,22 @@ export async function POST(req: NextRequest) {
 
         case 'calculate_payments': {
           return calculateMissingAllowances(tx, tenantId);
+        }
+
+        case 'submit_driver_expense_receipt': {
+          return submitDriverExpenseReceipt(tx, {
+            tenantId,
+            jobId: String(body.jobId),
+            driverName: body.driverName ? String(body.driverName) : undefined,
+            receiptCategory: String(body.receiptCategory || 'PORT_GATE_PASS'),
+            receiptLabel: String(body.receiptLabel || 'Port Gate Pass Receipt'),
+            amountAed: Number(body.amountAed || 0),
+            receiptNumber: body.receiptNumber ? String(body.receiptNumber) : undefined,
+            notes: body.notes ? String(body.notes) : undefined,
+            receiptPhotoUrl: body.receiptPhotoUrl ? String(body.receiptPhotoUrl) : null,
+            voiceNoteDataUrl: body.voiceNoteDataUrl ? String(body.voiceNoteDataUrl) : null,
+            voiceNoteDurationSec: body.voiceNoteDurationSec ? Number(body.voiceNoteDurationSec) : 0,
+          });
         }
 
         case 'adjust_allowance': {
