@@ -131,3 +131,17 @@ describe('approval executors', () => {
     });
   });
 });
+
+describe('executors stay in the approving tenant', () => {
+  it('every statement that picks a row by a payload id also filters by tenant', async () => {
+    await executeGatedAction('tenant-a', 'SUSPEND_DRIVER', { driverId: 'drv-1' });
+    await executeGatedAction('tenant-a', 'LINK_TRIPS', { result: { tripAId: 'trip-a', tripBId: 'trip-b', vehicleId: 'veh-1' } });
+    await executeGatedAction('tenant-a', 'ESCALATE_INCIDENT_SEVERITY', { incidentId: 'inc-1', toSeverity: 'CRITICAL' });
+    await executeGatedAction('tenant-a', 'OFFER_DISPATCH_JOB', { jobId: VEHICLE_UUID, driverId: 'drv-1', vehicleId: 'veh-1' });
+    const byId = st.sql.filter((q) =>
+      /^(SELECT .* FROM (drivers|trip_schedules|operations\.incidents)|UPDATE (drivers|trip_schedules|operations\.incidents|dispatch_jobs))/.test(q),
+    );
+    expect(byId.length).toBeGreaterThanOrEqual(6);
+    for (const q of byId) expect(q, q).toMatch(/tenant_id::text = \$\d/);
+  });
+});

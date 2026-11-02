@@ -141,15 +141,16 @@ async function createPredictiveWorkOrder(tenantId: string, p: Record<string, unk
   return { ok: true, detail: { workOrderId: id, woNumber } };
 }
 
-async function escalateIncidentSeverity(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+async function escalateIncidentSeverity(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
   const incidentId = str(p.incidentId);
   const toSeverity = str(p.toSeverity).toUpperCase();
   if (!incidentId || !SEVERITY_RANK[toSeverity]) {
     throw new Error('ESCALATE_INCIDENT_SEVERITY payload needs incidentId and a valid toSeverity');
   }
   const rows = await prisma.$queryRawUnsafe<Array<{ severity: string | null }>>(
-    `SELECT severity FROM operations.incidents WHERE id::text = $1 FOR UPDATE`,
+    `SELECT severity FROM operations.incidents WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`,
     incidentId,
+    tenantId,
   );
   if (rows.length === 0) return { ok: false, stale: true, reason: 'Incident no longer exists.' };
   const current = (rows[0].severity ?? '').toUpperCase();
@@ -157,9 +158,10 @@ async function escalateIncidentSeverity(_tenantId: string, p: Record<string, unk
     return { ok: false, stale: true, reason: `Incident is already ${current || 'unknown'}; nothing to escalate.` };
   }
   await prisma.$executeRawUnsafe(
-    `UPDATE operations.incidents SET severity = $1, updated_at = NOW() WHERE id::text = $2`,
+    `UPDATE operations.incidents SET severity = $1, updated_at = NOW() WHERE id::text = $2 AND tenant_id::text = $3`,
     toSeverity,
     incidentId,
+    tenantId,
   );
   await prisma.$executeRawUnsafe(
     `UPDATE incident_triage_assessments SET status = 'ESCALATED', updated_at = NOW() WHERE incident_id::text = $1`,
@@ -168,7 +170,7 @@ async function escalateIncidentSeverity(_tenantId: string, p: Record<string, unk
   return { ok: true, detail: { incidentId, from: current, to: toSeverity } };
 }
 
-async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+async function offerDispatchJob(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
   const jobId = str(p.jobId);
   const driverId = str(p.driverId);
   const vehicleId = str(p.vehicleId);
@@ -179,8 +181,9 @@ async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): 
   // taken another job, gone off shift or been removed. Lock the driver row
   // so two approvals cannot hand the same driver two jobs.
   const driver = await prisma.$queryRawUnsafe<Array<{ status: string | null }>>(
-    `SELECT status FROM drivers WHERE id::text = $1 AND deleted_at IS NULL FOR UPDATE`,
+    `SELECT status FROM drivers WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL FOR UPDATE`,
     driverId,
+    tenantId,
   );
   if (driver.length === 0) return { ok: false, stale: true, reason: 'Proposed driver no longer exists.' };
   const driverStatus = (driver[0].status ?? '').toUpperCase();
@@ -205,13 +208,14 @@ async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): 
     `UPDATE dispatch_jobs
         SET status = 'OFFERED', assigned_driver_id = $1, assigned_vehicle_id = $2,
             dispatch_score = $3, current_attempt = current_attempt + 1, updated_at = NOW()
-      WHERE id = $4::uuid AND status = ANY($5::text[])
+      WHERE id = $4::uuid AND tenant_id::text = $6 AND status = ANY($5::text[])
       RETURNING current_attempt`,
     driverId,
     vehicleId,
     num(p.score),
     jobId,
     DISPATCHABLE_STATUSES,
+    tenantId,
   );
   if (updated.length === 0) {
     return { ok: false, stale: true, reason: 'Job is no longer waiting for a driver.' };
@@ -239,14 +243,15 @@ async function offerDispatchJob(_tenantId: string, p: Record<string, unknown>): 
 }
 
 /** Compliance: a driver failed the pre-dispatch readiness gate. Block them from dispatch. */
-async function suspendDriver(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+async function suspendDriver(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
   const readiness = obj(p.readiness);
   const driverId = str(readiness.driverId) || str(p.driverId);
   if (!driverId) throw new Error('SUSPEND_DRIVER payload is missing readiness.driverId');
 
   const rows = await prisma.$queryRawUnsafe<Array<{ status: string | null }>>(
-    `SELECT status FROM drivers WHERE id::text = $1 AND deleted_at IS NULL FOR UPDATE`,
+    `SELECT status FROM drivers WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL FOR UPDATE`,
     driverId,
+    tenantId,
   );
   if (rows.length === 0) return { ok: false, stale: true, reason: 'Driver no longer exists.' };
   const current = (rows[0].status ?? '').toUpperCase();
@@ -256,8 +261,9 @@ async function suspendDriver(_tenantId: string, p: Record<string, unknown>): Pro
   // dispatch-optimiser skips SUSPENDED drivers, and OFFER_DISPATCH_JOB only
   // offers to available ones, so this takes the driver out of dispatch.
   await prisma.$executeRawUnsafe(
-    `UPDATE drivers SET status = 'SUSPENDED', updated_at = NOW() WHERE id::text = $1`,
+    `UPDATE drivers SET status = 'SUSPENDED', updated_at = NOW() WHERE id::text = $1 AND tenant_id::text = $2`,
     driverId,
+    tenantId,
   );
   return { ok: true, detail: { driverId, from: current || null, to: 'SUSPENDED' } };
 }
@@ -316,7 +322,7 @@ async function schedulePmSlot(tenantId: string, p: Record<string, unknown>): Pro
 }
 
 /** Vehicle reuse: run trip B on the vehicle that runs trip A (chained trips). */
-async function linkTrips(_tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
+async function linkTrips(tenantId: string, p: Record<string, unknown>): Promise<ExecutionResult> {
   const r = obj(p.result);
   const tripAId = str(r.tripAId);
   const tripBId = str(r.tripBId);
@@ -327,8 +333,9 @@ async function linkTrips(_tenantId: string, p: Record<string, unknown>): Promise
   }
 
   const tripA = await prisma.$queryRawUnsafe<Array<{ vehicle_id: string | null; status: string | null }>>(
-    `SELECT vehicle_id, status FROM trip_schedules WHERE id = $1 AND deleted_at IS NULL`,
+    `SELECT vehicle_id, status FROM trip_schedules WHERE id = $1 AND tenant_id::text = $2 AND deleted_at IS NULL`,
     tripAId,
+    tenantId,
   );
   if (tripA.length === 0) return { ok: false, stale: true, reason: 'The first trip no longer exists.' };
   if ((tripA[0].status ?? '').toUpperCase() === 'CANCELLED') {
@@ -344,12 +351,13 @@ async function linkTrips(_tenantId: string, p: Record<string, unknown>): Promise
   const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE trip_schedules
         SET vehicle_id = $1, driver_id = COALESCE(driver_id, $2), updated_at = NOW()
-      WHERE id = $3 AND deleted_at IS NULL AND vehicle_id IS NULL
+      WHERE id = $3 AND tenant_id::text = $4 AND deleted_at IS NULL AND vehicle_id IS NULL
         AND COALESCE(status, 'SCHEDULED') = 'SCHEDULED'
       RETURNING id`,
     vehicleId,
     driverId,
     tripBId,
+    tenantId,
   );
   if (updated.length === 0) {
     return { ok: false, stale: true, reason: 'The second trip is no longer scheduled without a vehicle.' };
@@ -367,7 +375,8 @@ const EXECUTORS: Record<GatedActionType, (tenantId: string, payload: Record<stri
 };
 
 /**
- * Run a gated action. Throws on real errors; returns `stale` when it no
+ * Run a gated action. Every statement that picks rows by a payload id also
+ * filters by the tenant (defence in depth on top of RLS). Throws on real errors; returns `stale` when it no
  * longer applies. Always in a tenant transaction: it joins the caller's
  * (the approval route, an agent already in scope) or opens one, so the
  * row locks hold until the writes commit and the writes commit together.
