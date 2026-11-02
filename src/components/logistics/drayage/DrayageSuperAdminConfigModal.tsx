@@ -9,11 +9,9 @@ import {
   Sliders,
   Repeat,
   Layers,
-  ShieldAlert,
   RotateCcw,
   CheckCircle2,
   Scale,
-  MapPin,
 } from 'lucide-react';
 import type { DrayageAutomationConfig } from '@/lib/logistics/drayage-domain';
 import { DEFAULT_DRAYAGE_AUTOMATION_CONFIG } from '@/lib/logistics/drayage-domain';

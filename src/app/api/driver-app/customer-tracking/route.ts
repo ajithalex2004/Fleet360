@@ -97,11 +97,26 @@ export async function POST(req: NextRequest) {
         const jobId = portalData.job.id;
 
         if (action === 'update_subscriptions') {
+          // Recipients come from the request only. Missing ones used to be
+          // filled with a made-up number and address, and an alert was then
+          // sent to them.
+          const customerWhatsApp = String(body.customerWhatsApp ?? '').trim();
+          const customerEmail = String(body.customerEmail ?? '').trim();
+          if (!customerWhatsApp && !customerEmail) {
+            throw new Error('Give a WhatsApp number or an email address for alerts.');
+          }
+          if (customerWhatsApp && !/^\+?[0-9 ()-]{7,20}$/.test(customerWhatsApp)) {
+            throw new Error('WhatsApp number is not valid.');
+          }
+          // No brackets: recipients are stored as [CUST_EMAIL:…] tags in the job notes.
+          if (customerEmail && !/^[^\s@[\]]+@[^\s@[\]]+\.[^\s@[\]]+$/.test(customerEmail)) {
+            throw new Error('Email address is not valid.');
+          }
           const updated = await updateDrayageCustomerAlertPreferences(tx, {
             tenantId,
             jobId,
-            customerWhatsApp: String(body.customerWhatsApp || '+971 50 482 9104'),
-            customerEmail: String(body.customerEmail || 'logistics-ops@shipper.ae'),
+            customerWhatsApp,
+            customerEmail,
             autoAlertsEnabled: Boolean(body.autoAlertsEnabled ?? true),
           });
           const alertSent = await dispatchDrayageCustomerMilestoneAlert(tx, {

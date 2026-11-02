@@ -30,6 +30,14 @@ interface Connection {
   healthMessage?: string;
   lastSyncAt?: string;
   createdAt: string;
+  hasWebhookSecret?: boolean;
+}
+
+/** A webhook secret just issued: shown once, never retrievable again. */
+interface IssuedSecret {
+  connectionId: string;
+  systemName: string;
+  secret: string;
 }
 
 export default function EnterpriseBridgePage() {
@@ -49,6 +57,8 @@ export default function EnterpriseBridgePage() {
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [issuedSecret, setIssuedSecret] = useState<IssuedSecret | null>(null);
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
 
   const loadConnections = useCallback(async () => {
     setLoading(true);
@@ -99,6 +109,9 @@ export default function EnterpriseBridgePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save connection');
 
+      if (data.webhookSecret && data.connection?.id) {
+        setIssuedSecret({ connectionId: data.connection.id, systemName, secret: data.webhookSecret });
+      }
       setShowAddModal(false);
       // Reset form
       setSystemName('');
@@ -139,6 +152,24 @@ export default function EnterpriseBridgePage() {
     }
   };
 
+  const rotateWebhookSecret = async (conn: Connection) => {
+    if (conn.hasWebhookSecret && !window.confirm(`Rotate the webhook secret for ${conn.systemName}? The ERP must be updated with the new secret; the old one stops working immediately.`)) {
+      return;
+    }
+    setRotatingId(conn.id);
+    try {
+      const res = await fetch(`/api/integrations/enterprise/connections/${conn.id}/webhook-secret`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.webhookSecret) throw new Error(data.error || 'Failed to rotate webhook secret');
+      setIssuedSecret({ connectionId: conn.id, systemName: conn.systemName, secret: data.webhookSecret });
+      await loadConnections();
+    } catch (err: unknown) {
+      window.alert(err instanceof Error ? err.message : 'Failed to rotate webhook secret');
+    } finally {
+      setRotatingId(null);
+    }
+  };
+
   const healthyCount = connections.filter((c) => c.healthStatus === 'HEALTHY').length;
 
   return (
@@ -176,6 +207,37 @@ export default function EnterpriseBridgePage() {
           </button>
         </div>
       </div>
+
+      {issuedSecret && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--text-main)]">Webhook secret for {issuedSecret.systemName}</h3>
+              <p className="text-xs text-[var(--text-muted)]">
+                Copy it now: it is not shown again. Configure your ERP to send it in the <code>x-webhook-secret</code> header.
+              </p>
+            </div>
+            <button
+              onClick={() => setIssuedSecret(null)}
+              className="text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            >
+              Done
+            </button>
+          </div>
+          <div className="text-xs font-mono break-all bg-black/30 p-2 rounded border border-white/10 text-[var(--text-main)]">
+            {issuedSecret.secret}
+          </div>
+          <div className="text-[11px] text-[var(--text-faint)] break-all">
+            Webhook URL: {typeof window !== 'undefined' ? window.location.origin : ''}/api/integrations/enterprise/webhook/{issuedSecret.connectionId}
+          </div>
+          <button
+            onClick={() => navigator.clipboard?.writeText(issuedSecret.secret)}
+            className="rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
+          >
+            Copy secret
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -262,6 +324,19 @@ export default function EnterpriseBridgePage() {
 
                 <div className="text-xs text-[var(--text-muted)] truncate font-mono bg-black/20 p-2 rounded border border-white/5">
                   {conn.baseUrl}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-[var(--text-faint)]">
+                  <span className={conn.hasWebhookSecret ? 'text-emerald-300' : 'text-amber-300'}>
+                    Webhook: {conn.hasWebhookSecret ? 'secret set' : 'no secret — inbound webhooks refused'}
+                  </span>
+                  <button
+                    onClick={() => rotateWebhookSecret(conn)}
+                    disabled={rotatingId === conn.id}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    {conn.hasWebhookSecret ? 'Rotate secret' : 'Create secret'}
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-[var(--text-faint)] pt-2 border-t border-[var(--border-subtle)]">

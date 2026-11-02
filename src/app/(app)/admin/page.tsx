@@ -244,7 +244,7 @@ export default function AdminOverview() {
         <DrayageSuperAdminConfigModal
           open={configModalOpen}
           onClose={() => setConfigModalOpen(false)}
-          currentConfig={automationConfig}
+          config={automationConfig}
           onSaved={(updated) => {
             setAutomationConfig(updated);
             setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
