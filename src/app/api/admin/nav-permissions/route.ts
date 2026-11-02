@@ -147,7 +147,7 @@ async function handlePUT(request: NextRequest) {
 
   await withTenantRls(prisma, targetTenantId, async (tx) => {
     for (const key of allKeysToSave) {
-      if (!(key in permissions) && !TOGGLEABLE_NAV_KEYS.includes(key as any)) continue;
+      if (!(key in permissions) && !(TOGGLEABLE_NAV_KEYS as readonly string[]).includes(key)) continue;
       const enabled = permissions[key] === true;
       await tx.$executeRawUnsafe(
         `INSERT INTO tenant_admin_nav_permissions (id, tenant_id, nav_key, enabled, updated_at)

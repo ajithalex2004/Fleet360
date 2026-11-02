@@ -98,9 +98,10 @@ export async function GET(req: NextRequest) {
       try {
         const rRows = await tx.$queryRawUnsafe<Array<{ id: string; code: string; name: string; reason_type: string }>>(
           `SELECT id, code, name, reason_type 
-           FROM fleet_nui_reasons 
-           WHERE is_active = TRUE AND reason_type IN ('TRANSFER', 'ALL') 
+           FROM fleet_nui_reasons
+           WHERE tenant_id = $1 AND is_active = TRUE AND reason_type IN ('TRANSFER', 'ALL')
            ORDER BY code ASC`,
+          authz.tenantId,
         );
         if (rRows.length > 0) {
           reasonList = rRows.map(r => ({
