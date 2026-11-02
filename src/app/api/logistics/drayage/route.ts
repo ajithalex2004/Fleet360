@@ -815,6 +815,7 @@ export async function POST(req: NextRequest) {
           );
 
           // Mirror into customers table as well so Customer Master and Drayage Client Master stay unified
+          await tx.$executeRawUnsafe(`SAVEPOINT sp_mirror_customer`);
           try {
             await tx.$executeRawUnsafe(
               `INSERT INTO customers (
@@ -843,8 +844,9 @@ export async function POST(req: NextRequest) {
               trn,
               tradeLicense,
             );
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_mirror_customer`);
           } catch {
-            // Ignore if customer_code unique constraint or optional schema mismatch
+            await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_mirror_customer`).catch(() => {});
           }
 
           return { ok: true, id };

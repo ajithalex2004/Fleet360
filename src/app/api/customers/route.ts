@@ -144,15 +144,45 @@ export async function POST(req: NextRequest) {
 
         const id = randomUUID();
 
-        // Auto-generate customer code
+        // Ensure customer_code uniqueness is scoped per-tenant (not globally across all tenants)
+        await tx.$executeRawUnsafe(`SAVEPOINT sp_cust_idx`);
+        try {
+          await tx.$executeRawUnsafe(`ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_customer_code_key`);
+          await tx.$executeRawUnsafe(`DROP INDEX IF EXISTS public.customers_customer_code_key`);
+          await tx.$executeRawUnsafe(
+            `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_tenant_customer_code ON public.customers (tenant_id, customer_code) WHERE customer_code IS NOT NULL`
+          );
+          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_cust_idx`);
+        } catch {
+          await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_cust_idx`).catch(() => {});
+        }
+
+        // Auto-generate collision-free customer code
         if (!body.customerCode) {
           const prefix = body.customerType === 'INTERNAL' ? 'INT' :
                          body.customerType === 'CORPORATE' ? 'CORP' :
                          body.customerType === 'VIP'       ? 'VIP' :
                          body.customerType === 'WALK_IN'   ? 'WLK' : 'CUST';
-          const countResult = await tx.$queryRaw<{count:bigint}[]>`SELECT COUNT(*) as count FROM customers`;
-          const count = Number((countResult[0] as any)?.count ?? 0);
-          body.customerCode = `${prefix}${String(count + 1).padStart(4, '0')}`;
+          const existingCodes = await prisma.$queryRawUnsafe<Array<{ customer_code: string | null }>>(
+            `SELECT customer_code FROM customers WHERE customer_code LIKE $1`,
+            `${prefix}%`,
+          ).catch(() => []);
+          const usedSet = new Set(
+            existingCodes.map((r) => String(r.customer_code ?? '').trim().toUpperCase()).filter(Boolean)
+          );
+          let maxSeq = 0;
+          for (const code of usedSet) {
+            const numPart = code.slice(prefix.length).replace(/\D/g, '');
+            const parsed = parseInt(numPart, 10);
+            if (Number.isFinite(parsed) && parsed > maxSeq && parsed < 1000000) {
+              maxSeq = parsed;
+            }
+          }
+          let candidate = `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+          if (usedSet.has(candidate)) {
+            candidate = `${prefix}-${id.slice(0, 6).toUpperCase()}`;
+          }
+          body.customerCode = candidate;
         }
 
         const now = new Date().toISOString();
@@ -227,8 +257,9 @@ export async function POST(req: NextRequest) {
           )
         `);
 
-        // Also auto-create a linked Lessee if type is CORPORATE or INDIVIDUAL
+        // Also auto-create a linked Lessee if type is CORPORATE or INDIVIDUAL (wrapped in SAVEPOINT so tx never aborts)
         if (['CORPORATE','INDIVIDUAL','VIP'].includes(body.customerType)) {
+          await tx.$executeRawUnsafe(`SAVEPOINT sp_create_lessee`);
           try {
             const lesseeId = randomUUID();
             await tx.$executeRawUnsafe(`
@@ -245,12 +276,15 @@ export async function POST(req: NextRequest) {
               )
               ON CONFLICT DO NOTHING
             `);
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_create_lessee`);
           } catch (e) {
+            await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_create_lessee`).catch(() => {});
             console.warn('Could not auto-create lessee:', e);
           }
         }
 
         // Also mirror into logistics_drayage_clients if that table exists so Drayage Client Master stays unified
+        await tx.$executeRawUnsafe(`SAVEPOINT sp_mirror_drayage_client`);
         try {
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_clients (
@@ -269,8 +303,9 @@ export async function POST(req: NextRequest) {
             body.taxRegistrationNumber ? String(body.taxRegistrationNumber).trim() : null,
             body.tradeLicense ? String(body.tradeLicense).trim() : null,
           );
+          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_mirror_drayage_client`);
         } catch {
-          // Non-fatal if drayage schema is not yet initialized
+          await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_mirror_drayage_client`).catch(() => {});
         }
 
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${id}'`);
