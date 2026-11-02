@@ -325,14 +325,14 @@ export default function LoginPage() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  {tLabel('Email address')}
+                  {tLabel('Email or Username')}
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="you@yourcompany.com"
-                  autoComplete="email"
+                  placeholder="username or you@yourcompany.com"
+                  autoComplete="username"
                   className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/15 focus:border-blue-600 transition-all"
                   required
                 />

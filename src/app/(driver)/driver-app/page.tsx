@@ -839,18 +839,19 @@ export default function DriverAppLauncher() {
         displayName = [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || data.user.email || trimmedEmail;
       }
 
+      const resolvedDriverEmail = data?.user?.email || trimmedEmail;
       if (typeof window !== 'undefined') {
         if (data?.sessionToken) {
           localStorage.setItem('fleet360_session_token', data.sessionToken);
         }
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_email', trimmedEmail);
+        localStorage.setItem('fleet360_driver_email', resolvedDriverEmail);
         localStorage.setItem('fleet360_driver_name', displayName);
         window.dispatchEvent(new Event('fleet360_vehicle_changed'));
       }
 
       // Immediately transition to Vehicle ID & Odometer step
-      await proceedToVehicleOdometer(displayName, trimmedEmail);
+      await proceedToVehicleOdometer(displayName, resolvedDriverEmail);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Unable to reach server. Please check your connection.');
       setPhase('needs-password');
