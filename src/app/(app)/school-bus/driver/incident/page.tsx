@@ -57,7 +57,7 @@ export default function SchoolBusIncidentPage() {
           <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Trip *</label>
           <select required value={tripId} onChange={e => setTripId(e.target.value)}
             className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-rose-500 focus:outline-none">
-            <option value="">Select today's trip</option>
+            <option value="">Select today&apos;s trip</option>
             {trips.map(t => <option key={t.id} value={t.id}>{t.route_name ?? t.id.slice(0, 8)} · {t.session_type ?? '—'}</option>)}
           </select>
         </div>

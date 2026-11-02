@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { MODULES, resolveModuleKey } from '@/lib/modules';
+import { NAV_CATEGORIES, MODULES as SIDEBAR_MODULES } from '@/lib/nav/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
 import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
@@ -853,17 +854,55 @@ export default function TenantDetailPage() {
   const [tab, setTab]               = useState<'modules'|'features'|'attachments'|'users'|'roles'|'branches'|'admin-access'>('modules');
 
   // Admin Access tab state
-  const TOGGLEABLE_NAV = [
-    { key: 'branches',   label: 'Branches & Regions',      desc: 'Manage branches and regional offices' },
-    { key: 'billing',    label: 'Billing & Subscriptions',  desc: 'View and manage subscription plan' },
-    { key: 'workflows',  label: 'Workflow Management',      desc: 'Configure automated workflows' },
-    { key: 'esign',      label: 'E-Signing Console',        desc: 'Monitor e-signing activity' },
-    { key: 'whatsapp',   label: 'WhatsApp Support',         desc: 'Manage WhatsApp bot and conversations' },
-    { key: 'dispatch',   label: 'Dispatch Monitor',         desc: 'View real-time dispatch dashboard' },
-    { key: 'audit-logs', label: 'Audit Log',                desc: 'View activity and change history' },
+  // Categorized toggleable navigation permissions for Tenant Admin
+  const TOGGLEABLE_NAV_GROUPS = [
+    {
+      category: 'Organization & Masters',
+      description: 'Foundational organizational structure, branches, and operational categories',
+      items: [
+        { key: 'hierarchy',       label: 'Region, Department & Section', desc: 'Manage 3-tier organizational hierarchy & Cost Centres' },
+        { key: 'branches',        label: 'Branches & Regions',           desc: 'Manage operational hubs, branch depots & regional offices' },
+        { key: 'nui-reasons',     label: 'NUI Reason Master',            desc: 'Configure vehicle off-road & non-utilization categories' },
+        { key: 'company-profile', label: 'Company Profile & Legal',      desc: 'Edit trade license, TRN tax number & corporate branding' },
+      ],
+    },
+    {
+      category: 'Operations & Workflows',
+      description: 'Operational dispatching, SLAs, approval routing, and client self-service',
+      items: [
+        { key: 'service-config',        label: 'Service Configuration',  desc: 'Configure operational SLAs, booking rules & service types' },
+        { key: 'workflows',             label: 'Workflow Management',    desc: 'Configure multi-step approvals and escalation rules' },
+        { key: 'dispatch',              label: 'Dispatch Monitor',       desc: 'View real-time dispatch dashboard & fleet radar' },
+        { key: 'shipper-portal-config', label: 'Shipper Portal Config',  desc: 'Configure client self-service portal settings' },
+        { key: 'partner-onboarding',    label: 'Partner Onboarding',     desc: 'Manage 3rd-party carrier and contractor onboarding' },
+      ],
+    },
+    {
+      category: 'Communications & Alerts',
+      description: 'Customer and driver communication channels and automated alert rules',
+      items: [
+        { key: 'notifications',   label: 'Email & SMS Notifications', desc: 'Automated alert rules for allocations and maintenance' },
+        { key: 'email-templates', label: 'Email Templates',           desc: 'Customize customer and corporate email notifications' },
+        { key: 'whatsapp',        label: 'WhatsApp Support',          desc: 'Manage WhatsApp bot, templates and booking chats' },
+        { key: 'esign',           label: 'E-Signing Console',         desc: 'Monitor digital handovers & contract signatures' },
+        { key: 'alerts',          label: 'Alert Engine',              desc: 'Configure rule-based alerts and triggers' },
+      ],
+    },
+    {
+      category: 'Subscription & Governance',
+      description: 'Audit trails, SaaS billing, and third-party integration controls',
+      items: [
+        { key: 'billing',      label: 'Billing & Subscriptions', desc: 'View and manage subscription plan & invoices' },
+        { key: 'audit-logs',   label: 'Audit Log',               desc: 'View security audit trail and change history' },
+        { key: 'integrations', label: 'API & Telematics Integrations', desc: 'Manage telematics API keys, webhooks and ERP connectors' },
+      ],
+    },
   ];
   const [navPerms, setNavPerms]         = useState<Record<string,boolean>>({});
   const [navPermsSaving, setNavPermsSaving] = useState(false);
+  const [navPermsSaved, setNavPermsSaved]   = useState(false);
+  const [menuAudience, setMenuAudience]     = useState<'tenant-admin' | 'other-users'>('tenant-admin');
+  const [expandedMenuIds, setExpandedMenuIds] = useState<Record<string, boolean>>({ dispatch: true, exchange: true, admin: true });
   const [branches, setBranches]     = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -1007,7 +1046,7 @@ export default function TenantDetailPage() {
     try {
       const res = await fetch(`/api/admin/tenants/${id}/modules`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabledModules, featureFlags }),
+        body: JSON.stringify({ enabledModules, featureFlags, allowOverrideAll: true }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -1103,7 +1142,7 @@ export default function TenantDetailPage() {
           ['modules',      '🧩 Modules & Feature Flags'],
           ['features',     '⚙️ Feature Settings'],
           ['attachments',  '📎 Attachments'],
-          ['admin-access', '🔐 Admin Access'],
+          ['admin-access', '🔐 Menus, Sub-Menus & Admin Access'],
           ['users',        `Users (${users.length})`],
           ['roles',        `Roles (${roles.length})`],
           ['branches',     `Branches (${branches.length})`],
@@ -1119,18 +1158,38 @@ export default function TenantDetailPage() {
       {tab === 'modules' && (
         <div className="space-y-6">
           <section className="space-y-3">
-            <div>
-              <h2 className="text-lg font-bold text-[var(--text-main)]">Active configuration</h2>
-              <p className="text-[var(--text-muted)] text-sm">
-                Modules currently enabled for <strong className="text-[var(--text-main)]">{tenant.name}</strong> and the feature flags active in each.
-              </p>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-main)]">Active configuration</h2>
+                <p className="text-[var(--text-muted)] text-sm">
+                  Modules currently enabled for <strong className="text-[var(--text-main)]">{tenant.name}</strong> and the feature flags active in each.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setTab('admin-access')}
+                  className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors"
+                >
+                  🔐 Control Menus, Sub-Menus &amp; Live Operations &rarr;
+                </button>
+                {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
+                {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
+                <button onClick={saveModules} disabled={saving}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Modules & Flags'}
+                </button>
+              </div>
             </div>
             <TenantModuleFeatureSummary
-              enabledModules={moduleKeysOf(tenant.modules)}
-              featureFlags={{ ...defaultFeatureFlags(), ...(tenant.featureFlags ?? {}) }}
+              enabledModules={enabledModules}
+              featureFlags={featureFlags}
               plan={tenant.plan}
               policies={modulePolicies}
               planNames={planNames}
+              onModulesChange={setEnabledModules}
+              onFlagsChange={setFeatureFlags}
+              allowOverrideAll={true}
             />
           </section>
 
@@ -1143,6 +1202,13 @@ export default function TenantDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setTab('admin-access')}
+                  className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors"
+                >
+                  🔐 Control Menus, Sub-Menus &amp; Live Operations &rarr;
+                </button>
                 {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
                 {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
                 <button onClick={saveModules} disabled={saving}
@@ -1159,6 +1225,7 @@ export default function TenantDetailPage() {
               planNames={planNames}
               onModulesChange={setEnabledModules}
               onFlagsChange={setFeatureFlags}
+              allowOverrideAll={true}
             />
           </section>
         </div>
@@ -1400,83 +1467,441 @@ export default function TenantDetailPage() {
         </div>
       )}
 
-      {/* ── ADMIN ACCESS ── */}
+      {/* ── ADMIN ACCESS & FULL MENU / SUB-MENU CONTROLLER ── */}
       {tab === 'admin-access' && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-5xl">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-[var(--text-main)] font-semibold text-lg flex items-center gap-2">
+                <span>Menu, Sub-Menu &amp; Admin Access Control Center</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-normal">Super Admin Control</span>
+              </h3>
+              <p className="text-[var(--text-muted)] text-sm mt-1">
+                Enable or disable entire Menu Categories (such as <strong>Live Operations</strong>), individual Menus, and every Sub-Menu item for <strong>Tenant Admin</strong> and <strong>Other Users</strong>. Changes auto-save immediately.
+              </p>
+            </div>
+            {/* Audience selector */}
+            <div className="inline-flex rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1">
+              <button
+                type="button"
+                onClick={() => setMenuAudience('tenant-admin')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  menuAudience === 'tenant-admin'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                👤 Tenant Admin View
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenuAudience('other-users')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  menuAudience === 'other-users'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                👥 Other Users (Managers / Operators)
+              </button>
+            </div>
+          </div>
+
+          {/* ── FULL SIDEBAR CATEGORY, MENU & SUB-MENU TREE CONTROLLER ── */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-[var(--text-main)] uppercase tracking-wider">
+                1. All Sidebar Menu Categories, Menus &amp; Sub-Menus ({menuAudience === 'tenant-admin' ? 'Tenant Admin' : 'Other Users'})
+              </h4>
+              {navPermsSaving && <span className="text-xs text-blue-400">⟳ Auto-saving…</span>}
+              {navPermsSaved && !navPermsSaving && <span className="text-xs text-emerald-400 font-semibold">✓ Saved to Tenant!</span>}
+            </div>
+
+            {NAV_CATEGORIES.map((cat) => {
+              const catKey = menuAudience === 'tenant-admin' ? `cat:${cat.id}` : `other:cat:${cat.id}`;
+              const catModules = SIDEBAR_MODULES.filter((m) => m.category === cat.id);
+              const isCatEnabled = navPerms[catKey] !== false && (
+                cat.id !== 'operations' || catModules.some((m) => enabledModules.includes(m.id) || navPerms[`mod:${m.id}`] === true)
+              );
+
+              const persistBoth = async (nextNav: Record<string, boolean>, nextMods?: string[]) => {
+                setNavPermsSaving(true);
+                setNavPermsSaved(false);
+                try {
+                  await Promise.all([
+                    fetch('/api/admin/nav-permissions', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ tenantId: id, permissions: nextNav }),
+                    }),
+                    nextMods
+                      ? fetch(`/api/admin/tenants/${id}/modules`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ enabledModules: nextMods, featureFlags, allowOverrideAll: true }),
+                        })
+                      : Promise.resolve(),
+                  ]);
+                  const cached = _detailCache.get(id);
+                  if (cached) _detailCache.set(id, { ...cached, navPerms: nextNav, ts: Date.now() });
+                  setNavPermsSaved(true);
+                  setTimeout(() => setNavPermsSaved(false), 3000);
+                } finally {
+                  setNavPermsSaving(false);
+                }
+              };
+
+              const toggleEntireCategory = () => {
+                const target = !isCatEnabled;
+                const nextNav = { ...navPerms, [catKey]: target };
+                const nextMods = new Set(enabledModules);
+                for (const m of catModules) {
+                  const modKey = menuAudience === 'tenant-admin' ? `mod:${m.id}` : `other:mod:${m.id}`;
+                  nextNav[modKey] = target;
+                  if (menuAudience === 'tenant-admin') {
+                    if (target) nextMods.add(m.id);
+                    else nextMods.delete(m.id);
+                  }
+                }
+                const modsArr = [...nextMods];
+                setNavPerms(nextNav);
+                if (menuAudience === 'tenant-admin') setEnabledModules(modsArr);
+                void persistBoth(nextNav, menuAudience === 'tenant-admin' ? modsArr : undefined);
+              };
+
+              return (
+                <div key={cat.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+                  <div className="px-5 py-3.5 bg-[var(--bg-surface-hover)]/50 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={toggleEntireCategory}
+                        className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                          isCatEnabled ? 'bg-emerald-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isCatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">{cat.label}</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isCatEnabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                            {isCatEnabled ? 'Category Enabled' : 'Category Disabled'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-faint)]">{cat.description}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleEntireCategory}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] transition-colors"
+                    >
+                      {isCatEnabled ? `Disable All ${cat.shortLabel}` : `Enable All ${cat.shortLabel}`}
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]/50">
+                    {catModules.map((mod) => {
+                      const modKey = menuAudience === 'tenant-admin' ? `mod:${mod.id}` : `other:mod:${mod.id}`;
+                      const isModEnabled =
+                        isCatEnabled &&
+                        (modKey in navPerms
+                          ? navPerms[modKey] === true
+                          : mod.id === 'admin'
+                            ? menuAudience === 'tenant-admin'
+                            : mod.id === 'exchange'
+                              ? enabledModules.includes('exchange') || enabledModules.includes('vendors')
+                              : mod.id === 'logistics'
+                                ? enabledModules.includes('logistics') || enabledModules.includes('drayage')
+                                : enabledModules.includes(mod.id));
+
+                      const subs = (mod.subPages ?? []).filter((sp) => !sp.superOnly);
+                      const isExpanded = !!expandedMenuIds[mod.id];
+
+                      const toggleMod = () => {
+                        const target = !isModEnabled;
+                        const nextNav = { ...navPerms, [modKey]: target };
+                        if (target) nextNav[catKey] = true;
+                        const nextMods = new Set(enabledModules);
+                        if (menuAudience === 'tenant-admin') {
+                          if (target) {
+                            nextMods.add(mod.id);
+                            if (mod.id === 'logistics') nextMods.add('drayage');
+                          } else {
+                            nextMods.delete(mod.id);
+                          }
+                        }
+                        const modsArr = [...nextMods];
+                        setNavPerms(nextNav);
+                        if (menuAudience === 'tenant-admin') setEnabledModules(modsArr);
+                        void persistBoth(nextNav, menuAudience === 'tenant-admin' ? modsArr : undefined);
+                      };
+
+                      return (
+                        <div key={mod.id} className="px-5 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={toggleMod}
+                                className={`relative inline-flex w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                                  isModEnabled ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'
+                                }`}
+                              >
+                                <span className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isModEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                              </button>
+                              <div>
+                                <span className="text-sm font-semibold text-[var(--text-main)]">{mod.label}</span>
+                                <span className="ml-2 text-[11px] font-mono text-[var(--text-faint)]">{mod.href}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {subs.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedMenuIds((p) => ({ ...p, [mod.id]: !p[mod.id] }))}
+                                  className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                                >
+                                  {isExpanded ? `▾ Hide Sub-Menus (${subs.length})` : `▸ Sub-Menus (${subs.length})`}
+                                </button>
+                              )}
+                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${isModEnabled ? 'bg-blue-500/20 text-blue-300' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'}`}>
+                                {isModEnabled ? 'Menu Enabled' : 'Menu Disabled'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isExpanded && subs.length > 0 && (
+                            <div className="mt-3 ml-8 pl-4 border-l-2 border-[var(--border-subtle)] grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {subs.map((sp) => {
+                                const subKey =
+                                  mod.id === 'admin' && sp.navKey
+                                    ? menuAudience === 'tenant-admin'
+                                      ? sp.navKey
+                                      : `other:${sp.navKey}`
+                                    : menuAudience === 'tenant-admin'
+                                      ? `sub:${sp.href}`
+                                      : `other:sub:${sp.href}`;
+                                const isSubEnabled =
+                                  subKey in navPerms
+                                    ? navPerms[subKey] === true
+                                    : mod.id === 'admin'
+                                      ? menuAudience === 'tenant-admin' && !sp.defaultHiddenForTenantAdmin
+                                      : true;
+
+                                return (
+                                  <div
+                                    key={sp.href}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/20 px-3 py-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-medium text-[var(--text-main)] truncate">{sp.label}</p>
+                                      <p className="text-[10px] text-[var(--text-faint)] font-mono truncate">{sp.group ? `${sp.group} · ${sp.href}` : sp.href}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextNav = { ...navPerms, [subKey]: !isSubEnabled };
+                                        if (mod.id === 'admin' && menuAudience === 'tenant-admin') {
+                                          if (sp.href === '/admin') nextNav['overview'] = !isSubEnabled;
+                                          if (sp.href === '/admin/users') nextNav['users'] = !isSubEnabled;
+                                          if (sp.href === '/admin/roles') nextNav['roles'] = !isSubEnabled;
+                                        }
+                                        setNavPerms(nextNav);
+                                        void persistBoth(nextNav);
+                                      }}
+                                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex-shrink-0 ${
+                                        isSubEnabled
+                                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                          : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                      }`}
+                                    >
+                                      {isSubEnabled ? '✓ Enabled' : '✕ Disabled'}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <hr className="border-[var(--border-subtle)]" />
+
           <div>
-            <h3 className="text-[var(--text-main)] font-semibold text-lg">Tenant Admin — Admin Panel Access</h3>
+            <h3 className="text-[var(--text-main)] font-semibold text-base flex items-center gap-2">
+              <span>2. Admin Sub-Menu Detailed Permissions (Tenant Admin)</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-normal">Super Admin Control</span>
+            </h3>
             <p className="text-[var(--text-muted)] text-sm mt-1">
-              Control which Admin Panel sections the Tenant Admin of this organisation can see.
-              <br/>
-              <span className="text-[var(--text-faint)]">Overview, Users, and Roles are always visible. Toggle optional sections below.</span>
+              Select which Admin menu items and capabilities this Tenant Admin can access. 
+              Changes take effect immediately on their next page load.
             </p>
           </div>
 
-          {/* Always-on items (read-only display) */}
-          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Always Enabled</p>
-            {['Overview', 'Users', 'Roles & Permissions'].map(label => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd"/></svg>
-                </div>
-                <span className="text-[var(--text-muted)] text-sm">{label}</span>
-                <span className="ml-auto text-xs text-emerald-500 font-medium">Always On</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Toggleable items */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl divide-y divide-white/5">
-            <div className="px-5 py-3">
-              <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Optional — Enable for this tenant</p>
+          {/* Always-on items (Core Essentials) */}
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">
+                Core Essentials — Always Enabled
+              </p>
+              <span className="text-[10px] text-emerald-400 font-mono">3 Mandatory Items</span>
             </div>
-            {TOGGLEABLE_NAV.map(item => (
-              <div key={item.key} className="flex items-center gap-4 px-5 py-4">
-                <button
-                  onClick={() => setNavPerms(p => ({ ...p, [item.key]: !p[item.key] }))}
-                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}
-                >
-                  <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[var(--text-main)] text-sm font-medium">{item.label}</p>
-                  <p className="text-[var(--text-faint)] text-xs">{item.desc}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                { label: 'Overview', desc: 'Administrative Dashboard' },
+                { label: 'Users', desc: 'Tenant User Directory' },
+                { label: 'Roles & Permissions', desc: 'Tenant RBAC Config' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+                  <div className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2.5 h-2.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[var(--text-main)] text-xs font-medium block truncate">{item.label}</span>
+                    <span className="text-[10px] text-[var(--text-faint)] block truncate">{item.desc}</span>
+                  </div>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)]'}`}>
-                  {navPerms[item.key] ? 'Enabled' : 'Hidden'}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* Super Admin only — informational */}
-          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Super Admin Only — Never Visible to Tenant Admin</p>
-            {['Tenants', 'Platform Info', 'Notifications', 'Integrations & ERP', 'Platform Settings'].map(label => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+          {/* Categorized Toggleable Groups */}
+          <div className="space-y-4">
+            {TOGGLEABLE_NAV_GROUPS.map((group) => {
+              const allKeys = group.items.map(i => i.key);
+              const allEnabled = allKeys.every(k => navPerms[k]);
+
+              const persistNavPerms = async (next: Record<string, boolean>) => {
+                setNavPermsSaving(true);
+                setNavPermsSaved(false);
+                try {
+                  const res = await fetch('/api/admin/nav-permissions', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenantId: id, permissions: next }),
+                  });
+                  if (res.ok) {
+                    const cached = _detailCache.get(id);
+                    if (cached) _detailCache.set(id, { ...cached, navPerms: next, ts: Date.now() });
+                    setNavPermsSaved(true);
+                    setTimeout(() => setNavPermsSaved(false), 3000);
+                  }
+                } finally {
+                  setNavPermsSaving(false);
+                }
+              };
+
+              const toggleGroup = () => {
+                const targetState = !allEnabled;
+                const next = { ...navPerms };
+                allKeys.forEach(k => { next[k] = targetState; });
+                setNavPerms(next);
+                void persistNavPerms(next);
+              };
+
+              return (
+                <div key={group.category} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 bg-[var(--bg-surface-hover)]/40 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wide">
+                        {group.category}
+                      </h4>
+                      <p className="text-[11px] text-[var(--text-faint)]">{group.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleGroup}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors border border-[var(--border-subtle)]"
+                    >
+                      {allEnabled ? 'Disable All' : 'Enable All'}
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border-subtle)]/50">
+                    {group.items.map((item) => (
+                      <div key={item.key} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[var(--bg-surface-hover)]/20 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...navPerms, [item.key]: !navPerms[item.key] };
+                            setNavPerms(next);
+                            void persistNavPerms(next);
+                          }}
+                          className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'}`}
+                        >
+                          <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[var(--text-main)] text-sm font-medium">{item.label}</p>
+                          <p className="text-[var(--text-faint)] text-xs mt-0.5">{item.desc}</p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}>
+                          {navPerms[item.key] ? 'Enabled for Tenant Admin' : 'Hidden from Tenant Admin'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <span className="text-[var(--text-muted)] text-sm">{label}</span>
-                <span className="ml-auto text-xs text-red-500 font-medium">Platform Only</span>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+
+          {/* Super Admin only — informational & protected */}
+          <div className="bg-[var(--bg-surface)]/40 border border-red-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-red-400 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                <span>Platform Super Admin Only — Locked & Protected</span>
+              </p>
+              <span className="text-[10px] text-red-400/80 font-mono">Restricted from Tenant Admins</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { label: 'Tenants Master', desc: 'Create, audit & manage SaaS tenants' },
+                { label: 'Module Policies', desc: 'Plan entitlement & licensing gates' },
+                { label: 'System Health', desc: 'Database pools, Redis & cron runs' },
+                { label: 'Platform Settings', desc: 'Root database timeouts & CORS origins' },
+                { label: 'Attachment Types', desc: 'Global document definitions' },
+                { label: 'Exchange Partners', desc: 'B2B global carrier network directory' },
+                { label: 'Brand Preview', desc: 'White-label SaaS theme customization' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2.5 p-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <div className="w-3.5 h-3.5 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2 h-2 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[var(--text-muted)] text-xs font-medium block truncate">{item.label}</span>
+                    <span className="text-[10px] text-[var(--text-faint)] block truncate">{item.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Save button */}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {navPermsSaving && <span className="text-xs text-blue-400">⟳ Saving changes…</span>}
+            {navPermsSaved && !navPermsSaving && <span className="text-xs text-emerald-400 font-semibold">✓ Saved!</span>}
             <button
               disabled={navPermsSaving}
               onClick={async () => {
                 setNavPermsSaving(true);
+                setNavPermsSaved(false);
                 try {
                   await fetch('/api/admin/nav-permissions', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tenantId: id, permissions: navPerms }),
                   });
-                  alert('Admin access permissions saved.');
+                  setNavPermsSaved(true);
+                  setTimeout(() => setNavPermsSaved(false), 3000);
                 } catch { alert('Failed to save permissions.'); }
                 finally { setNavPermsSaving(false); }
               }}

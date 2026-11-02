@@ -217,12 +217,12 @@ export default function GatewaysAdminPage() {
             </div>
             <div className="text-[11px] text-[var(--text-faint)]">
               Rotated at {new Date(rotateResult.rotatedAt).toLocaleString('en-AE')}. Paste into
-              your gateway's <code>BLE_HMAC_SECRET</code> config and restart it.
+              your gateway&apos;s <code>BLE_HMAC_SECRET</code> config and restart it.
             </div>
             <div className="flex justify-end pt-4">
               <button onClick={() => setRotateResult(null)}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 text-sm">
-                Done (I've copied the secret)
+                Done (I&apos;ve copied the secret)
               </button>
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function GatewaysAdminPage() {
           <li>Body shape A (preferred): <code className="text-[var(--text-muted)]">{'{ gatewayId, events:[{kind:BOARD|ALIGHT, tagId, occurredAt, rssiDbm?}] }'}</code></li>
           <li>Body shape B (fallback): <code className="text-[var(--text-muted)]">{'{ gatewayId, scanWindow:{startedAt, endedAt, observations:[...]} }'}</code> — server runs hysteresis</li>
           <li>Idempotent on (scheduleId, passengerId, occurredAt ±5s, direction)</li>
-          <li>Active trip auto-resolved as the SCHEDULED|STARTED|EN_ROUTE trip on the gateway's vehicle within ±2h</li>
+          <li>Active trip auto-resolved as the SCHEDULED|STARTED|EN_ROUTE trip on the gateway&apos;s vehicle within ±2h</li>
         </ul>
       </div>
     </div>

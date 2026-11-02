@@ -1,5 +1,6 @@
 'use client';
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Banknote, RefreshCw, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
@@ -283,10 +284,10 @@ export default function FinanceDashboard() {
                           )}
                         </td>
                         <td className="px-5 py-4">
-                          {key === 'rental'      && <a href="/rental/invoices" className="text-xs text-blue-400 hover:underline">{tLabel('View →')}</a>}
-                          {key === 'leasing'     && <a href="/leasing/invoices" className="text-xs text-violet-400 hover:underline">{tLabel('View →')}</a>}
-                          {key === 'maintenance' && <a href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">{tLabel('View →')}</a>}
-                          {key === 'payments'    && <a href="/finance/payments" className="text-xs text-green-400 hover:underline">{tLabel('View →')}</a>}
+                          {key === 'rental'      && <Link href="/rental/invoices" className="text-xs text-blue-400 hover:underline">{tLabel('View →')}</Link>}
+                          {key === 'leasing'     && <Link href="/leasing/invoices" className="text-xs text-violet-400 hover:underline">{tLabel('View →')}</Link>}
+                          {key === 'maintenance' && <Link href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">{tLabel('View →')}</Link>}
+                          {key === 'payments'    && <Link href="/finance/payments" className="text-xs text-green-400 hover:underline">{tLabel('View →')}</Link>}
                         </td>
                       </tr>
                     );

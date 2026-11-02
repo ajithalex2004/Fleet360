@@ -291,7 +291,18 @@ const RECOVERABLE_PRISMA_ERROR_PATTERNS: RegExp[] = [
 ];
 
 const prismaClientSingleton = () => {
+  // Connection strings come only from the environment. A hard-coded
+  // production owner URL that replaced certain DATABASE_URLs was removed here
+  // (it leaked the owner credential and silently pointed dev machines at
+  // production with DDL rights).
+  let customDbUrl = process.env.DATABASE_URL;
+  if (customDbUrl && customDbUrl.startsWith('postgresql+psycopg://')) {
+    customDbUrl = customDbUrl.replace('postgresql+psycopg://', 'postgresql://');
+    process.env.DATABASE_URL = customDbUrl;
+  }
+
   const client = new PrismaClient({
+    datasources: customDbUrl ? { db: { url: customDbUrl } } : undefined,
     log: [
       { level: 'error', emit: 'event' },
       ...(process.env.NODE_ENV === 'development'

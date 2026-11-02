@@ -1,25 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
 import {
   Building2,
   Users,
   Plus,
   Search,
-  Phone,
   Mail,
   ShieldCheck,
   CreditCard,
-  Percent,
   CheckCircle2,
   Trash2,
-  Send,
   MessageSquare,
-  Sparkles,
-  ArrowRight,
-  DollarSign,
-  AlertCircle,
   X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
@@ -377,9 +371,7 @@ export default function CorporateClientsPage() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
-                            <span className="flex items-center gap-1 font-mono text-cyan-300">
-                              <Phone className="w-3 h-3 text-cyan-400" /> {user.mobileNumber}
-                            </span>
+                            <PhoneCell value={user.mobileNumber} />
                             <span className="flex items-center gap-1">
                               <Mail className="w-3 h-3 text-[var(--text-faint)]" /> {user.email}
                             </span>
@@ -550,13 +542,11 @@ export default function CorporateClientsPage() {
 
               <div>
                 <label className="text-[var(--text-muted)] block mb-1 font-semibold">Mobile Number (WhatsApp OTP) *</label>
-                <input
-                  type="text"
-                  required
+                <PhoneInput
                   value={newUserMobile}
-                  onChange={(e) => setNewUserMobile(e.target.value)}
-                  placeholder="e.g. +971 50 887 6543"
-                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] font-mono"
+                  onChange={(val) => setNewUserMobile(val)}
+                  placeholder="50 123 4567"
+                  required
                 />
               </div>
 

@@ -431,7 +431,7 @@ function RoutePlannerInner() {
               </select>
             </div>
             <p className="text-[11px] text-[var(--text-faint)]">
-              Auto-suggested from origin and destination. Pick from the dropdown to load an existing route's stops.
+              Auto-suggested from origin and destination. Pick from the dropdown to load an existing route&apos;s stops.
             </p>
           </div>
 

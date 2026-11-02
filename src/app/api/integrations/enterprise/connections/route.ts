@@ -4,6 +4,10 @@ export const dynamic = 'force-dynamic';
  * GET & POST /api/integrations/enterprise/connections
  * ----------------------------------------------------
  * Manage multi-tenant enterprise ERP connections (SAP, NetSuite, Dynamics, Odoo, REST).
+ *
+ * Responses never contain auth_credentials or header values. A new
+ * connection gets its own inbound webhook secret, returned once in the
+ * POST response (rotate it with POST .../connections/[id]/webhook-secret).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -11,6 +15,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { getAdapterForConnection } from '@/lib/agents/enterprise-bridge/agent';
+import { checkErpUrl } from '@/lib/agents/enterprise-bridge/erp-fetch';
+import { generateWebhookSecret, toPublicConnection } from '@/lib/agents/enterprise-bridge/connection-secrets';
 import { EnterpriseConnectionConfig } from '@/lib/agents/types';
 import { withAuditedAction } from '@/lib/audited-action';
 
@@ -24,35 +30,18 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
   await ensureAgentSchema();
 
-  return withTenantRls(prisma, tenantId, async () => {
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const connections = await prisma.$queryRawUnsafe<any[]>(`
+      const connections = await tx.$queryRawUnsafe<Record<string, unknown>[]>(`
         SELECT * FROM enterprise_connections
         WHERE tenant_id = $1
         ORDER BY created_at DESC
       `, tenantId);
 
-      // Mask sensitive credentials
-      const sanitized = connections.map((c) => ({
-        id: c.id,
-        tenantId: c.tenant_id,
-        systemName: c.system_name,
-        systemType: c.system_type,
-        baseUrl: c.base_url,
-        authType: c.auth_type,
-        headers: typeof c.headers === 'string' ? JSON.parse(c.headers) : c.headers,
-        fieldMappings: typeof c.field_mappings === 'string' ? JSON.parse(c.field_mappings) : c.field_mappings,
-        isActive: c.is_active,
-        rateLimitPerMin: c.rate_limit_per_min,
-        healthStatus: c.health_status,
-        healthMessage: c.health_message,
-        lastSyncAt: c.last_sync_at,
-        createdAt: c.created_at,
-      }));
-
-      return NextResponse.json({ connections: sanitized });
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      return NextResponse.json({ connections: connections.map(toPublicConnection) });
+    } catch (err: unknown) {
+      console.error('[enterprise/connections GET]', err);
+      return NextResponse.json({ error: 'Failed to load connections' }, { status: 500 });
     }
   });
 }
@@ -65,52 +54,69 @@ async function handlePOST(req: NextRequest) {
   const { tenantId } = authz;
   await ensureAgentSchema();
 
-  return withTenantRls(prisma, tenantId, async () => {
+  const body = stripTenantOwnershipFields(await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const {
+    systemName,
+    systemType,
+    baseUrl,
+    authType = 'API_KEY',
+    authCredentials = {},
+    headers = {},
+    fieldMappings = {},
+    rateLimitPerMin = 60,
+    testNow = true,
+  } = body as {
+    systemName?: string;
+    systemType?: EnterpriseConnectionConfig['systemType'];
+    baseUrl?: string;
+    authType?: EnterpriseConnectionConfig['authType'];
+    authCredentials?: Record<string, unknown>;
+    headers?: Record<string, string>;
+    fieldMappings?: Record<string, string>;
+    rateLimitPerMin?: number;
+    testNow?: boolean;
+  };
+
+  if (!systemName || !systemType || !baseUrl) {
+    return NextResponse.json({ error: 'systemName, systemType, and baseUrl are required' }, { status: 400 });
+  }
+  // https, public host. The address itself is checked again on every
+  // request the adapters make (erp-fetch.ts).
+  const urlCheck = checkErpUrl(baseUrl);
+  if (!urlCheck.ok) {
+    return NextResponse.json({ error: urlCheck.error }, { status: 400 });
+  }
+
+  // The inbound webhook secret is Fleet360's to issue, never the caller's.
+  const webhookSecret = generateWebhookSecret();
+  const credentials = { ...(authCredentials && typeof authCredentials === 'object' ? authCredentials : {}), webhookSecret };
+
+  let healthStatus = 'UNTESTED';
+  let healthMessage = 'Connection saved without test.';
+  if (testNow) {
+    const adapter = getAdapterForConnection({
+      id: 'TEMP',
+      tenantId,
+      systemName,
+      systemType,
+      baseUrl,
+      authType,
+      authCredentials: credentials,
+      headers,
+      fieldMappings,
+      isActive: true,
+      rateLimitPerMin,
+      healthStatus: 'UNTESTED',
+    });
+    // Outside the database transaction: a slow ERP must not hold a connection.
+    const testRes = await adapter.testConnection();
+    healthStatus = testRes.success ? 'HEALTHY' : 'ERROR';
+    healthMessage = testRes.message;
+  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const rawBody = await req.json();
-      const body = stripTenantOwnershipFields(rawBody);
-      const {
-        systemName,
-        systemType,
-        baseUrl,
-        authType = 'API_KEY',
-        authCredentials = {},
-        headers = {},
-        fieldMappings = {},
-        rateLimitPerMin = 60,
-        testNow = true,
-      } = body;
-
-      if (!systemName || !systemType || !baseUrl) {
-        return NextResponse.json({ error: 'systemName, systemType, and baseUrl are required' }, { status: 400 });
-      }
-
-      let healthStatus = 'UNTESTED';
-      let healthMessage = 'Connection saved without test.';
-
-      const tempConfig: EnterpriseConnectionConfig = {
-        id: 'TEMP',
-        tenantId,
-        systemName,
-        systemType,
-        baseUrl,
-        authType,
-        authCredentials,
-        headers,
-        fieldMappings,
-        isActive: true,
-        rateLimitPerMin,
-        healthStatus: 'UNTESTED',
-      };
-
-      if (testNow) {
-        const adapter = getAdapterForConnection(tempConfig);
-        const testRes = await adapter.testConnection();
-        healthStatus = testRes.success ? 'HEALTHY' : 'ERROR';
-        healthMessage = testRes.message;
-      }
-
-      const rows = await prisma.$queryRawUnsafe<any[]>(`
+      const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(`
         INSERT INTO enterprise_connections (
           tenant_id, system_name, system_type, base_url, auth_type,
           auth_credentials, headers, field_mappings, rate_limit_per_min,
@@ -125,9 +131,9 @@ async function handlePOST(req: NextRequest) {
         tenantId,
         systemName,
         systemType,
-        baseUrl,
+        urlCheck.url.toString(),
         authType,
-        JSON.stringify(authCredentials),
+        JSON.stringify(credentials),
         JSON.stringify(headers),
         JSON.stringify(fieldMappings),
         rateLimitPerMin,
@@ -137,11 +143,14 @@ async function handlePOST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        connection: rows[0],
+        connection: toPublicConnection(rows[0]),
+        // Shown once: configure it as the ERP's x-webhook-secret header.
+        webhookSecret,
         testResult: { healthStatus, healthMessage },
       });
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message }, { status: 500 });
+    } catch (err: unknown) {
+      console.error('[enterprise/connections POST]', err);
+      return NextResponse.json({ error: 'Failed to save connection' }, { status: 500 });
     }
   });
 }

@@ -342,7 +342,7 @@ function BehaviorInner() {
 
         {!driverId && !err && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-            Loading session… (or sign in via the launcher if you haven't)
+            Loading session… (or sign in via the launcher if you haven&apos;t)
           </div>
         )}
 

@@ -19,6 +19,7 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { erpFetch } from '@/lib/agents/enterprise-bridge/erp-fetch';
 
 export type DocumentWebhookEvent =
   | 'DOCUMENT_EXTRACTED'
@@ -104,9 +105,10 @@ export async function dispatchDocumentWebhook(
     console.warn('[WebhookDispatcher] Connection lookup warning:', dbErr);
   }
 
-  // Fallback webhook endpoint if configured via environment
+  // Fallback webhook endpoint if configured via environment (operator-set,
+  // so it is not subject to the tenant-URL checks of erpFetch).
   const fallbackWebhookUrl = process.env.DOCUMENT_WEBHOOK_URL;
-  const webhookSecret = process.env.DOCUMENT_WEBHOOK_SECRET || 'fleet360_webhook_secret_default';
+  const fallbackSecret = process.env.DOCUMENT_WEBHOOK_SECRET;
 
   const targets: Array<{
     connectionId?: string;
@@ -114,31 +116,49 @@ export async function dispatchDocumentWebhook(
     url: string;
     secret: string;
     customHeaders: Record<string, string>;
+    tenantUrl: boolean;
   }> = [];
+  const skipped: WebhookDeliveryResult[] = [];
 
   for (const conn of connections) {
     if (conn.base_url) {
-      const creds = (typeof conn.auth_credentials === 'string' ? JSON.parse(conn.auth_credentials) : conn.auth_credentials || {}) as { webhookSecret?: string; apiKey?: string };
-      const secret = creds.webhookSecret || creds.apiKey || webhookSecret;
+      const creds = (typeof conn.auth_credentials === 'string' ? JSON.parse(conn.auth_credentials) : conn.auth_credentials || {}) as { webhookSecret?: string };
+      const url = conn.base_url.endsWith('/') ? `${conn.base_url}api/webhooks/fleet360` : `${conn.base_url}/api/webhooks/fleet360`;
+      // Signed with the connection's own webhook secret only. It used to fall
+      // back to the ERP API key, or to a default secret that is in this
+      // repository, so anyone could forge a "Fleet360" signature.
+      if (!creds.webhookSecret) {
+        skipped.push({ targetUrl: url, status: 'SKIPPED', errorMessage: 'Connection has no webhook secret; rotate one to receive document webhooks.', durationMs: 0 });
+        continue;
+      }
       const headers = (typeof conn.headers === 'string' ? JSON.parse(conn.headers) : conn.headers || {}) as Record<string, string>;
       targets.push({
         connectionId: conn.id,
         systemType: conn.system_type || 'EXTERNAL_ERP',
-        url: conn.base_url.endsWith('/') ? `${conn.base_url}api/webhooks/fleet360` : `${conn.base_url}/api/webhooks/fleet360`,
-        secret,
+        url,
+        secret: creds.webhookSecret,
         customHeaders: headers,
+        tenantUrl: true,
       });
     }
   }
 
-  if (targets.length === 0 && fallbackWebhookUrl) {
-    targets.push({
-      systemType: 'CUSTOM_REST',
-      url: fallbackWebhookUrl,
-      secret: webhookSecret,
-      customHeaders: {},
-    });
+  if (targets.length === 0 && skipped.length === 0 && fallbackWebhookUrl) {
+    if (!fallbackSecret) {
+      console.warn('[WebhookDispatcher] DOCUMENT_WEBHOOK_URL is set without DOCUMENT_WEBHOOK_SECRET; not sending unsigned webhooks.');
+    } else {
+      targets.push({
+        systemType: 'CUSTOM_REST',
+        url: fallbackWebhookUrl,
+        secret: fallbackSecret,
+        customHeaders: {},
+        tenantUrl: false,
+      });
+    }
   }
+
+  if (targets.length === 0 && skipped.length > 0) return skipped;
+  results.push(...skipped);
 
   if (targets.length === 0) {
     return [
@@ -156,18 +176,22 @@ export async function dispatchDocumentWebhook(
     const signature = generateWebhookSignature(payloadString, target.secret);
 
     try {
-      const response = await fetch(target.url, {
+      const requestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...target.customHeaders,
+          // After the connection's own headers so they cannot override them.
           'x-fleet360-event': event,
           'x-fleet360-signature': signature,
           'x-fleet360-tenant': tenantId,
-          ...target.customHeaders,
         },
         body: payloadString,
-        signal: AbortSignal.timeout(5000), // 5s timeout
-      });
+      };
+      // A tenant-entered URL goes through the SSRF-guarded client.
+      const response = target.tenantUrl
+        ? await erpFetch(target.url, { ...requestInit, timeoutMs: 5000 })
+        : await fetch(target.url, { ...requestInit, redirect: 'manual', signal: AbortSignal.timeout(5000) });
 
       const durationMs = Date.now() - startTime;
       const ok = response.ok;

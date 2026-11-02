@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
-import { withTenantRls, withPlatformAdmin, withSystemJob } from '@/lib/rls';
+import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 
 const suffix = Date.now();
 const tenantA = `t001-a-${suffix}`;
@@ -106,7 +106,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
     if (rentalReady) {
       try {
         await withTenantRls(basePrisma, tenantA, async (tx) => {
-          const cA = await (tx as any).rentalCustomer.create({
+          const cA = await tx.rentalCustomer.create({
             data: {
               tenantId: tenantA,
               fullName: `Customer A ${suffix}`,
@@ -115,7 +115,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
             },
           });
           customerA = cA.id;
-          const bA = await (tx as any).rentalBooking.create({
+          const bA = await tx.rentalBooking.create({
             data: {
               tenantId: tenantA,
               bookingRef: `BK-A-${suffix}`,
@@ -130,7 +130,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
         });
 
         await withTenantRls(basePrisma, tenantB, async (tx) => {
-          const cB = await (tx as any).rentalCustomer.create({
+          const cB = await tx.rentalCustomer.create({
             data: {
               tenantId: tenantB,
               fullName: `Customer B ${suffix}`,
@@ -139,7 +139,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
             },
           });
           customerB = cB.id;
-          const bB = await (tx as any).rentalBooking.create({
+          const bB = await tx.rentalBooking.create({
             data: {
               tenantId: tenantB,
               bookingRef: `BK-B-${suffix}`,
@@ -164,14 +164,14 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
       await withPlatformAdmin(basePrisma, async (tx) => {
         if (rentalReady) {
           try {
-            await (tx as any).rentalBooking.deleteMany({
+            await tx.rentalBooking.deleteMany({
               where: { tenantId: { in: [tenantA, tenantB] } },
             });
           } catch {
             /* ignore */
           }
           try {
-            await (tx as any).rentalCustomer.deleteMany({
+            await tx.rentalCustomer.deleteMany({
               where: { tenantId: { in: [tenantA, tenantB] } },
             });
           } catch {
@@ -278,7 +278,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
     it('tenant A lists only A bookings', async () => {
       if (!rentalReady) return;
       const rows = await withTenantRls(basePrisma, tenantA, async (tx) =>
-        (tx as any).rentalBooking.findMany({
+        tx.rentalBooking.findMany({
           where: { id: { in: [bookingA, bookingB] } },
           select: { id: true, tenantId: true },
         }),
@@ -291,7 +291,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
     it('tenant A cannot update tenant B booking', async () => {
       if (!rentalReady) return;
       const result = await withTenantRls(basePrisma, tenantA, async (tx) =>
-        (tx as any).rentalBooking.updateMany({
+        tx.rentalBooking.updateMany({
           where: { id: bookingB },
           data: { status: 'CANCELLED' },
         }),
@@ -303,7 +303,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
       if (!rentalReady) return;
       await expect(
         withTenantRls(basePrisma, tenantA, async (tx) =>
-          (tx as any).rentalBooking.create({
+          tx.rentalBooking.create({
             data: {
               tenantId: tenantB,
               bookingRef: `BK-EVIL-${suffix}`,

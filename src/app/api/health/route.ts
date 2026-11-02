@@ -20,6 +20,14 @@ import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
 import { schemaReport } from '@/lib/db/schema-registry';
 import { storageStatus } from '@/lib/storage/health';
+import { getBackgroundJobsAndOutboxHealth } from '@/lib/jobs/health';
+import {
+  getDbPoolMetrics,
+  getEnterpriseBridgeMetrics,
+  getSecurityHealthMetrics,
+  getAiHealthAndSpendingMetrics,
+  getGoogleMapsAndApisSpendingMetrics,
+} from '@/lib/health/extended-metrics';
 
 export const dynamic = 'force-dynamic'; // never cache
 
@@ -72,8 +80,47 @@ export async function GET() {
   const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
   const schema  = await schemaReport();
   const storage = await storageStatus();
-  const status  = missing.length > 0 || schema.status === 'incomplete' || !storage.durable || !storage.ok
-    ? 'degraded' : 'ok';
+
+  // Background jobs & outbox status
+  let jobsAndOutbox: Awaited<ReturnType<typeof getBackgroundJobsAndOutboxHealth>> | null = null;
+  try {
+    jobsAndOutbox = await getBackgroundJobsAndOutboxHealth();
+  } catch (err) {
+    console.error('[api/health] jobs/outbox health check failed:', err);
+  }
+
+  // Extended Metrics: DB Pool, Enterprise Bridge, Security, AI & Maps Spending
+  let dbPoolData: Awaited<ReturnType<typeof getDbPoolMetrics>> | null = null;
+  let enterpriseData: Awaited<ReturnType<typeof getEnterpriseBridgeMetrics>> | null = null;
+  let securityData: Awaited<ReturnType<typeof getSecurityHealthMetrics>> | null = null;
+  let aiData: Awaited<ReturnType<typeof getAiHealthAndSpendingMetrics>> | null = null;
+  let mapsData: Awaited<ReturnType<typeof getGoogleMapsAndApisSpendingMetrics>> | null = null;
+  try {
+    [dbPoolData, enterpriseData, securityData, aiData, mapsData] = await Promise.all([
+      getDbPoolMetrics(),
+      getEnterpriseBridgeMetrics(),
+      getSecurityHealthMetrics(),
+      getAiHealthAndSpendingMetrics(),
+      getGoogleMapsAndApisSpendingMetrics(),
+    ]);
+  } catch (err) {
+    console.error('[api/health] extended metrics failed:', err);
+  }
+
+  const jobsDegraded =
+    jobsAndOutbox?.jobRuns24h.status === 'critical' ||
+    jobsAndOutbox?.outbox.status === 'critical' ||
+    dbPoolData?.status === 'critical' ||
+    securityData?.status === 'critical';
+
+  const status =
+    missing.length > 0 ||
+    schema.status === 'incomplete' ||
+    !storage.durable ||
+    !storage.ok ||
+    jobsDegraded
+      ? 'degraded'
+      : 'ok';
 
   // Optional Go backend readiness probe
   let backendInfo: { status: string; version?: string; error?: string } | undefined;
@@ -90,9 +137,6 @@ export async function GET() {
         version: bData.version,
       };
     } catch (bErr) {
-      // Log server-side only — the raw error can contain the internal Go backend
-      // hostname (e.g. Railway's *.railway.internal address), which shouldn't be
-      // exposed to an unauthenticated caller.
       console.error('[api/health] backend readiness check failed:', bErr);
       backendInfo = { status: 'unreachable' };
     }
@@ -104,11 +148,23 @@ export async function GET() {
     integrations,
     missingConfig: missing,
     schema: { status: schema.status, missing: schema.missingCount },
-    // Uploads: durable (object store or mounted volume) and working. The
-    // error detail stays in the server log (public probe).
     storage: { backend: storage.backend, durable: storage.durable, ok: storage.ok },
     release: RELEASE,
     backend: backendInfo,
+    jobs: jobsAndOutbox
+      ? {
+          scheduler: jobsAndOutbox.scheduler.status,
+          isTicking: jobsAndOutbox.scheduler.isTicking,
+          failures24h: jobsAndOutbox.jobRuns24h.failed24h,
+          pendingOutbox: jobsAndOutbox.outbox.pendingCount,
+          outboxLagMs: jobsAndOutbox.outbox.lagMs,
+        }
+      : undefined,
+    dbPool: dbPoolData ?? undefined,
+    enterpriseBridge: enterpriseData ?? undefined,
+    security: securityData ?? undefined,
+    aiSpending: aiData ?? undefined,
+    googleApisSpending: mapsData ?? undefined,
     timestamp: new Date().toISOString(),
   });
 }

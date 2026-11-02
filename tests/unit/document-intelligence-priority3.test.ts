@@ -21,6 +21,10 @@ import { hasTestDatabase } from '../db-guard';
 const NO_TEST_DB = !hasTestDatabase();
 
 
+// Tenant-entered URLs go through the SSRF-guarded client (erp-fetch.ts).
+const erpFetchMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/agents/enterprise-bridge/erp-fetch', () => ({ erpFetch: erpFetchMock }));
+
 vi.mock('@/lib/rls', () => ({
   withTenantRls: vi.fn().mockImplementation((_prisma: any, _tenantId: string, fn: any) => fn(_prisma)),
 }));
@@ -71,12 +75,11 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
         .mockResolvedValueOnce(mockConn) // connection lookup
         .mockResolvedValueOnce([]); // enterprise_sync_logs insertion
 
-      const fetchMock = vi.fn().mockResolvedValue({
+      const fetchMock = erpFetchMock.mockResolvedValue({
         ok: true,
         status: 200,
         text: () => Promise.resolve('{"received": true}'),
       });
-      globalThis.fetch = fetchMock;
 
       const results = await dispatchDocumentWebhook('tenant-sap', 'DOCUMENT_EXTRACTED', {
         documentId: 'DOC-999',
@@ -93,6 +96,46 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
       expect(calledOpts.headers['x-fleet360-event']).toBe('DOCUMENT_EXTRACTED');
       expect(calledOpts.headers['x-fleet360-signature']).toBeDefined();
       expect(calledOpts.headers['X-Custom-Auth']).toBe('ERP-Token-99');
+    });
+
+    it('does not sign with the API key or a built-in default when the connection has no webhook secret', async () => {
+      vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValueOnce([
+        {
+          id: '22222222-2222-2222-2222-222222222222',
+          system_type: 'CUSTOM_REST',
+          base_url: 'https://erp.example.com',
+          auth_credentials: JSON.stringify({ apiKey: 'erp-api-key' }),
+          headers: '{}',
+        },
+      ]);
+      erpFetchMock.mockClear();
+
+      const results = await dispatchDocumentWebhook('tenant-x', 'DOCUMENT_EXTRACTED', { documentId: 'DOC-1' });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe('SKIPPED');
+      expect(results[0].errorMessage).toMatch(/no webhook secret/);
+      expect(erpFetchMock).not.toHaveBeenCalled();
+    });
+
+    it('a connection header cannot override the signature', async () => {
+      vi.spyOn(prisma, '$queryRawUnsafe')
+        .mockResolvedValueOnce([
+          {
+            id: '33333333-3333-3333-3333-333333333333',
+            system_type: 'CUSTOM_REST',
+            base_url: 'https://erp.example.com',
+            auth_credentials: JSON.stringify({ webhookSecret: 'whsec_test_secret_value_1234' }),
+            headers: JSON.stringify({ 'x-fleet360-signature': 'forged' }),
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      erpFetchMock.mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve('') });
+
+      await dispatchDocumentWebhook('tenant-x', 'DOCUMENT_EXTRACTED', { documentId: 'DOC-2' });
+
+      const [, opts] = erpFetchMock.mock.calls.at(-1)!;
+      expect(opts.headers['x-fleet360-signature']).not.toBe('forged');
     });
   });
 

@@ -10,6 +10,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import PhoneInput from '@/components/ui/PhoneInput';
 import PasswordInput from '@/components/ui/PasswordInput';
 import ModuleAccessGrid, {
   maskFromSelection, toggleLevel, type AccessLevel, type AccessModuleRow,
@@ -167,8 +168,8 @@ export default function NewUserDialog({ tenants, defaultTenantId, defaultOnboard
                 <input id="nu-last" className={INPUT} value={form.lastName} onChange={set('lastName')} required={onboarding === 'password'} maxLength={100} /></div>
               <div><label htmlFor="nu-email" className={LABEL}>Email *</label>
                 <input id="nu-email" type="email" className={INPUT} value={form.email} onChange={set('email')} required maxLength={254} placeholder="name@company.com" /></div>
-              <div><label htmlFor="nu-mobile" className={LABEL}>Mobile</label>
-                <input id="nu-mobile" className={INPUT} value={form.mobileNumber} onChange={set('mobileNumber')} maxLength={40} /></div>
+              <div><label htmlFor="nu-mobile" className={LABEL}>Mobile Number</label>
+                <PhoneInput id="nu-mobile" value={form.mobileNumber} onChange={(full) => setForm((p) => ({ ...p, mobileNumber: full }))} placeholder="50 123 4567" /></div>
               <div><label htmlFor="nu-position" className={LABEL}>Position</label>
                 <input id="nu-position" className={INPUT} value={form.position} onChange={set('position')} maxLength={100} placeholder="Fleet Supervisor" /></div>
               {onboarding === 'password' && (

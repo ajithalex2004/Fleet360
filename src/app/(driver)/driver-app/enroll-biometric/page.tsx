@@ -144,9 +144,9 @@ export default function EnrollBiometricPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-700 text-2xl font-bold text-white">
             🔒
           </div>
-          <h1 className="text-2xl font-bold text-white">You're signed in</h1>
+          <h1 className="text-2xl font-bold text-white">You&apos;re signed in</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Your device doesn't support fingerprint or face sign-in. That's fine — you can still
+            Your device doesn&apos;t support fingerprint or face sign-in. That&apos;s fine — you can still
             use the app. On your next visit, sign in with your password.
           </p>
         </div>
@@ -176,9 +176,9 @@ export default function EnrollBiometricPage() {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-2xl font-bold text-white">
           ✓
         </div>
-        <h1 className="text-2xl font-bold text-white">You're signed in</h1>
+        <h1 className="text-2xl font-bold text-white">You&apos;re signed in</h1>
         <p className="mt-2 text-sm text-slate-400">
-          One last step: register your device's biometric so you can sign in faster next time.
+          One last step: register your device&apos;s biometric so you can sign in faster next time.
         </p>
       </div>
 

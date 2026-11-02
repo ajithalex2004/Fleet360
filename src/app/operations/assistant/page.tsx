@@ -58,6 +58,7 @@ const BUTTON_PROMPTS: Record<string, string> = {
 };
 
 function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.ReactElement | null {
+  const send = React.useContext(ChatCtx);
   if (!node || typeof node !== 'object') return null;
   const n = node as CrayonNode;
   const p = n.props ?? {};
@@ -83,7 +84,6 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
         </div>
       );
     case 'List': {
-      const send  = React.useContext(ChatCtx);
       const items = (p.items ?? []) as Array<{ title: string; subtitle?: string; iconName?: string; value?: string; name?: string }>;
       return (
         <div className="px-5 py-3">
@@ -152,7 +152,6 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
       );
     }
     case 'Button': {
-      const send    = React.useContext(ChatCtx);
       const btnName = String(p.name ?? '');
       const label   = String(p.children ?? p.label ?? '');
 
@@ -261,11 +260,11 @@ function ToolComponent({ call }: { call: ToolCall }) {
     case 'showLogisticsKPI':             return <ServiceLogisticsKPICard />;
     case 'showLeasingKPI':               return <ServiceLeasingKPICard />;
     case 'showChauffeurKPI':             return <ServiceChauffeurKPICard />;
-    case 'generateUtilizationReport':    return <ReportUtilizationCard {...(call.args as any)} />;
-    case 'generateRevenueReport':        return <ReportRevenueCard     {...(call.args as any)} />;
-    case 'generateMaintenanceCostReport':return <ReportMaintenanceCard {...(call.args as any)} />;
-    case 'scheduleReport':               return <ReportScheduleCard    {...(call.args as any)} />;
-    case 'showContractClauses':          return <ContractClausesCard   {...(call.args as any)} />;
+    case 'generateUtilizationReport':    return <ReportUtilizationCard {...(call.args as React.ComponentProps<typeof ReportUtilizationCard>)} />;
+    case 'generateRevenueReport':        return <ReportRevenueCard     {...(call.args as React.ComponentProps<typeof ReportRevenueCard>)} />;
+    case 'generateMaintenanceCostReport':return <ReportMaintenanceCard {...(call.args as React.ComponentProps<typeof ReportMaintenanceCard>)} />;
+    case 'scheduleReport':               return <ReportScheduleCard    {...(call.args as React.ComponentProps<typeof ReportScheduleCard>)} />;
+    case 'showContractClauses':          return <ContractClausesCard   {...(call.args as React.ComponentProps<typeof ContractClausesCard>)} />;
     default:                             return null;
   }
 }
@@ -462,7 +461,7 @@ export default function OperationsAssistantPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || busy) return;
@@ -546,7 +545,7 @@ export default function OperationsAssistantPage() {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     sendMessage('Show me the full operations dashboard');
-  }, []);
+  }, [sendMessage]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); }

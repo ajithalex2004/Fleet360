@@ -506,16 +506,27 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_direction  ON whatsapp_messages(direction);
 
       -- ── whatsapp_templates ─────────────────────────────────────────────────────
+      -- Same columns as prisma/migrations/20260910000021: the seed INSERT
+      -- below writes display_name / category / language, which this fallback
+      -- DDL used to omit, so on a fresh database the whole block failed.
       CREATE TABLE IF NOT EXISTS whatsapp_templates (
         id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         template_name  TEXT NOT NULL UNIQUE,
+        display_name   TEXT NOT NULL,
+        category       TEXT NOT NULL,
+        language       TEXT DEFAULT 'en',
         body_en        TEXT NOT NULL,
         body_ar        TEXT,
+        variables      JSONB DEFAULT '[]',
         is_active      BOOLEAN NOT NULL DEFAULT true,
         usage_count    INT NOT NULL DEFAULT 0,
         created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS display_name TEXT;
+      ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS category     TEXT;
+      ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS language     TEXT DEFAULT 'en';
+      ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS variables    JSONB DEFAULT '[]';
 
       -- Default auto-reply templates, one per classified intent — safe to
       -- re-run, only inserts on first migration. Matches the pre-existing

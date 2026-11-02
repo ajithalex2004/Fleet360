@@ -1,7 +1,10 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import PhoneInput from '@/components/ui/PhoneInput';
+import PhoneCell from '@/components/ui/PhoneCell';
 import { Building2, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 //  Types 
 interface HNode { id: string; name: string; code?: string; level: string; }
@@ -279,7 +282,7 @@ export default function CustomerPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-[var(--text-main)] max-w-[140px] truncate">{c.email??'-'}</td>
-                    <td className="px-3 py-3 text-[var(--text-main)] whitespace-nowrap">{c.mobileCountryCode} {c.mobileNumber??'-'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap"><PhoneCell value={`${c.mobileCountryCode || ''}${c.mobileNumber || ''}`} /></td>
                     <td className="px-3 py-3 text-[var(--text-muted)]">{c.contactPerson??'-'}</td>
                     <td className="px-3 py-3 text-xs">
                       <div className="text-[var(--text-muted)]">{c.region?.name??'-'}</div>
@@ -364,25 +367,48 @@ export default function CustomerPage() {
                           </select>
                         </Fld>
                         <Fld label="Region (Hierarchy Level 1)">
-                          <select className={sel} value={form.regionId??''} onChange={async e=>{set('regionId',e.target.value);set('departmentId','');set('unitId','');if(e.target.value)await loadDepts(e.target.value);else setDepts([]);}}>
-                            <option value="">Select region</option>
-                            {regions.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
-                          </select>
+                          <SearchableSelect
+                            value={form.regionId ?? ''}
+                            onChange={async (val) => {
+                              set('regionId', val);
+                              set('departmentId', '');
+                              set('unitId', '');
+                              if (val) await loadDepts(val);
+                              else setDepts([]);
+                            }}
+                            options={regions.map((r) => ({ value: r.id, label: r.name }))}
+                            placeholder="Select region..."
+                            searchPlaceholder="Type region name..."
+                            isClearable
+                          />
                         </Fld>
-                        {depts.length>0&&(
+                        {depts.length > 0 && (
                           <Fld label="Department (Level 2)">
-                            <select className={sel} value={form.departmentId??''} onChange={async e=>{set('departmentId',e.target.value);set('unitId','');if(e.target.value)await loadUnits(e.target.value);else setUnits([]);}}>
-                              <option value="">Select department</option>
-                              {depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
+                            <SearchableSelect
+                              value={form.departmentId ?? ''}
+                              onChange={async (val) => {
+                                set('departmentId', val);
+                                set('unitId', '');
+                                if (val) await loadUnits(val);
+                                else setUnits([]);
+                              }}
+                              options={depts.map((d) => ({ value: d.id, label: d.name }))}
+                              placeholder="Select department..."
+                              searchPlaceholder="Type department name..."
+                              isClearable
+                            />
                           </Fld>
                         )}
-                        {units.length>0&&(
+                        {units.length > 0 && (
                           <Fld label="Unit (Level 3)">
-                            <select className={sel} value={form.unitId??''} onChange={e=>set('unitId',e.target.value)}>
-                              <option value="">Select unit</option>
-                              {units.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
+                            <SearchableSelect
+                              value={form.unitId ?? ''}
+                              onChange={(val) => set('unitId', val)}
+                              options={units.map((u) => ({ value: u.id, label: u.name }))}
+                              placeholder="Select unit..."
+                              searchPlaceholder="Type unit name..."
+                              isClearable
+                            />
                           </Fld>
                         )}
                         <Fld label="Account Code" help="Accounting reference code">
@@ -400,12 +426,14 @@ export default function CustomerPage() {
                           <input type="email" className={inp} value={form.email??''} onChange={e=>set('email',e.target.value)} placeholder="Enter email address"/>
                         </Fld>
                         <Fld label="Mobile Number" req>
-                          <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.mobileCountryCode??'+971'} onChange={e=>set('mobileCountryCode',e.target.value)}>
-                              {['+971','+966','+965','+973','+968','+974','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <input className={`${inp} flex-1`} value={form.mobileNumber??''} onChange={e=>set('mobileNumber',e.target.value)} placeholder="Phone number"/>
-                          </div>
+                          <PhoneInput
+                            value={`${form.mobileCountryCode ?? '+971'}${form.mobileNumber ?? ''}`}
+                            onChange={(full, { country, nationalNumber }) => {
+                              set('mobileCountryCode', country.dialCode);
+                              set('mobileNumber', nationalNumber);
+                            }}
+                            placeholder="50 123 4567"
+                          />
                         </Fld>
                         <Fld label="Communication Language">
                           <select className={sel} value={form.communicationLanguage??'en'} onChange={e=>set('communicationLanguage',e.target.value)}>
@@ -577,12 +605,14 @@ export default function CustomerPage() {
                           <input type="email" className={inp} value={form.notificationEmail??''} onChange={e=>set('notificationEmail',e.target.value)} placeholder="Enter notification email"/>
                         </Fld>
                         <Fld label="Notification SMS">
-                          <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.notificationSmsCode??'+971'} onChange={e=>set('notificationSmsCode',e.target.value)}>
-                              {['+971','+966','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <input className={`${inp} flex-1`} value={form.notificationSms??''} onChange={e=>set('notificationSms',e.target.value)} placeholder="Phone number"/>
-                          </div>
+                          <PhoneInput
+                            value={`${form.notificationSmsCode ?? '+971'}${form.notificationSms ?? ''}`}
+                            onChange={(full, { country, nationalNumber }) => {
+                              set('notificationSmsCode', country.dialCode);
+                              set('notificationSms', nationalNumber);
+                            }}
+                            placeholder="50 123 4567"
+                          />
                         </Fld>
                       </div>
                       <div className="flex items-center gap-6 mt-2">

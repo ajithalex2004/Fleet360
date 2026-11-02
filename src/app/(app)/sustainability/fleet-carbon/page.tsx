@@ -3,23 +3,27 @@ import React, { useState, useEffect } from 'react';
 
 interface DashData {
   fleet?: {
-    total_vehicles: number;
-    ev_count: number;
-    hybrid_count: number;
-    diesel_count: number;
-    petrol_count: number;
-    ev_percent: number;
-    total_km: number;
-    ev_km: number;
-    diesel_litres: number;
-    petrol_litres: number;
-    scope1_kg: number;
-    scope2_kg: number;
+    total_vehicles?: number;
+    ev_count?: number;
+    hybrid_count?: number;
+    diesel_count?: number;
+    petrol_count?: number;
+    ev_percent?: number;
+    ev_pct?: number;
+    total_km?: number;
+    ev_km?: number;
+    diesel_litres?: number;
+    petrol_litres?: number;
+    scope1_kg?: number;
+    scope2_kg?: number;
   };
   scope?: {
-    scope1: { total_kg: number };
-    scope2: { total_kg: number };
-    scope3: { total_kg: number };
+    scope1?: { total_kg?: number };
+    scope2?: { total_kg?: number };
+    scope3?: { total_kg?: number };
+    scope1_kg?: number;
+    scope2_kg?: number;
+    scope3_avoided_kg?: number;
   };
 }
 
@@ -50,15 +54,26 @@ export default function FleetCarbonPage() {
   const fleet = data?.fleet;
   const scope = data?.scope;
 
+  const totalVehicles = fleet?.total_vehicles ?? 0;
+  const evCount = fleet?.ev_count ?? 0;
+  const hybridCount = fleet?.hybrid_count ?? 0;
+  const dieselCount = fleet?.diesel_count ?? 0;
+  const petrolCount = fleet?.petrol_count ?? 0;
+
   const fuelTypes = fleet ? [
-    { type: 'EV',     count: fleet.ev_count,     pct: fleet.total_vehicles > 0 ? Math.round((fleet.ev_count / fleet.total_vehicles) * 100) : 0, co2: 0, color: 'emerald' },
-    { type: 'HYBRID', count: fleet.hybrid_count,  pct: fleet.total_vehicles > 0 ? Math.round((fleet.hybrid_count / fleet.total_vehicles) * 100) : 0, co2: 1.2, color: 'teal' },
-    { type: 'DIESEL', count: fleet.diesel_count,  pct: fleet.total_vehicles > 0 ? Math.round((fleet.diesel_count / fleet.total_vehicles) * 100) : 0, co2: 2.68, color: 'amber' },
-    { type: 'PETROL', count: fleet.petrol_count,  pct: fleet.total_vehicles > 0 ? Math.round((fleet.petrol_count / fleet.total_vehicles) * 100) : 0, co2: 2.31, color: 'rose' },
+    { type: 'EV',     count: evCount,     pct: totalVehicles > 0 ? Math.round((evCount / totalVehicles) * 100) : 0, co2: 0, color: 'emerald' },
+    { type: 'HYBRID', count: hybridCount,  pct: totalVehicles > 0 ? Math.round((hybridCount / totalVehicles) * 100) : 0, co2: 1.2, color: 'teal' },
+    { type: 'DIESEL', count: dieselCount,  pct: totalVehicles > 0 ? Math.round((dieselCount / totalVehicles) * 100) : 0, co2: 2.68, color: 'amber' },
+    { type: 'PETROL', count: petrolCount,  pct: totalVehicles > 0 ? Math.round((petrolCount / totalVehicles) * 100) : 0, co2: 2.31, color: 'rose' },
   ] : [];
 
-  const totalScope12 = (scope?.scope1.total_kg ?? 0) + (scope?.scope2.total_kg ?? 0);
-  const carbonIntensity = (fleet?.total_km ?? 0) > 0 ? (totalScope12 / (fleet!.total_km)).toFixed(3) : '—';
+  const scope1Kg = scope?.scope1?.total_kg ?? scope?.scope1_kg ?? 0;
+  const scope2Kg = scope?.scope2?.total_kg ?? scope?.scope2_kg ?? 0;
+  const scope3Kg = scope?.scope3?.total_kg ?? scope?.scope3_avoided_kg ?? 0;
+
+  const totalScope12 = scope1Kg + scope2Kg;
+  const totalKm = fleet?.total_km ?? 0;
+  const carbonIntensity = totalKm > 0 ? (totalScope12 / totalKm).toFixed(3) : '—';
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -98,11 +113,11 @@ export default function FleetCarbonPage() {
               <h2 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2">🏭 GHG Emissions by Scope</h2>
               <div className="space-y-4">
                 {[
-                  { label: 'Scope 1 — Direct (fuel combustion)', kg: scope?.scope1.total_kg ?? 0, color: 'bg-red-500', desc: 'Diesel + petrol burnt in fleet' },
-                  { label: 'Scope 2 — Indirect (electricity)', kg: scope?.scope2.total_kg ?? 0, color: 'bg-amber-500', desc: 'EV charging from UAE grid' },
-                  { label: 'Scope 3 — Value chain (modal shift)', kg: scope?.scope3.total_kg ?? 0, color: 'bg-blue-500', desc: 'Private car trips avoided' },
+                  { label: 'Scope 1 — Direct (fuel combustion)', kg: scope1Kg, color: 'bg-red-500', desc: 'Diesel + petrol burnt in fleet' },
+                  { label: 'Scope 2 — Indirect (electricity)', kg: scope2Kg, color: 'bg-amber-500', desc: 'EV charging from UAE grid' },
+                  { label: 'Scope 3 — Value chain (modal shift)', kg: scope3Kg, color: 'bg-blue-500', desc: 'Private car trips avoided' },
                 ].map(s => {
-                  const t = (scope?.scope1.total_kg ?? 0) + (scope?.scope2.total_kg ?? 0) + (scope?.scope3.total_kg ?? 0);
+                  const t = scope1Kg + scope2Kg + scope3Kg;
                   const pct = t > 0 ? Math.round((s.kg / t) * 100) : 0;
                   return (
                     <div key={s.label}>

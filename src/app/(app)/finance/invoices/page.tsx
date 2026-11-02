@@ -207,7 +207,7 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                       placeholder="e.g. Term 1 2024-25" className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)]" />
                   </div>
                 </div>
-                <p className="text-[10px] text-[var(--text-faint)]">👤 Use "Client Name" for the student name and "Email/Phone" for parent contact.</p>
+                <p className="text-[10px] text-[var(--text-faint)]">👤 Use &quot;Client Name&quot; for the student name and &quot;Email/Phone&quot; for parent contact.</p>
               </div>
             )}
             <div>

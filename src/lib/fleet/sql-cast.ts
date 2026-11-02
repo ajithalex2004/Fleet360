@@ -9,9 +9,10 @@
  * Same approach as src/lib/assets/sql-cast.ts.
  */
 const COLUMN_TYPES: Record<string, Record<string, string>> = {
-  fleet_allocations: { id: 'uuid', vehicle_id: 'uuid', allocation_date: 'timestamptz', expected_return_date: 'timestamptz', actual_return_date: 'timestamptz', mileage_at_allocation: 'int', mileage_at_return: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },
-  fleet_lifecycle_events: { id: 'uuid', vehicle_id: 'uuid', event_date: 'timestamptz', cost: 'numeric', metadata: 'jsonb', created_at: 'timestamptz', updated_at: 'timestamptz' },
-  fleet_transfers: { id: 'uuid', vehicle_id: 'uuid', transfer_date: 'timestamptz', mileage_at_transfer: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },
+  fleet_allocations: { id: 'uuid', allocation_date: 'timestamptz', expected_return_date: 'timestamptz', actual_return_date: 'timestamptz', mileage_at_allocation: 'int', mileage_at_return: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },
+  fleet_lifecycle_events: { id: 'uuid', event_date: 'timestamptz', cost: 'numeric', metadata: 'jsonb', created_at: 'timestamptz', updated_at: 'timestamptz' },
+  fleet_transfers: { id: 'uuid', transfer_date: 'timestamptz', mileage_at_transfer: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },
+  fleet_nui_reasons: { id: 'uuid', is_billable: 'boolean', is_active: 'boolean', created_at: 'timestamptz', updated_at: 'timestamptz' },
   fleet_vehicle_insurance: { id: 'uuid', vehicle_id: 'uuid', start_date: 'date', end_date: 'date', premium_amount: 'numeric', coverage_amount: 'numeric', deductible: 'numeric', renewal_reminder_days: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },
   fleet_work_orders: { id: 'uuid', vehicle_id: 'uuid', scheduled_date: 'timestamptz', start_date: 'timestamptz', end_date: 'timestamptz', odometer_at_entry: 'int', authorized_po_amount: 'numeric', actual_cost: 'numeric', variance: 'numeric', variance_alert: 'boolean', line_items: 'jsonb', created_at: 'timestamptz', updated_at: 'timestamptz' },
   hos_logs: { id: 'uuid', started_at: 'timestamptz', ended_at: 'timestamptz', duration_mins: 'int', created_at: 'timestamptz', updated_at: 'timestamptz' },

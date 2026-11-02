@@ -298,7 +298,7 @@ export default function RentalStaffPage() {
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <div className="text-5xl mb-4">👔</div>
           <p className="text-[var(--text-muted)] text-lg font-semibold">No staff assignments found</p>
-          <p className="text-[var(--text-faint)] text-sm mt-1">Click "+ Assign Staff" to add your first team member</p>
+          <p className="text-[var(--text-faint)] text-sm mt-1">Click &quot;+ Assign Staff&quot; to add your first team member</p>
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

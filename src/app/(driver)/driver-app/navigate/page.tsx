@@ -101,7 +101,7 @@ function NavigateInner() {
           <BackButton />
         </div>
         <div className="text-rose-300">Trip not found in offline cache.</div>
-        <div className="mt-2 text-xs text-slate-500">It hasn't been synced yet — connect to the internet and try again.</div>
+        <div className="mt-2 text-xs text-slate-500">It hasn&apos;t been synced yet — connect to the internet and try again.</div>
       </div>
     );
   }

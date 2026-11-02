@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { clearClientSession } from '@/lib/client-session';
 
 interface MeResponse { impersonatedBy?: string | null; tenantName?: string; userId?: string; }
 
@@ -42,6 +43,7 @@ export default function ImpersonationBanner() {
         alert(data?.error ?? 'Could not stop impersonating.');
         return;
       }
+      clearClientSession();
       window.location.href = '/admin/tenants';
     } finally {
       setStop(false);

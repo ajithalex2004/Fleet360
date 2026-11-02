@@ -201,7 +201,7 @@ export default function TenantSchoolBusPage() {
 
       {/* KPI cards */}
       <section>
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Today's Overview</h2>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Today&apos;s Overview</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard icon="🎒" label="Total Students" value={loadingStudents ? '…' : studentData.total}
             sub={studentData.maxStudents ? `of ${studentData.maxStudents} max` : `${studentData.active} active`}
@@ -222,7 +222,7 @@ export default function TenantSchoolBusPage() {
       {/* Today's routes table */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Today's Route Status</h2>
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Today&apos;s Route Status</h2>
           <Link href={`/portal/${slug}/school-bus`} className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
             Full route board →
           </Link>
@@ -236,7 +236,7 @@ export default function TenantSchoolBusPage() {
             <div className="p-10 text-center">
               <p className="text-3xl mb-3">🗺️</p>
               <p className="text-slate-400 text-sm font-medium">No routes scheduled for today</p>
-              <p className="text-slate-600 text-xs mt-1">Routes assigned to today's date will appear here</p>
+              <p className="text-slate-600 text-xs mt-1">Routes assigned to today&apos;s date will appear here</p>
               <Link href={`/portal/${slug}/school-bus`}
                 className="mt-4 inline-flex items-center px-4 py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-sm font-medium hover:bg-amber-500/30 transition-colors">
                 Set up routes →
@@ -299,7 +299,7 @@ export default function TenantSchoolBusPage() {
                 <p className="text-slate-400 text-sm">
                   {attendData.totalExpected > 0 ? 'No absences recorded' : 'No attendance data yet'}
                 </p>
-                <p className="text-slate-600 text-xs mt-1">Take attendance to log today's session</p>
+                <p className="text-slate-600 text-xs mt-1">Take attendance to log today&apos;s session</p>
               </div>
             ) : (
               <div className="divide-y divide-white/5">

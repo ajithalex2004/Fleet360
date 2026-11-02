@@ -203,9 +203,9 @@ export function resolveAuthorizedTenant(
     assertMembership?: (userId: string, tenantId: string) => Promise<boolean> | boolean;
   } = {},
 ): AuthorizedTenantResult {
-  const userId = headerGet(req.headers as any, 'x-user-id') || null;
-  const role = headerGet(req.headers as any, 'x-user-role') || headerGet(req.headers as any, 'x-role') || null;
-  const sessionTenant = sanitizeTenantId(headerGet(req.headers as any, 'x-tenant-id'));
+  const userId = headerGet(req.headers, 'x-user-id') || null;
+  const role = headerGet(req.headers, 'x-user-role') || headerGet(req.headers, 'x-role') || null;
+  const sessionTenant = sanitizeTenantId(headerGet(req.headers, 'x-tenant-id'));
 
   if (!sessionTenant) {
     // Authenticated routes should have middleware-injected tenant.
@@ -220,7 +220,7 @@ export function resolveAuthorizedTenant(
   const sp = req.nextUrl?.searchParams as { get?: (k: string) => string | null } | undefined;
   const requested =
     sanitizeTenantId(sp?.get?.('tenantId') ?? '') ||
-    sanitizeTenantId(headerGet(req.headers as any, 'x-requested-tenant-id'));
+    sanitizeTenantId(headerGet(req.headers, 'x-requested-tenant-id'));
 
   if (requested && requested !== sessionTenant) {
     if (!opts.allowPlatformSwitch || role !== 'SUPER_ADMIN') {
@@ -261,7 +261,7 @@ export async function resolveAuthorizedTenantAsync(
   const result = resolveAuthorizedTenant(req, opts);
   if (!result.ok) return result;
 
-  const sessionTenant = sanitizeTenantId(headerGet(req.headers as any, 'x-tenant-id'));
+  const sessionTenant = sanitizeTenantId(headerGet(req.headers, 'x-tenant-id'));
   if (result.tenantId !== sessionTenant && opts.assertMembership) {
     if (!result.userId) {
       return { ok: false, status: 403, error: 'Tenant switch requires authenticated user' };
@@ -301,9 +301,8 @@ export function requireAuthorizedTenant(
 export function stripTenantOwnershipFields<T extends Record<string, unknown>>(
   body: T,
 ): Omit<T, 'tenantId' | 'tenant_id'> {
-  const { tenantId: _a, tenant_id: _b, ...rest } = body as T & {
-    tenantId?: unknown;
-    tenant_id?: unknown;
-  };
+  const rest = { ...body };
+  delete rest.tenantId;
+  delete rest.tenant_id;
   return rest;
 }

@@ -22,16 +22,28 @@ import { sendSms } from '@/lib/sms';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
 
+interface MockItem {
+  id?: unknown;
+  tenantId?: unknown;
+  tenant_id?: unknown;
+  lesseeId?: unknown;
+  is_active?: unknown;
+  deleted_at?: unknown;
+  deletedAt?: unknown;
+  custom_fields?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 // Dynamic mock store for enterprise connections, service tickets, and portal users
-let mockEnterpriseConnections: any[] = [];
-let mockServiceTickets: any[] = [];
-let mockPortalUsers: any[] = [];
-let mockLeaseContracts: any[] = [];
+let mockEnterpriseConnections: MockItem[] = [];
+let mockServiceTickets: MockItem[] = [];
+let mockPortalUsers: MockItem[] = [];
+let mockLeaseContracts: MockItem[] = [];
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $executeRawUnsafe: vi.fn().mockResolvedValue(0),
-    $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: any[]) => {
+    $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: unknown[]) => {
       if (typeof sql === 'string' && sql.includes('set_config')) {
         const match = sql.match(/set_config\('app\.tenant_id',\s*'([^']+)'/);
         return [{ v: match ? match[1] : (args[0] || '*') }];
@@ -51,10 +63,10 @@ vi.mock('@/lib/prisma', () => ({
       }
       return [];
     }),
-    $transaction: vi.fn(async (cb: (tx: any) => any) =>
+    $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => unknown) =>
       cb({
         $executeRawUnsafe: vi.fn().mockResolvedValue(0),
-        $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: any[]) => {
+        $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: unknown[]) => {
           if (typeof sql === 'string' && sql.includes('set_config')) {
             const match = sql.match(/set_config\('app\.tenant_id',\s*'([^']+)'/);
             return [{ v: match ? match[1] : (args[0] || '*') }];
@@ -96,7 +108,7 @@ vi.mock('@/lib/prisma', () => ({
 }));
 
 vi.mock('@/lib/telematics/gateway-ingest', async (importOriginal) => {
-  const actual = await importOriginal<any>();
+  const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     processTelemetryBatch: vi.fn().mockResolvedValue({ processed: 1, failed: 0, alertsTriggered: 0 }),

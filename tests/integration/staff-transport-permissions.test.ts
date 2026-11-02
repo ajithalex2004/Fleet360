@@ -18,9 +18,9 @@ import { prisma as basePrisma } from '@/lib/prisma';
 import { cleanupTenant, createTestRole, createTestTenant, createTestUser, createTestUserTenant, isServerRunning, makeRequest } from '../setup';
 
 let serverUp = false;
-let testTenantId: string | null = null;
-let testUserId: string | null = null;
-let testRoleId: string | null = null;
+const testTenantId: string | null = null;
+const testUserId: string | null = null;
+const testRoleId: string | null = null;
 
 beforeAll(async () => {
   serverUp = await isServerRunning();

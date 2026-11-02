@@ -710,7 +710,7 @@ export default function RolesPage() {
                 platform-wide role. Editing it would change it for every tenant.
               </p>
               <p>
-                We'll create a <span className="font-semibold text-violet-300">custom version</span> just
+                We&apos;ll create a <span className="font-semibold text-violet-300">custom version</span> just
                 for <span className="font-semibold text-[var(--text-main)]">{myTenantName || 'your tenant'}</span> with
                 the same {overridePrompt.permCount} permission{overridePrompt.permCount === 1 ? '' : 's'}.
                 The platform role stays untouched.

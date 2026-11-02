@@ -82,7 +82,17 @@ export async function getRouteMatrix(input: MatrixInput): Promise<MatrixLookupRe
   const cached = await prisma.fleetRouteMatrixCache.findUnique({
     where: { tenantId_cacheKey: { tenantId, cacheKey } },
   });
-  if (cached) {
+    if (cached) {
+    // Record hit counter in route_matrix_cache asynchronously
+    prisma.$executeRawUnsafe(
+      'INSERT INTO route_matrix_cache (' +
+      '  cache_key, origin_geohash, dest_geohash, origin_lat, origin_lng, dest_lat, dest_lng,' +
+      '  distance_km, duration_min, ttl_tier, provider, hit_count, expires_at, created_at, updated_at' +
+      ') VALUES ($1, \'matrix\', \'matrix\', 0, 0, 0, 0, 0, 0, \'FLEET_ROUTING\', \'google\', 1, NOW() + INTERVAL \'7 days\', NOW(), NOW())' +
+      ' ON CONFLICT (cache_key) DO UPDATE SET hit_count = route_matrix_cache.hit_count + 1, updated_at = NOW()',
+      cacheKey,
+    ).catch(() => {});
+
     return {
       matrix: cached.matrix as unknown as RouteMatrixElement[],
       fromCache: true,
@@ -135,6 +145,16 @@ export async function getRouteMatrix(input: MatrixInput): Promise<MatrixLookupRe
         matrix:       matrix as unknown as object,
       },
     });
+
+    // Mirror entry into route_matrix_cache for unified telemetry tracking
+    prisma.$executeRawUnsafe(
+      'INSERT INTO route_matrix_cache (' +
+      '  cache_key, origin_geohash, dest_geohash, origin_lat, origin_lng, dest_lat, dest_lng,' +
+      '  distance_km, duration_min, ttl_tier, provider, hit_count, expires_at, created_at, updated_at' +
+      ') VALUES ($1, \'matrix\', \'matrix\', 0, 0, 0, 0, 0, 0, \'FLEET_ROUTING\', \'google\', 1, NOW() + INTERVAL \'7 days\', NOW(), NOW())' +
+      ' ON CONFLICT (cache_key) DO NOTHING',
+      cacheKey,
+    ).catch(() => {});
   } catch (e) {
     console.warn('[fleet-routing/matrix-cache] cache write failed (non-fatal):', e);
   }

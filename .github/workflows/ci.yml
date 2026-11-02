@@ -164,9 +164,40 @@ jobs:
       - name: Security & Session Key Hardening Gate (Blocking)
         run: npx vitest run tests/unit/session-secret.test.ts tests/unit/credential-leak-guard.test.ts
 
-      - name: Unit tests
+      # ── Unit-test database ─────────────────────────────────────────────────
+      # Unit tests that need a database (tests/db-guard.ts hasTestDatabase)
+      # used to run against ci_mock, which has no migrations applied (it is
+      # the drift check's shadow database), so they failed on missing tables
+      # and columns — and the step was continue-on-error, so nobody noticed
+      # when other tests broke too. They now get their own database, migrated
+      # with the same fresh-install runner the replay workflow verifies.
+      - name: Unit-test database (fresh, migrated)
+        env:
+          PGPASSWORD: pass
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci_unit?sslmode=disable
+          DIRECT_URL: postgresql://user:pass@localhost:5432/ci_unit?sslmode=disable
+          BOOTSTRAP_RUNTIME_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/ci_unit?sslmode=disable
+          CONFIRM_FRESH_INSTALL: "1"
+        run: |
+          command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -yqq postgresql-client; }
+          psql -h localhost -U user -d ci_mock -v ON_ERROR_STOP=1 -c "CREATE DATABASE ci_unit"
+          # Runtime role the migrations grant to (see migration-safety.yml).
+          psql -h localhost -U user -d ci_unit -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+          node scripts/fresh-install-migrate.cjs --fresh-install
+
+      - name: Unit tests (Blocking)
         run: npm run test:unit
-        continue-on-error: true   # TODO(KNOWN-TS-001): re-enforce after typecheck does.
+        env:
+          TEST_DATABASE_URL: postgresql://user:pass@localhost:5432/ci_unit?sslmode=disable
 
       - name: Public Endpoint Identity Boundary (Blocking)
         run: |

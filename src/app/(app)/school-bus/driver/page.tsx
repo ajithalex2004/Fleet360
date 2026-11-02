@@ -72,7 +72,7 @@ export default function SchoolBusDriverTodayPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Today</h1>
         <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-5">
-          <p className="text-sm text-[var(--text-muted)] mb-3">Pin your driver code to see today's trips.</p>
+          <p className="text-sm text-[var(--text-muted)] mb-3">Pin your driver code to see today&apos;s trips.</p>
           <Link href="/school-bus/driver/profile" className="block w-full text-center py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold">
             Set Driver Code →
           </Link>
@@ -85,7 +85,7 @@ export default function SchoolBusDriverTodayPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Today's Trips</h1>
+        <h1 className="text-2xl font-bold">Today&apos;s Trips</h1>
         <p className="text-sm text-[var(--text-muted)]">
           {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
           {' · '}driver {driverCode}
