@@ -235,8 +235,24 @@ export async function POST(request: NextRequest) {
           dateOfJoin:            parseSafeDate(body.dateOfJoin) ?? new Date(),
           dallasId:              body.dallasId               ?? null,
           garageId:              body.garageId               ?? null,
+          assignedVehicleId:     (typeof body.assignedVehicleId === 'string' && body.assignedVehicleId.trim()) ? body.assignedVehicleId.trim() : null,
         },
       });
+
+      if (driver.assignedVehicleId) {
+        await tx.$executeRawUnsafe(
+          `UPDATE vehicles SET assigned_driver_id = NULL WHERE assigned_driver_id::text = $1 AND id::text != $2 AND tenant_id = $3`,
+          driver.id,
+          driver.assignedVehicleId,
+          tenantId,
+        ).catch(() => {});
+        await tx.$executeRawUnsafe(
+          `UPDATE vehicles SET assigned_driver_id = $1 WHERE id::text = $2 AND tenant_id = $3`,
+          driver.id,
+          driver.assignedVehicleId,
+          tenantId,
+        ).catch(() => {});
+      }
 
       // Store extra columns (employee_id, driver_category, issuing_authority, additional_documents) directly
       await tx.$executeRawUnsafe(
@@ -283,7 +299,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!user) {
-        const newUserId = crypto.randomUUID();
+        const newUserId = driver.id;
         user = await tx.user.create({
           data: {
             id:           newUserId,

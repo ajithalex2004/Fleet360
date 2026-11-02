@@ -278,6 +278,7 @@ export async function POST(request: NextRequest) {
     // 4. Sign session cookie (include role + residency so middleware can inject
     //    x-user-role / x-data-residency without extra DB lookups per request)
     const plan = userTenant.tenant.plan ?? 'TRIAL';
+    const residencyClaims = residencySessionClaim(userTenant.tenant.dataResidency);
     const token = await signSession({
       userId:   user.id,
       tenantId: userTenant.tenantId,
@@ -286,8 +287,53 @@ export async function POST(request: NextRequest) {
       permissions,
       // Residency claim from the tenant record, whatever the plan: middleware
       // refuses tenants whose region this deployment does not serve.
-      ...residencySessionClaim(userTenant.tenant.dataResidency),
+      ...residencyClaims,
     });
+
+    // 4a. Resolve linked Driver profile in this tenant (for Driver App sessions where
+    //     User.id and Driver.id may differ when provisioned separately).
+    let driverSessionToken: string | null = null;
+    let linkedDriverId: string | null = null;
+    try {
+      const cleanLicFromEmail = user.email?.toLowerCase().match(/^driver\.([a-z0-9]+)@fleet360\.internal$/)?.[1]
+        || user.username?.toLowerCase().match(/^driver_([a-z0-9]+)$/)?.[1]
+        || null;
+      const driverRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM drivers
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND (
+              id::text = $2
+              OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+              OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+              OR ($5::text IS NOT NULL AND email IS NOT NULL AND LOWER(SPLIT_PART(email, '@', 1)) = LOWER($5))
+              OR ($6::text IS NOT NULL AND license_number IS NOT NULL AND REGEXP_REPLACE(LOWER(license_number), '[^a-z0-9]', '', 'g') = $6)
+            )
+          ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
+          LIMIT 1`,
+        userTenant.tenantId,
+        user.id,
+        user.email || null,
+        user.employeeId || null,
+        user.username || null,
+        cleanLicFromEmail,
+      );
+      if (driverRows[0]?.id) {
+        linkedDriverId = driverRows[0].id;
+        driverSessionToken = await signSession({
+          userId: linkedDriverId,
+          tenantId: userTenant.tenantId,
+          plan: 'DRIVER',
+          role: 'DRIVER',
+          permissions: [],
+          ttlMs: 24 * 60 * 60 * 1000,
+          ...residencyClaims,
+        });
+      }
+    } catch {
+      // Non-fatal if driver lookup fails
+    }
 
     // 4b. Sign a JWT for the Go backend (Authorization: Bearer <token>).
     // This is independent of the xl-session cookie above — that cookie is
@@ -316,6 +362,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: {
         id:        user.id,
+        driverId:  linkedDriverId,
         username:  user.username,
         email:     user.email,
         firstName: user.firstName,
@@ -355,6 +402,7 @@ export async function POST(request: NextRequest) {
       // Go-backend calls gracefully.
       backendToken,
       sessionToken: token,
+      driverSessionToken,
     };
 
     // Log successful sign in & update last_login_at
@@ -382,15 +430,25 @@ export async function POST(request: NextRequest) {
       maxAge:   86_400, // 24 hours
       path:     '/',
     });
-    // Clear any stale driver vehicle session cookies so a previous driver's
-    // assigned vehicle (e.g. Honda Pilot) never bleeds into a new login.
-    response.cookies.set('xl-driver-session', '', {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure:   process.env.NODE_ENV === 'production',
-      maxAge:   0,
-      path:     '/',
-    });
+    // Set xl-driver-session when a linked Driver profile exists in this tenant,
+    // or clear any stale driver session cookie from a previous login.
+    if (driverSessionToken) {
+      response.cookies.set('xl-driver-session', driverSessionToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure:   process.env.NODE_ENV === 'production',
+        maxAge:   86_400,
+        path:     '/',
+      });
+    } else {
+      response.cookies.set('xl-driver-session', '', {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure:   process.env.NODE_ENV === 'production',
+        maxAge:   0,
+        path:     '/',
+      });
+    }
     response.cookies.set('xl-driver-vehicle-id', '', {
       httpOnly: false,
       sameSite: 'lax',

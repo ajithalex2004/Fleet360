@@ -669,34 +669,6 @@ export default function DriverAppLauncher() {
         // network / local asset fallback
       }
 
-      const emailLower = (signedInEmail || username || '').toLowerCase().trim();
-      const isLogisticsContext =
-        emailLower.includes('trexla') ||
-        emailLower.includes('biju') ||
-        emailLower.includes('jainu') ||
-        vehicles.some((v) => v.vehicleUsage === 'LOGISTICS');
-
-      if (isLogisticsContext) {
-        // Filter out non-logistics vehicles (e.g. RENTAL 96448 Honda Pilot) and ensure all Trexla LOGISTICS vehicles are present
-        vehicles = vehicles.filter(
-          (v) =>
-            v.vehicleUsage === 'LOGISTICS' ||
-            (v.vehicleCode && (v.vehicleCode.startsWith('TRX-') || v.vehicleCode.startsWith('PM-')))
-        );
-        const existingPlates = new Set(
-          vehicles.map((v) => (v.licensePlate || v.vehicleCode || '').toUpperCase())
-        );
-        for (const fb of TREXLA_FALLBACK_VEHICLES) {
-          const key = (fb.licensePlate || fb.vehicleCode || '').toUpperCase();
-          if (key && !existingPlates.has(key)) {
-            vehicles.push({ ...fb, isAssignedToMe: false });
-            existingPlates.add(key);
-          }
-        }
-      } else if (vehicles.length === 0) {
-        vehicles = TREXLA_FALLBACK_VEHICLES.map((v) => ({ ...v, isAssignedToMe: false }));
-      }
-
       const activeDriverName = driver?.name || fallbackDriverName || signedInEmail || username || 'Driver';
       setDriverInfo({
         id: driver?.id,
@@ -708,20 +680,20 @@ export default function DriverAppLauncher() {
         localStorage.setItem('fleet360_driver_name', activeDriverName);
       }
 
-      // Strictly check ONLY whether a vehicle is genuinely assigned to this driver's profile in the database
-      const assignedVehicle = driver?.assignedVehicleId
-        ? vehicles.find(
-            (v) =>
-              v.id === driver?.assignedVehicleId ||
-              v.vehicleCode === driver?.assignedVehicleId ||
-              v.isAssignedToMe === true
-          ) || null
-        : null;
-
-      setFleetVehicles(vehicles);
+      // Check whether a vehicle is assigned to this driver's profile (from Driver Master or Vehicle Master)
+      const assignedVehicles = vehicles.filter(
+        (v) =>
+          v.isAssignedToMe === true ||
+          Boolean(
+            driver?.assignedVehicleId &&
+              (v.id === driver.assignedVehicleId || v.vehicleCode === driver.assignedVehicleId)
+          )
+      );
+      const assignedVehicle = assignedVehicles[0] || null;
 
       if (assignedVehicle) {
-        // Driver has a pre-assigned vehicle in their profile
+        // Driver has an assigned vehicle: ONLY show the assigned vehicle in the Vehicle ID column
+        setFleetVehicles(assignedVehicles);
         setHasAssignedVehicleOnProfile(true);
         setSelectedVehicle(assignedVehicle);
         setCustomVehicleQuery(assignedVehicle.licensePlate || assignedVehicle.vehicleCode || '');
@@ -731,7 +703,35 @@ export default function DriverAppLauncher() {
           window.dispatchEvent(new Event('fleet360_vehicle_changed'));
         }
       } else {
-        // Driver is NOT assigned to any vehicle — default to BLANK value so driver enters Vehicle ID / Plate
+        // Driver is NOT assigned to any vehicle — load available fleet vehicles and default to BLANK value
+        const emailLower = (signedInEmail || username || '').toLowerCase().trim();
+        const isLogisticsContext =
+          emailLower.includes('trexla') ||
+          emailLower.includes('biju') ||
+          emailLower.includes('jainu') ||
+          vehicles.some((v) => v.vehicleUsage === 'LOGISTICS');
+
+        if (isLogisticsContext) {
+          vehicles = vehicles.filter(
+            (v) =>
+              v.vehicleUsage === 'LOGISTICS' ||
+              (v.vehicleCode && (v.vehicleCode.startsWith('TRX-') || v.vehicleCode.startsWith('PM-')))
+          );
+          const existingPlates = new Set(
+            vehicles.map((v) => (v.licensePlate || v.vehicleCode || '').toUpperCase())
+          );
+          for (const fb of TREXLA_FALLBACK_VEHICLES) {
+            const key = (fb.licensePlate || fb.vehicleCode || '').toUpperCase();
+            if (key && !existingPlates.has(key)) {
+              vehicles.push({ ...fb, isAssignedToMe: false });
+              existingPlates.add(key);
+            }
+          }
+        } else if (vehicles.length === 0) {
+          vehicles = TREXLA_FALLBACK_VEHICLES.map((v) => ({ ...v, isAssignedToMe: false }));
+        }
+
+        setFleetVehicles(vehicles);
         setHasAssignedVehicleOnProfile(false);
         setSelectedVehicle(null);
         setCustomVehicleQuery('');
@@ -841,8 +841,9 @@ export default function DriverAppLauncher() {
 
       const resolvedDriverEmail = data?.user?.email || trimmedEmail;
       if (typeof window !== 'undefined') {
-        if (data?.sessionToken) {
-          localStorage.setItem('fleet360_session_token', data.sessionToken);
+        const activeSessionToken = data?.driverSessionToken || data?.sessionToken;
+        if (activeSessionToken) {
+          localStorage.setItem('fleet360_session_token', activeSessionToken);
         }
         localStorage.setItem('fleet360_driver_authenticated', 'true');
         localStorage.setItem('fleet360_driver_email', resolvedDriverEmail);
@@ -939,9 +940,12 @@ export default function DriverAppLauncher() {
 
       // 2. Start / initialize active shift with this vehicle and starting odometer
       try {
+        const shiftToken = vehData?.sessionToken || savedToken;
+        const shiftHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (shiftToken) shiftHeaders['Authorization'] = `Bearer ${shiftToken}`;
         await fetch(getApiEndpoint('/api/driver-app/shift/current'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: shiftHeaders,
           credentials: 'include',
           body: JSON.stringify({
             vehicleId: boundVehicle?.id,
@@ -1112,6 +1116,7 @@ export default function DriverAppLauncher() {
 
                 <select
                   value={selectedVehicle?.id || ''}
+                  disabled={hasAssignedVehicleOnProfile && fleetVehicles.length === 1}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (!val) {
@@ -1127,9 +1132,11 @@ export default function DriverAppLauncher() {
                       setOdometerInput(v.odometerReading ? String(v.odometerReading) : '');
                     }
                   }}
-                  className="w-full rounded-xl border-2 border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-950 px-3.5 py-3 text-sm font-bold text-slate-950 dark:text-white focus:border-violet-600 focus:outline-none"
+                  className="w-full rounded-xl border-2 border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-slate-950 px-3.5 py-3 text-sm font-bold text-slate-950 dark:text-white focus:border-violet-600 focus:outline-none disabled:opacity-100 disabled:cursor-default"
                 >
-                  <option value="">{txt.blankVehicleOption}</option>
+                  {!hasAssignedVehicleOnProfile && (
+                    <option value="">{txt.blankVehicleOption}</option>
+                  )}
                   {fleetVehicles.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.licensePlate || v.vehicleCode} - {v.make} {v.model} ({v.vehicleCode || 'FLEET'}){v.isAssignedToMe ? ' ★' : ''}

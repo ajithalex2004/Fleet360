@@ -80,4 +80,57 @@ describe('driver vehicle login stays in the caller\'s tenant', () => {
       expect(args.where.tenantId).toBe('tenant-a');
     }
   });
+
+  it('returns only the assigned vehicle when a vehicle is assigned to the logged-in driver', async () => {
+    h.driverFindFirst.mockResolvedValue({
+      id: 'drv-1',
+      name: 'Biju',
+      firstName: 'Biju',
+      lastName: 'Trexla',
+      email: 'biju@trexla.ae',
+      driverType: 'LOGISTICS',
+      assignedVehicleId: null,
+    });
+    h.vehicleFindMany.mockResolvedValue([
+      {
+        id: 'veh-assigned',
+        vehicleCode: 'TRX-001',
+        licensePlate: 'DXB-41087',
+        plateNumber: 'DXB-41087',
+        registrationNo: null,
+        make: 'Mercedes-Benz',
+        model: 'Actros',
+        year: 2024n,
+        type: 'TRUCK',
+        vehicleUsage: 'LOGISTICS',
+        deviceId: '',
+        odometerReading: 125000n,
+        assignedDriverId: 'drv-1',
+      },
+      {
+        id: 'veh-other',
+        vehicleCode: 'TRX-002',
+        licensePlate: 'DXB-51449',
+        plateNumber: 'DXB-51449',
+        registrationNo: null,
+        make: 'MAN',
+        model: 'TGX',
+        year: 2024n,
+        type: 'TRUCK',
+        vehicleUsage: 'LOGISTICS',
+        deviceId: '',
+        odometerReading: 98000n,
+        assignedDriverId: null,
+      },
+    ]);
+
+    const res = await loginGET(get('http://localhost/api/driver-app/auth/vehicle-login?list=true'));
+    const json = await res.json();
+    expect(json.hasSession).toBe(true);
+    expect(json.driver.assignedVehicleId).toBe('veh-assigned');
+    expect(json.vehicles).toHaveLength(1);
+    expect(json.vehicles[0].id).toBe('veh-assigned');
+    expect(json.vehicles[0].licensePlate).toBe('DXB-41087');
+    expect(json.vehicles[0].isAssignedToMe).toBe(true);
+  });
 });

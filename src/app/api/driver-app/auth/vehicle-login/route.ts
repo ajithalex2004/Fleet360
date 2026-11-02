@@ -307,7 +307,19 @@ export async function GET(req: NextRequest) {
           where: {
             tenantId,
             deletedAt: null,
-            ...(isLogisticsDriver ? { vehicleUsage: 'LOGISTICS' } : {}),
+            ...(isLogisticsDriver
+              ? {
+                  OR: [
+                    { vehicleUsage: 'LOGISTICS' },
+                    ...(driver
+                      ? [
+                          { assignedDriverId: driver.id },
+                          ...(driver.assignedVehicleId ? [{ id: driver.assignedVehicleId }] : []),
+                        ]
+                      : []),
+                  ],
+                }
+              : {}),
           },
           select: { ...VEHICLE_SELECT, assignedDriverId: true },
           orderBy: [{ vehicleCode: 'asc' }, { licensePlate: 'asc' }],
@@ -324,32 +336,53 @@ export async function GET(req: NextRequest) {
           });
         }
 
+        const assignedVehicleRow = driver
+          ? vehicles.find(
+              (v) =>
+                (driver.assignedVehicleId && v.id === driver.assignedVehicleId) ||
+                v.assignedDriverId === driver.id,
+            ) || null
+          : null;
+
+        const effectiveAssignedVehicleId =
+          driver?.assignedVehicleId ?? assignedVehicleRow?.id ?? null;
+
+        const resolvedDriverJson = driverJson
+          ? { ...driverJson, assignedVehicleId: effectiveAssignedVehicleId }
+          : null;
+
+        const mappedVehicles = vehicles.map((v) => {
+          const isBlank = (v.deviceId ?? '').trim() === '';
+          const isAssignedToMe = Boolean(
+            driver &&
+              ((effectiveAssignedVehicleId && effectiveAssignedVehicleId === v.id) ||
+                v.assignedDriverId === driver.id),
+          );
+          const plate = effectivePlate(v);
+          return {
+            id: v.id,
+            vehicleCode: v.vehicleCode || plate,
+            licensePlate: plate,
+            make: v.make,
+            model: v.model,
+            year: v.year ? Number(v.year) : null,
+            vehicleUsage: v.vehicleUsage || (isLogisticsDriver ? 'LOGISTICS' : null),
+            deviceId: (v.deviceId ?? '').trim(),
+            isDeviceBlank: isBlank,
+            canActivateMobileTracking: isBlank,
+            odometerReading: v.odometerReading != null ? Number(v.odometerReading) : null,
+            isAssignedToMe,
+          };
+        });
+
+        const assignedOnly = mappedVehicles.filter((v) => v.isAssignedToMe);
+
         return NextResponse.json({
           hasSession: true,
           userId,
           tenantId,
-          driver: driverJson,
-          vehicles: vehicles.map((v) => {
-            const isBlank = (v.deviceId ?? '').trim() === '';
-            const isAssignedToMe = Boolean(
-              driver?.assignedVehicleId && driver.assignedVehicleId === v.id,
-            );
-            const plate = effectivePlate(v);
-            return {
-              id: v.id,
-              vehicleCode: v.vehicleCode || plate,
-              licensePlate: plate,
-              make: v.make,
-              model: v.model,
-              year: v.year ? Number(v.year) : null,
-              vehicleUsage: v.vehicleUsage || (isLogisticsDriver ? 'LOGISTICS' : null),
-              deviceId: (v.deviceId ?? '').trim(),
-              isDeviceBlank: isBlank,
-              canActivateMobileTracking: isBlank,
-              odometerReading: v.odometerReading != null ? Number(v.odometerReading) : null,
-              isAssignedToMe,
-            };
-          }),
+          driver: resolvedDriverJson,
+          vehicles: assignedOnly.length > 0 ? assignedOnly : mappedVehicles,
         });
       }
 
@@ -375,9 +408,16 @@ export async function GET(req: NextRequest) {
             select: VEHICLE_SELECT,
           })
         : null;
-      if (!vehicle && driver?.assignedVehicleId) {
+      if (!vehicle && driver) {
         vehicle = await prisma.vehicle.findFirst({
-          where: { id: driver.assignedVehicleId, tenantId, deletedAt: null },
+          where: {
+            tenantId,
+            deletedAt: null,
+            OR: [
+              ...(driver.assignedVehicleId ? [{ id: driver.assignedVehicleId }] : []),
+              { assignedDriverId: driver.id },
+            ],
+          },
           select: VEHICLE_SELECT,
         });
       }

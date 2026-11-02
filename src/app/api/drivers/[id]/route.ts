@@ -158,6 +158,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         passportNumber, passportExpiry,
         visaExpiry,
         status, driverType, hierarchy, communicationLanguage, dateOfJoin, dallasId, garageId,
+        assignedVehicleId,
         password,
         issuingAuthority,
         additionalDocuments,
@@ -210,8 +211,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (dateOfJoin      !== undefined) data.dateOfJoin      = parseSafeDate(dateOfJoin);
       if (dallasId        !== undefined) data.dallasId        = emptyToNull(dallasId);
       if (garageId        !== undefined) data.garageId        = emptyToNull(garageId);
+      if (assignedVehicleId !== undefined) data.assignedVehicleId = emptyToNull(assignedVehicleId);
 
       const updated = await tx.driver.update({ where: { id }, data });
+
+      if (assignedVehicleId !== undefined) {
+        const nextVehId = emptyToNull(assignedVehicleId);
+        // Clear this driver from any other vehicle
+        await tx.$executeRawUnsafe(
+          `UPDATE vehicles SET assigned_driver_id = NULL WHERE assigned_driver_id::text = $1 AND ($2::text IS NULL OR id::text != $2) AND tenant_id = $3`,
+          id,
+          nextVehId,
+          tenantId,
+        ).catch(() => {});
+        if (nextVehId) {
+          // Clear any other driver that had this vehicle
+          await tx.$executeRawUnsafe(
+            `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1 AND id::text != $2 AND tenant_id = $3`,
+            nextVehId,
+            id,
+            tenantId,
+          ).catch(() => {});
+          // Assign this driver to the vehicle
+          await tx.$executeRawUnsafe(
+            `UPDATE vehicles SET assigned_driver_id = $1 WHERE id::text = $2 AND tenant_id = $3`,
+            id,
+            nextVehId,
+            tenantId,
+          ).catch(() => {});
+        }
+      }
 
       const cleanEmployeeId = employeeId !== undefined ? emptyToNull(employeeId) : undefined;
       const cleanCategory = driverCategory !== undefined ? emptyToNull(driverCategory) : undefined;
