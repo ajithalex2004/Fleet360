@@ -830,8 +830,8 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   );
   if (Number(trCountRows[0]?.cnt ?? 0) === 0) {
     const defaultTrailers = [
-      { id: `tr-9901-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'IN_USE', opStatus: 'LOADED_FCL', cnt: 'MSCU8492014', loc: 'Sheikh Zayed Rd (E11) Corridor', lat: 24.9850, lng: 55.0760 },
-      { id: `tr-9902-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'IN_USE', opStatus: 'DETACHED_AT_RAMP', cnt: 'MAEU5910283', loc: 'JAFZA South Ramp #4', lat: 24.9642, lng: 55.0915 },
+      { id: `tr-9901-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 24.9850, lng: 55.0760 },
+      { id: `tr-9902-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'JAFZA South Yard', lat: 24.9642, lng: 55.0915 },
       { id: `tr-9903-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9903', type: '45FT_REEFER_CHASSIS', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 25.0080, lng: 55.0640 },
       { id: `tr-8801-${tenantId.slice(0, 8)}`, plate: 'AUH-TR-8801', type: '20FT_SKELETAL', tons: 34, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Khalifa Port Marshalling Yard', lat: 24.8055, lng: 54.6462 },
       { id: `tr-7704-${tenantId.slice(0, 8)}`, plate: 'SHJ-TR-7704', type: '40FT_LOWBED', tons: 60, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'National Industries Park Yard', lat: 24.9310, lng: 55.0750 },
@@ -914,431 +914,131 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
-  // Seed initial realistic drayage containers & jobs if none exist yet
-  const jobCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM logistics_drayage_jobs WHERE tenant_id = $1`,
+  // Purge sample jobs (DRY-L1-1001..1006, DRY-L2-1001..1006, DRY-EXP-1001), their dependencies, and their containers from Container Master
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_allowances
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'alw-1-%'
+          OR id LIKE 'alw-2-%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
     tenantId,
-  );
-  if (Number(jobCountRows[0]?.cnt ?? 0) === 0) {
-    // Grab mapped Fleet360 vehicles and drivers if available
-    const vehicles = await db.$queryRawUnsafe<Array<{ id: string; plate_number: string | null; license_plate: string | null }>>(
-      `SELECT id, plate_number, license_plate FROM vehicles WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 3`,
-      tenantId,
-    ).catch(() => []);
-    const drivers = await db.$queryRawUnsafe<Array<{ id: string; first_name: string | null; last_name: string | null; name: string | null }>>(
-      `SELECT id, first_name, last_name, name FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 3`,
-      tenantId,
-    ).catch(() => []);
+  ).catch(() => {});
 
-    const v1Id = vehicles[0]?.id ?? null;
-    const v1Plate = vehicles[0]?.plate_number ?? vehicles[0]?.license_plate ?? 'DXB-84920';
-    const d1Id = drivers[0]?.id ?? null;
-    const d1Name = drivers[0] ? (`${drivers[0].first_name ?? ''} ${drivers[0].last_name ?? ''}`.trim() || drivers[0].name || 'rashid Al-Marri') : 'Rashid Al-Marri';
-
-    const v2Id = vehicles[1]?.id ?? null;
-    const v2Plate = vehicles[1]?.plate_number ?? vehicles[1]?.license_plate ?? 'DXB-51209';
-    const d2Id = drivers[1]?.id ?? null;
-    const d2Name = drivers[1] ? (`${drivers[1].first_name ?? ''} ${drivers[1].last_name ?? ''}`.trim() || drivers[1].name || 'Imran Khan') : 'Imran Khan';
-
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    const sampleContainers = [
-      {
-        id: `cnt-1-${tenantId.slice(0, 8)}`,
-        num: 'MSCU8492014',
-        size: '40HC',
-        type: 'DRY',
-        shipType: 'IMPORT',
-        status: 'IN_TRANSIT',
-        custName: 'Al-Futtaim Logistics LLC',
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 1 (DP World)',
-        whId: `wh-jafza-${tenantId.slice(0, 8)}`,
-        whName: 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
-        doExp: new Date(now + 3 * dayMs).toISOString(),
-        disch: new Date(now - 3 * dayMs).toISOString(),
-        seal: 'DPW-884120',
-        wt: 24800,
-        customs: true,
-        muni: false,
-        cpip: true,
-        merc: false,
-        boxcare: true,
-        trPlate: 'DXB-TR-9901',
-      },
-      {
-        id: `cnt-2-${tenantId.slice(0, 8)}`,
-        num: 'MAEU5910283',
-        size: '40HC',
-        type: 'DRY',
-        shipType: 'IMPORT',
-        status: 'PLACED_AT_RAMP',
-        custName: 'Landmark Retail Distribution',
-        termId: `term-ja2-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 2 (Mega Vessel Berth)',
-        whId: `wh-nip-${tenantId.slice(0, 8)}`,
-        whName: 'National Industries Park (NIP) Mega Automated DC',
-        doExp: new Date(now + 1 * dayMs).toISOString(),
-        disch: new Date(now - 5 * dayMs).toISOString(),
-        seal: 'MSK-391044',
-        wt: 26200,
-        customs: true,
-        muni: true,
-        cpip: false,
-        merc: false,
-        boxcare: false,
-        trPlate: 'DXB-TR-9902',
-      },
-      {
-        id: `cnt-3-${tenantId.slice(0, 8)}`,
-        num: 'CMAU3019482',
-        size: '40HC',
-        type: 'REEFER',
-        shipType: 'IMPORT',
-        status: 'AT_PORT_DISCHARGED',
-        custName: 'Chalhoub Luxury Supply Chain',
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 1 (DP World)',
-        whId: `wh-dwc-${tenantId.slice(0, 8)}`,
-        whName: 'Dubai South Aviation & Cold-Chain Hub',
-        doExp: new Date(now - 1 * dayMs).toISOString(),
-        disch: new Date(now - 6 * dayMs).toISOString(), // 6 days in port on a 3-day free Reefer -> 3 days overdue!
-        seal: 'CMA-772109',
-        wt: 21500,
-        customs: true,
-        muni: true,
-        cpip: true,
-        merc: true,
-        boxcare: false,
-        trPlate: null,
-      },
-      {
-        id: `cnt-4-${tenantId.slice(0, 8)}`,
-        num: 'HLXU9041128',
-        size: '20FT',
-        type: 'DRY',
-        shipType: 'EXPORT',
-        status: 'AT_PORT_DISCHARGED',
-        custName: 'ADNOC Industrial Polymers',
-        termId: `term-kp-${tenantId.slice(0, 8)}`,
-        termName: 'Khalifa Port Container Terminal (AD Ports)',
-        whId: `wh-kizad-${tenantId.slice(0, 8)}`,
-        whName: 'KEZAD Integrated Polymer & Cold Depot',
-        doExp: new Date(now + 4 * dayMs).toISOString(),
-        disch: new Date(now - 9 * dayMs).toISOString(), // 9 days in port on a 5-day free Dry -> 4 days overdue!
-        seal: 'HPL-550192',
-        wt: 19800,
-        customs: true,
-        muni: false,
-        cpip: false,
-        merc: false,
-        boxcare: true,
-        trPlate: null,
-      },
-    ];
-
-    for (const c of sampleContainers) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO logistics_drayage_containers (
-          id, tenant_id, container_number, size, container_type, shipment_type, status,
-          customer_name, terminal_id, terminal_name, warehouse_id, warehouse_name,
-          do_expiry_date, discharge_date, seal_number, weight_kg,
-          customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection,
-          linked_trailer_plate
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-          $13::timestamptz,$14::timestamptz,$15,$16,$17,$18,$19,$20,$21,$22
-        ) ON CONFLICT (id) DO NOTHING`,
-        c.id, tenantId, c.num, c.size, c.type, c.shipType, c.status,
-        c.custName, c.termId, c.termName, c.whId, c.whName,
-        c.doExp, c.disch, c.seal, c.wt,
-        c.customs, c.muni, c.cpip, c.merc, c.boxcare, c.trPlate,
-      );
-    }
-
-    const sampleJobs = [
-      {
-        id: `job-1-${tenantId.slice(0, 8)}`,
-        code: 'DRY-L1-1001',
-        phase: 'L1',
-        shipType: 'IMPORT',
-        status: 'IN_TRANSIT',
-        priority: 'HIGH',
-        custName: 'Al-Futtaim Logistics LLC',
-        whId: `wh-jafza-${tenantId.slice(0, 8)}`,
-        whName: 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 1 (DP World)',
-        cntId: `cnt-1-${tenantId.slice(0, 8)}`,
-        cntNum: 'MSCU8492014',
-        cntSize: '40HC',
-        cntType: 'DRY',
-        doExp: new Date(now + 3 * dayMs).toISOString(),
-        token: 'DPW-TKN-8841',
-        vId: v1Id,
-        vPlate: v1Plate,
-        dId: d1Id,
-        dName: d1Name,
-        trId: `tr-9901-${tenantId.slice(0, 8)}`,
-        trPlate: 'DXB-TR-9901',
-        placement: null,
-        detached: false,
-        l2Act: false,
-        rate: 1650,
-        allow: 160,
-        customs: true,
-        muni: false,
-        cpip: true,
-        merc: false,
-        boxcare: true,
-        lat: 24.9875,
-        lng: 55.0762,
-      },
-      {
-        id: `job-2-${tenantId.slice(0, 8)}`,
-        code: 'DRY-L1-1002',
-        phase: 'L1',
-        shipType: 'IMPORT',
-        status: 'CONTAINER_DETACHED',
-        priority: 'STANDARD',
-        custName: 'Landmark Retail Distribution',
-        whId: `wh-nip-${tenantId.slice(0, 8)}`,
-        whName: 'National Industries Park (NIP) Mega Automated DC',
-        termId: `term-ja2-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 2 (Mega Vessel Berth)',
-        cntId: `cnt-2-${tenantId.slice(0, 8)}`,
-        cntNum: 'MAEU5910283',
-        cntSize: '40HC',
-        cntType: 'DRY',
-        doExp: new Date(now + 1 * dayMs).toISOString(),
-        token: 'DPW-TKN-7920',
-        vId: v2Id,
-        vPlate: v2Plate,
-        dId: d2Id,
-        dName: d2Name,
-        trId: `tr-9902-${tenantId.slice(0, 8)}`,
-        trPlate: 'DXB-TR-9902',
-        placement: 'RAMP',
-        detached: true,
-        l2Act: false,
-        rate: 1500,
-        allow: 150,
-        customs: true,
-        muni: true,
-        cpip: false,
-        merc: false,
-        boxcare: false,
-        lat: 24.9310,
-        lng: 55.0750,
-      },
-      {
-        id: `job-3-${tenantId.slice(0, 8)}`,
-        code: 'DRY-L1-1003',
-        phase: 'L1',
-        shipType: 'IMPORT',
-        status: 'PENDING',
-        priority: 'URGENT',
-        custName: 'Chalhoub Luxury Supply Chain',
-        whId: `wh-dwc-${tenantId.slice(0, 8)}`,
-        whName: 'Dubai South Aviation & Cold-Chain Hub',
-        termId: `term-ja1-${tenantId.slice(0, 8)}`,
-        termName: 'Jebel Ali Port - Terminal 1 (DP World)',
-        cntId: `cnt-3-${tenantId.slice(0, 8)}`,
-        cntNum: 'CMAU3019482',
-        cntSize: '40HC',
-        cntType: 'REEFER',
-        doExp: new Date(now - 1 * dayMs).toISOString(),
-        token: null,
-        vId: null,
-        vPlate: null,
-        dId: null,
-        dName: null,
-        trId: null,
-        trPlate: null,
-        placement: null,
-        detached: false,
-        l2Act: false,
-        rate: 2250,
-        allow: 200,
-        customs: true,
-        muni: true,
-        cpip: true,
-        merc: true,
-        boxcare: false,
-        lat: 25.0112,
-        lng: 55.0612,
-      },
-      {
-        id: `job-4-${tenantId.slice(0, 8)}`,
-        code: 'DRY-L1-1004',
-        phase: 'L1',
-        shipType: 'EXPORT',
-        status: 'PENDING',
-        priority: 'HIGH',
-        custName: 'ADNOC Industrial Polymers',
-        whId: `wh-kizad-${tenantId.slice(0, 8)}`,
-        whName: 'KEZAD Integrated Polymer & Cold Depot',
-        termId: `term-kp-${tenantId.slice(0, 8)}`,
-        termName: 'Khalifa Port Container Terminal (AD Ports)',
-        cntId: `cnt-4-${tenantId.slice(0, 8)}`,
-        cntNum: 'HLXU9041128',
-        cntSize: '20FT',
-        cntType: 'DRY',
-        doExp: new Date(now + 4 * dayMs).toISOString(),
-        token: null,
-        vId: null,
-        vPlate: null,
-        dId: null,
-        dName: null,
-        trId: null,
-        trPlate: null,
-        placement: null,
-        detached: false,
-        l2Act: false,
-        rate: 1850,
-        allow: 175,
-        customs: true,
-        muni: false,
-        cpip: false,
-        merc: false,
-        boxcare: true,
-        lat: 24.8055,
-        lng: 54.6462,
-      },
-    ];
-
-    for (const j of sampleJobs) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO logistics_drayage_jobs (
-          id, tenant_id, job_code, job_phase, shipment_type, status, priority,
-          customer_name, warehouse_id, warehouse_name, terminal_id, terminal_name,
-          container_id, container_number, container_size, container_type, do_expiry_date,
-          token_number, assigned_vehicle_id, assigned_vehicle_plate,
-          assigned_driver_id, assigned_driver_name, assigned_trailer_id, assigned_trailer_plate,
-          placement_location, trailer_detached, l2_activated, rate_amount_aed, driver_allowance_aed,
-          customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection,
-          current_lat, current_lng
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::timestamptz,
-          $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36
-        ) ON CONFLICT (id) DO NOTHING`,
-        j.id, tenantId, j.code, j.phase, j.shipType, j.status, j.priority,
-        j.custName, j.whId, j.whName, j.termId, j.termName,
-        j.cntId, j.cntNum, j.cntSize, j.cntType, j.doExp,
-        j.token, j.vId, j.vPlate, j.dId, j.dName, j.trId, j.trPlate,
-        j.placement, j.detached, j.l2Act, j.rate, j.allow,
-        j.customs, j.muni, j.cpip, j.merc, j.boxcare, j.lat, j.lng,
-      );
-    }
-
-    // Sample driver allowances (DRY-L1-1001, DRY-L1-1002, DRY-L1-1004) are not seeded automatically.
-  }
-
-  // Ensure Street-Turn and Dual-20FT Bogie candidate jobs exist for this tenant
-  const pairingCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM logistics_drayage_jobs WHERE tenant_id = $1 AND job_code IN ('DRY-L2-1001', 'DRY-EXP-1001', 'DRY-L1-1005', 'DRY-L1-1006')`,
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_status_logs
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'log-1-%' OR id LIKE 'log-2-%' OR id LIKE 'log-3-%'
+          OR id LIKE 'log-4-%' OR id LIKE 'log-5-%' OR id LIKE 'log-6-%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR job_id IN (
+            SELECT id FROM logistics_drayage_jobs
+             WHERE tenant_id = $1
+               AND (
+                 job_code IN (
+                   'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+                   'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+                   'DRY-EXP-1001'
+                 )
+                 OR container_number IN (
+                   'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+                   'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+                 )
+               )
+          )
+        )`,
     tenantId,
-  ).catch(() => [{ cnt: 0 }]);
+  ).catch(() => {});
 
-  if (Number(pairingCountRows[0]?.cnt ?? 0) < 4) {
-    const nowMs = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    // 1. Dual-20FT Bogie Pair
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_jobs (
-        id, tenant_id, job_code, job_phase, shipment_type, status, priority,
-        customer_name, warehouse_id, warehouse_name, terminal_id, terminal_name,
-        container_number, container_size, container_type, do_expiry_date,
-        rate_amount_aed, driver_allowance_aed, cargo_weight_kg, shipping_line, notes
-      ) VALUES
-      ($1, $2, 'DRY-L1-1005', 'L1', 'IMPORT', 'PENDING', 'HIGH',
-       'Dubai Refreshments (PepsiCo) Hub', $3, 'National Industries Park (NIP) Mega Automated DC',
-       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
-       'MSCU2109483', '20FT', 'DRY', $5::timestamptz,
-       1450, 150, 14500, 'MSC', '20FT Import Cargo - Eligible for Dual-20FT Bogie Bundling'),
-      ($6, $2, 'DRY-L1-1006', 'L1', 'IMPORT', 'PENDING', 'HIGH',
-       'Agility Logistics Regional Park', $3, 'National Industries Park (NIP) Mega Automated DC',
-       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
-       'MSCU3918204', '20FT', 'DRY', $7::timestamptz,
-       1450, 150, 16200, 'MSC', '20FT Import Cargo - Eligible for Dual-20FT Bogie Bundling')
-      ON CONFLICT (id) DO NOTHING`,
-      `job-5-${tenantId.slice(0, 8)}`,
-      tenantId,
-      `wh-nip-${tenantId.slice(0, 8)}`,
-      `term-ja1-${tenantId.slice(0, 8)}`,
-      new Date(nowMs + 2 * dayMs).toISOString(),
-      `job-6-${tenantId.slice(0, 8)}`,
-      new Date(nowMs + 3 * dayMs).toISOString(),
-    ).catch(() => {});
-
-    // 2. Freshly Activated L2 Empty + Pending Export Booking in JAFZA South (Street-Turn Triangulation)
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_jobs (
-        id, tenant_id, job_code, job_phase, shipment_type, status, priority,
-        customer_name, warehouse_id, warehouse_name, terminal_id, terminal_name,
-        container_number, container_size, container_type, do_expiry_date,
-        rate_amount_aed, driver_allowance_aed, cargo_weight_kg, shipping_line, notes
-      ) VALUES
-      ($1, $2, 'DRY-L2-1001', 'L2', 'IMPORT', 'PENDING', 'HIGH',
-       'Al-Futtaim Logistics LLC', $3, 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
-       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
-       'MSCU9248102', '40HC', 'DRY', $5::timestamptz,
-       950, 120, 3800, 'MSC', 'Freshly activated L2 empty container awaiting depot return (Street-Turn candidate)'),
-      ($6, $2, 'DRY-EXP-1001', 'L1', 'EXPORT', 'PENDING', 'HIGH',
-       'Gulf Petrochem Exporters FZE', $3, 'JAFZA South Industrial Sector 4',
-       $4, 'Jebel Ali Port - Terminal 1 (DP World)',
-       'MSCU-TBD', '40HC', 'DRY', $7::timestamptz,
-       1950, 180, 21500, 'MSC', 'Pending export booking: requires 40HC MSC empty container for loading (Street-Turn candidate)')
-      ON CONFLICT (id) DO NOTHING`,
-      `job-l2-1001-${tenantId.slice(0, 8)}`,
-      tenantId,
-      `wh-jafza-${tenantId.slice(0, 8)}`,
-      `term-ja1-${tenantId.slice(0, 8)}`,
-      new Date(nowMs + 2 * dayMs).toISOString(),
-      `job-exp-1001-${tenantId.slice(0, 8)}`,
-      new Date(nowMs + 5 * dayMs).toISOString(),
-    ).catch(() => {});
-  }
-
-  // Seed default geofences if none exist
-  // Automatic terminal geofence seeding is disabled alongside automatic terminal seeding.
-
-  // Seed default status logs & dispatch chat messages if none exist
-  const logCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt FROM logistics_drayage_status_logs WHERE tenant_id = $1`,
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_messages
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'msg-1-%' OR id LIKE 'msg-2-%' OR id LIKE 'msg-3-%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR job_id IN (
+            SELECT id FROM logistics_drayage_jobs
+             WHERE tenant_id = $1
+               AND (
+                 job_code IN (
+                   'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+                   'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+                   'DRY-EXP-1001'
+                 )
+                 OR container_number IN (
+                   'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+                   'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+                 )
+               )
+          )
+        )`,
     tenantId,
-  );
-  if (Number(logCountRows[0]?.cnt ?? 0) === 0) {
-    const j1Id = `job-1-${tenantId.slice(0, 8)}`;
-    const j2Id = `job-2-${tenantId.slice(0, 8)}`;
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-       VALUES
-       ($1,$2,$3,'DRY-L1-1001','ASSIGNED','Assigned tractor & skeletal chassis with token DPW-TKN-8841','Dispatch Desk'),
-       ($4,$2,$3,'DRY-L1-1001','AT_PORT','Tractor gated in at Jebel Ali Terminal 1 OCR Gate 3','Port OCR Gate'),
-       ($5,$2,$3,'DRY-L1-1001','LOADED','Container MSCU8492014 loaded onto chassis DXB-TR-9901','RTG Crane #14'),
-       ($6,$2,$3,'DRY-L1-1001','IN_TRANSIT','Departed Jebel Ali T1 en route to JAFZA South Bonded Hub','Driver Mobile App'),
-       ($7,$2,$8,'DRY-L1-1002','PLACED_AT_RAMP','Placed container MAEU5910283 at NIP Mega DC Ramp #4','Driver Mobile App'),
-       ($9,$2,$8,'DRY-L1-1002','CONTAINER_DETACHED','Tractor uncoupled; trailer DXB-TR-9902 detached at Ramp #4','Driver Mobile App')
-       ON CONFLICT (id) DO NOTHING`,
-      `log-1-${tenantId.slice(0, 8)}`, tenantId, j1Id,
-      `log-2-${tenantId.slice(0, 8)}`, `log-3-${tenantId.slice(0, 8)}`, `log-4-${tenantId.slice(0, 8)}`,
-      `log-5-${tenantId.slice(0, 8)}`, j2Id, `log-6-${tenantId.slice(0, 8)}`,
-    );
+  ).catch(() => {});
 
-    await db.$executeRawUnsafe(
-      `INSERT INTO logistics_drayage_messages (id, tenant_id, job_id, job_code, sender_role, sender_name, message, is_urgent)
-       VALUES
-       ($1,$2,$3,'DRY-L1-1001','DISPATCHER','Port Operations Desk','Token DPW-TKN-8841 verified. Proceed directly to JAFZA South Gate 5 after customs seal check.',false),
-       ($4,$2,$3,'DRY-L1-1001','DRIVER','Rashid Al-Marri','Cleared Gate 3 OCR. Currently on E11 corridor, ETA 18 mins to JAFZA South.',false),
-       ($5,$2,$6,'DRY-L1-1002','DRIVER','Imran Khan','Container MAEU5910283 positioned at Ramp #4 and chassis uncoupled. Ready for next L1/L2 dispatch.',true)
-       ON CONFLICT (id) DO NOTHING`,
-      `msg-1-${tenantId.slice(0, 8)}`, tenantId, j1Id,
-      `msg-2-${tenantId.slice(0, 8)}`, `msg-3-${tenantId.slice(0, 8)}`, j2Id,
-    );
-  }
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_trailers
+        SET master_status = 'AVAILABLE',
+            operational_status = 'EMPTY',
+            linked_container_number = NULL,
+            updated_at = NOW()
+      WHERE tenant_id = $1
+        AND linked_container_number IN (
+          'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+          'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_jobs
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'job-1-%' OR id LIKE 'job-2-%' OR id LIKE 'job-3-%'
+          OR id LIKE 'job-4-%' OR id LIKE 'job-5-%' OR id LIKE 'job-6-%'
+          OR id LIKE 'job-l2-1001-%' OR id LIKE 'job-exp-1001-%'
+          OR job_code IN (
+            'DRY-L1-1001', 'DRY-L1-1002', 'DRY-L1-1003', 'DRY-L1-1004', 'DRY-L1-1005', 'DRY-L1-1006',
+            'DRY-L2-1001', 'DRY-L2-1002', 'DRY-L2-1003', 'DRY-L2-1004', 'DRY-L2-1005', 'DRY-L2-1006',
+            'DRY-EXP-1001'
+          )
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
+
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_containers
+      WHERE tenant_id = $1
+        AND (
+          id LIKE 'cnt-1-%' OR id LIKE 'cnt-2-%' OR id LIKE 'cnt-3-%' OR id LIKE 'cnt-4-%'
+          OR container_number IN (
+            'MSCU3918204', 'MSCU9248102', 'MSCU-TBD', 'HLXU9041128',
+            'CMAU3019482', 'MSCU8492014', 'MSCU2109483', 'MAEU5910283'
+          )
+        )`,
+    tenantId,
+  ).catch(() => {});
 
   seededTenants.add(tenantId);
 }
