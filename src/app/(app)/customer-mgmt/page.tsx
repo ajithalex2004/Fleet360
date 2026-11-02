@@ -370,9 +370,9 @@ export default function CustomerPage() {
                           <SearchableSelect
                             value={form.regionId ?? ''}
                             onChange={async (val) => {
-                              set('regionId', val);
-                              set('departmentId', '');
-                              set('unitId', '');
+                              set('regionId', val || undefined);
+                              set('departmentId', undefined);
+                              set('unitId', undefined);
                               if (val) await loadDepts(val);
                               else setDepts([]);
                             }}
@@ -387,8 +387,8 @@ export default function CustomerPage() {
                             <SearchableSelect
                               value={form.departmentId ?? ''}
                               onChange={async (val) => {
-                                set('departmentId', val);
-                                set('unitId', '');
+                                set('departmentId', val || undefined);
+                                set('unitId', undefined);
                                 if (val) await loadUnits(val);
                                 else setUnits([]);
                               }}
@@ -403,7 +403,7 @@ export default function CustomerPage() {
                           <Fld label="Unit (Level 3)">
                             <SearchableSelect
                               value={form.unitId ?? ''}
-                              onChange={(val) => set('unitId', val)}
+                              onChange={(val) => set('unitId', val || undefined)}
                               options={units.map((u) => ({ value: u.id, label: u.name }))}
                               placeholder="Select unit..."
                               searchPlaceholder="Type unit name..."

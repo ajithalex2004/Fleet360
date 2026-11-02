@@ -58,36 +58,136 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const { region, department, unit, documents, ...data } = body;
-        const now = new Date().toISOString();
-        const sets: string[] = [`updated_at = '${now}'`];
-        const allowed = ['customer_type','priority','account_code','trade_license','name_en','name_ar',
-          'description_en','email','mobile_number','mobile_country_code','communication_language',
-          'region_id','department_id','unit_id','contact_person','contact_person_phone','contact_person_email',
-          'address_line1','address_line2','city','state','country','po_box',
-          'tax_registration_number','tax_applicable','toll_exempt','credit_limit','credit_days',
-          'allowed_payment_methods','default_payment_method','billing_cycle','invoice_frequency',
-          'invoice_delivery_method','payment_reminder_days','late_fee_percentage','auto_invoice',
-          'allowed_waiting_time_min','cancellation_allowed_min','allowed_booking_modifications',
-          'skip_approval','preferred_channel','notification_email','notification_sms_code',
-          'notification_sms','marketing_communications','booking_notifications','status'];
-        const camelToSnake = (s: string) => s.replace(/[A-Z]/g,(c)=>`_${c.toLowerCase()}`);
-        for (const [k,v] of Object.entries(data)) {
-          const col = camelToSnake(k);
-          if (!allowed.includes(col)) continue;
-          if (v === null || v === undefined) sets.push(`${col} = NULL`);
-          else if (typeof v === 'boolean') sets.push(`${col} = ${v}`);
-          else if (typeof v === 'number') sets.push(`${col} = ${v}`);
-          else sets.push(`${col} = '${String(v).replace(/'/g,"''")}'`);
-        }
-        await tx.$executeRawUnsafe(`UPDATE customers SET ${sets.join(', ')} WHERE id = '${params.id}'`);
-        const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${params.id}'`);
-        return NextResponse.json((rows as any[])[0]);
-      } catch (e) {
-        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
+      const { region, department, unit, documents, ...data } = body;
+      const now = new Date().toISOString();
+      const sets: string[] = [`updated_at = '${now}'`];
+
+      const allowed = [
+        'customer_code', 'customer_type', 'priority', 'account_code', 'trade_license',
+        'name_en', 'name_ar', 'description_en', 'description_ar',
+        'email', 'mobile_number', 'mobile_country_code', 'communication_language',
+        'region_id', 'department_id', 'unit_id',
+        'contact_person', 'contact_person_phone', 'contact_person_email',
+        'address_line1', 'address_line2', 'city', 'state', 'country', 'po_box',
+        'tax_registration_number', 'tax_applicable', 'toll_exempt',
+        'credit_limit', 'credit_days', 'allowed_payment_methods', 'default_payment_method',
+        'billing_cycle', 'invoice_frequency', 'invoice_delivery_method',
+        'payment_reminder_days', 'late_fee_percentage', 'auto_invoice',
+        'allowed_waiting_time_min', 'cancellation_allowed_min', 'allowed_booking_modifications',
+        'skip_approval', 'preferred_channel', 'notification_email', 'notification_sms_code',
+        'notification_sms', 'marketing_communications', 'booking_notifications', 'status',
+      ];
+
+      const numericCols = new Set([
+        'credit_limit', 'credit_days', 'payment_reminder_days', 'late_fee_percentage',
+        'allowed_waiting_time_min', 'cancellation_allowed_min', 'allowed_booking_modifications',
+      ]);
+      const booleanCols = new Set([
+        'tax_applicable', 'toll_exempt', 'auto_invoice', 'skip_approval',
+        'marketing_communications', 'booking_notifications',
+      ]);
+      const hierarchyFkCols = new Set(['region_id', 'department_id', 'unit_id']);
+      const requiredStringCols = new Set(['name_en', 'customer_type']);
+
+      // Validate any non-empty hierarchy FK IDs against customer_hierarchy so 23503 FK errors cannot occur
+      const validHierarchyIds = new Set<string>();
+      const candidateFkIds = ['regionId', 'departmentId', 'unitId', 'region_id', 'department_id', 'unit_id']
+        .map((k) => (typeof data[k] === 'string' ? data[k].trim() : ''))
+        .filter(Boolean);
+      if (candidateFkIds.length > 0) {
+        const existingH = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[])`,
+          candidateFkIds,
+        ).catch(() => []);
+        for (const r of existingH) validHierarchyIds.add(r.id);
       }
+
+      const camelToSnake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+      for (const [k, v] of Object.entries(data)) {
+        const col = camelToSnake(k);
+        if (!allowed.includes(col)) continue;
+
+        if (v === null || v === undefined) {
+          if (!requiredStringCols.has(col)) sets.push(`${col} = NULL`);
+          continue;
+        }
+
+        if (booleanCols.has(col) || typeof v === 'boolean') {
+          sets.push(`${col} = ${Boolean(v)}`);
+          continue;
+        }
+
+        if (numericCols.has(col) || typeof v === 'number') {
+          if (typeof v === 'string' && v.trim() === '') {
+            sets.push(`${col} = NULL`);
+          } else {
+            const num = Number(v);
+            sets.push(Number.isFinite(num) ? `${col} = ${num}` : `${col} = NULL`);
+          }
+          continue;
+        }
+
+        const strVal = String(v).trim();
+        if (strVal === '') {
+          if (!requiredStringCols.has(col)) {
+            sets.push(`${col} = NULL`);
+          }
+          continue;
+        }
+
+        if (hierarchyFkCols.has(col) && !validHierarchyIds.has(strVal)) {
+          sets.push(`${col} = NULL`);
+          continue;
+        }
+
+        sets.push(`${col} = '${strVal.replace(/'/g, "''")}'`);
+      }
+
+      await tx.$executeRawUnsafe(`UPDATE customers SET ${sets.join(', ')} WHERE id = '${params.id}'`);
+
+      // Mirror key fields to logistics_drayage_clients inside a SAVEPOINT so Drayage Client Master stays unified
+      await tx.$executeRawUnsafe(`SAVEPOINT sp_sync_drayage_client`);
+      try {
+        const updatedRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT * FROM customers WHERE id = $1 LIMIT 1`,
+          params.id,
+        );
+        const c = updatedRows[0];
+        if (c) {
+          await tx.$executeRawUnsafe(
+            `UPDATE logistics_drayage_clients
+                SET name = COALESCE($1, name),
+                    contact_person = $2,
+                    contact_no = $3,
+                    street_address = $4,
+                    city = COALESCE($5, city),
+                    trn = $6,
+                    trade_license = $7,
+                    updated_at = NOW()
+              WHERE id = $8 AND tenant_id = $9`,
+            c.name_en ? String(c.name_en) : null,
+            c.contact_person ? String(c.contact_person) : null,
+            c.mobile_number ? String(c.mobile_number) : null,
+            c.address_line1 ? String(c.address_line1) : null,
+            c.city ? String(c.city) : null,
+            c.tax_registration_number ? String(c.tax_registration_number) : null,
+            c.trade_license ? String(c.trade_license) : null,
+            params.id,
+            tenantId,
+          );
+        }
+        await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_sync_drayage_client`);
+      } catch {
+        await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_sync_drayage_client`).catch(() => {});
+      }
+
+      const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${params.id}'`);
+      return NextResponse.json((rows as any[])[0]);
+    } catch (e) {
+      return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
+    }
   });
 }
 

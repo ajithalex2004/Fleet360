@@ -187,6 +187,24 @@ export async function POST(req: NextRequest) {
 
         const now = new Date().toISOString();
         const safeTenantId = tenantId.replace(/'/g, "''");
+
+        // Validate hierarchy foreign keys (regionId, departmentId, unitId) before INSERT so 23503 FK errors never happen
+        const cleanRegionId = typeof body.regionId === 'string' && body.regionId.trim() ? body.regionId.trim() : null;
+        const cleanDepartmentId = typeof body.departmentId === 'string' && body.departmentId.trim() ? body.departmentId.trim() : null;
+        const cleanUnitId = typeof body.unitId === 'string' && body.unitId.trim() ? body.unitId.trim() : null;
+        const candidateHIds = [cleanRegionId, cleanDepartmentId, cleanUnitId].filter((x): x is string => Boolean(x));
+        const validHIds = new Set<string>();
+        if (candidateHIds.length > 0) {
+          const hRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[])`,
+            candidateHIds,
+          ).catch(() => []);
+          for (const r of hRows) validHIds.add(r.id);
+        }
+        const safeRegionId = cleanRegionId && validHIds.has(cleanRegionId) ? `'${cleanRegionId.replace(/'/g, "''")}'` : 'NULL';
+        const safeDepartmentId = cleanDepartmentId && validHIds.has(cleanDepartmentId) ? `'${cleanDepartmentId.replace(/'/g, "''")}'` : 'NULL';
+        const safeUnitId = cleanUnitId && validHIds.has(cleanUnitId) ? `'${cleanUnitId.replace(/'/g, "''")}'` : 'NULL';
+
         await tx.$executeRawUnsafe(`
           INSERT INTO customers (
             id, tenant_id, created_at, updated_at, customer_code, customer_type, priority,
@@ -218,9 +236,9 @@ export async function POST(req: NextRequest) {
             ${body.mobileNumber ? `'${body.mobileNumber.replace(/'/g,"''")}'` : 'NULL'},
             ${body.mobileCountryCode ? `'${body.mobileCountryCode}'` : "'+971'"},
             ${body.communicationLanguage ? `'${body.communicationLanguage}'` : "'en'"},
-            ${body.regionId ? `'${body.regionId}'` : 'NULL'},
-            ${body.departmentId ? `'${body.departmentId}'` : 'NULL'},
-            ${body.unitId ? `'${body.unitId}'` : 'NULL'},
+            ${safeRegionId},
+            ${safeDepartmentId},
+            ${safeUnitId},
             ${body.contactPerson ? `'${body.contactPerson.replace(/'/g,"''")}'` : 'NULL'},
             ${body.contactPersonPhone ? `'${body.contactPersonPhone.replace(/'/g,"''")}'` : 'NULL'},
             ${body.contactPersonEmail ? `'${body.contactPersonEmail.replace(/'/g,"''")}'` : 'NULL'},
