@@ -101,7 +101,14 @@ export default function UsersPage() {
       ? `Disable ${name}? They will be signed out and unable to sign in until enabled again.`
       : `Enable ${name}? They will be able to sign in again.`;
     if (!confirm(ask)) return;
-    const res = await fetch(`/api/admin/users/${u.id}`, {
+    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    const res = targetTenantId
+      ? await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update-member', userId: u.id, isActive: !u.isActive }),
+        })
+      : await fetch(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !u.isActive }),
@@ -156,7 +163,8 @@ export default function UsersPage() {
     setLines(null);
     // Reporting lines in this company, for the Direct Manager / Department
     // Head approvers (Admin > Workflows).
-    fetch(`/api/admin/users/${u.id}`)
+    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    fetch(targetTenantId ? `/api/admin/tenants/${targetTenantId}/users?userId=${u.id}` : `/api/admin/users/${u.id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setLines({
         managerUserId: d?.reportingLines?.managerUserId ?? '',
@@ -182,6 +190,25 @@ export default function UsersPage() {
         // Sent once loaded: '' clears a line.
         ...(lines ? { managerUserId: lines.managerUserId, departmentHeadUserId: lines.departmentHeadUserId } : {}),
       };
+      const targetTenantId = showEdit.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+      if (targetTenantId) {
+        const res = await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update-member',
+            userId: showEdit.id,
+            ...profilePayload,
+            ...(editForm.newPassword ? { newPassword: editForm.newPassword } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || d.error || 'Failed to update');
+        }
+        setShowEdit(null); load();
+        return;
+      }
       const res = await fetch(`/api/admin/users/${showEdit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

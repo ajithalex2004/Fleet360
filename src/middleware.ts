@@ -379,6 +379,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
 
   // 4a. Authorization dry run (src/lib/authz/dry-run.ts): answer the admin
   // gate and policy decision in headers without running anything.
+  const effectiveAuthzRole = session.impersonatedBy ? 'SUPER_ADMIN' : session.role;
   if (pathname.startsWith('/api/') && request.headers.get(DRY_RUN_HEADER) === '1') {
     const level = isAdminApiPath(pathname) ? requiredAdminLevel(pathname, request.method) : null;
     const headers = dryRunHeaders({
@@ -386,9 +387,9 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
       mode: authzMode(),
       decision: decide(
         { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
-        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+        { role: effectiveAuthzRole, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
       ),
-      adminGateRefusal: level && !roleSatisfies(session.role, level) ? level : null,
+      adminGateRefusal: level && !roleSatisfies(effectiveAuthzRole, level) ? level : null,
     });
     return new NextResponse(null, { status: 204, headers });
   }
@@ -398,7 +399,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
   // unlisted admin routes require SUPER_ADMIN.
   if (isAdminApiPath(pathname)) {
     const level = requiredAdminLevel(pathname, request.method);
-    if (level && !roleSatisfies(session.role, level)) {
+    if (level && !roleSatisfies(effectiveAuthzRole, level)) {
       return NextResponse.json(
         {
           error: 'Forbidden',
@@ -421,7 +422,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
     if (mode !== 'off') {
       const decision = decide(
         { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
-        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+        { role: effectiveAuthzRole, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
       );
       // Sessions issued before the permission claim existed hold none until
       // they roll over (24 h); in report mode that is expected, not signal.

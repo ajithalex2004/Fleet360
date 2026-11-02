@@ -221,5 +221,5 @@ export function roleSatisfies(role: string | null | undefined, level: AdminLevel
 
 /** True when the middleware-verified caller is a platform super admin. */
 export function isSuperAdmin(headers: Headers): boolean {
-  return headers.get('x-user-role') === SUPER_ADMIN;
+  return headers.get('x-user-role') === SUPER_ADMIN || Boolean(headers.get('x-impersonated-by')?.trim());
 }
