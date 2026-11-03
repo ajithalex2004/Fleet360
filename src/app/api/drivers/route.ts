@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { findLinkableDriverUser } from '@/lib/drivers/driver-login-user';
 import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
 
 function parseSafeDate(val: unknown): Date | null {
@@ -74,11 +75,13 @@ export async function GET(request: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId, role } = authz;
+  const { tenantId } = authz;
   const sp = request.nextUrl.searchParams;
-  const includeLogistics = sp.get('includeLogistics') === 'true';
 
-  // Sync any User accounts with userType='DRIVER' or DRIVER role into `drivers` table if missing
+  // Give this tenant's driver users a driver profile if they have none.
+  // Only the caller's own tenant: this used to match users in every tenant
+  // whose tenant name, hierarchy or email contained "trexla", with
+  // platform-admin rights, and write drivers for them on a plain GET.
   await withPlatformAdmin(prisma, async (adminTx) => {
     await adminTx.$executeRawUnsafe(
       `INSERT INTO drivers (
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
        )
        SELECT
          u.id,
-         COALESCE(ut."tenantId", $1),
+         $1,
          COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", ''))), ''), u.username, 'Driver'),
          COALESCE(u."firstName", SPLIT_PART(u.username, '_', 1), 'Driver'),
          COALESCE(u."lastName", ''),
@@ -96,16 +99,12 @@ export async function GET(request: NextRequest) {
          u."employeeId",
          COALESCE(u."employeeId", CONCAT('LIC-', UPPER(SUBSTRING(MD5(u.id) FROM 1 FOR 6)))),
          CASE WHEN u."isActive" = false THEN 'INACTIVE' ELSE 'ACTIVE' END,
-         CASE
-           WHEN LOWER(COALESCE(t.name, '')) LIKE '%trexla%' OR LOWER(COALESCE(u.hierarchy, '')) LIKE '%trexla%' OR LOWER(COALESCE(u.email, '')) LIKE '%@trexla%'
-           THEN 'LOGISTICS'
-           ELSE 'LOGISTICS'
-         END,
+         'LOGISTICS',
          COALESCE(u.hierarchy, t.name),
          NOW(),
          NOW()
        FROM "User" u
-       LEFT JOIN "UserTenant" ut ON ut."userId" = u.id
+       JOIN "UserTenant" ut ON ut."userId" = u.id AND ut."tenantId" = $1
        LEFT JOIN "Tenant" t ON t.id = ut."tenantId"
        LEFT JOIN "Role" r ON r.id = ut."roleId"
        WHERE (
@@ -113,18 +112,12 @@ export async function GET(request: NextRequest) {
          OR UPPER(COALESCE(r.code, '')) = 'DRIVER'
          OR LOWER(COALESCE(r.name, '')) LIKE '%driver%'
        )
-       AND (
-         ut."tenantId" = $1
-         OR LOWER(COALESCE(t.name, '')) LIKE '%trexla%'
-         OR LOWER(COALESCE(u.hierarchy, '')) LIKE '%trexla%'
-         OR LOWER(COALESCE(u.email, '')) LIKE '%@trexla%'
-       )
        AND NOT EXISTS (
          SELECT 1 FROM drivers d
          WHERE d.deleted_at IS NULL
            AND (
              d.id::text = u.id
-             OR (u.email IS NOT NULL AND LOWER(d.email) = LOWER(u.email))
+             OR (d.tenant_id = $1 AND u.email IS NOT NULL AND LOWER(d.email) = LOWER(u.email))
            )
        )
        ON CONFLICT (id) DO NOTHING`,
@@ -134,31 +127,10 @@ export async function GET(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      // Purge legacy auto-seeded sample drivers and restore any real drivers that were soft-deactivated so they remain visible under INACTIVE status
-      await tx.$executeRawUnsafe(
-        `DELETE FROM drivers
-          WHERE tenant_id = $1
-            AND (
-              id::text LIKE 'drv-salim-%'
-              OR id::text LIKE 'drv-rashid-%'
-              OR id::text LIKE 'drv-tariq-%'
-              OR id::text LIKE 'drv-imran-%'
-              OR name ILIKE 'Rashid Al-Marri'
-            )`,
-        tenantId,
-      ).catch(() => {});
-
-      await tx.$executeRawUnsafe(
-        `UPDATE drivers
-            SET status = 'INACTIVE',
-                deleted_at = NULL,
-                updated_at = NOW()
-          WHERE tenant_id = $1
-            AND deleted_at IS NOT NULL
-            AND COALESCE(status, 'ACTIVE') = 'ACTIVE'`,
-        tenantId,
-      ).catch(() => {});
-
+      // A list request changes nothing else. It used to delete drivers whose
+      // id or name matched sample patterns (a real "Rashid Al-Marri"
+      // included) and to un-delete every soft-deleted driver, so deleting a
+      // driver never stuck.
       const status   = sp.get('status');
       const type     = sp.get('driverType') || sp.get('assignmentType');
       const search   = sp.get('search');
@@ -195,37 +167,10 @@ export async function GET(request: NextRequest) {
         orderBy: { name: 'asc' },
       });
 
-      // When called from Vehicle Master (includeLogistics=true) or by SUPER_ADMIN, also include Trexla / Logistics drivers across tenants
-      let drivers = [...tenantDrivers];
-      if (includeLogistics || role === 'SUPER_ADMIN') {
-        const crossTenantLogisticsDrivers = await withPlatformAdmin(prisma, async (adminTx) => {
-          return adminTx.driver.findMany({
-            where: {
-              deletedAt: null,
-              ...(status ? { status } : {}),
-              OR: [
-                { driverType: 'LOGISTICS' },
-                { hierarchy: { contains: 'Trexla', mode: 'insensitive' } },
-                { email: { contains: 'trexla', mode: 'insensitive' } },
-              ],
-            },
-            orderBy: { name: 'asc' },
-          });
-        }).catch(() => []);
-
-        const seenIds = new Set(drivers.map((d) => d.id));
-        const seenEmails = new Set(
-          drivers.map((d) => (d.email || '').toLowerCase().trim()).filter(Boolean)
-        );
-        for (const cd of crossTenantLogisticsDrivers) {
-          const emailKey = (cd.email || '').toLowerCase().trim();
-          if (seenIds.has(cd.id) || (emailKey && seenEmails.has(emailKey))) continue;
-          seenIds.add(cd.id);
-          if (emailKey) seenEmails.add(emailKey);
-          drivers.push(cd);
-        }
-        drivers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      }
+      // The caller's own tenant only. Other tenants' "Trexla / logistics"
+      // drivers used to be merged in (names, emails, phone numbers) for any
+      // caller passing includeLogistics=true, and for every SUPER_ADMIN.
+      const drivers = tenantDrivers;
 
       // Fetch dynamic driver_category, employee_id, issuing_authority, and additional_documents from DB
       const extraRows = await tx.$queryRawUnsafe<Array<{
@@ -256,10 +201,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(serialize(enriched));
     } catch (e) {
       console.error('[Driver Hub] GET /api/drivers:', e);
-      return NextResponse.json(
-        { error: 'Internal Server Error', details: String(e) },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
   });
 }
@@ -291,6 +233,25 @@ export async function POST(request: NextRequest) {
         ?? 'Driver';
 
       const driverCategory = body.driverCategory || body.licenseType || 'LIGHT_DUTY';
+
+      // The driver's login account, decided before anything is written: an
+      // existing account is linked (and its password set) only if it is
+      // plainly this tenant's driver login (src/lib/drivers/driver-login-user.ts).
+      const cleanLic = body.licenseNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const targetEmail = (body.email && body.email.trim())
+        ? body.email.trim().toLowerCase()
+        : `driver.${cleanLic}@fleet360.internal`;
+      const targetUsername = (body.username && body.username.trim())
+        ? body.username.trim().toLowerCase()
+        : (body.email ? body.email.split('@')[0] : `driver_${cleanLic}`);
+      const loginMatch = await findLinkableDriverUser(tenantId, {
+        email: targetEmail,
+        username: targetUsername,
+        employeeId: body.employeeId || null,
+      });
+      if (loginMatch.kind === 'conflict') {
+        return NextResponse.json({ error: loginMatch.message }, { status: 409 });
+      }
 
       // 1. Create Driver Profile in Driver Hub
       const driver = await tx.driver.create({
@@ -364,26 +325,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 2. Map Driver in User Module by creating / linking an entry in the User Profile
-      const cleanLic = body.licenseNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const targetEmail = (body.email && body.email.trim())
-        ? body.email.trim().toLowerCase()
-        : `driver.${cleanLic}@fleet360.internal`;
-
-      const targetUsername = (body.username && body.username.trim())
-        ? body.username.trim().toLowerCase()
-        : (body.email ? body.email.split('@')[0] : `driver_${cleanLic}`);
-
-      // Check if user already exists
-      let user = await tx.user.findFirst({
-        where: {
-          OR: [
-            { email: { equals: targetEmail, mode: 'insensitive' } },
-            { username: { equals: targetUsername, mode: 'insensitive' } },
-            ...(body.employeeId ? [{ employeeId: body.employeeId }] : []),
-          ],
-        },
-      });
+      // 2. Map Driver in User Module: link this tenant's existing driver login, or create one
+      let user = loginMatch.kind === 'linkable' ? loginMatch.user : null;
 
       if (!user) {
         const newUserId = driver.id;
@@ -443,7 +386,9 @@ export async function POST(request: NextRequest) {
             },
           ],
         },
-      }) || await tx.role.findFirst({ where: { OR: [{ tenantId }, { tenantId: null }] } });
+      });
+      // No driver role, no membership: the "any role" fallback here could
+      // give a new driver an admin role.
 
       if (role) {
         await tx.userTenant.upsert({
@@ -470,10 +415,7 @@ export async function POST(request: NextRequest) {
       );
     } catch (e) {
       console.error('[Driver Hub] POST /api/drivers:', e);
-      return NextResponse.json(
-        { error: 'Internal Server Error', details: String(e) },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
   });
 }

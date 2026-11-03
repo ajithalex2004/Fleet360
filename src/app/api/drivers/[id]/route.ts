@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { findLinkableDriverUser } from '@/lib/drivers/driver-login-user';
 import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
 
 type Params = { params: Promise<{ id: string }> };
@@ -109,16 +110,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
       const extra = extraRows[0];
 
       // Check for linked user
-      const linkedUser = await tx.user.findFirst({
-        where: {
-          OR: [
-            ...(driver.email ? [{ email: { equals: driver.email, mode: 'insensitive' as const } }] : []),
-            ...(extra?.employee_id ? [{ employeeId: extra.employee_id }] : []),
-            ...(driver.contactNumber ? [{ mobileNumber: driver.contactNumber }] : []),
-          ],
-        },
-        select: { id: true, username: true, email: true, employeeId: true, isActive: true },
+      // Only this tenant's driver login: matching any account by email or
+      // mobile number showed other people's usernames here.
+      const loginMatch = await findLinkableDriverUser(tenantId, {
+        driverId: driver.id,
+        email: driver.email,
+        employeeId: extra?.employee_id ?? null,
+        mobileNumber: driver.contactNumber,
       });
+      const linkedUser = loginMatch.kind === 'linkable'
+        ? { id: loginMatch.user.id, username: loginMatch.user.username, email: loginMatch.user.email, employeeId: loginMatch.user.employeeId }
+        : null;
 
       return NextResponse.json(
         serialize({
@@ -266,18 +268,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       // Synchronize / provision linked User Profile without risking rollback of driver update on non-critical conflicts
       let linkedUser: { id: string; email: string; username: string | null } | null = null;
+      let loginWarning: string | null = null;
       try {
-        const lookupOr: Prisma.UserWhereInput[] = [
-          ...(updated.email ? [{ email: { equals: updated.email, mode: 'insensitive' as const } }] : []),
-          ...(cleanEmployeeId ? [{ employeeId: cleanEmployeeId }] : []),
-          ...(updated.contactNumber ? [{ mobileNumber: updated.contactNumber }] : []),
-        ];
+        // Only this tenant's own driver login is linked or has its password
+        // set (src/lib/drivers/driver-login-user.ts). Matching any account by
+        // email, employee ID or mobile number let a tenant user set another
+        // person's password.
+        const loginMatch = await findLinkableDriverUser(tenantId, {
+          driverId: id,
+          email: updated.email,
+          employeeId: cleanEmployeeId || null,
+          mobileNumber: updated.contactNumber,
+        });
+        if (loginMatch.kind === 'conflict') loginWarning = loginMatch.message;
+        const existingUser = loginMatch.kind === 'linkable' ? loginMatch.user : null;
 
-        const existingUser = lookupOr.length > 0
-          ? await tx.user.findFirst({ where: { OR: lookupOr } })
-          : null;
-
-        if (!existingUser && (password || updated.email)) {
+        if (loginMatch.kind === 'conflict') {
+          // Leave every account alone.
+        } else if (!existingUser && (password || updated.email)) {
           const cleanLic = (updated.licenseNumber || id.slice(0, 8)).toLowerCase().replace(/[^a-z0-9]/g, '');
           const targetEmail = (updated.email && updated.email.trim())
             ? updated.email.trim().toLowerCase()
@@ -357,6 +365,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           issuingAuthority: cleanAuthority ?? null,
           additionalDocuments: additionalDocuments ?? [],
           linkedUser,
+          ...(loginWarning ? { loginWarning } : {}),
           compliance: complianceFlags(updated),
         })
       );

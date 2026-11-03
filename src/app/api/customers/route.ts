@@ -150,18 +150,8 @@ export async function POST(req: NextRequest) {
 
         const id = randomUUID();
 
-        // Ensure customer_code uniqueness is scoped per-tenant (not globally across all tenants)
-        await tx.$executeRawUnsafe(`SAVEPOINT sp_cust_idx`);
-        try {
-          await tx.$executeRawUnsafe(`ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_customer_code_key`);
-          await tx.$executeRawUnsafe(`DROP INDEX IF EXISTS public.customers_customer_code_key`);
-          await tx.$executeRawUnsafe(
-            `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_tenant_customer_code ON public.customers (tenant_id, customer_code) WHERE customer_code IS NOT NULL`
-          );
-          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_cust_idx`);
-        } catch {
-          await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_cust_idx`).catch(() => {});
-        }
+        // customer_code is unique per tenant: migration
+        // 20261107090000_customers_code_unique_per_tenant (this used to run as DDL here).
 
         // Auto-generate collision-free customer code
         if (!body.customerCode) {
