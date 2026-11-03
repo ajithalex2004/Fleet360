@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Apple,
   Download,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -34,22 +33,23 @@ interface MobileApp {
 const APPS: MobileApp[] = [
   {
     id: 'fleet360-driver',
-    name: 'Fleet360 Driver App',
-    audience: 'Chauffeur, Fleet & Logistics Drivers',
-    description: 'Real-time GPS telematics, live vehicle sign-in, shift pre-trip safety checklist, multi-language (English / Arabic / Hindi), turn-by-turn route dispatch, and dark/light UI mode.',
-    href: '/driver-app',
+    name: 'LogiXL-Connect Driver App',
+    audience: 'Port & Container Drayage Drivers',
+    description:
+      'Simplest container drayage driver app — My Jobs (Active Jobs & History), Single Next-Action L1/L2/Reassign progression, 1-Tap Ramp Offload ETC (1/2/3/4 Hrs), and Turn-by-Turn Google Maps navigation.',
+    href: '/driver-app/today',
     apkHref: '/api/mobile/download-apk?app=driver',
     icon: BusFront,
     gradient: 'from-blue-600 via-indigo-600 to-cyan-600',
     ring: 'ring-blue-500/50',
-    tag: 'Fleet Telematics & Ops',
+    tag: 'Port & Container Drayage',
     module: 'driver-app',
     capabilities: [
+      'My Jobs (Active & History)',
+      'Single Next-Action L1/L2',
+      '1-Tap Ramp Offload ETC',
+      'Google Maps Navigation',
       'Live GPS Telematics',
-      'Pre-Trip Safety Check',
-      'Vehicle Sign-In & Odometer',
-      'EN / AR / HI Languages',
-      'Dark & Light Mode',
       'Native Android APK',
     ],
   },
@@ -57,7 +57,8 @@ const APPS: MobileApp[] = [
     id: 'fleet360-booking-app',
     name: 'Fleet360 Booking App',
     audience: 'Corporate Clients, Freight Shippers & Guests',
-    description: 'Universal mobile booking app for all mobility domains (Freight & Logistics, Chauffeur, School Bus, Staff Transport, Car Rental). Features 1-Touch Biometrics, Dual-Channel OTP, Multi-Stop Routing, GS1 Barcode Scanning, Live IoT Reefer Temp, e-BOL & e-POD with Photo.',
+    description:
+      'Universal mobile booking app for all mobility domains (Freight & Logistics, Chauffeur, School Bus, Staff Transport, Car Rental). Features 1-Touch Biometrics, Dual-Channel OTP, Multi-Stop Routing, GS1 Barcode Scanning, Live IoT Reefer Temp, e-BOL & e-POD with Photo.',
     href: '/m',
     apkHref: '/api/mobile/download-apk',
     icon: Smartphone,
@@ -78,20 +79,22 @@ const APPS: MobileApp[] = [
     id: 'sts-driver',
     name: 'Fleet360 STS Driver',
     audience: 'Staff Transport Drivers',
-    description: 'On-the-road app for staff bus drivers. Today\'s trips, depart / arrive, passenger boarding manifest, pre-trip safety checklist, incident reporting.',
+    description:
+      "On-the-road app for staff bus drivers. Today's trips, depart / arrive, passenger boarding manifest, pre-trip safety checklist, incident reporting.",
     href: '/bus-ops/driver',
     icon: BusFront,
     gradient: 'from-violet-600 to-purple-600',
     ring: 'ring-violet-500/40',
     tag: 'Staff Transport',
     module: 'bus-ops',
-    capabilities: ['Today\'s trips', 'Pre-trip check', 'Boarding manifest', 'Incident report'],
+    capabilities: ["Today's trips", 'Pre-trip check', 'Boarding manifest', 'Incident report'],
   },
   {
     id: 'sts-passenger',
     name: 'Fleet360 STS Passenger',
     audience: 'Staff Riders',
-    description: 'Companion app for staff riders. Today\'s bus, BLE / NFC / QR boarding, absence registration, waitlist join with auto-promotion notifications.',
+    description:
+      "Companion app for staff riders. Today's bus, BLE / NFC / QR boarding, absence registration, waitlist join with auto-promotion notifications.",
     href: '/bus-ops/passenger',
     icon: UserRound,
     gradient: 'from-cyan-600 to-sky-600',
@@ -104,7 +107,8 @@ const APPS: MobileApp[] = [
     id: 'rac-counter',
     name: 'Fleet360 RAC Counter',
     audience: 'Rental Counter Staff',
-    description: 'Mobile counter for rental handover and return. Walkaround photos, mileage capture, e-signature, damage flagging.',
+    description:
+      'Mobile counter for rental handover and return. Walkaround photos, mileage capture, e-signature, damage flagging.',
     href: '/rental/counter',
     icon: ScanLine,
     gradient: 'from-emerald-600 to-teal-600',
@@ -117,7 +121,8 @@ const APPS: MobileApp[] = [
     id: 'leasing-field',
     name: 'Fleet360 Leasing Field',
     audience: 'Leasing Field Operators',
-    description: 'Mobile capture for leasing operations on the lot — mileage readings, fuel logs, traffic-fine entry. Posts to existing endpoints.',
+    description:
+      'Mobile capture for leasing operations on the lot — mileage readings, fuel logs, traffic-fine entry. Posts to existing endpoints.',
     href: '/leasing/field',
     icon: Wrench,
     gradient: 'from-amber-600 to-orange-600',
@@ -130,7 +135,8 @@ const APPS: MobileApp[] = [
     id: 'sb-parent',
     name: 'Fleet360 SchoolBus Parent',
     audience: 'Parents & Guardians',
-    description: 'Today\'s school bus, ETA at home stop, attendance log, push alerts (departure / boarded / dropped off / no-show), absence registration, medical-alert flag.',
+    description:
+      "Today's school bus, ETA at home stop, attendance log, push alerts (departure / boarded / dropped off / no-show), absence registration, medical-alert flag.",
     href: '/school-bus/parent',
     icon: GraduationCap,
     gradient: 'from-orange-600 to-red-600',
@@ -143,7 +149,8 @@ const APPS: MobileApp[] = [
     id: 'sb-driver',
     name: 'Fleet360 SchoolBus Driver',
     audience: 'School Bus Drivers & Attendants',
-    description: 'On-the-road app for school bus drivers. Pre-trip safety check, RFID/code scan boarding + alighting, manifest with medical-alert flagging, incident reporting that auto-pages parents.',
+    description:
+      'On-the-road app for school bus drivers. Pre-trip safety check, RFID/code scan boarding + alighting, manifest with medical-alert flagging, incident reporting that auto-pages parents.',
     href: '/school-bus/driver',
     icon: BusFront,
     gradient: 'from-red-700 to-rose-700',
@@ -168,15 +175,18 @@ export default function MobileAppsPage() {
               <h1 className="text-xl font-bold text-white">Fleet360 PWA Gallery</h1>
             </div>
           </div>
-          <Link href="/platform" className="text-xs text-slate-400 hover:text-white">← Platform</Link>
+          <Link href="/platform" className="text-xs text-slate-400 hover:text-white">
+            ← Platform
+          </Link>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         <section>
           <p className="text-slate-400 max-w-3xl text-sm leading-relaxed">
-            Installable progressive web apps. Open the link on your phone, then tap &quot;Add to Home Screen&quot; — the app installs scope-locked to its role,
-            works offline-cached, and is a single codebase across iOS and Android. No app-store submission, no native build pipeline, no separate auth realm.
+            Installable progressive web apps. Open the link on your phone, then tap &quot;Add to Home Screen&quot; — the
+            app installs scope-locked to its role, works offline-cached, and is a single codebase across iOS and
+            Android. No app-store submission, no native build pipeline, no separate auth realm.
           </p>
         </section>
 
@@ -188,11 +198,15 @@ export default function MobileAppsPage() {
                 key={app.id}
                 className={`group relative overflow-hidden rounded-3xl bg-slate-900/60 border border-white/10 hover:ring-2 ${app.ring} transition-all`}
               >
-                <div className={`absolute -top-20 -right-20 w-64 h-64 rounded-full bg-gradient-to-br ${app.gradient} opacity-10 group-hover:opacity-20 blur-3xl transition-opacity`} />
+                <div
+                  className={`absolute -top-20 -right-20 w-64 h-64 rounded-full bg-gradient-to-br ${app.gradient} opacity-10 group-hover:opacity-20 blur-3xl transition-opacity`}
+                />
                 <div className="relative p-6 space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-4">
-                      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${app.gradient} flex items-center justify-center shadow-lg`}>
+                      <div
+                        className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${app.gradient} flex items-center justify-center shadow-lg`}
+                      >
                         <Icon className="w-7 h-7 text-white" strokeWidth={1.75} />
                       </div>
                       <div>
@@ -207,7 +221,10 @@ export default function MobileAppsPage() {
 
                   <div className="flex flex-wrap gap-1.5">
                     {app.capabilities.map((c) => (
-                      <span key={c} className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-300">
+                      <span
+                        key={c}
+                        className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-300"
+                      >
                         {c}
                       </span>
                     ))}
@@ -243,16 +260,24 @@ export default function MobileAppsPage() {
             iOS Add to Home Screen
           </div>
           <ol className="list-decimal pl-5 space-y-1 text-xs">
-            <li>Open the app URL in <strong>Safari</strong> (Chrome on iOS won&apos;t trigger install).</li>
-            <li>Tap the Share button → <strong>Add to Home Screen</strong>.</li>
+            <li>
+              Open the app URL in <strong>Safari</strong> (Chrome on iOS won&apos;t trigger install).
+            </li>
+            <li>
+              Tap the Share button → <strong>Add to Home Screen</strong>.
+            </li>
             <li>The app launches standalone (no Safari chrome) from the home-screen icon.</li>
           </ol>
           <div className="border-t border-white/5 pt-3">
             <div className="text-white font-semibold text-xs mb-1">Android</div>
-            <p className="text-xs">Chrome shows the install prompt automatically when the manifest is detected. Or use the menu → &quot;Install app&quot;.</p>
+            <p className="text-xs">
+              Chrome shows the install prompt automatically when the manifest is detected. Or use the menu →
+              &quot;Install app&quot;.
+            </p>
           </div>
           <div className="border-t border-white/5 pt-3 text-xs italic">
-            Web Bluetooth + Web NFC are <strong>Android-only</strong> (Chrome). iOS staff can still use QR + manual boarding methods.
+            Web Bluetooth + Web NFC are <strong>Android-only</strong> (Chrome). iOS staff can still use QR + manual
+            boarding methods.
           </div>
         </section>
       </main>

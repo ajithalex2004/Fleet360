@@ -6,10 +6,10 @@ import {
   Smartphone,
   Download,
   ExternalLink,
-  ScanLine,
-  Receipt,
-  WifiOff,
+  Navigation,
+  Clock,
   CheckCircle2,
+  Truck,
 } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui/page-theme';
 import DriverTodayPage from '@/app/(driver)/driver-app/today/page';
@@ -18,8 +18,8 @@ export default function DrayageDriverMobileWorkspacePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Driver Mobile App & Android APK Hub"
-        subtitle="Camera OCR Container & Bolt Seal Gate-Out Guard, Voice Note & Expense Receipt Upload to Driver Payments, and Port Dead-Zone Offline Queue Mode"
+        title="LogiXL-Connect Driver App & Android APK Hub"
+        subtitle="Simplest Port & Container Drayage Driver Experience — My Jobs (Active Jobs & History), Single Next-Action L1/L2/Reassign Workflow, 1-Tap Ramp Offload ETC (1/2/3/4 Hrs), and Turn-by-Turn Google Maps Navigation"
         icon={Smartphone}
         accent="blue"
         actions={
@@ -48,51 +48,51 @@ export default function DrayageDriverMobileWorkspacePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-sky-500/30 space-y-2">
           <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
-            <ScanLine className="w-4 h-4" />
-            <span>1. Camera OCR Container &amp; Seal Gate-Out Guard</span>
+            <Truck className="w-4 h-4" />
+            <span>1. Single Next-Action L1 / L2 / Reassign Workflow</span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Driver snaps a photo of the container door and bolt seal; Gemini Vision OCR verifies the characters match the assigned job&apos;s container/seal number before allowing gate-out.
+            Zero clutter or pre-trip checklists — shows only the current status badge and the single next action button (Accept Job, Attach Trailer, Placed @ Yard / Placed @ Ramp, Detach Trailer).
           </p>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Blocks mismatched container gate-out automatically</span>
+            <span>Exact LogiXL-Connect 1-tap state progression</span>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/30 space-y-2">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-            <Receipt className="w-4 h-4" />
-            <span>2. Voice Note &amp; Expense Receipt Upload</span>
+            <Clock className="w-4 h-4" />
+            <span>2. 1-Tap Ramp Offload ETC &amp; Inspection Photo</span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Drivers snap photos of physical port gate passes, weighbridge slips, or tire/toll receipts and record an audio Voice Note directly from the mobile app.
+            When placing a container at a warehouse ramp, drivers select estimated offload duration (1 / 2 / 3 / 4 Hours) in one tap, or attach inspection photos during Under Inspection.
           </p>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Auto-appears in Dispatcher&apos;s Driver Payments screen</span>
+            <span>Syncs live to Dispatcher Control Tower</span>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-amber-500/30 space-y-2">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-            <WifiOff className="w-4 h-4" />
-            <span>3. Port Dead-Zone Offline Queue Mode</span>
+            <Navigation className="w-4 h-4" />
+            <span>3. Direct Turn-by-Turn Google Maps Navigation</span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Caches active trip milestones, ePOD signatures, OCR scans, and expense receipts on the phone when inside port dead-zones and auto-syncs when signal returns.
+            Every job card and detail screen includes 1-tap Pickup and Dropoff Navigate buttons that launch native Google Maps turn-by-turn directions to the exact port gate or warehouse.
           </p>
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Zero data loss inside Jebel Ali / Khalifa Port cranes</span>
+            <span>Works in Web Browser &amp; Native Android APK</span>
           </div>
         </div>
       </div>
 
       {/* Live Interactive Driver Mobile App Simulator & Console */}
       <Panel
-        title="Live Interactive Driver Mobile App (Embedded Handset View)"
-        subtitle="Test Camera OCR Container/Seal verification, upload Expense Receipts & Voice Notes, or toggle Offline Queue Mode directly below"
+        title="LogiXL-Connect Driver Mobile App (Live Interactive Handset View)"
+        subtitle="My Jobs (Active Jobs & History) with Single Next-Action Button, Highlighted Trailer Box, and Turn-by-Turn Google Maps Navigation"
         icon={Smartphone}
         accent="blue"
       >

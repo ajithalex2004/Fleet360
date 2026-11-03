@@ -302,12 +302,12 @@ const TREXLA_FALLBACK_VEHICLES: FleetVehicle[] = [
 
 const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
   en: {
-    appTitle: 'Fleet360 Driver',
-    appSubtitle: 'Mobile Telematics & Driver Dispatch Hub',
+    appTitle: 'LogiXL-Connect Driver',
+    appSubtitle: 'Port & Container Drayage Driver App',
     driverTab: 'Driver Account',
     vehicleTab: 'Vehicle Sign-In',
     driverSignInTitle: 'Driver Account Sign In',
-    driverSignInSubtitle: 'Sign in to assign your vehicle and begin your shift checklist.',
+    driverSignInSubtitle: 'Sign in to assign your prime mover and open My Jobs.',
     biometricSignIn: 'Sign In with Biometric',
     usernameLabel: 'Driver Email or Employee ID',
     passwordLabel: 'Password',
@@ -316,7 +316,7 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehicleSignInSubtitle: 'Sign in with Vehicle Code or Plate Number to activate tracking.',
     vehicleIdLabel: 'Vehicle ID or License Plate',
     suggested: 'Suggested:',
-    step2Badge: 'Step 2 · Pre-Shift Assignment',
+    step2Badge: 'Step 2 · Prime Mover Assignment',
     vehiclePromptTitle: 'Enter Vehicle ID & Odometer',
     vehiclePromptSubtitle: 'Confirm your vehicle and dashboard odometer reading to view your assigned jobs.',
     assignedVehicleLabel: 'Select Vehicle',
@@ -328,12 +328,12 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     startingOdometerLabel: 'Starting Odometer (km) *',
     useLast: 'Use last:',
     odometerHint: 'Verify reading against the physical vehicle instrument cluster.',
-    confirmButton: 'Confirm & View My Jobs',
+    confirmButton: 'Confirm & Open My Jobs',
     startingChecklist: 'Opening My Jobs…',
     connectedVehicle: 'Connected Vehicle',
     switchVehicle: 'Switch',
-    startReviewChecklist: 'Start / Review Driver Checklist',
-    operationsMenu: 'Go to Driver Operations Menu',
+    startReviewChecklist: 'Open My Jobs (LogiXL-Connect)',
+    operationsMenu: 'Open My Jobs',
     statusActive: 'Status: Active & Assigned',
     notice: 'Notice',
     serverHostTitle: 'API Server Endpoint',
@@ -341,12 +341,12 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     saveServer: 'Save Server URL',
   },
   ar: {
-    appTitle: 'سائق Fleet360',
-    appSubtitle: 'منصة التتبع الميداني وإدارة السائقين',
+    appTitle: 'سائق LogiXL-Connect',
+    appSubtitle: 'تطبيق سائق نقل الحاويات والموانئ',
     driverTab: 'حساب السائق',
     vehicleTab: 'تسجيل المركبة',
     driverSignInTitle: 'تسجيل دخول حساب السائق',
-    driverSignInSubtitle: 'سجل الدخول لتعيين مركبتك والبدء في فحص ما قبل الرحلة.',
+    driverSignInSubtitle: 'سجل الدخول لتعيين مركبتك وعرض مهام الحاويات المخصصة لك.',
     biometricSignIn: 'الدخول بالبصمة البيومترية',
     usernameLabel: 'البريد الإلكتروني أو رقم الموظف',
     passwordLabel: 'كلمة المرور',
@@ -355,9 +355,9 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehicleSignInSubtitle: 'تسجيل الدخول برقم المركبة أو لوحة الترخيص لتفعيل التتبع.',
     vehicleIdLabel: 'رقم المركبة أو لوحة الترخيص',
     suggested: 'مقترح:',
-    step2Badge: 'الخطوة ٢ · تعيين ما قبل الوردية',
+    step2Badge: 'الخطوة ٢ · تعيين المركبة',
     vehiclePromptTitle: 'أدخل رقم المركبة وقراءة العداد',
-    vehiclePromptSubtitle: 'تحقق من مركبتك وقراءة العداد الفعلية قبل بدء فحص السائق.',
+    vehiclePromptSubtitle: 'تحقق من مركبتك وقراءة العداد لعرض مهامك المخصصة.',
     assignedVehicleLabel: 'اختر المركبة',
     assignedToProfile: '★ مخصصة لحسابك',
     noVehicleAssigned: 'غير مخصصة لمركبة',
@@ -367,12 +367,12 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     startingOdometerLabel: 'عداد المسافات الأولي (كم) *',
     useLast: 'استخدام السابق:',
     odometerHint: 'تأكد من مطابقة القراءة مع شاشة عداد المركبة الفعلية.',
-    confirmButton: 'تأكيد وبدء فحص السائق',
-    startingChecklist: 'جار بدء الفحص…',
+    confirmButton: 'تأكيد وعرض مهامي',
+    startingChecklist: 'جار فتح مهامي…',
     connectedVehicle: 'المركبة المتصلة',
     switchVehicle: 'تغيير',
-    startReviewChecklist: 'بدء / مراجعة فحص السائق',
-    operationsMenu: 'الانتقال إلى قائمة العمليات',
+    startReviewChecklist: 'فتح مهامي (LogiXL-Connect)',
+    operationsMenu: 'فتح مهامي',
     statusActive: 'الحالة: نشطة ومخصصة',
     notice: 'تنبيه',
     serverHostTitle: 'عنوان خادم النظام (API)',
@@ -380,12 +380,12 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     saveServer: 'حفظ عنوان الخادم',
   },
   hi: {
-    appTitle: 'फ्लीट360 ड्राइवर',
-    appSubtitle: 'मोबाइल टेलीमैटिक्स और ड्राइवर डिस्पैच हब',
+    appTitle: 'LogiXL-Connect ड्राइवर',
+    appSubtitle: 'पोर्ट और कंटेनर ड्रेएज ड्राइवर ऐप',
     driverTab: 'ड्राइवर खाता',
     vehicleTab: 'वाहन साइन-इन',
     driverSignInTitle: 'ड्राइवर खाता साइन इन',
-    driverSignInSubtitle: 'अपना वाहन सौंपने और शिफ्ट चेकलिस्ट शुरू करने के लिए साइन इन करें।',
+    driverSignInSubtitle: 'अपना वाहन सौंपने और अपने कंटेनर जॉब्स देखने के लिए साइन इन करें।',
     biometricSignIn: 'बायोमेट्रिक से साइन इन करें',
     usernameLabel: 'ड्राइवर ईमेल या कर्मचारी आईडी',
     passwordLabel: 'पासवर्ड',
@@ -394,9 +394,9 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     vehicleSignInSubtitle: 'ट्रैकिंग सक्रिय करने के लिए वाहन कोड या प्लेट नंबर से साइन इन करें।',
     vehicleIdLabel: 'वाहन आईडी या लाइसेंस प्लेट',
     suggested: 'सुझाया गया:',
-    step2Badge: 'चरण 2 · प्री-शिफ्ट असाइनमेंट',
+    step2Badge: 'चरण 2 · वाहन असाइनमेंट',
     vehiclePromptTitle: 'वाहन आईडी और ओडोमीटर दर्ज करें',
-    vehiclePromptSubtitle: 'ड्राइवर चेकलिस्ट शुरू करने से पहले अपने वाहन और डैशबोर्ड ओडोमीटर की पुष्टि करें।',
+    vehiclePromptSubtitle: 'अपने जॉब्स देखने के लिए अपने वाहन और डैशबोर्ड ओडोमीटर की पुष्टि करें।',
     assignedVehicleLabel: 'वाहन चुनें',
     assignedToProfile: '★ प्रोफ़ाइल को सौंपा गया',
     noVehicleAssigned: 'कोई वाहन असाइन नहीं है',
@@ -406,12 +406,12 @@ const UI_STRINGS: Record<MobileLanguage, Record<string, string>> = {
     startingOdometerLabel: 'प्रारंभिक ओडोमीटर (किमी) *',
     useLast: 'पिछला उपयोग करें:',
     odometerHint: 'वाहन के वास्तविक क्लस्टर से रीडिंग का मिलान करें।',
-    confirmButton: 'पुष्टि करें और ड्राइवर चेकलिस्ट शुरू करें',
-    startingChecklist: 'चेकलिस्ट शुरू हो रही है…',
+    confirmButton: 'पुष्टि करें और मेरे जॉब्स खोलें',
+    startingChecklist: 'मेरे जॉब्स खुल रहे हैं…',
     connectedVehicle: 'कनेक्टेड वाहन',
     switchVehicle: 'बदलें',
-    startReviewChecklist: 'ड्राइवर चेकलिस्ट शुरू / समीक्षा करें',
-    operationsMenu: 'ड्राइवर संचालन मेनू पर जाएं',
+    startReviewChecklist: 'मेरे जॉब्स खोलें (LogiXL-Connect)',
+    operationsMenu: 'मेरे जॉब्स खोलें',
     statusActive: 'स्थिति: सक्रिय और असाइन किया गया',
     notice: 'सूचना',
     serverHostTitle: 'एपीआई सर्वर एंडपॉइंट',
@@ -643,6 +643,8 @@ export default function DriverAppLauncher() {
           if (!explicitlyDisabled && data.vehicle.canActivateMobileTracking) {
             startMobileTracking(data.vehicle);
           }
+          // Immediately route to the simplest LogiXL-Connect My Jobs view
+          router.replace('/driver-app/today');
         }
         if (data && data.driver) {
           setDriverInfo(data.driver);
@@ -651,7 +653,7 @@ export default function DriverAppLauncher() {
     } catch {
       // ignore
     }
-  }, [startMobileTracking]);
+  }, [startMobileTracking, router]);
 
   const loadBoot = useCallback(async () => {
     setPhase('booting');
@@ -1463,11 +1465,11 @@ export default function DriverAppLauncher() {
             </div>
           </div>
 
-          {/* Action to Driver Checklist & Menu */}
+          {/* Direct Action to LogiXL-Connect My Jobs */}
           <div className="space-y-2">
             <button
               type="button"
-              onClick={() => router.push('/driver-app/shift-checklist')}
+              onClick={() => router.push('/driver-app/today')}
               className="w-full flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-600/20 p-4 text-sm font-bold text-emerald-200 transition hover:bg-emerald-600/30"
             >
               <span className="flex items-center gap-2">
@@ -1475,18 +1477,6 @@ export default function DriverAppLauncher() {
                 {txt.startReviewChecklist}
               </span>
               <ArrowRight className="h-4 w-4 text-emerald-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/driver-app/menu')}
-              className="w-full flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/80 p-4 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
-            >
-              <span className="flex items-center gap-2">
-                <Navigation className="h-4 w-4 text-violet-400" />
-                {txt.operationsMenu}
-              </span>
-              <ArrowRight className="h-4 w-4 text-slate-400" />
             </button>
           </div>
         </div>
