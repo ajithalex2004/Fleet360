@@ -12,6 +12,7 @@ import { residencySessionClaim } from '@/lib/data-residency';
 import crypto from 'crypto';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
+import { matchDriverProfileForUser } from '@/lib/drivers/driver-login-user';
 import { signSession } from '@/lib/tenant-session';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
@@ -295,37 +296,14 @@ export async function POST(request: NextRequest) {
     let driverSessionToken: string | null = null;
     let linkedDriverId: string | null = null;
     try {
-      const cleanLicFromEmail = user.email?.toLowerCase().match(/^driver\.([a-z0-9]+)@fleet360\.internal$/)?.[1]
-        || user.username?.toLowerCase().match(/^driver_([a-z0-9]+)$/)?.[1]
-        || null;
-      const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
-      const driverRows = await withPlatformAdmin(prisma, (tx) =>
-        tx.$queryRawUnsafe<Array<{ id: string }>>(
-          `SELECT id::text AS id
-             FROM drivers
-            WHERE tenant_id = $1
-              AND deleted_at IS NULL
-              AND (
-                id::text = $2
-                OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
-                OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
-                OR ($5::text IS NOT NULL AND email IS NOT NULL AND LOWER(SPLIT_PART(email, '@', 1)) = LOWER($5))
-                OR ($6::text IS NOT NULL AND license_number IS NOT NULL AND REGEXP_REPLACE(LOWER(license_number), '[^a-z0-9]', '', 'g') = $6)
-                OR ($7::text IS NOT NULL AND LOWER(TRIM(COALESCE(NULLIF(name, ''), TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))))) = LOWER($7))
-              )
-            ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
-            LIMIT 1`,
-          userTenant.tenantId,
-          user.id,
-          user.email || null,
-          user.employeeId || null,
-          user.username || null,
-          cleanLicFromEmail,
-          fullName,
-        ),
+      // Only a DRIVER-type account, by id, exact email or employee id
+      // (src/lib/drivers/driver-login-user.ts). Matching by name or username
+      // gave a staff user who shared a driver's name a session as that driver.
+      const matchedDriverId = await withPlatformAdmin(prisma, (tx) =>
+        matchDriverProfileForUser(tx, userTenant.tenantId, user),
       );
-      if (driverRows[0]?.id) {
-        linkedDriverId = driverRows[0].id;
+      if (matchedDriverId) {
+        linkedDriverId = matchedDriverId;
         driverSessionToken = await signSession({
           userId: linkedDriverId,
           tenantId: userTenant.tenantId,

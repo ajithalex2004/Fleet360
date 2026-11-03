@@ -79,6 +79,9 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
 
   // Give this tenant's driver users a driver profile if they have none.
+  // (Table names are user_tenants / tenants / roles: the "UserTenant" /
+  // "Tenant" / "Role" spelling this used before never matched, so the
+  // statement failed and its error was swallowed.)
   // Only the caller's own tenant: this used to match users in every tenant
   // whose tenant name, hierarchy or email contained "trexla", with
   // platform-admin rights, and write drivers for them on a plain GET.
@@ -98,15 +101,15 @@ export async function GET(request: NextRequest) {
          u."mobileNumber",
          u."employeeId",
          COALESCE(u."employeeId", CONCAT('LIC-', UPPER(SUBSTRING(MD5(u.id) FROM 1 FOR 6)))),
-         CASE WHEN u."isActive" = false THEN 'INACTIVE' ELSE 'ACTIVE' END,
+         CASE WHEN u.is_active = false THEN 'INACTIVE' ELSE 'ACTIVE' END,
          'LOGISTICS',
          COALESCE(u.hierarchy, t.name),
          NOW(),
          NOW()
        FROM "User" u
-       JOIN "UserTenant" ut ON ut."userId" = u.id AND ut."tenantId" = $1
-       LEFT JOIN "Tenant" t ON t.id = ut."tenantId"
-       LEFT JOIN "Role" r ON r.id = ut."roleId"
+       JOIN user_tenants ut ON ut.user_id = u.id AND ut.tenant_id = $1
+       LEFT JOIN tenants t ON t.id = ut.tenant_id
+       LEFT JOIN roles r ON r.id = ut.role_id
        WHERE (
          UPPER(COALESCE(u."userType", '')) = 'DRIVER'
          OR UPPER(COALESCE(r.code, '')) = 'DRIVER'
