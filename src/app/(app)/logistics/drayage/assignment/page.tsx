@@ -1053,40 +1053,72 @@ export default function DrayageAssignmentPage() {
     {
       key: 'jobCode',
       header: 'Job & Phase',
-      accessor: (j) => `${j.jobCode} ${j.jobPhase} ${j.customerName}`,
+      accessor: (j) => `${j.jobCode} ${j.jobPhase}`,
       filter: 'text',
       render: (job) => (
-        <div>
-          <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5">
-            <span>{job.jobCode}</span>
-            <span
-              className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                job.jobPhase === 'L2'
-                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                  : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-              }`}
-            >
-              {job.jobPhase}
-            </span>
-          </div>
-          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[140px]">{job.customerName}</div>
+        <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5 whitespace-nowrap">
+          <span>{job.jobCode}</span>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+              job.jobPhase === 'L2'
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+            }`}
+          >
+            {job.jobPhase}
+          </span>
         </div>
       ),
     },
     {
       key: 'container',
-      header: 'Container & Route',
-      accessor: (j) => `${j.containerNumber} ${j.containerSize} ${j.terminalName} ${j.warehouseName}`,
+      header: 'Container',
+      accessor: (j) => `${j.containerNumber} ${j.containerSize} ${j.containerType || ''}`.trim(),
       filter: 'text',
       render: (job) => (
-        <div>
-          <div className="font-mono font-semibold flex items-center gap-1.5">
-            <span>{job.containerNumber}</span>
-            <span className="text-[10px] font-normal text-[var(--text-muted)]">({job.containerSize})</span>
+        <div className="font-mono font-semibold flex items-center gap-1.5 whitespace-nowrap">
+          <span className="text-[var(--text-main)]">{job.containerNumber}</span>
+          <span className="text-[10px] font-normal text-[var(--text-muted)]">({job.containerSize})</span>
+        </div>
+      ),
+    },
+    {
+      key: 'customerName',
+      header: 'Customer',
+      accessor: (j) => j.customerName || '—',
+      filter: 'text',
+      render: (job) => (
+        <div className="text-xs font-medium text-[var(--text-main)] max-w-[170px] truncate" title={job.customerName || '—'}>
+          {job.customerName || '—'}
+        </div>
+      ),
+    },
+    {
+      key: 'clientDestination',
+      header: 'Client Destination',
+      accessor: (j) => `${j.warehouseName || ''} ${j.customerPortal?.clientName || ''}`.trim() || '—',
+      filter: 'text',
+      render: (job) => (
+        <div className="max-w-[190px]">
+          <div className="text-xs font-medium text-[var(--text-main)] truncate" title={job.warehouseName || '—'}>
+            {job.warehouseName || '—'}
           </div>
-          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[190px]">
-            {job.terminalName} → {job.warehouseName}
-          </div>
+          {job.customerPortal?.clientName && job.customerPortal.clientName !== job.warehouseName && (
+            <div className="text-[10px] text-[var(--text-muted)] truncate" title={job.customerPortal.clientName}>
+              {job.customerPortal.clientName}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'terminalName',
+      header: 'Terminal',
+      accessor: (j) => j.terminalName || '—',
+      filter: 'text',
+      render: (job) => (
+        <div className="text-xs font-medium text-[var(--text-main)] max-w-[160px] truncate" title={job.terminalName || '—'}>
+          {job.terminalName || '—'}
         </div>
       ),
     },
