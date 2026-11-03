@@ -153,10 +153,6 @@ export default function DrayageCreateJobsPage() {
   // Consignee Destination Modal State
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
 
-  // Bulk Paste State
-  const [showBulkPaste, setShowBulkPaste] = useState(false);
-  const [bulkText, setBulkText] = useState('');
-
   // Container rows (Starts with 1 completely blank row — no dummy values)
   const [containers, setContainers] = useState<ContainerItem[]>([
     createEmptyContainerRow('c-init-1'),
@@ -281,28 +277,6 @@ export default function DrayageCreateJobsPage() {
 
   const updateContainer = (id: string, updates: Partial<ContainerItem>) => {
     setContainers((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-  };
-
-  const handleApplyBulkPaste = () => {
-    const lines = bulkText
-      .split(/[\r\n,]+/)
-      .map((l) => l.trim().toUpperCase())
-      .filter((l) => l.length >= 4);
-
-    if (lines.length === 0) {
-      showToast('error', 'No valid container numbers detected in paste text');
-      return;
-    }
-
-    const newRows: ContainerItem[] = lines.map((num, idx) => ({
-      ...createEmptyContainerRow(`c-bulk-${Date.now()}-${idx}`),
-      containerNumber: num,
-    }));
-
-    setContainers((prev) => (prev[0]?.containerNumber ? [...prev, ...newRows] : newRows));
-    setBulkText('');
-    setShowBulkPaste(false);
-    showToast('success', `Imported ${newRows.length} container(s) into manifest!`);
   };
 
   // Download pre-formatted Excel (.xlsx) manifest template
@@ -739,14 +713,6 @@ export default function DrayageCreateJobsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setShowBulkPaste(!showBulkPaste)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              Bulk Paste
-            </button>
-            <button
-              type="button"
               onClick={handleAddContainerRow}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-semibold text-blue-400 hover:bg-blue-600/25 transition-colors"
             >
@@ -888,41 +854,6 @@ export default function DrayageCreateJobsPage() {
           </div>
         )}
       </div>
-
-      {/* Bulk Paste Modal */}
-      {showBulkPaste && (
-        <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-blue-500/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-              <UploadCloud className="w-4 h-4 text-blue-400" />
-              Paste Multiple Container Numbers (Comma or Newline separated)
-            </h4>
-            <button
-              type="button"
-              onClick={() => setShowBulkPaste(false)}
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
-            >
-              Cancel
-            </button>
-          </div>
-          <textarea
-            rows={3}
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            placeholder="Paste container numbers separated by comma or newline..."
-            className="w-full text-xs font-mono p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
-          />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleApplyBulkPaste}
-              className="px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors"
-            >
-              Parse & Add to Manifest
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Main Creation Form */}
       <form onSubmit={handleSubmit} className="space-y-6">

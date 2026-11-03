@@ -1236,23 +1236,50 @@ export default function DrayageGeofenceMap({
     }
   };
 
-  const handleFitUAE = () => {
+  const handleFitUAE = useCallback(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
     if (!ctors || !map) return;
 
-    const bounds = new ctors.LatLngBounds();
-    terminals.forEach((t) => bounds.extend({ lat: t.lat, lng: t.lng }));
-    warehouses.forEach((w) => {
-      if (w.lat && w.lng) bounds.extend({ lat: w.lat, lng: w.lng });
-    });
-    if (!bounds.isEmpty()) {
-      map.fitBounds(bounds, 50);
-    } else {
-      map.panTo(DEFAULT_CENTER);
-      map.setZoom(11);
+    infoWindowRef.current?.close();
+    setSearchQuery("");
+
+    const isWithinUae = (lat: number, lng: number) =>
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= 22.5 &&
+      lat <= 26.5 &&
+      lng >= 51.4 &&
+      lng <= 56.6;
+
+    try {
+      const bounds = new ctors.LatLngBounds();
+      // Core UAE Ports & Emirates envelope (Abu Dhabi / Khalifa Port -> Dubai / Jebel Ali -> Sharjah / RAK / Fujairah)
+      bounds.extend({ lat: 24.20, lng: 54.30 });
+      bounds.extend({ lat: 25.85, lng: 56.38 });
+
+      terminals.forEach((t) => {
+        const lat = Number(t.lat);
+        const lng = Number(t.lng);
+        if (isWithinUae(lat, lng)) bounds.extend({ lat, lng });
+      });
+      warehouses.forEach((w) => {
+        const lat = Number(w.lat);
+        const lng = Number(w.lng);
+        if (isWithinUae(lat, lng)) bounds.extend({ lat, lng });
+      });
+      geofences.forEach((g) => {
+        const lat = Number(g.centerLat);
+        const lng = Number(g.centerLng);
+        if (isWithinUae(lat, lng)) bounds.extend({ lat, lng });
+      });
+
+      map.fitBounds(bounds, { top: 115, right: 48, bottom: 56, left: 48 });
+    } catch {
+      map.panTo({ lat: 24.95, lng: 55.20 });
+      map.setZoom(8);
     }
-  };
+  }, [terminals, warehouses, geofences]);
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-slate-950 shadow-2xl">

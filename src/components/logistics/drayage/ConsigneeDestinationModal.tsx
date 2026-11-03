@@ -757,6 +757,26 @@ export function ConsigneeDestinationModal({
     map.setZoom(16);
   };
 
+  // Fit entire UAE view on Plot Map
+  const handleFitPlotUAE = () => {
+    const map = mapInstanceRef.current;
+    const ctors = ctorsRef.current;
+    if (!map || !ctors) return;
+    try {
+      const bounds = new ctors.LatLngBounds();
+      bounds.extend({ lat: 24.20, lng: 54.30 });
+      bounds.extend({ lat: 25.85, lng: 56.38 });
+      const cur = plotCoordinatesRef.current;
+      if (cur && cur.lat >= 22.5 && cur.lat <= 26.5 && cur.lng >= 51.4 && cur.lng <= 56.6) {
+        bounds.extend(cur);
+      }
+      map.fitBounds(bounds, { top: 115, right: 48, bottom: 60, left: 48 });
+    } catch {
+      map.panTo({ lat: 24.95, lng: 55.20 });
+      map.setZoom(8);
+    }
+  };
+
   // Google Maps setup in Plot Modal
   useEffect(() => {
     if (!showPlotModal || !mapContainerRef.current) return;
@@ -1747,6 +1767,15 @@ export function ConsigneeDestinationModal({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleFitPlotUAE}
+                      className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all"
+                      title="Fit UAE Ports & Corridors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Fit UAE</span>
+                    </button>
                     <div className="text-[11px] text-slate-300 font-mono bg-slate-950/60 px-2 py-0.5 rounded-md border border-slate-700/50">
                       📍 {plotCoordinates.lat.toFixed(5)}, {plotCoordinates.lng.toFixed(5)}
                     </div>
