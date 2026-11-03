@@ -13,7 +13,7 @@ import crypto from 'crypto';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-import { findLinkableDriverUser } from '@/lib/drivers/driver-login-user';
+import { findLinkableDriverUser, syncDriverUserForeignKey } from '@/lib/drivers/driver-login-user';
 import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
 
 function parseSafeDate(val: unknown): Date | null {
@@ -88,12 +88,13 @@ export async function GET(request: NextRequest) {
   await withPlatformAdmin(prisma, async (adminTx) => {
     await adminTx.$executeRawUnsafe(
       `INSERT INTO drivers (
-         id, tenant_id, name, first_name, last_name, email, contact_number,
+         id, tenant_id, user_id, name, first_name, last_name, email, contact_number,
          employee_id, license_number, status, driver_type, hierarchy, created_at, updated_at
        )
        SELECT
          u.id,
          $1,
+         u.id,
          COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", ''))), ''), u.username, 'Driver'),
          COALESCE(u."firstName", SPLIT_PART(u.username, '_', 1), 'Driver'),
          COALESCE(u."lastName", ''),
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
          WHERE d.deleted_at IS NULL
            AND (
              d.id::text = u.id
+             OR d.user_id = u.id
              OR (d.tenant_id = $1 AND u.email IS NOT NULL AND LOWER(d.email) = LOWER(u.email))
            )
        )
@@ -175,15 +177,16 @@ export async function GET(request: NextRequest) {
       // caller passing includeLogistics=true, and for every SUPER_ADMIN.
       const drivers = tenantDrivers;
 
-      // Fetch dynamic driver_category, employee_id, issuing_authority, and additional_documents from DB
+      // Fetch dynamic user_id, driver_category, employee_id, issuing_authority, and additional_documents from DB
       const extraRows = await tx.$queryRawUnsafe<Array<{
         id: string;
+        user_id: string | null;
         employee_id: string | null;
         driver_category: string | null;
         issuing_authority: string | null;
         additional_documents: unknown;
       }>>(
-        `SELECT id::text, employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL`,
+        `SELECT id::text, user_id, employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE tenant_id = $1 AND deleted_at IS NULL`,
         tenantId,
       ).catch(() => []);
       const extraMap = new Map(extraRows.map(r => [r.id, r]));
@@ -193,6 +196,7 @@ export async function GET(request: NextRequest) {
         const driverCategory = extra?.driver_category || d.licenseType || 'LIGHT_DUTY';
         return {
           ...d,
+          userId: extra?.user_id ?? null,
           employeeId: extra?.employee_id ?? null,
           driverCategory,
           issuingAuthority: extra?.issuing_authority ?? null,
@@ -364,6 +368,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // 3. Synchronize explicit Foreign Key (`drivers.user_id` -> `User.id`) inside the transaction
+      await syncDriverUserForeignKey(tx, {
+        tenantId,
+        driverId: driver.id,
+        userId: user.id,
+      }).catch((err) => {
+        console.warn('[Driver Hub] Failed to sync drivers.user_id FK:', err);
+      });
+
       // If password provided, hash and update password_hash on the User record
       if (body.password && typeof body.password === 'string' && body.password.trim()) {
         const hashed = hashPassword(body.password.trim());
@@ -404,6 +417,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         serialize({
           ...driver,
+          userId: user.id,
           employeeId: body.employeeId || null,
           driverCategory,
           issuingAuthority: body.issuingAuthority || null,

@@ -1,20 +1,16 @@
 /**
- * Which login account a driver profile may link to, and have its password
- * set by, from the Driver Hub (POST /api/drivers, PUT/PATCH /api/drivers/[id]).
+ * Unified Identity Link (User.id <-> Driver.id Foreign Key) & Safe Login Resolution.
  *
- * Those routes used to look up an existing User by email, username,
- * employee id or mobile number across the whole platform and then
- * overwrite that user's password with the one in the request. Anyone who
- * could create a driver in their own tenant could put another person's email
- * (a platform admin's, say) on a "driver" with a password of their choosing
- * and sign in as them.
+ * Determines which login account (`public."User"`) a driver profile (`public.drivers`)
+ * links to via the explicit `drivers.user_id` foreign key, with fallback resolution
+ * by UUID parity, email, or employeeId for legacy records (and automatic self-healing
+ * of `drivers.user_id`).
  *
+ * Security invariant:
  * An existing account is linkable only when it is plainly this tenant's
  * driver login: a DRIVER-type user whose every membership is in this
  * tenant, with a driver role (or none). Any other match is a conflict: the
- * route refuses and touches nothing. The read uses the platform context,
- * because tenant RLS would hide the memberships in other tenants that make
- * an account unsafe.
+ * route refuses and touches nothing.
  */
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -22,6 +18,8 @@ import { withPlatformAdmin } from '@/lib/rls';
 export interface DriverLoginLookup {
   /** The driver profile's id: an account created for it has this id. */
   driverId?: string;
+  /** Explicit foreign key (`drivers.user_id`) if already linked. */
+  userId?: string | null;
   email?: string | null;
   username?: string | null;
   employeeId?: string | null;
@@ -48,45 +46,107 @@ export type DriverLoginMatch =
 /** Minimal client for a raw query: prisma or a transaction. */
 type RawQueryClient = {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  $executeRawUnsafe?(query: string, ...values: unknown[]): Promise<unknown>;
 };
 
 /**
- * The driver profile a signed-in user may act as, in this tenant: the
- * reverse direction of findLinkableDriverUser, used by login and the driver
- * app's vehicle login to mint a DRIVER session.
+ * Resolves the driver profile (`drivers.id`) for a signed-in user in this tenant.
  *
- * Only a DRIVER-type account, and only by the same id, the exact email or
- * the employee id. Matching by name, username or a licence number derived
- * from the username let a staff user who shared a driver's name (or set
- * their username to a driver's email prefix) be signed in as that driver.
+ * Priority order:
+ * 1. Explicit `drivers.user_id = user.id` foreign key (O(1) index scan on `idx_drivers_tenant_user_id`)
+ * 2. Direct UUID parity (`drivers.id = user.id`)
+ * 3. Exact tenant-scoped email or employeeId match (only for `userType === 'DRIVER'`),
+ *    with automatic self-healing of `drivers.user_id` when matched unambiguously.
  */
 export async function matchDriverProfileForUser(
   db: RawQueryClient,
   tenantId: string,
   user: { id: string; userType?: string | null; email?: string | null; employeeId?: string | null },
 ): Promise<string | null> {
-  if ((user.userType ?? '').toUpperCase() !== 'DRIVER') return null;
-  const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id::text AS id
+  const isDriverUserType = (user.userType ?? '').toUpperCase() === 'DRIVER';
+
+  const rows = await db.$queryRawUnsafe<Array<{ id: string; user_id: string | null }>>(
+    `SELECT id::text AS id, user_id
        FROM drivers
       WHERE tenant_id = $1
         AND deleted_at IS NULL
         AND (
-          id::text = $2
-          OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
-          OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+          user_id = $2
+          OR (
+            $5::boolean = TRUE
+            AND (
+              id::text = $2
+              OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+              OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+            )
+          )
         )
-      ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
+      ORDER BY
+        (user_id = $2) DESC,
+        (id::text = $2) DESC,
+        (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
       LIMIT 2`,
     tenantId,
     user.id,
     user.email?.trim() || null,
     user.employeeId?.trim() || null,
+    isDriverUserType,
   );
   if (rows.length === 0) return null;
-  // The same id is unambiguous; otherwise two matches mean the details are shared.
-  if (rows[0].id === user.id || rows.length === 1) return rows[0].id;
-  return null;
+
+  const top = rows[0];
+  const unambiguous = top.user_id === user.id || top.id === user.id || rows.length === 1;
+  if (!unambiguous) return null;
+
+  // Self-heal `drivers.user_id` if resolved via legacy fallback and `user_id` is not yet populated
+  if (top.user_id !== user.id && typeof db.$executeRawUnsafe === 'function') {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE drivers
+            SET user_id = $1,
+                updated_at = NOW()
+          WHERE id::text = $2
+            AND tenant_id = $3
+            AND user_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM drivers d2
+              WHERE d2.user_id = $1 AND d2.deleted_at IS NULL
+            )`,
+        user.id,
+        top.id,
+        tenantId,
+      )
+      .catch(() => null);
+  }
+
+  return top.id;
+}
+
+/**
+ * Enforces `drivers.user_id = userId` synchronization inside an active transaction.
+ */
+export async function syncDriverUserForeignKey(
+  db: RawQueryClient,
+  params: { tenantId: string; driverId: string; userId: string },
+): Promise<void> {
+  if (typeof db.$executeRawUnsafe !== 'function') return;
+  await db.$executeRawUnsafe(
+    `UPDATE drivers
+        SET user_id = $1,
+            updated_at = NOW()
+      WHERE id::text = $2
+        AND tenant_id = $3
+        AND (user_id IS NULL OR user_id = $1)
+        AND NOT EXISTS (
+          SELECT 1 FROM drivers d2
+          WHERE d2.user_id = $1
+            AND d2.id::text <> $2
+            AND d2.deleted_at IS NULL
+        )`,
+    params.userId,
+    params.driverId,
+    params.tenantId,
+  );
 }
 
 const isDriverRole = (role: { code: string | null; name: string | null } | null) =>
@@ -94,6 +154,7 @@ const isDriverRole = (role: { code: string | null; name: string | null } | null)
 
 export async function findLinkableDriverUser(tenantId: string, lookup: DriverLoginLookup): Promise<DriverLoginMatch> {
   const or: Array<Record<string, unknown>> = [];
+  if (lookup.userId?.trim()) or.push({ id: lookup.userId.trim() });
   if (lookup.driverId) or.push({ id: lookup.driverId });
   if (lookup.email?.trim()) or.push({ email: { equals: lookup.email.trim(), mode: 'insensitive' } });
   if (lookup.username?.trim()) or.push({ username: { equals: lookup.username.trim(), mode: 'insensitive' } });

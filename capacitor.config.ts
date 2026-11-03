@@ -20,38 +20,14 @@ const config: CapacitorConfig = {
   appId: 'com.fleet360.driver',
   appName: 'Fleet360 Driver',
   webDir: 'out/driver',
-  // The bundled WebView config. iOS + Android use the system WebView
-  // (WKWebView on iOS 14+, Chromium on Android 9+) — no Cordova,
-  // no embedded browser. Background colour matches the dark theme to
-  // avoid a white flash on cold start.
   backgroundColor: '#0F172A',
-  // Set `server.hostname` to something other than the default
-  // `localhost`. This changes the WebView's main URL from
-  // `https://localhost/` to `https://localhost2/`, which
-  // invalidates any stale WebView HTTP cache (cache is keyed
-  // on the full URL — a different host = cache miss).
-  //
-  // v10 note: this is now defense-in-depth, not the primary
-  // cache-bust. The primary mechanism is
-  // `WebView.clearCache(true)` called from MainActivity.onCreate
-  // (see android/app/src/main/java/com/fleet360/driver/MainActivity.java).
-  // clearCache wipes the WebView's HTTP cache + localStorage +
-  // IndexedDB + Service Workers on every cold start, so the
-  // launcher always loads fresh — even on MIUI where the system
-  // WebView cache survives `pm clear` and uninstall+reinstall.
   server: {
     androidScheme: 'https',
     hostname: 'localhost2',
     cleartext: true,
   },
   plugins: {
-    // Camera — DVIR defect photos. We restrict to environment + photos
-    // (no video) and prefer the system picker when possible (lighter
-    // permission model than in-app capture).
-    Camera: {
-      // Limit to stills. No video.
-      // (Plugin doesn't expose a direct flag; we enforce on the caller.)
-    },
+    Camera: {},
     SplashScreen: {
       launchShowDuration: 800,
       backgroundColor: '#0F172A',
@@ -66,6 +42,26 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: 'body',
       resizeOnFullScreen: true,
+    },
+    // Foreground Location Service (@capacitor-community/background-geolocation)
+    // Keeps GPS & geofence telemetry running when the screen is locked or when
+    // Google Maps / Waze is in the foreground during container drayage trips.
+    BackgroundGeolocation: {
+      notificationTitle: 'Fleet360 Active Dispatch Telemetry',
+      notificationText: 'Uninterrupted GPS & geofence tracking active in background',
+      distanceFilter: 25,
+      stopOnTerminate: false,
+      startOnBoot: true,
+    },
+    // Over-The-Air (OTA) Live Updates (@capgo/capacitor-updater)
+    // Deploys UI and workflow updates over-the-air without requiring manual APK reinstalls.
+    CapacitorUpdater: {
+      autoUpdate: true,
+      resetWhenUpdate: false,
+      updateUrl: 'https://fleet360-app-production.up.railway.app/api/driver-app/ota-manifest',
+      statsUrl: '',
+      channelUrl: '',
+      allowModifyUrl: true,
     },
   },
 };

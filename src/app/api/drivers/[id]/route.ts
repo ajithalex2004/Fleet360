@@ -14,7 +14,7 @@ import crypto from 'crypto';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { findLinkableDriverUser } from '@/lib/drivers/driver-login-user';
+import { findLinkableDriverUser, syncDriverUserForeignKey } from '@/lib/drivers/driver-login-user';
 import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
 
 type Params = { params: Promise<{ id: string }> };
@@ -99,21 +99,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
       }
 
       const extraRows = await tx.$queryRawUnsafe<Array<{
+        user_id: string | null;
         employee_id: string | null;
         driver_category: string | null;
         issuing_authority: string | null;
         additional_documents: unknown;
       }>>(
-        `SELECT employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE id::text = $1 LIMIT 1`,
+        `SELECT user_id, employee_id, driver_category, issuing_authority, additional_documents FROM drivers WHERE id::text = $1 LIMIT 1`,
         id,
       ).catch(() => []);
       const extra = extraRows[0];
 
-      // Check for linked user
-      // Only this tenant's driver login: matching any account by email or
-      // mobile number showed other people's usernames here.
+      // Check for linked user via explicit FK (`user_id`) first, then safe tenant driver identity
       const loginMatch = await findLinkableDriverUser(tenantId, {
         driverId: driver.id,
+        userId: extra?.user_id ?? null,
         email: driver.email,
         employeeId: extra?.employee_id ?? null,
         mobileNumber: driver.contactNumber,
@@ -122,9 +122,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
         ? { id: loginMatch.user.id, username: loginMatch.user.username, email: loginMatch.user.email, employeeId: loginMatch.user.employeeId }
         : null;
 
+      if (linkedUser && extra?.user_id !== linkedUser.id) {
+        await syncDriverUserForeignKey(tx, { tenantId, driverId: driver.id, userId: linkedUser.id }).catch(() => {});
+      }
+
       return NextResponse.json(
         serialize({
           ...driver,
+          userId: linkedUser?.id ?? extra?.user_id ?? null,
           employeeId: extra?.employee_id ?? null,
           driverCategory: extra?.driver_category || driver.licenseType || 'LIGHT_DUTY',
           issuingAuthority: extra?.issuing_authority ?? null,
@@ -270,12 +275,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       let linkedUser: { id: string; email: string; username: string | null } | null = null;
       let loginWarning: string | null = null;
       try {
+        const existingFkRows = await tx
+          .$queryRawUnsafe<Array<{ user_id: string | null }>>(
+            `SELECT user_id FROM drivers WHERE id::text = $1 AND tenant_id = $2 LIMIT 1`,
+            id,
+            tenantId,
+          )
+          .catch(() => []);
+        const existingUserId = existingFkRows[0]?.user_id ?? null;
+
         // Only this tenant's own driver login is linked or has its password
         // set (src/lib/drivers/driver-login-user.ts). Matching any account by
         // email, employee ID or mobile number let a tenant user set another
         // person's password.
         const loginMatch = await findLinkableDriverUser(tenantId, {
           driverId: id,
+          userId: existingUserId,
           email: updated.email,
           employeeId: cleanEmployeeId || null,
           mobileNumber: updated.contactNumber,
@@ -344,6 +359,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           linkedUser = { id: updatedUser.id, email: updatedUser.email, username: updatedUser.username };
         }
 
+        if (linkedUser) {
+          await syncDriverUserForeignKey(tx, {
+            tenantId,
+            driverId: id,
+            userId: linkedUser.id,
+          }).catch(() => {});
+        }
+
         // If password provided, update password hash
         if (password && typeof password === 'string' && password.trim() && linkedUser) {
           const hashed = hashPassword(password.trim());
@@ -360,6 +383,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json(
         serialize({
           ...updated,
+          userId: linkedUser?.id ?? null,
           employeeId: cleanEmployeeId ?? null,
           driverCategory: cleanCategory || updated.licenseType || 'LIGHT_DUTY',
           issuingAuthority: cleanAuthority ?? null,

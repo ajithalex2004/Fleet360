@@ -64,28 +64,45 @@ async function resolveCallerAuth(
 }
 
 /**
- * The caller's own driver profile, by id (or, for a DRIVER-type account whose
- * User.id differs from its Driver.id, by exact email or employee id).
+ * The caller's own driver profile, resolved in O(1) via `drivers.id = userId`
+ * or the explicit `drivers.user_id = userId` foreign key, with fallback to
+ * `matchDriverProfileForUser` (which self-heals `drivers.user_id`).
  */
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {
-  const direct = await prisma.driver.findFirst({
-    where: { id: userId, tenantId, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      driverType: true,
-      assignedVehicleId: true,
-    },
-  });
-  if (direct) return direct;
+  const fkRows = await prisma
+    .$queryRawUnsafe<
+      Array<{
+        id: string;
+        name: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        email: string | null;
+        driverType: string | null;
+        assignedVehicleId: string | null;
+      }>
+    >(
+      `SELECT
+          id::text AS id,
+          name,
+          first_name AS "firstName",
+          last_name AS "lastName",
+          email,
+          driver_type AS "driverType",
+          assigned_vehicle_id AS "assignedVehicleId"
+         FROM drivers
+        WHERE tenant_id = $1
+          AND deleted_at IS NULL
+          AND (id::text = $2 OR user_id = $2)
+        ORDER BY (id::text = $2) DESC
+        LIMIT 1`,
+      tenantId,
+      userId,
+    )
+    .catch(() => []);
+  if (fkRows[0]) return fkRows[0];
 
-  // Fallback when the session carries User.id instead of Driver.id: only a
-  // DRIVER-type account, by id, exact email or employee id
-  // (src/lib/drivers/driver-login-user.ts). Name and username matches let a
-  // staff user who shared a driver's name sign in as that driver.
+  // Fallback when the session carries User.id and `drivers.user_id` has not yet been backfilled:
+  // matchDriverProfileForUser resolves safely and self-heals `drivers.user_id`.
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },

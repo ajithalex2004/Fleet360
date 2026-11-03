@@ -23,6 +23,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useMobileI18n, MobileLanguage } from '@/contexts/MobileLanguageContext';
 import { useMobileTheme } from '@/contexts/MobileThemeContext';
 import { getApiEndpoint, parseJsonSafely } from '@/lib/api-endpoint';
+import {
+  startResilientDriverTelemetryWatcher,
+  checkAndApplyDriverOtaLiveUpdate,
+  enqueueOfflineGpsSample,
+  drainOfflineGpsSamples,
+  LOCAL_OTA_BUNDLE_VERSION,
+  type TelemetryWatcherHandle,
+  type OtaSyncStatus,
+} from '@/lib/driver-native-bridge';
 import { useRouter } from 'next/navigation';
 import {
   Car,
@@ -453,7 +462,21 @@ export default function DriverAppLauncher() {
   const [, setGpsError] = useState<string | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
+  const watcherHandleRef = useRef<TelemetryWatcherHandle | null>(null);
   const lastSentRef = useRef<number>(0);
+  const [otaStatus, setOtaStatus] = useState<OtaSyncStatus | null>(null);
+  const [telemetryMode, setTelemetryMode] = useState<'NATIVE_FOREGROUND_SERVICE' | 'WAKE_LOCK_WEB_WATCH' | null>(null);
+
+  // Check for OTA Live Updates on mount
+  useEffect(() => {
+    let mounted = true;
+    void checkAndApplyDriverOtaLiveUpdate(getApiEndpoint('')).then((status) => {
+      if (mounted) setOtaStatus(status);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // WebAuthn probe
   const [webAuthnSupported, setWebAuthnSupported] = useState(false);
@@ -507,21 +530,25 @@ export default function DriverAppLauncher() {
       localStorage.setItem('fleet360_tracked_vehicle_id', vehicle.id);
     }
 
-    if (watchIdRef.current !== null) {
+    if (watcherHandleRef.current) {
+      void watcherHandleRef.current.stop();
+      watcherHandleRef.current = null;
+    }
+    if (watchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        const { latitude, longitude, speed, heading, accuracy } = pos.coords;
-        const speedKmh = speed != null && speed > 0 ? Math.round(speed * 3.6 * 10) / 10 : 0;
-
+    void startResilientDriverTelemetryWatcher({
+      distanceFilterMeters: 25,
+      heartbeatIntervalMs: 15000,
+      onLocation: async (sample) => {
+        const { latitude, longitude, speedKmh, heading, accuracyMeters } = sample;
         setCurrentSpeed(speedKmh);
         setCoords({
           lat: latitude,
           lng: longitude,
-          accuracy: Math.round(accuracy),
+          accuracy: Math.round(accuracyMeters ?? 10),
           heading: heading || 0,
         });
 
@@ -529,6 +556,24 @@ export default function DriverAppLauncher() {
         if (now - lastSentRef.current >= 4000) {
           lastSentRef.current = now;
           try {
+            // Drain any offline-buffered samples first if connectivity just returned
+            const queuedSamples = drainOfflineGpsSamples();
+            for (const q of queuedSamples.slice(-5)) {
+              await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  vehicleId: vehicle.id,
+                  lat: q.latitude,
+                  lng: q.longitude,
+                  speedKmh: q.speedKmh,
+                  heading: q.heading || 0,
+                  accuracy: Math.round(q.accuracyMeters ?? 15),
+                }),
+              }).catch(() => {});
+            }
+
             const pingRes = await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -539,7 +584,7 @@ export default function DriverAppLauncher() {
                 lng: longitude,
                 speedKmh,
                 heading: heading || 0,
-                accuracy: Math.round(accuracy),
+                accuracy: Math.round(accuracyMeters ?? 10),
               }),
             });
 
@@ -551,31 +596,28 @@ export default function DriverAppLauncher() {
               if (pingErr?.error) setGpsError(pingErr.error);
             }
           } catch (err) {
-            console.warn('[mobile-tracking] Ping transmission error:', err);
+            console.warn('[mobile-tracking] Buffering GPS sample offline:', err);
+            enqueueOfflineGpsSample(sample);
           }
         }
       },
-      (err) => {
-        console.error('[mobile-tracking] Geolocation watch error:', err);
-        setGpsError(`GPS Error: ${err.message}. Please allow Location Access.`);
-        setIsTracking(false);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 2000,
-        timeout: 10000,
-      }
-    );
-
-    watchIdRef.current = watchId;
+    }).then((handle) => {
+      watcherHandleRef.current = handle;
+      setTelemetryMode(handle.mode);
+    });
   }, [activeVehicle]);
 
   const stopMobileTracking = useCallback(() => {
+    if (watcherHandleRef.current) {
+      void watcherHandleRef.current.stop();
+      watcherHandleRef.current = null;
+    }
     if (watchIdRef.current !== null && typeof navigator !== 'undefined') {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     setIsTracking(false);
+    setTelemetryMode(null);
     if (typeof window !== 'undefined') {
       localStorage.setItem('fleet360_driver_tracking_active', 'false');
     }
@@ -637,6 +679,10 @@ export default function DriverAppLauncher() {
 
   useEffect(() => {
     return () => {
+      if (watcherHandleRef.current) {
+        void watcherHandleRef.current.stop();
+        watcherHandleRef.current = null;
+      }
       if (watchIdRef.current !== null && typeof navigator !== 'undefined') {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
@@ -1028,6 +1074,23 @@ export default function DriverAppLauncher() {
         <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
           {txt.appSubtitle}
         </p>
+
+        {/* OTA Live Update & Background Telemetry Status Pill */}
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            OTA {otaStatus?.currentBundleVersion || LOCAL_OTA_BUNDLE_VERSION}
+            {otaStatus?.otaApplied ? ' • Live Synced' : ''}
+          </span>
+          {telemetryMode && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-[10px] font-bold text-violet-700 dark:text-violet-300">
+              <Navigation className="h-2.5 w-2.5" />
+              {telemetryMode === 'NATIVE_FOREGROUND_SERVICE'
+                ? 'Android Foreground GPS Active'
+                : 'WakeLock Background GPS Active'}
+            </span>
+          )}
+        </div>
 
         {/* 3-Language Switcher (English / العربية / हिन्दी) */}
         <div className="mt-3 flex items-center justify-center gap-1 rounded-xl bg-white dark:bg-slate-900/90 p-1 border-2 border-slate-300 dark:border-white/10 max-w-[270px] mx-auto shadow-sm">

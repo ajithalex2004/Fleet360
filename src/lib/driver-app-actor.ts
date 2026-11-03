@@ -69,10 +69,30 @@ export async function loadDriverActor(
   tenantId: string,
   userId: string,
 ): Promise<VerifiedDriverActor | null> {
-  const driver = await tx.driver.findFirst({
+  let driver = await tx.driver.findFirst({
     where: { id: userId, tenantId, deletedAt: null },
     select: { id: true, name: true, firstName: true, lastName: true, status: true },
   });
+  if (!driver) {
+    const fkRows = await tx
+      .$queryRawUnsafe<DriverRow[]>(
+        `SELECT
+            id::text AS id,
+            name,
+            first_name AS "firstName",
+            last_name AS "lastName",
+            status
+           FROM drivers
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND user_id = $2
+          LIMIT 1`,
+        tenantId,
+        userId,
+      )
+      .catch(() => []);
+    driver = fkRows[0] ?? null;
+  }
   if (!driver) return null;
   if (driver.status && driver.status !== 'ACTIVE') return null;
 
@@ -81,11 +101,13 @@ export async function loadDriverActor(
        FROM trip_schedules ts
        LEFT JOIN vehicles v ON v.id = ts.vehicle_id AND v.tenant_id = ts.tenant_id
       WHERE ts.tenant_id = $1::uuid
-        AND ts.driver_id = $2::text
+        AND ts.driver_id IN ($2::text, $3::text)
         AND ts.status = 'IN_PROGRESS'
       ORDER BY ts.actual_departure_at DESC NULLS LAST
       LIMIT 1`,
-    tenantId, userId,
+    tenantId,
+    userId,
+    driver.id,
   );
   const trip = trips[0];
 
@@ -94,11 +116,13 @@ export async function loadDriverActor(
        FROM shifts s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.tenant_id = s.tenant_id
       WHERE s.tenant_id = $1::uuid
-        AND s.driver_id = $2::uuid
+        AND s.driver_id::text IN ($2::text, $3::text)
         AND s.status = 'ACTIVE'
       ORDER BY s.started_at DESC
       LIMIT 1`,
-    tenantId, userId,
+    tenantId,
+    userId,
+    driver.id,
   );
   const shift = shifts[0];
 
