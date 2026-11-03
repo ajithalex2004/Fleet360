@@ -298,26 +298,31 @@ export async function POST(request: NextRequest) {
       const cleanLicFromEmail = user.email?.toLowerCase().match(/^driver\.([a-z0-9]+)@fleet360\.internal$/)?.[1]
         || user.username?.toLowerCase().match(/^driver_([a-z0-9]+)$/)?.[1]
         || null;
-      const driverRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-        `SELECT id::text AS id
-           FROM drivers
-          WHERE tenant_id = $1
-            AND deleted_at IS NULL
-            AND (
-              id::text = $2
-              OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
-              OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
-              OR ($5::text IS NOT NULL AND email IS NOT NULL AND LOWER(SPLIT_PART(email, '@', 1)) = LOWER($5))
-              OR ($6::text IS NOT NULL AND license_number IS NOT NULL AND REGEXP_REPLACE(LOWER(license_number), '[^a-z0-9]', '', 'g') = $6)
-            )
-          ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
-          LIMIT 1`,
-        userTenant.tenantId,
-        user.id,
-        user.email || null,
-        user.employeeId || null,
-        user.username || null,
-        cleanLicFromEmail,
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
+      const driverRows = await withPlatformAdmin(prisma, (tx) =>
+        tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id::text AS id
+             FROM drivers
+            WHERE tenant_id = $1
+              AND deleted_at IS NULL
+              AND (
+                id::text = $2
+                OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+                OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+                OR ($5::text IS NOT NULL AND email IS NOT NULL AND LOWER(SPLIT_PART(email, '@', 1)) = LOWER($5))
+                OR ($6::text IS NOT NULL AND license_number IS NOT NULL AND REGEXP_REPLACE(LOWER(license_number), '[^a-z0-9]', '', 'g') = $6)
+                OR ($7::text IS NOT NULL AND LOWER(TRIM(COALESCE(NULLIF(name, ''), TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))))) = LOWER($7))
+              )
+            ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
+            LIMIT 1`,
+          userTenant.tenantId,
+          user.id,
+          user.email || null,
+          user.employeeId || null,
+          user.username || null,
+          cleanLicFromEmail,
+          fullName,
+        ),
       );
       if (driverRows[0]?.id) {
         linkedDriverId = driverRows[0].id;

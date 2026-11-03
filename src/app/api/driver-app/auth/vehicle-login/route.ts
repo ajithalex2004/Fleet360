@@ -63,12 +63,11 @@ async function resolveCallerAuth(
 }
 
 /**
- * The caller's own driver profile, by id. Sessions minted here carry the
- * driver id. There is deliberately no email or mobile-number fallback: a
- * user who could set their number to a driver's would sign in as that driver.
+ * The caller's own driver profile, by id (or via the verified User account
+ * when User.id and Driver.id were provisioned with different UUIDs).
  */
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {
-  return prisma.driver.findFirst({
+  const direct = await prisma.driver.findFirst({
     where: { id: userId, tenantId, deletedAt: null },
     select: {
       id: true,
@@ -80,6 +79,69 @@ async function callerDriver(userId: string, tenantId: string): Promise<DriverRef
       assignedVehicleId: true,
     },
   });
+  if (direct) return direct;
+
+  // Fallback when the session carries User.id instead of Driver.id
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+    if (!user) return null;
+
+    const cleanLicFromEmail =
+      user.email?.toLowerCase().match(/^driver\.([a-z0-9]+)@fleet360\.internal$/)?.[1] ||
+      user.username?.toLowerCase().match(/^driver_([a-z0-9]+)$/)?.[1] ||
+      null;
+    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
+
+    const matchedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id::text AS id
+         FROM drivers
+        WHERE tenant_id = $1
+          AND deleted_at IS NULL
+          AND (
+            id::text = $2
+            OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+            OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+            OR ($5::text IS NOT NULL AND email IS NOT NULL AND LOWER(SPLIT_PART(email, '@', 1)) = LOWER($5))
+            OR ($6::text IS NOT NULL AND license_number IS NOT NULL AND REGEXP_REPLACE(LOWER(license_number), '[^a-z0-9]', '', 'g') = $6)
+            OR ($7::text IS NOT NULL AND LOWER(TRIM(COALESCE(NULLIF(name, ''), TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))))) = LOWER($7))
+          )
+        ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
+        LIMIT 1`,
+      tenantId,
+      user.id,
+      user.email || null,
+      user.employeeId || null,
+      user.username || null,
+      cleanLicFromEmail,
+      fullName,
+    );
+    if (!matchedRows[0]?.id) return null;
+
+    return prisma.driver.findFirst({
+      where: { id: matchedRows[0].id, tenantId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        driverType: true,
+        assignedVehicleId: true,
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 const displayName = (d: DriverRef) =>
@@ -336,27 +398,29 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        const assignedVehicleRow = driver
-          ? vehicles.find(
-              (v) =>
-                (driver.assignedVehicleId && v.id === driver.assignedVehicleId) ||
-                v.assignedDriverId === driver.id,
-            ) || null
-          : null;
+        const assignedVehicleRow =
+          vehicles.find(
+            (v) =>
+              Boolean(driver?.assignedVehicleId && v.id === driver.assignedVehicleId) ||
+              Boolean(driver && v.assignedDriverId === driver.id) ||
+              v.assignedDriverId === userId,
+          ) || null;
 
         const effectiveAssignedVehicleId =
           driver?.assignedVehicleId ?? assignedVehicleRow?.id ?? null;
 
         const resolvedDriverJson = driverJson
           ? { ...driverJson, assignedVehicleId: effectiveAssignedVehicleId }
-          : null;
+          : assignedVehicleRow
+            ? { id: userId, name: 'Driver', driverType: null, assignedVehicleId: assignedVehicleRow.id }
+            : null;
 
         const mappedVehicles = vehicles.map((v) => {
           const isBlank = (v.deviceId ?? '').trim() === '';
           const isAssignedToMe = Boolean(
-            driver &&
-              ((effectiveAssignedVehicleId && effectiveAssignedVehicleId === v.id) ||
-                v.assignedDriverId === driver.id),
+            (effectiveAssignedVehicleId && effectiveAssignedVehicleId === v.id) ||
+              (driver && v.assignedDriverId === driver.id) ||
+              v.assignedDriverId === userId,
           );
           const plate = effectivePlate(v);
           return {

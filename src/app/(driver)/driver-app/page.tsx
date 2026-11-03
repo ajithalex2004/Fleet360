@@ -1145,111 +1145,120 @@ export default function DriverAppLauncher() {
                 </select>
               </div>
 
-              {/* Blank Value Column to Enter Vehicle ID / Plate Manually + Searchable Logistics Vehicle Dropdown */}
-              {!selectedVehicle && (
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>{txt.customVehicleLabel}</span>
-                    {matchedVehicleFromInput && (
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                        ✓ Matched: {matchedVehicleFromInput.make} {matchedVehicleFromInput.model}
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    list="logistics-vehicles-datalist"
-                    required={!selectedVehicle}
-                    placeholder={txt.customVehiclePlaceholder}
-                    value={customVehicleQuery}
-                    onChange={(e) => {
-                      const nextVal = e.target.value;
-                      setCustomVehicleQuery(nextVal);
-                      const q = nextVal.trim().toLowerCase();
-                      const compactQ = q.replace(/[^a-z0-9]/g, '');
-                      const match = fleetVehicles.find((v) => {
-                        const plate = (v.licensePlate || '').toLowerCase();
-                        const code = (v.vehicleCode || '').toLowerCase();
-                        return plate === q || code === q || (compactQ.length >= 4 && plate.replace(/[^a-z0-9]/g, '') === compactQ);
-                      });
-                      if (match?.odometerReading) {
+              {/* Enter Vehicle ID / License Plate Column (Locked to assigned plate when driver has an assigned vehicle) */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>{txt.customVehicleLabel}</span>
+                  {(selectedVehicle || matchedVehicleFromInput) && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                      ✓ {(selectedVehicle || matchedVehicleFromInput)?.make} {(selectedVehicle || matchedVehicleFromInput)?.model}
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  list="logistics-vehicles-datalist"
+                  required
+                  readOnly={hasAssignedVehicleOnProfile && Boolean(selectedVehicle)}
+                  placeholder={txt.customVehiclePlaceholder}
+                  value={
+                    hasAssignedVehicleOnProfile && selectedVehicle
+                      ? selectedVehicle.licensePlate || selectedVehicle.vehicleCode || ''
+                      : customVehicleQuery
+                  }
+                  onChange={(e) => {
+                    if (hasAssignedVehicleOnProfile && selectedVehicle) return;
+                    const nextVal = e.target.value;
+                    setCustomVehicleQuery(nextVal);
+                    const q = nextVal.trim().toLowerCase();
+                    const compactQ = q.replace(/[^a-z0-9]/g, '');
+                    const match = fleetVehicles.find((v) => {
+                      const plate = (v.licensePlate || '').toLowerCase();
+                      const code = (v.vehicleCode || '').toLowerCase();
+                      return plate === q || code === q || (compactQ.length >= 4 && plate.replace(/[^a-z0-9]/g, '') === compactQ);
+                    });
+                    if (match) {
+                      setSelectedVehicle(match);
+                      if (match.odometerReading) {
                         setOdometerInput(String(match.odometerReading));
                       }
-                    }}
-                    dir="ltr"
-                    className="w-full rounded-xl border-2 border-violet-400 dark:border-violet-500/50 bg-slate-50 dark:bg-slate-950 px-4 py-3 font-mono text-base font-black uppercase text-slate-950 dark:text-white placeholder-slate-400 focus:border-violet-600 focus:outline-none text-left"
-                  />
-                  <datalist id="logistics-vehicles-datalist">
-                    {fleetVehicles.map((v) => {
-                      const primary = v.licensePlate || v.vehicleCode || '';
-                      return (
-                        <option
-                          key={v.id}
-                          value={primary}
-                          label={`${v.vehicleCode || 'LOGISTICS'} — ${v.make || ''} ${v.model || ''}`}
-                        />
-                      );
-                    })}
-                  </datalist>
-                  {fleetVehicles.length > 0 && (
-                    <div className="mt-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-slate-950/90 p-2.5">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                          Logistics Vehicles ({fleetVehicles.length}) — Tap to Select:
-                        </span>
-                      </div>
-                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
-                        {fleetVehicles
-                          .filter((v) => {
-                            const q = customVehicleQuery.trim().toLowerCase();
-                            if (!q) return true;
-                            const plate = (v.licensePlate || '').toLowerCase();
-                            const code = (v.vehicleCode || '').toLowerCase();
-                            const model = `${v.make || ''} ${v.model || ''}`.toLowerCase();
-                            return plate.includes(q) || code.includes(q) || model.includes(q);
-                          })
-                          .map((v) => {
-                            const plateLabel = v.licensePlate || v.vehicleCode || '';
-                            const codeLabel = v.vehicleCode || 'LOGISTICS';
-                            const isMatched =
-                              customVehicleQuery.trim().toUpperCase() === plateLabel.toUpperCase() ||
-                              customVehicleQuery.trim().toUpperCase() === codeLabel.toUpperCase();
-                            return (
-                              <button
-                                key={v.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedVehicle(v);
-                                  setCustomVehicleQuery(plateLabel);
-                                  if (v.odometerReading) {
-                                    setOdometerInput(String(v.odometerReading));
-                                  }
-                                }}
-                                className={`w-full flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-left transition ${
-                                  isMatched
-                                    ? 'border-violet-500 bg-violet-600/20 text-white'
-                                    : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 hover:border-violet-500'
-                                }`}
-                              >
-                                <div>
-                                  <span className="font-mono text-xs font-black text-slate-950 dark:text-white">
-                                    {plateLabel}
-                                  </span>
-                                  <span className="ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                                    {v.make} {v.model}
-                                  </span>
-                                </div>
-                                <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-violet-600 dark:text-violet-300">
-                                  {codeLabel}
-                                </span>
-                              </button>
-                            );
-                          })}
-                      </div>
+                    } else {
+                      setSelectedVehicle(null);
+                    }
+                  }}
+                  dir="ltr"
+                  className="w-full rounded-xl border-2 border-violet-400 dark:border-violet-500/50 bg-slate-50 dark:bg-slate-950 px-4 py-3 font-mono text-base font-black uppercase text-slate-950 dark:text-white placeholder-slate-400 focus:border-violet-600 focus:outline-none text-left read-only:cursor-default"
+                />
+                <datalist id="logistics-vehicles-datalist">
+                  {fleetVehicles.map((v) => {
+                    const primary = v.licensePlate || v.vehicleCode || '';
+                    return (
+                      <option
+                        key={v.id}
+                        value={primary}
+                        label={`${v.vehicleCode || 'LOGISTICS'} — ${v.make || ''} ${v.model || ''}`}
+                      />
+                    );
+                  })}
+                </datalist>
+                {!hasAssignedVehicleOnProfile && !selectedVehicle && fleetVehicles.length > 0 && (
+                  <div className="mt-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-slate-950/90 p-2.5">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                        Logistics Vehicles ({fleetVehicles.length}) — Tap to Select:
+                      </span>
                     </div>
-                  )}
-                </div>
-              )}
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {fleetVehicles
+                        .filter((v) => {
+                          const q = customVehicleQuery.trim().toLowerCase();
+                          if (!q) return true;
+                          const plate = (v.licensePlate || '').toLowerCase();
+                          const code = (v.vehicleCode || '').toLowerCase();
+                          const model = `${v.make || ''} ${v.model || ''}`.toLowerCase();
+                          return plate.includes(q) || code.includes(q) || model.includes(q);
+                        })
+                        .map((v) => {
+                          const plateLabel = v.licensePlate || v.vehicleCode || '';
+                          const codeLabel = v.vehicleCode || 'LOGISTICS';
+                          const isMatched =
+                            customVehicleQuery.trim().toUpperCase() === plateLabel.toUpperCase() ||
+                            customVehicleQuery.trim().toUpperCase() === codeLabel.toUpperCase();
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedVehicle(v);
+                                setCustomVehicleQuery(plateLabel);
+                                if (v.odometerReading) {
+                                  setOdometerInput(String(v.odometerReading));
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-left transition ${
+                                isMatched
+                                  ? 'border-violet-500 bg-violet-600/20 text-white'
+                                  : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 hover:border-violet-500'
+                              }`}
+                            >
+                              <div>
+                                <span className="font-mono text-xs font-black text-slate-950 dark:text-white">
+                                  {plateLabel}
+                                </span>
+                                <span className="ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                  {v.make} {v.model}
+                                </span>
+                              </div>
+                              <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-violet-600 dark:text-violet-300">
+                                {codeLabel}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Vehicle Summary Card (Only shown when a vehicle is selected or matched) */}
               {(selectedVehicle || matchedVehicleFromInput) && (
