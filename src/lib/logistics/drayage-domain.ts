@@ -242,14 +242,30 @@ export interface DrayageJob {
   customerPortal?: DrayageCustomerPortalLink;
 }
 
+export type DrayageTrackingPortalRole = 'CUSTOMER' | 'CLIENT' | 'RAMP';
+
 export interface DrayageCustomerPortalLink {
   trackingToken: string;
   shareablePath: string;
+  customerToken: string;
+  customerShareablePath: string;
+  clientToken: string;
+  clientShareablePath: string;
+  rampToken: string;
+  rampShareablePath: string;
+  customerLinkActive: boolean;
+  clientLinkActive: boolean;
+  rampLinkActive: boolean;
   jobCode: string;
   containerNumber: string;
   customerName: string;
   customerWhatsApp: string;
   customerEmail: string;
+  clientName: string;
+  clientWhatsApp: string;
+  clientEmail: string;
+  rampContactName: string;
+  rampWhatsApp: string;
   autoAlertsEnabled: boolean;
   lastAlertSentAt: string | null;
   lastAlertSummary: string | null;
@@ -2020,14 +2036,29 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       });
     }
 
-    // (C) Live Customer Tracking Link (Shareable Portal) & Automated Milestone Alert Config
-    const trackingToken = generateDrayageCustomerTrackingToken({
+    // (C) Role-Scoped Tracking Links (Customer, Client, Ramp) & Automated Milestone Alert Config
+    const customerToken = generateDrayageCustomerTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
+      role: 'CUSTOMER',
+    });
+    const clientToken = generateDrayageCustomerTrackingToken({
+      tenantId,
+      jobCode: j.jobCode,
+      containerNumber: j.containerNumber,
+      role: 'CLIENT',
+    });
+    const rampToken = generateDrayageCustomerTrackingToken({
+      tenantId,
+      jobCode: j.jobCode,
+      containerNumber: j.containerNumber,
+      role: 'RAMP',
     });
     const resolvedContacts = resolveCustomerMilestoneContacts({
       customerName: j.customerName,
+      warehouseId: j.warehouseId,
+      warehouseName: j.warehouseName,
       notes: j.notes,
       clients,
       warehouses,
@@ -2038,14 +2069,40 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         (String(l.job_id) === j.id || String(l.job_code) === j.jobCode) &&
         String(l.actor || '').includes('Customer Alert Engine'),
     );
+    const custAndClientActive = isCustomerOrClientLinkActive({
+      status: j.status,
+      assignedVehicleId: j.assignedVehicleId,
+      assignedDriverId: j.assignedDriverId,
+      assignedVehiclePlate: j.assignedVehiclePlate,
+      assignedDriverName: j.assignedDriverName,
+    });
+    const rampActive = isRampLinkActive({
+      status: j.status,
+      placementLocation: j.placementLocation,
+      trailerDetached: j.trailerDetached,
+    });
     j.customerPortal = {
-      trackingToken,
-      shareablePath: `/track/drayage/${trackingToken}`,
+      trackingToken: customerToken,
+      shareablePath: `/track/drayage/${customerToken}`,
+      customerToken,
+      customerShareablePath: `/track/drayage/${customerToken}`,
+      clientToken,
+      clientShareablePath: `/track/drayage/${clientToken}`,
+      rampToken,
+      rampShareablePath: `/track/drayage/${rampToken}`,
+      customerLinkActive: custAndClientActive,
+      clientLinkActive: custAndClientActive,
+      rampLinkActive: rampActive,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
       customerName: j.customerName,
       customerWhatsApp: resolvedContacts.whatsapp,
       customerEmail: resolvedContacts.email,
+      clientName: resolvedContacts.clientName,
+      clientWhatsApp: resolvedContacts.clientWhatsApp,
+      clientEmail: resolvedContacts.clientEmail,
+      rampContactName: resolvedContacts.rampContactName,
+      rampWhatsApp: resolvedContacts.rampWhatsApp,
       autoAlertsEnabled: resolvedContacts.autoAlertsEnabled,
       lastAlertSentAt: lastAlertLog?.created_at
         ? new Date(String(lastAlertLog.created_at)).toISOString()
@@ -2567,6 +2624,16 @@ export async function assignDrayageJob(
       allowanceCalc.totalAmountAed,
     );
   }
+
+  // Automatically dispatch Customer & Client tracking links upon Vehicle & Driver Assignment (ASSIGNED status)
+  await dispatchDrayageCustomerMilestoneAlert(db, {
+    tenantId: args.tenantId,
+    jobId: args.jobId,
+    milestoneStatus: nextAssignStatus,
+    triggerSource: 'AUTO_STAGE_TRANSITION',
+  }).catch((err) => {
+    console.warn('[assignDrayageJob] milestone alert warning:', err);
+  });
 
   return { ok: true, tokenNumber: token };
 }
@@ -4647,6 +4714,9 @@ export async function consigneeConfirmEmptyReady(
     receiverName: string;
     bayNotes?: string;
     photoUrl?: string | null;
+    operationType?: 'DESTUFFING' | 'STUFFING';
+    newSealNumber?: string | null;
+    grossWeightKg?: number | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -4658,12 +4728,37 @@ export async function consigneeConfirmEmptyReady(
   const job = jobRows[0];
   if (!job) throw new Error('Shipment job not found');
 
-  const receiver = (args.receiverName || 'Consignee Dock Supervisor').trim();
+  const currentStatus = String(job.status || '').toUpperCase();
+  const rampActive = isRampLinkActive({
+    status: currentStatus,
+    placementLocation: job.placement_location ? String(job.placement_location) : 'RAMP',
+    trailerDetached: Boolean(job.trailer_detached),
+  });
+  if (!rampActive) {
+    throw new Error(
+      `Ramp Stuffing/Destuffing completion can only be submitted once the container is in PLACED_AT_RAMP status (current status: ${currentStatus}).`,
+    );
+  }
+
+  const shipmentType = String(job.shipment_type || 'IMPORT').toUpperCase();
+  const isStuffing =
+    args.operationType === 'STUFFING' || (!args.operationType && shipmentType === 'EXPORT');
+  const receiver = (args.receiverName || 'Warehouse Ramp Supervisor').trim();
   const nowIso = new Date().toISOString();
+  const cleanSeal = args.newSealNumber ? String(args.newSealNumber).trim().toUpperCase() : null;
+  const cleanWeight =
+    args.grossWeightKg != null && Number(args.grossWeightKg) > 0
+      ? Math.round(Number(args.grossWeightKg))
+      : null;
+
+  const noteSummary = isStuffing
+    ? `Ramp Export Stuffing Completed by ${receiver}${cleanSeal ? ` · New Seal: ${cleanSeal}` : ''}${cleanWeight ? ` · Gross Weight: ${cleanWeight} kg` : ''}${args.bayNotes ? `: ${args.bayNotes}` : ''}`
+    : `Ramp Destuffing / Empty Release signed by ${receiver}${args.bayNotes ? `: ${args.bayNotes}` : ''}`;
 
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
-        SET pod_signature_name = $3,
+        SET status = 'READY_FOR_PICKUP',
+            pod_signature_name = $3,
             pod_signed_at = NOW(),
             pod_photo_url = COALESCE($4, pod_photo_url),
             etc_time = NOW(),
@@ -4675,18 +4770,36 @@ export async function consigneeConfirmEmptyReady(
     args.tenantId,
     receiver,
     args.photoUrl ? String(args.photoUrl) : null,
-    `Consignee Empty Release signed by ${receiver}${args.bayNotes ? `: ${args.bayNotes}` : ''}`,
+    noteSummary,
   );
+
+  // If Export Stuffing provided a new seal number or gross weight, update the container record
+  if (job.container_id && (cleanSeal || cleanWeight)) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET seal_number = COALESCE($3, seal_number),
+              weight_kg = COALESCE($4, weight_kg),
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      String(job.container_id),
+      args.tenantId,
+      cleanSeal,
+      cleanWeight,
+    );
+  }
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, 'CONSIGNEE_EMPTY_RELEASE', $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     `log-${crypto.randomUUID().slice(0, 12)}`,
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    `Consignee (${receiver}) confirmed container ${job.container_number} destuffing complete & empty ready for L2 pickup.${args.bayNotes ? ` Dock Note: ${args.bayNotes}` : ''}`,
-    `${receiver} (Consignee Portal)`,
+    isStuffing ? 'RAMP_STUFFING_COMPLETE' : 'CONSIGNEE_EMPTY_RELEASE',
+    isStuffing
+      ? `Ramp (${receiver}) confirmed container ${job.container_number} export stuffing complete & sealed${cleanSeal ? ` (Seal: ${cleanSeal})` : ''}${cleanWeight ? ` · Weight: ${cleanWeight} kg` : ''}. Ready for Port Terminal haulage.${args.bayNotes ? ` Dock Note: ${args.bayNotes}` : ''}`
+      : `Ramp (${receiver}) confirmed container ${job.container_number} destuffing complete & empty ready for L2 pickup.${args.bayNotes ? ` Dock Note: ${args.bayNotes}` : ''}`,
+    `${receiver} (Ramp Portal)`,
   );
 
   // If L1 job and L2 has not yet been activated, dynamically activate Leg 2 immediately
@@ -4704,6 +4817,9 @@ export async function consigneeConfirmEmptyReady(
     jobId: args.jobId,
     jobCode: String(job.job_code),
     containerNumber: String(job.container_number),
+    operationType: isStuffing ? 'STUFFING' : 'DESTUFFING',
+    newSealNumber: cleanSeal,
+    grossWeightKg: cleanWeight,
     receiverName: receiver,
     signedAt: nowIso,
     l2Activated: true,
@@ -5401,18 +5517,78 @@ function getDrayageTrackingTokenSecret(): string {
 }
 
 /**
- * Generates a read-only, HMAC-SHA256 signed capability token per (tenantId, jobCode, containerNumber)
- * so external customers can open `/track/drayage/[token]` without logging into the dispatch console.
+ * Checks whether Customer Link & Client Link are active for a job.
+ * Per policy: Customer Link & Client Link ONLY activate upon Vehicle & Driver Assignment (ASSIGNED status or later).
+ */
+export function isCustomerOrClientLinkActive(job: {
+  status: string;
+  assignedVehicleId?: string | null;
+  assignedDriverId?: string | null;
+  assignedVehiclePlate?: string | null;
+  assignedDriverName?: string | null;
+}): boolean {
+  const st = String(job.status || '').toUpperCase();
+  if (!st || st === 'PENDING' || st === 'UNASSIGNED' || st === 'CANCELLED') {
+    return false;
+  }
+  const hasVehicle = Boolean(job.assignedVehicleId || job.assignedVehiclePlate);
+  const hasDriver = Boolean(job.assignedDriverId || job.assignedDriverName);
+  if (hasVehicle && hasDriver) {
+    return true;
+  }
+  // If the job is already in an active/completed stage past assignment (Stage >= 1), keep Customer/Client link active
+  return getDrayageOperationalStageIndex(st) >= 1;
+}
+
+/**
+ * Checks whether the Ramp Link (Stuffing / Destuffing Completion) is active for a job.
+ * Per policy: Ramp Link ONLY activates upon PLACED_AT_RAMP status (and remains accessible through ramp completion).
+ */
+export function isRampLinkActive(job: {
+  status: string;
+  placementLocation?: string | null;
+  trailerDetached?: boolean;
+}): boolean {
+  const st = String(job.status || '').toUpperCase();
+  const rampStatuses = [
+    'PLACED_AT_RAMP',
+    'REASSIGN_PLACED_AT_RAMP',
+    'CONTAINER_DETACHED',
+    'TRAILER_DETACHED',
+    'REASSIGN_TRAILER_DETACHED',
+    'READY_FOR_PICKUP',
+    'WAITING_MT_RETURN',
+    'STUFFING_COMPLETE',
+    'DESTUFFING_COMPLETE',
+  ];
+  if (rampStatuses.includes(st)) {
+    return String(job.placementLocation || 'RAMP').toUpperCase() !== 'YARD';
+  }
+  if (
+    ['COMPLETED', 'EMPTY_DEPOSITED', 'STREET_TURNED'].includes(st) &&
+    String(job.placementLocation || 'RAMP').toUpperCase() === 'RAMP'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Generates a role-scoped, HMAC-SHA256 signed capability token per (tenantId, jobCode, containerNumber, role)
+ * so external stakeholders (Customer, Client, or Ramp Supervisor) can open `/track/drayage/[token]` without logging in.
  */
 export function generateDrayageCustomerTrackingToken(args: {
   tenantId: string;
   jobCode: string;
   containerNumber: string;
+  role?: DrayageTrackingPortalRole;
 }): string {
-  const payloadObj = {
+  const role: DrayageTrackingPortalRole = args.role || 'CUSTOMER';
+  const payloadObj: Record<string, string> = {
     t: String(args.tenantId).trim(),
     j: String(args.jobCode).trim().toUpperCase(),
     c: String(args.containerNumber).trim().toUpperCase(),
+    r: role,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payloadObj), 'utf8').toString('base64url');
   const sig = crypto
@@ -5424,13 +5600,14 @@ export function generateDrayageCustomerTrackingToken(args: {
 }
 
 /**
- * Verifies a shareable drayage customer tracking token and extracts tenantId, jobCode, and containerNumber.
+ * Verifies a shareable drayage tracking token and extracts tenantId, jobCode, containerNumber, and role.
  */
 export function verifyDrayageCustomerTrackingToken(rawToken: string): {
   valid: boolean;
   tenantId?: string;
   jobCode?: string;
   containerNumber?: string;
+  role?: DrayageTrackingPortalRole;
 } {
   try {
     const cleaned = decodeURIComponent(String(rawToken || '').trim());
@@ -5456,15 +5633,19 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
       t?: string;
       j?: string;
       c?: string;
+      r?: string;
     };
     if (!parsed?.t || !parsed?.j) {
       return { valid: false };
     }
+    const role: DrayageTrackingPortalRole =
+      parsed.r === 'CLIENT' || parsed.r === 'RAMP' ? parsed.r : 'CUSTOMER';
     return {
       valid: true,
       tenantId: String(parsed.t),
       jobCode: String(parsed.j).toUpperCase(),
       containerNumber: String(parsed.c || '').toUpperCase(),
+      role,
     };
   } catch {
     return { valid: false };
@@ -5473,6 +5654,8 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
 
 export function resolveCustomerMilestoneContacts(args: {
   customerName: string;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   notes?: string | null;
   clients?: DrayageClient[];
   warehouses?: DrayageWarehouse[];
@@ -5480,23 +5663,42 @@ export function resolveCustomerMilestoneContacts(args: {
 }): {
   whatsapp: string;
   email: string;
+  clientName: string;
+  clientWhatsApp: string;
+  clientEmail: string;
+  rampContactName: string;
+  rampWhatsApp: string;
   autoAlertsEnabled: boolean;
 } {
   const notesStr = String(args.notes || '');
   const waMatch = notesStr.match(/\[CUST_WA:([^\]]+)\]/);
   const emMatch = notesStr.match(/\[CUST_EMAIL:([^\]]+)\]/);
+  const clientWaMatch = notesStr.match(/\[CLIENT_WA:([^\]]+)\]/);
+  const clientEmMatch = notesStr.match(/\[CLIENT_EMAIL:([^\]]+)\]/);
+  const rampWaMatch = notesStr.match(/\[RAMP_WA:([^\]]+)\]/);
   const autoMatch = notesStr.match(/\[CUST_AUTO_ALERTS:(ON|OFF)\]/);
 
   const custLower = String(args.customerName || '').toLowerCase();
-  const matchedClient = args.clients?.find((c) => c.name.toLowerCase() === custLower);
-  const matchedWh = args.warehouses?.find((w) => w.customerName.toLowerCase() === custLower);
+  const whLower = String(args.warehouseName || '').toLowerCase();
+
   const matchedCustomer = args.customers?.find((c) => c.name.toLowerCase() === custLower);
+  const matchedWh =
+    (args.warehouseId ? args.warehouses?.find((w) => w.id === args.warehouseId) : undefined) ||
+    (whLower ? args.warehouses?.find((w) => w.name.toLowerCase() === whLower) : undefined) ||
+    args.warehouses?.find((w) => w.customerName.toLowerCase() === custLower);
+
+  const matchedClient =
+    (matchedWh?.customerId ? args.clients?.find((c) => c.id === matchedWh.customerId) : undefined) ||
+    (matchedWh?.customerName
+      ? args.clients?.find((c) => c.name.toLowerCase() === matchedWh.customerName.toLowerCase())
+      : undefined) ||
+    args.clients?.find((c) => c.name.toLowerCase() === custLower);
 
   const whatsapp =
     waMatch?.[1]?.trim() ||
+    matchedCustomer?.phone ||
     matchedClient?.contactNo ||
     matchedWh?.contactPhone ||
-    matchedCustomer?.phone ||
     '';
 
   const email =
@@ -5504,9 +5706,46 @@ export function resolveCustomerMilestoneContacts(args: {
     matchedCustomer?.email ||
     '';
 
+  const clientName =
+    matchedClient?.name ||
+    matchedWh?.customerName ||
+    matchedWh?.name ||
+    args.warehouseName ||
+    'Consignee Client';
+
+  const clientWhatsApp =
+    clientWaMatch?.[1]?.trim() ||
+    matchedClient?.contactNo ||
+    matchedWh?.contactPhone ||
+    whatsapp;
+
+  const clientEmail =
+    clientEmMatch?.[1]?.trim() ||
+    email;
+
+  const rampContactName =
+    matchedWh?.contactPerson ||
+    matchedClient?.contactPerson ||
+    `${args.warehouseName || 'Warehouse'} Ramp Supervisor`;
+
+  const rampWhatsApp =
+    rampWaMatch?.[1]?.trim() ||
+    matchedWh?.contactPhone ||
+    matchedClient?.contactNo ||
+    clientWhatsApp;
+
   const autoAlertsEnabled = autoMatch ? autoMatch[1] === 'ON' : true;
 
-  return { whatsapp, email, autoAlertsEnabled };
+  return {
+    whatsapp,
+    email,
+    clientName,
+    clientWhatsApp,
+    clientEmail,
+    rampContactName,
+    rampWhatsApp,
+    autoAlertsEnabled,
+  };
 }
 
 export function formatMilestoneLabelForCustomer(status: string): {
@@ -5579,8 +5818,10 @@ export function formatMilestoneLabelForCustomer(status: string): {
 }
 
 /**
- * Dispatches automated or on-demand WhatsApp & Email milestone alerts to the customer
- * with the read-only token-secured tracking link, and records the delivery in status logs.
+ * Dispatches automated or on-demand WhatsApp & Email milestone alerts to Customer, Client, or Ramp
+ * with role-scoped token-secured links, enforcing activation gating rules:
+ *  - CUSTOMER & CLIENT links: Active ONLY upon Vehicle & Driver Assignment (ASSIGNED+)
+ *  - RAMP link: Active ONLY upon PLACED_AT_RAMP status
  */
 export async function dispatchDrayageCustomerMilestoneAlert(
   db: DrayageDbClient,
@@ -5591,6 +5832,7 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     etcTime?: string | null;
     customWhatsApp?: string;
     customEmail?: string;
+    targetRole?: DrayageTrackingPortalRole;
     channels?: Array<'WHATSAPP' | 'EMAIL'>;
     triggerSource?: 'AUTO_STAGE_TRANSITION' | 'MANUAL_DISPATCH' | 'CUSTOMER_PORTAL';
   },
@@ -5607,11 +5849,46 @@ export async function dispatchDrayageCustomerMilestoneAlert(
   const jobCode = String(job.job_code);
   const containerNumber = String(job.container_number);
   const customerName = String(job.customer_name || 'Valued Customer');
-  const status = String(args.milestoneStatus || job.status || 'IN_TRANSIT');
+  const status = String(args.milestoneStatus || job.status || 'IN_TRANSIT').toUpperCase();
   const etcIso = args.etcTime ?? (job.etc_time ? new Date(String(job.etc_time)).toISOString() : null);
+
+  const custClientActive = isCustomerOrClientLinkActive({
+    status,
+    assignedVehicleId: job.assigned_vehicle_id ? String(job.assigned_vehicle_id) : null,
+    assignedDriverId: job.assigned_driver_id ? String(job.assigned_driver_id) : null,
+    assignedVehiclePlate: job.assigned_vehicle_plate ? String(job.assigned_vehicle_plate) : null,
+    assignedDriverName: job.assigned_driver_name ? String(job.assigned_driver_name) : null,
+  });
+  const rampActive = isRampLinkActive({
+    status,
+    placementLocation: job.placement_location ? String(job.placement_location) : 'RAMP',
+    trailerDetached: Boolean(job.trailer_detached),
+  });
+
+  const requestedRole: DrayageTrackingPortalRole = args.targetRole || 'CUSTOMER';
+  if (args.triggerSource === 'MANUAL_DISPATCH') {
+    if ((requestedRole === 'CUSTOMER' || requestedRole === 'CLIENT') && !custClientActive) {
+      throw new Error(
+        `${requestedRole === 'CLIENT' ? 'Client' : 'Customer'} Link only activates upon Vehicle & Driver Assignment (ASSIGNED status). Please assign a Vehicle & Driver first.`,
+      );
+    }
+    if (requestedRole === 'RAMP' && !rampActive) {
+      throw new Error(
+        'Ramp Link only activates once the container reaches PLACED_AT_RAMP status.',
+      );
+    }
+  } else if (!custClientActive && !rampActive) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'link_not_active_yet',
+    };
+  }
 
   const resolved = resolveCustomerMilestoneContacts({
     customerName,
+    warehouseId: job.warehouse_id ? String(job.warehouse_id) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
     notes: job.notes ? String(job.notes) : null,
   });
 
@@ -5623,18 +5900,53 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     };
   }
 
-  const targetWhatsApp = (args.customWhatsApp || resolved.whatsapp).trim();
-  const targetEmail = (args.customEmail || resolved.email).trim();
-  const trackingToken = generateDrayageCustomerTrackingToken({
+  const customerToken = generateDrayageCustomerTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
+    role: 'CUSTOMER',
   });
+  const clientToken = generateDrayageCustomerTrackingToken({
+    tenantId: args.tenantId,
+    jobCode,
+    containerNumber,
+    role: 'CLIENT',
+  });
+  const rampToken = generateDrayageCustomerTrackingToken({
+    tenantId: args.tenantId,
+    jobCode,
+    containerNumber,
+    role: 'RAMP',
+  });
+
+  const activeToken =
+    requestedRole === 'RAMP'
+      ? rampToken
+      : requestedRole === 'CLIENT'
+      ? clientToken
+      : customerToken;
+
+  const targetWhatsApp = (
+    args.customWhatsApp ||
+    (requestedRole === 'RAMP'
+      ? resolved.rampWhatsApp
+      : requestedRole === 'CLIENT'
+      ? resolved.clientWhatsApp
+      : resolved.whatsapp)
+  ).trim();
+  const targetEmail = (
+    args.customEmail ||
+    (requestedRole === 'CLIENT' ? resolved.clientEmail : resolved.email)
+  ).trim();
 
   const appBaseUrl =
     process.env.NEXT_PUBLIC_APP_URL ||
     'https://fleet360-app-production.up.railway.app';
-  const shareableUrl = `${appBaseUrl.replace(/\/$/, '')}/track/drayage/${trackingToken}`;
+  const baseUrlClean = appBaseUrl.replace(/\/$/, '');
+  const shareableUrl = `${baseUrlClean}/track/drayage/${activeToken}`;
+  const customerUrl = `${baseUrlClean}/track/drayage/${customerToken}`;
+  const clientUrl = `${baseUrlClean}/track/drayage/${clientToken}`;
+  const rampUrl = `${baseUrlClean}/track/drayage/${rampToken}`;
 
   const milestoneMeta = formatMilestoneLabelForCustomer(status);
   const etcFormatted = etcIso
@@ -5645,15 +5957,25 @@ export async function dispatchDrayageCustomerMilestoneAlert(
       }) + ' GST'
     : null;
 
+  const roleHeader =
+    requestedRole === 'RAMP'
+      ? `🏭 *Fleet360 Warehouse Ramp Action Link (Stuffing / Destuffing Completion)*`
+      : requestedRole === 'CLIENT'
+      ? `🏢 *Fleet360 Client (Consignee/End User) Live Container Tracking*`
+      : `📦 *Fleet360 Customer (Consignor/Shipper) Live Container Milestone Alert*`;
+
   const whatsappBody = [
-    `📦 *Fleet360 Live Container Milestone Alert*`,
+    roleHeader,
     `• *Job / Container:* ${jobCode} (${containerNumber} · ${String(job.container_size || '40HC')})`,
-    `• *Customer:* ${customerName}`,
+    `• *Customer (Consignor):* ${customerName}`,
+    `• *Consignee Facility:* ${String(job.warehouse_name)}`,
     `• *Milestone:* ${milestoneMeta.title}`,
     `• *Route:* ${String(job.terminal_name)} → ${String(job.warehouse_name)}`,
     `• *Assigned Tractor:* ${String(job.assigned_vehicle_plate || 'Assigned')} (${String(job.assigned_driver_name || 'Driver')})`,
-    ...(etcFormatted ? [`• *Offloading ETC:* ${etcFormatted}`] : []),
-    `🔗 *Live Corridor Map & e-POD Portal:* ${shareableUrl}`,
+    ...(etcFormatted ? [`• *Ramp ETC:* ${etcFormatted}`] : []),
+    requestedRole === 'RAMP'
+      ? `🔗 *Update Stuffing / Destuffing Completion (No-Login Ramp Portal):* ${shareableUrl}`
+      : `🔗 *Live Corridor Map & e-POD Portal (${requestedRole}):* ${shareableUrl}`,
   ].join('\n');
 
   // Best-effort REST gateway dispatch (pure fetch so client/server bundles stay 100% isomorphic)
@@ -5665,7 +5987,8 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     process.env?.TWILIO_ACCOUNT_SID &&
     process.env?.TWILIO_AUTH_TOKEN &&
     process.env?.TWILIO_WHATSAPP_NUMBER &&
-    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true'
+    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true' &&
+    targetWhatsApp
   ) {
     try {
       const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -5695,7 +6018,8 @@ export async function dispatchDrayageCustomerMilestoneAlert(
   if (
     typeof process !== 'undefined' &&
     process.env?.SENDGRID_API_KEY &&
-    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true'
+    process.env?.DISABLE_OUTBOUND_NOTIFICATIONS !== 'true' &&
+    targetEmail
   ) {
     try {
       const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -5707,7 +6031,7 @@ export async function dispatchDrayageCustomerMilestoneAlert(
         body: JSON.stringify({
           personalizations: [{ to: [{ email: targetEmail }] }],
           from: { email: process.env.EMAIL_FROM || 'no-reply@fleet360.ae', name: 'Fleet360 Drayage Ops' },
-          subject: `[Fleet360 Live Track] ${containerNumber} (${jobCode}) — ${milestoneMeta.title}`,
+          subject: `[Fleet360 ${requestedRole} Portal] ${containerNumber} (${jobCode}) — ${milestoneMeta.title}`,
           content: [{ type: 'text/plain', value: whatsappBody.replace(/\*/g, '') }],
         }),
       });
@@ -5717,7 +6041,14 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     }
   }
 
-  const logNote = `[WhatsApp → ${targetWhatsApp} (${waProviderStatus})] + [Email → ${targetEmail} (${emailProviderStatus})] · Milestone "${milestoneMeta.title}"${etcFormatted ? ` · ETC ${etcFormatted}` : ''} · Link: /track/drayage/${trackingToken.slice(0, 18)}...`;
+  const activeLinksNote =
+    args.triggerSource === 'AUTO_STAGE_TRANSITION'
+      ? rampActive
+        ? `Customer Link + Client Link + Ramp Link (Activated @ PLACED_AT_RAMP)`
+        : `Customer Link + Client Link (Activated @ ${status})`
+      : `${requestedRole} Link (/track/drayage/${activeToken.slice(0, 18)}...)`;
+
+  const logNote = `[${requestedRole} Alert · WhatsApp → ${targetWhatsApp || 'N/A'} (${waProviderStatus})]${targetEmail ? ` + [Email → ${targetEmail} (${emailProviderStatus})]` : ''} · Milestone "${milestoneMeta.title}"${etcFormatted ? ` · ETC ${etcFormatted}` : ''} · ${activeLinksNote}`;
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -5736,19 +6067,23 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     jobId: args.jobId,
     jobCode,
     containerNumber,
+    role: requestedRole,
     milestoneTitle: milestoneMeta.title,
     whatsappTo: targetWhatsApp,
     emailTo: targetEmail,
-    trackingToken,
-    shareablePath: `/track/drayage/${trackingToken}`,
+    trackingToken: activeToken,
+    shareablePath: `/track/drayage/${activeToken}`,
     shareableUrl,
+    customerUrl,
+    clientUrl,
+    rampUrl: rampActive ? rampUrl : null,
     whatsappPreview: whatsappBody,
     sentAt: new Date().toISOString(),
   };
 }
 
 /**
- * Updates the customer's WhatsApp number, Email address, and Auto-Milestone Alert toggle on a job.
+ * Updates the customer's, client's, and ramp's WhatsApp/Email addresses and Auto-Milestone Alert toggle on a job.
  */
 export async function updateDrayageCustomerAlertPreferences(
   db: DrayageDbClient,
@@ -5757,6 +6092,9 @@ export async function updateDrayageCustomerAlertPreferences(
     jobId: string;
     customerWhatsApp: string;
     customerEmail: string;
+    clientWhatsApp?: string;
+    clientEmail?: string;
+    rampWhatsApp?: string;
     autoAlertsEnabled: boolean;
   },
 ) {
@@ -5772,10 +6110,22 @@ export async function updateDrayageCustomerAlertPreferences(
   const rawNotes = String(job.notes || '')
     .replace(/\s*\|?\s*\[CUST_WA:[^\]]+\]/g, '')
     .replace(/\s*\|?\s*\[CUST_EMAIL:[^\]]+\]/g, '')
+    .replace(/\s*\|?\s*\[CLIENT_WA:[^\]]+\]/g, '')
+    .replace(/\s*\|?\s*\[CLIENT_EMAIL:[^\]]+\]/g, '')
+    .replace(/\s*\|?\s*\[RAMP_WA:[^\]]+\]/g, '')
     .replace(/\s*\|?\s*\[CUST_AUTO_ALERTS:(ON|OFF)\]/g, '')
     .trim();
 
-  const tagBlock = `[CUST_WA:${args.customerWhatsApp.trim()}] [CUST_EMAIL:${args.customerEmail.trim()}] [CUST_AUTO_ALERTS:${args.autoAlertsEnabled ? 'ON' : 'OFF'}]`;
+  const tags: string[] = [
+    `[CUST_WA:${args.customerWhatsApp.trim()}]`,
+    `[CUST_EMAIL:${args.customerEmail.trim()}]`,
+  ];
+  if (args.clientWhatsApp?.trim()) tags.push(`[CLIENT_WA:${args.clientWhatsApp.trim()}]`);
+  if (args.clientEmail?.trim()) tags.push(`[CLIENT_EMAIL:${args.clientEmail.trim()}]`);
+  if (args.rampWhatsApp?.trim()) tags.push(`[RAMP_WA:${args.rampWhatsApp.trim()}]`);
+  tags.push(`[CUST_AUTO_ALERTS:${args.autoAlertsEnabled ? 'ON' : 'OFF'}]`);
+
+  const tagBlock = tags.join(' ');
   const updatedNotes = rawNotes ? `${rawNotes} | ${tagBlock}` : tagBlock;
 
   await db.$executeRawUnsafe(
@@ -5790,13 +6140,18 @@ export async function updateDrayageCustomerAlertPreferences(
     jobId: args.jobId,
     customerWhatsApp: args.customerWhatsApp.trim(),
     customerEmail: args.customerEmail.trim(),
+    clientWhatsApp: args.clientWhatsApp?.trim() || '',
+    clientEmail: args.clientEmail?.trim() || '',
+    rampWhatsApp: args.rampWhatsApp?.trim() || '',
     autoAlertsEnabled: args.autoAlertsEnabled,
   };
 }
 
 /**
- * Resolves the complete read-only customer tracking portal payload for a verified token.
- * Safe for external customers without an internal dispatch login session.
+ * Resolves the role-scoped tracking portal payload for a verified token.
+ * Enforces activation gating:
+ *  - CUSTOMER & CLIENT links only activate upon Vehicle & Driver Assignment (ASSIGNED status or later).
+ *  - RAMP link only activates upon PLACED_AT_RAMP status.
  */
 export async function getPublicCustomerTrackingByToken(
   db: DrayageDbClient,
@@ -5805,6 +6160,7 @@ export async function getPublicCustomerTrackingByToken(
     jobCode: string;
     containerNumber?: string;
     rawToken: string;
+    role?: DrayageTrackingPortalRole;
   },
 ) {
   const workspace = await getDrayageWorkspaceData(db, args.tenantId);
@@ -5818,6 +6174,26 @@ export async function getPublicCustomerTrackingByToken(
   if (!matchedJob) {
     throw new Error('Tracking reference not found');
   }
+
+  const portalRole: DrayageTrackingPortalRole = args.role || 'CUSTOMER';
+  const custClientActive = isCustomerOrClientLinkActive({
+    status: matchedJob.status,
+    assignedVehicleId: matchedJob.assignedVehicleId,
+    assignedDriverId: matchedJob.assignedDriverId,
+    assignedVehiclePlate: matchedJob.assignedVehiclePlate,
+    assignedDriverName: matchedJob.assignedDriverName,
+  });
+  const rampActive = isRampLinkActive({
+    status: matchedJob.status,
+    placementLocation: matchedJob.placementLocation,
+    trailerDetached: matchedJob.trailerDetached,
+  });
+
+  const linkActive = portalRole === 'RAMP' ? rampActive : custClientActive;
+  const activationRequirement =
+    portalRole === 'RAMP'
+      ? 'Ramp Link only activates once the container reaches PLACED_AT_RAMP status at the destination facility.'
+      : `${portalRole === 'CLIENT' ? 'Client' : 'Customer'} Link only activates upon Vehicle & Driver Assignment (ASSIGNED status).`;
 
   const currentStage = getDrayageOperationalStageIndex(matchedJob.status, matchedJob.trailerDetached);
   const jobLogs = workspace.statusLogs.filter(
@@ -5899,7 +6275,10 @@ export async function getPublicCustomerTrackingByToken(
   );
 
   return {
-    portalReadOnly: true,
+    portalReadOnly: portalRole === 'CUSTOMER',
+    portalRole,
+    linkActive,
+    activationRequirement,
     verifiedToken: args.rawToken,
     refreshedAt: new Date().toISOString(),
     job: {

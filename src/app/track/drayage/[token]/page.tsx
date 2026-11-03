@@ -61,6 +61,9 @@ interface StatusLogItem {
 
 interface PortalPayload {
   portalReadOnly: boolean;
+  portalRole?: 'CUSTOMER' | 'CLIENT' | 'RAMP';
+  linkActive?: boolean;
+  activationRequirement?: string;
   verifiedToken: string;
   refreshedAt: string;
   currentStageIndex: number;
@@ -102,6 +105,14 @@ interface PortalPayload {
     customerPortal?: {
       customerWhatsApp: string;
       customerEmail: string;
+      clientName?: string;
+      clientWhatsApp?: string;
+      clientEmail?: string;
+      rampContactName?: string;
+      rampWhatsApp?: string;
+      customerLinkActive?: boolean;
+      clientLinkActive?: boolean;
+      rampLinkActive?: boolean;
       autoAlertsEnabled: boolean;
     };
     createdAt: string;
@@ -130,12 +141,20 @@ export default function CustomerDrayageTrackingPortalPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
-  // Customer WhatsApp & Email Subscription Form
+  // Customer / Client / Ramp WhatsApp & Email Subscription Form
   const [whatsappInput, setWhatsappInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [autoAlertsEnabled, setAutoAlertsEnabled] = useState(true);
   const [savingAlerts, setSavingAlerts] = useState(false);
   const [confirmingEmpty, setConfirmingEmpty] = useState(false);
+  const [extendingEtc, setExtendingEtc] = useState(false);
+
+  // Ramp Stuffing / Destuffing Completion Form
+  const [rampOperationType, setRampOperationType] = useState<'DESTUFFING' | 'STUFFING'>('DESTUFFING');
+  const [rampReceiverName, setRampReceiverName] = useState('');
+  const [rampBayNotes, setRampBayNotes] = useState('');
+  const [rampSealNumber, setRampSealNumber] = useState('');
+  const [rampGrossWeightKg, setRampGrossWeightKg] = useState('');
 
   const showNotice = (msg: string) => {
     setToast(msg);
@@ -161,9 +180,26 @@ export default function CustomerDrayageTrackingPortalPage() {
         setError(null);
 
         if (data.job?.customerPortal && !silent) {
-          setWhatsappInput(data.job.customerPortal.customerWhatsApp || '');
-          setEmailInput(data.job.customerPortal.customerEmail || '');
-          setAutoAlertsEnabled(Boolean(data.job.customerPortal.autoAlertsEnabled ?? true));
+          const role = data.portalRole || 'CUSTOMER';
+          const cp = data.job.customerPortal;
+          if (role === 'RAMP') {
+            setWhatsappInput(cp.rampWhatsApp || cp.clientWhatsApp || cp.customerWhatsApp || '');
+            setEmailInput(cp.clientEmail || cp.customerEmail || '');
+            setRampReceiverName(cp.rampContactName || `${data.job.warehouseName} Ramp Supervisor`);
+          } else if (role === 'CLIENT') {
+            setWhatsappInput(cp.clientWhatsApp || cp.customerWhatsApp || '');
+            setEmailInput(cp.clientEmail || cp.customerEmail || '');
+            setRampReceiverName(cp.rampContactName || cp.clientName || `${data.job.warehouseName} Receiving`);
+          } else {
+            setWhatsappInput(cp.customerWhatsApp || '');
+            setEmailInput(cp.customerEmail || '');
+          }
+          setAutoAlertsEnabled(Boolean(cp.autoAlertsEnabled ?? true));
+          setRampOperationType(
+            String(data.job.shipmentType || '').toUpperCase() === 'EXPORT' ? 'STUFFING' : 'DESTUFFING',
+          );
+          if (data.job.sealNumber) setRampSealNumber(String(data.job.sealNumber));
+          if (data.job.weightKg) setRampGrossWeightKg(String(data.job.weightKg));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load tracking portal');
@@ -379,25 +415,60 @@ export default function CustomerDrayageTrackingPortalPage() {
   const handleConfirmOffloadingComplete = async () => {
     try {
       setConfirmingEmpty(true);
+      const isStuffing = rampOperationType === 'STUFFING';
       const res = await fetch('/api/driver-app/customer-tracking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          action: 'confirm_offloading_complete',
-          consigneeContact: `${portalData?.job?.customerName || 'Consignee'} (${whatsappInput || 'Portal'})`,
+          action: isStuffing ? 'confirm_stuffing_complete' : 'confirm_offloading_complete',
+          operationType: rampOperationType,
+          receiverName: rampReceiverName.trim() || `${portalData?.job?.warehouseName || 'Ramp'} Supervisor`,
+          consigneeContact: rampReceiverName.trim() || `${portalData?.job?.warehouseName || 'Ramp'} Supervisor`,
+          bayNotes: rampBayNotes.trim() || undefined,
+          newSealNumber: isStuffing && rampSealNumber.trim() ? rampSealNumber.trim() : undefined,
+          grossWeightKg:
+            isStuffing && rampGrossWeightKg.trim() && Number(rampGrossWeightKg) > 0
+              ? Number(rampGrossWeightKg)
+              : undefined,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to confirm empty ready');
+      if (!res.ok) throw new Error(data.error || 'Failed to confirm ramp completion');
       showNotice(
-        `✓ Offloading confirmed! L2 Empty Return ${data.l2JobCode || ''} activated for immediate pickup.`,
+        isStuffing
+          ? `✓ Export Stuffing & Seal confirmed! Container ${portalData?.job?.containerNumber} marked Ready for Pickup.`
+          : `✓ Destuffing confirmed! L2 Empty Return ${data.l2JobCode || ''} activated for immediate pickup.`,
       );
       await fetchPortalData(true);
     } catch (err) {
-      showNotice(err instanceof Error ? err.message : 'Error confirming offloading');
+      showNotice(err instanceof Error ? err.message : 'Error confirming ramp completion');
     } finally {
       setConfirmingEmpty(false);
+    }
+  };
+
+  const handleExtendRampEtc = async (minutesToAdd: number) => {
+    try {
+      setExtendingEtc(true);
+      const res = await fetch('/api/driver-app/customer-tracking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          action: 'extend_ramp_etc',
+          minutesToAdd,
+          reason: `Ramp Supervisor extended ${rampOperationType.toLowerCase()} window by +${minutesToAdd}m`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to extend Ramp ETC');
+      showNotice(`✓ Extended Ramp ETC by +${minutesToAdd} minutes.`);
+      await fetchPortalData(true);
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : 'Error extending Ramp ETC');
+    } finally {
+      setExtendingEtc(false);
     }
   };
 
@@ -430,6 +501,78 @@ export default function CustomerDrayageTrackingPortalPage() {
   }
 
   const job = portalData.job;
+  const portalRole = portalData.portalRole || 'CUSTOMER';
+  const linkActive = portalData.linkActive ?? true;
+  const roleLabel =
+    portalRole === 'RAMP'
+      ? 'RAMP SUPERVISOR LINK (STUFFING / DESTUFFING)'
+      : portalRole === 'CLIENT'
+      ? 'CLIENT (CONSIGNEE / END USER) PORTAL'
+      : 'CUSTOMER (CONSIGNOR / SHIPPER) PORTAL';
+
+  if (!linkActive) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
+        <div className="max-w-lg w-full p-6 rounded-2xl bg-slate-900 border border-amber-500/40 shadow-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              ⏳ LINK PENDING STAGE ACTIVATION · {roleLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => void fetchPortalData(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-blue-300"
+            >
+              <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+              Check Now
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-lg font-black text-white">
+              {portalRole === 'RAMP'
+                ? 'Ramp Link Activates Upon PLACED_AT_RAMP Status'
+                : `${portalRole === 'CLIENT' ? 'Client' : 'Customer'} Link Activates Upon Vehicle & Driver Assignment`}
+            </h1>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {portalData.activationRequirement ||
+                (portalRole === 'RAMP'
+                  ? 'This Ramp Stuffing/Destuffing completion link will automatically unlock as soon as the driver positions the container at the facility ramp (PLACED_AT_RAMP).'
+                  : 'This live tracking link will automatically unlock as soon as Dispatch assigns a Prime Mover (Vehicle) & Driver (ASSIGNED status).')}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-[10px] uppercase text-slate-400 font-bold block">Container / Job</span>
+              <strong className="font-mono text-white">{job.containerNumber}</strong>
+              <div className="text-[11px] text-slate-400">{job.jobCode} · {job.containerSize}</div>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase text-slate-400 font-bold block">Current Job Status</span>
+              <strong className="font-mono text-amber-300">{job.status}</strong>
+              <div className="text-[11px] text-slate-400">
+                Required: {portalRole === 'RAMP' ? 'PLACED_AT_RAMP' : 'ASSIGNED (Vehicle & Driver)'}
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase text-slate-400 font-bold block">Customer (Consignor)</span>
+              <strong className="text-slate-200">{job.customerName}</strong>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase text-slate-400 font-bold block">Consignee Facility</span>
+              <strong className="text-slate-200">{job.warehouseName}</strong>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400 text-center">
+            Auto-syncing every 15 seconds — this page will open automatically once activated.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const milestones: MilestoneStep[] = portalData.milestones || [];
   const statusLogs: StatusLogItem[] = portalData.statusLogs || [];
   const alertLogs: StatusLogItem[] = portalData.alertLogs || [];
@@ -442,13 +585,13 @@ export default function CustomerDrayageTrackingPortalPage() {
   const currentPortalUrl = typeof window !== 'undefined' ? window.location.href : '';
   const cleanWaPhone = whatsappInput.replace(/[^\d]/g, '');
   const shareWhatsAppHref = `https://wa.me/${cleanWaPhone}?text=${encodeURIComponent(
-    `📦 *Fleet360 Live Container Tracking*\n• *Job:* ${job.jobCode}\n• *Container:* ${job.containerNumber} (${job.containerSize})\n• *Seal:* ${job.sealNumber || 'Verified'}\n• *Status:* ${job.status}\n• *Route:* ${job.terminalName} → ${job.warehouseName}\n🔗 *Live Tracking & Signed ePOD:* ${currentPortalUrl}`,
+    `📦 *Fleet360 Live Container Tracking (${portalRole})*\n• *Job:* ${job.jobCode}\n• *Container:* ${job.containerNumber} (${job.containerSize})\n• *Seal:* ${job.sealNumber || 'Verified'}\n• *Status:* ${job.status}\n• *Route:* ${job.terminalName} → ${job.warehouseName}\n🔗 *Portal Link:* ${currentPortalUrl}`,
   )}`;
 
   const shareEmailHref = `mailto:${encodeURIComponent(emailInput)}?subject=${encodeURIComponent(
-    `Live Container Tracking & ePOD — ${job.containerNumber} (${job.jobCode})`,
+    `Live Container Tracking & ePOD (${portalRole}) — ${job.containerNumber} (${job.jobCode})`,
   )}&body=${encodeURIComponent(
-    `Hello,\n\nTrack live milestone progress (Gate-In → Loaded at Terminal → Customs Cleared → En Route → At Warehouse → ePOD Signed) and download the signed ePOD & Seal photos for Container ${job.containerNumber} (${job.jobCode}):\n\n${currentPortalUrl}\n\nRoute: ${job.terminalName} → ${job.warehouseName}\nCurrent Status: ${job.status}\n`,
+    `Hello,\n\nAccess the ${portalRole} Portal for Container ${job.containerNumber} (${job.jobCode}):\n\n${currentPortalUrl}\n\nRoute: ${job.terminalName} → ${job.warehouseName}\nCurrent Status: ${job.status}\n`,
   )}`;
 
   return (
@@ -461,7 +604,7 @@ export default function CustomerDrayageTrackingPortalPage() {
         </div>
       )}
 
-      {/* Zero-Login Customer Portal Top Header */}
+      {/* Zero-Login Role-Scoped Portal Top Header */}
       <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -471,15 +614,29 @@ export default function CustomerDrayageTrackingPortalPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-black tracking-tight text-white">
-                  FLEET360 LIVE CUSTOMER TRACKING PORTAL
+                  {portalRole === 'RAMP'
+                    ? 'FLEET360 WAREHOUSE RAMP PORTAL — STUFFING & DESTUFFING'
+                    : portalRole === 'CLIENT'
+                    ? 'FLEET360 CLIENT (CONSIGNEE / END USER) TRACKING PORTAL'
+                    : 'FLEET360 CUSTOMER (CONSIGNOR / SHIPPER) TRACKING PORTAL'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border flex items-center gap-1 ${
+                    portalRole === 'RAMP'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : portalRole === 'CLIENT'
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  }`}
+                >
                   <ShieldCheck className="w-3 h-3" />
-                  NO-LOGIN SHAREABLE PORTAL
+                  {roleLabel}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Zero-Login Shipper & Consignee Visibility · {job.customerName} · Live Milestones, ePOD & Seal Verification
+                {portalRole === 'RAMP'
+                  ? `Activated @ PLACED_AT_RAMP · ${job.warehouseName} · Update Stuffing / Destuffing Completion & Seal Verification`
+                  : `Activated @ ASSIGNED · ${job.customerName} → ${job.warehouseName} · Live Milestones, ePOD & Seal Verification`}
               </p>
             </div>
           </div>
@@ -491,7 +648,7 @@ export default function CustomerDrayageTrackingPortalPage() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 transition-colors"
             >
               <Copy className="w-3.5 h-3.5 text-blue-400" />
-              {copiedLink ? 'Link Copied!' : 'Copy Tracking Link'}
+              {copiedLink ? 'Link Copied!' : `Copy ${portalRole} Link`}
             </button>
 
             <a
@@ -549,7 +706,11 @@ export default function CustomerDrayageTrackingPortalPage() {
               </div>
               <p className="text-xs text-slate-400 mt-1.5 flex flex-wrap items-center gap-2">
                 <span>
-                  Customer: <strong className="text-slate-200">{job.customerName}</strong>
+                  Customer (Consignor): <strong className="text-slate-200">{job.customerName}</strong>
+                </span>
+                <span>•</span>
+                <span>
+                  Consignee (Client/End User): <strong className="text-slate-200">{job.warehouseName}</strong>
                 </span>
                 <span>•</span>
                 <span>
@@ -629,8 +790,8 @@ export default function CustomerDrayageTrackingPortalPage() {
                   </strong>
                   <div className="text-[11px] text-emerald-400 font-semibold mt-1">
                     {etcRemainingMins !== null && etcRemainingMins <= 0
-                      ? '✓ Offloading window completed — L2 Return Ready'
-                      : `${etcRemainingMins} mins remaining at customer ramp`}
+                      ? '✓ Ramp window completed — Pickup Ready'
+                      : `${etcRemainingMins} mins remaining at facility ramp`}
                   </div>
                 </>
               ) : (
@@ -647,54 +808,183 @@ export default function CustomerDrayageTrackingPortalPage() {
             </div>
           </div>
 
-          {/* Offloading ETC Banner & Customer Self-Service "Confirm Empty Ready" */}
-          {(job.etcTime || job.status === 'PLACED_AT_RAMP' || job.placementLocation === 'RAMP') && (
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                  <Clock className="w-5 h-5 animate-pulse" />
+          {/* RAMP SUPERVISOR STUFFING / DESTUFFING COMPLETION PANEL (Shown on RAMP Link, or CLIENT Link when at Ramp) */}
+          {portalRole !== 'CUSTOMER' &&
+            (portalRole === 'RAMP' ||
+              job.etcTime ||
+              job.status === 'PLACED_AT_RAMP' ||
+              job.placementLocation === 'RAMP') && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                      <Clock className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-extrabold text-amber-300">
+                          RAMP STUFFING / DESTUFFING COMPLETION CONSOLE
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          ✓ Activated @ PLACED_AT_RAMP
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {job.etcTime ? (
+                          <>
+                            Scheduled Ramp Completion:{' '}
+                            <strong className="font-mono text-white">
+                              {new Date(job.etcTime).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </strong>{' '}
+                            (
+                            {etcRemainingMins !== null && etcRemainingMins > 0
+                              ? `${etcRemainingMins} minutes left`
+                              : 'Ready for Pickup'}
+                            )
+                          </>
+                        ) : (
+                          `Container ${job.containerNumber} is positioned at ${job.warehouseName}. Update completion of Stuffing or Destuffing below.`
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick ETC Extension Buttons for Ramp */}
+                  {!job.l2Activated && job.status !== 'READY_FOR_PICKUP' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={extendingEtc}
+                        onClick={() => void handleExtendRampEtc(30)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 text-xs font-bold transition-colors"
+                      >
+                        +30m ETC
+                      </button>
+                      <button
+                        type="button"
+                        disabled={extendingEtc}
+                        onClick={() => void handleExtendRampEtc(60)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 text-xs font-bold transition-colors"
+                      >
+                        +60m ETC
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-extrabold text-amber-300">
-                      LIVE OFFLOADING / DESTUFFING COUNTDOWN (RAMP ETC)
-                    </span>
-                    {etcRemainingMins !== null && etcRemainingMins <= 30 && etcRemainingMins > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        ⚡ Auto-L2 Empty Return Pre-Assigned
+
+                {job.l2Activated || job.status === 'READY_FOR_PICKUP' ? (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-between text-xs text-emerald-200">
+                    <div>
+                      <strong className="font-extrabold text-emerald-300 block">
+                        ✓ Ramp Completion Confirmed ({job.podSignatureName || 'Ramp Supervisor'})
+                      </strong>
+                      <span>
+                        Container {job.containerNumber} is marked Ready for Pickup and Dispatch has been notified.
+                      </span>
+                    </div>
+                    {job.podSignedAt && (
+                      <span className="font-mono text-[11px] text-emerald-300">
+                        {new Date(job.podSignedAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {job.etcTime ? (
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-amber-500/20 text-xs">
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] uppercase font-bold text-amber-200 mb-1">
+                        Ramp Operation Type
+                      </label>
+                      <select
+                        value={rampOperationType}
+                        onChange={(e) =>
+                          setRampOperationType(e.target.value as 'DESTUFFING' | 'STUFFING')
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-bold text-xs"
+                      >
+                        <option value="DESTUFFING">Import Destuffing (Offloading)</option>
+                        <option value="STUFFING">Export Stuffing (Loading)</option>
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] uppercase font-bold text-amber-200 mb-1">
+                        Ramp Supervisor / Dock Contact
+                      </label>
+                      <input
+                        type="text"
+                        value={rampReceiverName}
+                        onChange={(e) => setRampReceiverName(e.target.value)}
+                        placeholder="Dock Supervisor Name"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                      />
+                    </div>
+
+                    {rampOperationType === 'STUFFING' ? (
                       <>
-                        Scheduled Ramp Completion:{' '}
-                        <strong className="font-mono text-white">
-                          {new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </strong>{' '}
-                        ({etcRemainingMins !== null && etcRemainingMins > 0 ? `${etcRemainingMins} minutes left` : 'Ready for Empty Pickup'})
+                        <div className="md:col-span-3">
+                          <label className="block text-[10px] uppercase font-bold text-amber-200 mb-1">
+                            New Export Bolt Seal #
+                          </label>
+                          <input
+                            type="text"
+                            value={rampSealNumber}
+                            onChange={(e) => setRampSealNumber(e.target.value)}
+                            placeholder="e.g. SL-EXP-90412"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
+                        <div className="md:col-span-3">
+                          <label className="block text-[10px] uppercase font-bold text-amber-200 mb-1">
+                            Gross Cargo Weight (KG)
+                          </label>
+                          <input
+                            type="number"
+                            value={rampGrossWeightKg}
+                            onChange={(e) => setRampGrossWeightKg(e.target.value)}
+                            placeholder="e.g. 22400"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
                       </>
                     ) : (
-                      'Container positioned at customer dock bay. Confirm below once destuffing is finished.'
+                      <div className="md:col-span-6">
+                        <label className="block text-[10px] uppercase font-bold text-amber-200 mb-1">
+                          Ramp / Bay Completion Notes
+                        </label>
+                        <input
+                          type="text"
+                          value={rampBayNotes}
+                          onChange={(e) => setRampBayNotes(e.target.value)}
+                          placeholder="e.g. Bay 3 — Container destuffed, swept & empty ready for L2 pickup"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                        />
+                      </div>
                     )}
-                  </p>
-                </div>
-              </div>
 
-              {job.jobPhase === 'L1' && !job.l2Activated && (
-                <button
-                  type="button"
-                  disabled={confirmingEmpty}
-                  onClick={handleConfirmOffloadingComplete}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-extrabold shadow-lg transition-all"
-                >
-                  {confirmingEmpty
-                    ? 'Notifying Dispatch...'
-                    : '✓ Confirm Offloading Complete (Request Empty Pickup)'}
-                </button>
-              )}
-            </div>
-          )}
+                    <div className="md:col-span-12 flex justify-end pt-1">
+                      <button
+                        type="button"
+                        disabled={confirmingEmpty}
+                        onClick={handleConfirmOffloadingComplete}
+                        className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-extrabold shadow-lg transition-all"
+                      >
+                        {confirmingEmpty
+                          ? 'Updating Dispatch...'
+                          : rampOperationType === 'STUFFING'
+                          ? '✓ Confirm Export Stuffing Complete & Seal Applied (Ready for Port Pickup)'
+                          : '✓ Confirm Destuffing Complete (Container Empty & Ready for Pickup)'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
         </section>
 
         {/* 6-Stage Horizontal Milestone Progress Bar (Gate-In → Loaded at Terminal → Customs Cleared → En Route → At Warehouse → ePOD Signed) */}

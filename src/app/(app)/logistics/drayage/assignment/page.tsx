@@ -94,8 +94,22 @@ interface DrayageJob {
   customerPortal?: {
     trackingToken: string;
     shareablePath: string;
+    customerToken?: string;
+    customerShareablePath?: string;
+    clientToken?: string;
+    clientShareablePath?: string;
+    rampToken?: string;
+    rampShareablePath?: string;
+    customerLinkActive?: boolean;
+    clientLinkActive?: boolean;
+    rampLinkActive?: boolean;
     customerWhatsApp: string;
     customerEmail: string;
+    clientName?: string;
+    clientWhatsApp?: string;
+    clientEmail?: string;
+    rampContactName?: string;
+    rampWhatsApp?: string;
     autoAlertsEnabled: boolean;
   };
   riskRadar?: {
@@ -324,34 +338,100 @@ export default function DrayageAssignmentPage() {
   }));
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [sharingTrackingJob, setSharingTrackingJob] = useState<DrayageJob | null>(null);
+  const [shareRole, setShareRole] = useState<'CUSTOMER' | 'CLIENT' | 'RAMP'>('CUSTOMER');
   const [shareWhatsAppInput, setShareWhatsAppInput] = useState('');
   const [shareEmailInput, setShareEmailInput] = useState('');
   const [sendingShareAlert, setSendingShareAlert] = useState(false);
   const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
 
-  const getJobShareablePath = useCallback((job: DrayageJob) => {
-    if (job.customerPortal?.shareablePath) return job.customerPortal.shareablePath;
-    return `/logistics/drayage/tracking`;
+  const isJobAssignedActive = useCallback((job: DrayageJob) => {
+    if (job.customerPortal?.customerLinkActive !== undefined) {
+      return job.customerPortal.customerLinkActive;
+    }
+    const st = String(job.status || '').toUpperCase();
+    return st !== 'PENDING' && st !== 'UNASSIGNED' && Boolean(job.assignedVehicleId || job.assignedVehiclePlate);
   }, []);
 
-  const handleCopyJobTrackingLink = useCallback((job: DrayageJob) => {
-    if (typeof window === 'undefined') return;
-    const path = getJobShareablePath(job);
-    const fullUrl = `${window.location.origin}${path}`;
-    navigator.clipboard.writeText(fullUrl);
-    setCopiedJobId(job.id);
-    setToast({ type: 'success', message: `Copied live tracking link for ${job.containerNumber} (${job.jobCode})!` });
-    setTimeout(() => {
-      setCopiedJobId(null);
-      setToast(null);
-    }, 3500);
-  }, [getJobShareablePath]);
-
-  const handleOpenShareTrackingModal = useCallback((job: DrayageJob) => {
-    setSharingTrackingJob(job);
-    setShareWhatsAppInput(job.customerPortal?.customerWhatsApp || '');
-    setShareEmailInput(job.customerPortal?.customerEmail || '');
+  const isJobRampActive = useCallback((job: DrayageJob) => {
+    if (job.customerPortal?.rampLinkActive !== undefined) {
+      return job.customerPortal.rampLinkActive;
+    }
+    const st = String(job.status || '').toUpperCase();
+    return ['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'TRAILER_DETACHED', 'READY_FOR_PICKUP'].includes(st);
   }, []);
+
+  const getJobShareablePath = useCallback(
+    (job: DrayageJob, role: 'CUSTOMER' | 'CLIENT' | 'RAMP' = 'CUSTOMER') => {
+      const cp = job.customerPortal;
+      if (!cp) return `/logistics/drayage/tracking`;
+      if (role === 'RAMP') return cp.rampShareablePath || cp.shareablePath;
+      if (role === 'CLIENT') return cp.clientShareablePath || cp.shareablePath;
+      return cp.customerShareablePath || cp.shareablePath;
+    },
+    [],
+  );
+
+  const handleCopyJobTrackingLink = useCallback(
+    (job: DrayageJob, role: 'CUSTOMER' | 'CLIENT' | 'RAMP' = 'CUSTOMER') => {
+      if (typeof window === 'undefined') return;
+      if ((role === 'CUSTOMER' || role === 'CLIENT') && !isJobAssignedActive(job)) {
+        setToast({
+          type: 'error',
+          message: `${role === 'CLIENT' ? 'Client' : 'Customer'} Link only activates upon Vehicle & Driver Assignment (ASSIGNED status).`,
+        });
+        setTimeout(() => setToast(null), 3500);
+        return;
+      }
+      if (role === 'RAMP' && !isJobRampActive(job)) {
+        setToast({
+          type: 'error',
+          message: 'Ramp Link only activates once the container reaches PLACED_AT_RAMP status.',
+        });
+        setTimeout(() => setToast(null), 3500);
+        return;
+      }
+      const path = getJobShareablePath(job, role);
+      const fullUrl = `${window.location.origin}${path}`;
+      navigator.clipboard.writeText(fullUrl);
+      setCopiedJobId(job.id);
+      setToast({
+        type: 'success',
+        message: `Copied ${role} Link for ${job.containerNumber} (${job.jobCode})!`,
+      });
+      setTimeout(() => {
+        setCopiedJobId(null);
+        setToast(null);
+      }, 3500);
+    },
+    [getJobShareablePath, isJobAssignedActive, isJobRampActive],
+  );
+
+  const handleSelectShareRole = useCallback(
+    (job: DrayageJob, role: 'CUSTOMER' | 'CLIENT' | 'RAMP') => {
+      setShareRole(role);
+      const cp = job.customerPortal;
+      if (role === 'RAMP') {
+        setShareWhatsAppInput(cp?.rampWhatsApp || cp?.clientWhatsApp || cp?.customerWhatsApp || '');
+        setShareEmailInput(cp?.clientEmail || cp?.customerEmail || '');
+      } else if (role === 'CLIENT') {
+        setShareWhatsAppInput(cp?.clientWhatsApp || cp?.customerWhatsApp || '');
+        setShareEmailInput(cp?.clientEmail || cp?.customerEmail || '');
+      } else {
+        setShareWhatsAppInput(cp?.customerWhatsApp || '');
+        setShareEmailInput(cp?.customerEmail || '');
+      }
+    },
+    [],
+  );
+
+  const handleOpenShareTrackingModal = useCallback(
+    (job: DrayageJob) => {
+      setSharingTrackingJob(job);
+      const defaultRole: 'CUSTOMER' | 'CLIENT' | 'RAMP' = isJobRampActive(job) ? 'RAMP' : 'CUSTOMER';
+      handleSelectShareRole(job, defaultRole);
+    },
+    [handleSelectShareRole, isJobRampActive],
+  );
 
   const handleDispatchTrackingAlert = async () => {
     if (!sharingTrackingJob) return;
@@ -363,15 +443,16 @@ export default function DrayageAssignmentPage() {
         body: JSON.stringify({
           action: 'send_customer_milestone_alert',
           jobId: sharingTrackingJob.id,
-          customWhatsApp: shareWhatsAppInput.trim(),
-          customEmail: shareEmailInput.trim(),
+          customerWhatsApp: shareWhatsAppInput.trim(),
+          customerEmail: shareEmailInput.trim(),
+          targetRole: shareRole,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to dispatch tracking link');
       setToast({
         type: 'success',
-        message: `Sent live tracking link for ${sharingTrackingJob.containerNumber} via WhatsApp & Email!`,
+        message: `Sent ${shareRole} Link for ${sharingTrackingJob.containerNumber} via WhatsApp & Email!`,
       });
       setTimeout(() => setToast(null), 4000);
       setSharingTrackingJob(null);
@@ -1092,33 +1173,49 @@ export default function DrayageAssignmentPage() {
       filter: false,
       render: (job) => {
         const isAssigned = Boolean(job.assignedVehicleId);
-        const sharePath = getJobShareablePath(job);
-        const isCopied = copiedJobId === job.id;
+        const isLinkActive = isJobAssignedActive(job);
+        const sharePath = getJobShareablePath(job, 'CUSTOMER');
+        const isCopied = copiedJobId === `${job.id}:CUSTOMER` || copiedJobId === job.id;
         return (
           <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
-              onClick={() => handleCopyJobTrackingLink(job)}
-              title="Copy No-Login Shareable Customer Tracking Link"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 text-[11px] font-semibold transition-colors"
+              disabled={!isLinkActive}
+              onClick={() => handleCopyJobTrackingLink(job, 'CUSTOMER')}
+              title={
+                isLinkActive
+                  ? 'Copy Customer Tracking Link'
+                  : 'Customer & Client Links activate upon Vehicle & Driver Assignment (ASSIGNED)'
+              }
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Copy className="w-3 h-3" />
-              <span>{isCopied ? 'Copied!' : 'Copy Link'}</span>
+              <span>{isCopied ? 'Copied!' : isLinkActive ? 'Copy Link' : 'Pending Assign'}</span>
             </button>
-            <a
-              href={sharePath}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Open No-Login Customer Tracking Portal in a new tab"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 text-[11px] font-semibold transition-colors"
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span>Portal</span>
-            </a>
+            {isLinkActive ? (
+              <a
+                href={sharePath}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open No-Login Customer Tracking Portal in a new tab"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 hover:bg-sky-500/25 text-[11px] font-semibold transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Portal</span>
+              </a>
+            ) : (
+              <span
+                title="Customer & Client Links activate upon Vehicle & Driver Assignment (ASSIGNED)"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-500 text-[11px] font-semibold opacity-50 cursor-not-allowed"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Portal</span>
+              </span>
+            )}
             <button
               type="button"
               onClick={() => handleOpenShareTrackingModal(job)}
-              title="One-Click Share Live Tracking Link via WhatsApp or Email"
+              title="Share Role-Scoped Links (Customer / Client / Ramp)"
               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 text-[11px] font-semibold transition-colors"
             >
               <Share2 className="w-3 h-3" />
@@ -1134,7 +1231,7 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk, getJobShareablePath, copiedJobId, handleCopyJobTrackingLink, handleOpenShareTrackingModal]);
+  ], [getDemurrageRisk, isJobAssignedActive, getJobShareablePath, copiedJobId, handleCopyJobTrackingLink, handleOpenShareTrackingModal]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -3198,18 +3295,18 @@ export default function DrayageAssignmentPage() {
       )}
 
       {/* Super Admin Drayage Configuration Modal */}
-      {/* One-Click Share Live Customer Tracking Link (WhatsApp / Email) Modal */}
+      {/* One-Click Share Role-Scoped Live Tracking Links (Customer / Client / Ramp) Modal */}
       {sharingTrackingJob && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/40 shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-xl rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/40 shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                   <Share2 className="w-4 h-4 text-emerald-400" />
-                  Share Live Customer Tracking Link (No-Login Portal)
+                  Role-Scoped Live Tracking & Ramp Links (No-Login Portal)
                 </h3>
                 <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                  Container <strong className="font-mono text-[var(--text-main)]">{sharingTrackingJob.containerNumber}</strong> ({sharingTrackingJob.jobCode}) · {sharingTrackingJob.customerName}
+                  Container <strong className="font-mono text-[var(--text-main)]">{sharingTrackingJob.containerNumber}</strong> ({sharingTrackingJob.jobCode}) · Status: <span className="font-semibold text-[var(--text-main)]">{sharingTrackingJob.status}</span>
                 </p>
               </div>
               <button
@@ -3221,106 +3318,243 @@ export default function DrayageAssignmentPage() {
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                    Tokenized Read-Only Portal Link
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
-                    HMAC-SHA256 Verified
-                  </span>
-                </div>
-                <code className="block text-[11px] font-mono text-[var(--text-main)] break-all">
-                  {typeof window !== 'undefined'
-                    ? `${window.location.origin}${getJobShareablePath(sharingTrackingJob)}`
-                    : getJobShareablePath(sharingTrackingJob)}
-                </code>
-                <div className="flex items-center gap-2 pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyJobTrackingLink(sharingTrackingJob)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-colors"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    Copy Tracking Link
-                  </button>
-                  <a
-                    href={getJobShareablePath(sharingTrackingJob)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 font-bold hover:bg-blue-600/30 transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Open Portal
-                  </a>
-                </div>
-              </div>
+            {(() => {
+              const assignedActive = isJobAssignedActive(sharingTrackingJob);
+              const rampActive = isJobRampActive(sharingTrackingJob);
+              const selectedRoleActive = shareRole === 'RAMP' ? rampActive : assignedActive;
+              const selectedSharePath = getJobShareablePath(sharingTrackingJob, shareRole);
+              const fullShareUrl = typeof window !== 'undefined'
+                ? `${window.location.origin}${selectedSharePath}`
+                : selectedSharePath;
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)] block">
-                    Consignee WhatsApp Number
-                  </label>
-                  <input
-                    type="text"
-                    value={shareWhatsAppInput}
-                    onChange={(e) => setShareWhatsAppInput(e.target.value)}
-                    placeholder="+971 50 000 0000"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-[var(--text-muted)] block">
-                    Consignee Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={shareEmailInput}
-                    onChange={(e) => setShareEmailInput(e.target.value)}
-                    placeholder="operations@customer.ae"
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
+              return (
+                <div className="space-y-3 text-xs">
+                  {/* Role Selector Tabs */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectShareRole(sharingTrackingJob, 'CUSTOMER')}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        shareRole === 'CUSTOMER'
+                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                          : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold">1. Customer Link</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                          assignedActive
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {assignedActive ? 'Active' : 'At Assign'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] opacity-80 mt-0.5 truncate">
+                        {sharingTrackingJob.customerName || 'Consignor / Shipper'}
+                      </p>
+                    </button>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[var(--border-subtle)]">
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`https://wa.me/${shareWhatsAppInput.replace(/[^\d]/g, '')}?text=${encodeURIComponent(
-                      `📦 *Fleet360 Live Container Tracking*\n• *Job:* ${sharingTrackingJob.jobCode}\n• *Container:* ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.containerSize})\n• *Status:* ${sharingTrackingJob.status}\n• *Route:* ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\n🔗 *Track Live Milestones & Download Signed ePOD:* ${typeof window !== 'undefined' ? window.location.origin + getJobShareablePath(sharingTrackingJob) : getJobShareablePath(sharingTrackingJob)}`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 font-bold hover:bg-emerald-600/30 transition-colors"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Open WhatsApp
-                  </a>
-                  <a
-                    href={`mailto:${encodeURIComponent(shareEmailInput)}?subject=${encodeURIComponent(
-                      `Live Container Tracking & Signed ePOD — ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode})`
-                    )}&body=${encodeURIComponent(
-                      `Hello,\n\nTrack live container milestone progress (Gate-In → Loaded at Terminal → Customs Cleared → En Route → At Warehouse → ePOD Signed) and download the signed ePOD + Seal photos for Container ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode}):\n\n${typeof window !== 'undefined' ? window.location.origin + getJobShareablePath(sharingTrackingJob) : getJobShareablePath(sharingTrackingJob)}\n\nRoute: ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\nCurrent Status: ${sharingTrackingJob.status}`
-                    )}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/40 text-sky-400 font-bold hover:bg-sky-600/30 transition-colors"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    Open Email
-                  </a>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectShareRole(sharingTrackingJob, 'CLIENT')}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        shareRole === 'CLIENT'
+                          ? 'bg-sky-500/15 border-sky-500/50 text-sky-300'
+                          : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold">2. Client Link</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                          assignedActive
+                            ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {assignedActive ? 'Active' : 'At Assign'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] opacity-80 mt-0.5 truncate">
+                        {sharingTrackingJob.customerPortal?.clientName || 'Consignee / End User'}
+                      </p>
+                    </button>
 
-                <button
-                  type="button"
-                  disabled={sendingShareAlert}
-                  onClick={handleDispatchTrackingAlert}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  {sendingShareAlert ? 'Sending Alert...' : 'Send Automated Alert'}
-                </button>
-              </div>
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectShareRole(sharingTrackingJob, 'RAMP')}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        shareRole === 'RAMP'
+                          ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
+                          : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold">3. Ramp Link</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                          rampActive
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {rampActive ? 'Active' : 'At Ramp'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] opacity-80 mt-0.5 truncate">
+                        {sharingTrackingJob.warehouseName || 'Stuffing / Destuffing'}
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Selected Role Link Details & Gating Notice */}
+                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                        {shareRole === 'CUSTOMER' && 'Customer Link (Read-Only Live Tracking + Signed ePOD)'}
+                        {shareRole === 'CLIENT' && 'Client Link (End-User Live Tracking + Signed ePOD)'}
+                        {shareRole === 'RAMP' && 'Ramp Link (Update Completion of Stuffing / Destuffing)'}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
+                        selectedRoleActive
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      }`}>
+                        {selectedRoleActive
+                          ? 'Active & Unlocked'
+                          : shareRole === 'RAMP'
+                          ? 'Activates at PLACED_AT_RAMP'
+                          : 'Activates upon Vehicle & Driver Assignment'}
+                      </span>
+                    </div>
+
+                    {selectedRoleActive ? (
+                      <>
+                        <code className="block text-[11px] font-mono text-[var(--text-main)] break-all">
+                          {fullShareUrl}
+                        </code>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyJobTrackingLink(sharingTrackingJob, shareRole)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-colors"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy {shareRole === 'RAMP' ? 'Ramp' : shareRole === 'CLIENT' ? 'Client' : 'Customer'} Link
+                          </button>
+                          <a
+                            href={selectedSharePath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 font-bold hover:bg-blue-600/30 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open {shareRole === 'RAMP' ? 'Ramp Console' : 'Portal'}
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+                        {shareRole === 'RAMP' ? (
+                          <>
+                            <strong>Locked until PLACED_AT_RAMP:</strong> The Ramp Link only activates once the container reaches{' '}
+                            <code className="font-mono font-bold">PLACED_AT_RAMP</code> status at{' '}
+                            <strong>{sharingTrackingJob.warehouseName}</strong> so ramp supervisors can update completion of Stuffing / Destuffing.
+                          </>
+                        ) : (
+                          <>
+                            <strong>Locked until Vehicle &amp; Driver Assignment:</strong> The{' '}
+                            {shareRole === 'CLIENT' ? 'Client' : 'Customer'} Link only activates once a Vehicle &amp; Driver are assigned (
+                            <code className="font-mono font-bold">ASSIGNED</code> status).
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[var(--text-muted)] block">
+                        {shareRole === 'RAMP'
+                          ? 'Ramp Supervisor WhatsApp Number'
+                          : shareRole === 'CLIENT'
+                          ? 'Client (Consignee) WhatsApp Number'
+                          : 'Customer (Consignor) WhatsApp Number'}
+                      </label>
+                      <input
+                        type="text"
+                        value={shareWhatsAppInput}
+                        onChange={(e) => setShareWhatsAppInput(e.target.value)}
+                        placeholder="+971 50 000 0000"
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-semibold text-[var(--text-muted)] block">
+                        {shareRole === 'RAMP'
+                          ? 'Ramp / Warehouse Email (Optional)'
+                          : shareRole === 'CLIENT'
+                          ? 'Client (Consignee) Email Address'
+                          : 'Customer (Consignor) Email Address'}
+                      </label>
+                      <input
+                        type="email"
+                        value={shareEmailInput}
+                        onChange={(e) => setShareEmailInput(e.target.value)}
+                        placeholder="operations@company.ae"
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                    <div className="flex items-center gap-2">
+                      {selectedRoleActive ? (
+                        <>
+                          <a
+                            href={`https://wa.me/${shareWhatsAppInput.replace(/[^\d]/g, '')}?text=${encodeURIComponent(
+                              shareRole === 'RAMP'
+                                ? `🏗️ *Fleet360 Ramp Stuffing / Destuffing Console*\n• *Job:* ${sharingTrackingJob.jobCode}\n• *Container:* ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.containerSize})\n• *Facility:* ${sharingTrackingJob.warehouseName}\n🔗 *Update Stuffing / Destuffing Completion:* ${fullShareUrl}`
+                                : `📦 *Fleet360 Live Container Tracking (${shareRole})*\n• *Job:* ${sharingTrackingJob.jobCode}\n• *Container:* ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.containerSize})\n• *Status:* ${sharingTrackingJob.status}\n• *Route:* ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\n🔗 *Track Live Milestones & Download Signed ePOD:* ${fullShareUrl}`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 font-bold hover:bg-emerald-600/30 transition-colors"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Open WhatsApp
+                          </a>
+                          <a
+                            href={`mailto:${encodeURIComponent(shareEmailInput)}?subject=${encodeURIComponent(
+                              shareRole === 'RAMP'
+                                ? `Ramp Stuffing / Destuffing Completion Link — ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode})`
+                                : `Live Container Tracking & Signed ePOD — ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode})`
+                            )}&body=${encodeURIComponent(
+                              `Hello,\n\nAccess the ${shareRole} portal for Container ${sharingTrackingJob.containerNumber} (${sharingTrackingJob.jobCode}):\n\n${fullShareUrl}\n\nRoute: ${sharingTrackingJob.terminalName} → ${sharingTrackingJob.warehouseName}\nCurrent Status: ${sharingTrackingJob.status}`
+                            )}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/40 text-sky-400 font-bold hover:bg-sky-600/30 transition-colors"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                            Open Email
+                          </a>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-amber-400 font-medium">
+                          Sharing unlocks once required job status is reached.
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={sendingShareAlert || !selectedRoleActive}
+                      onClick={handleDispatchTrackingAlert}
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      {sendingShareAlert ? 'Sending Alert...' : `Send ${shareRole} Alert`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

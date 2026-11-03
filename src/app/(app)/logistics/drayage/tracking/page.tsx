@@ -138,11 +138,25 @@ interface DrayageJob {
   customerPortal?: {
     trackingToken: string;
     shareablePath: string;
+    customerToken?: string;
+    customerShareablePath?: string;
+    clientToken?: string;
+    clientShareablePath?: string;
+    rampToken?: string;
+    rampShareablePath?: string;
+    customerLinkActive?: boolean;
+    clientLinkActive?: boolean;
+    rampLinkActive?: boolean;
     jobCode: string;
     containerNumber: string;
     customerName: string;
     customerWhatsApp: string;
     customerEmail: string;
+    clientName?: string;
+    clientWhatsApp?: string;
+    clientEmail?: string;
+    rampContactName?: string;
+    rampWhatsApp?: string;
     autoAlertsEnabled: boolean;
     lastAlertSentAt: string | null;
     lastAlertSummary: string | null;
@@ -377,17 +391,57 @@ export default function DrayageJobTrackingPage() {
     }
   }, [activeJob?.id, activeJob?.customerPortal]);
 
-  const handleCopyCustomerTrackingLink = () => {
-    if (!activeJob?.customerPortal?.shareablePath || typeof window === 'undefined') return;
-    const fullUrl = `${window.location.origin}${activeJob.customerPortal.shareablePath}`;
+  const handleCopyRoleTrackingLink = (role: 'CUSTOMER' | 'CLIENT' | 'RAMP' = 'CUSTOMER') => {
+    if (!activeJob?.customerPortal || typeof window === 'undefined') return;
+    const cp = activeJob.customerPortal;
+    if ((role === 'CUSTOMER' || role === 'CLIENT') && cp.customerLinkActive === false) {
+      showToast(
+        'error',
+        `${role === 'CLIENT' ? 'Client' : 'Customer'} Link only activates upon Vehicle & Driver Assignment (ASSIGNED status).`,
+      );
+      return;
+    }
+    if (role === 'RAMP' && !cp.rampLinkActive) {
+      showToast('error', 'Ramp Link only activates once the container reaches PLACED_AT_RAMP status.');
+      return;
+    }
+    const path =
+      role === 'RAMP'
+        ? cp.rampShareablePath || cp.shareablePath
+        : role === 'CLIENT'
+        ? cp.clientShareablePath || cp.shareablePath
+        : cp.customerShareablePath || cp.shareablePath;
+    const fullUrl = `${window.location.origin}${path}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedTrackingLink(true);
-    showToast('success', `Copied read-only Customer Tracking Link for ${activeJob.jobCode} (${activeJob.containerNumber})`);
+    showToast(
+      'success',
+      `Copied ${role} Portal Link for ${activeJob.jobCode} (${activeJob.containerNumber})`,
+    );
     setTimeout(() => setCopiedTrackingLink(false), 3000);
   };
 
-  const handleSendCustomerMilestoneAlert = async (savePrefsOnly = false) => {
+  const handleCopyCustomerTrackingLink = () => handleCopyRoleTrackingLink('CUSTOMER');
+
+  const handleSendCustomerMilestoneAlert = async (
+    savePrefsOnly = false,
+    targetRole: 'CUSTOMER' | 'CLIENT' | 'RAMP' = 'CUSTOMER',
+  ) => {
     if (!activeJob) return;
+    const cp = activeJob.customerPortal;
+    if (!savePrefsOnly) {
+      if ((targetRole === 'CUSTOMER' || targetRole === 'CLIENT') && cp?.customerLinkActive === false) {
+        showToast(
+          'error',
+          `${targetRole === 'CLIENT' ? 'Client' : 'Customer'} Link only activates upon Vehicle & Driver Assignment (ASSIGNED status).`,
+        );
+        return;
+      }
+      if (targetRole === 'RAMP' && !cp?.rampLinkActive) {
+        showToast('error', 'Ramp Link only activates once the container reaches PLACED_AT_RAMP status.');
+        return;
+      }
+    }
     try {
       setSendingCustomerAlert(true);
       await fetch('/api/logistics/drayage', {
@@ -410,20 +464,21 @@ export default function DrayageJobTrackingPage() {
             jobId: activeJob.id,
             customerWhatsApp: customerWhatsAppInput,
             customerEmail: customerEmailInput,
+            targetRole,
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to send customer milestone alert');
+        if (!res.ok) throw new Error(data.error || 'Failed to send milestone alert');
         showToast(
           'success',
-          `📲 Sent WhatsApp (${data.whatsappTo}) & Email (${data.emailTo}) Milestone Alert with Live Tracking Portal link!`,
+          `📲 Sent ${targetRole} Link via WhatsApp (${data.whatsappTo || 'N/A'}) & Email (${data.emailTo || 'N/A'})!`,
         );
       } else {
-        showToast('success', 'Saved Customer WhatsApp & Email milestone notification settings.');
+        showToast('success', 'Saved Customer/Client/Ramp milestone notification settings.');
       }
       await loadData();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error sending customer milestone alert');
+      showToast('error', err instanceof Error ? err.message : 'Error sending milestone alert');
     } finally {
       setSendingCustomerAlert(false);
     }
@@ -1004,23 +1059,46 @@ export default function DrayageJobTrackingPage() {
                       <>
                         <button
                           type="button"
-                          onClick={handleCopyCustomerTrackingLink}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-xs font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors"
-                          title="Copy read-only token-secured Customer Tracking Portal link"
+                          disabled={activeJob.customerPortal.customerLinkActive === false}
+                          onClick={() => handleCopyRoleTrackingLink('CUSTOMER')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-xs font-bold text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          title={
+                            activeJob.customerPortal.customerLinkActive === false
+                              ? 'Customer Link activates upon Vehicle & Driver Assignment (ASSIGNED status)'
+                              : 'Copy Customer (Consignor/Shipper) Tracking Link'
+                          }
                         >
                           <Copy className="w-3.5 h-3.5" />
-                          {copiedTrackingLink ? 'Link Copied!' : 'Copy Customer Link'}
+                          {copiedTrackingLink ? 'Copied!' : 'Customer Link'}
                         </button>
-                        <a
-                          href={activeJob.customerPortal.shareablePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-xs font-bold text-blue-300 hover:bg-blue-600/30 transition-colors"
-                          title="Open Zero-Login Read-Only Customer Tracking Portal in a new tab"
+                        <button
+                          type="button"
+                          disabled={activeJob.customerPortal.clientLinkActive === false}
+                          onClick={() => handleCopyRoleTrackingLink('CLIENT')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-xs font-bold text-cyan-400 hover:bg-cyan-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          title={
+                            activeJob.customerPortal.clientLinkActive === false
+                              ? 'Client Link activates upon Vehicle & Driver Assignment (ASSIGNED status)'
+                              : 'Copy Client (Consignee/End User) Tracking Link'
+                          }
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          Customer Portal
-                        </a>
+                          <Copy className="w-3.5 h-3.5" />
+                          Client Link
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!activeJob.customerPortal.rampLinkActive}
+                          onClick={() => handleCopyRoleTrackingLink('RAMP')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-xs font-bold text-amber-400 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          title={
+                            !activeJob.customerPortal.rampLinkActive
+                              ? 'Ramp Link activates only upon PLACED_AT_RAMP status'
+                              : 'Copy Ramp Supervisor Stuffing/Destuffing Link'
+                          }
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Ramp Link
+                        </button>
                       </>
                     )}
                     <button
@@ -1572,58 +1650,241 @@ export default function DrayageJobTrackingPage() {
                 })()}
               </div>
 
-              {/* Live Customer Tracking Link (Shareable Portal) & Automated WhatsApp/Email Milestone Alerts */}
+              {/* Role-Scoped Stakeholder Links (Customer, Client, Ramp) & Automated Milestone Alerts */}
               {activeJob.customerPortal && (
                 <Panel
-                  title="Live Customer Tracking Link (Shareable Portal) & Automated Milestone Alerts"
-                  subtitle={`Read-only, token-secured customer portal for ${activeJob.jobCode} (${activeJob.containerNumber}) with live corridor map, 6-stage timeline, Offloading ETC & automated WhatsApp/Email notifications`}
+                  title="Role-Scoped Stakeholder Links (Customer, Client & Ramp) & Automated Alerts"
+                  subtitle={`Customer & Client Links activate upon Vehicle & Driver Assignment (ASSIGNED) · Ramp Stuffing/Destuffing Link activates upon PLACED_AT_RAMP`}
                   icon={Share2}
                   accent="emerald"
                   actions={
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCopyCustomerTrackingLink}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                      <span
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                          activeJob.customerPortal.customerLinkActive !== false
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                            : 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                        }`}
                       >
-                        <Copy className="w-3.5 h-3.5" />
-                        {copiedTrackingLink ? 'Tracking Link Copied!' : 'Copy Shareable Link'}
-                      </button>
-                      <a
-                        href={activeJob.customerPortal.shareablePath}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-xs font-bold text-blue-300 hover:bg-blue-600/30 transition-colors"
+                        {activeJob.customerPortal.customerLinkActive !== false
+                          ? '✓ Customer & Client Links Active'
+                          : '⏳ Customer/Client Links: Assign Vehicle & Driver'}
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                          activeJob.customerPortal.rampLinkActive
+                            ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                            : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                        }`}
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Open Customer Portal
-                      </a>
+                        {activeJob.customerPortal.rampLinkActive
+                          ? '✓ Ramp Link Active (PLACED_AT_RAMP)'
+                          : '🔒 Ramp Link: Activates @ PLACED_AT_RAMP'}
+                      </span>
                     </div>
                   }
                 >
                   <div className="space-y-3 text-xs">
-                    {/* Token-Secured Shareable URL Bar */}
-                    <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">
-                          Zero-Login Token-Secured Customer Portal URL ({activeJob.jobCode} · {activeJob.containerNumber})
-                        </span>
-                        <code className="text-[11px] font-mono text-[var(--text-main)] break-all">
-                          {typeof window !== 'undefined'
-                            ? `${window.location.origin}${activeJob.customerPortal.shareablePath}`
-                            : activeJob.customerPortal.shareablePath}
-                        </code>
+                    {/* 3 Role-Scoped Shareable Links Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {/* 1. Customer Link (Consignor / Shipper) */}
+                      <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-emerald-500/30 flex flex-col justify-between gap-2">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">
+                              1. Customer Link (Consignor/Shipper)
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                activeJob.customerPortal.customerLinkActive !== false
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-amber-500/20 text-amber-400'
+                              }`}
+                            >
+                              {activeJob.customerPortal.customerLinkActive !== false
+                                ? '✓ ACTIVE'
+                                : '🔒 REQUIRES ASSIGNED'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] mb-1.5">
+                            Read-only live map, 6-stage milestones & signed ePOD for {activeJob.customerName}.
+                          </p>
+                          <code className="text-[10px] font-mono text-[var(--text-main)] break-all block bg-black/20 p-1.5 rounded">
+                            {typeof window !== 'undefined'
+                              ? `${window.location.origin}${activeJob.customerPortal.customerShareablePath || activeJob.customerPortal.shareablePath}`
+                              : activeJob.customerPortal.customerShareablePath || activeJob.customerPortal.shareablePath}
+                          </code>
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            disabled={activeJob.customerPortal.customerLinkActive === false}
+                            onClick={() => handleCopyRoleTrackingLink('CUSTOMER')}
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                          >
+                            <Copy className="w-3 h-3" />
+                            Copy Link
+                          </button>
+                          <a
+                            href={
+                              activeJob.customerPortal.customerLinkActive === false
+                                ? undefined
+                                : activeJob.customerPortal.customerShareablePath || activeJob.customerPortal.shareablePath
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (activeJob.customerPortal?.customerLinkActive === false) {
+                                e.preventDefault();
+                                showToast('error', 'Customer Link only activates upon Vehicle & Driver Assignment.');
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold ${
+                              activeJob.customerPortal.customerLinkActive === false
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-emerald-500/25'
+                            }`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Open
+                          </a>
+                        </div>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
-                        HMAC-SHA256 Verified · Read-Only
-                      </span>
+
+                      {/* 2. Client Link (Consignee / End User) */}
+                      <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-cyan-500/30 flex flex-col justify-between gap-2">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">
+                              2. Client Link (Consignee/End User)
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                activeJob.customerPortal.clientLinkActive !== false
+                                  ? 'bg-cyan-500/20 text-cyan-300'
+                                  : 'bg-amber-500/20 text-amber-400'
+                              }`}
+                            >
+                              {activeJob.customerPortal.clientLinkActive !== false
+                                ? '✓ ACTIVE'
+                                : '🔒 REQUIRES ASSIGNED'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] mb-1.5">
+                            Live ETA, milestones, ePOD & destination visibility for {activeJob.customerPortal.clientName || activeJob.warehouseName}.
+                          </p>
+                          <code className="text-[10px] font-mono text-[var(--text-main)] break-all block bg-black/20 p-1.5 rounded">
+                            {typeof window !== 'undefined'
+                              ? `${window.location.origin}${activeJob.customerPortal.clientShareablePath || activeJob.customerPortal.shareablePath}`
+                              : activeJob.customerPortal.clientShareablePath || activeJob.customerPortal.shareablePath}
+                          </code>
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            disabled={activeJob.customerPortal.clientLinkActive === false}
+                            onClick={() => handleCopyRoleTrackingLink('CLIENT')}
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                          >
+                            <Copy className="w-3 h-3" />
+                            Copy Link
+                          </button>
+                          <a
+                            href={
+                              activeJob.customerPortal.clientLinkActive === false
+                                ? undefined
+                                : activeJob.customerPortal.clientShareablePath || activeJob.customerPortal.shareablePath
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (activeJob.customerPortal?.clientLinkActive === false) {
+                                e.preventDefault();
+                                showToast('error', 'Client Link only activates upon Vehicle & Driver Assignment.');
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold ${
+                              activeJob.customerPortal.clientLinkActive === false
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-cyan-500/25'
+                            }`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Open
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* 3. Ramp Link (Stuffing / Destuffing Completion) */}
+                      <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-amber-500/30 flex flex-col justify-between gap-2">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">
+                              3. Ramp Link (Stuffing/Destuffing)
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                activeJob.customerPortal.rampLinkActive
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-slate-500/20 text-[var(--text-muted)]'
+                              }`}
+                            >
+                              {activeJob.customerPortal.rampLinkActive
+                                ? '✓ ACTIVE'
+                                : '🔒 AT PLACED_AT_RAMP'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] mb-1.5">
+                            Dock supervisor link to confirm Stuffing/Destuffing completion at {activeJob.warehouseName}.
+                          </p>
+                          <code className="text-[10px] font-mono text-[var(--text-main)] break-all block bg-black/20 p-1.5 rounded">
+                            {typeof window !== 'undefined'
+                              ? `${window.location.origin}${activeJob.customerPortal.rampShareablePath || activeJob.customerPortal.shareablePath}`
+                              : activeJob.customerPortal.rampShareablePath || activeJob.customerPortal.shareablePath}
+                          </code>
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            disabled={!activeJob.customerPortal.rampLinkActive}
+                            onClick={() => handleCopyRoleTrackingLink('RAMP')}
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                          >
+                            <Copy className="w-3 h-3" />
+                            Copy Link
+                          </button>
+                          <a
+                            href={
+                              !activeJob.customerPortal.rampLinkActive
+                                ? undefined
+                                : activeJob.customerPortal.rampShareablePath || activeJob.customerPortal.shareablePath
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (!activeJob.customerPortal?.rampLinkActive) {
+                                e.preventDefault();
+                                showToast('error', 'Ramp Link only activates once the container reaches PLACED_AT_RAMP status.');
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold ${
+                              !activeJob.customerPortal.rampLinkActive
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-amber-500/25'
+                            }`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Open
+                          </a>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Customer WhatsApp & Email Milestone Alert Controls */}
+                    {/* Customer / Client / Ramp WhatsApp & Email Milestone Alert Controls */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-3">
                         <label className="block text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">
-                          Customer WhatsApp (Milestone Alerts)
+                          Recipient WhatsApp
                         </label>
                         <input
                           type="text"
@@ -1634,9 +1895,9 @@ export default function DrayageJobTrackingPage() {
                         />
                       </div>
 
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-3">
                         <label className="block text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">
-                          Customer Email (Milestone & e-POD)
+                          Recipient Email
                         </label>
                         <input
                           type="email"
@@ -1647,15 +1908,33 @@ export default function DrayageJobTrackingPage() {
                         />
                       </div>
 
-                      <div className="md:col-span-4 flex flex-wrap items-center gap-2">
+                      <div className="md:col-span-6 flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
-                          disabled={sendingCustomerAlert}
-                          onClick={() => void handleSendCustomerMilestoneAlert(false)}
-                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-sm"
+                          disabled={sendingCustomerAlert || activeJob.customerPortal.customerLinkActive === false}
+                          onClick={() => void handleSendCustomerMilestoneAlert(false, 'CUSTOMER')}
+                          className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-[11px] transition-colors shadow-sm"
                         >
-                          <Send className="w-3.5 h-3.5" />
-                          {sendingCustomerAlert ? 'Dispatching...' : 'Send WhatsApp & Email Alert'}
+                          <Send className="w-3 h-3" />
+                          Send Customer Link
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sendingCustomerAlert || activeJob.customerPortal.clientLinkActive === false}
+                          onClick={() => void handleSendCustomerMilestoneAlert(false, 'CLIENT')}
+                          className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white font-bold text-[11px] transition-colors shadow-sm"
+                        >
+                          <Send className="w-3 h-3" />
+                          Send Client Link
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sendingCustomerAlert || !activeJob.customerPortal.rampLinkActive}
+                          onClick={() => void handleSendCustomerMilestoneAlert(false, 'RAMP')}
+                          className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold text-[11px] transition-colors shadow-sm"
+                        >
+                          <Send className="w-3 h-3" />
+                          Send Ramp Link
                         </button>
                       </div>
                     </div>
@@ -1671,7 +1950,7 @@ export default function DrayageJobTrackingPage() {
                           className="rounded border-[var(--border-subtle)] text-emerald-500"
                         />
                         <span>
-                          Auto-trigger WhatsApp & Email milestone alerts on every stage change (Gated In, Container Loaded, In Transit, Placed at Ramp, Completed)
+                          Auto-activate & send Customer/Client links upon Vehicle & Driver Assignment, and Ramp Link upon PLACED_AT_RAMP
                         </span>
                       </label>
 

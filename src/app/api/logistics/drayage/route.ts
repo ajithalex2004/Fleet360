@@ -1106,9 +1106,12 @@ export async function POST(req: NextRequest) {
           return consigneeConfirmEmptyReady(tx, {
             tenantId,
             jobId: String(body.jobId),
-            receiverName: String(body.receiverName ?? 'Consignee Dock Supervisor'),
+            receiverName: String(body.receiverName ?? 'Warehouse Ramp Supervisor'),
             bayNotes: body.bayNotes ? String(body.bayNotes) : undefined,
             photoUrl: body.photoUrl ? String(body.photoUrl) : null,
+            operationType: body.operationType === 'STUFFING' ? 'STUFFING' : body.operationType === 'DESTUFFING' ? 'DESTUFFING' : undefined,
+            newSealNumber: body.newSealNumber ? String(body.newSealNumber) : null,
+            grossWeightKg: body.grossWeightKg != null ? Number(body.grossWeightKg) : null,
           });
         }
 
@@ -1184,12 +1187,17 @@ export async function POST(req: NextRequest) {
         }
 
         case 'send_customer_milestone_alert': {
+          const targetRole =
+            body.targetRole === 'CLIENT' || body.targetRole === 'RAMP'
+              ? body.targetRole
+              : 'CUSTOMER';
           return dispatchDrayageCustomerMilestoneAlert(tx, {
             tenantId,
             jobId: String(body.jobId),
             milestoneStatus: body.milestoneStatus ? String(body.milestoneStatus) : undefined,
             customWhatsApp: body.customerWhatsApp ? String(body.customerWhatsApp) : undefined,
             customEmail: body.customerEmail ? String(body.customerEmail) : undefined,
+            targetRole,
             triggerSource: 'MANUAL_DISPATCH',
           });
         }
@@ -1200,6 +1208,9 @@ export async function POST(req: NextRequest) {
             jobId: String(body.jobId),
             customerWhatsApp: String(body.customerWhatsApp || '+971 50 482 9104'),
             customerEmail: String(body.customerEmail || 'logistics-ops@shipper.ae'),
+            clientWhatsApp: body.clientWhatsApp ? String(body.clientWhatsApp) : undefined,
+            clientEmail: body.clientEmail ? String(body.clientEmail) : undefined,
+            rampWhatsApp: body.rampWhatsApp ? String(body.rampWhatsApp) : undefined,
             autoAlertsEnabled: Boolean(body.autoAlertsEnabled),
           });
         }
