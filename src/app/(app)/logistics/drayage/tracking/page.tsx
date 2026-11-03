@@ -421,7 +421,6 @@ export default function DrayageJobTrackingPage() {
     setTimeout(() => setCopiedTrackingLink(false), 3000);
   };
 
-  const handleCopyCustomerTrackingLink = () => handleCopyRoleTrackingLink('CUSTOMER');
 
   const handleSendCustomerMilestoneAlert = async (
     savePrefsOnly = false,
