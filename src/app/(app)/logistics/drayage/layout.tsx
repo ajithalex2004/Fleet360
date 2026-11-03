@@ -16,8 +16,6 @@ const DRAYAGE_TABS = [
   { href: '/logistics/drayage/create-jobs', label: 'Create Jobs', icon: PlusCircle },
   { href: '/logistics/drayage/assignment', label: 'Job Assignment', icon: UserCheck },
   { href: '/logistics/drayage/tracking', label: 'Job Tracking', icon: Navigation },
-  { href: '/logistics/drayage/portal', label: 'Consignee Portal', icon: Globe },
-  { href: '/logistics/drayage/driver-mobile', label: 'Driver Mobile & APK', icon: Smartphone },
   { href: '/logistics/drayage/history', label: 'Job History', icon: History },
   { href: '/logistics/drayage/containers', label: 'Containers', icon: Layers },
   { href: '/logistics/drayage/payments', label: 'Payments', icon: Wallet },
@@ -25,6 +23,8 @@ const DRAYAGE_TABS = [
   { href: '/logistics/drayage/trailers', label: 'Trailers', icon: Truck },
   { href: '/logistics/drayage/terminal-map', label: 'Terminal & Consignee', icon: MapPin },
   { href: '/logistics/drayage/reports', label: 'Reports', icon: FileSpreadsheet },
+  { href: '/logistics/drayage/portal', label: 'Consignee Portal', icon: Globe },
+  { href: '/logistics/drayage/driver-mobile', label: 'Driver Mobile & APK', icon: Smartphone },
 ];
 
 export default function DrayageLayout({ children }: { children: React.ReactNode }) {
