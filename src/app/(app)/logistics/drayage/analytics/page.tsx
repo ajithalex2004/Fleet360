@@ -28,6 +28,7 @@ import {
   getCachedDrayageData,
   subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
+import { usePermissions } from '@/contexts/PermissionContext';
 import type { DrayageFullObservabilityReport } from '@/lib/logistics/drayage-observability';
 
 interface DrayageWorkspaceData {
@@ -77,6 +78,8 @@ interface ProbeBenchmarkResult {
 }
 
 export default function DrayageAnalyticsPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const cached = getCachedDrayageData();
   const [data, setData] = useState<DrayageWorkspaceData | null>(cached);
   const [obsReport, setObsReport] = useState<DrayageFullObservabilityReport | null>(null);
@@ -264,42 +267,52 @@ export default function DrayageAnalyticsPage() {
 
       {/* Page Header */}
       <PageHeader
-        title="Outcome Monitoring, Commercial Analytics & Full-Stack Observability"
-        subtitle="Real-time SLA outcomes, demurrage avoidance ROI, corridor velocity, API p50/p95/p99 telemetry, and multi-tier cache diagnostics"
+        title={
+          isSuperAdmin
+            ? 'Outcome Monitoring, Commercial Analytics & Full-Stack Observability'
+            : 'Drayage Commercial & Operational Analytics'
+        }
+        subtitle={
+          isSuperAdmin
+            ? 'Real-time SLA outcomes, demurrage avoidance ROI, corridor velocity, API p50/p95/p99 telemetry, and multi-tier cache diagnostics'
+            : 'Real-time SLA outcomes, demurrage avoidance ROI, corridor turnaround velocity, and driver margin'
+        }
         icon={BarChart3}
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Mode Switcher */}
-            <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-1 text-xs">
-              <button
-                onClick={() => setActiveTab('OUTCOMES')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                  activeTab === 'OUTCOMES'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                <TrendingUp className="w-3.5 h-3.5" />
-                Outcome & Commercial KPIs
-              </button>
-              <button
-                onClick={() => setActiveTab('OBSERVABILITY')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                  activeTab === 'OBSERVABILITY'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5" />
-                Full-Stack Observability & SLOs
-                {obsReport && (
-                  <span className="ml-1 px-1.5 py-0.5 rounded bg-black/25 text-[10px] font-mono">
-                    {obsReport.systemHealthScore}%
-                  </span>
-                )}
-              </button>
-            </div>
+            {/* Mode Switcher — Full-Stack Observability & SLOs visible ONLY for Super Admin / Platform Owner */}
+            {isSuperAdmin && (
+              <div className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-1 text-xs">
+                <button
+                  onClick={() => setActiveTab('OUTCOMES')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                    activeTab === 'OUTCOMES'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Outcome & Commercial KPIs
+                </button>
+                <button
+                  onClick={() => setActiveTab('OBSERVABILITY')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                    activeTab === 'OBSERVABILITY'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  Full-Stack Observability & SLOs
+                  {obsReport && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded bg-black/25 text-[10px] font-mono">
+                      {obsReport.systemHealthScore}%
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs">
               {(['7', '30', '90'] as const).map((r) => (
@@ -317,14 +330,16 @@ export default function DrayageAnalyticsPage() {
               ))}
             </div>
 
-            <button
-              onClick={handleRunSyntheticProbe}
-              disabled={runningProbe}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/15 border border-emerald-500/40 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-colors disabled:opacity-50"
-            >
-              <Zap className={`w-3.5 h-3.5 ${runningProbe ? 'animate-spin' : ''}`} />
-              {runningProbe ? 'Probing DB & Cache...' : 'Run Synthetic Probe'}
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={handleRunSyntheticProbe}
+                disabled={runningProbe}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/15 border border-emerald-500/40 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-colors disabled:opacity-50"
+              >
+                <Zap className={`w-3.5 h-3.5 ${runningProbe ? 'animate-spin' : ''}`} />
+                {runningProbe ? 'Probing DB & Cache...' : 'Run Synthetic Probe'}
+              </button>
+            )}
 
             <button
               onClick={handleExportReport}
@@ -337,63 +352,7 @@ export default function DrayageAnalyticsPage() {
         }
       />
 
-      {/* System Observability & Outcome Pulse Bar (Always Visible) */}
-      {obsReport && (
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-11 h-11 rounded-xl flex items-center justify-center border font-mono font-bold text-sm ${
-                obsReport.systemStatus === 'OPTIMAL'
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                  : obsReport.systemStatus === 'DEGRADED'
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                  : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
-              }`}
-            >
-              {obsReport.systemHealthScore}%
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
-                  System & Corridor SLO Health: {obsReport.systemStatus}
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  <Radio className="w-3 h-3 animate-pulse" />
-                  SSE Push Active ({obsReport.cacheAndStreamState.activeSseSubscribers} clients)
-                </span>
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                API Latency <strong className="text-[var(--text-main)] font-mono">p50 {telemetry?.p50Ms}ms</strong> ·{' '}
-                <strong className="text-[var(--text-main)] font-mono">p95 {telemetry?.p95Ms}ms</strong> · Cache Hit{' '}
-                <strong className="text-emerald-400 font-mono">{telemetry?.workspaceCacheHitRatePct}%</strong> · PCS Gate Compliance{' '}
-                <strong className="text-blue-400 font-mono">
-                  {outcomes?.turnaroundVelocity.pcsSlotComplianceRatePct}%
-                </strong>{' '}
-                · Demurrage Avoided{' '}
-                <strong className="text-emerald-400 font-mono">
-                  AED {(outcomes?.demurrageAndDetentionOutcomes.estimatedDemurrageSavedAed ?? 0).toLocaleString()}
-                </strong>
-              </p>
-            </div>
-          </div>
-
-          {probeResult && (
-            <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
-              <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div>
-                <div className="font-bold text-emerald-300">
-                  Last Probe: {probeResult.speedupFactor}x Cache Acceleration ({probeResult.indexVerifiedCount} Indexes Verified)
-                </div>
-                <div className="text-[11px] text-emerald-200/80 font-mono">
-                  Neon DB RLS: {probeResult.dbProbeMs}ms → In-Memory Workspace Cache: {probeResult.cacheProbeMs}ms
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'OUTCOMES' ? (
+      {activeTab === 'OUTCOMES' || !isSuperAdmin ? (
         <>
           {/* 5 Primary Commercial & Outcome KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -663,9 +622,23 @@ export default function DrayageAnalyticsPage() {
         </>
       ) : (
         /* ======================================================================
-         * TAB 2: FULL-STACK OBSERVABILITY & SLO COMMAND CENTER
+         * TAB 2: FULL-STACK OBSERVABILITY & SLO COMMAND CENTER (SUPER ADMIN ONLY)
          * ====================================================================== */
         <div className="space-y-6">
+          {probeResult && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
+              <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div>
+                <div className="font-bold text-emerald-300">
+                  Last Probe: {probeResult.speedupFactor}x Cache Acceleration ({probeResult.indexVerifiedCount} Indexes Verified)
+                </div>
+                <div className="text-[11px] text-emerald-200/80 font-mono">
+                  Neon DB RLS: {probeResult.dbProbeMs}ms → In-Memory Workspace Cache: {probeResult.cacheProbeMs}ms
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 5 System Telemetry KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <KpiCard
