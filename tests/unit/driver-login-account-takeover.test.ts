@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   users: [] as Array<Record<string, unknown>>,
   platformCalls: [] as string[],
   driverCreate: vi.fn(async (args: { data: Record<string, unknown> }) => ({ id: 'drv-new', ...args.data })),
-  driverFindMany: vi.fn(async (_args: unknown) => [] as unknown[]),
+  driverFindMany: vi.fn(async (args: { where: Record<string, unknown> }) => { void args; return [] as unknown[]; }),
   rawWrites: [] as Array<{ sql: string; params: unknown[] }>,
 }));
 
