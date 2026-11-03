@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { hashPassword, validatePasswordPolicy } from '@/lib/password-policy';
@@ -74,7 +74,63 @@ export async function GET(request: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const { tenantId, role } = authz;
+  const sp = request.nextUrl.searchParams;
+  const includeLogistics = sp.get('includeLogistics') === 'true';
+
+  // Sync any User accounts with userType='DRIVER' or DRIVER role into `drivers` table if missing
+  await withPlatformAdmin(prisma, async (adminTx) => {
+    await adminTx.$executeRawUnsafe(
+      `INSERT INTO drivers (
+         id, tenant_id, name, first_name, last_name, email, contact_number,
+         employee_id, license_number, status, driver_type, hierarchy, created_at, updated_at
+       )
+       SELECT
+         u.id,
+         COALESCE(ut."tenantId", $1),
+         COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", ''))), ''), u.username, 'Driver'),
+         COALESCE(u."firstName", SPLIT_PART(u.username, '_', 1), 'Driver'),
+         COALESCE(u."lastName", ''),
+         u.email,
+         u."mobileNumber",
+         u."employeeId",
+         COALESCE(u."employeeId", CONCAT('LIC-', UPPER(SUBSTRING(MD5(u.id) FROM 1 FOR 6)))),
+         CASE WHEN u."isActive" = false THEN 'INACTIVE' ELSE 'ACTIVE' END,
+         CASE
+           WHEN LOWER(COALESCE(t.name, '')) LIKE '%trexla%' OR LOWER(COALESCE(u.hierarchy, '')) LIKE '%trexla%' OR LOWER(COALESCE(u.email, '')) LIKE '%@trexla%'
+           THEN 'LOGISTICS'
+           ELSE 'LOGISTICS'
+         END,
+         COALESCE(u.hierarchy, t.name),
+         NOW(),
+         NOW()
+       FROM "User" u
+       LEFT JOIN "UserTenant" ut ON ut."userId" = u.id
+       LEFT JOIN "Tenant" t ON t.id = ut."tenantId"
+       LEFT JOIN "Role" r ON r.id = ut."roleId"
+       WHERE (
+         UPPER(COALESCE(u."userType", '')) = 'DRIVER'
+         OR UPPER(COALESCE(r.code, '')) = 'DRIVER'
+         OR LOWER(COALESCE(r.name, '')) LIKE '%driver%'
+       )
+       AND (
+         ut."tenantId" = $1
+         OR LOWER(COALESCE(t.name, '')) LIKE '%trexla%'
+         OR LOWER(COALESCE(u.hierarchy, '')) LIKE '%trexla%'
+         OR LOWER(COALESCE(u.email, '')) LIKE '%@trexla%'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM drivers d
+         WHERE d.deleted_at IS NULL
+           AND (
+             d.id::text = u.id
+             OR (u.email IS NOT NULL AND LOWER(d.email) = LOWER(u.email))
+           )
+       )
+       ON CONFLICT (id) DO NOTHING`,
+      tenantId,
+    ).catch(() => {});
+  }).catch(() => {});
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -103,9 +159,8 @@ export async function GET(request: NextRequest) {
         tenantId,
       ).catch(() => {});
 
-      const sp       = request.nextUrl.searchParams;
       const status   = sp.get('status');
-      const type     = sp.get('driverType');
+      const type     = sp.get('driverType') || sp.get('assignmentType');
       const search   = sp.get('search');
       const expiring = sp.get('expiring');
 
@@ -135,10 +190,42 @@ export async function GET(request: NextRequest) {
         ];
       }
 
-      const drivers = await tx.driver.findMany({
+      const tenantDrivers = await tx.driver.findMany({
         where,
         orderBy: { name: 'asc' },
       });
+
+      // When called from Vehicle Master (includeLogistics=true) or by SUPER_ADMIN, also include Trexla / Logistics drivers across tenants
+      let drivers = [...tenantDrivers];
+      if (includeLogistics || role === 'SUPER_ADMIN') {
+        const crossTenantLogisticsDrivers = await withPlatformAdmin(prisma, async (adminTx) => {
+          return adminTx.driver.findMany({
+            where: {
+              deletedAt: null,
+              ...(status ? { status } : {}),
+              OR: [
+                { driverType: 'LOGISTICS' },
+                { hierarchy: { contains: 'Trexla', mode: 'insensitive' } },
+                { email: { contains: 'trexla', mode: 'insensitive' } },
+              ],
+            },
+            orderBy: { name: 'asc' },
+          });
+        }).catch(() => []);
+
+        const seenIds = new Set(drivers.map((d) => d.id));
+        const seenEmails = new Set(
+          drivers.map((d) => (d.email || '').toLowerCase().trim()).filter(Boolean)
+        );
+        for (const cd of crossTenantLogisticsDrivers) {
+          const emailKey = (cd.email || '').toLowerCase().trim();
+          if (seenIds.has(cd.id) || (emailKey && seenEmails.has(emailKey))) continue;
+          seenIds.add(cd.id);
+          if (emailKey) seenEmails.add(emailKey);
+          drivers.push(cd);
+        }
+        drivers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      }
 
       // Fetch dynamic driver_category, employee_id, issuing_authority, and additional_documents from DB
       const extraRows = await tx.$queryRawUnsafe<Array<{

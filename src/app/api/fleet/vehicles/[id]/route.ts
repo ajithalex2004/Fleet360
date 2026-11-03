@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { revalidateCache } from '@/lib/server-cache';
@@ -301,37 +301,35 @@ export async function PUT(
         }
         const nextDriverId = typeof body.assignedDriverId === 'string' ? (body.assignedDriverId.trim() || null) : body.assignedDriverId;
         if (body.assignedDriverId !== undefined && nextDriverId !== prev.assigned_driver_id) {
-          // Keep Driver.assignedVehicleId synchronized bidirectionally
-          if (prev.assigned_driver_id) {
-            await tx.$executeRawUnsafe(
-              `UPDATE drivers SET assigned_vehicle_id = NULL WHERE id::text = $1 AND tenant_id = $2`,
-              prev.assigned_driver_id,
-              tenantId,
-            ).catch(() => {});
-          }
-          if (nextDriverId) {
-            // Clear any other driver that had this vehicle
-            await tx.$executeRawUnsafe(
-              `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1 AND id::text != $2 AND tenant_id = $3`,
-              id,
-              nextDriverId,
-              tenantId,
-            ).catch(() => {});
-            // Set the new driver's assigned vehicle
-            await tx.$executeRawUnsafe(
-              `UPDATE drivers SET assigned_vehicle_id = $1 WHERE id::text = $2 AND tenant_id = $3`,
-              id,
-              nextDriverId,
-              tenantId,
-            ).catch(() => {});
-          } else {
-            // Unassigning: clear any driver assigned to this vehicle
-            await tx.$executeRawUnsafe(
-              `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1 AND tenant_id = $2`,
-              id,
-              tenantId,
-            ).catch(() => {});
-          }
+          // Keep Driver.assignedVehicleId synchronized bidirectionally (using withPlatformAdmin so cross-tenant / Trexla Logistics drivers sync cleanly)
+          await withPlatformAdmin(prisma, async (adminTx) => {
+            if (prev.assigned_driver_id) {
+              await adminTx.$executeRawUnsafe(
+                `UPDATE drivers SET assigned_vehicle_id = NULL WHERE id::text = $1`,
+                prev.assigned_driver_id,
+              ).catch(() => {});
+            }
+            if (nextDriverId) {
+              // Clear any other driver that had this vehicle
+              await adminTx.$executeRawUnsafe(
+                `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1 AND id::text != $2`,
+                id,
+                nextDriverId,
+              ).catch(() => {});
+              // Set the new driver's assigned vehicle
+              await adminTx.$executeRawUnsafe(
+                `UPDATE drivers SET assigned_vehicle_id = $1 WHERE id::text = $2`,
+                id,
+                nextDriverId,
+              ).catch(() => {});
+            } else {
+              // Unassigning: clear any driver assigned to this vehicle
+              await adminTx.$executeRawUnsafe(
+                `UPDATE drivers SET assigned_vehicle_id = NULL WHERE assigned_vehicle_id::text = $1`,
+                id,
+              ).catch(() => {});
+            }
+          }).catch(() => {});
 
           await recordLifecycleEvent(tx, {
             vehicleId: id,

@@ -440,6 +440,21 @@ export default function VehiclesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const refreshDriverList = useCallback(() => {
+    fetch('/api/drivers?includeLogistics=true', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
+        const drivers = list.map((dr: { id: string; name?: string; firstName?: string; lastName?: string; hierarchy?: string | null }) => ({
+          id: dr.id,
+          name: dr.name || [dr.firstName, dr.lastName].filter(Boolean).join(' ') || 'Driver',
+        }));
+        _cachedDrivers = drivers;
+        setDriverList(drivers);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (_cachedZones) {
       setZones(_cachedZones);
@@ -456,21 +471,9 @@ export default function VehiclesPage() {
 
     if (_cachedDrivers) {
       setDriverList(_cachedDrivers);
-    } else {
-      fetch('/api/drivers')
-        .then(r => r.json())
-        .then(d => {
-          const list = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
-          const drivers = list.map((dr: { id: string; name?: string; firstName?: string; lastName?: string }) => ({
-            id: dr.id,
-            name: dr.name || [dr.firstName, dr.lastName].filter(Boolean).join(' ') || 'Driver',
-          }));
-          _cachedDrivers = drivers;
-          setDriverList(drivers);
-        })
-        .catch(() => {});
     }
-  }, []);
+    refreshDriverList();
+  }, [refreshDriverList]);
 
   // Open Inspector drawer with instant preview and background refresh
   const openInspect = (v: Vehicle) => {
@@ -649,6 +652,7 @@ export default function VehiclesPage() {
   };
 
   const openNew = () => {
+    refreshDriverList();
     setEditing(null);
     setForm({
       ...EMPTY_VEHICLE,
@@ -663,6 +667,7 @@ export default function VehiclesPage() {
   };
 
     const openEdit = (v: Vehicle) => {
+    refreshDriverList();
     setEditing(v);
     let docs = v.documents?.length ? v.documents : DEFAULT_DOCUMENTS;
     // Clean out legacy empty document widgets if they had no data

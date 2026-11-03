@@ -295,6 +295,48 @@ async function handlePOST(req: NextRequest) {
         });
       }
 
+      // If this user is a DRIVER (by userType or assigned Role), ensure a corresponding row exists in `drivers`
+      const isDriverAccount =
+        (userType && userType.trim().toUpperCase() === 'DRIVER') ||
+        (userTenant?.role?.code && userTenant.role.code.toUpperCase() === 'DRIVER') ||
+        (userTenant?.role?.name && userTenant.role.name.toLowerCase().includes('driver'));
+
+      if (isDriverAccount) {
+        const targetDriverTenantId = tenantId || authz.tenantId;
+        const fullName =
+          [firstName?.trim(), lastName?.trim()].filter(Boolean).join(' ') ||
+          username.trim() ||
+          'Driver';
+        await tx.$executeRawUnsafe(
+          `INSERT INTO drivers (
+             id, tenant_id, name, first_name, last_name, email, contact_number,
+             employee_id, license_number, status, driver_type, hierarchy, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7,
+             $8, $9, $10, 'LOGISTICS', $11, NOW(), NOW()
+           )
+           ON CONFLICT (id) DO UPDATE SET
+             name = EXCLUDED.name,
+             first_name = EXCLUDED.first_name,
+             last_name = EXCLUDED.last_name,
+             email = COALESCE(EXCLUDED.email, drivers.email),
+             contact_number = COALESCE(EXCLUDED.contact_number, drivers.contact_number),
+             hierarchy = COALESCE(EXCLUDED.hierarchy, drivers.hierarchy),
+             updated_at = NOW()`,
+          user.id,
+          targetDriverTenantId,
+          fullName,
+          firstName?.trim() || fullName.split(' ')[0] || 'Driver',
+          lastName?.trim() || fullName.split(' ').slice(1).join(' ') || '',
+          email.trim(),
+          mobileNumber?.trim() || null,
+          employeeId?.trim() || null,
+          employeeId?.trim() || `LIC-${user.id.slice(0, 6).toUpperCase()}`,
+          isActive === false ? 'INACTIVE' : 'ACTIVE',
+          hierarchy?.trim() || null,
+        ).catch(() => {});
+      }
+
       // Invalidate cached list so the platform dashboard's stat card
       // and the user list page see the new user on next request.
       revalidateCache([CACHE_TAG]);
