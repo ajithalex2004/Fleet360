@@ -250,9 +250,8 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON ai.agent_anomaly_flags(created_at DESC);
       
       -- Open-flag dedup is per tenant: two tenants can share an entity_id.
-      -- The new index matches prisma/migrations/20261031090000_anomaly_flags_tenant_dedup.
-      -- Migrated databases still have the old index until the follow-up
-      -- migration drops it; a fresh database never needs it.
+      -- Matches prisma/migrations/20261031090000_anomaly_flags_tenant_dedup
+      -- (new index) and 20261102090000_drop_old_anomaly_dedup_index (old one dropped).
       DROP INDEX IF EXISTS ai.idx_anomaly_flags_open_dedup;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup_tenant
         ON ai.agent_anomaly_flags(tenant_id, entity_id, detector_id)
