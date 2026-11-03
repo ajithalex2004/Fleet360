@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const h = vi.hoisted(() => ({
   updatePrefs: vi.fn(async (_db: unknown, args: Record<string, unknown>) => args),
   dispatchAlert: vi.fn(async () => ({ sent: true })),
+  linkActive: true,
 }));
 
 vi.mock('@/lib/rls', () => ({
@@ -15,7 +16,11 @@ vi.mock('@/lib/logistics/drayage-domain', async (importOriginal) => {
   return {
     ...actual,
     ensureDrayageSchema: vi.fn(async () => undefined),
-    getPublicCustomerTrackingByToken: vi.fn(async () => ({ job: { id: 'job-1', customerName: 'ACME' } })),
+    getPublicCustomerTrackingByToken: vi.fn(async () => ({
+      linkActive: h.linkActive,
+      activationRequirement: 'Link activates once a vehicle and driver are assigned.',
+      job: { id: 'job-1', customerName: 'ACME', customerPortal: {} },
+    })),
     updateDrayageCustomerAlertPreferences: h.updatePrefs,
     dispatchDrayageCustomerMilestoneAlert: h.dispatchAlert,
   };
@@ -31,6 +36,7 @@ function req(url: string, body?: unknown) {
 
 describe('drayage customer tracking link', () => {
   beforeEach(() => {
+    h.linkActive = true;
     h.updatePrefs.mockClear();
     h.dispatchAlert.mockClear();
   });
@@ -60,5 +66,14 @@ describe('drayage customer tracking link', () => {
     const ok = await POST(req('http://localhost/api/driver-app/customer-tracking', { token, action: 'update_subscriptions', customerEmail: 'ops@consignee.ae' }));
     expect(ok.status).toBe(200);
     expect(h.updatePrefs).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tenantId: 'tenant-a', customerEmail: 'ops@consignee.ae', customerWhatsApp: '' }));
+  });
+
+  it('an inactive link changes nothing', async () => {
+    h.linkActive = false;
+    const token = generateDrayageCustomerTrackingToken({ tenantId: 'tenant-a', jobCode: 'DRY-1', containerNumber: 'MSCU1234567' });
+    const res = await POST(req('http://localhost/api/driver-app/customer-tracking', { token, action: 'update_subscriptions', customerEmail: 'ops@consignee.ae' }));
+    expect(res.status).toBe(400);
+    expect(h.updatePrefs).not.toHaveBeenCalled();
+    expect(h.dispatchAlert).not.toHaveBeenCalled();
   });
 });
