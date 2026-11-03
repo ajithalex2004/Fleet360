@@ -2472,33 +2472,33 @@ export default function DrayageAssignmentPage() {
           ========================================================================= */}
       {showSmartAnalysis && (
         <div className="rounded-2xl bg-gradient-to-br from-blue-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-blue-500/30 p-5 space-y-4 shadow-xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-blue-500/20 pb-4">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 border-b border-blue-500/20 pb-4">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
                 <Sparkles className="w-5 h-5 text-blue-300" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
                     Smart Drayage Analysis & Optimizer
                   </h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                    Dual-20FT & Street Turn Matcher
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-600 text-white whitespace-nowrap shadow-sm">
+                    Dual-20FT · Street Turn · 3-Leg Chain
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  AI corridor pairing eliminates empty gate runs, bundles 2x20FT containers, and prioritizes expiring DOs.
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  AI corridor pairing eliminates empty gate runs, bundles 2x20FT containers, holds deadhead L2s, and prioritizes expiring DOs.
                 </p>
               </div>
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-subtle)]">
+            {/* Single-Row Filter Pills */}
+            <div className="flex items-center gap-1.5 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-subtle)] overflow-x-auto w-fit max-w-full shrink-0">
               <button
                 onClick={() => setSmartAnalysisFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'ALL'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
@@ -2506,9 +2506,9 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BOGIE')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BOGIE'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
@@ -2516,9 +2516,9 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('STREET_TURN')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'STREET_TURN'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
@@ -2526,20 +2526,20 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BACKHAUL_HOLD')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BACKHAUL_HOLD'
-                    ? 'bg-amber-600 text-white'
-                    : 'text-amber-400 hover:text-amber-300'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-amber-500 hover:text-amber-400'
                 }`}
               >
                 Smart Backhaul Hold ({smartBackhaulHoldJobs.length})
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('DEMURRAGE')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'DEMURRAGE'
-                    ? 'bg-rose-600 text-white'
-                    : 'text-rose-400 hover:text-rose-300'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-rose-500 hover:text-rose-400'
                 }`}
               >
                 Urgent Demurrage Alert ({urgentDemurrageJobs.length})
