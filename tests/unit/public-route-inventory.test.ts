@@ -73,6 +73,7 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/api/mobile/': 'none — static APK downloads; no database or tenant data',
   '/health': 'none — status page; data from the public /api/health, admin calls are SUPER_ADMIN-gated',
   '/api/bus-ops/gateway/': 'per-gateway HMAC signature',
+  '/api/integrations/enterprise/webhook/': 'per-connection webhook secret (header), checked in the handler',
   '/api/push/': 'operator session or scheduler secret, checked in the handler',
   '/api/cron/': 'CRON_SECRET bearer token',
   '/api/jobs/': 'scheduler secret or operator session, checked in the handler',

@@ -20,9 +20,18 @@ import { secretsMatch, webhookSecretOf } from '@/lib/agents/enterprise-bridge/co
 
 export const runtime = 'nodejs';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// This path is public (src/lib/auth-route-policies.ts): one answer for an
+// unknown connection, a connection without a secret and a wrong secret, so a
+// caller cannot tell which connection ids exist.
+const unauthorized = () =>
+  NextResponse.json({ error: 'Unauthorized enterprise webhook request' }, { status: 401 });
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await ensureAgentSchema();
   const { id: connectionId } = await params;
+  if (!UUID.test(connectionId)) return unauthorized();
 
   try {
     const rawConnections = await withPlatformAdmin(prisma, (tx) =>
@@ -33,9 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       `, connectionId)
     );
 
-    if (rawConnections.length === 0) {
-      return NextResponse.json({ error: 'Invalid or inactive enterprise connection' }, { status: 404 });
-    }
+    if (rawConnections.length === 0) return unauthorized();
 
     const connection = rawConnections[0];
     const tenantId = connection.tenant_id;
@@ -48,21 +55,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // up in access logs.
     const expectedSecret = webhookSecretOf(connection.auth_credentials);
     if (!expectedSecret) {
-      return NextResponse.json(
-        { error: 'Unauthorized enterprise webhook request', message: 'This connection has no webhook secret. Rotate one in Fleet360 to receive webhooks.' },
-        { status: 401 }
-      );
+      console.warn(`[EnterpriseWebhook] Connection ${connectionId} has no webhook secret; create one in Admin > Enterprise Bridge.`);
+      return unauthorized();
     }
     const incomingSecret =
       req.headers.get('x-webhook-secret') ||
       req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
       '';
-    if (!incomingSecret || !secretsMatch(incomingSecret, expectedSecret)) {
-      return NextResponse.json(
-        { error: 'Unauthorized enterprise webhook request' },
-        { status: 401 }
-      );
-    }
+    if (!incomingSecret || !secretsMatch(incomingSecret, expectedSecret)) return unauthorized();
 
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody) as Record<string, any>;
@@ -122,7 +122,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       systemName: connection.system_name,
       message: 'Inbound ERP event ingested and queued for agent execution.',
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    // Public route: log the detail, never return it.
+    console.error('[EnterpriseWebhook] Failed to ingest event:', err);
+    return NextResponse.json({ error: 'Webhook could not be processed' }, { status: 500 });
   }
 }
