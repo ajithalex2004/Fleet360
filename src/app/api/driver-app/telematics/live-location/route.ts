@@ -6,6 +6,7 @@ import { rejectForeignIdentifiers, requireDriverActor } from '@/lib/driver-app-a
 import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { emitDrayageEvent } from '@/lib/logistics/drayage-events';
 
 export const runtime = 'nodejs';
 
@@ -136,6 +137,14 @@ export async function POST(req: NextRequest) {
           occurredAt: new Date(),
           source: 'DRIVER_APP',
         },
+      });
+
+      emitDrayageEvent(tenantId, {
+        type: 'telemetry_ping',
+        action: 'live_location',
+        vehicleId: vehicle.id,
+        lat,
+        lng,
       });
 
       return withCorsHeaders(

@@ -1,4 +1,10 @@
 import crypto from 'crypto';
+import {
+  getCachedDrayageMasterData,
+  setCachedDrayageMasterData,
+  invalidateDrayageMasterCache,
+  shouldRunEtcAutoActivationCheck,
+} from './drayage-events';
 
 export interface DrayageDbClient {
   $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
@@ -1123,12 +1129,16 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
 export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: string) {
   await seedTenantDrayageDefaultsIfNeeded(db, tenantId);
 
-  // Proactively check and auto-activate any Leg 1 jobs whose Offload ETC timer has elapsed
-  await checkAndAutoActivateExpiredEtcJobs(db, tenantId).catch((err) => {
-    console.error('[getDrayageWorkspaceData] checkAndAutoActivateExpiredEtcJobs error:', err);
-  });
+  // Throttle proactive Offload ETC sweep to at most once every 30s per tenant on GET reads
+  if (shouldRunEtcAutoActivationCheck(tenantId)) {
+    await checkAndAutoActivateExpiredEtcJobs(db, tenantId).catch((err) => {
+      console.error('[getDrayageWorkspaceData] checkAndAutoActivateExpiredEtcJobs error:', err);
+    });
+  }
 
-  // Parallelize all 13 workspace SQL queries into a single roundtrip to maximize throughput
+  const cachedMaster = getCachedDrayageMasterData(tenantId);
+
+  // Parallelize operational SQL queries (and master queries only when master cache misses)
   const [
     terminalRows,
     warehouseRows,
@@ -1144,19 +1154,26 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     statusLogRows,
     messageRows,
     ackRows,
+    automationConfig,
   ] = await Promise.all([
-    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_terminals WHERE tenant_id = $1 ORDER BY name ASC`,
-      tenantId,
-    ),
-    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_warehouses WHERE tenant_id = $1 ORDER BY name ASC`,
-      tenantId,
-    ),
-    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_clients WHERE tenant_id = $1 ORDER BY name ASC`,
-      tenantId,
-    ).catch(() => []),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.terminalRows)
+      : db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT * FROM logistics_drayage_terminals WHERE tenant_id = $1 ORDER BY name ASC`,
+          tenantId,
+        ),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.warehouseRows)
+      : db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT * FROM logistics_drayage_warehouses WHERE tenant_id = $1 ORDER BY name ASC`,
+          tenantId,
+        ),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.clientRows)
+      : db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT * FROM logistics_drayage_clients WHERE tenant_id = $1 ORDER BY name ASC`,
+          tenantId,
+        ).catch(() => []),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT * FROM logistics_drayage_trailers WHERE tenant_id = $1 ORDER BY plate_number ASC`,
       tenantId,
@@ -1224,24 +1241,28 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         LIMIT 60`,
       tenantId,
     ).catch(() => []),
-    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT id, customer_code, name_en, name_ar, customer_type, email, mobile_number, city, trade_license
-         FROM customers
-        WHERE tenant_id = $1
-          AND deleted_at IS NULL
-          AND id NOT LIKE 'cli-%'
-        ORDER BY name_en ASC
-        LIMIT 60`,
-      tenantId,
-    ).catch(() => []),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.rawCustomers)
+      : db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT id, customer_code, name_en, name_ar, customer_type, email, mobile_number, city, trade_license
+             FROM customers
+            WHERE tenant_id = $1
+              AND deleted_at IS NULL
+              AND id NOT LIKE 'cli-%'
+            ORDER BY name_en ASC
+            LIMIT 60`,
+          tenantId,
+        ).catch(() => []),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT * FROM logistics_drayage_allowances WHERE tenant_id = $1 ORDER BY created_at DESC`,
       tenantId,
     ),
-    db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_geofences WHERE tenant_id = $1 ORDER BY created_at DESC`,
-      tenantId,
-    ),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.geofenceRows)
+      : db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT * FROM logistics_drayage_geofences WHERE tenant_id = $1 ORDER BY created_at DESC`,
+          tenantId,
+        ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT * FROM logistics_drayage_status_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 200`,
       tenantId,
@@ -1254,7 +1275,24 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       `SELECT alert_key, acknowledged FROM logistics_drayage_alerts WHERE tenant_id = $1`,
       tenantId,
     ).catch(() => []),
+    cachedMaster
+      ? Promise.resolve(cachedMaster.automationConfig)
+      : getTenantAutomationConfig(db, tenantId),
   ]);
+
+  if (!cachedMaster) {
+    setCachedDrayageMasterData(tenantId, {
+      terminalRows,
+      warehouseRows,
+      clientRows,
+      geofenceRows,
+      rawCustomers,
+      automationConfig,
+    });
+  }
+
+  const pendingSyncWrites: Array<Promise<unknown>> = [];
+  let masterGeofenceInserted = false;
 
   // 1. Terminals
   const terminals: DrayageTerminal[] = terminalRows.map((r: Record<string, unknown>) => ({
@@ -1655,27 +1693,30 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       };
       geofences.push(autoGf);
 
-      // Persist to database so it stays in sync
-      db.$executeRawUnsafe(
-        `INSERT INTO logistics_drayage_geofences (
-          id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
-        ) VALUES ($1,$2,$3,$4,$5,'CIRCLE',$6,$7,$8,$9)
-        ON CONFLICT (id) DO UPDATE
-           SET terminal_name = EXCLUDED.terminal_name,
-               name = EXCLUDED.name,
-               center_lat = EXCLUDED.center_lat,
-               center_lng = EXCLUDED.center_lng,
-               radius_meters = EXCLUDED.radius_meters`,
-        gfId,
-        tenantId,
-        term.id,
-        term.name,
-        autoGf.name,
-        term.lat,
-        term.lng,
-        autoGf.radiusMeters,
-        autoGf.coordinatesJson,
-      ).catch(() => {});
+      // Persist to database within the active transaction before returning
+      masterGeofenceInserted = true;
+      pendingSyncWrites.push(
+        db.$executeRawUnsafe(
+          `INSERT INTO logistics_drayage_geofences (
+            id, tenant_id, terminal_id, terminal_name, name, type, center_lat, center_lng, radius_meters, coordinates_json
+          ) VALUES ($1,$2,$3,$4,$5,'CIRCLE',$6,$7,$8,$9)
+          ON CONFLICT (id) DO UPDATE
+             SET terminal_name = EXCLUDED.terminal_name,
+                 name = EXCLUDED.name,
+                 center_lat = EXCLUDED.center_lat,
+                 center_lng = EXCLUDED.center_lng,
+                 radius_meters = EXCLUDED.radius_meters`,
+          gfId,
+          tenantId,
+          term.id,
+          term.name,
+          autoGf.name,
+          term.lat,
+          term.lng,
+          autoGf.radiusMeters,
+          autoGf.coordinatesJson,
+        ).catch(() => {}),
+      );
     }
   }
 
@@ -1705,7 +1746,6 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
-  const automationConfig = await getTenantAutomationConfig(db, tenantId);
   const autoL2DispatchEnabled = automationConfig.autoL2DispatchEnabled;
   const thresholdMins = automationConfig.thresholdMinutes;
 
@@ -1839,11 +1879,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       autoEscalatedCritical = true;
       if (j.priority !== 'URGENT') {
         j.priority = 'URGENT';
-        db.$executeRawUnsafe(
-          `UPDATE logistics_drayage_jobs SET priority = 'URGENT', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
-          j.id,
-          tenantId,
-        ).catch(() => {});
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs SET priority = 'URGENT', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+          ).catch(() => {}),
+        );
       }
 
       const alertKey = `radar-24h-${j.id}`;
@@ -2210,6 +2252,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         createdAt: j.updatedAt,
       });
     }
+  }
+
+  if (pendingSyncWrites.length > 0) {
+    await Promise.allSettled(pendingSyncWrites);
+  }
+  if (masterGeofenceInserted) {
+    invalidateDrayageMasterCache(tenantId);
   }
 
   // 11. Summary Metrics

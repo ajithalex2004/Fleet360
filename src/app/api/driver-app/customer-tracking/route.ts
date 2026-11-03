@@ -12,6 +12,10 @@ import {
   consigneeConfirmEmptyReady,
   extendDrayageJobEtcTime,
 } from '@/lib/logistics/drayage-domain';
+import {
+  emitDrayageEvent,
+  resetEtcAutoActivationThrottle,
+} from '@/lib/logistics/drayage-events';
 
 let schemaReady = false;
 
@@ -191,6 +195,14 @@ export async function POST(req: NextRequest) {
       },
       { timeoutMs: 25000 },
     );
+
+    resetEtcAutoActivationThrottle(tenantId);
+    emitDrayageEvent(tenantId, {
+      type: 'customer_portal_mutation',
+      action,
+      jobCode: verified.jobCode,
+      containerNumber: verified.containerNumber ?? null,
+    });
 
     return NextResponse.json(result);
   } catch (err) {

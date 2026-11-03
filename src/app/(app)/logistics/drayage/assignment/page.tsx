@@ -40,6 +40,7 @@ import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
   invalidateDrayageClientCache,
+  subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -612,6 +613,16 @@ export default function DrayageAssignmentPage() {
 
   useEffect(() => {
     loadData();
+    const unsubscribe = subscribeDrayageLiveUpdates((data) => {
+      if (!data) return;
+      setJobs(data.jobs || []);
+      setVehicles(data.vehicles || []);
+      setDrivers(data.drivers || []);
+      setTrailers(data.trailers || []);
+      setTerminals(data.terminals || []);
+      setWarehouses(data.warehouses || []);
+    });
+    return () => unsubscribe();
   }, [loadData]);
 
   // Heavy Commercial Prime Movers / Tractors only (exclude light passenger cars like Honda Pilot, Sedans, SUVs)

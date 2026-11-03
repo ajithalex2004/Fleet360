@@ -42,8 +42,53 @@ import {
   dispatchDrayageCustomerMilestoneAlert,
   updateDrayageCustomerAlertPreferences,
 } from '@/lib/logistics/drayage-domain';
+import {
+  getCachedDrayageWorkspace,
+  setCachedDrayageWorkspace,
+  emitDrayageEvent,
+  resetEtcAutoActivationThrottle,
+} from '@/lib/logistics/drayage-events';
 
 let drayageSchemaEnsured = false;
+
+function filterWorkspaceByScope(data: Record<string, unknown>, scope: string): Record<string, unknown> {
+  switch (scope) {
+    case 'jobs':
+      return {
+        summary: data.summary,
+        automationConfig: data.automationConfig,
+        jobs: data.jobs,
+        containers: data.containers,
+        vehicles: data.vehicles,
+        drivers: data.drivers,
+        trailers: data.trailers,
+        alerts: data.alerts,
+      };
+    case 'master':
+      return {
+        terminals: data.terminals,
+        warehouses: data.warehouses,
+        clients: data.clients,
+        customers: data.customers,
+        geofences: data.geofences,
+        trailers: data.trailers,
+        automationConfig: data.automationConfig,
+      };
+    case 'telemetry':
+      return {
+        summary: data.summary,
+        jobs: data.jobs,
+        vehicles: data.vehicles,
+        trailers: data.trailers,
+        geofences: data.geofences,
+        statusLogs: data.statusLogs,
+        messages: data.messages,
+        alerts: data.alerts,
+      };
+    default:
+      return data;
+  }
+}
 
 function safeNum(val: unknown, fallback: number): number {
   if (val === null || val === undefined || val === '') return fallback;
@@ -59,27 +104,34 @@ function safeIso(val: unknown, fallbackMsOffset = 0): string {
   return new Date(Date.now() + fallbackMsOffset).toISOString();
 }
 
-interface WorkspaceCacheEntry {
-  timestamp: number;
-  data: unknown;
-}
-const workspaceCache = new Map<string, WorkspaceCacheEntry>();
-const CACHE_TTL_MS = 4000; // 4s cache for instantaneous tab switching and burst requests
-
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const scope = (req.nextUrl.searchParams.get('scope') || 'full').toLowerCase();
+  const ifNoneMatch = req.headers.get('if-none-match');
 
-  const now = Date.now();
-  const cached = workspaceCache.get(tenantId);
-  if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
-    return NextResponse.json(cached.data, {
+  const cached = getCachedDrayageWorkspace(tenantId);
+  if (cached) {
+    if (ifNoneMatch && ifNoneMatch === cached.etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          ETag: cached.etag,
+          'X-Cache': 'HIT-304',
+          'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+        },
+      });
+    }
+    const payload = filterWorkspaceByScope(cached.data, scope);
+    return NextResponse.json(payload, {
       headers: {
+        ETag: cached.etag,
         'X-Cache': 'HIT',
-        'Cache-Control': 'private, max-age=4',
+        'X-Drayage-Scope': scope,
+        'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
       },
     });
   }
@@ -93,11 +145,24 @@ export async function GET(req: NextRequest) {
     const data = await withTenantRls(prisma, tenantId, async (tx) => {
       return getDrayageWorkspaceData(tx, tenantId);
     }, { timeoutMs: 30000 });
-    workspaceCache.set(tenantId, { timestamp: Date.now(), data });
-    return NextResponse.json(data, {
+    const entry = setCachedDrayageWorkspace(tenantId, data as unknown as Record<string, unknown>);
+    if (ifNoneMatch && ifNoneMatch === entry.etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          ETag: entry.etag,
+          'X-Cache': 'MISS-304',
+          'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+        },
+      });
+    }
+    const payload = filterWorkspaceByScope(entry.data, scope);
+    return NextResponse.json(payload, {
       headers: {
+        ETag: entry.etag,
         'X-Cache': 'MISS',
-        'Cache-Control': 'private, max-age=4',
+        'X-Drayage-Scope': scope,
+        'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
       },
     });
   } catch (error) {
@@ -1220,8 +1285,24 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Invalidate workspace cache on any state-changing mutation
-    workspaceCache.delete(tenantId);
+    // Invalidate shared workspace/master cache and push real-time SSE notification
+    if (
+      action === 'extend_etc_time' ||
+      action === 'update_status' ||
+      action === 'run_etc_auto_check' ||
+      action === 'set_auto_l2_mode' ||
+      action === 'save_automation_config'
+    ) {
+      resetEtcAutoActivationThrottle(tenantId);
+    }
+    emitDrayageEvent(tenantId, {
+      type: 'drayage_mutation',
+      action,
+      jobId: body.jobId ? String(body.jobId) : null,
+      jobCode: body.jobCode ? String(body.jobCode) : null,
+      containerNumber: body.containerNumber ? String(body.containerNumber) : null,
+      vehicleId: body.vehicleId ? String(body.vehicleId) : null,
+    });
 
     return NextResponse.json(result);
   } catch (error) {

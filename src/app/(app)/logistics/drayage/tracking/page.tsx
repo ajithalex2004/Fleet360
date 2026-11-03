@@ -41,6 +41,12 @@ import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
   type DrayageAutomationConfig,
 } from '@/lib/logistics/drayage-domain';
+import {
+  fetchDrayageWorkspaceCached,
+  getCachedDrayageData,
+  invalidateDrayageClientCache,
+  subscribeDrayageLiveUpdates,
+} from '@/lib/logistics/drayage-client-cache';
 import type {
   DrayageCorridorTerminal,
   DrayageCorridorWarehouse,
@@ -265,15 +271,13 @@ export default function DrayageJobTrackingPage() {
     setTimeout(() => setToast(null), 4500);
   };
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceFreshInput?: boolean | unknown) => {
+    const forceFresh = typeof forceFreshInput === 'boolean' ? forceFreshInput : true;
     try {
-      setLoading(true);
-      const res = await fetch('/api/logistics/drayage');
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.error || errJson?.message || 'Failed to load tracking data');
+      if (!getCachedDrayageData()?.jobs) {
+        setLoading(true);
       }
-      const data = await res.json();
+      const data = await fetchDrayageWorkspaceCached({ forceFresh });
       const allJobs: DrayageJob[] = data.jobs || [];
       setJobs(allJobs);
       setStatusLogs(data.statusLogs || []);
@@ -376,7 +380,18 @@ export default function DrayageJobTrackingPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
+    const unsubscribe = subscribeDrayageLiveUpdates((data) => {
+      if (!data) return;
+      setJobs(data.jobs || []);
+      setStatusLogs(data.statusLogs || []);
+      setMessages(data.messages || []);
+      setTerminals(data.terminals || []);
+      setWarehouses(data.warehouses || []);
+      setGeofences(data.geofences || []);
+      setVehicles(data.vehicles || []);
+    });
+    return () => unsubscribe();
   }, [loadData]);
 
   const activeJob = useMemo(() => {
