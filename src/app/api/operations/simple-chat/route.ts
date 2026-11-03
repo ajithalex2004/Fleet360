@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { checkRunAllowed, recordChatTurn } from '@/lib/agents/chat-governance';
+import { chatUsage, checkRunAllowed, recordChatTurn, type ReportedUsage } from '@/lib/agents/chat-governance';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
@@ -337,12 +337,15 @@ export async function POST(req: NextRequest) {
         });
 
         let textAccum = '';
+        let reportedUsage: ReportedUsage = null;
         // Accumulate each distinct tool call by its stream index — a single
         // turn can request multiple tools (e.g. "show me the full dashboard"),
         // and each gets its own index in delta.tool_calls[].
         const toolCallsByIndex = new Map<number, { name: string; argsRaw: string }>();
 
         for await (const chunk of completion) {
+          // A usage-only chunk (if the provider sends one) has no choices.
+          if (chunk.usage) reportedUsage = chunk.usage;
           const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
 
@@ -399,6 +402,11 @@ export async function POST(req: NextRequest) {
           toolsUsed:    toolCalls.map(tc => tc.name),
           messageCount: sessionStore.getMessages(tenantId, threadId).length,
           durationMs:   Date.now() - t0,
+          usage:        chatUsage(
+            reportedUsage,
+            messagesToSend,
+            textAccum + toolCalls.map(tc => tc.name + tc.argsRaw).join(''),
+          ),
         });
 
         send({ type: 'done' });

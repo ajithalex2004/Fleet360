@@ -4,7 +4,7 @@ import { transformStream } from '@crayonai/stream';
 import { DBMessage, getMessageStore } from '../../chat/messageStore';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-import { checkRunAllowed, recordChatTurn } from '@/lib/agents/chat-governance';
+import { chatUsage, checkRunAllowed, recordChatTurn, type ReportedUsage } from '@/lib/agents/chat-governance';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
 You have real-time access to the following live data via tools:
@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
 
   messageStore.addMessage(prompt);
 
+  const sentMessages = messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 });
+  let reportedUsage: ReportedUsage = null;
   const llmStream = await client.chat.completions.create({
     model: 'c1/openai/gpt-5/v-20250915',
-    messages: messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 }),
+    messages: sentMessages,
     max_tokens: 1500,
     stream: true,
     tools: [
@@ -263,7 +265,10 @@ export async function POST(req: NextRequest) {
 
   const responseStream = transformStream(
     llmStream,
-    (chunk) => chunk.choices?.[0]?.delta?.content ?? '',
+    (chunk) => {
+      if (chunk.usage) reportedUsage = chunk.usage;
+      return chunk.choices?.[0]?.delta?.content ?? '';
+    },
     {
       onEnd: ({ accumulated }) => {
         const message = accumulated.filter(Boolean).join('');
@@ -277,6 +282,7 @@ export async function POST(req: NextRequest) {
           messageCount: messageStore.getOpenAICompatibleMessageList().length,
           toolsUsed: [],
           durationMs: Date.now() - t0,
+          usage: chatUsage(reportedUsage, sentMessages, message),
         });
       },
     },

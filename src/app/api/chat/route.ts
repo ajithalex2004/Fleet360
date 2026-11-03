@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { transformStream } from "@crayonai/stream";
 import { DBMessage, getMessageStore } from "./messageStore";
-import { checkRunAllowed, recordChatTurn } from "@/lib/agents/chat-governance";
+import { chatUsage, checkRunAllowed, recordChatTurn, type ReportedUsage } from "@/lib/agents/chat-governance";
 
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -32,9 +32,11 @@ export async function POST(req: NextRequest) {
 
   messageStore.addMessage(prompt);
 
+  const sentMessages = messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 });
+  let reportedUsage: ReportedUsage = null;
   const llmStream = await client.chat.completions.create({
     model: "c1/openai/gpt-5/v-20250915",
-    messages: messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 }),
+    messages: sentMessages,
     max_tokens: 1500,
     stream: true,
     tools: [
@@ -64,6 +66,7 @@ export async function POST(req: NextRequest) {
   const responseStream = transformStream(
     llmStream,
     (chunk) => {
+      if (chunk.usage) reportedUsage = chunk.usage;
       return chunk.choices?.[0]?.delta?.content ?? "";
     },
     {
@@ -84,6 +87,7 @@ export async function POST(req: NextRequest) {
           messageCount: messageStore.getOpenAICompatibleMessageList().length,
           toolsUsed,
           durationMs: Date.now() - t0,
+          usage: chatUsage(reportedUsage, sentMessages, message),
         });
       },
     }
