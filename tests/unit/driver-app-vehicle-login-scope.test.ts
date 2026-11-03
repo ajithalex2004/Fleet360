@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   vehicleFindMany: vi.fn(),
   driverFindFirst: vi.fn(),
   userFindUnique: vi.fn(),
+  rawQuery: vi.fn(async (sql: string, ...params: unknown[]) => { void sql; void params; return [] as Array<{ id: string }>; }),
   caller: null as null | { tenantId: string; userId: string },
 }));
 
@@ -17,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
     vehicle: { findFirst: h.vehicleFindFirst, findMany: h.vehicleFindMany, updateMany: vi.fn(async () => ({ count: 0 })), update: vi.fn(async () => ({})) },
     driver: { findFirst: h.driverFindFirst },
     user: { findUnique: h.userFindUnique },
+    $queryRawUnsafe: h.rawQuery,
     busGpsPing: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({})) },
   },
 }));
@@ -65,13 +67,23 @@ describe('driver vehicle login stays in the caller\'s tenant', () => {
     expect(JSON.stringify(where)).not.toMatch(/contains|LOGISTICS/);
   });
 
-  it('signs in only as the caller\'s own driver profile (no email or mobile fallback)', async () => {
+  it('a non-driver account is never signed in as a driver, whatever its details match', async () => {
     h.vehicleFindFirst.mockResolvedValue({ id: 'veh-1', vehicleCode: 'TRX-01', licensePlate: null, plateNumber: null, registrationNo: null, deviceId: 'GPS-1', odometerReading: null, assignedDriverId: null });
     h.driverFindFirst.mockResolvedValue(null);
+    h.userFindUnique.mockResolvedValue({ id: 'drv-1', email: 'd@a.ae', employeeId: 'E1', userType: 'STAFF' });
     const res = await loginPOST(post('http://localhost/api/driver-app/auth/vehicle-login', { vehicleIdentifier: 'TRX-01' }));
     expect(res.status).toBe(403);
-    expect(h.userFindUnique).not.toHaveBeenCalled();
-    expect(h.driverFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'drv-1', tenantId: 'tenant-a', deletedAt: null } }));
+    expect(h.rawQuery).not.toHaveBeenCalled();
+  });
+
+  it('a driver account whose user id differs is matched by id, exact email or employee id only', async () => {
+    h.driverFindFirst.mockResolvedValue(null);
+    h.userFindUnique.mockResolvedValue({ id: 'u-9', email: 'd@a.ae', employeeId: 'E1', userType: 'DRIVER' });
+    await loginGET(get('http://localhost/api/driver-app/auth/vehicle-login'));
+    expect(h.rawQuery).toHaveBeenCalled();
+    const [sql, ...params] = h.rawQuery.mock.calls[0];
+    expect(params).toEqual(['tenant-a', 'u-9', 'd@a.ae', 'E1']);
+    expect(sql).not.toMatch(/SPLIT_PART|license_number|first_name/);
   });
 
   it('lists only the caller\'s tenant\'s vehicles', async () => {

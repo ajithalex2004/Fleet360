@@ -45,6 +45,50 @@ export type DriverLoginMatch =
   | { kind: 'linkable'; user: LinkableUser }
   | { kind: 'conflict'; message: string };
 
+/** Minimal client for a raw query: prisma or a transaction. */
+type RawQueryClient = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+};
+
+/**
+ * The driver profile a signed-in user may act as, in this tenant: the
+ * reverse direction of findLinkableDriverUser, used by login and the driver
+ * app's vehicle login to mint a DRIVER session.
+ *
+ * Only a DRIVER-type account, and only by the same id, the exact email or
+ * the employee id. Matching by name, username or a licence number derived
+ * from the username let a staff user who shared a driver's name (or set
+ * their username to a driver's email prefix) be signed in as that driver.
+ */
+export async function matchDriverProfileForUser(
+  db: RawQueryClient,
+  tenantId: string,
+  user: { id: string; userType?: string | null; email?: string | null; employeeId?: string | null },
+): Promise<string | null> {
+  if ((user.userType ?? '').toUpperCase() !== 'DRIVER') return null;
+  const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id::text AS id
+       FROM drivers
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND (
+          id::text = $2
+          OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+          OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
+        )
+      ORDER BY (id::text = $2) DESC, (LOWER(COALESCE(email, '')) = LOWER(COALESCE($3, ''))) DESC
+      LIMIT 2`,
+    tenantId,
+    user.id,
+    user.email?.trim() || null,
+    user.employeeId?.trim() || null,
+  );
+  if (rows.length === 0) return null;
+  // The same id is unambiguous; otherwise two matches mean the details are shared.
+  if (rows[0].id === user.id || rows.length === 1) return rows[0].id;
+  return null;
+}
+
 const isDriverRole = (role: { code: string | null; name: string | null } | null) =>
   !role || (role.code ?? '').toUpperCase() === 'DRIVER' || /driver/i.test(role.name ?? '');
 

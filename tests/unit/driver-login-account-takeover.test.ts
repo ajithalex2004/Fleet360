@@ -110,7 +110,7 @@ describe('GET /api/drivers stays in the caller\'s tenant', () => {
     // The only platform-context statement is the driver-user sync, scoped to this tenant.
     const sync = h.rawWrites.filter((w) => /INSERT INTO drivers/.test(w.sql));
     expect(sync).toHaveLength(1);
-    expect(sync[0].sql).toMatch(/ut\."tenantId" = \$1/);
+    expect(sync[0].sql).toMatch(/ut\.tenant_id = \$1/);
     expect(sync[0].sql.toLowerCase()).not.toContain('trexla');
     // No deletes or un-deletes on a list request.
     expect(h.rawWrites.some((w) => /DELETE FROM drivers|deleted_at = NULL/.test(w.sql))).toBe(false);
