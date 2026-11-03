@@ -255,6 +255,12 @@ interface StreetTurnRecommendation {
   exportJob: DrayageJob;
   inboundJob: DrayageJob;
   outboundJob: DrayageJob;
+  matchMode: 'INLAND_STREET_TURN' | 'PORT_TERMINAL_RELOAD' | 'DAISY_CHAIN_3LEG';
+  leg3Job?: DrayageJob | null;
+  leg3Risk?: DemurrageRisk;
+  leg3Zone?: string | null;
+  leg3HasBackhaul?: boolean;
+  holdLeg3Recommended?: boolean;
   sourcePhase: 'L1_RAMP' | 'L2_EMPTY';
   containerGrade: string;
   shippingLine: string;
@@ -265,6 +271,7 @@ interface StreetTurnRecommendation {
   originWarehouse: string;
   destWarehouse: string;
   zone: string;
+  destZone?: string;
   interWarehouseDistanceKm: number;
   terminalName: string;
   tasSlot: string;
@@ -278,13 +285,28 @@ interface StreetTurnRecommendation {
   score: number;
 }
 
+interface SmartBackhaulHoldItem {
+  job: DrayageJob;
+  risk: DemurrageRisk;
+  zone: string;
+  terminalName: string;
+  outboundL1AtTerminal: number;
+  estimatedDeadheadKmAvoided: number;
+  fuelRiskAvoidedAed: number;
+  isCurrentlyHeld: boolean;
+  linkedDaisyChainPairId?: string;
+  recommendationText: string;
+}
+
 interface AutoPilotDispatchItem {
   id: string;
-  type: 'BOGIE' | 'STREET_TURN' | 'SINGLE';
+  type: 'BOGIE' | 'STREET_TURN' | 'PORT_RELOAD' | 'DAISY_CHAIN' | 'SINGLE';
   jobIds: string[];
   jobCodes: string[];
   containers: string[];
   customerNames: string[];
+  heldLeg3JobId?: string;
+  heldLeg3JobCode?: string;
   routeDescription: string;
   terminalName: string;
   tokenNumber: string;
@@ -333,7 +355,9 @@ export default function DrayageAssignmentPage() {
 
   // Smart Analysis UI state
   const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
-  const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<'ALL' | 'BOGIE' | 'STREET_TURN' | 'DEMURRAGE'>('ALL');
+  const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<
+    'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD' | 'DEMURRAGE'
+  >('ALL');
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(() => ({
     ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
     ...(cached?.automationConfig || {}),
@@ -489,6 +513,7 @@ export default function DrayageAssignmentPage() {
   const [newTokenValue, setNewTokenValue] = useState('');
   const [isBogieAssign, setIsBogieAssign] = useState(false);
   const [activeStreetTurnPair, setActiveStreetTurnPair] = useState<StreetTurnRecommendation | null>(null);
+  const [holdLeg3InModal, setHoldLeg3InModal] = useState<boolean>(true);
 
   // Assignment Modal Fields
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
@@ -741,6 +766,7 @@ export default function DrayageAssignmentPage() {
     const lower = whName.toLowerCase();
     if (lower.includes('jafza south') || lower.includes('jafza-s')) return 'JAFZA South';
     if (lower.includes('jafza north') || lower.includes('jafza-n')) return 'JAFZA North';
+    if (lower.includes('dic') || lower.includes('dubai industrial city') || lower.includes('industrial city')) return 'DIC (Dubai Industrial City)';
     if (lower.includes('dubai south') || lower.includes('dwc')) return 'Dubai South';
     if (lower.includes('dip') || lower.includes('investment park')) return 'Dubai Investments Park';
     if (lower.includes('al quoz')) return 'Al Quoz Industrial';
@@ -893,6 +919,9 @@ export default function DrayageAssignmentPage() {
       if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) {
         return { lat: 24.7892, lng: 54.7341 };
       }
+      if (lower.includes('dic') || lower.includes('dubai industrial city') || lower.includes('industrial city')) {
+        return { lat: 24.8528, lng: 55.0636 };
+      }
       if (lower.includes('dubai south') || lower.includes('dwc')) {
         return { lat: 24.9182, lng: 55.1342 };
       }
@@ -928,6 +957,15 @@ export default function DrayageAssignmentPage() {
 
     if (l2Inbound.length === 0 || l1Outbound.length === 0) return [];
 
+    // Count unassigned outbound L1 jobs per terminal so we know if a 3rd leg's destination terminal has a backhaul
+    const outboundCountByTerminal = new Map<string, number>();
+    for (const uJob of unassignedJobs) {
+      if (uJob.jobPhase === 'L1') {
+        const tKey = (uJob.terminalName || '').trim().toLowerCase();
+        outboundCountByTerminal.set(tKey, (outboundCountByTerminal.get(tKey) || 0) + 1);
+      }
+    }
+
     const candidates: StreetTurnRecommendation[] = [];
     for (const j2 of l2Inbound) {
       for (const j1 of l1Outbound) {
@@ -937,27 +975,37 @@ export default function DrayageAssignmentPage() {
         const zoneL1 = getWarehouseZone(j1.warehouseName, j1.warehouseId);
         const sameZone = zoneL2.toLowerCase() === zoneL1.toLowerCase();
 
-        // Terminal Match
+        // Terminal Match (e.g. DIC -> Port T1 Empty Drop + Port T1 -> JAFZA South Import Pick)
         const termMatch =
           j2.terminalName.trim().toLowerCase() === j1.terminalName.trim().toLowerCase();
 
-        // Proximity Match: Same Zone or Corridor Cluster (JAFZA / NIP / Dubai South <= 15 km)
+        // Proximity Match: Same Zone or Corridor Cluster (JAFZA / NIP / Dubai South / DIC)
         const isClusterMatch =
           sameZone ||
           (zoneL2.includes('JAFZA') && zoneL1.includes('JAFZA')) ||
           (zoneL2.includes('JAFZA') && zoneL1.includes('NIP')) ||
-          (zoneL2.includes('NIP') && zoneL1.includes('JAFZA'));
+          (zoneL2.includes('NIP') && zoneL1.includes('JAFZA')) ||
+          (zoneL2.includes('DIC') && (zoneL1.includes('JAFZA') || zoneL1.includes('Dubai South'))) ||
+          (zoneL1.includes('DIC') && (zoneL2.includes('JAFZA') || zoneL2.includes('Dubai South')));
 
         if (!isClusterMatch && !termMatch) continue;
 
-        // Container Size Compatibility: 20FT with 20FT, 40FT/40HC with 40FT/40HC
+        const isExportBooking =
+          j1.shipmentType === 'EXPORT' || j1.jobCode.startsWith('EXP') || j1.jobCode.includes('EXP');
+        // Distinguish Port Terminal Reload (T1 Drop -> T1 Pick) from Inland Warehouse-to-Warehouse Street Turn
+        const isPortTerminalReload = termMatch && (!isExportBooking || !sameZone);
+
+        // Container Size Compatibility: 20FT with 20FT, 40FT/40HC with 40FT/40HC (for inland reuse; port reload on a 40FT chassis supports any standard container)
         const sizeMatch =
+          isPortTerminalReload ||
           j2.containerSize === j1.containerSize ||
           (j2.containerSize.startsWith('40') && j1.containerSize.startsWith('40'));
         if (!sizeMatch) continue;
 
-        // Container Type: DRY with DRY, REEFER with REEFER
-        const typeMatch = (j2.containerType || 'DRY').toUpperCase() === (j1.containerType || 'DRY').toUpperCase();
+        // Container Type: DRY with DRY, REEFER with REEFER (only strict for inland physical box reuse)
+        const typeMatch =
+          isPortTerminalReload ||
+          (j2.containerType || 'DRY').toUpperCase() === (j1.containerType || 'DRY').toUpperCase();
         if (!typeMatch) continue;
 
         // Carrier Line Matching (e.g. MSCU with MSC)
@@ -972,16 +1020,56 @@ export default function DrayageAssignmentPage() {
         const c2 = resolveWarehouseCoords(j2.warehouseName, j2.warehouseId);
         const c1 = resolveWarehouseCoords(j1.warehouseName, j1.warehouseId);
         const rawDistKm = Math.round(haversineKm(c2.lat, c2.lng, c1.lat, c1.lng) * 10) / 10;
-        const interDist = rawDistKm === 0 ? (sameZone ? 3.2 : 6.4) : rawDistKm;
+        // For a Port Terminal Reload (T1 -> T1), the handoff happens at the SAME Port Terminal (0.0 km deadhead between Drop & Pick!)
+        const interDist = isPortTerminalReload ? 0 : rawDistKm === 0 ? (sameZone ? 3.2 : 6.4) : rawDistKm;
         const maxRadiusKm = automationConfig.streetTurnRadiusKm || 15.0;
-        if (interDist > maxRadiusKm) continue;
+        if (!isPortTerminalReload && interDist > maxRadiusKm) continue;
+
+        // Look for a 3rd Leg (Daisy-Chain Triangulation): e.g. Leg 1 (DIC -> T1) + Leg 2 (T1 -> JAFZA South) + Leg 3 (JAFZA South -> T2 Empty Return)
+        let leg3Candidate: DrayageJob | undefined;
+        let leg3Risk: DemurrageRisk | undefined;
+        let leg3HasBackhaul = false;
+        let holdLeg3Recommended = false;
+
+        for (const j3 of l2Inbound) {
+          if (j3.id === j2.id || j3.id === j1.id) continue;
+          if (j3.jobPhase !== 'L2') continue;
+          const zoneL3 = getWarehouseZone(j3.warehouseName, j3.warehouseId);
+          const sameLeg2DestZone =
+            zoneL3.toLowerCase() === zoneL1.toLowerCase() ||
+            j3.warehouseName.trim().toLowerCase() === j1.warehouseName.trim().toLowerCase() ||
+            (zoneL3.includes('JAFZA South') && zoneL1.includes('JAFZA South'));
+          if (!sameLeg2DestZone) continue;
+
+          leg3Candidate = j3;
+          leg3Risk = getDemurrageRisk(j3);
+          const t3Key = (j3.terminalName || '').trim().toLowerCase();
+          // Exclude j1 if j1 is at the same terminal as j3
+          const otherL1AtT3 =
+            (outboundCountByTerminal.get(t3Key) || 0) -
+            (t3Key === (j1.terminalName || '').trim().toLowerCase() ? 1 : 0);
+          leg3HasBackhaul = otherL1AtT3 > 0;
+          // Recommend holding Leg 3 if it has ample DO free time (>36h) AND no backhaul from its destination terminal (e.g. T2)
+          holdLeg3Recommended = leg3Risk.hoursRemaining > 36 && !leg3HasBackhaul;
+          break;
+        }
+
+        const matchMode: 'INLAND_STREET_TURN' | 'PORT_TERMINAL_RELOAD' | 'DAISY_CHAIN_3LEG' = leg3Candidate
+          ? 'DAISY_CHAIN_3LEG'
+          : isPortTerminalReload
+            ? 'PORT_TERMINAL_RELOAD'
+            : 'INLAND_STREET_TURN';
 
         const containerGrade = (j2.containerType || 'DRY').toUpperCase().includes('REEFER')
           ? 'Grade A · PTI Cold-Chain Certified'
           : 'Grade A · Export Seaworthy / CW';
         const sourcePhase: 'L1_RAMP' | 'L2_EMPTY' = j2.jobPhase === 'L1' ? 'L1_RAMP' : 'L2_EMPTY';
 
-        const deadheadSaved = Math.max(48, Math.round(62 - interDist));
+        const deadheadSaved = isPortTerminalReload
+          ? leg3Candidate && !holdLeg3Recommended
+            ? 68
+            : 54
+          : Math.max(48, Math.round(62 - interDist));
         const co2Saved = Math.round(deadheadSaved * 0.95 * 10) / 10;
         const fuelSaved = Math.round(deadheadSaved * 4.5 + 400);
 
@@ -991,17 +1079,24 @@ export default function DrayageAssignmentPage() {
         const tas = getTasSlotWindow(j2, j1);
 
         let score = 90;
+        if (termMatch) score += 12;
         if (sameZone) score += 10;
         if (isLineMatch) score += 8;
         if (sourcePhase === 'L1_RAMP') score += 4;
-        if (hasUrgent) score += 15;
+        if (hasUrgent) score += 18;
+        if (leg3Candidate) score += 10;
 
         candidates.push({
-          id: `STREET-${j2.id}-${j1.id}`,
+          id: leg3Candidate ? `DAISY-${j2.id}-${j1.id}-${leg3Candidate.id}` : `STREET-${j2.id}-${j1.id}`,
+          matchMode,
           l2Job: j2,
           exportJob: j1,
           inboundJob: j2,
           outboundJob: j1,
+          leg3Job: leg3Candidate,
+          leg3Risk,
+          leg3HasBackhaul,
+          holdLeg3Recommended,
           sourcePhase,
           containerGrade,
           shippingLine: line2,
@@ -1011,16 +1106,22 @@ export default function DrayageAssignmentPage() {
           containerType: j2.containerType || 'DRY',
           originWarehouse: j2.warehouseName,
           destWarehouse: j1.warehouseName,
-          zone: zoneL2,
+          zone: zoneL2 === zoneL1 ? zoneL2 : `${zoneL2} ➜ ${j1.terminalName} ➜ ${zoneL1}`,
           interWarehouseDistanceKm: interDist,
           terminalName: j1.terminalName || j2.terminalName,
           tasSlot: tas.slotTime,
-          combinedRevenueAed: (j2.rateAmountAed || 1200) + (j1.rateAmountAed || 1450),
-          combinedAllowanceAed: (j2.driverAllowanceAed || 120) + (j1.driverAllowanceAed || 150),
+          combinedRevenueAed:
+            (j2.rateAmountAed || 1200) +
+            (j1.rateAmountAed || 1450) +
+            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.rateAmountAed || 1150 : 0),
+          combinedAllowanceAed:
+            (j2.driverAllowanceAed || 120) +
+            (j1.driverAllowanceAed || 150) +
+            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.driverAllowanceAed || 120 : 0),
           deadheadKmSaved: deadheadSaved,
           co2SavedKg: co2Saved,
           fuelSavingsAed: fuelSaved,
-          turnaroundHoursSaved: 4.0,
+          turnaroundHoursSaved: leg3Candidate ? 5.5 : 4.0,
           hasUrgentDemurrage: hasUrgent,
           score,
         });
@@ -1035,11 +1136,60 @@ export default function DrayageAssignmentPage() {
       if (usedIds.has(pair.inboundJob.id) || usedIds.has(pair.outboundJob.id)) continue;
       usedIds.add(pair.inboundJob.id);
       usedIds.add(pair.outboundJob.id);
+      if (pair.leg3Job && !pair.holdLeg3Recommended) {
+        usedIds.add(pair.leg3Job.id);
+      }
       finalStreetTurns.push(pair);
     }
 
     return finalStreetTurns;
   }, [jobs, unassignedJobs, warehouses, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+
+  // =========================================================================
+  // SMART BACKHAUL HOLD ADVISOR (Non-Urgent L2 Empties to Deadhead Terminals like T2)
+  // =========================================================================
+  const smartBackhaulHoldJobs = useMemo<SmartBackhaulHoldItem[]>(() => {
+    const outboundL1ByTerminal = new Map<string, number>();
+    for (const j of unassignedJobs) {
+      if (j.jobPhase === 'L1') {
+        const key = (j.terminalName || '').trim().toLowerCase();
+        outboundL1ByTerminal.set(key, (outboundL1ByTerminal.get(key) || 0) + 1);
+      }
+    }
+
+    const items: SmartBackhaulHoldItem[] = [];
+    for (const j of unassignedJobs) {
+      if (j.jobPhase !== 'L2') continue;
+      const risk = getDemurrageRisk(j);
+      // Only non-urgent L2 empty returns (> 36h free time remaining)
+      if (risk.hoursRemaining <= 36) continue;
+
+      const tKey = (j.terminalName || '').trim().toLowerCase();
+      const outboundL1AtTerminal = outboundL1ByTerminal.get(tKey) || 0;
+      const isCurrentlyHeld = Boolean((j.notes || '').includes('[SMART_BACKHAUL_HOLD]'));
+
+      // Flag if destination terminal has 0 unassigned outbound L1 jobs (deadhead return risk) OR if already placed on hold
+      if (outboundL1AtTerminal === 0 || isCurrentlyHeld) {
+        const zone = getWarehouseZone(j.warehouseName, j.warehouseId);
+        const linkedDaisyChain = streetTurnPairs.find((p) => p.leg3Job?.id === j.id);
+        items.push({
+          job: j,
+          risk,
+          zone,
+          terminalName: j.terminalName,
+          outboundL1AtTerminal,
+          estimatedDeadheadKmAvoided: 34,
+          fuelRiskAvoidedAed: 245,
+          isCurrentlyHeld,
+          linkedDaisyChainPairId: linkedDaisyChain?.id,
+          recommendationText: linkedDaisyChain
+            ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${j.terminalName} L1 Import backhaul arrives.`
+            : `${j.jobCode} (${zone} ➜ ${j.terminalName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${j.terminalName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a 34 km empty return.`,
+        });
+      }
+    }
+    return items;
+  }, [unassignedJobs, getDemurrageRisk, getWarehouseZone, streetTurnPairs]);
 
   // High Demurrage, Line Detention (<24h) & Port Slot Miss Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -1631,9 +1781,18 @@ export default function DrayageAssignmentPage() {
     }
   };
 
-  const handleUseStreetTurnPair = (pair: StreetTurnRecommendation) => {
+  const handleUseStreetTurnPair = (pair: StreetTurnRecommendation, holdLeg3Override?: boolean) => {
+    const shouldHoldLeg3 =
+      typeof holdLeg3Override === 'boolean'
+        ? holdLeg3Override
+        : Boolean(pair.holdLeg3Recommended);
+    setHoldLeg3InModal(shouldHoldLeg3);
     setActiveStreetTurnPair(pair);
-    setSelectedJobIds([pair.inboundJob.id, pair.outboundJob.id]);
+    const ids = [pair.inboundJob.id, pair.outboundJob.id];
+    if (pair.leg3Job && !shouldHoldLeg3) {
+      ids.push(pair.leg3Job.id);
+    }
+    setSelectedJobIds(ids);
     setAssigningJob(pair.inboundJob);
     setIsBogieAssign(false);
     const rec = getSmartRecommendedAssets(pair.inboundJob, false);
@@ -1641,6 +1800,32 @@ export default function DrayageAssignmentPage() {
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
     setTokenInput(pair.inboundJob.tokenNumber || '');
+  };
+
+  const handleToggleBackhaulHold = async (job: DrayageJob, hold: boolean) => {
+    try {
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: hold ? 'hold_for_backhaul' : 'release_backhaul_hold',
+          jobId: job.id,
+          reason: `${job.warehouseName} ➜ ${job.terminalName} has safe DO free time and 0 outbound L1 pickups at ${job.terminalName}.`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update Smart Backhaul Hold');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        hold
+          ? `⏸️ Placed ${job.jobCode} (${job.warehouseName} ➜ ${job.terminalName}) on Smart Backhaul Hold to prevent a 34 km empty return!`
+          : `▶️ Released ${job.jobCode} from Smart Backhaul Hold for immediate dispatch!`,
+      );
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error updating Smart Backhaul Hold');
+    }
   };
 
   // Open modal for single job — clear fields so previous action values never pre-populate on Assign / Reassign
@@ -1698,6 +1883,9 @@ export default function DrayageAssignmentPage() {
             action: 'execute_street_turn',
             l2JobId: activeStreetTurnPair.inboundJob.id,
             exportJobId: activeStreetTurnPair.outboundJob.id,
+            leg3JobId: activeStreetTurnPair.leg3Job?.id,
+            holdLeg3: holdLeg3InModal,
+            matchMode: activeStreetTurnPair.matchMode,
             vehicleId: selectedVehicleId,
             vehiclePlate: veh?.plateNumber || 'DXB-TRACTOR',
             driverId: selectedDriverId,
@@ -1709,9 +1897,17 @@ export default function DrayageAssignmentPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to execute Street-Turn triangulation');
+        const modeLabel =
+          data.matchMode === 'DAISY_CHAIN_3LEG'
+            ? data.leg3HeldForBackhaul
+              ? `3-Leg Daisy-Chain (Leg 1+2 Dispatched · Leg 3 ${data.leg3JobCode} Placed on Smart Backhaul Hold)`
+              : `Full 3-Leg Daisy-Chain (${data.l2JobCode} ➜ ${data.exportJobCode} ➜ ${data.leg3JobCode})`
+            : data.matchMode === 'PORT_TERMINAL_RELOAD'
+              ? `Port Terminal Reload (${data.l2JobCode} ➜ ${data.exportJobCode})`
+              : `Street-Turn ${data.streetTurnRef}`;
         showToast(
           'success',
-          `⚡ Street-Turn ${data.streetTurnRef} executed! Reallocated ${data.containerNumber} to ${data.exportJobCode}. Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂)! Saved AED ${data.fuelSavingsAed}!`
+          `⚡ ${modeLabel} executed! Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂) & AED ${data.fuelSavingsAed}!`
         );
         setActiveStreetTurnPair(null);
         setSelectedJobIds([]);
@@ -1833,7 +2029,7 @@ export default function DrayageAssignmentPage() {
       return { veh, drv, score: topScored };
     };
 
-    // 1. First Pass: Street Turn Pairs
+    // 1. First Pass: Street Turn / Port Terminal Reload / 3-Leg Daisy-Chain Pairs
     for (const st of streetTurnPairs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
       if (!candidateIdSet.has(st.inboundJob.id) || !candidateIdSet.has(st.outboundJob.id)) continue;
@@ -1849,15 +2045,45 @@ export default function DrayageAssignmentPage() {
 
       assignedIds.add(st.inboundJob.id);
       assignedIds.add(st.outboundJob.id);
+      const includeLeg3 = Boolean(st.leg3Job && !st.holdLeg3Recommended && candidateIdSet.has(st.leg3Job.id));
+      const holdLeg3 = Boolean(st.leg3Job && st.holdLeg3Recommended);
+      if (st.leg3Job) {
+        // Mark Leg 3 as handled (either included in the 3-leg loop OR held on Smart Backhaul Hold so Pass 3 won't dispatch it empty to T2)
+        assignedIds.add(st.leg3Job.id);
+      }
+
+      const dispatchType: AutoPilotDispatchItem['type'] = st.leg3Job
+        ? 'DAISY_CHAIN'
+        : st.matchMode === 'PORT_TERMINAL_RELOAD'
+          ? 'PORT_RELOAD'
+          : 'STREET_TURN';
 
       plan.push({
         id: `DISPATCH-ST-${st.id}`,
-        type: 'STREET_TURN',
-        jobIds: [st.inboundJob.id, st.outboundJob.id],
-        jobCodes: [st.inboundJob.jobCode, st.outboundJob.jobCode],
-        containers: [st.inboundJob.containerNumber, st.outboundJob.containerNumber],
-        customerNames: [st.inboundJob.customerName, st.outboundJob.customerName],
-        routeDescription: `L2 Drop (${st.inboundJob.containerNumber}) ➜ L1 Pick (${st.outboundJob.containerNumber}) @ ${st.terminalName}`,
+        type: dispatchType,
+        jobIds:
+          includeLeg3 && st.leg3Job
+            ? [st.inboundJob.id, st.outboundJob.id, st.leg3Job.id]
+            : [st.inboundJob.id, st.outboundJob.id],
+        jobCodes:
+          includeLeg3 && st.leg3Job
+            ? [st.inboundJob.jobCode, st.outboundJob.jobCode, st.leg3Job.jobCode]
+            : [st.inboundJob.jobCode, st.outboundJob.jobCode],
+        containers:
+          includeLeg3 && st.leg3Job
+            ? [st.inboundJob.containerNumber, st.outboundJob.containerNumber, st.leg3Job.containerNumber]
+            : [st.inboundJob.containerNumber, st.outboundJob.containerNumber],
+        customerNames:
+          includeLeg3 && st.leg3Job
+            ? [st.inboundJob.customerName, st.outboundJob.customerName, st.leg3Job.customerName]
+            : [st.inboundJob.customerName, st.outboundJob.customerName],
+        routeDescription: st.leg3Job
+          ? holdLeg3
+            ? `${st.originWarehouse} ➜ ${st.terminalName} ➜ ${st.destWarehouse} (⏸️ Hold ${st.leg3Job.jobCode} @ ${st.leg3Job.terminalName})`
+            : `3-Leg Chain: ${st.originWarehouse} ➜ ${st.terminalName} ➜ ${st.destWarehouse} ➜ ${st.leg3Job.terminalName}`
+          : st.matchMode === 'PORT_TERMINAL_RELOAD'
+            ? `Port Reload: ${st.originWarehouse} ➜ ${st.terminalName} ➜ ${st.destWarehouse}`
+            : `L2 Drop (${st.inboundJob.containerNumber}) ➜ L1 Pick (${st.outboundJob.containerNumber}) @ ${st.terminalName}`,
         terminalName: st.terminalName,
         tokenNumber: token,
         selectedVehicleId: veh.id,
@@ -1872,6 +2098,8 @@ export default function DrayageAssignmentPage() {
         tasSlot: st.tasSlot,
         matchScorePct: topScored.totalScore,
         proximityKm: topScored.distanceKm,
+        heldLeg3JobId: holdLeg3 && st.leg3Job ? st.leg3Job.id : undefined,
+        heldLeg3JobCode: holdLeg3 && st.leg3Job ? st.leg3Job.jobCode : undefined,
       });
     }
 
@@ -1919,8 +2147,12 @@ export default function DrayageAssignmentPage() {
       });
     }
 
-    // 3. Third Pass: Remaining Single Jobs
-    const remainingJobs = candidateJobs.filter((j) => !assignedIds.has(j.id));
+    // 3. Third Pass: Remaining Single Jobs (Skip non-urgent L2 empty returns with 0 backhaul at destination terminal during global Auto-Pilot)
+    const backhaulHoldSet = new Set(smartBackhaulHoldJobs.map((h) => h.job.id));
+    const isExplicitSelection = Boolean(jobIdsToOptimize && jobIdsToOptimize.length > 0);
+    const remainingJobs = candidateJobs.filter(
+      (j) => !assignedIds.has(j.id) && (isExplicitSelection || !backhaulHoldSet.has(j.id)),
+    );
     for (const job of remainingJobs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
 
@@ -1987,6 +2219,7 @@ export default function DrayageAssignmentPage() {
       const dispatches = autoPilotPlan.map((item) => ({
         type: item.type,
         jobIds: item.jobIds,
+        heldLeg3JobId: item.heldLeg3JobId,
         vehicleId: item.selectedVehicleId,
         vehiclePlate: item.selectedVehiclePlate,
         driverId: item.selectedDriverId,
@@ -1997,9 +2230,13 @@ export default function DrayageAssignmentPage() {
         notes:
           item.type === 'BOGIE'
             ? `Dual-20FT Bogie Combo (${item.tokenNumber})`
-            : item.type === 'STREET_TURN'
-            ? `Terminal Street Turn Pair (${item.tokenNumber})`
-            : `Single Dispatch (${item.tokenNumber})`,
+            : item.type === 'DAISY_CHAIN'
+              ? `3-Leg Daisy-Chain Triangulation (${item.tokenNumber})`
+              : item.type === 'PORT_RELOAD'
+                ? `Port Terminal Reload (${item.tokenNumber})`
+                : item.type === 'STREET_TURN'
+                  ? `Terminal Street Turn Pair (${item.tokenNumber})`
+                  : `Single Dispatch (${item.tokenNumber})`,
       }));
 
       const res = await fetch('/api/logistics/drayage', {
@@ -2256,7 +2493,7 @@ export default function DrayageAssignmentPage() {
             </div>
 
             {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-subtle)]">
+            <div className="flex flex-wrap items-center gap-1.5 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-subtle)]">
               <button
                 onClick={() => setSmartAnalysisFilter('ALL')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
@@ -2265,7 +2502,7 @@ export default function DrayageAssignmentPage() {
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
-                All Matches ({bogieCombos.length + streetTurnPairs.length})
+                All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length})
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BOGIE')}
@@ -2285,7 +2522,17 @@ export default function DrayageAssignmentPage() {
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
-                Street Turns ({streetTurnPairs.length})
+                Street Turns & Chains ({streetTurnPairs.length})
+              </button>
+              <button
+                onClick={() => setSmartAnalysisFilter('BACKHAUL_HOLD')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  smartAnalysisFilter === 'BACKHAUL_HOLD'
+                    ? 'bg-amber-600 text-white'
+                    : 'text-amber-400 hover:text-amber-300'
+                }`}
+              >
+                Smart Backhaul Hold ({smartBackhaulHoldJobs.length})
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('DEMURRAGE')}
@@ -2432,7 +2679,7 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 2. Zone-Based Street Turn Triangulation Matches */}
+            {/* 2. Zone-Based Street Turn, Port Terminal Reload & 3-Leg Daisy-Chain Triangulation Matches */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'STREET_TURN') &&
               streetTurnPairs.map((pair) => (
                 <div
@@ -2440,10 +2687,14 @@ export default function DrayageAssignmentPage() {
                   className="rounded-xl bg-[var(--bg-surface)] border border-emerald-500/30 p-4 space-y-3 hover:border-emerald-500/60 transition-all flex flex-col justify-between shadow-sm"
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
-                        Street-Turn (Import ➔ Export)
+                        {pair.matchMode === 'DAISY_CHAIN_3LEG'
+                          ? '3-Leg Daisy-Chain Triangulation'
+                          : pair.matchMode === 'PORT_TERMINAL_RELOAD'
+                            ? 'Port Terminal Reload (0 km Handoff)'
+                            : 'Street-Turn (Import ➔ Export)'}
                       </span>
                       <span className="text-[10px] font-mono font-bold text-emerald-400">
                         Score: {pair.score}
@@ -2467,40 +2718,77 @@ export default function DrayageAssignmentPage() {
                     </div>
 
                     <div className="space-y-1.5 pt-1 text-xs">
-                      {/* L1 Placed at Ramp or L2 Inbound Empty Box */}
+                      {/* Leg 1: L1 Placed at Ramp or L2 Inbound Empty Box */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-amber-400">
                             {pair.sourcePhase === 'L1_RAMP'
                               ? '1. L1 Placed at Ramp (Import)'
-                              : '1. L2 Inbound Empty (Warehouse)'}
+                              : `1. L2 Empty Return (${pair.inboundJob.jobCode})`}
                           </span>
                           <span className="font-mono font-bold text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {pair.originWarehouse} ({pair.zone})
+                          {pair.originWarehouse} ➔ {pair.inboundJob.terminalName}
                         </div>
                       </div>
 
-                      {/* Direct Inland Repositioning within configured radius */}
+                      {/* Handoff Connector: Port Terminal Reload vs Direct Inland Repositioning */}
                       <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 flex items-center justify-between">
                         <span className="flex items-center gap-1">
                           <ArrowRight className="w-3 h-3 text-emerald-400" />
-                          <span>Direct Match ({pair.interWarehouseDistanceKm} km · ≤ {automationConfig.streetTurnRadiusKm || 15} km Radius)</span>
+                          <span>
+                            {pair.matchMode === 'INLAND_STREET_TURN'
+                              ? `Direct Match (${pair.interWarehouseDistanceKm} km · ≤ ${automationConfig.streetTurnRadiusKm || 15} km Radius)`
+                              : `Same-Terminal Reload @ ${pair.terminalName} (0.0 km Handoff · ${pair.tasSlot})`}
+                          </span>
                         </span>
-                        <span className="font-bold text-emerald-400">Zero Port Return</span>
+                        <span className="font-bold text-emerald-400">
+                          {pair.matchMode === 'INLAND_STREET_TURN' ? 'Zero Port Return' : 'Dual TAS Pass'}
+                        </span>
                       </div>
 
-                      {/* Outbound Export Booking */}
+                      {/* Leg 2: Outbound L1 Import Full or Export Loading */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-blue-400">2. Outbound Export Loading</span>
-                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.exportJob.jobCode}</span>
+                          <span className="font-bold text-blue-400">
+                            {pair.matchMode === 'INLAND_STREET_TURN'
+                              ? '2. Outbound Export Loading'
+                              : `2. L1 Import Full (${pair.exportJob.jobCode})`}
+                          </span>
+                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.exportJob.containerNumber}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {pair.destWarehouse} ➔ {pair.terminalName}
+                          {pair.matchMode === 'INLAND_STREET_TURN'
+                            ? `${pair.destWarehouse} ➔ ${pair.terminalName}`
+                            : `${pair.terminalName} ➔ ${pair.destWarehouse}`}
                         </div>
                       </div>
+
+                      {/* Leg 3: Optional 3-Leg Daisy-Chain Empty Return (e.g. JAFZA South -> T2) */}
+                      {pair.leg3Job && (
+                        <div
+                          className={`p-2 rounded-lg border space-y-1 ${
+                            pair.holdLeg3Recommended
+                              ? 'bg-amber-500/10 border-amber-500/30'
+                              : 'bg-indigo-500/10 border-indigo-500/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className={`font-bold ${pair.holdLeg3Recommended ? 'text-amber-300' : 'text-indigo-300'}`}>
+                              3. L2 Empty ({pair.leg3Job.jobCode})
+                            </span>
+                            <span className="font-mono text-[10px] font-bold text-[var(--text-main)]">
+                              {pair.leg3Job.warehouseName} ➔ {pair.leg3Job.terminalName}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)] leading-snug">
+                            {pair.holdLeg3Recommended
+                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.terminalName}. Hold Leg 3 to avoid 34 km empty return.`
+                              : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.terminalName})`}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2530,13 +2818,105 @@ export default function DrayageAssignmentPage() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleUseStreetTurnPair(pair)}
-                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      ⚡ Execute Street-Turn Triangulation
-                    </button>
+                    {pair.leg3Job ? (
+                      <div className="space-y-1.5">
+                        <button
+                          onClick={() => handleUseStreetTurnPair(pair, true)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          ⚡ Dispatch Leg 1+2 & Hold Leg 3 ({pair.leg3Job.jobCode})
+                        </button>
+                        <button
+                          onClick={() => handleUseStreetTurnPair(pair, false)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold hover:bg-indigo-600/30 transition-colors"
+                        >
+                          <Truck className="w-3 h-3" />
+                          🔄 Dispatch Full 3-Leg Loop ({pair.inboundJob.jobCode} ➔ {pair.outboundJob.jobCode} ➔ {pair.leg3Job.jobCode})
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleUseStreetTurnPair(pair, false)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {pair.matchMode === 'PORT_TERMINAL_RELOAD'
+                          ? `⚡ Dispatch Port Reload (${pair.terminalName})`
+                          : '⚡ Execute Street-Turn Triangulation'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+            {/* 2B. Smart Backhaul Hold Advisor Cards (Non-Urgent L2 Empties to Deadhead Terminals like T2) */}
+            {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BACKHAUL_HOLD') &&
+              smartBackhaulHoldJobs.map((item) => (
+                <div
+                  key={`HOLD-${item.job.id}`}
+                  className="rounded-xl bg-[var(--bg-surface)] border border-amber-500/40 p-4 space-y-3 hover:border-amber-500/70 transition-all flex flex-col justify-between shadow-sm"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {item.isCurrentlyHeld ? '⏸️ On Smart Backhaul Hold' : 'Smart Backhaul Hold Advisor'}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-amber-400">{item.job.jobCode}</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
+                        <span>{item.job.containerNumber} ({item.job.containerSize})</span>
+                        <span className="text-[10px] text-emerald-400 font-sans">
+                          {Math.floor(item.risk.hoursRemaining / 24)}d {item.risk.hoursRemaining % 24}h DO Free Time
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        {item.job.warehouseName} ({item.zone}) ➔ {item.terminalName}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 leading-relaxed">
+                      {item.recommendationText}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Empty Return Avoided</span>
+                        <span className="font-bold text-amber-400">{item.estimatedDeadheadKmAvoided} km from {item.terminalName}</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Cost Saved</span>
+                        <span className="font-bold text-emerald-400">AED {item.fuelRiskAvoidedAed}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBackhaulHold(item.job, !item.isCurrentlyHeld)}
+                        className={`inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${
+                          item.isCurrentlyHeld
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                            : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        {item.isCurrentlyHeld ? 'Release Hold' : 'Hold for Backhaul'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAssign(item.job)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold hover:bg-[var(--bg-surface-hover)] transition-colors"
+                      >
+                        <Truck className="w-3.5 h-3.5 text-blue-400" />
+                        Dispatch Anyway
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2671,14 +3051,21 @@ export default function DrayageAssignmentPage() {
 
             {/* Empty state when no matches found */}
             {((smartAnalysisFilter === 'DEMURRAGE' && urgentDemurrageJobs.length === 0) ||
-              (smartAnalysisFilter !== 'DEMURRAGE' && bogieCombos.length === 0 && streetTurnPairs.length === 0)) && (
+              (smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
+              (smartAnalysisFilter !== 'DEMURRAGE' &&
+                smartAnalysisFilter !== 'BACKHAUL_HOLD' &&
+                bogieCombos.length === 0 &&
+                streetTurnPairs.length === 0 &&
+                smartBackhaulHoldJobs.length === 0)) && (
               <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
                 <h4 className="text-xs font-bold text-[var(--text-main)]">Queue Optimized</h4>
                 <p className="text-xs text-[var(--text-muted)]">
                   {smartAnalysisFilter === 'DEMURRAGE'
                     ? 'No urgent demurrage or port slot risk alerts in current queue.'
-                    : 'No pending pairing conflicts found in current queue.'}
+                    : smartAnalysisFilter === 'BACKHAUL_HOLD'
+                      ? 'No non-urgent L2 empty return deadhead risks detected.'
+                      : 'No pending pairing conflicts found in current queue.'}
                 </p>
               </div>
             )}
@@ -2816,16 +3203,24 @@ export default function DrayageAssignmentPage() {
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             item.type === 'BOGIE'
                               ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                              : item.type === 'STREET_TURN'
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                              : item.type === 'DAISY_CHAIN'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : item.type === 'PORT_RELOAD' || item.type === 'STREET_TURN'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                           }`}
                         >
                           {item.type === 'BOGIE'
                             ? 'Dual-20FT Bogie'
-                            : item.type === 'STREET_TURN'
-                            ? 'Street Turn Pair'
-                            : 'Single Run'}
+                            : item.type === 'DAISY_CHAIN'
+                              ? item.heldLeg3JobCode
+                                ? `2-Leg + Hold ${item.heldLeg3JobCode}`
+                                : '3-Leg Daisy-Chain'
+                              : item.type === 'PORT_RELOAD'
+                                ? 'Port Terminal Reload'
+                                : item.type === 'STREET_TURN'
+                                  ? 'Street Turn Pair'
+                                  : 'Single Run'}
                         </span>
                         <span className="font-mono font-semibold text-[var(--text-main)]">
                           {item.containers.join(' + ')}
@@ -2918,14 +3313,20 @@ export default function DrayageAssignmentPage() {
                 <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-blue-400" />
                   {activeStreetTurnPair
-                    ? '⚡ Confirm Inland Street-Turn Triangulation'
+                    ? activeStreetTurnPair.matchMode === 'DAISY_CHAIN_3LEG'
+                      ? '⚡ Confirm 3-Leg Daisy-Chain Triangulation'
+                      : activeStreetTurnPair.matchMode === 'PORT_TERMINAL_RELOAD'
+                        ? '⚡ Confirm Port Terminal Reload (Dual TAS Gate Pass)'
+                        : '⚡ Confirm Inland Street-Turn Triangulation'
                     : isBogieAssign
                     ? '⚡ Dual-20FT Bogie Dispatch (Single Prime Mover)'
                     : `Assign Assets: ${assigningJob.jobCode}`}
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
                   {activeStreetTurnPair
-                    ? `Direct interchange: Reallocating empty container ${activeStreetTurnPair.containerNumber} from ${activeStreetTurnPair.originWarehouse} to ${activeStreetTurnPair.exportJob.jobCode}`
+                    ? activeStreetTurnPair.matchMode === 'INLAND_STREET_TURN'
+                      ? `Direct interchange: Reallocating empty container ${activeStreetTurnPair.containerNumber} from ${activeStreetTurnPair.originWarehouse} to ${activeStreetTurnPair.exportJob.jobCode}`
+                      : `Port Reload: Drop ${activeStreetTurnPair.inboundJob.jobCode} (${activeStreetTurnPair.originWarehouse} ➜ ${activeStreetTurnPair.terminalName}) + Pick ${activeStreetTurnPair.outboundJob.jobCode} (${activeStreetTurnPair.terminalName} ➜ ${activeStreetTurnPair.destWarehouse})`
                     : isBogieAssign
                     ? `Coupling two 20FT containers onto a 40FT/45FT skeletal/bogie trailer`
                     : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize})`}
@@ -2942,11 +3343,15 @@ export default function DrayageAssignmentPage() {
             <div className="space-y-4 text-xs">
               {/* Special Triangulation Street-Turn Banner */}
               {activeStreetTurnPair && (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-bold text-emerald-400 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      Triangulation Match: {activeStreetTurnPair.shippingLine} Line Verified
+                      {activeStreetTurnPair.matchMode === 'DAISY_CHAIN_3LEG'
+                        ? `3-Leg Chain: ${activeStreetTurnPair.originWarehouse} ➜ ${activeStreetTurnPair.terminalName} ➜ ${activeStreetTurnPair.destWarehouse}`
+                        : activeStreetTurnPair.matchMode === 'PORT_TERMINAL_RELOAD'
+                          ? `Port Terminal Reload @ ${activeStreetTurnPair.terminalName} (0.0 km Handoff)`
+                          : `Triangulation Match: ${activeStreetTurnPair.shippingLine} Line Verified`}
                     </span>
                     <span className="font-mono text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded">
                       {activeStreetTurnPair.containerSize} {activeStreetTurnPair.containerType}
@@ -2970,6 +3375,31 @@ export default function DrayageAssignmentPage() {
                       <span className="font-bold text-cyan-400">{activeStreetTurnPair.turnaroundHoursSaved}h dwell avoided</span>
                     </div>
                   </div>
+                  {activeStreetTurnPair.leg3Job && (
+                    <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 flex items-center justify-between gap-2 text-[11px]">
+                      <div>
+                        <span className="font-bold text-amber-300 block">
+                          Leg 3 ({activeStreetTurnPair.leg3Job.jobCode}): {activeStreetTurnPair.leg3Job.warehouseName} ➜ {activeStreetTurnPair.leg3Job.terminalName}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-muted)]">
+                          {holdLeg3InModal
+                            ? `⏸️ Placed on Smart Backhaul Hold (avoids 34 km empty return from ${activeStreetTurnPair.leg3Job.terminalName})`
+                            : `🔄 Included in Full 3-Leg Loop onto this Prime Mover`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setHoldLeg3InModal((prev) => !prev)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors ${
+                          holdLeg3InModal
+                            ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                        }`}
+                      >
+                        {holdLeg3InModal ? 'Switch to Full 3-Leg' : 'Switch to Hold Leg 3'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

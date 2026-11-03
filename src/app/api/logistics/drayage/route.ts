@@ -348,6 +348,11 @@ export async function POST(req: NextRequest) {
             tenantId,
             l2JobId: String(body.l2JobId),
             exportJobId: String(body.exportJobId),
+            leg3JobId: body.leg3JobId ? String(body.leg3JobId) : undefined,
+            holdLeg3: Boolean(body.holdLeg3),
+            matchMode: body.matchMode
+              ? (String(body.matchMode) as 'INLAND_STREET_TURN' | 'PORT_TERMINAL_RELOAD' | 'DAISY_CHAIN_3LEG')
+              : undefined,
             vehicleId: body.vehicleId ? String(body.vehicleId) : undefined,
             vehiclePlate: body.vehiclePlate ? String(body.vehiclePlate) : undefined,
             driverId: body.driverId ? String(body.driverId) : undefined,
@@ -358,6 +363,42 @@ export async function POST(req: NextRequest) {
             actor: String(body.actor || 'Dispatcher Console'),
           });
           return res;
+        }
+
+        case 'hold_for_backhaul': {
+          const jobId = String(body.jobId || '');
+          if (!jobId) throw new Error('jobId is required');
+          const holdReason = String(
+            body.reason ||
+              '[SMART_BACKHAUL_HOLD] Held for Port Backhaul / Street-Turn (Safe DO window · Avoids empty return leg)',
+          );
+          await tx.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET notes = CASE
+                      WHEN POSITION('[SMART_BACKHAUL_HOLD]' IN COALESCE(notes, '')) > 0 THEN notes
+                      ELSE COALESCE(notes || ' | ', '') || $3
+                    END,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            jobId,
+            tenantId,
+            holdReason,
+          );
+          return { ok: true, jobId, held: true, reason: holdReason };
+        }
+
+        case 'release_backhaul_hold': {
+          const jobId = String(body.jobId || '');
+          if (!jobId) throw new Error('jobId is required');
+          await tx.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET notes = REGEXP_REPLACE(COALESCE(notes, ''), '\\s*\\|?\\s*\\[SMART_BACKHAUL_HOLD\\][^|]*', '', 'g'),
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            jobId,
+            tenantId,
+          );
+          return { ok: true, jobId, held: false };
         }
 
         case 'get_bogie_candidates': {
@@ -428,8 +469,9 @@ export async function POST(req: NextRequest) {
 
         case 'batch_dispatch': {
           const dispatches: Array<{
-            type?: 'BOGIE' | 'STREET_TURN' | 'SINGLE';
+            type?: 'BOGIE' | 'STREET_TURN' | 'DAISY_CHAIN' | 'PORT_RELOAD' | 'SINGLE';
             jobIds: string[];
+            heldLeg3JobId?: string;
             vehicleId: string;
             vehiclePlate: string;
             driverId: string;
@@ -443,6 +485,7 @@ export async function POST(req: NextRequest) {
           if (dispatches.length === 0) throw new Error('No dispatches provided in batch');
 
           let assignedCount = 0;
+          let heldCount = 0;
           for (const d of dispatches) {
             const jobIds = Array.isArray(d.jobIds) ? d.jobIds.map(String) : [];
             if (jobIds.length === 0) continue;
@@ -450,7 +493,17 @@ export async function POST(req: NextRequest) {
             const token = String(d.tokenNumber ?? '');
 
             for (const jId of jobIds) {
-              const noteText = d.notes || (d.type === 'BOGIE' ? `Dual-20FT Bogie Combo (${token})` : d.type === 'STREET_TURN' ? `Terminal Street Turn Pair (${token})` : undefined);
+              const noteText =
+                d.notes ||
+                (d.type === 'DAISY_CHAIN'
+                  ? `3-Leg Daisy-Chain Triangulation (${token})`
+                  : d.type === 'PORT_RELOAD'
+                    ? `Port Terminal Reload Dual-Move (${token})`
+                    : d.type === 'BOGIE'
+                      ? `Dual-20FT Bogie Combo (${token})`
+                      : d.type === 'STREET_TURN'
+                        ? `Terminal Street Turn Pair (${token})`
+                        : undefined);
               if (noteText) {
                 await tx.$executeRawUnsafe(
                   `UPDATE logistics_drayage_jobs
@@ -477,9 +530,25 @@ export async function POST(req: NextRequest) {
               });
               assignedCount++;
             }
+
+            if (d.heldLeg3JobId) {
+              await tx.$executeRawUnsafe(
+                `UPDATE logistics_drayage_jobs
+                    SET notes = CASE
+                          WHEN POSITION('[SMART_BACKHAUL_HOLD]' IN COALESCE(notes, '')) > 0 THEN notes
+                          ELSE COALESCE(notes || ' | ', '') || $3
+                        END,
+                        updated_at = NOW()
+                  WHERE id = $1 AND tenant_id = $2`,
+                String(d.heldLeg3JobId),
+                tenantId,
+                '[SMART_BACKHAUL_HOLD] Held by Auto-Pilot: Safe DO window & no outbound L1 backhaul at destination terminal',
+              );
+              heldCount++;
+            }
           }
 
-          return { ok: true, count: assignedCount, batches: dispatches.length };
+          return { ok: true, count: assignedCount, heldCount, batches: dispatches.length };
         }
 
         case 'update_status': {

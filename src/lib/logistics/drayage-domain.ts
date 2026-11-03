@@ -4348,23 +4348,32 @@ export async function findStreetTurnCandidates(
     return isL1AtRamp || isUnassignedL2;
   });
 
-  // Outbound candidates: Pending Export L1 bookings
+  // Outbound candidates: Pending Export L1 bookings OR L1 Import pickups at the same Port Terminal (Port Reload)
   const unassignedJobs = workspace.jobs.filter(
     (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && j.status !== 'STREET_TURNED',
   );
   const exportJobs = unassignedJobs.filter(
     (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'),
   );
+  const outboundCandidates = exportJobs.length > 0 ? exportJobs : unassignedJobs.filter((j) => j.jobPhase === 'L1');
 
-  if (inboundRampOrEmptyJobs.length === 0 || exportJobs.length === 0) return [];
+  if (inboundRampOrEmptyJobs.length === 0 || outboundCandidates.length === 0) return [];
 
   const candidates: StreetTurnMatch[] = [];
 
   for (const inbound of inboundRampOrEmptyJobs) {
-    for (const exp of exportJobs) {
+    for (const exp of outboundCandidates) {
       if (inbound.id === exp.id) continue;
 
+      const isExportOutbound =
+        exp.shipmentType === 'EXPORT' || exp.jobCode.startsWith('EXP') || exp.jobCode.includes('EXP');
+      const sameTerminalReload =
+        inbound.jobPhase === 'L2' &&
+        (inbound.terminalName || '').trim().toLowerCase() === (exp.terminalName || '').trim().toLowerCase();
+
       // 1. Super Admin Configurable Radius Haversine Proximity Check (Default <= 15 km)
+      //    Note: For a Port Terminal Reload (L2 Drop at T1 -> L1 Pick at T1), the handoff is 0 km
+      //    at the port terminal itself, so warehouse-to-warehouse distance is NOT a blocker.
       const maxRadiusKm = workspace.automationConfig?.streetTurnRadiusKm ?? 15.0;
       const strictCarrier = workspace.automationConfig?.streetTurnStrictCarrierMatch ?? true;
       const c1 = resolveWarehouseCoords(inbound);
@@ -4373,9 +4382,11 @@ export async function findStreetTurnCandidates(
       const zoneL2 = getWarehouseZoneName(inbound.warehouseName);
       const zoneExp = getWarehouseZoneName(exp.warehouseName);
       const sameZone = zoneL2.toLowerCase() === zoneExp.toLowerCase();
-      const interDist = Math.round((rawDistKm < 0.5 ? (sameZone ? 2.8 : 6.4) : rawDistKm) * 10) / 10;
+      const interDist = sameTerminalReload && !isExportOutbound
+        ? 0.0
+        : Math.round((rawDistKm < 0.5 ? (sameZone ? 2.8 : 6.4) : rawDistKm) * 10) / 10;
 
-      if (interDist > maxRadiusKm) continue;
+      if (!sameTerminalReload && interDist > maxRadiusKm) continue;
 
       // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match
       const sizeMatch =
@@ -4386,22 +4397,31 @@ export async function findStreetTurnCandidates(
       const typeMatch = (inbound.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
       if (!typeMatch) continue;
 
-      // 3. Carrier Line Matching
+      // 3. Carrier Line Matching (mandatory for inland box reuse, optional bonus for Port Terminal Reload)
       const l2Line = detectShippingLine(inbound.containerNumber, inbound.shippingLine);
       const expLine = detectShippingLine(exp.containerNumber, exp.shippingLine);
       const isLineMatch = l2Line === expLine || exp.containerNumber.includes('TBD') || !exp.containerNumber;
-      if (strictCarrier && !isLineMatch && expLine !== 'GENERIC_LINE' && expLine !== 'CARRIER_DEFAULT') continue;
+      if (isExportOutbound && strictCarrier && !isLineMatch && expLine !== 'GENERIC_LINE' && expLine !== 'CARRIER_DEFAULT') {
+        continue;
+      }
 
-      const deadheadKmSaved = Math.max(44, Math.round(58 - interDist));
+      const deadheadKmSaved = sameTerminalReload && !isExportOutbound
+        ? 38
+        : Math.max(44, Math.round(58 - interDist));
       const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
       const fuelSavingsAed = Math.round(deadheadKmSaved * 4.5 + 420);
       const isReefer = (inbound.containerType || 'DRY').toUpperCase().includes('REEFER');
-      const containerGrade = isReefer ? 'Grade A · PTI Cold-Chain Certified' : 'Grade A · Export Seaworthy / CW';
+      const containerGrade = sameTerminalReload && !isExportOutbound
+        ? `Port Dual-Transaction @ ${exp.terminalName} (0 km Handoff)`
+        : isReefer
+          ? 'Grade A · PTI Cold-Chain Certified'
+          : 'Grade A · Export Seaworthy / CW';
 
       let score = 90;
       if (sameZone) score += 8;
+      if (sameTerminalReload) score += 10;
       if (l2Line === expLine) score += 5;
-      if (inbound.jobPhase === 'L1') score += 4; // Direct L1Placed@Ramp-to-Export saves an entire L2 leg
+      if (inbound.jobPhase === 'L1') score += 4;
 
       candidates.push({
         id: `STREET-${inbound.id}-${exp.id}`,
@@ -4438,6 +4458,9 @@ export async function executeStreetTurnTriangulation(
     tenantId: string;
     l2JobId: string;
     exportJobId: string;
+    leg3JobId?: string;
+    holdLeg3?: boolean;
+    matchMode?: 'INLAND_STREET_TURN' | 'PORT_TERMINAL_RELOAD' | 'DAISY_CHAIN_3LEG';
     vehicleId?: string;
     vehiclePlate?: string;
     driverId?: string;
@@ -4450,62 +4473,128 @@ export async function executeStreetTurnTriangulation(
 ) {
   await ensureDrayageSchema(db);
 
+  const lookupIds = [args.l2JobId, args.exportJobId, ...(args.leg3JobId ? [args.leg3JobId] : [])];
   const rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT * FROM logistics_drayage_jobs WHERE id IN ($1, $2) AND tenant_id = $3`,
-    args.l2JobId,
-    args.exportJobId,
+    `SELECT * FROM logistics_drayage_jobs WHERE id = ANY($1::text[]) AND tenant_id = $2`,
+    lookupIds,
     args.tenantId,
   );
   const l2 = rows.find((r) => String(r.id) === args.l2JobId);
   const exp = rows.find((r) => String(r.id) === args.exportJobId);
+  const leg3 = args.leg3JobId ? rows.find((r) => String(r.id) === args.leg3JobId) : undefined;
 
   if (!l2) throw new Error(`Source Ramp / Empty Job ${args.l2JobId} not found`);
-  if (!exp) throw new Error(`Export Job ${args.exportJobId} not found`);
+  if (!exp) throw new Error(`Outbound / Leg-2 Job ${args.exportJobId} not found`);
 
   const containerNum = String(l2.container_number);
   const containerSize = String(l2.container_size || '40HC');
   const containerType = String(l2.container_type || 'DRY');
-  const streetTurnRef = `ST-${Math.floor(1000 + Math.random() * 9000)}`;
+  const expShipmentType = String(exp.shipment_type || '').toUpperCase();
+  const expJobCode = String(exp.job_code || '');
+  const isExportBoxReuse =
+    args.matchMode === 'INLAND_STREET_TURN' ||
+    ((args.matchMode === undefined) &&
+      (expShipmentType === 'EXPORT' || expJobCode.startsWith('EXP') || String(exp.container_number || '').includes('TBD')));
+
+  const streetTurnRef = args.leg3JobId
+    ? `DC3-${Math.floor(1000 + Math.random() * 9000)}`
+    : isExportBoxReuse
+      ? `ST-${Math.floor(1000 + Math.random() * 9000)}`
+      : `PR-${Math.floor(1000 + Math.random() * 9000)}`;
   const token = args.tokenNumber || `DPW-ST-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // 1. Mark source L1 Ramp / L2 job as STREET_TURNED (and l2_activated = TRUE if L1 so no redundant L2 empty return is created)
-  await db.$executeRawUnsafe(
-    `UPDATE logistics_drayage_jobs
-        SET status = 'STREET_TURNED',
-            l2_activated = TRUE,
-            street_turn_job_id = $3,
-            notes = COALESCE(notes || ' | ', '') || $4,
-            updated_at = NOW()
-      WHERE id = $1 AND tenant_id = $2`,
-    args.l2JobId,
-    args.tenantId,
-    args.exportJobId,
-    `Inland Street-Turned to Export Job ${exp.job_code} (${streetTurnRef}) - 52km deadhead avoided`,
-  );
+  if (isExportBoxReuse) {
+    // 1A. Inland Street-Turn: Reuse the empty container directly for the Export booking
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET status = 'STREET_TURNED',
+              l2_activated = TRUE,
+              street_turn_job_id = $3,
+              notes = COALESCE(notes || ' | ', '') || $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.l2JobId,
+      args.tenantId,
+      args.exportJobId,
+      `Inland Street-Turned to Export Job ${exp.job_code} (${streetTurnRef}) - 52km deadhead avoided`,
+    );
 
-  // 2. Allocate empty container to Export Job
-  await db.$executeRawUnsafe(
-    `UPDATE logistics_drayage_jobs
-        SET container_id = $3,
-            container_number = $4,
-            container_size = $5,
-            container_type = $6,
-            street_turn_job_id = $7,
-            priority = 'HIGH',
-            notes = COALESCE(notes || ' | ', '') || $8,
-            updated_at = NOW()
-      WHERE id = $1 AND tenant_id = $2`,
-    args.exportJobId,
-    args.tenantId,
-    l2.container_id ? String(l2.container_id) : null,
-    containerNum,
-    containerSize,
-    containerType,
-    args.l2JobId,
-    `Container ${containerNum} allocated via Inland Street-Turn from ${l2.job_code} (${streetTurnRef})`,
-  );
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET container_id = $3,
+              container_number = $4,
+              container_size = $5,
+              container_type = $6,
+              street_turn_job_id = $7,
+              priority = 'HIGH',
+              notes = COALESCE(notes || ' | ', '') || $8,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.exportJobId,
+      args.tenantId,
+      l2.container_id ? String(l2.container_id) : null,
+      containerNum,
+      containerSize,
+      containerType,
+      args.l2JobId,
+      `Container ${containerNum} allocated via Inland Street-Turn from ${l2.job_code} (${streetTurnRef})`,
+    );
 
-  // 3. If vehicle, driver, and trailer provided, dispatch Export Job
+    if (l2.container_id) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_containers
+            SET status = 'REALLOCATED_EXPORT',
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        String(l2.container_id),
+        args.tenantId,
+      );
+    }
+  } else {
+    // 1B. Port Terminal Reload / Daisy-Chain (L2 Empty Return -> T1 -> L1 Import Full from T1)
+    // Both jobs keep their own container numbers and execute sequentially on the same tractor/chassis
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET street_turn_job_id = $3,
+              priority = 'HIGH',
+              notes = COALESCE(notes || ' | ', '') || $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.l2JobId,
+      args.tenantId,
+      args.exportJobId,
+      `Leg #1 of Port Terminal Reload / Daisy-Chain (${streetTurnRef}): Drop Empty ${containerNum} @ ${l2.terminal_name} ➜ Reload ${exp.job_code}`,
+    );
+
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET street_turn_job_id = $3,
+              priority = 'HIGH',
+              notes = COALESCE(notes || ' | ', '') || $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.exportJobId,
+      args.tenantId,
+      args.l2JobId,
+      `Leg #2 of Port Terminal Reload / Daisy-Chain (${streetTurnRef}): 0km Port Reload @ ${exp.terminal_name} after ${l2.job_code} ➜ Deliver to ${exp.warehouse_name}`,
+    );
+
+    if (args.vehicleId && args.driverId && args.trailerId) {
+      await assignDrayageJob(db, {
+        tenantId: args.tenantId,
+        jobId: args.l2JobId,
+        vehicleId: args.vehicleId,
+        vehiclePlate: args.vehiclePlate || 'DXB-TRACTOR',
+        driverId: args.driverId,
+        driverName: args.driverName || 'Assigned Driver',
+        trailerId: args.trailerId,
+        trailerPlate: args.trailerPlate || 'DXB-TR-9901',
+        tokenNumber: token,
+      });
+    }
+  }
+
+  // 2. Dispatch Leg 2 / Export Job if vehicle, driver, and trailer provided
   if (args.vehicleId && args.driverId && args.trailerId) {
     await assignDrayageJob(db, {
       tenantId: args.tenantId,
@@ -4520,19 +4609,46 @@ export async function executeStreetTurnTriangulation(
     });
   }
 
-  // 4. Update container status
-  if (l2.container_id) {
-    await db.$executeRawUnsafe(
-      `UPDATE logistics_drayage_containers
-          SET status = 'REALLOCATED_EXPORT',
-              updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2`,
-      String(l2.container_id),
-      args.tenantId,
-    );
+  // 3. Handle Optional Leg 3 (3-Leg Daisy-Chain Triangulation: e.g. JAFZA South -> T2)
+  if (leg3 && args.leg3JobId) {
+    if (args.holdLeg3) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET notes = COALESCE(notes || ' | ', '') || $3,
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.leg3JobId,
+        args.tenantId,
+        `[SMART_BACKHAUL_HOLD] Held after ${streetTurnRef} (${exp.warehouse_name} ➜ ${leg3.terminal_name}): Safe DO free time & no outbound L1 backhaul at ${leg3.terminal_name}`,
+      );
+    } else if (args.vehicleId && args.driverId && args.trailerId) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET street_turn_job_id = $3,
+                priority = 'HIGH',
+                notes = COALESCE(notes || ' | ', '') || $4,
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.leg3JobId,
+        args.tenantId,
+        args.exportJobId,
+        `Leg #3 of 3-Leg Daisy-Chain (${streetTurnRef}): Intra-Zone Handoff @ ${leg3.warehouse_name} after ${exp.job_code} ➜ Drop Empty @ ${leg3.terminal_name}`,
+      );
+      await assignDrayageJob(db, {
+        tenantId: args.tenantId,
+        jobId: args.leg3JobId,
+        vehicleId: args.vehicleId,
+        vehiclePlate: args.vehiclePlate || 'DXB-TRACTOR',
+        driverId: args.driverId,
+        driverName: args.driverName || 'Assigned Driver',
+        trailerId: args.trailerId,
+        trailerPlate: args.trailerPlate || 'DXB-TR-9901',
+        tokenNumber: token,
+      });
+    }
   }
 
-  // 5. Log status event
+  // 4. Log status event
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
      VALUES ($1, $2, $3, $4, 'STREET_TURN_EXECUTED', $5, $6)`,
@@ -4540,19 +4656,29 @@ export async function executeStreetTurnTriangulation(
     args.tenantId,
     args.exportJobId,
     String(exp.job_code),
-    `Triangulation Street-Turn executed with ${l2.job_code}. Container ${containerNum} repositioned inland from ${l2.warehouse_name} to ${exp.warehouse_name} (<=15km radius). 52km empty port deadhead avoided.`,
+    args.leg3JobId
+      ? `3-Leg Daisy-Chain (${streetTurnRef}) executed across ${l2.job_code} ➜ ${exp.job_code} ➜ ${leg3?.job_code || args.leg3JobId} (${args.holdLeg3 ? 'Leg 3 placed on Smart Backhaul Hold' : 'All 3 legs dispatched'}).`
+      : isExportBoxReuse
+        ? `Triangulation Street-Turn executed with ${l2.job_code}. Container ${containerNum} repositioned inland from ${l2.warehouse_name} to ${exp.warehouse_name}.`
+        : `Port Terminal Reload (${streetTurnRef}) executed at ${exp.terminal_name}: ${l2.job_code} (${l2.warehouse_name} ➜ ${l2.terminal_name}) chained with ${exp.job_code} (${exp.terminal_name} ➜ ${exp.warehouse_name}).`,
     args.actor || 'Dispatcher Console',
   );
+
+  const deadheadKmSaved = args.leg3JobId && !args.holdLeg3 ? 68 : 52;
+  const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
+  const fuelSavingsAed = args.leg3JobId && !args.holdLeg3 ? 980 : 750;
 
   return {
     ok: true,
     streetTurnRef,
     l2JobCode: String(l2.job_code),
     exportJobCode: String(exp.job_code),
+    leg3JobCode: leg3 ? String(leg3.job_code) : undefined,
+    leg3Held: Boolean(args.holdLeg3),
     containerNumber: containerNum,
-    deadheadKmSaved: 52,
-    co2SavedKg: 49.4,
-    fuelSavingsAed: 750,
+    deadheadKmSaved,
+    co2SavedKg,
+    fuelSavingsAed,
     tokenNumber: token,
   };
 }
