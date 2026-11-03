@@ -272,3 +272,29 @@ export function emitDrayageEvent(
 
   return event;
 }
+
+
+export function getDrayageCacheAndStreamStats(tenantId: string) {
+  const state = getGlobalState();
+  const now = Date.now();
+  const ws = state.workspaceCache.get(tenantId);
+  const master = state.masterDataCache.get(tenantId);
+  const lastEtc = state.etcCheckTimestamps.get(tenantId) ?? 0;
+  const subs = state.subscribers.get(tenantId);
+
+  const wsWarm = Boolean(ws && now - ws.timestamp <= WORKSPACE_CACHE_TTL_MS);
+  const masterWarm = Boolean(master && now - master.timestamp <= MASTER_DATA_CACHE_TTL_MS);
+
+  return {
+    workspaceCacheWarm: wsWarm,
+    workspaceCacheAgeMs: ws ? now - ws.timestamp : null,
+    workspaceCacheTtlMs: WORKSPACE_CACHE_TTL_MS,
+    workspaceEtag: ws?.etag ?? null,
+    masterCacheWarm: masterWarm,
+    masterCacheAgeMs: master ? now - master.timestamp : null,
+    masterCacheTtlMs: MASTER_DATA_CACHE_TTL_MS,
+    etcThrottleRemainingMs: lastEtc > 0 ? Math.max(0, ETC_CHECK_THROTTLE_MS - (now - lastEtc)) : 0,
+    activeSseSubscribers: subs ? subs.size : 0,
+    totalTenantsCached: state.workspaceCache.size,
+  };
+}

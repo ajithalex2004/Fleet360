@@ -7,6 +7,7 @@ import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { emitDrayageEvent } from '@/lib/logistics/drayage-events';
+import { recordDrayageApiMetric } from '@/lib/logistics/drayage-observability';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +73,7 @@ export async function OPTIONS(req: NextRequest) {
  * hard-coded tenant, and writing to a hard-coded fallback vehicle.)
  */
 export async function POST(req: NextRequest) {
+  const t0 = performance.now();
   const origin = corsOrigin(req);
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
   const session = await requireDriverSessionForTenant(req, tenantId);
   if (session instanceof NextResponse) return withCorsHeaders(session, origin);
 
+  const dbStart = performance.now();
   return withTenantRls(prisma, tenantId, async (tx) => {
     const actor = await requireDriverActor(tx, session);
     if (actor instanceof NextResponse) return withCorsHeaders(actor, origin);
@@ -139,12 +142,24 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      const dbMs = performance.now() - dbStart;
+      const totalMs = performance.now() - t0;
       emitDrayageEvent(tenantId, {
         type: 'telemetry_ping',
         action: 'live_location',
         vehicleId: vehicle.id,
         lat,
         lng,
+      });
+      recordDrayageApiMetric({
+        tenantId,
+        route: '/api/driver-app/telematics/live-location',
+        method: 'POST',
+        actionOrScope: 'gps_ping',
+        durationMs: totalMs,
+        dbMs,
+        status: 200,
+        cacheStatus: 'MUTATION',
       });
 
       return withCorsHeaders(

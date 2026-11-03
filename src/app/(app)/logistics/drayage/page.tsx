@@ -103,6 +103,7 @@ import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
   invalidateDrayageClientCache,
+  subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
 
 export default function DrayageDashboardPage() {
@@ -134,6 +135,10 @@ export default function DrayageDashboardPage() {
 
   useEffect(() => {
     loadData();
+    const unsub = subscribeDrayageLiveUpdates((freshWs) => {
+      if (freshWs) setData(freshWs);
+    });
+    return () => unsub();
   }, [loadData]);
 
   const handleActivateL2 = async (jobId: string) => {
@@ -188,6 +193,13 @@ export default function DrayageDashboardPage() {
         accent="blue"
         actions={
           <div className="flex items-center gap-2">
+            <Link
+              href="/logistics/drayage/analytics"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/15 border border-emerald-500/40 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-colors"
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              Outcomes &amp; Observability
+            </Link>
             <button
               onClick={() => loadData(true)}
               disabled={loading}

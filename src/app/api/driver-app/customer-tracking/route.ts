@@ -16,10 +16,15 @@ import {
   emitDrayageEvent,
   resetEtcAutoActivationThrottle,
 } from '@/lib/logistics/drayage-events';
+import {
+  recordDrayageApiMetric,
+  buildServerTimingHeader,
+} from '@/lib/logistics/drayage-observability';
 
 let schemaReady = false;
 
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
   const rawToken = req.nextUrl.searchParams.get('token') || '';
   const verified = verifyDrayageCustomerTrackingToken(rawToken);
 
@@ -39,6 +44,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const dbStart = performance.now();
     const data = await withTenantRls(
       prisma,
       verified.tenantId,
@@ -53,13 +59,43 @@ export async function GET(req: NextRequest) {
       },
       { timeoutMs: 25000 },
     );
+    const dbMs = performance.now() - dbStart;
+    const totalMs = performance.now() - t0;
+
+    recordDrayageApiMetric({
+      tenantId: verified.tenantId,
+      route: '/api/driver-app/customer-tracking',
+      method: 'GET',
+      actionOrScope: `portal:${verified.role || 'CUSTOMER'}`,
+      durationMs: totalMs,
+      dbMs,
+      status: 200,
+      cacheStatus: 'BYPASS',
+    });
 
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'no-store, max-age=0',
+        'Server-Timing': buildServerTimingHeader({
+          totalMs,
+          dbMs,
+          cacheStatus: 'BYPASS',
+          scope: verified.role || 'CUSTOMER',
+        }),
       },
     });
   } catch (err) {
+    const totalMs = performance.now() - t0;
+    recordDrayageApiMetric({
+      tenantId: verified.tenantId,
+      route: '/api/driver-app/customer-tracking',
+      method: 'GET',
+      actionOrScope: `portal:${verified.role || 'CUSTOMER'}`,
+      durationMs: totalMs,
+      status: 404,
+      cacheStatus: 'BYPASS',
+      errorMessage: err instanceof Error ? err.message : 'Portal GET failed',
+    });
     return NextResponse.json(
       {
         error: err instanceof Error ? err.message : 'Unable to load customer tracking portal',
@@ -70,6 +106,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = performance.now();
   try {
     const body = await req.json();
     const rawToken = String(body.token || '');
@@ -91,6 +128,7 @@ export async function POST(req: NextRequest) {
     const tenantId = verified.tenantId;
     const tokenRole = verified.role || 'CUSTOMER';
 
+    const dbStart = performance.now();
     const result = await withTenantRls(
       prisma,
       tenantId,
@@ -195,6 +233,8 @@ export async function POST(req: NextRequest) {
       },
       { timeoutMs: 25000 },
     );
+    const dbMs = performance.now() - dbStart;
+    const totalMs = performance.now() - t0;
 
     resetEtcAutoActivationThrottle(tenantId);
     emitDrayageEvent(tenantId, {
@@ -203,8 +243,27 @@ export async function POST(req: NextRequest) {
       jobCode: verified.jobCode,
       containerNumber: verified.containerNumber ?? null,
     });
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/driver-app/customer-tracking',
+      method: 'POST',
+      actionOrScope: `${tokenRole}:${action}`,
+      durationMs: totalMs,
+      dbMs,
+      status: 200,
+      cacheStatus: 'MUTATION',
+    });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        'Server-Timing': buildServerTimingHeader({
+          totalMs,
+          dbMs,
+          cacheStatus: 'MUTATION',
+          scope: action,
+        }),
+      },
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Operation failed' },

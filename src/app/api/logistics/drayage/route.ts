@@ -48,6 +48,10 @@ import {
   emitDrayageEvent,
   resetEtcAutoActivationThrottle,
 } from '@/lib/logistics/drayage-events';
+import {
+  recordDrayageApiMetric,
+  buildServerTimingHeader,
+} from '@/lib/logistics/drayage-observability';
 
 let drayageSchemaEnsured = false;
 
@@ -105,6 +109,7 @@ function safeIso(val: unknown, fallbackMsOffset = 0): string {
 }
 
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -115,23 +120,56 @@ export async function GET(req: NextRequest) {
 
   const cached = getCachedDrayageWorkspace(tenantId);
   if (cached) {
+    const totalMs = performance.now() - t0;
     if (ifNoneMatch && ifNoneMatch === cached.etag) {
+      recordDrayageApiMetric({
+        tenantId,
+        route: '/api/logistics/drayage',
+        method: 'GET',
+        actionOrScope: `scope:${scope}`,
+        durationMs: totalMs,
+        dbMs: 0,
+        status: 304,
+        cacheStatus: 'HIT-304',
+      });
       return new NextResponse(null, {
         status: 304,
         headers: {
           ETag: cached.etag,
           'X-Cache': 'HIT-304',
           'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+          'Server-Timing': buildServerTimingHeader({
+            totalMs,
+            dbMs: 0,
+            cacheStatus: 'HIT-304',
+            scope,
+          }),
         },
       });
     }
     const payload = filterWorkspaceByScope(cached.data, scope);
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/logistics/drayage',
+      method: 'GET',
+      actionOrScope: `scope:${scope}`,
+      durationMs: totalMs,
+      dbMs: 0,
+      status: 200,
+      cacheStatus: 'HIT',
+    });
     return NextResponse.json(payload, {
       headers: {
         ETag: cached.etag,
         'X-Cache': 'HIT',
         'X-Drayage-Scope': scope,
         'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+        'Server-Timing': buildServerTimingHeader({
+          totalMs,
+          dbMs: 0,
+          cacheStatus: 'HIT',
+          scope,
+        }),
       },
     });
   }
@@ -142,30 +180,77 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const dbStart = performance.now();
     const data = await withTenantRls(prisma, tenantId, async (tx) => {
       return getDrayageWorkspaceData(tx, tenantId);
     }, { timeoutMs: 30000 });
+    const dbMs = performance.now() - dbStart;
     const entry = setCachedDrayageWorkspace(tenantId, data as unknown as Record<string, unknown>);
+    const totalMs = performance.now() - t0;
+
     if (ifNoneMatch && ifNoneMatch === entry.etag) {
+      recordDrayageApiMetric({
+        tenantId,
+        route: '/api/logistics/drayage',
+        method: 'GET',
+        actionOrScope: `scope:${scope}`,
+        durationMs: totalMs,
+        dbMs,
+        status: 304,
+        cacheStatus: 'MISS-304',
+      });
       return new NextResponse(null, {
         status: 304,
         headers: {
           ETag: entry.etag,
           'X-Cache': 'MISS-304',
           'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+          'Server-Timing': buildServerTimingHeader({
+            totalMs,
+            dbMs,
+            cacheStatus: 'MISS-304',
+            scope,
+          }),
         },
       });
     }
     const payload = filterWorkspaceByScope(entry.data, scope);
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/logistics/drayage',
+      method: 'GET',
+      actionOrScope: `scope:${scope}`,
+      durationMs: totalMs,
+      dbMs,
+      status: 200,
+      cacheStatus: 'MISS',
+    });
     return NextResponse.json(payload, {
       headers: {
         ETag: entry.etag,
         'X-Cache': 'MISS',
         'X-Drayage-Scope': scope,
         'Cache-Control': 'private, max-age=4, stale-while-revalidate=8',
+        'Server-Timing': buildServerTimingHeader({
+          totalMs,
+          dbMs,
+          cacheStatus: 'MISS',
+          scope,
+        }),
       },
     });
   } catch (error) {
+    const totalMs = performance.now() - t0;
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/logistics/drayage',
+      method: 'GET',
+      actionOrScope: `scope:${scope}`,
+      durationMs: totalMs,
+      status: 500,
+      cacheStatus: 'MISS',
+      errorMessage: error instanceof Error ? error.message : 'Workspace GET failed',
+    });
     console.error('[api/logistics/drayage GET]', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to load port & container drayage workspace' },
@@ -175,6 +260,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = performance.now();
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -186,11 +272,13 @@ export async function POST(req: NextRequest) {
     drayageSchemaEnsured = true;
   }
 
+  let action = 'unknown_action';
   try {
     // Tenant ownership comes from the session, never the body.
     const body = stripTenantOwnershipFields(await req.json());
-    const action = String(body.action ?? '');
+    action = String(body.action ?? '');
 
+    const dbStart = performance.now();
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
 
       switch (action) {
@@ -1285,6 +1373,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    const dbMs = performance.now() - dbStart;
     // Invalidate shared workspace/master cache and push real-time SSE notification
     if (
       action === 'extend_etc_time' ||
@@ -1304,8 +1393,40 @@ export async function POST(req: NextRequest) {
       vehicleId: body.vehicleId ? String(body.vehicleId) : null,
     });
 
-    return NextResponse.json(result);
+    const totalMs = performance.now() - t0;
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/logistics/drayage',
+      method: 'POST',
+      actionOrScope: action || 'mutation',
+      durationMs: totalMs,
+      dbMs,
+      status: 200,
+      cacheStatus: 'MUTATION',
+    });
+
+    return NextResponse.json(result, {
+      headers: {
+        'Server-Timing': buildServerTimingHeader({
+          totalMs,
+          dbMs,
+          cacheStatus: 'MUTATION',
+          scope: action,
+        }),
+      },
+    });
   } catch (error) {
+    const totalMs = performance.now() - t0;
+    recordDrayageApiMetric({
+      tenantId,
+      route: '/api/logistics/drayage',
+      method: 'POST',
+      actionOrScope: action,
+      durationMs: totalMs,
+      status: 400,
+      cacheStatus: 'MUTATION',
+      errorMessage: error instanceof Error ? error.message : 'Operation failed',
+    });
     console.error('[api/logistics/drayage POST]', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Operation failed' },
