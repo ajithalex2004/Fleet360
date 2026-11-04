@@ -3758,15 +3758,20 @@ export async function sendDispatchChatMessage(
     senderName: string;
     message: string;
     isUrgent?: boolean;
+    isBroadcast?: boolean;
   },
 ) {
   await ensureDrayageSchema(db);
-  const jobRows = await db.$queryRawUnsafe<Array<{ job_code: string }>>(
-    `SELECT job_code FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
-    args.jobId,
-    args.tenantId,
-  );
-  const jobCode = jobRows[0]?.job_code ? String(jobRows[0].job_code) : 'DRY-JOB';
+  const isBroadcast = Boolean(args.isBroadcast || args.jobId === 'BROADCAST');
+  let jobCode = 'BROADCAST';
+  if (!isBroadcast) {
+    const jobRows = await db.$queryRawUnsafe<Array<{ job_code: string }>>(
+      `SELECT job_code FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    );
+    jobCode = jobRows[0]?.job_code ? String(jobRows[0].job_code) : 'DRY-JOB';
+  }
   const id = `msg-${crypto.randomUUID().slice(0, 12)}`;
 
   await db.$executeRawUnsafe(
@@ -3775,7 +3780,7 @@ export async function sendDispatchChatMessage(
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     id,
     args.tenantId,
-    args.jobId,
+    isBroadcast ? 'BROADCAST' : args.jobId,
     jobCode,
     args.senderRole,
     args.senderName,
@@ -3783,7 +3788,7 @@ export async function sendDispatchChatMessage(
     Boolean(args.isUrgent),
   );
 
-  return { ok: true, id };
+  return { ok: true, id, isBroadcast };
 }
 
 export async function acknowledgeDrayageAlert(

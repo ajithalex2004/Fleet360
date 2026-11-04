@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  Bell,
   Camera,
   CheckCircle2,
   Clock,
@@ -45,6 +46,7 @@ interface DrayageChatMessage {
   senderName: string;
   message: string;
   isUrgent?: boolean;
+  isBroadcast?: boolean;
   createdAt: string;
 }
 
@@ -382,9 +384,40 @@ export default function DriverTodayPage() {
   const [showEtcModal, setShowEtcModal] = useState(false);
   const [pendingRampStatus, setPendingRampStatus] = useState<string>('PLACED_AT_RAMP');
 
-  // Dispatcher <-> Driver chat state
+  // Dispatcher <-> Driver chat & broadcast notification state
   const [chatInput, setChatInput] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
+  const [broadcastMessages, setBroadcastMessages] = useState<DrayageChatMessage[]>([]);
+  const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState<string[]>([]);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const seenMsgIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedDismissed = localStorage.getItem('fleet360_dismissed_broadcast_ids');
+      if (savedDismissed) {
+        const parsed = JSON.parse(savedDismissed);
+        if (Array.isArray(parsed)) setDismissedBroadcastIds(parsed);
+      }
+      if ('Notification' in window && Notification.permission === 'default') {
+        void Notification.requestPermission().catch(() => {});
+      }
+    } catch {}
+  }, []);
+
+  const handleDismissBroadcast = useCallback((msgId: string) => {
+    setDismissedBroadcastIds((prev) => {
+      const next = prev.includes(msgId) ? prev : [...prev, msgId];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('fleet360_dismissed_broadcast_ids', JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+  }, []);
 
   // Inspection photo / attachment state
   const [attachedDocs, setAttachedDocs] = useState<Record<string, string[]>>({});
@@ -442,7 +475,56 @@ export default function DriverTodayPage() {
           const fetched: DrayageAssignment[] = Array.isArray(data.drayageJobs)
             ? data.drayageJobs
             : [];
+          const fetchedBroadcasts: DrayageChatMessage[] = Array.isArray(data.broadcastMessages)
+            ? data.broadcastMessages
+            : [];
           setJobs(fetched);
+          setBroadcastMessages(fetchedBroadcasts);
+
+          // Detect newly arrived Dispatcher messages (Broadcast or Individual)
+          const allIncomingDispatcherMsgs: Array<DrayageChatMessage & { jobCodeLabel?: string }> = [];
+          for (const b of fetchedBroadcasts) {
+            if ((b.senderRole || '').toUpperCase() !== 'DRIVER') {
+              allIncomingDispatcherMsgs.push({ ...b, isBroadcast: true, jobCodeLabel: 'ALL DRIVERS' });
+            }
+          }
+          for (const j of fetched) {
+            for (const m of j.messages || []) {
+              if ((m.senderRole || '').toUpperCase() !== 'DRIVER' && !m.isBroadcast) {
+                allIncomingDispatcherMsgs.push({ ...m, jobCodeLabel: j.jobCode });
+              }
+            }
+          }
+
+          if (!initialLoadDoneRef.current) {
+            for (const m of allIncomingDispatcherMsgs) {
+              seenMsgIdsRef.current.add(m.id);
+            }
+            initialLoadDoneRef.current = true;
+          } else {
+            const newlyArrived = allIncomingDispatcherMsgs.filter((m) => !seenMsgIdsRef.current.has(m.id));
+            if (newlyArrived.length > 0) {
+              for (const m of newlyArrived) {
+                seenMsgIdsRef.current.add(m.id);
+              }
+              const latest = newlyArrived[newlyArrived.length - 1];
+              const prefix = latest.isBroadcast
+                ? '📢 Fleet Broadcast'
+                : `💬 ${latest.jobCodeLabel || 'Dispatcher'}`;
+              showToast(`${prefix}: "${latest.message}"`);
+              try {
+                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                  navigator.vibrate([250, 100, 250]);
+                }
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                  new Notification(
+                    latest.isBroadcast ? '📢 Port Operations Broadcast' : `💬 Dispatcher (${latest.jobCodeLabel})`,
+                    { body: latest.message }
+                  );
+                }
+              } catch {}
+            }
+          }
         } else if (res.status === 401) {
           setJobs([]);
         }
@@ -910,11 +992,18 @@ export default function DriverTodayPage() {
                         </span>
                       </div>
                       <p className="text-xs font-semibold leading-relaxed">{msg.message}</p>
-                      {msg.isUrgent && (
-                        <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase">
-                          URGENT INSTRUCTION
-                        </span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {msg.isBroadcast && (
+                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-amber-400 text-slate-950 uppercase">
+                            📢 BROADCAST TO ALL DRIVERS
+                          </span>
+                        )}
+                        {msg.isUrgent && (
+                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase">
+                            URGENT INSTRUCTION
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -1062,6 +1151,7 @@ export default function DriverTodayPage() {
   // VIEW 1: SIMPLIFIED MY JOBS DASHBOARD (LogiXL-Connect DashboardScreen.js)
   // ══════════════════════════════════════════════════════════════════════════
   const displayedJobs = viewMode === 'active' ? activeJobs : historyJobs;
+  const activeBroadcasts = broadcastMessages.filter((b) => !dismissedBroadcastIds.includes(b.id));
 
   return (
     <div className="min-h-screen bg-slate-100 pb-20 text-slate-900">
@@ -1082,6 +1172,19 @@ export default function DriverTodayPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowNotificationsPanel((prev) => !prev)}
+              title="Dispatcher Broadcasts & Notifications"
+              className="relative p-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white transition active:scale-95"
+            >
+              <Bell className="w-4 h-4" />
+              {activeBroadcasts.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] flex items-center justify-center shadow">
+                  {activeBroadcasts.length}
+                </span>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => void fetchDriverJobs(false)}
@@ -1139,6 +1242,80 @@ export default function DriverTodayPage() {
 
       {/* Jobs List */}
       <main className="max-w-lg mx-auto p-4 space-y-3.5">
+        {/* Fleet-Wide Broadcast Notifications Banner */}
+        {(activeBroadcasts.length > 0 || showNotificationsPanel) && (
+          <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 shadow-md space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-900">
+                <Bell className="w-4 h-4 text-amber-600" />
+                <span>📢 Fleet Broadcast Notifications ({broadcastMessages.length})</span>
+              </div>
+              {showNotificationsPanel && (
+                <button
+                  type="button"
+                  onClick={() => setShowNotificationsPanel(false)}
+                  className="text-xs font-bold text-amber-800 hover:text-amber-950"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {(showNotificationsPanel ? broadcastMessages : activeBroadcasts).length === 0 ? (
+              <div className="text-xs text-amber-800 py-2">
+                No fleet broadcast announcements from Port Operations Desk yet.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {(showNotificationsPanel ? [...broadcastMessages].reverse() : [...activeBroadcasts].reverse()).map(
+                  (b) => (
+                    <div
+                      key={b.id}
+                      className={`rounded-xl p-3 border text-xs space-y-1 ${
+                        b.isUrgent
+                          ? 'bg-rose-50 border-rose-300 text-rose-950'
+                          : 'bg-white border-amber-200 text-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                        <span className="text-amber-900 font-extrabold">
+                          📢 {b.senderName || 'Port Operations Desk'} · ALL DRIVERS
+                        </span>
+                        <span>
+                          {b.createdAt
+                            ? new Date(b.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : ''}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold leading-relaxed">{b.message}</p>
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          {b.isUrgent && (
+                            <span className="inline-block px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black uppercase">
+                              URGENT BROADCAST
+                            </span>
+                          )}
+                        </div>
+                        {!dismissedBroadcastIds.includes(b.id) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDismissBroadcast(b.id)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] transition"
+                          >
+                            Acknowledge ✓
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {loading ? (
           <div className="bg-white rounded-2xl p-8 text-center text-sm text-slate-500 shadow-sm border border-slate-200">
             Loading your assigned jobs…

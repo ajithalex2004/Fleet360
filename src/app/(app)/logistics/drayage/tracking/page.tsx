@@ -245,6 +245,7 @@ export default function DrayageJobTrackingPage() {
   // Chat input
   const [chatInput, setChatInput] = useState('');
   const [chatUrgent, setChatUrgent] = useState(false);
+  const [chatBroadcast, setChatBroadcast] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
 
   // Status updating
@@ -505,7 +506,13 @@ export default function DrayageJobTrackingPage() {
 
   const jobMessages = useMemo(() => {
     if (!activeJob) return [];
-    return messages.filter((m) => m.jobId === activeJob.id || m.jobCode === activeJob.jobCode);
+    return messages.filter(
+      (m) =>
+        m.jobId === activeJob.id ||
+        m.jobCode === activeJob.jobCode ||
+        m.jobId === 'BROADCAST' ||
+        m.jobCode === 'BROADCAST',
+    );
   }, [messages, activeJob]);
 
   // Handle stage transition
@@ -764,10 +771,11 @@ export default function DrayageJobTrackingPage() {
     }
   };
 
-  // Send Dispatch Chat Message
+  // Send Dispatch Chat Message (Individual Driver/Job or Broadcast to All Active Drivers)
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeJob || !chatInput.trim()) return;
+    const wasBroadcast = chatBroadcast;
     try {
       setSendingChat(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -775,16 +783,24 @@ export default function DrayageJobTrackingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send_dispatch_message',
-          jobId: activeJob.id,
+          jobId: wasBroadcast ? 'BROADCAST' : activeJob.id,
           senderRole: 'DISPATCHER',
           senderName: 'Port Operations Desk',
           message: chatInput.trim(),
           isUrgent: chatUrgent,
+          isBroadcast: wasBroadcast,
         }),
       });
       if (!res.ok) throw new Error('Failed to send message');
       setChatInput('');
       setChatUrgent(false);
+      setChatBroadcast(false);
+      showToast(
+        'success',
+        wasBroadcast
+          ? '📢 Broadcast notification sent to ALL active drivers!'
+          : `💬 Message sent to ${activeJob.assignedDriverName || 'Assigned Driver'} (${activeJob.jobCode})`,
+      );
       await loadData();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error sending message');
@@ -1983,25 +1999,49 @@ export default function DrayageJobTrackingPage() {
                 {/* Dispatcher <-> Driver Chat */}
                 <Panel
                   title="Dispatcher ↔ Driver Communications"
-                  subtitle="Instruction thread with urgent alert flag"
+                  subtitle={
+                    chatBroadcast
+                      ? '📢 Broadcasting to All Active Drivers in Fleet (Push Notification)'
+                      : `👤 Driver: ${activeJob.assignedDriverName || 'Unassigned'}${activeJob.assignedVehiclePlate ? ` (${activeJob.assignedVehiclePlate})` : ''} · Job: ${activeJob.jobCode}`
+                  }
                   icon={MessageSquare}
                   accent="blue"
+                  actions={
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                        chatBroadcast
+                          ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                          : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                      }`}
+                    >
+                      {chatBroadcast ? (
+                        <span>📢 Broadcast: All Active Drivers</span>
+                      ) : (
+                        <span>
+                          👤 {activeJob.assignedDriverName || 'Unassigned'} · {activeJob.jobCode}
+                        </span>
+                      )}
+                    </span>
+                  }
                 >
-                  <div className="flex flex-col h-[320px]">
+                  <div className="flex flex-col h-[340px]">
                     <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                       {jobMessages.length === 0 ? (
                         <div className="py-12 text-center text-xs text-[var(--text-muted)]">
-                          No dispatch messages on this job yet. Send an instruction or checkpoint notice below.
+                          No dispatch messages on {activeJob.jobCode} ({activeJob.assignedDriverName || 'Unassigned'}) yet. Send an individual instruction or toggle Broadcast below.
                         </div>
                       ) : (
                         jobMessages.map((msg) => {
                           const isDriver = msg.senderRole === 'DRIVER';
+                          const isBroadcastMsg = msg.jobId === 'BROADCAST' || msg.jobCode === 'BROADCAST';
                           return (
                             <div
                               key={msg.id}
                               className={`p-2.5 rounded-xl text-xs max-w-[85%] space-y-1 ${
                                 isDriver
                                   ? 'bg-[var(--bg-main)] border border-[var(--border-subtle)] mr-auto'
+                                  : isBroadcastMsg
+                                  ? 'bg-amber-500/15 border border-amber-500/40 text-amber-100 ml-auto'
                                   : 'bg-blue-600/15 border border-blue-500/30 text-blue-200 ml-auto'
                               }`}
                             >
@@ -2010,43 +2050,68 @@ export default function DrayageJobTrackingPage() {
                                 <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
                               <p className="leading-relaxed text-[var(--text-main)]">{msg.message}</p>
-                              {msg.isUrgent && (
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                                  URGENT
-                                </span>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                {isBroadcastMsg && (
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    📢 BROADCAST TO ALL DRIVERS
+                                  </span>
+                                )}
+                                {msg.isUrgent && (
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                    URGENT
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })
                       )}
                     </div>
 
-                    <form onSubmit={handleSendMessage} className="pt-3 border-t border-[var(--border-subtle)] space-y-2">
+                    <form onSubmit={handleSendMessage} className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Type dispatch instruction to driver..."
+                          placeholder={
+                            chatBroadcast
+                              ? '📢 Type broadcast notification to ALL active drivers...'
+                              : `Message ${activeJob.assignedDriverName || 'driver'} on ${activeJob.jobCode}...`
+                          }
                           className="flex-1 text-xs px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                         />
                         <button
                           type="submit"
                           disabled={sendingChat || !chatInput.trim()}
-                          className="px-3.5 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50"
+                          className={`px-3.5 py-2 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 ${
+                            chatBroadcast ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
+                          }`}
                         >
                           <Send className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={chatUrgent}
-                          onChange={(e) => setChatUrgent(e.target.checked)}
-                          className="rounded border-[var(--border-subtle)] text-rose-600"
-                        />
-                        <span>Flag as URGENT instruction</span>
-                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={chatUrgent}
+                            onChange={(e) => setChatUrgent(e.target.checked)}
+                            className="rounded border-[var(--border-subtle)] text-rose-600"
+                          />
+                          <span>Flag as URGENT instruction</span>
+                        </label>
+
+                        <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-500 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={chatBroadcast}
+                            onChange={(e) => setChatBroadcast(e.target.checked)}
+                            className="rounded border-amber-500/40 text-amber-600"
+                          />
+                          <span>📢 Broadcast to All Active Drivers</span>
+                        </label>
+                      </div>
                     </form>
                   </div>
                 </Panel>
