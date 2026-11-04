@@ -784,7 +784,9 @@ export default function DrayageAssignmentPage() {
   // FEATURE 2: DUAL-20FT BOGIE / CHASSIS AUTO-BUNDLING ENGINE
   // =========================================================================
   const bogieCombos = useMemo(() => {
-    const twentyFtJobs = unassignedJobs.filter((j) => j.containerSize === '20FT');
+    const twentyFtJobs = unassignedJobs.filter(
+      (j) => j.containerSize === '20FT' && j.jobPhase === 'L1' && j.status === 'PENDING' && !j.trailerDetached,
+    );
     if (twentyFtJobs.length < 2) return [];
 
     const candidates: BogieComboRecommendation[] = [];
@@ -940,38 +942,57 @@ export default function DrayageAssignmentPage() {
       return { lat: 24.9602, lng: 55.0615 };
     };
 
-    // 1. Inbound containers: L1 Placed at Ramp / Detached / Ready for Pickup containers OR unassigned L2 Empty Return jobs
-    const l2Inbound = jobs.filter(
-      (j) =>
-        !j.streetTurnJobId &&
-        j.status !== 'STREET_TURNED' &&
-        j.status !== 'COMPLETED' &&
-        ((j.jobPhase === 'L2' && (j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId)) ||
-          (j.jobPhase === 'L1' &&
-            (Boolean(j.trailerDetached) ||
-              j.status === 'PLACED_AT_RAMP' ||
-              j.status === 'REASSIGN_PLACED_AT_RAMP' ||
-              j.status === 'PLACED_AT_YARD' ||
-              j.status === 'REASSIGN_PLACED_AT_YARD' ||
-              j.status === 'CONTAINER_DETACHED' ||
-              j.status === 'TRAILER_DETACHED' ||
-              j.status === 'REASSIGN_TRAILER_DETACHED' ||
-              j.status === 'READY_FOR_PICKUP' ||
-              j.status === 'WAITING_MT_RETURN' ||
-              j.placementLocation === 'RAMP')))
+    // 1. Inbound containers: L1 Placed at Ramp / Ready for Pickup containers OR unassigned L2 Empty Return jobs
+    //    Exclude initial Yard Drops (PLACED_AT_YARD / FCL_REASSIGN / MT_REASSIGN) which are still full (FCL) awaiting Yard-to-Ramp shunting
+    const l2Inbound = jobs.filter((j) => {
+      if (j.streetTurnJobId || j.status === 'STREET_TURNED' || j.status === 'COMPLETED' || j.status === 'CANCELLED') {
+        return false;
+      }
+      if (j.jobPhase === 'L2') {
+        return j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId;
+      }
+      if (j.jobPhase === 'L1' && !j.l2Activated) {
+        const st = (j.status || '').toUpperCase();
+        const isInitialYardDrop =
+          ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st) ||
+          (j.placementLocation === 'YARD' &&
+            !['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
+        if (isInitialYardDrop) return false;
+        return (
+          Boolean(j.trailerDetached) ||
+          [
+            'PLACED_AT_RAMP',
+            'REASSIGN_PLACED_AT_RAMP',
+            'CONTAINER_DETACHED',
+            'TRAILER_DETACHED',
+            'REASSIGN_TRAILER_DETACHED',
+            'READY_FOR_PICKUP',
+            'CONTAINER_OFFLOADED',
+            'WAITING_MT_RETURN',
+          ].includes(st) ||
+          j.placementLocation === 'RAMP'
+        );
+      }
+      return false;
+    });
+    // 2. Pending outbound port/export bookings (strictly PENDING jobs not yet picked up from port/origin)
+    const pendingPortOrExportJobs = unassignedJobs.filter(
+      (j) => !j.streetTurnJobId && j.status === 'PENDING' && !j.trailerDetached,
     );
-    // 2. Pending export bookings
-    const exportBookings = unassignedJobs.filter(
-      (j) => !j.streetTurnJobId && (j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'))
+    const exportBookings = pendingPortOrExportJobs.filter(
+      (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'),
     );
-    // Fallback: If no explicit EXPORT jobs in queue, also evaluate unassigned L1 jobs
-    const l1Outbound = exportBookings.length > 0 ? exportBookings : unassignedJobs.filter((j) => j.jobPhase === 'L1' && !j.streetTurnJobId);
+    // Fallback: If no explicit EXPORT jobs in queue, also evaluate pending L1 port pickups
+    const l1Outbound =
+      exportBookings.length > 0
+        ? exportBookings
+        : pendingPortOrExportJobs.filter((j) => j.jobPhase === 'L1');
 
     if (l2Inbound.length === 0 || l1Outbound.length === 0) return [];
 
-    // Count unassigned outbound L1 jobs per terminal so we know if a 3rd leg's destination terminal has a backhaul
+    // Count unassigned outbound L1 port pickups per terminal so we know if a 3rd leg's destination terminal has a backhaul
     const outboundCountByTerminal = new Map<string, number>();
-    for (const uJob of unassignedJobs) {
+    for (const uJob of pendingPortOrExportJobs) {
       if (uJob.jobPhase === 'L1') {
         const tKey = (uJob.terminalName || '').trim().toLowerCase();
         outboundCountByTerminal.set(tKey, (outboundCountByTerminal.get(tKey) || 0) + 1);
@@ -1163,7 +1184,7 @@ export default function DrayageAssignmentPage() {
   const smartBackhaulHoldJobs = useMemo<SmartBackhaulHoldItem[]>(() => {
     const outboundL1ByTerminal = new Map<string, number>();
     for (const j of unassignedJobs) {
-      if (j.jobPhase === 'L1') {
+      if (j.jobPhase === 'L1' && j.status === 'PENDING' && !j.trailerDetached) {
         const key = (j.terminalName || '').trim().toLowerCase();
         outboundL1ByTerminal.set(key, (outboundL1ByTerminal.get(key) || 0) + 1);
       }
@@ -1588,6 +1609,69 @@ export default function DrayageAssignmentPage() {
     [terminals]
   );
 
+  // Resolve Actual Pickup Coordinates for a Job Leg:
+  // - For L2 Empty Return jobs OR Reassigned/Detached L1 jobs (FCL_REASSIGN / MT_REASSIGN / PLACED_AT_YARD / TRAILER_DETACHED),
+  //   the container is physically at the Customer Warehouse, so score 4-Factor Proximity from the Warehouse!
+  // - For standard PENDING L1 jobs, score 4-Factor Proximity from the Port Terminal.
+  const getJobPickupCoordinates = useCallback(
+    (job?: DrayageJob | null): { lat: number; lng: number; name: string } => {
+      if (!job) return getTerminalCoordinates(null);
+      const st = (job.status || '').toUpperCase();
+      const isWarehousePickup =
+        job.jobPhase === 'L2' ||
+        Boolean(job.trailerDetached) ||
+        [
+          'FCL_REASSIGN',
+          'MT_REASSIGN',
+          'RE-ASSIGNED',
+          'PLACED_AT_YARD',
+          'PLACED_AT_RAMP',
+          'TRAILER_DETACHED',
+          'CONTAINER_DETACHED',
+          'REASSIGN_PLACED_AT_YARD',
+          'REASSIGN_PLACED_AT_RAMP',
+          'REASSIGN_TRAILER_DETACHED',
+          'READY_FOR_PICKUP',
+          'WAITING_MT_RETURN',
+        ].includes(st);
+
+      if (isWarehousePickup) {
+        if (job.warehouseId) {
+          const wh = warehouses.find((w) => w.id === job.warehouseId);
+          if (wh && typeof wh.lat === 'number' && typeof wh.lng === 'number' && wh.lat !== 0) {
+            return { lat: wh.lat, lng: wh.lng, name: wh.name };
+          }
+        }
+        const byName = warehouses.find(
+          (w) => w.name.toLowerCase() === (job.warehouseName || '').toLowerCase(),
+        );
+        if (byName && typeof byName.lat === 'number' && typeof byName.lng === 'number' && byName.lat !== 0) {
+          return { lat: byName.lat, lng: byName.lng, name: byName.name };
+        }
+        const lower = (job.warehouseName || '').toLowerCase();
+        if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) {
+          return { lat: 24.7892, lng: 54.7341, name: job.warehouseName || 'KIZAD Industrial Hub' };
+        }
+        if (lower.includes('dic') || lower.includes('dubai industrial city') || lower.includes('industrial city')) {
+          return { lat: 24.8528, lng: 55.0636, name: job.warehouseName || 'Dubai Industrial City' };
+        }
+        if (lower.includes('dubai south') || lower.includes('dwc')) {
+          return { lat: 24.9182, lng: 55.1342, name: job.warehouseName || 'Dubai South Logistics' };
+        }
+        if (lower.includes('national industries') || lower.includes('nip')) {
+          return { lat: 24.9415, lng: 55.0695, name: job.warehouseName || 'NIP Hub' };
+        }
+        if (lower.includes('jafza north')) {
+          return { lat: 24.9964, lng: 55.0842, name: job.warehouseName || 'JAFZA North' };
+        }
+        return { lat: 24.9642, lng: 55.0915, name: job.warehouseName || 'Customer Warehouse' };
+      }
+
+      return getTerminalCoordinates(job.terminalId || job.terminalName);
+    },
+    [warehouses, getTerminalCoordinates],
+  );
+
   // Calculate 4-Factor Composite Telematics Score
   const calculate4FactorScore = useCallback(
     (
@@ -1716,8 +1800,8 @@ export default function DrayageAssignmentPage() {
   // =========================================================================
   const getSmartRecommendedAssets = useCallback(
     (job: DrayageJob | null, isBogie = false) => {
-      // 1. Resolve Target Pickup Terminal GPS Location
-      const targetLoc = getTerminalCoordinates(job?.terminalId || job?.terminalName);
+      // 1. Resolve Target Pickup GPS Location (Port Terminal for L1 PENDING; Customer Warehouse for L2 or L1 Reassign)
+      const targetLoc = getJobPickupCoordinates(job);
 
       // 2. Candidate vehicles: only heavy commercial prime movers
       const candidateVehicles = availableVehicles.length > 0 ? availableVehicles : primeMovers;
@@ -1795,13 +1879,13 @@ export default function DrayageAssignmentPage() {
         rankedList: scoredList,
       };
     },
-    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers, getTerminalCoordinates, calculate4FactorScore],
+    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers, getJobPickupCoordinates, calculate4FactorScore],
   );
 
-  // Target Terminal for active assignment modal
+  // Target Pickup Location (Port Terminal or Customer Warehouse) for active assignment modal
   const targetTerminalLoc = useMemo(() => {
-    return getTerminalCoordinates(assigningJob?.terminalId || assigningJob?.terminalName);
-  }, [assigningJob, getTerminalCoordinates]);
+    return getJobPickupCoordinates(assigningJob);
+  }, [assigningJob, getJobPickupCoordinates]);
 
   // Scored Prime Movers for current modal
   const scoredPrimeMovers = useMemo(() => {
@@ -2250,7 +2334,7 @@ export default function DrayageAssignmentPage() {
     for (const job of remainingJobs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
 
-      const termLoc = getTerminalCoordinates(job.terminalId || job.terminalName);
+      const termLoc = getJobPickupCoordinates(job);
       const best = pickBestTractorAndDriver(termLoc);
       if (!best) break;
 
@@ -3607,10 +3691,6 @@ export default function DrayageAssignmentPage() {
                     if (assigningJob && !selectedTrailerId) {
                       const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
                       if (linkedTrId) setSelectedTrailerId(linkedTrId);
-                    }
-                    if (assigningJob && !tokenInput) {
-                      const existingToken = assigningJob.tokenNumber || assigningJob.pcsTokenNumber || '';
-                      if (existingToken) setTokenInput(existingToken);
                     }
                   }}
                   options={primeMoverSelectOptions}

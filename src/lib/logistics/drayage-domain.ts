@@ -4748,40 +4748,49 @@ export async function findStreetTurnCandidates(
     return { lat: 24.9642, lng: 55.0915 };
   };
 
-  // Inbound candidates: L1 jobs Placed at Ramp (or detached at ramp/yard / ready for pickup) AND unassigned L2 Empty Return jobs
+  // Inbound candidates: L1 jobs Placed at Ramp (or detached after Reassign / Ready for Pickup) AND unassigned L2 Empty Return jobs
+  // Exclude initial Yard Drops (PLACED_AT_YARD / FCL_REASSIGN / MT_REASSIGN) which are still loaded (FCL) awaiting Yard-to-Ramp shunting
   const inboundRampOrEmptyJobs = workspace.jobs.filter((j) => {
     if (j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'STREET_TURNED' || j.streetTurnJobId) {
       return false;
     }
-    const isL1AtRamp =
+    const st = (j.status || '').toUpperCase();
+    const isInitialYardDrop =
+      ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st) ||
+      ((j.placementLocation || '').toUpperCase() === 'YARD' &&
+        !['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
+    if (j.jobPhase === 'L1' && isInitialYardDrop) {
+      return false;
+    }
+    const isL1AtRampOrReady =
       j.jobPhase === 'L1' &&
       !j.l2Activated &&
       (Boolean(j.trailerDetached) ||
         [
           'PLACED_AT_RAMP',
           'REASSIGN_PLACED_AT_RAMP',
-          'PLACED_AT_YARD',
-          'REASSIGN_PLACED_AT_YARD',
           'CONTAINER_DETACHED',
           'TRAILER_DETACHED',
           'REASSIGN_TRAILER_DETACHED',
           'READY_FOR_PICKUP',
+          'CONTAINER_OFFLOADED',
           'WAITING_MT_RETURN',
-        ].includes(j.status) ||
+        ].includes(st) ||
         j.placementLocation === 'RAMP');
     const isUnassignedL2 =
-      !j.assignedVehicleId && (j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
-    return isL1AtRamp || isUnassignedL2;
+      !j.assignedVehicleId && (j.jobPhase === 'L2' || st === 'WAITING_MT_RETURN');
+    return isL1AtRampOrReady || isUnassignedL2;
   });
 
-  // Outbound candidates: Pending Export L1 bookings OR L1 Import pickups at the same Port Terminal (Port Reload)
-  const unassignedJobs = workspace.jobs.filter(
-    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && j.status !== 'STREET_TURNED',
+  // Outbound candidates: Pending Export L1 bookings OR Pending L1 Import pickups at the same Port Terminal (Port Reload)
+  // Exclude jobs already picked up or sitting in Customer Yard (FCL_REASSIGN / MT_REASSIGN / trailerDetached)
+  const pendingOutboundJobs = workspace.jobs.filter(
+    (j) => !j.assignedVehicleId && j.status === 'PENDING' && !j.trailerDetached,
   );
-  const exportJobs = unassignedJobs.filter(
+  const exportJobs = pendingOutboundJobs.filter(
     (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'),
   );
-  const outboundCandidates = exportJobs.length > 0 ? exportJobs : unassignedJobs.filter((j) => j.jobPhase === 'L1');
+  const outboundCandidates = exportJobs.length > 0 ? exportJobs : pendingOutboundJobs.filter((j) => j.jobPhase === 'L1');
 
   if (inboundRampOrEmptyJobs.length === 0 || outboundCandidates.length === 0) return [];
 
@@ -5118,7 +5127,11 @@ export async function findBogiePairCandidates(
 ): Promise<BogiePairCandidate[]> {
   const workspace = await getDrayageWorkspaceData(db, tenantId);
   const unassignedJobs = workspace.jobs.filter(
-    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED'
+    (j) =>
+      !j.assignedVehicleId &&
+      j.jobPhase === 'L1' &&
+      j.status === 'PENDING' &&
+      !j.trailerDetached,
   );
   const twentyFtJobs = unassignedJobs.filter((j) => j.containerSize === '20FT');
 
