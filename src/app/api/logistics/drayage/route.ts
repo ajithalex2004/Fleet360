@@ -633,11 +633,12 @@ export async function POST(req: NextRequest) {
         case 'send_dispatch_message': {
           return sendDispatchChatMessage(tx, {
             tenantId,
-            jobId: String(body.jobId),
+            jobId: body.isBroadcast ? 'BROADCAST' : String(body.jobId),
             senderRole: body.senderRole === 'DRIVER' ? 'DRIVER' : 'DISPATCHER',
             senderName: String(body.senderName ?? 'Port Operations Desk'),
             message: String(body.message ?? '').trim(),
             isUrgent: Boolean(body.isUrgent),
+            isBroadcast: Boolean(body.isBroadcast),
           });
         }
 

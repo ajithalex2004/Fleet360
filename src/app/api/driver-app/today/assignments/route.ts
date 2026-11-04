@@ -239,6 +239,7 @@ export async function GET(req: NextRequest) {
 
     // 1b) Port Container Drayage assignments strictly for this logged-in driver
     let drayageJobs: Array<Record<string, unknown>> = [];
+    let broadcastMessages: Array<Record<string, unknown>> = [];
     try {
       const [drayageRows, gfRows, termRows, whRows, msgRows] = await Promise.all([
         tx.$queryRawUnsafe<DrayageJobRow[]>(
@@ -402,13 +403,14 @@ export async function GET(req: NextRequest) {
         };
 
         const jobMessages = msgRows
-          .filter((m) => m.job_id === j.id)
+          .filter((m) => m.job_id === j.id || m.job_id === 'BROADCAST')
           .map((m) => ({
             id: m.id,
             senderRole: m.sender_role,
             senderName: m.sender_name,
             message: m.message,
             isUrgent: Boolean(m.is_urgent),
+            isBroadcast: m.job_id === 'BROADCAST',
             createdAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
           }));
 
@@ -424,13 +426,25 @@ export async function GET(req: NextRequest) {
           messages: jobMessages,
         };
       });
+
+      broadcastMessages = msgRows
+        .filter((m) => m.job_id === 'BROADCAST')
+        .map((m) => ({
+          id: m.id,
+          senderRole: m.sender_role,
+          senderName: m.sender_name,
+          message: m.message,
+          isUrgent: Boolean(m.is_urgent),
+          isBroadcast: true,
+          createdAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
+        }));
     } catch (drayageErr) {
       console.warn('[today/assignments] Drayage query skipped or failed:', drayageErr);
     }
 
     if (trips.length === 0) {
       return NextResponse.json(
-        { trips: [], drayageJobs, generatedAt: new Date().toISOString() },
+        { trips: [], drayageJobs, broadcastMessages, generatedAt: new Date().toISOString() },
         { headers: { 'Cache-Control': privateCacheControl(5, 5) } },
       );
     }
@@ -482,7 +496,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json(
-      { trips: result, drayageJobs, generatedAt: new Date().toISOString() },
+      { trips: result, drayageJobs, broadcastMessages, generatedAt: new Date().toISOString() },
       { headers: { 'Cache-Control': privateCacheControl(5, 5) } },
     );
   });
