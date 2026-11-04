@@ -280,6 +280,30 @@ export async function POST(req: NextRequest) {
 
     const dbStart = performance.now();
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
+      let dispatcherActor = typeof body.actor === 'string' ? body.actor.trim() : '';
+      if (
+        !dispatcherActor ||
+        ['Dispatch Console', 'Dispatcher Console', 'Port Operations Desk', 'Super Admin'].includes(
+          dispatcherActor,
+        )
+      ) {
+        if (userId) {
+          const userRows = await tx
+            .$queryRawUnsafe<Array<{ username: string | null; email: string | null }>>(
+              `SELECT username, email FROM "User" WHERE id = $1 LIMIT 1`,
+              userId,
+            )
+            .catch(() => []);
+          if (userRows[0]?.username) {
+            dispatcherActor = String(userRows[0].username).trim();
+          } else if (userRows[0]?.email) {
+            dispatcherActor = String(userRows[0].email).split('@')[0].trim();
+          }
+        }
+      }
+      if (!dispatcherActor) {
+        dispatcherActor = 'dispatcher';
+      }
 
       switch (action) {
         case 'create_jobs': {
@@ -320,6 +344,7 @@ export async function POST(req: NextRequest) {
             trailerId: String(body.trailerId),
             trailerPlate: String(body.trailerPlate),
             tokenNumber: String(body.tokenNumber ?? ''),
+            actor: dispatcherActor,
           });
         }
 
@@ -360,7 +385,7 @@ export async function POST(req: NextRequest) {
             trailerId: body.trailerId ? String(body.trailerId) : undefined,
             trailerPlate: body.trailerPlate ? String(body.trailerPlate) : undefined,
             tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
-            actor: String(body.actor || 'Dispatcher Console'),
+            actor: dispatcherActor,
           });
           return res;
         }
@@ -418,7 +443,7 @@ export async function POST(req: NextRequest) {
             trailerId: String(body.trailerId),
             trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
             tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
-            actor: String(body.actor || 'Dispatcher Console'),
+            actor: dispatcherActor,
           });
           return res;
         }
@@ -461,6 +486,7 @@ export async function POST(req: NextRequest) {
                 trailerId: String(body.trailerId),
                 trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
                 tokenNumber: String(body.tokenNumber ?? ''),
+                actor: dispatcherActor,
               });
             }
           }
@@ -527,6 +553,7 @@ export async function POST(req: NextRequest) {
                 trailerId: String(d.trailerId),
                 trailerPlate: String(d.trailerPlate ?? 'DXB-TR-9901'),
                 tokenNumber: token,
+                actor: dispatcherActor,
               });
               assignedCount++;
             }
@@ -560,7 +587,7 @@ export async function POST(req: NextRequest) {
             detachTrailer: body.detachTrailer,
             etcTime: body.etcTime || body.etc || undefined,
             notes: body.notes || undefined,
-            actor: body.actor || undefined,
+            actor: dispatcherActor,
           });
         }
 
@@ -570,7 +597,7 @@ export async function POST(req: NextRequest) {
             jobId: String(body.jobId),
             minutesToAdd: Number(body.minutesToAdd ?? 60),
             reason: body.reason ? String(body.reason) : undefined,
-            actor: body.actor ? String(body.actor) : 'Dispatch Console',
+            actor: dispatcherActor,
           });
         }
 

@@ -12,6 +12,62 @@ import {
   submitDriverExpenseReceipt,
 } from '@/lib/logistics/drayage-domain';
 
+async function resolveDriverActorLabel(
+  tx: { $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T> },
+  tenantId: string,
+  jobId: string,
+  fallbackName?: unknown,
+): Promise<string> {
+  const rawFallback = typeof fallbackName === 'string' ? fallbackName.trim() : '';
+  const rows = await tx
+    .$queryRawUnsafe<Array<{ driver_name: string | null; employee_id: string | null }>>(
+      `SELECT
+         COALESCE(
+           NULLIF(TRIM(CONCAT(COALESCE(d.first_name, ''), ' ', COALESCE(d.last_name, ''))), ''),
+           NULLIF(TRIM(d.name), ''),
+           NULLIF(TRIM(j.assigned_driver_name), '')
+         ) AS driver_name,
+         COALESCE(
+           NULLIF(TRIM(d.employee_id), ''),
+           (
+             SELECT NULLIF(TRIM(u."employeeId"), '')
+               FROM "User" u
+              WHERE u.id = d.id::text
+                 OR u.id = d.user_id
+                 OR u.id = j.assigned_driver_id
+                 OR (u.email IS NOT NULL AND d.email IS NOT NULL AND LOWER(u.email) = LOWER(d.email))
+              LIMIT 1
+           ),
+           NULLIF(TRIM(d.dallas_id), ''),
+           NULLIF(TRIM(d.license_number), '')
+         ) AS employee_id
+       FROM logistics_drayage_jobs j
+       LEFT JOIN drivers d
+         ON d.deleted_at IS NULL
+        AND (
+          d.id::text = j.assigned_driver_id
+          OR (
+            j.assigned_driver_name IS NOT NULL
+            AND LOWER(TRIM(COALESCE(NULLIF(TRIM(CONCAT(COALESCE(d.first_name, ''), ' ', COALESCE(d.last_name, ''))), ''), d.name, ''))) =
+                LOWER(TRIM(j.assigned_driver_name))
+          )
+        )
+      WHERE j.id = $1 AND j.tenant_id = $2
+      LIMIT 1`,
+      jobId,
+      tenantId,
+    )
+    .catch(() => []);
+
+  const dbName = rows[0]?.driver_name?.trim() || '';
+  const empId = rows[0]?.employee_id?.trim() || '';
+  const name = rawFallback || dbName || 'Driver';
+  if (empId && !name.includes(empId)) {
+    return `${name} (${empId})`;
+  }
+  return name;
+}
+
 export async function POST(
   req: NextRequest,
   props: { params: Promise<{ id: string }> },
@@ -60,14 +116,15 @@ export async function POST(
       const scannedEir = String(body.scannedEirNumber ?? '').trim().toUpperCase();
       const scanStage = String(body.scanStage ?? 'CONTAINER_LOADED').trim();
       await withTenantRls(prisma, tenantId, async (tx) => {
+        const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
         await clearPortInspection(tx, {
           tenantId,
           jobId,
           agency: 'CUSTOMS',
           newSealNumber: scannedSeal || undefined,
-          clearedBy: String(body.driverName || 'Driver Gemini Vision OCR Scanner'),
+          clearedBy: driverActor,
           notes: `Gemini Vision OCR [${scanStage}]: Container (${scannedContainer})${scannedSeal ? `, Customs Seal (${scannedSeal})` : ''}${scannedEir ? `, EIR Gate Slip (${scannedEir})` : ''} verified via Driver Mobile App`,
-          actor: String(body.driverName || 'Driver Mobile App'),
+          actor: driverActor,
         });
       });
       return NextResponse.json({
@@ -95,6 +152,7 @@ export async function POST(
         .join(' · ');
 
       const podRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
         return submitJobPodEvidence(tx, {
           tenantId,
           jobId,
@@ -105,7 +163,7 @@ export async function POST(
             ? String(body.photo)
             : sealCargoPhotoUrl,
           notes: combinedNotes || undefined,
-          actor: String(body.driverName || 'Driver Mobile App'),
+          actor: driverActor,
         });
       });
       return NextResponse.json({
@@ -169,6 +227,7 @@ export async function POST(
         : status.includes('DETACHED') || status === 'READY_FOR_PICKUP' || status === 'CONTAINER_DROPPED';
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
+      const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
       if (body.receiverName || body.photo || body.signatureDataUri || sealCargoPhotoUrl) {
         const baseReceiver = String(body.receiverName || body.driverName || 'Warehouse Dock Supervisor').trim();
         await submitJobPodEvidence(tx, {
@@ -181,7 +240,7 @@ export async function POST(
             ? String(body.photo)
             : sealCargoPhotoUrl,
           notes,
-          actor: body.driverName ? String(body.driverName) : 'Driver Mobile App',
+          actor: driverActor,
         });
       }
       return updateDrayageJobExecutionStatus(tx, {
@@ -192,7 +251,7 @@ export async function POST(
         detachTrailer,
         etcTime,
         notes,
-        actor: body.driverName || 'Driver Mobile App',
+        actor: driverActor,
       });
     });
 

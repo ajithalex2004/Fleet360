@@ -228,6 +228,7 @@ export default function DrayageJobTrackingPage() {
   const [warehouses, setWarehouses] = useState<DrayageCorridorWarehouse[]>([]);
   const [geofences, setGeofences] = useState<DrayageCorridorGeofence[]>([]);
   const [vehicles, setVehicles] = useState<DrayageCorridorVehicle[]>([]);
+  const [drivers, setDrivers] = useState<Array<{ id: string; fullName: string; employeeId?: string | null; licenseNumber?: string | null }>>([]);
   const [viewMode, setViewMode] = useState<'SPLIT' | 'RADAR' | 'CONSOLE'>('SPLIT');
 
   // EDI verification state
@@ -287,6 +288,7 @@ export default function DrayageJobTrackingPage() {
       setWarehouses(data.warehouses || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
+      setDrivers(data.drivers || []);
       if (data.automationConfig) {
         setAutomationConfig({
           ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -391,6 +393,7 @@ export default function DrayageJobTrackingPage() {
       setWarehouses(data.warehouses || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
+      setDrivers(data.drivers || []);
     });
     return () => unsubscribe();
   }, [loadData]);
@@ -501,8 +504,92 @@ export default function DrayageJobTrackingPage() {
 
   const jobLogs = useMemo(() => {
     if (!activeJob) return [];
-    return statusLogs.filter((l) => l.jobId === activeJob.id || l.jobCode === activeJob.jobCode);
-  }, [statusLogs, activeJob]);
+    const rawForJob = statusLogs.filter((l) => l.jobId === activeJob.id || l.jobCode === activeJob.jobCode);
+    const directStatuses = new Set(
+      rawForJob
+        .filter((l) => !/^MILESTONE_ALERT_/i.test(l.status))
+        .map((l) => l.status.toUpperCase()),
+    );
+    const seenMilestoneFallback = new Set<string>();
+    const assignedDriver = drivers.find(
+      (d) =>
+        Boolean(
+          activeJob.assignedDriverName &&
+            d.fullName.trim().toLowerCase() === activeJob.assignedDriverName.trim().toLowerCase(),
+        ),
+    );
+    const driverStageSet = new Set([
+      'ACCEPTED',
+      'CONTAINER_PICKED',
+      'TRAILER_ATTACHED',
+      'UNDER_INSPECTION',
+      'EN_ROUTE_WAREHOUSE',
+      'EN_ROUTE_TERMINAL',
+      'IN_TRANSIT',
+      'PLACED_AT_RAMP',
+      'PLACED_AT_YARD',
+      'TRAILER_DETACHED',
+      'CONTAINER_DETACHED',
+      'CONTAINER_DROPPED',
+      'EMPTY_DEPOSITED',
+      'COMPLETED',
+      'EPOD_SIGNED',
+      'DRIVER_EXPENSE_RECEIPT',
+    ]);
+    const systemActorSet = new Set([
+      'dispatcher',
+      'customer alert engine (whatsapp + email)',
+      'dispatch console',
+      'dispatcher console',
+      'port operations desk',
+      'auto-l2 dispatch engine (t-30m)',
+    ]);
+
+    return rawForJob
+      .filter((l) => {
+        if (!/^MILESTONE_ALERT_/i.test(l.status)) return true;
+        const cleanSt = l.status.replace(/^MILESTONE_ALERT_/i, '').toUpperCase();
+        if (directStatuses.has(cleanSt)) return false;
+        if (seenMilestoneFallback.has(cleanSt)) return false;
+        seenMilestoneFallback.add(cleanSt);
+        return true;
+      })
+      .map((l) => {
+        const cleanStatus = l.status.replace(/^MILESTONE_ALERT_/i, '');
+        const cleanNotes = (l.notes || '')
+          .replace(/\[(?:CUSTOMER|CLIENT|RAMP)\s+Alert[^\]]*\](\s*\+\s*\[Email[^\]]*\])?/gi, '')
+          .replace(/·?\s*Milestone\s+"[^"]*"/gi, '')
+          .replace(/·?\s*ETC\s+[^·]+(?=\s*·|$)/gi, '')
+          .replace(/·?\s*(?:Customer|Client|Ramp)\s+Link[^·]*/gi, '')
+          .replace(/^Execution stage updated to [A-Z0-9_-]+(?:\s*\((?:RAMP|YARD)\))?/i, '')
+          .replace(/^\s*[·\-|]+\s*/, '')
+          .replace(/\s*[·\-|]+\s*$/, '')
+          .trim();
+
+        const rawActor = (l.actor || '').trim();
+        const baseActor = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        const matchedDrv =
+          drivers.find((d) => d.fullName.trim().toLowerCase() === baseActor.toLowerCase()) ||
+          assignedDriver;
+        let displayActor = rawActor;
+        if (driverStageSet.has(cleanStatus.toUpperCase()) || drivers.some((d) => d.fullName.trim().toLowerCase() === baseActor.toLowerCase())) {
+          const drvName =
+            matchedDrv?.fullName ||
+            (baseActor && !systemActorSet.has(baseActor.toLowerCase()) ? baseActor : activeJob.assignedDriverName || 'Driver');
+          const empId = matchedDrv?.employeeId || matchedDrv?.licenseNumber || null;
+          displayActor = empId && !rawActor.includes(`(${empId})`) ? `${drvName} (${empId})` : rawActor || drvName;
+        } else if (!rawActor || systemActorSet.has(rawActor.toLowerCase())) {
+          displayActor = user?.username || rawActor || 'dispatcher';
+        }
+
+        return {
+          ...l,
+          status: cleanStatus,
+          notes: cleanNotes,
+          actor: displayActor,
+        };
+      });
+  }, [statusLogs, activeJob, drivers, user?.username]);
 
   const jobMessages = useMemo(() => {
     if (!activeJob) return [];
@@ -535,6 +622,7 @@ export default function DrayageJobTrackingPage() {
           placementLocation: placement,
           detachTrailer: detach,
           etcTime: etcTime || undefined,
+          actor: user?.username || undefined,
         }),
       });
       const data = await res.json();
@@ -560,7 +648,7 @@ export default function DrayageJobTrackingPage() {
           action: 'extend_etc',
           jobId: activeJob.id,
           minutesToAdd,
-          actor: 'Dispatch Console',
+          actor: user?.username || 'dispatcher',
         }),
       });
       const data = await res.json();
@@ -2168,13 +2256,15 @@ export default function DrayageJobTrackingPage() {
                         <div key={log.id} className="flex items-start gap-2.5 text-xs">
                           <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                           <div className="space-y-0.5 min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-[var(--text-main)] font-mono text-[11px]">{log.status}</span>
                               <span className="text-[10px] text-[var(--text-muted)]">
                                 {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {log.actor}
                               </span>
                             </div>
-                            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">{log.notes}</p>
+                            {log.notes ? (
+                              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">{log.notes}</p>
+                            ) : null}
                           </div>
                         </div>
                       ))

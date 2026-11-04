@@ -1155,6 +1155,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     messageRows,
     ackRows,
     automationConfig,
+    dispatcherUserRows,
   ] = await Promise.all([
     cachedMaster
       ? Promise.resolve(cachedMaster.terminalRows)
@@ -1223,21 +1224,35 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       tenantId,
     ).catch(() => []),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT id,
-              employee_id,
-              first_name,
-              last_name,
-              name,
-              contact_number AS phone,
-              license_number,
-              license_expiry,
-              COALESCE(status, 'ACTIVE') AS status,
-              COALESCE(driver_type, 'LOGISTICS') AS assignment_type,
-              assigned_vehicle_id
-         FROM drivers
-        WHERE deleted_at IS NULL
-          AND (tenant_id = $1 OR driver_type = 'LOGISTICS')
-        ORDER BY CASE WHEN driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, first_name ASC NULLS LAST
+      `SELECT d.id,
+              COALESCE(
+                NULLIF(TRIM(d.employee_id), ''),
+                (
+                  SELECT NULLIF(TRIM(u."employeeId"), '')
+                    FROM "User" u
+                   WHERE u.id = d.id::text
+                      OR u.id = d.user_id
+                      OR (u.email IS NOT NULL AND d.email IS NOT NULL AND LOWER(u.email) = LOWER(d.email))
+                      OR LOWER(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", '')))) =
+                         LOWER(TRIM(COALESCE(NULLIF(TRIM(CONCAT(COALESCE(d.first_name, ''), ' ', COALESCE(d.last_name, ''))), ''), d.name, '')))
+                   LIMIT 1
+                ),
+                NULLIF(TRIM(d.dallas_id), ''),
+                NULLIF(TRIM(d.license_number), '')
+              ) AS employee_id,
+              d.first_name,
+              d.last_name,
+              d.name,
+              d.contact_number AS phone,
+              d.license_number,
+              d.license_expiry,
+              COALESCE(d.status, 'ACTIVE') AS status,
+              COALESCE(d.driver_type, 'LOGISTICS') AS assignment_type,
+              d.assigned_vehicle_id
+         FROM drivers d
+        WHERE d.deleted_at IS NULL
+          AND (d.tenant_id = $1 OR d.driver_type = 'LOGISTICS')
+        ORDER BY CASE WHEN d.driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, d.first_name ASC NULLS LAST
         LIMIT 60`,
       tenantId,
     ).catch(() => []),
@@ -1278,6 +1293,21 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     cachedMaster
       ? Promise.resolve(cachedMaster.automationConfig)
       : getTenantAutomationConfig(db, tenantId),
+    db.$queryRawUnsafe<Array<{ username: string | null; email: string | null }>>(
+      `SELECT u.username, u.email
+         FROM "User" u
+         JOIN user_tenants ut ON ut.user_id = u.id AND ut.tenant_id = $1
+         LEFT JOIN roles r ON r.id = ut.role_id
+        WHERE u.is_active = TRUE
+          AND UPPER(COALESCE(u."userType", '')) != 'DRIVER'
+          AND UPPER(COALESCE(r.code, '')) != 'DRIVER'
+        ORDER BY CASE
+          WHEN UPPER(COALESCE(r.code, '')) LIKE '%DISPATCH%' OR LOWER(COALESCE(u.username, '')) LIKE '%dispatch%' THEN 0
+          ELSE 1
+        END, u.created_at ASC
+        LIMIT 10`,
+      tenantId,
+    ).catch(() => []),
   ]);
 
   if (!cachedMaster) {
@@ -1720,18 +1750,166 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
   }
 
-  const statusLogs: DrayageStatusLog[] = statusLogRows
-    .filter((l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG')
-    .map((l: Record<string, unknown>) => ({
-      id: String(l.id),
-      tenantId: String(l.tenant_id),
-      jobId: String(l.job_id),
-      jobCode: String(l.job_code),
-      status: String(l.status),
-      notes: String(l.notes ?? ''),
-      actor: String(l.actor ?? 'Dispatch Console'),
-      timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
-    }));
+  const defaultDispatcherUsername =
+    dispatcherUserRows.find((u) => u.username && String(u.username).trim())?.username?.trim() ||
+    dispatcherUserRows.find((u) => u.email && String(u.email).trim())?.email?.split('@')[0]?.trim() ||
+    'dispatcher';
+
+  const jobByIdOrCode = new Map<string, DrayageJob>();
+  for (const j of jobs) {
+    jobByIdOrCode.set(j.id, j);
+    if (j.jobCode) jobByIdOrCode.set(j.jobCode, j);
+  }
+  const driverById = new Map<string, MappedFleetDriver>();
+  const driverByLowerName = new Map<string, MappedFleetDriver>();
+  for (const d of drivers) {
+    driverById.set(d.id, d);
+    if (d.fullName) driverByLowerName.set(d.fullName.trim().toLowerCase(), d);
+  }
+
+  const DRIVER_STAGE_STATUSES = new Set([
+    'ACCEPTED',
+    'CONTAINER_PICKED',
+    'TRAILER_ATTACHED',
+    'UNDER_INSPECTION',
+    'EN_ROUTE_WAREHOUSE',
+    'EN_ROUTE_TERMINAL',
+    'IN_TRANSIT',
+    'PLACED_AT_RAMP',
+    'PLACED_AT_YARD',
+    'TRAILER_DETACHED',
+    'CONTAINER_DETACHED',
+    'CONTAINER_DROPPED',
+    'EMPTY_DEPOSITED',
+    'COMPLETED',
+    'EPOD_SIGNED',
+    'DRIVER_EXPENSE_RECEIPT',
+  ]);
+  const DISPATCHER_STAGE_STATUSES = new Set([
+    'ASSIGNED',
+    'RE-ASSIGNED',
+    'L2_ACTIVATED',
+    'ETC_EXTENDED',
+    'BOGIE_DISPATCH_CREATED',
+    'STREET_TURN_EXECUTED',
+    'PCS_TOKEN_BOOKED',
+    'PCS_SLOT_AUTO_REBOOKED',
+    'TRACTOR_SWAPPED_SLOT_RESCUE',
+    'DO_REVALIDATED',
+  ]);
+  const SYSTEM_DISPATCHER_ACTORS = new Set([
+    'customer alert engine (whatsapp + email)',
+    'dispatch console',
+    'dispatcher console',
+    'port operations desk',
+    'auto-l2 dispatch engine (t-30m)',
+    'pcs integration gateway',
+    'port slot risk intelligence',
+    'shipping line edo interface',
+    'super admin',
+  ]);
+
+  const nonMilestoneLogRows = statusLogRows.filter(
+    (l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG',
+  );
+  const directJobStageKeys = new Set<string>();
+  for (const l of nonMilestoneLogRows) {
+    const st = String(l.status ?? '').trim();
+    if (!/^MILESTONE_ALERT_/i.test(st)) {
+      directJobStageKeys.add(`${String(l.job_id)}::${st.toUpperCase()}`);
+      directJobStageKeys.add(`${String(l.job_code)}::${st.toUpperCase()}`);
+    }
+  }
+  const seenMilestoneFallbackKeys = new Set<string>();
+
+  const statusLogs: DrayageStatusLog[] = nonMilestoneLogRows
+    .filter((l: Record<string, unknown>) => {
+      const rawStatus = String(l.status ?? '').trim();
+      if (!/^MILESTONE_ALERT_/i.test(rawStatus)) return true;
+      const cleanSt = rawStatus.replace(/^MILESTONE_ALERT_/i, '').toUpperCase();
+      const jobKeyId = `${String(l.job_id)}::${cleanSt}`;
+      const jobKeyCode = `${String(l.job_code)}::${cleanSt}`;
+      if (directJobStageKeys.has(jobKeyId) || directJobStageKeys.has(jobKeyCode)) {
+        return false;
+      }
+      if (seenMilestoneFallbackKeys.has(jobKeyId)) {
+        return false;
+      }
+      seenMilestoneFallbackKeys.add(jobKeyId);
+      return true;
+    })
+    .map((l: Record<string, unknown>) => {
+      const jobId = String(l.job_id);
+      const jobCode = String(l.job_code);
+      const rawStatus = String(l.status ?? '').trim();
+      const normalizedStatus = rawStatus.replace(/^MILESTONE_ALERT_/i, '');
+      const rawNotes = String(l.notes ?? '');
+      const cleanedNotes = rawNotes
+        .replace(/\[(?:CUSTOMER|CLIENT|RAMP)\s+Alert[^\]]*\](\s*\+\s*\[Email[^\]]*\])?/gi, '')
+        .replace(/·?\s*Milestone\s+"[^"]*"/gi, '')
+        .replace(/·?\s*ETC\s+[^·]+(?=\s*·|$)/gi, '')
+        .replace(/·?\s*(?:Customer|Client|Ramp)\s+Link[^·]*/gi, '')
+        .replace(/^Execution stage updated to [A-Z0-9_-]+(?:\s*\((?:RAMP|YARD)\))?/i, '')
+        .replace(/^\s*[·\-|]+\s*/, '')
+        .replace(/\s*[·\-|]+\s*$/, '')
+        .trim();
+
+      const rawActor = String(l.actor ?? '').trim();
+      const baseActorName = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      const matchedJob = jobByIdOrCode.get(jobId) || jobByIdOrCode.get(jobCode);
+      const matchedDriver =
+        driverByLowerName.get(baseActorName.toLowerCase()) ||
+        (matchedJob?.assignedDriverId ? driverById.get(matchedJob.assignedDriverId) : undefined) ||
+        (matchedJob?.assignedDriverName
+          ? driverByLowerName.get(matchedJob.assignedDriverName.trim().toLowerCase())
+          : undefined);
+
+      const isDriverAction =
+        !DISPATCHER_STAGE_STATUSES.has(normalizedStatus.toUpperCase()) &&
+        (DRIVER_STAGE_STATUSES.has(normalizedStatus.toUpperCase()) ||
+          driverByLowerName.has(baseActorName.toLowerCase()) ||
+          baseActorName.toLowerCase() === 'driver mobile app' ||
+          Boolean(
+            matchedJob?.assignedDriverName &&
+              baseActorName.toLowerCase() === matchedJob.assignedDriverName.trim().toLowerCase(),
+          ));
+
+      let formattedActor: string;
+      if (isDriverAction) {
+        const driverDisplayName =
+          driverByLowerName.get(baseActorName.toLowerCase())?.fullName ||
+          (baseActorName &&
+          baseActorName.toLowerCase() !== 'driver mobile app' &&
+          !SYSTEM_DISPATCHER_ACTORS.has(baseActorName.toLowerCase())
+            ? baseActorName
+            : matchedDriver?.fullName || matchedJob?.assignedDriverName || 'Assigned Driver');
+        const existingParenMatch = rawActor.match(/\(([^)]+)\)\s*$/);
+        const effectiveEmpId =
+          matchedDriver?.employeeId ||
+          (existingParenMatch && !/portal|desk|whatsapp|email/i.test(existingParenMatch[1])
+            ? existingParenMatch[1].trim()
+            : null) ||
+          matchedDriver?.licenseNumber ||
+          null;
+        formattedActor = effectiveEmpId ? `${driverDisplayName} (${effectiveEmpId})` : driverDisplayName;
+      } else {
+        formattedActor =
+          rawActor && !SYSTEM_DISPATCHER_ACTORS.has(rawActor.toLowerCase())
+            ? rawActor
+            : defaultDispatcherUsername;
+      }
+
+      return {
+        id: String(l.id),
+        tenantId: String(l.tenant_id),
+        jobId,
+        jobCode,
+        status: normalizedStatus,
+        notes: cleanedNotes,
+        actor: formattedActor,
+        timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
+      };
+    });
 
   const messages: DrayageDispatchMessage[] = messageRows.map((m: Record<string, unknown>) => ({
     id: String(m.id),
@@ -2525,6 +2703,7 @@ export async function assignDrayageJob(
     trailerId: string;
     trailerPlate: string;
     tokenNumber: string;
+    actor?: string;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -2673,6 +2852,18 @@ export async function assignDrayageJob(
       allowanceCalc.totalAmountAed,
     );
   }
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    nextAssignStatus,
+    '',
+    args.actor || 'dispatcher',
+  );
 
   // Automatically dispatch Customer & Client tracking links upon Vehicle & Driver Assignment (ASSIGNED status)
   await dispatchDrayageCustomerMilestoneAlert(db, {
@@ -2879,8 +3070,16 @@ export async function updateDrayageJobExecutionStatus(
   }
 
   const logActor = args.actor || 'Dispatch Console';
-  const etcNote = effectiveEtcTime ? ` | Offloading ETC: ${new Date(effectiveEtcTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}` : '';
-  const customNotes = args.notes ? ` - ${args.notes}` : '';
+  const stageDetails = [
+    placement ? `Placement: ${placement}` : '',
+    detached ? 'Chassis Detached' : '',
+    effectiveEtcTime
+      ? `Offloading ETC: ${new Date(effectiveEtcTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}`
+      : '',
+    args.notes ? String(args.notes).trim() : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -2890,7 +3089,7 @@ export async function updateDrayageJobExecutionStatus(
     args.jobId,
     String(job.job_code),
     args.status,
-    `Execution stage updated to ${args.status}${placement ? ` (${placement})` : ''}${detached ? ' [Chassis Detached]' : ''}${etcNote}${customNotes}`,
+    stageDetails,
     logActor,
   );
 
@@ -6388,27 +6587,8 @@ export async function dispatchDrayageCustomerMilestoneAlert(
       // Fallback simulated SMTP log
     }
   }
-
-  const activeLinksNote =
-    args.triggerSource === 'AUTO_STAGE_TRANSITION'
-      ? rampActive
-        ? `Customer Link + Client Link + Ramp Link (Activated @ PLACED_AT_RAMP)`
-        : `Customer Link + Client Link (Activated @ ${status})`
-      : `${requestedRole} Link (/track/drayage/${activeToken.slice(0, 18)}...)`;
-
-  const logNote = `[${requestedRole} Alert · WhatsApp → ${targetWhatsApp || 'N/A'} (${waProviderStatus})]${targetEmail ? ` + [Email → ${targetEmail} (${emailProviderStatus})]` : ''} · Milestone "${milestoneMeta.title}"${etcFormatted ? ` · ETC ${etcFormatted}` : ''} · ${activeLinksNote}`;
-
-  await db.$executeRawUnsafe(
-    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    `log-${crypto.randomUUID().slice(0, 12)}`,
-    args.tenantId,
-    args.jobId,
-    jobCode,
-    `MILESTONE_ALERT_${status}`,
-    logNote,
-    'Customer Alert Engine (WhatsApp + Email)',
-  );
+  void waProviderStatus;
+  void emailProviderStatus;
 
   return {
     ok: true,

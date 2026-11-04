@@ -1893,6 +1893,7 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
@@ -1933,6 +1934,7 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
@@ -1956,6 +1958,7 @@ export default function DrayageAssignmentPage() {
             trailerId: effectiveTrailerId,
             trailerPlate: tr?.plateNumber || assigningJob?.assignedTrailerPlate || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
