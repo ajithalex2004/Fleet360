@@ -1304,7 +1304,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         ORDER BY CASE
           WHEN UPPER(COALESCE(r.code, '')) LIKE '%DISPATCH%' OR LOWER(COALESCE(u.username, '')) LIKE '%dispatch%' THEN 0
           ELSE 1
-        END, u.created_at ASC
+        END, u.username ASC
         LIMIT 10`,
       tenantId,
     ).catch(() => []),
