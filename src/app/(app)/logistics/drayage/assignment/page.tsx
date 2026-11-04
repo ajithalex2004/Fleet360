@@ -1828,15 +1828,47 @@ export default function DrayageAssignmentPage() {
     }
   };
 
-  // Open modal for single job — clear fields so previous action values never pre-populate on Assign / Reassign
+  // Open modal for single job — auto-populate detached/linked chassis & existing gate token when reassigning or dispatching L2
   const handleOpenAssign = (job: DrayageJob) => {
     setAssigningJob(job);
     setIsBogieAssign(false);
     setSelectedJobIds([job.id]);
     setSelectedVehicleId('');
     setSelectedDriverId('');
-    setSelectedTrailerId('');
-    setTokenInput('');
+
+    const st = String(job.status || '').toUpperCase();
+    const hasLinkedOrDetachedChassis =
+      Boolean(job.trailerDetached) ||
+      job.jobPhase === 'L2' ||
+      [
+        'TRAILER_DETACHED',
+        'CONTAINER_DETACHED',
+        'REASSIGN_TRAILER_DETACHED',
+        'PLACED_AT_RAMP',
+        'REASSIGN_PLACED_AT_RAMP',
+        'PLACED_AT_YARD',
+        'REASSIGN_PLACED_AT_YARD',
+        'WAITING_MT_RETURN',
+        'READY_FOR_PICKUP',
+      ].includes(st) ||
+      Boolean(job.assignedTrailerId || job.assignedTrailerPlate);
+
+    const matchedTrailer = hasLinkedOrDetachedChassis
+      ? trailers.find(
+          (t) =>
+            (job.assignedTrailerId && t.id === job.assignedTrailerId) ||
+            (job.assignedTrailerPlate &&
+              t.plateNumber.trim().toLowerCase() === job.assignedTrailerPlate.trim().toLowerCase()) ||
+            (job.containerNumber &&
+              t.linkedContainerNumber &&
+              t.linkedContainerNumber.trim().toLowerCase() === job.containerNumber.trim().toLowerCase()),
+        )
+      : undefined;
+
+    setSelectedTrailerId(
+      matchedTrailer?.id || (hasLinkedOrDetachedChassis ? job.assignedTrailerId || '' : ''),
+    );
+    setTokenInput(job.tokenNumber || job.pcsTokenNumber || '');
   };
 
   // Open modal for bogie merge (strictly exactly 2 twenty-foot containers)
@@ -3661,12 +3693,26 @@ export default function DrayageAssignmentPage() {
                 <SearchableSelect
                   value={selectedTrailerId}
                   onChange={(val) => setSelectedTrailerId(val)}
-                  options={trailers.map((t) => ({
-                    value: t.id,
-                    label: `${t.plateNumber} · ${t.trailerType}`,
-                    sublabel: `Capacity: ${t.capacityTons}T • Loc: ${t.currentLocation || 'Depot'} • Master: ${t.masterStatus}`,
-                    badge: t.operationalStatus,
-                  }))}
+                  options={(() => {
+                    const baseOptions = trailers.map((t) => ({
+                      value: t.id,
+                      label: `${t.plateNumber} · ${t.trailerType}`,
+                      sublabel: `Capacity: ${t.capacityTons}T • Loc: ${t.currentLocation || 'Depot'} • Master: ${t.masterStatus}`,
+                      badge: t.operationalStatus,
+                    }));
+                    if (
+                      assigningJob?.assignedTrailerId &&
+                      !baseOptions.some((o) => o.value === assigningJob.assignedTrailerId)
+                    ) {
+                      baseOptions.unshift({
+                        value: assigningJob.assignedTrailerId,
+                        label: `${assigningJob.assignedTrailerPlate || assigningJob.assignedTrailerId} · 40FT_SKELETAL`,
+                        sublabel: `Linked Chassis for ${assigningJob.containerNumber} (${assigningJob.jobCode})`,
+                        badge: assigningJob.trailerDetached ? 'DETACHED' : 'LINKED',
+                      });
+                    }
+                    return baseOptions;
+                  })()}
                   placeholder="-- Search & Choose Chassis --"
                   searchPlaceholder="Type chassis plate, skeletal, flatbed..."
                   accent="emerald"
