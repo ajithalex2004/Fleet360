@@ -58,6 +58,8 @@ interface DrayageAssignment {
   status: string;
   priority: string;
   customerName?: string | null;
+  clientName?: string | null;
+  clientDestination?: string | null;
   containerNumber: string;
   containerSize: string;
   containerType: string;
@@ -1195,9 +1197,23 @@ export default function DriverTodayPage() {
             </div>
 
             <div className="flex justify-between py-1.5 border-b border-slate-100">
-              <span className="text-slate-500 font-medium">Client</span>
+              <span className="text-slate-500 font-medium">Customer</span>
               <span className="font-bold text-slate-900 text-right">
                 {selectedJob.customerName || 'N/A'}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Client</span>
+              <span className="font-bold text-slate-900 text-right">
+                {selectedJob.clientName || selectedJob.warehouseName || 'N/A'}
+              </span>
+            </div>
+
+            <div className="flex justify-between py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Client Destination</span>
+              <span className="font-bold text-slate-900 text-right">
+                {selectedJob.clientDestination || selectedJob.warehouseName || 'N/A'}
               </span>
             </div>
 
@@ -1573,9 +1589,21 @@ export default function DriverTodayPage() {
                 {/* Core Details */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500 font-semibold">Client:</span>
+                    <span className="text-slate-500 font-semibold">Customer:</span>
                     <span className="font-bold text-slate-900 text-right">
                       {job.customerName || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Client:</span>
+                    <span className="font-bold text-slate-900 text-right">
+                      {job.clientName || job.warehouseName || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Client Destination:</span>
+                    <span className="font-bold text-slate-900 text-right">
+                      {job.clientDestination || job.warehouseName || 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between">

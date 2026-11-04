@@ -154,11 +154,22 @@ type DrayageTerminalRow = {
 type DrayageWarehouseRow = {
   id: string;
   name: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  zone: string | null;
+  address: string | null;
   lat: number | null;
   lng: number | null;
   geofence_type: string | null;
   geofence_radius_meters: number | null;
   geofence_coordinates_json: string | null;
+};
+
+type DrayageClientRow = {
+  id: string;
+  name: string | null;
+  street_address: string | null;
+  city: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -241,7 +252,7 @@ export async function GET(req: NextRequest) {
     let drayageJobs: Array<Record<string, unknown>> = [];
     let broadcastMessages: Array<Record<string, unknown>> = [];
     try {
-      const [drayageRows, gfRows, termRows, whRows, msgRows] = await Promise.all([
+      const [drayageRows, gfRows, termRows, whRows, clientRows, msgRows] = await Promise.all([
         tx.$queryRawUnsafe<DrayageJobRow[]>(
           `
             SELECT
@@ -327,8 +338,18 @@ export async function GET(req: NextRequest) {
         tx
           .$queryRawUnsafe<DrayageWarehouseRow[]>(
             `
-            SELECT id, name, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
+            SELECT id, name, customer_id, customer_name, zone, address, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
             FROM logistics_drayage_warehouses
+            WHERE tenant_id = $1
+          `,
+            tenantId,
+          )
+          .catch(() => []),
+        tx
+          .$queryRawUnsafe<DrayageClientRow[]>(
+            `
+            SELECT id, name, street_address, city
+            FROM logistics_drayage_clients
             WHERE tenant_id = $1
           `,
             tenantId,
@@ -393,6 +414,27 @@ export async function GET(req: NextRequest) {
             (w.name && j.warehouseName && w.name.toLowerCase().includes(j.warehouseName.toLowerCase().slice(0, 10))),
         );
 
+        const matchedClient = clientRows.find(
+          (c) =>
+            (matchedWh?.customer_id && c.id === matchedWh.customer_id) ||
+            (matchedWh?.customer_name &&
+              c.name &&
+              c.name.trim().toLowerCase() === matchedWh.customer_name.trim().toLowerCase()),
+        );
+
+        const clientName =
+          matchedClient?.name?.trim() ||
+          matchedWh?.customer_name?.trim() ||
+          j.warehouseName ||
+          'N/A';
+
+        const clientDestination =
+          j.warehouseName ||
+          matchedWh?.name?.trim() ||
+          matchedWh?.address?.trim() ||
+          matchedClient?.street_address?.trim() ||
+          'N/A';
+
         const warehouseGeofence = {
           name: matchedWhGf?.name || matchedWh?.name || j.warehouseName,
           type: (matchedWhGf?.type || matchedWh?.geofence_type || 'POLYGON') as 'CIRCLE' | 'POLYGON',
@@ -416,6 +458,8 @@ export async function GET(req: NextRequest) {
 
         return {
           ...j,
+          clientName,
+          clientDestination,
           rateAmountAed: Number(j.rateAmountAed || 0),
           driverAllowanceAed: Number(j.driverAllowanceAed || 0),
           etcTime: j.etcTime ? new Date(j.etcTime).toISOString() : null,

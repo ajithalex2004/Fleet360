@@ -1723,18 +1723,10 @@ export default function DrayageJobTrackingPage() {
                               'bg-slate-500/5 border-[var(--border-subtle)] text-[var(--text-muted)] opacity-45 cursor-not-allowed line-through';
                           } else if (isCurrent) {
                             btnClass +=
-                              'bg-blue-500/15 border-blue-500/50 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/30 cursor-not-allowed';
+                              'bg-blue-700 text-white border-blue-800 shadow-sm cursor-default';
                           } else if (isNext) {
-                            if (st.variant === 'amber') {
-                              btnClass +=
-                                'bg-amber-600 text-white border-amber-500 hover:bg-amber-500 shadow-sm cursor-pointer';
-                            } else if (st.variant === 'emerald') {
-                              btnClass +=
-                                'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-sm cursor-pointer';
-                            } else {
-                              btnClass +=
-                                'bg-blue-600 text-white border-blue-500 hover:bg-blue-500 shadow-sm cursor-pointer';
-                            }
+                            btnClass +=
+                              'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 dark:bg-amber-400/20 dark:hover:bg-amber-400/30 dark:text-amber-200 dark:border-amber-400/50 shadow-sm cursor-pointer';
                           } else if (isFuture) {
                             btnClass +=
                               'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-35 cursor-not-allowed';
