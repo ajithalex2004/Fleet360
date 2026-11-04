@@ -1204,8 +1204,8 @@ export default function DrayageJobTrackingPage() {
                             {' · '}
                             {isExpired
                               ? minsLeft !== null && minsLeft < 0
-                                ? `Expired ${Math.abs(minsLeft)}m ago — ${isYardReassign ? 'Reassign tractor for Yard-to-Ramp / Pickup' : 'Ready for L2 Empty Return'}`
-                                : `Timer Expired — ${isYardReassign ? 'Reassign tractor now' : 'Ready for L2 Empty Return'}`
+                                ? `Expired ${Math.abs(minsLeft)}m ago — Reassign tractor now (FCL_REASSIGN / MT_REASSIGN)`
+                                : `Timer Expired — Reassign tractor now (FCL_REASSIGN / MT_REASSIGN)`
                               : `Approaching expiry in ${minsLeft} minute(s) — Prepare tractor reassignment`}
                           </span>
                         ) : (
@@ -1801,7 +1801,7 @@ export default function DrayageJobTrackingPage() {
                               </span>
                               {isEtcExpired ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-500 text-white animate-pulse">
-                                  🚨 ETC EXPIRED — {isYardPlacement ? 'REASSIGN TRACTOR REQUIRED' : 'L2 EMPTY RETURN READY'}
+                                  🚨 ETC EXPIRED — REASSIGN TRACTOR REQUIRED
                                 </span>
                               ) : isEtcT15 ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
@@ -1838,9 +1838,7 @@ export default function DrayageJobTrackingPage() {
                                     }
                                   >
                                     {isEtcExpired
-                                      ? isYardPlacement
-                                        ? 'Yard timer expired — Dispatcher Reassign required (FCL_REASSIGN / MT_REASSIGN)'
-                                        : 'Offloading completed — L2 Empty Return ready for assignment'
+                                      ? 'Offloading / Yard timer expired — Dispatcher Reassign required (FCL_REASSIGN / MT_REASSIGN)'
                                       : `${activeMinsLeft} mins remaining`}
                                   </span>
                                   {' · '}
@@ -1884,13 +1882,9 @@ export default function DrayageJobTrackingPage() {
                                   const expIso = new Date(Date.now() - 60 * 1000).toISOString();
                                   delete alertedEtcJobsRef.current[activeJob.id];
                                   await handleUpdateStatus(
-                                    activeJob.placementLocation === 'YARD' || activeSt === 'PLACED_AT_YARD'
-                                      ? activeJob.shipmentType === 'EXPORT'
-                                        ? 'MT_REASSIGN'
-                                        : 'FCL_REASSIGN'
-                                      : activeJob.status,
-                                    activeJob.placementLocation || 'YARD',
-                                    activeJob.trailerDetached,
+                                    activeJob.shipmentType === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN',
+                                    activeJob.placementLocation || 'RAMP',
+                                    true,
                                     expIso,
                                   );
                                   showToast(
@@ -1922,7 +1916,7 @@ export default function DrayageJobTrackingPage() {
                           >
                             +2 Hours
                           </button>
-                          {isYardPlacement ? (
+                          {(isEtcExpired || isYardPlacement) ? (
                             <Link
                               href="/logistics/drayage/assignment"
                               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition-colors shadow-sm"
