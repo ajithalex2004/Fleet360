@@ -3086,7 +3086,7 @@ export async function updateDrayageJobExecutionStatus(
             'INSPECTION_REPORTED', 'TRAILER_ATTACHED', 'ACCEPTED',
             'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED'
           )
-        ORDER BY timestamp DESC
+        ORDER BY created_at DESC
         LIMIT 1`,
       args.jobId,
       args.tenantId,

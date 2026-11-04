@@ -29,12 +29,10 @@ async function resolveDriverActorLabel(
            NULLIF(TRIM(j.assigned_driver_name), '')
          ) AS driver_name,
          COALESCE(
-           NULLIF(TRIM(d.employee_id), ''),
            (
              SELECT NULLIF(TRIM(u."employeeId"), '')
                FROM "User" u
               WHERE u.id = d.id::text
-                 OR u.id = d.user_id
                  OR u.id = j.assigned_driver_id
                  OR (u.email IS NOT NULL AND d.email IS NOT NULL AND LOWER(u.email) = LOWER(d.email))
               LIMIT 1
