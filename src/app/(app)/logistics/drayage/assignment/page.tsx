@@ -193,6 +193,7 @@ interface DrayageTrailer {
   operationalStatus: string;
   capacityTons?: number;
   currentLocation?: string | null;
+  linkedContainerNumber?: string | null;
 }
 
 interface DrayageTerminal {
@@ -934,7 +935,7 @@ export default function DrayageAssignmentPage() {
       return { lat: 24.9602, lng: 55.0615 };
     };
 
-    // 1. Inbound containers: L1 Placed at Ramp containers OR unassigned L2 Empty Return jobs
+    // 1. Inbound containers: L1 Placed at Ramp / Detached / Ready for Pickup containers OR unassigned L2 Empty Return jobs
     const l2Inbound = jobs.filter(
       (j) =>
         !j.streetTurnJobId &&
@@ -942,9 +943,15 @@ export default function DrayageAssignmentPage() {
         j.status !== 'COMPLETED' &&
         ((j.jobPhase === 'L2' && (j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId)) ||
           (j.jobPhase === 'L1' &&
-            (j.status === 'PLACED_AT_RAMP' ||
+            (Boolean(j.trailerDetached) ||
+              j.status === 'PLACED_AT_RAMP' ||
               j.status === 'REASSIGN_PLACED_AT_RAMP' ||
+              j.status === 'PLACED_AT_YARD' ||
+              j.status === 'REASSIGN_PLACED_AT_YARD' ||
               j.status === 'CONTAINER_DETACHED' ||
+              j.status === 'TRAILER_DETACHED' ||
+              j.status === 'REASSIGN_TRAILER_DETACHED' ||
+              j.status === 'READY_FOR_PICKUP' ||
               j.status === 'WAITING_MT_RETURN' ||
               j.placementLocation === 'RAMP')))
     );
@@ -1244,7 +1251,7 @@ export default function DrayageAssignmentPage() {
     [trailers],
   );
 
-  // Open modal for single job — auto-populate detached/linked chassis & existing gate token when reassigning or dispatching L2
+  // Open modal for single job — auto-populate detached/linked chassis when reassigning or dispatching L2; keep token blank
   const handleOpenAssign = useCallback(
     (job: DrayageJob) => {
       setAssigningJob(job);
@@ -1253,7 +1260,7 @@ export default function DrayageAssignmentPage() {
       setSelectedVehicleId('');
       setSelectedDriverId('');
       setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
-      setTokenInput(job.tokenNumber || job.pcsTokenNumber || '');
+      setTokenInput('');
     },
     [resolveLinkedTrailerIdForJob],
   );
@@ -1263,10 +1270,6 @@ export default function DrayageAssignmentPage() {
     const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
     if (linkedTrId) {
       setSelectedTrailerId((prev) => prev || linkedTrId);
-    }
-    const existingToken = assigningJob.tokenNumber || assigningJob.pcsTokenNumber || '';
-    if (existingToken) {
-      setTokenInput((prev) => prev || existingToken);
     }
   }, [assigningJob, isBogieAssign, activeStreetTurnPair, resolveLinkedTrailerIdForJob]);
 
@@ -1861,8 +1864,8 @@ export default function DrayageAssignmentPage() {
     const rec = getSmartRecommendedAssets(pair.inboundJob, false);
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
-    setSelectedTrailerId(rec.trailerId);
-    setTokenInput(pair.inboundJob.tokenNumber || '');
+    setSelectedTrailerId(resolveLinkedTrailerIdForJob(pair.inboundJob) || rec.trailerId);
+    setTokenInput('');
   };
 
   const handleToggleBackhaulHold = async (job: DrayageJob, hold: boolean) => {
@@ -2455,9 +2458,9 @@ export default function DrayageAssignmentPage() {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Smart Analysis</span>
-              {bogieCombos.length + streetTurnPairs.length > 0 && (
+              {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white text-blue-900 font-bold ml-0.5">
-                  {bogieCombos.length + streetTurnPairs.length}
+                  {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length}
                 </span>
               )}
             </button>
@@ -2557,7 +2560,7 @@ export default function DrayageAssignmentPage() {
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
-                All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length})
+                All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length})
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BOGIE')}
@@ -2773,12 +2776,17 @@ export default function DrayageAssignmentPage() {
                     </div>
 
                     <div className="space-y-1.5 pt-1 text-xs">
-                      {/* Leg 1: L1 Placed at Ramp or L2 Inbound Empty Box */}
+                      {/* Leg 1: L1 Placed at Ramp / Detached or L2 Inbound Empty Box */}
                       <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-amber-400">
                             {pair.sourcePhase === 'L1_RAMP'
-                              ? '1. L1 Placed at Ramp (Import)'
+                              ? pair.inboundJob.trailerDetached ||
+                                ['TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP'].includes(
+                                  pair.inboundJob.status,
+                                )
+                                ? `1. L1 Trailer Detached / Empty Ready (${pair.inboundJob.jobCode})`
+                                : `1. L1 Placed at Ramp (${pair.inboundJob.jobCode})`
                               : `1. L2 Empty Return (${pair.inboundJob.jobCode})`}
                           </span>
                           <span className="font-mono font-bold text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
@@ -2976,8 +2984,8 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View (Shown ONLY when Urgent Demurrage Alert button is clicked) */}
-            {smartAnalysisFilter === 'DEMURRAGE' &&
+            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View (Included in All Matches & Urgent Demurrage Alert tab) */}
+            {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'DEMURRAGE') &&
               urgentDemurrageJobs.map((job) => {
                 const risk = getDemurrageRisk(job);
                 const radar = job.riskRadar;
@@ -3107,11 +3115,13 @@ export default function DrayageAssignmentPage() {
             {/* Empty state when no matches found */}
             {((smartAnalysisFilter === 'DEMURRAGE' && urgentDemurrageJobs.length === 0) ||
               (smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
-              (smartAnalysisFilter !== 'DEMURRAGE' &&
-                smartAnalysisFilter !== 'BACKHAUL_HOLD' &&
+              (smartAnalysisFilter === 'BOGIE' && bogieCombos.length === 0) ||
+              (smartAnalysisFilter === 'STREET_TURN' && streetTurnPairs.length === 0) ||
+              (smartAnalysisFilter === 'ALL' &&
                 bogieCombos.length === 0 &&
                 streetTurnPairs.length === 0 &&
-                smartBackhaulHoldJobs.length === 0)) && (
+                smartBackhaulHoldJobs.length === 0 &&
+                urgentDemurrageJobs.length === 0)) && (
               <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
                 <h4 className="text-xs font-bold text-[var(--text-main)]">Queue Optimized</h4>

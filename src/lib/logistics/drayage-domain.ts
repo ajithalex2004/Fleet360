@@ -4537,7 +4537,7 @@ export async function findStreetTurnCandidates(
     return { lat: 24.9642, lng: 55.0915 };
   };
 
-  // Inbound candidates: L1 jobs Placed at Ramp (or detached at ramp) AND unassigned L2 Empty Return jobs
+  // Inbound candidates: L1 jobs Placed at Ramp (or detached at ramp/yard / ready for pickup) AND unassigned L2 Empty Return jobs
   const inboundRampOrEmptyJobs = workspace.jobs.filter((j) => {
     if (j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'STREET_TURNED' || j.streetTurnJobId) {
       return false;
@@ -4545,7 +4545,18 @@ export async function findStreetTurnCandidates(
     const isL1AtRamp =
       j.jobPhase === 'L1' &&
       !j.l2Activated &&
-      (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'WAITING_MT_RETURN'].includes(j.status) ||
+      (Boolean(j.trailerDetached) ||
+        [
+          'PLACED_AT_RAMP',
+          'REASSIGN_PLACED_AT_RAMP',
+          'PLACED_AT_YARD',
+          'REASSIGN_PLACED_AT_YARD',
+          'CONTAINER_DETACHED',
+          'TRAILER_DETACHED',
+          'REASSIGN_TRAILER_DETACHED',
+          'READY_FOR_PICKUP',
+          'WAITING_MT_RETURN',
+        ].includes(j.status) ||
         j.placementLocation === 'RAMP');
     const isUnassignedL2 =
       !j.assignedVehicleId && (j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
@@ -4572,7 +4583,7 @@ export async function findStreetTurnCandidates(
       const isExportOutbound =
         exp.shipmentType === 'EXPORT' || exp.jobCode.startsWith('EXP') || exp.jobCode.includes('EXP');
       const sameTerminalReload =
-        inbound.jobPhase === 'L2' &&
+        !isExportOutbound &&
         (inbound.terminalName || '').trim().toLowerCase() === (exp.terminalName || '').trim().toLowerCase();
 
       // 1. Super Admin Configurable Radius Haversine Proximity Check (Default <= 15 km)
@@ -4592,13 +4603,16 @@ export async function findStreetTurnCandidates(
 
       if (!sameTerminalReload && interDist > maxRadiusKm) continue;
 
-      // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match
+      // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match (Port Reload on a 40FT chassis supports any standard container)
       const sizeMatch =
+        sameTerminalReload ||
         inbound.containerSize === exp.containerSize ||
         (inbound.containerSize.startsWith('40') && exp.containerSize.startsWith('40'));
       if (!sizeMatch) continue;
 
-      const typeMatch = (inbound.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
+      const typeMatch =
+        sameTerminalReload ||
+        (inbound.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
       if (!typeMatch) continue;
 
       // 3. Carrier Line Matching (mandatory for inland box reuse, optional bonus for Port Terminal Reload)
