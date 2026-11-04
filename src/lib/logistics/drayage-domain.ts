@@ -2071,7 +2071,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const portFreeDaysAllowed = isReefer ? (term?.freeDaysReefer ?? 3) : (term?.freeDaysDry ?? 5);
     const dischargeMs = linkedCnt?.dischargeDate
       ? new Date(linkedCnt.dischargeDate).getTime()
-      : new Date(j.createdAt || Date.now()).getTime() - (idx % 3 === 0 ? 4.3 : 2.5) * 24 * 60 * 60 * 1000;
+      : new Date(j.createdAt || Date.now()).getTime();
     const portFreeTimeExpiryMs = dischargeMs + portFreeDaysAllowed * 24 * 60 * 60 * 1000;
     const portFreeTimeExpiry = new Date(portFreeTimeExpiryMs).toISOString();
     const portDemurrageHoursRemaining = Math.round(((portFreeTimeExpiryMs - Date.now()) / (1000 * 60 * 60)) * 10) / 10;
@@ -2080,16 +2080,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     // 2. Shipping Line Container Free Days (Detention) Deadline
     const carrier = (j.shippingLine || detectShippingLine(j.containerNumber)).toUpperCase();
     const lineFreeDaysAllowed = isReefer ? 4 : carrier.includes('HAPAG') ? 8 : 7;
-    // If container is detached/at ramp or L2, line detention clock is tighter
-    const isAtCustomerRampOrDetached =
-      j.jobPhase === 'L2' ||
-      j.trailerDetached ||
-      j.placementLocation === 'RAMP' ||
-      ['PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'WAITING_MT_RETURN'].includes((j.status || '').toUpperCase());
-    const lineDetentionExpiryMs = isAtCustomerRampOrDetached
-      ? Math.min(
+    const lineDetentionExpiryMs = j.doExpiryDate
+      ? Math.max(
+          new Date(j.doExpiryDate).getTime(),
           dischargeMs + lineFreeDaysAllowed * 24 * 60 * 60 * 1000,
-          Date.now() + (idx % 2 === 0 ? 16.5 : 22.0) * 60 * 60 * 1000,
         )
       : dischargeMs + lineFreeDaysAllowed * 24 * 60 * 60 * 1000;
     const lineDetentionExpiry = new Date(lineDetentionExpiryMs).toISOString();
@@ -2106,11 +2100,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
     const doHoursRemaining = Math.round(((doExpiryMs - Date.now()) / (1000 * 60 * 60)) * 10) / 10;
 
-    const minHoursRemaining = Math.min(
-      portDemurrageHoursRemaining,
-      lineDetentionHoursRemaining,
-      doHoursRemaining,
-    );
+    const minHoursRemaining =
+      j.jobPhase === 'L2'
+        ? Math.min(lineDetentionHoursRemaining, doHoursRemaining)
+        : Math.min(portDemurrageHoursRemaining, lineDetentionHoursRemaining, doHoursRemaining);
 
     let primaryRiskFactor: DrayageRiskRadarInfo['primaryRiskFactor'] = 'SAFE';
     if (minHoursRemaining <= 48) {
@@ -2180,6 +2173,16 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         acknowledged: ackSet.has(alertKey),
         createdAt: j.updatedAt,
       });
+    } else if (j.priority === 'URGENT' && minHoursRemaining > criticalWindowHrs) {
+      // Restore STANDARD priority if previously auto-escalated when free time / DO expiry still has > 24h remaining
+      j.priority = 'STANDARD';
+      pendingSyncWrites.push(
+        db.$executeRawUnsafe(
+          `UPDATE logistics_drayage_jobs SET priority = 'STANDARD', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          j.id,
+          tenantId,
+        ).catch(() => {}),
+      );
     }
 
     j.riskRadar = {
@@ -2234,7 +2237,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (j.notes || '').includes('E11/E311 Traffic Delay') ||
       (j.pcsSlotEnd && new Date(j.pcsSlotEnd).getTime() - Date.now() < 35 * 60 * 1000);
     const trafficCondition: DrayagePortSlotPrediction['trafficCondition'] =
-      hasSimulatedCongestion || (idx % 3 === 1 && !isCompleted)
+      hasSimulatedCongestion
         ? 'HEAVY_CONGESTION'
         : distanceToPortKm > 15
         ? 'MODERATE_FLOW'
