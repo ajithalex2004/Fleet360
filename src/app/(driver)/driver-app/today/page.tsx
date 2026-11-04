@@ -478,8 +478,19 @@ export default function DriverTodayPage() {
         }
       }
       const w = window as unknown as {
-        Fleet360Android?: { requestPermission?: () => void };
+        Fleet360Android?: {
+          requestPermission?: () => void;
+          syncAuthSession?: (token: string, apiHost: string, driverName: string) => void;
+        };
       };
+      const savedToken = localStorage.getItem('fleet360_session_token');
+      if (savedToken && w?.Fleet360Android?.syncAuthSession) {
+        w.Fleet360Android.syncAuthSession(
+          savedToken,
+          localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+          localStorage.getItem('fleet360_driver_name') || 'Driver',
+        );
+      }
       if (w?.Fleet360Android?.requestPermission) {
         w.Fleet360Android.requestPermission();
       } else if ('Notification' in window && Notification.permission === 'default') {
@@ -563,6 +574,18 @@ export default function DriverTodayPage() {
           setBroadcastMessages(fetchedBroadcasts);
 
           // 1. Detect newly assigned or reassigned jobs and trigger immediate mobile OS notification
+          const androidBridge =
+            typeof window !== 'undefined'
+              ? (window as unknown as {
+                  Fleet360Android?: {
+                    isJobKeyNotified?: (k: string) => boolean;
+                    markJobKeyNotified?: (k: string) => void;
+                    isMsgIdNotified?: (id: string) => boolean;
+                    markMsgIdNotified?: (id: string) => void;
+                  };
+                }).Fleet360Android
+              : undefined;
+
           const ASSIGNMENT_STATUSES = new Set([
             'ASSIGNED',
             'PENDING',
@@ -578,8 +601,15 @@ export default function DriverTodayPage() {
             if (HISTORY_STATUSES.has(st)) continue;
 
             const assignKey = `${j.id}:${st}:${j.assignedVehiclePlate || ''}:${j.assignedTrailerPlate || ''}`;
+            const alreadyNotifiedByNative = Boolean(androidBridge?.isJobKeyNotified?.(assignKey));
+            if (alreadyNotifiedByNative && !seenJobKeysRef.current.has(assignKey)) {
+              seenJobKeysRef.current.add(assignKey);
+              jobKeysUpdated = true;
+              continue;
+            }
             if (!seenJobKeysRef.current.has(assignKey)) {
               seenJobKeysRef.current.add(assignKey);
+              androidBridge?.markJobKeyNotified?.(assignKey);
               jobKeysUpdated = true;
               if (initialJobLoadDoneRef.current || ASSIGNMENT_STATUSES.has(st)) {
                 newlyAssignedJobs.push(j);
@@ -630,6 +660,7 @@ export default function DriverTodayPage() {
           if (!initialLoadDoneRef.current) {
             for (const m of allIncomingDispatcherMsgs) {
               seenMsgIdsRef.current.add(m.id);
+              androidBridge?.markMsgIdNotified?.(m.id);
             }
             initialLoadDoneRef.current = true;
             if (typeof window !== 'undefined') {
@@ -641,10 +672,18 @@ export default function DriverTodayPage() {
               } catch {}
             }
           } else {
-            const newlyArrived = allIncomingDispatcherMsgs.filter((m) => !seenMsgIdsRef.current.has(m.id));
+            const newlyArrived = allIncomingDispatcherMsgs.filter((m) => {
+              if (seenMsgIdsRef.current.has(m.id)) return false;
+              if (androidBridge?.isMsgIdNotified?.(m.id)) {
+                seenMsgIdsRef.current.add(m.id);
+                return false;
+              }
+              return true;
+            });
             if (newlyArrived.length > 0) {
               for (const m of newlyArrived) {
                 seenMsgIdsRef.current.add(m.id);
+                androidBridge?.markMsgIdNotified?.(m.id);
               }
               if (typeof window !== 'undefined') {
                 try {
@@ -882,6 +921,10 @@ export default function DriverTodayPage() {
 
   const handleLogout = async () => {
     if (typeof window !== 'undefined') {
+      const w = window as unknown as {
+        Fleet360Android?: { stopBackgroundService?: () => void };
+      };
+      w.Fleet360Android?.stopBackgroundService?.();
       localStorage.removeItem('fleet360_session_token');
       localStorage.removeItem('fleet360_active_vehicle');
       localStorage.removeItem('fleet360_driver_authenticated');

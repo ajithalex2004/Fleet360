@@ -631,6 +631,16 @@ export default function DriverAppLauncher() {
       if (!isAuthed || !token) {
         return;
       }
+      if (typeof window !== 'undefined') {
+        const w = window as unknown as {
+          Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+        };
+        w.Fleet360Android?.syncAuthSession?.(
+          token,
+          localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+          localStorage.getItem('fleet360_driver_name') || 'Driver',
+        );
+      }
       const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
         credentials: 'include',
         headers: { Authorization: `Bearer ${token}` },
@@ -892,6 +902,14 @@ export default function DriverAppLauncher() {
         const activeSessionToken = data?.driverSessionToken || data?.sessionToken;
         if (activeSessionToken) {
           localStorage.setItem('fleet360_session_token', activeSessionToken);
+          const w = window as unknown as {
+            Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+          };
+          w.Fleet360Android?.syncAuthSession?.(
+            activeSessionToken,
+            localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+            displayName,
+          );
         }
         localStorage.setItem('fleet360_driver_authenticated', 'true');
         localStorage.setItem('fleet360_driver_email', resolvedDriverEmail);
@@ -1004,10 +1022,22 @@ export default function DriverAppLauncher() {
 
       // 3. Persist locally for APK / standalone mode
       if (typeof window !== 'undefined') {
+        const finalToken = vehData?.sessionToken || savedToken || localStorage.getItem('fleet360_session_token');
+        const finalDriverName = driverInfo?.name || username || 'Driver';
         localStorage.setItem('fleet360_active_vehicle', JSON.stringify(boundVehicle));
         localStorage.setItem('fleet360_start_odometer', String(odoValue));
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_name', driverInfo?.name || username || 'Driver');
+        localStorage.setItem('fleet360_driver_name', finalDriverName);
+        if (finalToken) {
+          const w = window as unknown as {
+            Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+          };
+          w.Fleet360Android?.syncAuthSession?.(
+            finalToken,
+            localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+            finalDriverName,
+          );
+        }
       }
 
       // 4. Notify tracking provider to start real device GPS tracking
@@ -1033,6 +1063,10 @@ export default function DriverAppLauncher() {
     setOdometerInput('');
     setDriverInfo(null);
     if (typeof window !== 'undefined') {
+      const w = window as unknown as {
+        Fleet360Android?: { stopBackgroundService?: () => void };
+      };
+      w.Fleet360Android?.stopBackgroundService?.();
       localStorage.removeItem('fleet360_session_token');
       localStorage.removeItem('fleet360_driver_tracking_active');
       localStorage.removeItem('fleet360_tracked_vehicle_id');
