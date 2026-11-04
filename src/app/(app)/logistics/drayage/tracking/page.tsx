@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
-  Radio, Compass, Truck, Layers, Zap,
+  Radio, Compass, Truck, Layers,
 } from 'lucide-react';
 
 const DrayageCorridorLiveMap = dynamic(
@@ -264,8 +265,6 @@ export default function DrayageJobTrackingPage() {
   const [targetStatusForEtc, setTargetStatusForEtc] = useState<'PLACED_AT_RAMP' | 'CONTAINER_DETACHED'>('PLACED_AT_RAMP');
   const [selectedEtcHours, setSelectedEtcHours] = useState(3);
   const [customEtcInput, setCustomEtcInput] = useState('');
-  const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState(true);
-  const [togglingAutoL2, setTogglingAutoL2] = useState(false);
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [customerWhatsAppInput, setCustomerWhatsAppInput] = useState('');
@@ -273,7 +272,8 @@ export default function DrayageJobTrackingPage() {
   const [customerAutoAlerts, setCustomerAutoAlerts] = useState(true);
   const [sendingCustomerAlert, setSendingCustomerAlert] = useState(false);
   const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);
-  const [, setTick] = useState(0);
+  const [nowTickMs, setNowTickMs] = useState(() => Date.now());
+  const alertedEtcJobsRef = useRef<Record<string, 'T15' | 'EXPIRED'>>({});
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -303,9 +303,6 @@ export default function DrayageJobTrackingPage() {
           ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
           ...data.automationConfig,
         });
-        if (typeof data.automationConfig.autoL2DispatchEnabled === 'boolean') {
-          setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
-        }
       }
 
       if (allJobs.length > 0 && !selectedJobId) {
@@ -319,31 +316,48 @@ export default function DrayageJobTrackingPage() {
   }, [selectedJobId]);
 
   useEffect(() => {
-    const thresholdMins = autoL2DispatchEnabled ? (automationConfig.thresholdMinutes || 30) : 0;
     const timer = setInterval(async () => {
-      setTick((t) => t + 1);
-      const hasDueL1Job = jobs.some((j) => {
-        if (j.jobPhase !== 'L1' || j.l2Activated) return false;
+      const now = Date.now();
+      setNowTickMs(now);
+
+      let hasExpiredEtcJob = false;
+      for (const j of jobs) {
+        if (j.jobPhase !== 'L1' || j.l2Activated || j.status === 'COMPLETED') continue;
         const st = (j.status || '').toUpperCase();
-        const isInitialYardDrop =
-          j.placementLocation === 'YARD' && ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st);
-        if (isInitialYardDrop) return false;
-        if (st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED') {
-          if (!j.etcTime) return true;
-          return new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000;
+        const etcMs = j.etcTime ? new Date(j.etcTime).getTime() : null;
+        const minsLeft = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - now) / 60000) : null;
+
+        if (minsLeft !== null && minsLeft <= 0) {
+          hasExpiredEtcJob = true;
+          if (alertedEtcJobsRef.current[j.id] !== 'EXPIRED') {
+            alertedEtcJobsRef.current[j.id] = 'EXPIRED';
+            showToast(
+              'error',
+              `🚨 ETC EXPIRED — Reassign / Action Required for ${j.jobCode} (${j.containerNumber}) at ${j.warehouseName}!`,
+            );
+          }
+        } else if (minsLeft !== null && minsLeft > 0 && minsLeft <= 15) {
+          if (!alertedEtcJobsRef.current[j.id]) {
+            alertedEtcJobsRef.current[j.id] = 'T15';
+            showToast(
+              'error',
+              `⏳ T-15M REASSIGN ALERT: ${j.jobCode} (${j.containerNumber}) at ${j.warehouseName} has ${minsLeft}m remaining before ETC expiry!`,
+            );
+          }
+        } else if (st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED') {
+          hasExpiredEtcJob = true;
         }
-        if (!j.etcTime) return false;
-        return new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000;
-      });
-      if (hasDueL1Job) {
+      }
+
+      if (hasExpiredEtcJob) {
         try {
           const res = await fetch('/api/logistics/drayage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'check_etc_timers',
-              thresholdMinutes: thresholdMins,
-              preAssignTractor: autoL2DispatchEnabled,
+              thresholdMinutes: 0,
+              preAssignTractor: false,
             }),
           });
           if (res.ok) {
@@ -352,9 +366,14 @@ export default function DrayageJobTrackingPage() {
               const first = checkRes.activated[0];
               showToast(
                 'success',
-                autoL2DispatchEnabled
-                  ? `⚡ Auto-L2 @ T-${thresholdMins}m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`
-                  : `⚡ L2 Empty Return ${first.l2JobCode} automatically triggered upon ETC completion!`,
+                `⚡ L2 Empty Return ${first.l2JobCode} automatically triggered upon ETC completion!`,
+              );
+              await loadData();
+            } else if (Array.isArray(checkRes.reassigned) && checkRes.reassigned.length > 0) {
+              const firstReassign = checkRes.reassigned[0];
+              showToast(
+                'error',
+                `🚨 ETC Expired for ${firstReassign.jobCode} — Transitioned to ${firstReassign.newStatus} for Dispatcher Reassign!`,
               );
               await loadData();
             }
@@ -363,38 +382,9 @@ export default function DrayageJobTrackingPage() {
           // Silent background poll
         }
       }
-    }, 30000);
+    }, 15000);
     return () => clearInterval(timer);
-  }, [autoL2DispatchEnabled, automationConfig.thresholdMinutes, jobs, loadData]);
-
-  // Toggle Tenant Manual vs Auto-L2 (T-30m) Dispatch Mode
-  const handleToggleAutoL2Mode = async (enabled: boolean) => {
-    try {
-      setTogglingAutoL2(true);
-      setAutoL2DispatchEnabled(enabled);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'toggle_auto_l2_mode',
-          enabled,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update L2 dispatch mode');
-      showToast(
-        'success',
-        enabled
-          ? '⚡ Switched to Auto-L2 Dispatch & 4-Factor Pre-Assignment (Triggers @ T-30m before ETC)'
-          : '🛠️ Switched to Manual L2 Dispatch Mode (Dispatcher triggers L2 manually)',
-      );
-      await loadData();
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
-    } finally {
-      setTogglingAutoL2(false);
-    }
-  };
+  }, [jobs, loadData]);
 
   useEffect(() => {
     loadData(false);
@@ -651,8 +641,9 @@ export default function DrayageJobTrackingPage() {
   };
 
   // Extend ETC timer
-  const handleExtendEtc = async (minutesToAdd: number) => {
-    if (!activeJob) return;
+  const handleExtendEtc = async (minutesToAdd: number, targetJobId?: string) => {
+    const jobIdToExtend = targetJobId || activeJob?.id;
+    if (!jobIdToExtend) return;
     try {
       setUpdatingStatus(true);
       const res = await fetch('/api/logistics/drayage', {
@@ -660,13 +651,14 @@ export default function DrayageJobTrackingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'extend_etc',
-          jobId: activeJob.id,
+          jobId: jobIdToExtend,
           minutesToAdd,
           actor: user?.username || 'dispatcher',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to extend ETC');
+      delete alertedEtcJobsRef.current[jobIdToExtend];
       showToast('success', `ETC extended by +${minutesToAdd}m (New ETC: ${new Date(data.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`);
       await loadData();
     } catch (err) {
@@ -676,7 +668,7 @@ export default function DrayageJobTrackingPage() {
     }
   };
 
-  // Trigger L2 Empty Return (with 4-Factor Telematics Pre-Assignment)
+  // Trigger L2 Empty Return
   const handleTriggerL2 = async () => {
     if (!activeJob) return;
     try {
@@ -687,19 +679,15 @@ export default function DrayageJobTrackingPage() {
         body: JSON.stringify({
           action: 'activate_l2',
           l1JobId: activeJob.id,
-          preAssignTractor: true,
-          triggerSource: autoL2DispatchEnabled ? 'AUTO_T30' : 'MANUAL_DISPATCH',
+          preAssignTractor: false,
+          triggerSource: 'MANUAL_DISPATCH',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to activate L2 empty return');
       showToast(
         'success',
-        `L2 Empty Return ${data.l2JobCode} activated${
-          data.preAssigned && data.vehiclePlate
-            ? ` · 4-Factor Pre-Assigned to ${data.vehiclePlate} (${data.driverName} · ${data.matchScorePct}% Match)`
-            : '!'
-        }`,
+        `L2 Empty Return ${data.l2JobCode} activated for assignment!`,
       );
       await loadData();
       if (data.l2JobId) setSelectedJobId(data.l2JobId);
@@ -709,6 +697,51 @@ export default function DrayageJobTrackingPage() {
       setUpdatingStatus(false);
     }
   };
+
+  // Dispatcher Reassign & Offload ETC Alerts (@ T-15m and Upon Expiry)
+  const reassignEtcAlerts = useMemo(() => {
+    const items: Array<{
+      job: DrayageJob;
+      alertLevel: 'EXPIRED' | 'T15_WARNING';
+      minsLeft: number | null;
+      isYardReassign: boolean;
+    }> = [];
+    for (const j of jobs) {
+      if (j.jobPhase !== 'L1' || j.l2Activated) continue;
+      const st = (j.status || '').toUpperCase();
+      if (['COMPLETED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'STREET_TURNED', 'CANCELLED'].includes(st)) {
+        continue;
+      }
+      const isReassignStatus = st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+      const etcMs = j.etcTime ? new Date(j.etcTime).getTime() : null;
+      const minsLeft = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - nowTickMs) / 60000) : null;
+      const isYardReassign =
+        isReassignStatus ||
+        (j.placementLocation || '').toUpperCase() === 'YARD' ||
+        st === 'PLACED_AT_YARD' ||
+        st === 'REASSIGN_PLACED_AT_YARD';
+
+      if (isReassignStatus || (minsLeft !== null && minsLeft <= 0)) {
+        items.push({
+          job: j,
+          alertLevel: 'EXPIRED',
+          minsLeft,
+          isYardReassign,
+        });
+      } else if (minsLeft !== null && minsLeft > 0 && minsLeft <= 15) {
+        items.push({
+          job: j,
+          alertLevel: 'T15_WARNING',
+          minsLeft,
+          isYardReassign,
+        });
+      }
+    }
+    return items.sort((a, b) => {
+      if (a.alertLevel !== b.alertLevel) return a.alertLevel === 'EXPIRED' ? -1 : 1;
+      return (a.minsLeft ?? 0) - (b.minsLeft ?? 0);
+    });
+  }, [jobs, nowTickMs]);
 
   // Verify Port EDI
   const handleVerifyEdi = async (provider: 'DUBAI_TRADE_DPWORLD' | 'AD_PORTS_MAQTA') => {
@@ -939,46 +972,12 @@ export default function DrayageJobTrackingPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Super Admin Only: Manual vs Auto-L2 Dispatch & Engine Config */}
-            {isSuperAdmin && (
-            <div
-              className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
-              title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
-            >
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(false)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
-                  !autoL2DispatchEnabled
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                Manual L2
-              </button>
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(true)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
-                  autoL2DispatchEnabled
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
-              </button>
-            </div>
-            )}
-
             {isSuperAdmin && (
             <button
               type="button"
               onClick={() => setConfigModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
-              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, Reassign T-15m Alert, Street-Turn Radius, Demurrage Thresholds)"
             >
               <Settings className="w-3.5 h-3.5 text-sky-400" />
               Engine Config
@@ -1083,6 +1082,164 @@ export default function DrayageJobTrackingPage() {
         />
       </div>
 
+      {/* Dispatcher Reassign & Offload ETC Alert Banner (@ T-15m & Upon Expiry) */}
+      {reassignEtcAlerts.length > 0 && (
+        <div
+          className={`rounded-2xl border p-4 shadow-lg transition-all ${
+            reassignEtcAlerts.some((a) => a.alertLevel === 'EXPIRED')
+              ? 'bg-rose-950/35 border-rose-500/50 shadow-rose-500/10'
+              : 'bg-amber-950/35 border-amber-500/50 shadow-amber-500/10'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                  reassignEtcAlerts.some((a) => a.alertLevel === 'EXPIRED')
+                    ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                    : 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-[var(--text-main)]">
+                    Dispatcher Reassign &amp; Offload ETC Alert Center
+                  </span>
+                  {reassignEtcAlerts.filter((a) => a.alertLevel === 'EXPIRED').length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse">
+                      🚨 {reassignEtcAlerts.filter((a) => a.alertLevel === 'EXPIRED').length} EXPIRED · REASSIGN NOW
+                    </span>
+                  )}
+                  {reassignEtcAlerts.filter((a) => a.alertLevel === 'T15_WARNING').length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
+                      ⏳ {reassignEtcAlerts.filter((a) => a.alertLevel === 'T15_WARNING').length} AT T-15M THRESHOLD
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Proactive Dispatcher alerts fire at <strong>T-15 minutes</strong> before Offloading / Yard ETC and immediately <strong>Upon Expiry</strong> so tractors can be reassigned without delay.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/logistics/drayage/assignment"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-colors"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>Open Assignment &amp; Reassign Queue</span>
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {reassignEtcAlerts.map(({ job, alertLevel, minsLeft, isYardReassign }) => {
+              const isExpired = alertLevel === 'EXPIRED';
+              const isSelected = activeJob?.id === job.id;
+              return (
+                <div
+                  key={job.id}
+                  onClick={() => setSelectedJobId(job.id)}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2.5 ${
+                    isExpired
+                      ? 'bg-rose-500/10 border-rose-500/40 hover:border-rose-400'
+                      : 'bg-amber-500/10 border-amber-500/40 hover:border-amber-400'
+                  } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                            isExpired
+                              ? 'bg-rose-500 text-white animate-pulse'
+                              : 'bg-amber-500 text-slate-950'
+                          }`}
+                        >
+                          {isExpired
+                            ? '🚨 ETC EXPIRED · REASSIGN DUE'
+                            : `⏳ T-15M ALERT (${minsLeft}m left)`}
+                        </span>
+                        <span className="font-mono font-bold text-xs text-[var(--text-main)]">
+                          {job.jobCode}
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-blue-400">
+                          {job.containerNumber} ({job.containerSize})
+                        </span>
+                        <StatusPill status={job.status.toLowerCase()} label={job.status} />
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)] mt-1">
+                        <strong className="text-[var(--text-main)]">{job.warehouseName}</strong> ({job.placementLocation || (isYardReassign ? 'YARD' : 'RAMP')}) · Customer: {job.customerName}
+                      </div>
+                      <div className="text-[11px] mt-0.5">
+                        {job.etcTime ? (
+                          <span className={isExpired ? 'text-rose-300 font-bold' : 'text-amber-300 font-bold'}>
+                            ETC: {new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {' · '}
+                            {isExpired
+                              ? minsLeft !== null && minsLeft < 0
+                                ? `Expired ${Math.abs(minsLeft)}m ago — ${isYardReassign ? 'Reassign tractor for Yard-to-Ramp / Pickup' : 'Ready for L2 Empty Return'}`
+                                : `Timer Expired — ${isYardReassign ? 'Reassign tractor now' : 'Ready for L2 Empty Return'}`
+                              : `Approaching expiry in ${minsLeft} minute(s) — Prepare tractor reassignment`}
+                          </span>
+                        ) : (
+                          <span className="text-rose-300 font-bold">
+                            Status {job.status} — Immediate Tractor Reassignment Required
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex flex-wrap items-center justify-end gap-1.5 pt-2 border-t border-[var(--border-subtle)]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJobId(job.id)}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-main)] hover:border-blue-500/50 transition-colors"
+                    >
+                      Inspect Job
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingStatus}
+                      onClick={() => handleExtendEtc(30, job.id)}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
+                      title="Extend ETC by +30 minutes"
+                    >
+                      +30m ETC
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingStatus}
+                      onClick={() => handleExtendEtc(60, job.id)}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
+                      title="Extend ETC by +1 hour"
+                    >
+                      +1h ETC
+                    </button>
+                    <Link
+                      href="/logistics/drayage/assignment"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                        isExpired
+                          ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-sm'
+                          : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm'
+                      }`}
+                    >
+                      <Truck className="w-3 h-3" />
+                      <span>Reassign Tractor</span>
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
 {/* Real-Time Telematics Corridor Map (Full Radar or Split) */}
       {(viewMode === 'RADAR' || viewMode === 'SPLIT') && (
         <DrayageCorridorLiveMap
@@ -1115,6 +1272,24 @@ export default function DrayageJobTrackingPage() {
           <div className="space-y-2 max-h-[780px] overflow-y-auto pr-1">
             {jobs.map((job) => {
               const selected = activeJob?.id === job.id;
+              const jobSt = (job.status || '').toUpperCase();
+              const jobEtcMs = job.etcTime ? new Date(job.etcTime).getTime() : null;
+              const jobMinsLeft =
+                jobEtcMs !== null && !isNaN(jobEtcMs) ? Math.ceil((jobEtcMs - nowTickMs) / 60000) : null;
+              const isJobEtcExpired =
+                job.jobPhase === 'L1' &&
+                !job.l2Activated &&
+                jobSt !== 'COMPLETED' &&
+                (jobSt === 'FCL_REASSIGN' || jobSt === 'MT_REASSIGN' || (jobMinsLeft !== null && jobMinsLeft <= 0));
+              const isJobEtcT15 =
+                job.jobPhase === 'L1' &&
+                !job.l2Activated &&
+                jobSt !== 'COMPLETED' &&
+                !isJobEtcExpired &&
+                jobMinsLeft !== null &&
+                jobMinsLeft > 0 &&
+                jobMinsLeft <= 15;
+
               return (
                 <div
                   key={job.id}
@@ -1122,6 +1297,10 @@ export default function DrayageJobTrackingPage() {
                   className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                     selected
                       ? 'bg-blue-600/10 border-blue-500 text-[var(--text-main)] shadow-sm'
+                      : isJobEtcExpired
+                      ? 'bg-rose-500/10 border-rose-500/50 hover:border-rose-400'
+                      : isJobEtcT15
+                      ? 'bg-amber-500/10 border-amber-500/50 hover:border-amber-400'
                       : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}
                 >
@@ -1140,6 +1319,20 @@ export default function DrayageJobTrackingPage() {
                     </div>
                     <StatusPill status={job.status.toLowerCase()} label={job.status} />
                   </div>
+
+                  {(isJobEtcExpired || isJobEtcT15) && (
+                    <div className="mb-1.5">
+                      {isJobEtcExpired ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                          🚨 ETC EXPIRED · REASSIGN REQUIRED
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                          ⏳ REASSIGN ALERT @ T-{jobMinsLeft}M
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="font-mono font-semibold text-xs text-[var(--text-main)] flex items-center gap-2">
                     <span>{job.containerNumber}</span>
@@ -1527,140 +1720,224 @@ export default function DrayageJobTrackingPage() {
                 </div>
                 )}
 
-                {/* Offloading ETC Countdown & Management */}
-                {activeJob.jobPhase === 'L1' && (activeJob.etcTime || activeJob.placementLocation === 'RAMP' || activeJob.status === 'PLACED_AT_RAMP' || activeJob.trailerDetached) && (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                        <Clock className="w-4 h-4 animate-pulse" />
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-amber-400">Destuffing & Offload Timer (ETC)</span>
-                          {activeJob.etcTime && new Date(activeJob.etcTime).getTime() <= Date.now() ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                              ⚠️ EXPIRED - L2 READY
-                            </span>
-                          ) : activeJob.etcTime && new Date(activeJob.etcTime).getTime() - Date.now() <= (automationConfig.thresholdMinutes || 30) * 60 * 1000 ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                              ⚡ T-{automationConfig.thresholdMinutes || 30}M THRESHOLD ACTIVE · 4-FACTOR PRE-ASSIGN
-                            </span>
-                          ) : activeJob.etcTime ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              ⏳ ACTIVE TIMER
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400">
-                              NO ETC SET
-                            </span>
-                          )}
-                          {isSuperAdmin && (
-                          <button
-                            type="button"
-                            disabled={togglingAutoL2}
-                            onClick={() => handleToggleAutoL2Mode(!autoL2DispatchEnabled)}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
-                              autoL2DispatchEnabled
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
-                                : 'bg-slate-700/60 text-slate-300 border-slate-500/40 hover:bg-slate-700'
-                            }`}
-                            title="Click to switch Tenant L2 Turnaround Mode between Auto-L2 and Manual L2 Dispatch (Super Admin)"
-                          >
-                            <Zap className="w-2.5 h-2.5" />
-                            {autoL2DispatchEnabled
-                              ? `Mode: Auto-L2 & 4-Factor Pre-Assign @ T-${automationConfig.thresholdMinutes || 30}m (Click for Manual)`
-                              : `Mode: Manual L2 Dispatch (Click for Auto-L2 @ T-${automationConfig.thresholdMinutes || 30}m)`}
-                          </button>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                          {activeJob.etcTime ? (
-                            <>
-                              Expected Completion: <strong className="text-[var(--text-main)] font-mono">{new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
-                              {' · '}
-                              <span className={new Date(activeJob.etcTime).getTime() <= Date.now() ? 'text-rose-400 font-semibold' : 'text-amber-400 font-semibold'}>
-                                {new Date(activeJob.etcTime).getTime() <= Date.now()
-                                  ? 'Offloading completed - Dynamic L2 activation triggered'
-                                  : `${Math.max(1, Math.round((new Date(activeJob.etcTime).getTime() - Date.now()) / 60000))} mins remaining`}
-                              </span>
-                              {' · '}
-                              <span className="text-emerald-400 font-medium">
-                                {autoL2DispatchEnabled
-                                  ? `Auto-triggers L2 & 4-Factor tractor pre-assignment at T-${automationConfig.thresholdMinutes || 30}m`
-                                  : 'Manual L2 trigger mode active'}
-                              </span>
-                            </>
-                          ) : (
-                            'Set ETC from driver mobile app or click button below to activate Leg 2 automation'
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                {/* Offloading & Reassign ETC Countdown & Dispatcher Alert Management (@ T-15m & Upon Expiry) */}
+                {activeJob.jobPhase === 'L1' &&
+                  (activeJob.etcTime ||
+                    activeJob.placementLocation === 'RAMP' ||
+                    activeJob.placementLocation === 'YARD' ||
+                    ['PLACED_AT_RAMP', 'PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                      (activeJob.status || '').toUpperCase(),
+                    ) ||
+                    activeJob.trailerDetached) && (() => {
+                    const activeSt = (activeJob.status || '').toUpperCase();
+                    const activeEtcMs = activeJob.etcTime ? new Date(activeJob.etcTime).getTime() : null;
+                    const activeMinsLeft =
+                      activeEtcMs !== null && !isNaN(activeEtcMs)
+                        ? Math.ceil((activeEtcMs - nowTickMs) / 60000)
+                        : null;
+                    const isEtcExpired =
+                      activeSt === 'FCL_REASSIGN' ||
+                      activeSt === 'MT_REASSIGN' ||
+                      (activeMinsLeft !== null && activeMinsLeft <= 0);
+                    const isEtcT15 =
+                      !isEtcExpired && activeMinsLeft !== null && activeMinsLeft > 0 && activeMinsLeft <= 15;
+                    const isYardPlacement =
+                      activeJob.placementLocation === 'YARD' ||
+                      ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(activeSt);
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!activeJob.l2Activated && (
-                        <button
-                          onClick={async () => {
-                            const t25Iso = new Date(Date.now() + 25 * 60 * 1000).toISOString();
-                            await handleUpdateStatus(
-                              activeJob.status === 'IN_TRANSIT' ? 'PLACED_AT_RAMP' : activeJob.status,
-                              'RAMP',
-                              activeJob.trailerDetached,
-                              t25Iso,
-                            );
-                          }}
-                          disabled={updatingStatus}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 text-xs font-bold transition-colors"
-                          title="Set Offload ETC to T-25 mins to test T-30m Auto-L2 Dispatch & 4-Factor Pre-Assignment"
-                        >
-                          ⚡ Set ETC T-25m (Test T-30m)
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleExtendEtc(60)}
-                        disabled={updatingStatus}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
-                        title="Extend Offload ETC by 1 hour"
+                    return (
+                      <div
+                        className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition-all ${
+                          isEtcExpired
+                            ? 'bg-rose-500/15 border-rose-500/50'
+                            : isEtcT15
+                            ? 'bg-amber-500/15 border-amber-500/50'
+                            : 'bg-amber-500/10 border-amber-500/30'
+                        }`}
                       >
-                        +1 Hour
-                      </button>
-                      <button
-                        onClick={() => handleExtendEtc(120)}
-                        disabled={updatingStatus}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
-                        title="Extend Offload ETC by 2 hours"
-                      >
-                        +2 Hours
-                      </button>
-                      {!activeJob.l2Activated && (() => {
-                        const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
-                        const canTriggerL2 =
-                          currentStage >= 4 &&
-                          activeJob.placementLocation !== 'YARD' &&
-                          Boolean(activeJob.etcTime);
-                        return (
-                          <button
-                            onClick={handleTriggerL2}
-                            disabled={updatingStatus || !canTriggerL2}
-                            title={
-                              canTriggerL2
-                                ? 'Activate L2 Empty Return job now & pre-assign nearest tractor via 4-Factor Telematics'
-                                : 'Requires container Placed at Ramp with Offloading ETC set'
-                            }
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
-                              canTriggerL2
-                                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 cursor-pointer'
-                                : 'bg-slate-500/20 text-[var(--text-muted)] opacity-50 cursor-not-allowed'
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center ${
+                              isEtcExpired
+                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                                : 'bg-amber-500/20 border-amber-500/40 text-amber-400'
                             }`}
                           >
-                            <RefreshCw className="w-3 h-3" />
-                            Trigger L2 & Pre-Assign
+                            <Clock className="w-4 h-4 animate-pulse" />
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`text-xs font-bold ${
+                                  isEtcExpired ? 'text-rose-300' : 'text-amber-400'
+                                }`}
+                              >
+                                Destuffing, Yard &amp; Reassign Timer (ETC)
+                              </span>
+                              {isEtcExpired ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-500 text-white animate-pulse">
+                                  🚨 ETC EXPIRED — {isYardPlacement ? 'REASSIGN TRACTOR REQUIRED' : 'L2 EMPTY RETURN READY'}
+                                </span>
+                              ) : isEtcT15 ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
+                                  ⏳ T-15M DISPATCHER ALERT ({activeMinsLeft}m remaining) · PREPARE REASSIGN
+                                </span>
+                              ) : activeJob.etcTime ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  ⏳ ACTIVE TIMER ({activeMinsLeft}m left)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400">
+                                  NO ETC SET
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              {activeJob.etcTime ? (
+                                <>
+                                  Expected Completion:{' '}
+                                  <strong className="text-[var(--text-main)] font-mono">
+                                    {new Date(activeJob.etcTime).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </strong>
+                                  {' · '}
+                                  <span
+                                    className={
+                                      isEtcExpired
+                                        ? 'text-rose-400 font-bold'
+                                        : isEtcT15
+                                        ? 'text-amber-300 font-bold'
+                                        : 'text-amber-400 font-semibold'
+                                    }
+                                  >
+                                    {isEtcExpired
+                                      ? isYardPlacement
+                                        ? 'Yard timer expired — Dispatcher Reassign required (FCL_REASSIGN / MT_REASSIGN)'
+                                        : 'Offloading completed — L2 Empty Return ready for assignment'
+                                      : `${activeMinsLeft} mins remaining`}
+                                  </span>
+                                  {' · '}
+                                  <span className="text-sky-400 font-medium">
+                                    Alerts Dispatcher @ T-15m &amp; Upon Expiry
+                                  </span>
+                                </>
+                              ) : (
+                                'Set ETC timer from console or driver app — Dispatcher will be alerted at T-15m and upon expiry'
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!activeJob.l2Activated && (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  const t14Iso = new Date(Date.now() + 14 * 60 * 1000).toISOString();
+                                  delete alertedEtcJobsRef.current[activeJob.id];
+                                  await handleUpdateStatus(
+                                    activeJob.status === 'IN_TRANSIT' ? 'PLACED_AT_RAMP' : activeJob.status,
+                                    activeJob.placementLocation || 'RAMP',
+                                    activeJob.trailerDetached,
+                                    t14Iso,
+                                  );
+                                  showToast(
+                                    'error',
+                                    `⏳ T-15M REASSIGN ALERT: ${activeJob.jobCode} (${activeJob.containerNumber}) is within 15 minutes of ETC expiry!`,
+                                  );
+                                }}
+                                disabled={updatingStatus}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 text-xs font-bold transition-colors"
+                                title="Set ETC to T-14 mins to test the T-15m Dispatcher Reassign Alert"
+                              >
+                                ⏳ Test T-15m Alert
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const expIso = new Date(Date.now() - 60 * 1000).toISOString();
+                                  delete alertedEtcJobsRef.current[activeJob.id];
+                                  await handleUpdateStatus(
+                                    activeJob.placementLocation === 'YARD' || activeSt === 'PLACED_AT_YARD'
+                                      ? activeJob.shipmentType === 'EXPORT'
+                                        ? 'MT_REASSIGN'
+                                        : 'FCL_REASSIGN'
+                                      : activeJob.status,
+                                    activeJob.placementLocation || 'YARD',
+                                    activeJob.trailerDetached,
+                                    expIso,
+                                  );
+                                  showToast(
+                                    'error',
+                                    `🚨 ETC EXPIRED — Reassign Required for ${activeJob.jobCode} (${activeJob.containerNumber})!`,
+                                  );
+                                }}
+                                disabled={updatingStatus}
+                                className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 text-xs font-bold transition-colors"
+                                title="Simulate ETC Expiry now to trigger the Expired Reassign Alert"
+                              >
+                                🚨 Test Expiry Alert
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => handleExtendEtc(60)}
+                            disabled={updatingStatus}
+                            className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                            title="Extend Offload ETC by 1 hour"
+                          >
+                            +1 Hour
                           </button>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
+                          <button
+                            onClick={() => handleExtendEtc(120)}
+                            disabled={updatingStatus}
+                            className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                            title="Extend Offload ETC by 2 hours"
+                          >
+                            +2 Hours
+                          </button>
+                          {isYardPlacement ? (
+                            <Link
+                              href="/logistics/drayage/assignment"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition-colors shadow-sm"
+                              title="Open Assignment Queue to Reassign a Tractor for this container"
+                            >
+                              <Truck className="w-3 h-3" />
+                              <span>Reassign Tractor</span>
+                            </Link>
+                          ) : (
+                            !activeJob.l2Activated && (() => {
+                              const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                              const canTriggerL2 =
+                                currentStage >= 4 &&
+                                activeJob.placementLocation !== 'YARD' &&
+                                Boolean(activeJob.etcTime);
+                              return (
+                                <button
+                                  onClick={handleTriggerL2}
+                                  disabled={updatingStatus || !canTriggerL2}
+                                  title={
+                                    canTriggerL2
+                                      ? 'Activate L2 Empty Return job now'
+                                      : 'Requires container Placed at Ramp with Offloading ETC set'
+                                  }
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
+                                    canTriggerL2
+                                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 cursor-pointer'
+                                      : 'bg-slate-500/20 text-[var(--text-muted)] opacity-50 cursor-not-allowed'
+                                  }`}
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  Trigger L2 Empty Return
+                                </button>
+                              );
+                            })()
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 {/* Execution Stage Action Buttons */}
                 {(() => {
@@ -2535,10 +2812,9 @@ export default function DrayageJobTrackingPage() {
         config={automationConfig}
         onSaved={(updated) => {
           setAutomationConfig(updated);
-          setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
           showToast(
             'success',
-            `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+            `⚙️ Drayage Policy Updated: Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
           );
           loadData();
         }}

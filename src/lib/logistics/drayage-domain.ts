@@ -336,8 +336,8 @@ export interface DrayageAutomationConfig {
 }
 
 export const DEFAULT_DRAYAGE_AUTOMATION_CONFIG: DrayageAutomationConfig = {
-  autoL2DispatchEnabled: true,
-  thresholdMinutes: 30,
+  autoL2DispatchEnabled: false,
+  thresholdMinutes: 15,
   weightProximityPct: 60,
   weightIdlenessPct: 25,
   weightWorkloadPct: 10,
@@ -471,7 +471,9 @@ export interface DrayageAlertItem {
     | 'DETENTION_CRITICAL'
     | 'PORT_SLOT_MISS_RISK'
     | 'DETACHED_TRAILER'
-    | 'PORT_TOKEN_PENDING';
+    | 'PORT_TOKEN_PENDING'
+    | 'REASSIGN_ETC_T15'
+    | 'REASSIGN_ETC_EXPIRED';
   severity: 'URGENT' | 'CRITICAL' | 'WARNING';
   title: string;
   message: string;
@@ -1928,14 +1930,49 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
-  const autoL2DispatchEnabled = automationConfig.autoL2DispatchEnabled;
-  const thresholdMins = automationConfig.thresholdMinutes;
 
-  // Check if any L1 job is due for L2 Empty Return activation (at T-threshold when Auto-L2 is enabled, or upon ETC completion / READY_FOR_PICKUP in LogiXL-Connect mode)
+  // Check L1 ETC timers:
+  // 1) Initial Yard-Drop jobs whose ETC has expired transition to FCL_REASSIGN / MT_REASSIGN.
+  // 2) Ramp / Reassigned jobs whose ETC has completed (<= NOW()) or are in READY_FOR_PICKUP / CONTAINER_OFFLOADED automatically activate PENDING L2 Empty Return jobs.
   {
     const nowMs = Date.now();
-    const effectiveWindowMins = autoL2DispatchEnabled ? thresholdMins : 0;
-    const tThresholdMs = nowMs + effectiveWindowMins * 60 * 1000;
+    for (const j of jobs) {
+      if (j.jobPhase !== 'L1' || j.l2Activated || !j.etcTime) continue;
+      const st = (j.status || '').toUpperCase();
+      const etcMs = new Date(j.etcTime).getTime();
+      if (isNaN(etcMs)) continue;
+      const minsLeft = Math.ceil((etcMs - nowMs) / 60000);
+
+      const isInitialYardDrop =
+        (j.placementLocation || '').toUpperCase() === 'YARD' &&
+        ['PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED'].includes(st);
+
+      if (minsLeft <= 0 && isInitialYardDrop) {
+        const nextStatus = j.shipmentType === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
+        j.status = nextStatus;
+        j.etcAlertStatus = 'EXPIRED';
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs SET status = $3, etc_alert_status = 'EXPIRED', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            nextStatus,
+          ).catch(() => {}),
+        );
+      } else if (minsLeft <= 0 && j.etcAlertStatus !== 'EXPIRED' && j.etcAlertStatus !== 'ACTIVATED') {
+        j.etcAlertStatus = 'EXPIRED';
+      } else if (minsLeft > 0 && minsLeft <= 15 && j.etcAlertStatus === 'NEW') {
+        j.etcAlertStatus = 'T15_WARNING';
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs SET etc_alert_status = 'T15_WARNING', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+          ).catch(() => {}),
+        );
+      }
+    }
+
     const dueL1Jobs = jobs.filter((j) => {
       if (j.jobPhase !== 'L1' || j.l2Activated) return false;
       const st = (j.status || '').toUpperCase();
@@ -1949,17 +1986,17 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       if (st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED') {
         if (!j.etcTime) return true;
         const etcMs = new Date(j.etcTime).getTime();
-        return isNaN(etcMs) || etcMs <= tThresholdMs;
+        return isNaN(etcMs) || etcMs <= nowMs;
       }
       if (!j.etcTime) return false;
       const etcMs = new Date(j.etcTime).getTime();
-      return !isNaN(etcMs) && etcMs <= tThresholdMs;
+      return !isNaN(etcMs) && etcMs <= nowMs;
     });
 
     if (dueL1Jobs.length > 0) {
       const actRes = await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
-        thresholdMinutes: effectiveWindowMins,
-        preAssignTractor: autoL2DispatchEnabled,
+        thresholdMinutes: 0,
+        preAssignTractor: false,
       }).catch((err) => {
         console.error('[getDrayageWorkspaceData] L2 ETC activation trigger error:', err);
         return { checked: 0, activated: [] };
@@ -1977,12 +2014,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               jobCode: act.l2JobCode,
               jobPhase: 'L2',
               parentJobId: l1InMem.id,
-              status: act.preAssigned ? 'ASSIGNED' : 'PENDING',
+              status: 'PENDING',
               priority: 'HIGH',
-              assignedVehicleId: act.preAssigned ? l1InMem.assignedVehicleId : null,
-              assignedVehiclePlate: act.preAssigned ? (act.vehiclePlate ?? null) : null,
-              assignedDriverId: act.preAssigned ? l1InMem.assignedDriverId : null,
-              assignedDriverName: act.preAssigned ? (act.driverName ?? null) : null,
+              assignedVehicleId: null,
+              assignedVehiclePlate: null,
+              assignedDriverId: null,
+              assignedDriverName: null,
               assignedTrailerId: l1InMem.assignedTrailerId,
               assignedTrailerPlate: l1InMem.assignedTrailerPlate,
               placementLocation: null,
@@ -2455,33 +2492,77 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }
 
   for (const j of jobs) {
-    if (j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP') && !j.l2Activated) {
-      const key = `det-l2-${j.id}`;
-      const hasEtc = Boolean(j.etcTime);
-      const isExpired = hasEtc && new Date(j.etcTime as string).getTime() <= Date.now();
-      alerts.push({
-        id: key,
-        tenantId,
-        type: 'DETACHED_TRAILER',
-        severity: isExpired ? 'URGENT' : 'CRITICAL',
-        title: isExpired
-          ? `Offload ETC Expired: Ready for L2 Empty Return — ${j.containerNumber}`
-          : hasEtc
-          ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
-          : `Detached Chassis Awaiting L2 Empty Return — ${j.containerNumber}`,
-        message: hasEtc
-          ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Offloading completion estimated at ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}. Background worker will trigger Leg 2.`
-          : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Activate L2 Empty Return once destuffing finishes.`,
-        terminalName: j.terminalName,
-        containerId: j.containerId,
-        containerNumber: j.containerNumber,
-        jobId: j.id,
-        jobCode: j.jobCode,
-        driverName: j.assignedDriverName,
-        driverPhone: '+971 55 301 7741',
-        acknowledged: ackSet.has(key),
-        createdAt: j.updatedAt,
-      });
+    const st = (j.status || '').toUpperCase();
+    const isReassignState = st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+    const hasEtc = Boolean(j.etcTime);
+    const etcMs = hasEtc ? new Date(j.etcTime as string).getTime() : null;
+    const minsRemaining = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - Date.now()) / 60000) : null;
+    const isExpired = isReassignState || (minsRemaining !== null && minsRemaining <= 0);
+    const isT15Warning = !isExpired && minsRemaining !== null && minsRemaining > 0 && minsRemaining <= 15;
+
+    if (j.jobPhase === 'L1' && !j.l2Activated && st !== 'COMPLETED') {
+      if (isExpired) {
+        const expKey = `etc-exp-${j.id}`;
+        alerts.push({
+          id: expKey,
+          tenantId,
+          type: 'REASSIGN_ETC_EXPIRED',
+          severity: 'URGENT',
+          title: `🚨 ETC Expired — Reassign Required: ${j.jobCode} (${j.containerNumber})`,
+          message: `Offloading / Yard timer expired for ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'YARD/RAMP'}). Immediate Dispatcher Reassign or L2 Empty Return action required.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(expKey),
+          createdAt: j.updatedAt,
+        });
+      } else if (isT15Warning) {
+        const t15Key = `etc-t15-${j.id}`;
+        alerts.push({
+          id: t15Key,
+          tenantId,
+          type: 'REASSIGN_ETC_T15',
+          severity: 'CRITICAL',
+          title: `⏳ T-15m Reassign Alert (${minsRemaining}m left) — ${j.jobCode} (${j.containerNumber})`,
+          message: `Container ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}) has ${minsRemaining} minute(s) remaining before ETC expiry. Prepare tractor for Reassign / Empty Return.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(t15Key),
+          createdAt: j.updatedAt,
+        });
+      } else if (j.trailerDetached || st === 'CONTAINER_DETACHED' || st === 'PLACED_AT_RAMP' || st === 'PLACED_AT_YARD') {
+        const key = `det-l2-${j.id}`;
+        alerts.push({
+          id: key,
+          tenantId,
+          type: 'DETACHED_TRAILER',
+          severity: 'WARNING',
+          title: hasEtc
+            ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
+            : `Detached Chassis at ${j.placementLocation ?? 'RAMP'} — ${j.containerNumber}`,
+          message: hasEtc
+            ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Dispatcher alerts will fire at T-15m and upon ETC expiry.`
+            : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Set ETC timer or Reassign once ready.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(key),
+          createdAt: j.updatedAt,
+        });
+      }
     }
   }
 
@@ -3744,8 +3825,7 @@ export async function activateL2EmptyReturnJob(
     args.tenantId,
   );
 
-  const isAutoT30 = args.triggerSource === 'AUTO_T30';
-  const shouldPreAssign = args.preAssignTractor !== undefined ? args.preAssignTractor : isAutoT30;
+  const shouldPreAssign = Boolean(args.preAssignTractor);
 
   // Create L2 Empty Return Job (from Warehouse back to Port Terminal)
   await db.$executeRawUnsafe(
@@ -3784,9 +3864,7 @@ export async function activateL2EmptyReturnJob(
     l1.assigned_trailer_plate ? String(l1.assigned_trailer_plate) : null,
     rampLat,
     rampLng,
-    isAutoT30
-      ? `Auto-L2 Empty Return triggered at T-30m before ETC from ${l1.job_code}`
-      : `Auto-generated L2 Empty Container Return from ${l1.job_code}`,
+    `Auto-generated L2 Empty Container Return from ${l1.job_code}`,
   );
 
   let preAssignedInfo: {
@@ -3857,7 +3935,7 @@ export async function activateL2EmptyReturnJob(
   }
 
   const logNote = preAssignedInfo
-    ? `L2 Empty Return ${l2Code} activated (${isAutoT30 ? 'Auto T-30m Threshold' : 'Manual Dispatch'}) & Pre-Assigned to ${preAssignedInfo.vehiclePlate} (${preAssignedInfo.driverName}) via 4-Factor Telematics Match [${preAssignedInfo.matchScorePct}% Match · ${preAssignedInfo.distanceKm} km]`
+    ? `L2 Empty Return ${l2Code} activated & Pre-Assigned to ${preAssignedInfo.vehiclePlate} (${preAssignedInfo.driverName}) via 4-Factor Telematics Match [${preAssignedInfo.matchScorePct}% Match · ${preAssignedInfo.distanceKm} km]`
     : `L2 Empty Container Return ${l2Code} activated for container ${l1.container_number}`;
 
   await db.$executeRawUnsafe(
@@ -3868,7 +3946,7 @@ export async function activateL2EmptyReturnJob(
     args.l1JobId,
     String(l1.job_code),
     logNote,
-    isAutoT30 ? 'Auto-L2 Dispatch Engine (T-30m)' : 'Dispatch Console',
+    'Dispatch Console',
   );
 
   return {
@@ -3942,37 +4020,40 @@ export async function checkAndAutoActivateExpiredEtcJobs(
     driverName?: string;
     matchScorePct?: number;
   }>;
+  reassigned?: Array<{
+    jobId: string;
+    jobCode: string;
+    newStatus: string;
+  }>;
 }> {
   await ensureDrayageSchema(db);
-  const isAutoEnabled = tenantId ? await getTenantAutoL2DispatchEnabled(db, tenantId) : false;
-
-  // When Auto-L2 (T-30m) is enabled, check jobs within thresholdMinutes and pre-assign a tractor.
-  // When Auto-L2 is disabled (LogiXL-Connect mode), check jobs whose ETC has completed (<= NOW()) or are in READY_FOR_PICKUP / CONTAINER_OFFLOADED and create PENDING L2 jobs.
-  const thresholdMins = isAutoEnabled ? (options?.thresholdMinutes ?? 30) : 0;
-  const shouldPreAssign = isAutoEnabled ? (options?.preAssignTractor ?? true) : false;
+  // L2 Empty Return activates strictly upon ETC completion (<= NOW()) or READY_FOR_PICKUP / CONTAINER_OFFLOADED.
+  // Initial Yard-Drop jobs whose ETC has expired transition to FCL_REASSIGN / MT_REASSIGN.
+  const shouldPreAssign = Boolean(options?.preAssignTractor);
 
   const whereClause = tenantId
     ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND (
-         (etc_time IS NOT NULL AND etc_time <= (NOW() + ($2 || ' minutes')::interval))
+         (etc_time IS NOT NULL AND etc_time <= NOW())
          OR (status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED') AND (etc_time IS NULL OR etc_time <= NOW()))
        )`
     : `job_phase = 'L1' AND l2_activated = FALSE AND (
-         (etc_time IS NOT NULL AND etc_time <= (NOW() + ($1 || ' minutes')::interval))
+         (etc_time IS NOT NULL AND etc_time <= NOW())
          OR (status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED') AND (etc_time IS NULL OR etc_time <= NOW()))
        )`;
-  const params = tenantId ? [tenantId, String(thresholdMins)] : [String(thresholdMins)];
+  const params = tenantId ? [tenantId] : [];
   const dueJobs = await db.$queryRawUnsafe<
     Array<{
       id: string;
       tenant_id: string;
       job_code: string;
+      shipment_type: string | null;
       status: string;
       placement_location: string | null;
       trailer_detached: boolean;
       etc_time: Date | null;
     }>
   >(
-    `SELECT id, tenant_id, job_code, status, placement_location, trailer_detached, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
+    `SELECT id, tenant_id, job_code, shipment_type, status, placement_location, trailer_detached, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
     ...params,
   );
 
@@ -3986,23 +4067,48 @@ export async function checkAndAutoActivateExpiredEtcJobs(
     matchScorePct?: number;
   }> = [];
 
+  const reassigned: Array<{
+    jobId: string;
+    jobCode: string;
+    newStatus: string;
+  }> = [];
+
   for (const job of dueJobs) {
     try {
       const jobStatus = String(job.status || '').toUpperCase();
       const stage = getDrayageOperationalStageIndex(jobStatus, Boolean(job.trailer_detached));
       if (stage < 4) continue;
 
-      // Initial yard drop (before Reassign / Ready for Pickup) stays in FCL_REASSIGN / MT_REASSIGN
+      // Initial yard drop transitions to FCL_REASSIGN / MT_REASSIGN upon ETC expiry so Dispatcher can reassign
       const isInitialYardDrop =
         String(job.placement_location || '').toUpperCase() === 'YARD' &&
-        ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(jobStatus);
-      if (isInitialYardDrop) continue;
+        ['PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(jobStatus);
+      if (isInitialYardDrop) {
+        if (!['FCL_REASSIGN', 'MT_REASSIGN'].includes(jobStatus)) {
+          const nextStatus = String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
+          await db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $2,
+                    etc_alert_status = 'EXPIRED',
+                    updated_at = NOW()
+              WHERE id = $1`,
+            job.id,
+            nextStatus,
+          );
+          reassigned.push({
+            jobId: String(job.id),
+            jobCode: String(job.job_code),
+            newStatus: nextStatus,
+          });
+        }
+        continue;
+      }
 
       const res = await activateL2EmptyReturnJob(db, {
         tenantId: String(job.tenant_id),
         l1JobId: String(job.id),
         preAssignTractor: shouldPreAssign,
-        triggerSource: isAutoEnabled ? 'AUTO_T30' : 'MANUAL',
+        triggerSource: 'MANUAL',
       });
       await db.$executeRawUnsafe(
         `UPDATE logistics_drayage_jobs
@@ -4024,7 +4130,7 @@ export async function checkAndAutoActivateExpiredEtcJobs(
       console.error(`[checkAndAutoActivateExpiredEtcJobs] Error activating L2 for ${job.job_code}:`, err);
     }
   }
-  return { checked: dueJobs.length, activated };
+  return { checked: dueJobs.length, activated, reassigned };
 }
 
 export async function recordDrayageStatusLog(

@@ -2496,46 +2496,12 @@ export default function DrayageAssignmentPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Super Admin Only: Manual vs Auto-L2 Dispatch & Engine Config */}
-            {isSuperAdmin && (
-            <div
-              className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
-              title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
-            >
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(false)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
-                  !autoL2DispatchEnabled
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                Manual L2
-              </button>
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(true)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
-                  autoL2DispatchEnabled
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
-              </button>
-            </div>
-            )}
-
             {isSuperAdmin && (
             <button
               type="button"
               onClick={() => setConfigModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
-              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, Reassign T-15m Alert, Street-Turn Radius, Demurrage Thresholds)"
             >
               <Settings className="w-3.5 h-3.5 text-sky-400" />
               Engine Config
@@ -4326,11 +4292,10 @@ export default function DrayageAssignmentPage() {
         config={automationConfig}
         onSaved={(updated) => {
           setAutomationConfig(updated);
-          setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
           invalidateDrayageClientCache();
           showToast(
             'success',
-            `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+            `⚙️ Drayage Policy Updated: Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
           );
           loadData(true);
         }}
