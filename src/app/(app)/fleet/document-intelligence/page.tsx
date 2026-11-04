@@ -36,6 +36,15 @@ import type {
 } from '@/lib/agents/types';
 import type { BatchJobSummary } from '@/lib/agents/document-intelligence/pipeline/batch-worker';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
+import { REVIEW_FIELD_LABELS, reviewFieldsFrom, stagedRecordKind, type ReviewFields, type StagedRecordKind } from '@/lib/agents/document-intelligence/review-fields';
+
+/** What the Approve button says for documents that create a record. */
+const APPROVE_LABEL: Record<StagedRecordKind, string> = {
+  PAYABLE: 'Approve & create payable',
+  WORK_ORDER: 'Approve & create work order',
+  POD: 'Approve & record delivery',
+  QUOTATION: 'Mark quotation reviewed',
+};
 
 // Shape of one row returned by GET /api/documents/intelligence/extractions
 // (a flattened SQL projection of document_intelligence_extractions).
@@ -187,6 +196,11 @@ export default function DocumentIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('ALL');
   const [selectedExtraction, setSelectedExtraction] = useState<ExtractionRow | null>(null);
+  // The reviewer's corrections to the selected document's extracted fields.
+  const [reviewDraft, setReviewDraft] = useState<ReviewFields>({});
+  useEffect(() => {
+    setReviewDraft(selectedExtraction?.extractedData ? reviewFieldsFrom(selectedExtraction.extractedData) : {});
+  }, [selectedExtraction]);
 
   // Source Grounding Highlight state
   const [highlightedField, setHighlightedField] = useState<string | null>(null);
@@ -316,7 +330,7 @@ export default function DocumentIntelligencePage() {
           masterDataValidation: extraction.masterCrossCheck,
           crossDocValidation: extraction.crossDocRelationship,
           contractObligations: extraction.contractObligations,
-          autoPopulateStatus: data.output.autoPopulate?.status || 'APPLIED',
+          autoPopulateStatus: data.output.autoPopulate?.status || 'PENDING_REVIEW',
           linkedEntityType: data.output.autoPopulate?.linkedEntityType,
           linkedEntityId: data.output.autoPopulate?.linkedEntityId,
           createdAt: new Date().toISOString(),
@@ -329,14 +343,17 @@ export default function DocumentIntelligencePage() {
     }
   };
 
-  const handleApplyRecord = async (extraction: ExtractionRow) => {
+  const handleApplyRecord = async (extraction: ExtractionRow, fields?: ReviewFields) => {
     try {
+      // The server approves the stored extraction; only the reviewer's
+      // corrections are sent.
       const res = await fetch('/api/documents/intelligence/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           extractionId: extraction.id,
-          extractionData: extraction.extractedData,
+          action: 'APPLY',
+          ...(fields ? { fields } : {}),
         }),
       });
 
@@ -345,8 +362,11 @@ export default function DocumentIntelligencePage() {
 
       setActionMessage({
         type: 'success',
-        text: `Updated Fleet360: ${data.message}`,
+        text: `Approved: ${data.message}`,
       });
+      setSelectedExtraction((cur) =>
+        cur && cur.id === extraction.id ? { ...cur, autoPopulateStatus: 'APPLIED', linkedEntityType: data.linkedEntityType, linkedEntityId: data.linkedEntityId } : cur,
+      );
       loadExtractions();
     } catch (err) {
       setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Apply failed' });
@@ -459,6 +479,7 @@ export default function DocumentIntelligencePage() {
     if (selectedDocIds.size === 0) return;
     setIsBatchActionPending(true);
     let successCount = 0;
+    let failedCount = 0;
 
     for (const docId of Array.from(selectedDocIds)) {
       const targetDoc = extractions.find((e) => e.id === docId);
@@ -470,20 +491,20 @@ export default function DocumentIntelligencePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             extractionId: targetDoc.id,
-            extractionData: targetDoc.extractedData,
             action,
             reason: action === 'REJECT' ? 'Batch rejected from review dashboard' : undefined,
           }),
         });
         if (res.ok) successCount++;
+        else failedCount++;
       } catch (err) {
         console.warn('Batch action item error:', err);
       }
     }
 
     setActionMessage({
-      type: 'success',
-      text: `Batch ${action === 'APPLY' ? 'Approved' : 'Rejected'} ${successCount} document(s) successfully.`,
+      type: failedCount ? 'warning' : 'success',
+      text: `Batch ${action === 'APPLY' ? 'approved' : 'rejected'} ${successCount} document(s)${failedCount ? `; ${failedCount} could not be (open each to see why)` : ''}.`,
     });
     setSelectedDocIds(new Set());
     setIsBatchActionPending(false);
@@ -1112,6 +1133,36 @@ export default function DocumentIntelligencePage() {
                 </div>
               )}
 
+              {/* Review form: documents that create a record wait for a person to confirm the fields */}
+              {(() => {
+                const kind = stagedRecordKind(selectedExtraction.docCategory);
+                if (!kind || selectedExtraction.autoPopulateStatus === 'APPLIED' || selectedExtraction.autoPopulateStatus === 'REJECTED') return null;
+                const labels = REVIEW_FIELD_LABELS[kind];
+                return (
+                  <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-3 text-xs text-slate-300">
+                    <div className="font-semibold text-amber-300">
+                      Waiting for review: check the extracted fields against the document, correct them if needed, then approve.
+                    </div>
+                    {labels.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {labels.map(([key, label]) => (
+                          <label key={key} className="flex flex-col gap-1">
+                            <span className="text-slate-400">{label}</span>
+                            <input
+                              value={reviewDraft[key] ?? ''}
+                              onChange={(e) => setReviewDraft((d) => ({ ...d, [key]: e.target.value }))}
+                              className="px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-slate-400">Quotations are reviewed only; approving creates no Finance record.</div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Auto-Population & Apply */}
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs text-slate-300">
                 <span>
@@ -1151,11 +1202,19 @@ export default function DocumentIntelligencePage() {
                       Reject
                     </button>
                     <button
-                      onClick={() => handleApplyRecord(selectedExtraction)}
+                      onClick={() =>
+                        handleApplyRecord(
+                          selectedExtraction,
+                          stagedRecordKind(selectedExtraction.docCategory) ? reviewDraft : undefined,
+                        )
+                      }
                       className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition flex items-center gap-1"
                     >
                       <Check className="w-3.5 h-3.5" />
-                      Apply to Fleet360 Record
+                      {(() => {
+                        const kind = stagedRecordKind(selectedExtraction.docCategory);
+                        return kind ? APPROVE_LABEL[kind] : 'Apply to Fleet360 Record';
+                      })()}
                     </button>
                   </div>
                 )}
