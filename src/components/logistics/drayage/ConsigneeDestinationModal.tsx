@@ -38,6 +38,7 @@ import {
   type GMapsLatLng,
   type GoogleCtors,
 } from '@/lib/google-maps-loader';
+import { getCachedDrayageData } from '@/lib/logistics/drayage-client-cache';
 
 export interface DrayageClientOption {
   id: string;
@@ -51,6 +52,7 @@ export interface DrayageClientOption {
   tradeLicense?: string | null;
   defaultTripAmountAed?: number;
   defaultDriverAllowanceAed?: number;
+  warehouses?: DrayageWarehouseData[];
 }
 
 export interface DrayageWarehouseData {
@@ -80,6 +82,7 @@ interface ConsigneeDestinationModalProps {
   onSaved: (savedWarehouse: DrayageWarehouseData) => void;
   initialData?: DrayageWarehouseData | null;
   clients: DrayageClientOption[];
+  warehouses?: DrayageWarehouseData[];
   onClientCreated?: (newClient: DrayageClientOption) => void;
   defaultClientId?: string | null;
 }
@@ -141,10 +144,12 @@ export function ConsigneeDestinationModal({
   onSaved,
   initialData,
   clients,
+  warehouses,
   onClientCreated,
   defaultClientId,
 }: ConsigneeDestinationModalProps) {
   // Main form state
+  const [selectedExistingWarehouseId, setSelectedExistingWarehouseId] = useState<string>('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [customerId, setCustomerId] = useState('');
@@ -270,11 +275,63 @@ export function ConsigneeDestinationModal({
     }
   }, [isOpen, showPlotModal]);
 
+  const getWarehousesForClient = (cId: string, cName?: string): DrayageWarehouseData[] => {
+    if (!cId && !cName) return [];
+    const clientObj = clients.find((c) => c.id === cId);
+    const effectiveName = (cName || clientObj?.name || '').trim().toLowerCase();
+    const cachedWhs: DrayageWarehouseData[] = Array.isArray(getCachedDrayageData()?.warehouses)
+      ? getCachedDrayageData().warehouses
+      : [];
+    const combined: DrayageWarehouseData[] = [
+      ...(clientObj?.warehouses || []),
+      ...(warehouses || []),
+      ...cachedWhs,
+    ];
+    const seen = new Set<string>();
+    const filtered: DrayageWarehouseData[] = [];
+    for (const w of combined) {
+      if (!w) continue;
+      const matchId = Boolean(cId && w.customerId && String(w.customerId) === String(cId));
+      const matchName = Boolean(
+        effectiveName &&
+          w.customerName &&
+          String(w.customerName).trim().toLowerCase() === effectiveName,
+      );
+      if (!matchId && !matchName) continue;
+      const key = String(w.id || `${w.name}::${w.zone}`).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      filtered.push(w);
+    }
+    return filtered;
+  };
+
+  const applyWarehouseToForm = (wh: DrayageWarehouseData) => {
+    setSelectedExistingWarehouseId(wh.id || '');
+    setName(wh.name || '');
+    setCode(wh.code || '');
+    setZone(wh.zone || 'JAFZA South');
+    setRampsCount(wh.rampsCount || 4);
+    setLat(wh.lat ?? 24.9642);
+    setLng(wh.lng ?? 55.0915);
+    setAddress(wh.address || '');
+    setDriverAllowanceAed(wh.driverAllowanceAed ?? 150);
+    setTripAmountAed(wh.tripAmountAed ?? 1550);
+    setContactPerson(wh.contactPerson || '');
+    setContactPhone(wh.contactPhone || '');
+    const initType = wh.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
+    setGeofenceConfigured(Boolean(wh.geofenceConfigured));
+    setGeofenceType(initType);
+    setGeofenceRadiusMeters(initType === 'POLYGON' ? 0 : (wh.geofenceRadiusMeters ?? 800));
+    setGeofenceCoordinatesJson(wh.geofenceCoordinatesJson || '[]');
+  };
+
   // Populate initial values when opening modal
   useEffect(() => {
     if (!isOpen) return;
 
     if (initialData) {
+      setSelectedExistingWarehouseId(initialData.id || '');
       setName(initialData.name || '');
       setCode(initialData.code || '');
       setCustomerId(initialData.customerId || '');
@@ -297,23 +354,30 @@ export function ConsigneeDestinationModal({
       const selectedClient = clients.find((c) => c.id === defaultClientId) || clients[0];
       const initialCid = selectedClient?.id || '';
       const initialCName = selectedClient?.name || '';
-      setName('');
-      setCode('');
       setCustomerId(initialCid);
       setCustomerName(initialCName);
-      setZone('JAFZA South');
-      setRampsCount(4);
-      setLat(24.9642);
-      setLng(55.0915);
-      setAddress(selectedClient?.streetAddress || '');
-      setDriverAllowanceAed(150);
-      setTripAmountAed(1550);
-      setContactPerson(selectedClient?.contactPerson || '');
-      setContactPhone(selectedClient?.contactNo || '');
-      setGeofenceConfigured(false);
-      setGeofenceType('CIRCLE');
-      setGeofenceRadiusMeters(800);
-      setGeofenceCoordinatesJson('[]');
+
+      const clientWhs = getWarehousesForClient(initialCid, initialCName);
+      if (clientWhs.length > 0) {
+        applyWarehouseToForm(clientWhs[0]);
+      } else {
+        setSelectedExistingWarehouseId('');
+        setName('');
+        setCode('');
+        setZone('JAFZA South');
+        setRampsCount(4);
+        setLat(24.9642);
+        setLng(55.0915);
+        setAddress(selectedClient?.streetAddress || '');
+        setDriverAllowanceAed(selectedClient?.defaultDriverAllowanceAed ?? 150);
+        setTripAmountAed(selectedClient?.defaultTripAmountAed ?? 1550);
+        setContactPerson(selectedClient?.contactPerson || '');
+        setContactPhone(selectedClient?.contactNo || '');
+        setGeofenceConfigured(false);
+        setGeofenceType('CIRCLE');
+        setGeofenceRadiusMeters(800);
+        setGeofenceCoordinatesJson('[]');
+      }
     }
   }, [isOpen, initialData, clients, defaultClientId]);
 
@@ -323,20 +387,24 @@ export function ConsigneeDestinationModal({
     const client = clients.find((c) => c.id === cId);
     if (client) {
       setCustomerName(client.name);
-      if (!name || name.includes('- Facility / Ramp')) {
-        setName(`${client.name} - Facility / Ramp`);
-      }
-      if (!address && client.streetAddress) {
-        setAddress(client.streetAddress);
-      }
-      if (!contactPerson && client.contactPerson) {
-        setContactPerson(client.contactPerson);
-      }
-      if (!contactPhone && client.contactNo) {
-        setContactPhone(client.contactNo);
+      const clientWhs = getWarehousesForClient(cId, client.name);
+      if (clientWhs.length > 0) {
+        applyWarehouseToForm(clientWhs[0]);
+      } else {
+        setSelectedExistingWarehouseId('');
+        setName('');
+        setCode('');
+        setZone('JAFZA South');
+        setRampsCount(4);
+        setAddress(client.streetAddress || '');
+        setDriverAllowanceAed(client.defaultDriverAllowanceAed ?? 150);
+        setTripAmountAed(client.defaultTripAmountAed ?? 1550);
+        setContactPerson(client.contactPerson || '');
+        setContactPhone(client.contactNo || '');
       }
     } else {
       setCustomerName('');
+      setSelectedExistingWarehouseId('');
     }
   };
 
@@ -1032,7 +1100,7 @@ export function ConsigneeDestinationModal({
     try {
       setSubmitting(true);
       const payload: DrayageWarehouseData = {
-        id: initialData?.id,
+        id: selectedExistingWarehouseId || initialData?.id,
         customerId: customerId || null,
         customerName: customerName || (clients.find((c) => c.id === customerId)?.name || 'Direct Client'),
         name: name.trim(),
@@ -1064,7 +1132,10 @@ export function ConsigneeDestinationModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save consignee destination');
 
-      onSaved(payload);
+      onSaved({
+        ...payload,
+        id: payload.id || data.warehouseId || data.id,
+      });
       onClose();
     } catch (err) {
       console.error('Error saving consignee destination:', err);
@@ -1101,41 +1172,12 @@ export function ConsigneeDestinationModal({
 
           {/* Form Body */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-            {/* Consignee Facility / Warehouse Name (Client) * */}
-            <div className="space-y-1">
-              <label className="font-semibold text-[var(--text-muted)]">
-                Consignee Facility / Warehouse Name (Client) *
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Landmark Distribution Center NIP, Chalhoub DWC Hub"
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-medium"
-              />
-            </div>
-
-            {/* Warehouse / Facility Code */}
-            <div className="space-y-1">
-              <label className="font-semibold text-[var(--text-muted)]">
-                Warehouse / Facility Code (Optional)
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. AF-LOG-DIC-WH1"
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono uppercase outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            {/* Map to Client / Consignee * with + Add Client button */}
+            {/* 1. Map to Client / Consignee * (Shown First) */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Map to Client / Consignee *</span>
+                  <span>Client / Consignee *</span>
                 </label>
                 <button
                   type="button"
@@ -1159,6 +1201,144 @@ export function ConsigneeDestinationModal({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 2. Defined Destinations / Facilities / Warehouses for Selected Client */}
+            {customerId && (() => {
+              const clientWhs = getWarehousesForClient(customerId, customerName);
+              return (
+                <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/25 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                      <Warehouse className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>
+                        Defined Destinations / Facilities ({clientWhs.length})
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selCli = clients.find((c) => c.id === customerId);
+                        setSelectedExistingWarehouseId('');
+                        setName('');
+                        setCode('');
+                        setZone('JAFZA South');
+                        setRampsCount(4);
+                        setAddress(selCli?.streetAddress || '');
+                        setDriverAllowanceAed(selCli?.defaultDriverAllowanceAed ?? 150);
+                        setTripAmountAed(selCli?.defaultTripAmountAed ?? 1550);
+                        setContactPerson(selCli?.contactPerson || '');
+                        setContactPhone(selCli?.contactNo || '');
+                      }}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                        !selectedExistingWarehouseId
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>New Destination</span>
+                    </button>
+                  </div>
+
+                  {clientWhs.length > 0 ? (
+                    <>
+                      <select
+                        value={selectedExistingWarehouseId || '__NEW__'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__NEW__') {
+                            const selCli = clients.find((c) => c.id === customerId);
+                            setSelectedExistingWarehouseId('');
+                            setName('');
+                            setCode('');
+                            setZone('JAFZA South');
+                            setRampsCount(4);
+                            setAddress(selCli?.streetAddress || '');
+                            setDriverAllowanceAed(selCli?.defaultDriverAllowanceAed ?? 150);
+                            setTripAmountAed(selCli?.defaultTripAmountAed ?? 1550);
+                            setContactPerson(selCli?.contactPerson || '');
+                            setContactPhone(selCli?.contactNo || '');
+                            return;
+                          }
+                          const matched = clientWhs.find((w) => (w.id || w.name) === val);
+                          if (matched) {
+                            applyWarehouseToForm(matched);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-medium"
+                      >
+                        {clientWhs.map((w) => {
+                          const keyVal = w.id || w.name;
+                          return (
+                            <option key={keyVal} value={keyVal}>
+                              {w.name}{w.code ? ` (${w.code})` : ''} · {w.zone} · AED {w.tripAmountAed ?? 1550}
+                            </option>
+                          );
+                        })}
+                        <option value="__NEW__">➕ Define New Destination / Facility for {customerName}...</option>
+                      </select>
+
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {clientWhs.map((w) => {
+                          const keyVal = w.id || w.name;
+                          const isSelected = selectedExistingWarehouseId
+                            ? selectedExistingWarehouseId === keyVal
+                            : name.trim().toLowerCase() === w.name.trim().toLowerCase();
+                          return (
+                            <button
+                              key={keyVal}
+                              type="button"
+                              onClick={() => applyWarehouseToForm(w)}
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all inline-flex items-center gap-1.5 ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-main)] hover:border-emerald-500/50'
+                              }`}
+                            >
+                              <span>{w.name}</span>
+                              {w.code && <span className="text-[10px] opacity-80 font-mono">({w.code})</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      No destinations defined yet for <strong className="text-[var(--text-main)]">{customerName}</strong>. Enter the facility details below to create one.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 3. Consignee Facility / Warehouse Name (Client) * */}
+            <div className="space-y-1">
+              <label className="font-semibold text-[var(--text-muted)]">
+                Consignee Facility / Warehouse Name (Client) *
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Landmark Distribution Center NIP, Chalhoub DWC Hub"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500 font-medium"
+              />
+            </div>
+
+            {/* 4. Warehouse / Facility Code */}
+            <div className="space-y-1">
+              <label className="font-semibold text-[var(--text-muted)]">
+                Warehouse / Facility Code (Optional)
+              </label>
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="e.g. AF-LOG-DIC-WH1"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono uppercase outline-none focus:border-emerald-500"
+              />
             </div>
 
             {/* Industrial Zone / Area & Loading Ramps / Bays */}

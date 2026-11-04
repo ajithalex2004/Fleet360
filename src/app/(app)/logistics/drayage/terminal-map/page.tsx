@@ -1611,6 +1611,7 @@ export default function DrayageTerminalMapPage() {
         }}
         initialData={selectedWarehouseForEdit}
         clients={clients}
+        warehouses={warehouses}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli as (typeof prev)[number], ...prev]);
         }}

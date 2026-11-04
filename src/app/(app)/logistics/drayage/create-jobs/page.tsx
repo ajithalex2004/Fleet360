@@ -1464,6 +1464,7 @@ export default function DrayageCreateJobsPage() {
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}
         clients={clients}
+        warehouses={warehouses}
         defaultClientId={null}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli, ...prev]);

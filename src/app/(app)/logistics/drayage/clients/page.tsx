@@ -1180,6 +1180,7 @@ export default function DrayageClientMasterPage() {
         }}
         initialData={editingWarehouse}
         clients={clients}
+        warehouses={warehouses}
         defaultClientId={defaultClientForNewWh || selectedClientForWarehouses?.id || null}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli as (typeof prev)[number], ...prev]);
