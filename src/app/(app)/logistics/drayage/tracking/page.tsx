@@ -1978,66 +1978,6 @@ export default function DrayageJobTrackingPage() {
                 </Panel>
               )}
 
-              {/* Port EDI Verification Panel */}
-              <Panel
-                title="Port Community System (PCS) EDI Verification"
-                subtitle="Live status query with Dubai Trade (DP World Jebel Ali) and Maqta Gateway (AD Ports Khalifa Port)"
-                icon={ShieldCheck}
-                accent="cyan"
-                actions={
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleVerifyEdi('DUBAI_TRADE_DPWORLD')}
-                      disabled={ediLoading}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-semibold text-blue-400 hover:bg-blue-600/25 transition-colors"
-                    >
-                      <ShieldCheck className={`w-3.5 h-3.5 ${ediLoading ? 'animate-spin' : ''}`} />
-                      Verify DP World Dubai Trade
-                    </button>
-                    <button
-                      onClick={() => handleVerifyEdi('AD_PORTS_MAQTA')}
-                      disabled={ediLoading}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600/15 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-600/25 transition-colors"
-                    >
-                      <ShieldCheck className={`w-3.5 h-3.5 ${ediLoading ? 'animate-spin' : ''}`} />
-                      Verify AD Ports Maqta
-                    </button>
-                  </div>
-                }
-              >
-                {ediResult ? (
-                  <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-emerald-500/30 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        EDI Electronic Clearance Received ({ediResult.providerLabel})
-                      </span>
-                      <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                        {new Date(ediResult.verifiedAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 text-[11px]">
-                      <div>
-                        Customs Status: <strong className="text-emerald-400">{ediResult.customsStatus}</strong>
-                      </div>
-                      <div>
-                        Delivery Order: <strong className="text-emerald-400">{ediResult.doStatus}</strong>
-                      </div>
-                      <div>
-                        Vessel / Berth: <strong className="text-[var(--text-main)]">{ediResult.vesselName}</strong>
-                      </div>
-                      <div>
-                        Gate Pass: <strong className="text-emerald-400">APPROVED (Token: {ediResult.tokenNumber})</strong>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="py-6 text-center text-xs text-[var(--text-muted)]">
-                    Click either &quot;Verify DP World Dubai Trade&quot; or &quot;Verify AD Ports Maqta&quot; to ping the port community EDI API and authenticate customs seal, DO expiry, and OCR gate pass readiness.
-                  </div>
-                )}
-              </Panel>
-
               {/* Chat & Status Logs Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Dispatcher <-> Driver Chat */}
@@ -2142,6 +2082,66 @@ export default function DrayageJobTrackingPage() {
                   </div>
                 </Panel>
               </div>
+
+              {/* Port EDI Verification Panel */}
+              <Panel
+                title="Port Community System (PCS) EDI Verification"
+                subtitle="Live status query with Dubai Trade (DP World Jebel Ali) and Maqta Gateway (AD Ports Khalifa Port)"
+                icon={ShieldCheck}
+                accent="cyan"
+                actions={
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleVerifyEdi('DUBAI_TRADE_DPWORLD')}
+                      disabled={ediLoading}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-semibold text-blue-400 hover:bg-blue-600/25 transition-colors"
+                    >
+                      <ShieldCheck className={`w-3.5 h-3.5 ${ediLoading ? 'animate-spin' : ''}`} />
+                      Verify DP World Dubai Trade
+                    </button>
+                    <button
+                      onClick={() => handleVerifyEdi('AD_PORTS_MAQTA')}
+                      disabled={ediLoading}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600/15 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-600/25 transition-colors"
+                    >
+                      <ShieldCheck className={`w-3.5 h-3.5 ${ediLoading ? 'animate-spin' : ''}`} />
+                      Verify AD Ports Maqta
+                    </button>
+                  </div>
+                }
+              >
+                {ediResult ? (
+                  <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-emerald-500/30 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        EDI Electronic Clearance Received ({ediResult.providerLabel})
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                        {new Date(ediResult.verifiedAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 text-[11px]">
+                      <div>
+                        Customs Status: <strong className="text-emerald-400">{ediResult.customsStatus}</strong>
+                      </div>
+                      <div>
+                        Delivery Order: <strong className="text-emerald-400">{ediResult.doStatus}</strong>
+                      </div>
+                      <div>
+                        Vessel / Berth: <strong className="text-[var(--text-main)]">{ediResult.vesselName}</strong>
+                      </div>
+                      <div>
+                        Gate Pass: <strong className="text-emerald-400">APPROVED (Token: {ediResult.tokenNumber})</strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-[var(--text-muted)]">
+                    Click either &quot;Verify DP World Dubai Trade&quot; or &quot;Verify AD Ports Maqta&quot; to ping the port community EDI API and authenticate customs seal, DO expiry, and OCR gate pass readiness.
+                  </div>
+                )}
+              </Panel>
             </>
           ) : (
             <Panel title="Select a Job" icon={Package} accent="blue">
