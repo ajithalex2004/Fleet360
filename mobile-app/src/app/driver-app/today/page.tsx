@@ -454,13 +454,27 @@ export default function DriverTodayPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Ramp ETC selection modal state (LogiXL-Connect 1 Hr / 2 Hrs / 3 Hrs / 4 Hrs modal)
+  // Ramp ETC selection modal state (Quick Presets + Custom Date & Time picker)
   const [showEtcModal, setShowEtcModal] = useState(false);
   const [pendingRampStatus, setPendingRampStatus] = useState<string>('PLACED_AT_RAMP');
+  const [customEtcDate, setCustomEtcDate] = useState<string>(() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
+  const [customEtcTime, setCustomEtcTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${min}`;
+  });
 
   // Sign-on-Glass ePOD Signature Pad Modal state (LogiXL-Connect SignaturePadModal parity)
   const [epodSignatures, setEpodSignatures] = useState<Record<string, EpodSignatureInfo>>({});
   const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [sigModalKey, setSigModalKey] = useState(0);
   const [pendingActionAfterSign, setPendingActionAfterSign] = useState<{
     targetStatus: string;
     label: string;
@@ -473,6 +487,52 @@ export default function DriverTodayPage() {
   const isDrawingSigRef = useRef(false);
   const sigCurrentStrokeRef = useRef<Array<{ x: number; y: number }>>([]);
   const sigSvgRef = useRef<SVGSVGElement | null>(null);
+
+  const openEtcModalWithDefaults = useCallback((rampStatus: string) => {
+    const d = new Date(Date.now() + 60 * 60 * 1000);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    setCustomEtcDate(`${yyyy}-${mm}-${dd}`);
+    setCustomEtcTime(`${hh}:${min}`);
+    setPendingRampStatus(rampStatus);
+    setShowEtcModal(true);
+  }, []);
+
+  const openSignatureModalFresh = useCallback(
+    (
+      pendingAction: {
+        targetStatus: string;
+        label: string;
+        requireEtcModal?: boolean;
+      } | null = null,
+    ) => {
+      isDrawingSigRef.current = false;
+      sigCurrentStrokeRef.current = [];
+      setSigCurrentStroke([]);
+      setSigStrokes([]);
+      setSigReceiverName('');
+      setSigReceiverRole('');
+      setSigModalKey((prev) => prev + 1);
+      setPendingActionAfterSign(pendingAction);
+      setShowSignatureModal(true);
+    },
+    [],
+  );
+
+  // Ensure Sign-on-Glass fields & pad are always cleared whenever the modal opens
+  useEffect(() => {
+    if (showSignatureModal) {
+      isDrawingSigRef.current = false;
+      sigCurrentStrokeRef.current = [];
+      setSigCurrentStroke([]);
+      setSigStrokes([]);
+      setSigReceiverName('');
+      setSigReceiverRole('');
+    }
+  }, [showSignatureModal]);
 
   // Dispatcher <-> Driver chat & broadcast + job assignment notification state
   const [chatInput, setChatInput] = useState('');
@@ -1001,9 +1061,8 @@ export default function DriverTodayPage() {
   };
 
   /**
-   * Matches LogiXL-Connect JobDetailScreen.js handleAction:
-   * Prompts for Receiver Sign-on-Glass ePOD Signature on Import FCL / Delivery / Placement / Dropoff milestones
-   * if not signed yet.
+   * Prompts for Receiver Sign-on-Glass ePOD Signature strictly at Container Delivery / Ramp Delivery
+   * (PLACED_AT_RAMP or REASSIGN_PLACED_AT_RAMP) if not signed yet.
    */
   const handleActionWithEpodCheck = (
     job: DrayageAssignment,
@@ -1011,34 +1070,23 @@ export default function DriverTodayPage() {
     label: string,
   ) => {
     const upper = targetStatus.toUpperCase();
+    const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
     const isRampTarget = upper === 'PLACED_AT_RAMP' || upper === 'REASSIGN_PLACED_AT_RAMP';
-    const isEpodDeliveryMilestone = [
-      'PLACED_AT_YARD',
-      'PLACED_AT_RAMP',
-      'REASSIGN_PLACED_AT_YARD',
-      'REASSIGN_PLACED_AT_RAMP',
-      'TRAILER_DETACHED',
-      'REASSIGN_TRAILER_DETACHED',
-      'READY_FOR_PICKUP',
-      'CONTAINER_DROPPED',
-      'COMPLETED',
-    ].includes(upper);
+    const isEpodDeliveryMilestone = !isL2Job && isRampTarget;
 
     const hasSignedAlready = Boolean(epodSignatures[job.id] || job.podSignatureName);
 
     if (isEpodDeliveryMilestone && !hasSignedAlready) {
-      setPendingActionAfterSign({
+      openSignatureModalFresh({
         targetStatus,
         label,
         requireEtcModal: isRampTarget,
       });
-      setShowSignatureModal(true);
       return;
     }
 
     if (isRampTarget) {
-      setPendingRampStatus(targetStatus);
-      setShowEtcModal(true);
+      openEtcModalWithDefaults(targetStatus);
       return;
     }
 
@@ -1170,8 +1218,7 @@ export default function DriverTodayPage() {
             }),
           });
         } catch {}
-        setPendingRampStatus(pending.targetStatus);
-        setShowEtcModal(true);
+        openEtcModalWithDefaults(pending.targetStatus);
         return;
       }
       await handleStatusUpdate(selectedJob, pending.targetStatus, null, capturedSig);
@@ -1206,8 +1253,7 @@ export default function DriverTodayPage() {
     if (!pending) return;
 
     if (pending.requireEtcModal) {
-      setPendingRampStatus(pending.targetStatus);
-      setShowEtcModal(true);
+      openEtcModalWithDefaults(pending.targetStatus);
       return;
     }
     await handleStatusUpdate(selectedJob, pending.targetStatus);
@@ -1265,6 +1311,21 @@ export default function DriverTodayPage() {
     setShowEtcModal(false);
     const etcDate = new Date(Date.now() + hours * 60 * 60 * 1000);
     await handleStatusUpdate(selectedJob, pendingRampStatus, etcDate.toISOString());
+  };
+
+  const handleConfirmCustomEtc = async () => {
+    if (!selectedJob) return;
+    if (!customEtcDate || !customEtcTime) {
+      showToast('Please select both Custom Date and Time for Offloading ETC.');
+      return;
+    }
+    const parsed = new Date(`${customEtcDate}T${customEtcTime}:00`);
+    if (isNaN(parsed.getTime())) {
+      showToast('Invalid Custom Date or Time selected.');
+      return;
+    }
+    setShowEtcModal(false);
+    await handleStatusUpdate(selectedJob, pendingRampStatus, parsed.toISOString());
   };
 
   const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1446,43 +1507,43 @@ export default function DriverTodayPage() {
                   </div>
                 )}
 
-                {/* Sign-on-Glass ePOD Receiver Signature Section (LogiXL-Connect JobDetailScreen parity) */}
-                <div className="pt-1 border-t border-slate-100">
-                  {isEpodSigned ? (
-                    <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-extrabold text-emerald-800">
-                          ✅ ePOD Signed ({epodDeliveryStatusCode})
+                {/* Sign-on-Glass ePOD Receiver Signature Section — Shown strictly at Container / Ramp Delivery */}
+                {!isL2Selected &&
+                  (['EN_ROUTE_WAREHOUSE', 'PLACED_AT_RAMP', 'TRAILER_ATTACHED', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                    (selectedJob.status || '').toUpperCase(),
+                  ) ||
+                    isEpodSigned) && (
+                    <div className="pt-1 border-t border-slate-100">
+                      {isEpodSigned ? (
+                        <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-extrabold text-emerald-800">
+                              ✅ ePOD Signed ({epodDeliveryStatusCode})
+                            </div>
+                            <div className="text-[11px] font-semibold text-emerald-700 truncate mt-0.5">
+                              Receiver: {signedReceiverDisplay}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openSignatureModalFresh(null)}
+                            className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] hover:bg-emerald-100 transition"
+                          >
+                            Re-Sign
+                          </button>
                         </div>
-                        <div className="text-[11px] font-semibold text-emerald-700 truncate mt-0.5">
-                          Receiver: {signedReceiverDisplay}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingActionAfterSign(null);
-                          setShowSignatureModal(true);
-                        }}
-                        className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] hover:bg-emerald-100 transition"
-                      >
-                        Re-Sign
-                      </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => openSignatureModalFresh(null)}
+                          className="w-full py-3 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-extrabold text-xs text-center transition active:scale-95"
+                        >
+                          ✍️ Capture Receiver Sign-on-Glass ({epodDeliveryStatusCode})
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => {
-                        setPendingActionAfterSign(null);
-                        setShowSignatureModal(true);
-                      }}
-                      className="w-full py-3 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-extrabold text-xs text-center transition active:scale-95"
-                    >
-                      ✍️ Capture Receiver Sign-on-Glass ({epodDeliveryStatusCode})
-                    </button>
                   )}
-                </div>
 
                 {/* Dual Placement Choice: Placed @ Yard OR Placed @ Ramp */}
                 {nextStep.isDualChoice ? (
@@ -1776,33 +1837,77 @@ export default function DriverTodayPage() {
           </div>
         </main>
 
-        {/* Simple LogiXL-Connect ETC Modal (1 Hr / 2 Hrs / 3 Hrs / 4 Hrs) */}
+        {/* LogiXL-Connect ETC Modal (Quick Presets + Custom Date & Time Picker) */}
         {showEtcModal && (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-extrabold text-slate-900">
-                  Estimated Offloading Time (ETC)
+            <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+              <div className="text-center space-y-1">
+                <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Estimated Completion Time (ETC)
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Select estimated hours for warehouse offloading at the ramp:
+                <p className="text-xs text-slate-500">
+                  When do you expect warehouse loading / unloading at the ramp to finish?
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[1, 2, 3, 4].map((hrs) => (
-                  <button
-                    key={hrs}
-                    type="button"
-                    onClick={() => void handleSelectEtcHours(hrs)}
-                    className="py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow transition active:scale-95"
-                  >
-                    {hrs} {hrs === 1 ? 'Hour' : 'Hours'}
-                  </button>
-                ))}
+              {/* Custom Date & Time Inputs */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-blue-700">
+                  Custom Date &amp; Time
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customEtcDate}
+                      onChange={(e) => setCustomEtcDate(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Time (AM / PM)
+                    </label>
+                    <input
+                      type="time"
+                      value={customEtcTime}
+                      onChange={(e) => setCustomEtcTime(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmCustomEtc()}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow transition active:scale-95"
+                >
+                  Confirm Custom Date &amp; Time
+                </button>
+              </div>
+
+              {/* Quick Duration Presets */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 text-center">
+                  Or Quick Select Duration
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((hrs) => (
+                    <button
+                      key={hrs}
+                      type="button"
+                      onClick={() => void handleSelectEtcHours(hrs)}
+                      className="py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow transition active:scale-95"
+                    >
+                      +{hrs} {hrs === 1 ? 'Hr' : 'Hrs'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <button
@@ -1818,7 +1923,7 @@ export default function DriverTodayPage() {
 
         {/* Sign-on-Glass ePOD Signature Pad Modal (LogiXL-Connect SignaturePadModal.js parity) */}
         {showSignatureModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div key={sigModalKey} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-3.5">
               {/* Header */}
               <div className="flex items-start justify-between border-b border-slate-100 pb-2.5">
@@ -1851,6 +1956,8 @@ export default function DriverTodayPage() {
                   </label>
                   <input
                     type="text"
+                    name={`receiver_name_${sigModalKey}`}
+                    autoComplete="off"
                     value={sigReceiverName}
                     onChange={(e) => setSigReceiverName(e.target.value)}
                     placeholder="e.g. Ahmed Al-Mansoor"
@@ -1863,6 +1970,8 @@ export default function DriverTodayPage() {
                   </label>
                   <input
                     type="text"
+                    name={`receiver_role_${sigModalKey}`}
+                    autoComplete="off"
                     value={sigReceiverRole}
                     onChange={(e) => setSigReceiverRole(e.target.value)}
                     placeholder="e.g. Ramp Supv"
