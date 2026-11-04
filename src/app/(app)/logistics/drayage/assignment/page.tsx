@@ -670,15 +670,35 @@ export default function DrayageAssignmentPage() {
   const availableDrivers = useMemo(() => drivers.filter((d) => d.status === 'ACTIVE' && d.complianceOk), [drivers]);
   const availableTrailers = useMemo(() => trailers.filter((t) => t.masterStatus === 'AVAILABLE'), [trailers]);
 
-  // Filter unassigned jobs & all jobs
+  // Filter unassigned jobs & active queue jobs (exclude COMPLETED / L2-activated L1 jobs by default)
+  const [showCompletedJobs, setShowCompletedJobs] = useState(false);
+
+  const isJobCompletedOrSuperseded = useCallback((j: DrayageJob) => {
+    const st = (j.status || '').toUpperCase();
+    return (
+      ['COMPLETED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CANCELLED'].includes(st) ||
+      (j.jobPhase === 'L1' && Boolean(j.l2Activated))
+    );
+  }, []);
+
+  const activeQueueJobs = useMemo(
+    () => (showCompletedJobs ? jobs : jobs.filter((j) => !isJobCompletedOrSuperseded(j))),
+    [jobs, showCompletedJobs, isJobCompletedOrSuperseded],
+  );
+
+  const completedJobsCount = useMemo(
+    () => jobs.filter((j) => isJobCompletedOrSuperseded(j)).length,
+    [jobs, isJobCompletedOrSuperseded],
+  );
+
   const unassignedJobs = useMemo(
     () =>
       jobs.filter(
         (j) =>
           (j.status === 'PENDING' || !j.assignedVehicleId || j.status === 'FCL_REASSIGN' || j.status === 'MT_REASSIGN') &&
-          !['COMPLETED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CANCELLED'].includes(j.status),
+          !isJobCompletedOrSuperseded(j),
       ),
-    [jobs],
+    [jobs, isJobCompletedOrSuperseded],
   );
 
   // =========================================================================
@@ -1280,6 +1300,10 @@ export default function DrayageAssignmentPage() {
   // Open modal for single job — auto-populate detached/linked chassis when reassigning or dispatching L2; keep token blank
   const handleOpenAssign = useCallback(
     (job: DrayageJob) => {
+      if (isJobCompletedOrSuperseded(job)) {
+        showToast('error', `${job.jobCode} is already completed and cannot be reassigned.`);
+        return;
+      }
       setAssigningJob(job);
       setIsBogieAssign(false);
       setSelectedJobIds([job.id]);
@@ -1288,7 +1312,7 @@ export default function DrayageAssignmentPage() {
       setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
       setTokenInput('');
     },
-    [resolveLinkedTrailerIdForJob],
+    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded],
   );
 
   useEffect(() => {
@@ -1487,6 +1511,23 @@ export default function DrayageAssignmentPage() {
       sortable: false,
       filter: false,
       render: (job) => {
+        if (isJobCompletedOrSuperseded(job)) {
+          return (
+            <div className="flex items-center justify-end">
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-60 whitespace-nowrap"
+                title={
+                  job.jobPhase === 'L1' && job.l2Activated
+                    ? 'L1 leg is completed and L2 Empty Return has been activated'
+                    : 'Job is completed'
+                }
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>{job.jobPhase === 'L1' && job.l2Activated ? 'L2 Activated' : 'Completed'}</span>
+              </span>
+            </div>
+          );
+        }
         const isReassign =
           job.jobPhase === 'L1' &&
           (Boolean(job.assignedVehicleId) ||
@@ -1546,7 +1587,7 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk, portalMenuState?.job.id, handleOpenAssign]);
+  ], [getDemurrageRisk, portalMenuState?.job.id, handleOpenAssign, isJobCompletedOrSuperseded]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -3226,16 +3267,23 @@ export default function DrayageAssignmentPage() {
 
       {/* FleetDataGrid (Smart Data Table) */}
       <FleetDataGrid<DrayageJob>
-        rows={jobs}
+        rows={activeQueueJobs}
         columns={assignmentColumns}
         getRowId={(j) => j.id}
         loading={loading}
-        emptyMessage="No drayage jobs in queue"
+        emptyMessage="No active drayage jobs in queue"
         gridName="DrayageAssignmentGrid"
         numbered={true}
         selectable={true}
         selectedIds={new Set(selectedJobIds)}
-        onSelectionChange={(ids) => setSelectedJobIds(Array.from(ids))}
+        onSelectionChange={(ids) =>
+          setSelectedJobIds(
+            Array.from(ids).filter((id) => {
+              const target = jobs.find((j) => j.id === id);
+              return target ? !isJobCompletedOrSuperseded(target) : false;
+            }),
+          )
+        }
         toolbar={{
           title: 'Drayage Jobs Queue',
           search: true,
@@ -3246,6 +3294,21 @@ export default function DrayageAssignmentPage() {
           exportName: 'drayage_job_assignment',
           actions: (
             <div className="flex items-center gap-2">
+              {completedJobsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedJobs((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                    showCompletedJobs
+                      ? 'bg-slate-700 text-white border-slate-600'
+                      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                  title="Show or hide completed L1/L2 jobs in the table"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{showCompletedJobs ? 'Hide Completed' : `Show Completed (${completedJobsCount})`}</span>
+                </button>
+              )}
               {selectedJobIds.length === 2 && (
                 <button
                   onClick={handleOpenBogieModal}
