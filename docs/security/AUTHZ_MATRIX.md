@@ -44,7 +44,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `documents` | 8 | module `compliance` | module `compliance` |
 | `documents/intelligence/cron` | 1 | external | external |
 | `driver` | 1 | module `logistics` | module `logistics` |
-| `driver-app` | 32 | external | external |
+| `driver-app` | 33 | external | external |
 | `drivers` | 9 | module `driver-mgmt` | module `driver-mgmt` |
 | `esign` | 3 | module `leasing` | module `leasing` |
 | `exchange` | 17 | partner | partner |
@@ -62,7 +62,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `leasing` | 91 | module `leasing` | module `leasing` |
 | `leasing-portal` | 13 | external | external |
 | `leasing/documents/upload` | 1 | module `leasing` | self |
-| `logistics` | 66 | module `logistics` | module `logistics` |
+| `logistics` | 68 | module `logistics` | module `logistics` |
 | `logistics/rates/quote` | 0 | self | self |
 | `maintenance` | 23 | module `maintenance` | module `maintenance` |
 | `maintenance-requests` | 3 | module `maintenance` | module `maintenance` |
