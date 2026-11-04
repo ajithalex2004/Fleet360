@@ -76,10 +76,19 @@ export default function LoginPage() {
     } else {
       try {
         const stored = localStorage.getItem('xl_mobility_session');
-        const snap = localStorage.getItem('xl_mobility_session_snapshot');
+        const snap =
+          localStorage.getItem('xl_mobility_session_snapshot_v2') ||
+          localStorage.getItem('xl_mobility_session_snapshot');
         if (stored && snap) {
-          window.location.assign('/platform');
-          return;
+          fetch('/api/admin/session', { cache: 'no-store' })
+            .then((r) => {
+              if (r.ok) {
+                window.location.assign('/platform');
+              } else if (r.status === 401 || r.status === 403 || r.status === 404) {
+                clearClientSession();
+              }
+            })
+            .catch(() => {});
         }
       } catch {}
     }

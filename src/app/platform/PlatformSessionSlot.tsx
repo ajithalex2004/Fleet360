@@ -30,16 +30,9 @@ export default function PlatformSessionSlot() {
   if (isLoading) return <SessionFallback label="Session..." />;
   if (isAuthenticated) return <UserSwitcher />;
 
-  const hasLocalSession =
-    typeof window !== 'undefined' &&
-    (!!localStorage.getItem('xl_mobility_session') || !!localStorage.getItem('xl_mobility_session_snapshot'));
-  if (hasLocalSession) {
-    return <SessionFallback label="Authenticating..." />;
-  }
-
   return (
     <Link
-      href="/login"
+      href="/login?logout=true"
       className="rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 hover:text-white transition-all"
     >
       Sign In
