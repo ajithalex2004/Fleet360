@@ -27,6 +27,7 @@ import {
   Send,
   RefreshCw,
   Truck,
+  X,
 } from 'lucide-react';
 import { getApiEndpoint } from '@/lib/api-endpoint';
 
