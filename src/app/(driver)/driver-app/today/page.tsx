@@ -384,14 +384,70 @@ export default function DriverTodayPage() {
   const [showEtcModal, setShowEtcModal] = useState(false);
   const [pendingRampStatus, setPendingRampStatus] = useState<string>('PLACED_AT_RAMP');
 
-  // Dispatcher <-> Driver chat & broadcast notification state
+  // Dispatcher <-> Driver chat & broadcast + job assignment notification state
   const [chatInput, setChatInput] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
   const [broadcastMessages, setBroadcastMessages] = useState<DrayageChatMessage[]>([]);
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState<string[]>([]);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const seenMsgIdsRef = useRef<Set<string>>(new Set());
+  const seenJobKeysRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
+  const initialJobLoadDoneRef = useRef(false);
+
+  const triggerMobileNotification = useCallback((title: string, body: string, tagKey?: string) => {
+    try {
+      const keyStr = tagKey || `${title}:${body}:${Date.now()}`;
+      let hash = 0;
+      for (let i = 0; i < keyStr.length; i += 1) {
+        hash = (hash * 31 + keyStr.charCodeAt(i)) | 0;
+      }
+      const notificationId = Math.abs(hash % 900000) + 10000;
+
+      // 1. Native Android OS Heads-Up Notification (via MainActivity @JavascriptInterface)
+      const w = typeof window !== 'undefined' ? (window as unknown as {
+        Fleet360Android?: {
+          postNotification?: (t: string, b: string, id: number) => void;
+          requestPermission?: () => void;
+        };
+      }) : undefined;
+      if (w?.Fleet360Android?.postNotification) {
+        w.Fleet360Android.postNotification(title, body, notificationId);
+      } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        // 2. Browser Notification API fallback
+        new Notification(title, { body, tag: tagKey });
+      }
+
+      // 3. Vibration pattern (like WhatsApp / SMS alert)
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([300, 120, 300, 120, 400]);
+      }
+
+      // 4. Audible two-tone dispatch chime
+      if (typeof window !== 'undefined') {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const playTone = (freq: number, startSec: number, durationSec: number) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + startSec);
+            gain.gain.setValueAtTime(0.22, ctx.currentTime + startSec);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startSec + durationSec);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + startSec);
+            osc.stop(ctx.currentTime + startSec + durationSec);
+          };
+          playTone(880, 0, 0.16);
+          playTone(1174.66, 0.18, 0.24);
+        }
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -401,7 +457,30 @@ export default function DriverTodayPage() {
         const parsed = JSON.parse(savedDismissed);
         if (Array.isArray(parsed)) setDismissedBroadcastIds(parsed);
       }
-      if ('Notification' in window && Notification.permission === 'default') {
+      const savedNotifiedJobs = localStorage.getItem('fleet360_notified_job_keys');
+      if (savedNotifiedJobs) {
+        const parsedKeys = JSON.parse(savedNotifiedJobs);
+        if (Array.isArray(parsedKeys)) {
+          for (const k of parsedKeys) {
+            if (typeof k === 'string') seenJobKeysRef.current.add(k);
+          }
+        }
+      }
+      const savedNotifiedMsgs = localStorage.getItem('fleet360_notified_msg_ids');
+      if (savedNotifiedMsgs) {
+        const parsedMsgs = JSON.parse(savedNotifiedMsgs);
+        if (Array.isArray(parsedMsgs)) {
+          for (const mId of parsedMsgs) {
+            if (typeof mId === 'string') seenMsgIdsRef.current.add(mId);
+          }
+        }
+      }
+      const w = window as unknown as {
+        Fleet360Android?: { requestPermission?: () => void };
+      };
+      if (w?.Fleet360Android?.requestPermission) {
+        w.Fleet360Android.requestPermission();
+      } else if ('Notification' in window && Notification.permission === 'default') {
         void Notification.requestPermission().catch(() => {});
       }
     } catch {}
@@ -481,7 +560,57 @@ export default function DriverTodayPage() {
           setJobs(fetched);
           setBroadcastMessages(fetchedBroadcasts);
 
-          // Detect newly arrived Dispatcher messages (Broadcast or Individual)
+          // 1. Detect newly assigned or reassigned jobs and trigger immediate mobile OS notification
+          const ASSIGNMENT_STATUSES = new Set([
+            'ASSIGNED',
+            'PENDING',
+            'RE-ASSIGNED',
+            'FCL_REASSIGN',
+            'MT_REASSIGN',
+          ]);
+          const newlyAssignedJobs: DrayageAssignment[] = [];
+          let jobKeysUpdated = false;
+
+          for (const j of fetched) {
+            const st = (j.status || 'ASSIGNED').toUpperCase();
+            if (HISTORY_STATUSES.has(st)) continue;
+
+            const assignKey = `${j.id}:${st}:${j.assignedVehiclePlate || ''}:${j.assignedTrailerPlate || ''}`;
+            if (!seenJobKeysRef.current.has(assignKey)) {
+              seenJobKeysRef.current.add(assignKey);
+              jobKeysUpdated = true;
+              if (initialJobLoadDoneRef.current || ASSIGNMENT_STATUSES.has(st)) {
+                newlyAssignedJobs.push(j);
+              }
+            }
+          }
+
+          if (!initialJobLoadDoneRef.current) {
+            initialJobLoadDoneRef.current = true;
+          }
+
+          if (jobKeysUpdated && typeof window !== 'undefined') {
+            try {
+              const keysArr = Array.from(seenJobKeysRef.current).slice(-250);
+              localStorage.setItem('fleet360_notified_job_keys', JSON.stringify(keysArr));
+            } catch {}
+          }
+
+          for (const j of newlyAssignedJobs) {
+            const st = (j.status || 'ASSIGNED').toUpperCase();
+            const isReassigned = st === 'RE-ASSIGNED' || st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+            const { pickupName, dropoffName } = getPickupAndDropoff(j);
+            const notifTitle = isReassigned
+              ? `🔄 Job Re-Assigned: ${j.jobCode}`
+              : `🚛 New Job Assigned: ${j.jobCode}`;
+            const notifBody = `Container ${j.containerNumber} (${j.containerSize}) · Trailer: ${
+              j.assignedTrailerPlate || 'Assigned'
+            } · ${pickupName} → ${dropoffName}`;
+            showToast(`${notifTitle} — ${j.containerNumber} (${pickupName} → ${dropoffName})`);
+            triggerMobileNotification(notifTitle, notifBody, `job-assign-${j.id}-${st}`);
+          }
+
+          // 2. Detect newly arrived Dispatcher messages (Broadcast or Individual)
           const allIncomingDispatcherMsgs: Array<DrayageChatMessage & { jobCodeLabel?: string }> = [];
           for (const b of fetchedBroadcasts) {
             if ((b.senderRole || '').toUpperCase() !== 'DRIVER') {
@@ -501,28 +630,38 @@ export default function DriverTodayPage() {
               seenMsgIdsRef.current.add(m.id);
             }
             initialLoadDoneRef.current = true;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem(
+                  'fleet360_notified_msg_ids',
+                  JSON.stringify(Array.from(seenMsgIdsRef.current).slice(-250)),
+                );
+              } catch {}
+            }
           } else {
             const newlyArrived = allIncomingDispatcherMsgs.filter((m) => !seenMsgIdsRef.current.has(m.id));
             if (newlyArrived.length > 0) {
               for (const m of newlyArrived) {
                 seenMsgIdsRef.current.add(m.id);
               }
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.setItem(
+                    'fleet360_notified_msg_ids',
+                    JSON.stringify(Array.from(seenMsgIdsRef.current).slice(-250)),
+                  );
+                } catch {}
+              }
               const latest = newlyArrived[newlyArrived.length - 1];
               const prefix = latest.isBroadcast
                 ? '📢 Fleet Broadcast'
                 : `💬 ${latest.jobCodeLabel || 'Dispatcher'}`;
               showToast(`${prefix}: "${latest.message}"`);
-              try {
-                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                  navigator.vibrate([250, 100, 250]);
-                }
-                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-                  new Notification(
-                    latest.isBroadcast ? '📢 Port Operations Broadcast' : `💬 Dispatcher (${latest.jobCodeLabel})`,
-                    { body: latest.message }
-                  );
-                }
-              } catch {}
+              triggerMobileNotification(
+                latest.isBroadcast ? '📢 Port Operations Broadcast' : `💬 Dispatcher (${latest.jobCodeLabel})`,
+                latest.message,
+                `msg-${latest.id}`,
+              );
             }
           }
         } else if (res.status === 401) {
@@ -535,15 +674,30 @@ export default function DriverTodayPage() {
         setRefreshing(false);
       }
     },
-    [getAuthHeaders],
+    [getAuthHeaders, showToast, triggerMobileNotification],
   );
 
   useEffect(() => {
     void fetchDriverJobs(false);
     const interval = setInterval(() => {
       void fetchDriverJobs(true);
-    }, 15000);
-    return () => clearInterval(interval);
+    }, 4000);
+    const onVisibleOrFocus = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void fetchDriverJobs(true);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', onVisibleOrFocus);
+      document.addEventListener('visibilitychange', onVisibleOrFocus);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', onVisibleOrFocus);
+        document.removeEventListener('visibilitychange', onVisibleOrFocus);
+      }
+    };
   }, [fetchDriverJobs]);
 
   // Split jobs into Active vs. History and sort L2 jobs first (matching LogiXL-Connect DashboardScreen.js)
