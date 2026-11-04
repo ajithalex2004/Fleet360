@@ -11,6 +11,7 @@ import {
   clearPortInspection,
   submitDriverExpenseReceipt,
 } from '@/lib/logistics/drayage-domain';
+import { emitDrayageEvent } from '@/lib/logistics/drayage-events';
 
 async function resolveDriverActorLabel(
   tx: { $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T> },
@@ -102,6 +103,11 @@ export async function POST(
           isUrgent: Boolean(body.isUrgent),
         });
       });
+      emitDrayageEvent(tenantId, {
+        type: 'chat_message',
+        action: 'driver_chat',
+        jobId,
+      });
       return NextResponse.json({
         success: true,
         id: chatRes.id,
@@ -126,6 +132,11 @@ export async function POST(
           notes: `Gemini Vision OCR [${scanStage}]: Container (${scannedContainer})${scannedSeal ? `, Customs Seal (${scannedSeal})` : ''}${scannedEir ? `, EIR Gate Slip (${scannedEir})` : ''} verified via Driver Mobile App`,
           actor: driverActor,
         });
+      });
+      emitDrayageEvent(tenantId, {
+        type: 'status_updated',
+        action: 'driver_scan_verify',
+        jobId,
       });
       return NextResponse.json({
         success: true,
@@ -166,6 +177,11 @@ export async function POST(
           actor: driverActor,
         });
       });
+      emitDrayageEvent(tenantId, {
+        type: 'status_updated',
+        action: 'driver_epod_sign',
+        jobId,
+      });
       return NextResponse.json({
         success: true,
         rampBayNumber,
@@ -189,6 +205,11 @@ export async function POST(
           voiceNoteDataUrl: body.voiceNoteDataUrl ? String(body.voiceNoteDataUrl) : null,
           voiceNoteDurationSec: body.voiceNoteDurationSec ? Number(body.voiceNoteDurationSec) : 0,
         });
+      });
+      emitDrayageEvent(tenantId, {
+        type: 'status_updated',
+        action: 'driver_expense_receipt',
+        jobId,
       });
       return NextResponse.json({
         success: true,
@@ -253,6 +274,12 @@ export async function POST(
         notes,
         actor: driverActor,
       });
+    });
+
+    emitDrayageEvent(tenantId, {
+      type: 'status_updated',
+      action: 'driver_status_update',
+      jobId,
     });
 
     return NextResponse.json({
