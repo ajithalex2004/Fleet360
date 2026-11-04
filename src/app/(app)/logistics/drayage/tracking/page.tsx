@@ -192,11 +192,20 @@ interface DispatchMessage {
 
 function getOperationalStageIndex(status: string, trailerDetached?: boolean): number {
   const s = (status || '').toUpperCase();
-  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
     return 6;
   }
   if (
-    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP', 'WAITING_MT_RETURN'].includes(s)
+    [
+      'CONTAINER_DETACHED',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'READY_FOR_PICKUP',
+      'CONTAINER_OFFLOADED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'WAITING_MT_RETURN',
+    ].includes(s)
   ) {
     return 5;
   }
@@ -310,43 +319,48 @@ export default function DrayageJobTrackingPage() {
   }, [selectedJobId]);
 
   useEffect(() => {
-    const thresholdMins = automationConfig.thresholdMinutes || 30;
+    const thresholdMins = autoL2DispatchEnabled ? (automationConfig.thresholdMinutes || 30) : 0;
     const timer = setInterval(async () => {
       setTick((t) => t + 1);
-      if (autoL2DispatchEnabled) {
-        const hasPendingThresholdJob = jobs.some(
-          (j) =>
-            j.jobPhase === 'L1' &&
-            !j.l2Activated &&
-            j.placementLocation !== 'YARD' &&
-            j.etcTime &&
-            new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000,
-        );
-        if (hasPendingThresholdJob) {
-          try {
-            const res = await fetch('/api/logistics/drayage', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'check_etc_timers',
-                thresholdMinutes: thresholdMins,
-                preAssignTractor: true,
-              }),
-            });
-            if (res.ok) {
-              const checkRes = await res.json();
-              if (Array.isArray(checkRes.activated) && checkRes.activated.length > 0) {
-                const first = checkRes.activated[0];
-                showToast(
-                  'success',
-                  `⚡ Auto-L2 @ T-${thresholdMins}m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`,
-                );
-                await loadData();
-              }
+      const hasDueL1Job = jobs.some((j) => {
+        if (j.jobPhase !== 'L1' || j.l2Activated) return false;
+        const st = (j.status || '').toUpperCase();
+        const isInitialYardDrop =
+          j.placementLocation === 'YARD' && ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st);
+        if (isInitialYardDrop) return false;
+        if (st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED') {
+          if (!j.etcTime) return true;
+          return new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000;
+        }
+        if (!j.etcTime) return false;
+        return new Date(j.etcTime).getTime() - Date.now() <= thresholdMins * 60 * 1000;
+      });
+      if (hasDueL1Job) {
+        try {
+          const res = await fetch('/api/logistics/drayage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'check_etc_timers',
+              thresholdMinutes: thresholdMins,
+              preAssignTractor: autoL2DispatchEnabled,
+            }),
+          });
+          if (res.ok) {
+            const checkRes = await res.json();
+            if (Array.isArray(checkRes.activated) && checkRes.activated.length > 0) {
+              const first = checkRes.activated[0];
+              showToast(
+                'success',
+                autoL2DispatchEnabled
+                  ? `⚡ Auto-L2 @ T-${thresholdMins}m triggered ${first.l2JobCode}${first.vehiclePlate ? ` · Pre-Assigned ${first.vehiclePlate} (${first.driverName} · ${first.matchScorePct}% Match)` : ''}!`
+                  : `⚡ L2 Empty Return ${first.l2JobCode} automatically triggered upon ETC completion!`,
+              );
+              await loadData();
             }
-          } catch {
-            // Silent background poll
           }
+        } catch {
+          // Silent background poll
         }
       }
     }, 30000);
@@ -1228,10 +1242,12 @@ export default function DrayageJobTrackingPage() {
                     </button>
                     {activeJob.jobPhase === 'L1' && !activeJob.l2Activated && (() => {
                       const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
-                      const canTriggerL2 =
-                        currentStage >= 4 &&
-                        activeJob.placementLocation !== 'YARD' &&
-                        Boolean(activeJob.etcTime);
+                      const isInitialYardDrop =
+                        activeJob.placementLocation === 'YARD' &&
+                        ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(
+                          (activeJob.status || '').toUpperCase(),
+                        );
+                      const canTriggerL2 = currentStage >= 4 && !isInitialYardDrop;
                       return (
                         <button
                           onClick={handleTriggerL2}
@@ -1239,7 +1255,7 @@ export default function DrayageJobTrackingPage() {
                           title={
                             canTriggerL2
                               ? 'Activate L2 Empty Return job now'
-                              : 'Locked: Requires container Placed at Ramp with Offloading ETC set'
+                              : 'Locked: Requires container Placed at Ramp, Ready for Pickup, or Reassigned'
                           }
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                             canTriggerL2

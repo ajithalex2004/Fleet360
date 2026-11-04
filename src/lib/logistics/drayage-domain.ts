@@ -1535,7 +1535,11 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'CONTAINER_DETACHED',
     'REASSIGN_TRAILER_DETACHED',
     'READY_FOR_PICKUP',
+    'CONTAINER_OFFLOADED',
+    'FCL_REASSIGN',
+    'MT_REASSIGN',
     'CONTAINER_DROPPED',
+    'CONTAINER_DELIVERED',
     'PENDING',
     'CANCELLED',
   ]);
@@ -1927,25 +1931,74 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const autoL2DispatchEnabled = automationConfig.autoL2DispatchEnabled;
   const thresholdMins = automationConfig.thresholdMinutes;
 
-  // If tenant has Auto-L2 enabled, check if any L1 job Placed at Ramp is within configured thresholdMinutes of ETC
-  if (autoL2DispatchEnabled) {
+  // Check if any L1 job is due for L2 Empty Return activation (at T-threshold when Auto-L2 is enabled, or upon ETC completion / READY_FOR_PICKUP in LogiXL-Connect mode)
+  {
     const nowMs = Date.now();
-    const tThresholdMs = nowMs + thresholdMins * 60 * 1000;
-    const dueT30Jobs = jobs.filter((j) => {
-      if (j.jobPhase !== 'L1' || j.l2Activated || !j.etcTime) return false;
-      const stage = getDrayageOperationalStageIndex(j.status, j.trailerDetached);
-      if (stage < 4 || (j.placementLocation || '').toUpperCase() === 'YARD') return false;
+    const effectiveWindowMins = autoL2DispatchEnabled ? thresholdMins : 0;
+    const tThresholdMs = nowMs + effectiveWindowMins * 60 * 1000;
+    const dueL1Jobs = jobs.filter((j) => {
+      if (j.jobPhase !== 'L1' || j.l2Activated) return false;
+      const st = (j.status || '').toUpperCase();
+      const stage = getDrayageOperationalStageIndex(st, j.trailerDetached);
+      if (stage < 4) return false;
+      // Initial yard drop (before Reassign / Ready for Pickup) stays in FCL_REASSIGN / MT_REASSIGN until reassigned
+      const isInitialYardDrop =
+        (j.placementLocation || '').toUpperCase() === 'YARD' &&
+        ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st);
+      if (isInitialYardDrop) return false;
+      if (st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED') {
+        if (!j.etcTime) return true;
+        const etcMs = new Date(j.etcTime).getTime();
+        return isNaN(etcMs) || etcMs <= tThresholdMs;
+      }
+      if (!j.etcTime) return false;
       const etcMs = new Date(j.etcTime).getTime();
       return !isNaN(etcMs) && etcMs <= tThresholdMs;
     });
 
-    if (dueT30Jobs.length > 0) {
-      await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
-        thresholdMinutes: thresholdMins,
-        preAssignTractor: true,
+    if (dueL1Jobs.length > 0) {
+      const actRes = await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
+        thresholdMinutes: effectiveWindowMins,
+        preAssignTractor: autoL2DispatchEnabled,
       }).catch((err) => {
-        console.error('[getDrayageWorkspaceData] Auto-L2 threshold trigger error:', err);
+        console.error('[getDrayageWorkspaceData] L2 ETC activation trigger error:', err);
+        return { checked: 0, activated: [] };
       });
+      if (actRes && actRes.activated.length > 0) {
+        for (const act of actRes.activated) {
+          const l1InMem = jobs.find((j) => j.jobCode === act.l1JobCode);
+          if (l1InMem) {
+            l1InMem.l2Activated = true;
+            l1InMem.status = 'COMPLETED';
+            l1InMem.etcAlertStatus = 'ACTIVATED';
+            jobs.unshift({
+              ...l1InMem,
+              id: act.l2JobId,
+              jobCode: act.l2JobCode,
+              jobPhase: 'L2',
+              parentJobId: l1InMem.id,
+              status: act.preAssigned ? 'ASSIGNED' : 'PENDING',
+              priority: 'HIGH',
+              assignedVehicleId: act.preAssigned ? l1InMem.assignedVehicleId : null,
+              assignedVehiclePlate: act.preAssigned ? (act.vehiclePlate ?? null) : null,
+              assignedDriverId: act.preAssigned ? l1InMem.assignedDriverId : null,
+              assignedDriverName: act.preAssigned ? (act.driverName ?? null) : null,
+              assignedTrailerId: l1InMem.assignedTrailerId,
+              assignedTrailerPlate: l1InMem.assignedTrailerPlate,
+              placementLocation: null,
+              trailerDetached: false,
+              l2Activated: false,
+              etcTime: null,
+              etcAlertStatus: 'NEW',
+              rateAmountAed: 950,
+              driverAllowanceAed: 120,
+              notes: `Auto-generated L2 Empty Container Return from ${l1InMem.jobCode}`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
+      }
     }
   }
 
@@ -2880,11 +2933,20 @@ export async function assignDrayageJob(
 
 function getDrayageOperationalStageIndex(status: string, trailerDetached?: boolean): number {
   const s = (status || '').toUpperCase();
-  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
     return 6;
   }
   if (
-    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP', 'WAITING_MT_RETURN'].includes(s)
+    [
+      'CONTAINER_DETACHED',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'READY_FOR_PICKUP',
+      'CONTAINER_OFFLOADED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'WAITING_MT_RETURN',
+    ].includes(s)
   ) {
     return 5;
   }
@@ -2926,10 +2988,45 @@ export async function updateDrayageJobExecutionStatus(
   if (!job) throw new Error('Drayage job not found');
 
   const currentStatus = String(job.status || '');
-  const placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
-  const detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
+  const currentStatusUpper = currentStatus.toUpperCase();
+  const requestedStatusUpper = String(args.status || '').toUpperCase();
+  let placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
+  let detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
 
-  if (args.status !== currentStatus) {
+  // Determine previous origin placement status from status logs (LogiXL-Connect status_helper.go pattern)
+  const prevOriginRows = await db
+    .$queryRawUnsafe<Array<{ status: string }>>(
+      `SELECT status
+         FROM logistics_drayage_status_logs
+        WHERE job_id = $1 AND tenant_id = $2
+          AND status NOT IN (
+            'CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED',
+            'READY_FOR_PICKUP', 'PHOTO_UPLOADED', 'INSPECTION_SKIPPED',
+            'INSPECTION_REPORTED', 'TRAILER_ATTACHED', 'ACCEPTED',
+            'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED'
+          )
+        ORDER BY timestamp DESC
+        LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    )
+    .catch(() => []);
+  const prevOriginStatus = String(prevOriginRows[0]?.status || currentStatusUpper).toUpperCase();
+
+  const isReassignTransition =
+    [
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'RE-ASSIGNED',
+      'TRAILER_DETACHED',
+      'CONTAINER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+    ].includes(currentStatusUpper) ||
+    requestedStatusUpper.startsWith('REASSIGN_') ||
+    requestedStatusUpper === 'TRAILER_ATTACHED' ||
+    requestedStatusUpper === 'ACCEPTED';
+
+  if (args.status !== currentStatus && !isReassignTransition) {
     const currentStage = getDrayageOperationalStageIndex(currentStatus, Boolean(job.trailer_detached));
     const targetStage = getDrayageOperationalStageIndex(args.status, detached);
     if (currentStage >= 1 && targetStage >= 1) {
@@ -2946,11 +3043,42 @@ export async function updateDrayageJobExecutionStatus(
       }
     }
   }
+
+  // LogiXL-Connect State Machine for Detach & Reassign:
+  // 1. L1 PLACED_AT_YARD + Detach -> FCL_REASSIGN (IMPORT) / MT_REASSIGN (EXPORT)
+  // 2. REASSIGN_PLACED_AT_YARD + Detach -> READY_FOR_PICKUP (immediately eligible for L2)
+  let effectiveStatus = requestedStatusUpper;
+  const isDetachSignal =
+    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes( requestedStatusUpper ) ||
+    (detached && ['PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(requestedStatusUpper));
+
+  if (isDetachSignal) {
+    detached = true;
+    const isReassignYardDrop =
+      requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED' ||
+      requestedStatusUpper === 'REASSIGN_PLACED_AT_YARD' ||
+      prevOriginStatus === 'REASSIGN_PLACED_AT_YARD' ||
+      currentStatusUpper === 'REASSIGN_PLACED_AT_YARD';
+    const isInitialYardDrop =
+      !isReassignYardDrop &&
+      (requestedStatusUpper === 'PLACED_AT_YARD' ||
+        prevOriginStatus === 'PLACED_AT_YARD' ||
+        currentStatusUpper === 'PLACED_AT_YARD');
+
+    if (isReassignYardDrop) {
+      effectiveStatus = 'READY_FOR_PICKUP';
+      if (!placement) placement = 'YARD';
+    } else if (String(job.job_phase || 'L1') === 'L1' && isInitialYardDrop) {
+      effectiveStatus = String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
+      placement = 'YARD';
+    }
+  }
+
   const isRampPlacement =
-    args.status === 'PLACED_AT_RAMP' ||
-    args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+    effectiveStatus === 'PLACED_AT_RAMP' ||
+    effectiveStatus === 'REASSIGN_PLACED_AT_RAMP' ||
     (detached && placement === 'RAMP') ||
-    args.status === 'CONTAINER_DETACHED';
+    effectiveStatus === 'CONTAINER_DETACHED';
 
   // Handle ETC (Estimated Time of Completion for container offloading / destuffing)
   let effectiveEtcTime: string | null = null;
@@ -2971,7 +3099,7 @@ export async function updateDrayageJobExecutionStatus(
   let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
   let lng = job.current_lng != null ? Number(job.current_lng) : 55.0612;
 
-  if (args.status === 'IN_TRANSIT') {
+  if (effectiveStatus === 'IN_TRANSIT') {
     lat = 24.9850;
     lng = 55.0760;
   } else if (
@@ -2981,12 +3109,18 @@ export async function updateDrayageJobExecutionStatus(
       'PLACED_AT_YARD',
       'REASSIGN_PLACED_AT_YARD',
       'CONTAINER_DETACHED',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'READY_FOR_PICKUP',
+      'CONTAINER_OFFLOADED',
       'WAITING_MT_RETURN',
-    ].includes(args.status)
+    ].includes(effectiveStatus)
   ) {
     lat = 24.9642;
     lng = 55.0915;
-  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'COMPLETED'].includes(args.status)) {
+  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'COMPLETED'].includes(effectiveStatus)) {
     lat = 25.0112;
     lng = 55.0612;
   }
@@ -3005,7 +3139,7 @@ export async function updateDrayageJobExecutionStatus(
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
     args.tenantId,
-    args.status,
+    effectiveStatus,
     placement,
     detached,
     lat,
@@ -3016,9 +3150,14 @@ export async function updateDrayageJobExecutionStatus(
 
   // Sync container status: When placed at ramp or detached, container transitions to WAITING_MT_RETURN
   if (job.container_id) {
-    const isCompletedL2 = String(job.job_phase) === 'L2' && (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED');
-    let cntStatus = args.status;
-    if (isRampPlacement || args.status === 'WAITING_MT_RETURN') {
+    const isCompletedL2 = String(job.job_phase) === 'L2' && (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED');
+    let cntStatus = effectiveStatus;
+    if (
+      isRampPlacement ||
+      effectiveStatus === 'WAITING_MT_RETURN' ||
+      effectiveStatus === 'READY_FOR_PICKUP' ||
+      effectiveStatus === 'CONTAINER_OFFLOADED'
+    ) {
       cntStatus = 'WAITING_MT_RETURN';
     }
     await db.$executeRawUnsafe(
@@ -3040,18 +3179,23 @@ export async function updateDrayageJobExecutionStatus(
     let trMaster = 'IN_USE';
     let trOp = 'LOADED_FCL';
     if (
-      args.status === 'PLACED_AT_RAMP' ||
-      args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+      effectiveStatus === 'PLACED_AT_RAMP' ||
+      effectiveStatus === 'REASSIGN_PLACED_AT_RAMP' ||
       (detached && placement === 'RAMP')
     ) {
       trOp = 'DETACHED_AT_RAMP';
     } else if (
-      args.status === 'PLACED_AT_YARD' ||
-      args.status === 'REASSIGN_PLACED_AT_YARD' ||
+      effectiveStatus === 'PLACED_AT_YARD' ||
+      effectiveStatus === 'REASSIGN_PLACED_AT_YARD' ||
+      effectiveStatus === 'FCL_REASSIGN' ||
+      effectiveStatus === 'MT_REASSIGN' ||
       (detached && placement === 'YARD')
     ) {
       trOp = 'DETACHED_AT_YARD';
-    } else if (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED') {
+    } else if (
+      String(job.job_phase) === 'L2' &&
+      (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED')
+    ) {
       trMaster = 'AVAILABLE';
       trOp = 'EMPTY';
     }
@@ -3088,17 +3232,56 @@ export async function updateDrayageJobExecutionStatus(
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    args.status,
+    effectiveStatus,
     stageDetails,
     logActor,
   );
 
+  // LogiXL-Connect Automatic L2 Activation upon READY_FOR_PICKUP / CONTAINER_OFFLOADED / L1 Completion:
+  // If READY_FOR_PICKUP comes from PLACED_AT_RAMP or REASSIGN_PLACED_AT_RAMP and etc_time is still in the future,
+  // wait until etc_time expires (handled by checkAndAutoActivateExpiredEtcJobs). Otherwise activate L2 immediately!
+  let l2ActivationResult: { l2JobId?: string; l2JobCode?: string } | null = null;
+  if (
+    String(job.job_phase || 'L1') === 'L1' &&
+    !job.l2_activated &&
+    ['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'COMPLETED', 'CONTAINER_DELIVERED', 'CONTAINER_DROPPED'].includes(
+      effectiveStatus,
+    )
+  ) {
+    const isFromRamp =
+      prevOriginStatus === 'PLACED_AT_RAMP' ||
+      prevOriginStatus === 'REASSIGN_PLACED_AT_RAMP' ||
+      (placement === 'RAMP' &&
+        !['REASSIGN_PLACED_AT_YARD', 'REASSIGN_TRAILER_DETACHED'].includes(requestedStatusUpper));
+    const shouldWaitForEtc =
+      effectiveStatus === 'READY_FOR_PICKUP' &&
+      isFromRamp &&
+      Boolean(effectiveEtcTime) &&
+      new Date(effectiveEtcTime!).getTime() > Date.now();
+
+    if (!shouldWaitForEtc) {
+      try {
+        const autoPreAssign = await getTenantAutoL2DispatchEnabled(db, args.tenantId);
+        const actRes = await activateL2EmptyReturnJob(db, {
+          tenantId: args.tenantId,
+          l1JobId: args.jobId,
+          preAssignTractor: autoPreAssign,
+          triggerSource: 'MANUAL',
+        });
+        l2ActivationResult = { l2JobId: actRes.l2JobId, l2JobCode: actRes.l2JobCode };
+        effectiveStatus = 'COMPLETED';
+      } catch (l2Err) {
+        console.warn('[updateDrayageJobExecutionStatus] Auto L2 activation warning:', l2Err);
+      }
+    }
+  }
+
   // Automatically trigger WhatsApp & Email Customer Milestone Alert when stage advances
-  if (args.status !== currentStatus) {
+  if (effectiveStatus !== currentStatus) {
     await dispatchDrayageCustomerMilestoneAlert(db, {
       tenantId: args.tenantId,
       jobId: args.jobId,
-      milestoneStatus: args.status,
+      milestoneStatus: effectiveStatus,
       etcTime: effectiveEtcTime,
       triggerSource: 'AUTO_STAGE_TRANSITION',
     }).catch((err) => {
@@ -3106,7 +3289,12 @@ export async function updateDrayageJobExecutionStatus(
     });
   }
 
-  return { ok: true, status: args.status, etcTime: effectiveEtcTime };
+  return {
+    ok: true,
+    status: effectiveStatus,
+    etcTime: effectiveEtcTime,
+    ...(l2ActivationResult ?? {}),
+  };
 }
 
 export function computeHaversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -3529,11 +3717,14 @@ export async function activateL2EmptyReturnJob(
   if (!l1) throw new Error('L1 Job not found');
   if (l1.l2_activated) throw new Error('L2 Empty Return is already activated for this container');
 
-  const l1Stage = getDrayageOperationalStageIndex(String(l1.status || ''), Boolean(l1.trailer_detached));
+  const l1Status = String(l1.status || '').toUpperCase();
+  const l1Stage = getDrayageOperationalStageIndex(l1Status, Boolean(l1.trailer_detached));
   const l1Placement = String(l1.placement_location || '').toUpperCase();
-  if (l1Stage < 4 || l1Placement === 'YARD' || !l1.etc_time) {
+  const isInitialYardDrop =
+    l1Placement === 'YARD' && ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(l1Status);
+  if (l1Stage < 4 || isInitialYardDrop) {
     throw new Error(
-      'L2 Empty Return can only be triggered after the container is Placed at Ramp with an Offloading ETC set.',
+      'L2 Empty Return can only be triggered after the container is Placed at Ramp, Ready for Pickup, or Detached after Reassignment.',
     );
   }
 
@@ -3753,20 +3944,33 @@ export async function checkAndAutoActivateExpiredEtcJobs(
   }>;
 }> {
   await ensureDrayageSchema(db);
-  if (tenantId) {
-    const isAutoEnabled = await getTenantAutoL2DispatchEnabled(db, tenantId);
-    if (!isAutoEnabled) {
-      return { checked: 0, activated: [] };
-    }
-  }
+  const isAutoEnabled = tenantId ? await getTenantAutoL2DispatchEnabled(db, tenantId) : false;
 
-  const thresholdMins = options?.thresholdMinutes ?? 30;
+  // When Auto-L2 (T-30m) is enabled, check jobs within thresholdMinutes and pre-assign a tractor.
+  // When Auto-L2 is disabled (LogiXL-Connect mode), check jobs whose ETC has completed (<= NOW()) or are in READY_FOR_PICKUP / CONTAINER_OFFLOADED and create PENDING L2 jobs.
+  const thresholdMins = isAutoEnabled ? (options?.thresholdMinutes ?? 30) : 0;
+  const shouldPreAssign = isAutoEnabled ? (options?.preAssignTractor ?? true) : false;
+
   const whereClause = tenantId
-    ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= (NOW() + ($2 || ' minutes')::interval)`
-    : `job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= (NOW() + ($1 || ' minutes')::interval)`;
+    ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND (
+         (etc_time IS NOT NULL AND etc_time <= (NOW() + ($2 || ' minutes')::interval))
+         OR (status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED') AND (etc_time IS NULL OR etc_time <= NOW()))
+       )`
+    : `job_phase = 'L1' AND l2_activated = FALSE AND (
+         (etc_time IS NOT NULL AND etc_time <= (NOW() + ($1 || ' minutes')::interval))
+         OR (status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED') AND (etc_time IS NULL OR etc_time <= NOW()))
+       )`;
   const params = tenantId ? [tenantId, String(thresholdMins)] : [String(thresholdMins)];
   const dueJobs = await db.$queryRawUnsafe<
-    Array<{ id: string; tenant_id: string; job_code: string; status: string; placement_location: string | null; trailer_detached: boolean; etc_time: Date }>
+    Array<{
+      id: string;
+      tenant_id: string;
+      job_code: string;
+      status: string;
+      placement_location: string | null;
+      trailer_detached: boolean;
+      etc_time: Date | null;
+    }>
   >(
     `SELECT id, tenant_id, job_code, status, placement_location, trailer_detached, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
     ...params,
@@ -3784,14 +3988,21 @@ export async function checkAndAutoActivateExpiredEtcJobs(
 
   for (const job of dueJobs) {
     try {
-      const stage = getDrayageOperationalStageIndex(String(job.status || ''), Boolean(job.trailer_detached));
-      if (stage < 4 || String(job.placement_location || '').toUpperCase() === 'YARD') continue;
+      const jobStatus = String(job.status || '').toUpperCase();
+      const stage = getDrayageOperationalStageIndex(jobStatus, Boolean(job.trailer_detached));
+      if (stage < 4) continue;
+
+      // Initial yard drop (before Reassign / Ready for Pickup) stays in FCL_REASSIGN / MT_REASSIGN
+      const isInitialYardDrop =
+        String(job.placement_location || '').toUpperCase() === 'YARD' &&
+        ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(jobStatus);
+      if (isInitialYardDrop) continue;
 
       const res = await activateL2EmptyReturnJob(db, {
         tenantId: String(job.tenant_id),
         l1JobId: String(job.id),
-        preAssignTractor: options?.preAssignTractor ?? true,
-        triggerSource: 'AUTO_T30',
+        preAssignTractor: shouldPreAssign,
+        triggerSource: isAutoEnabled ? 'AUTO_T30' : 'MANUAL',
       });
       await db.$executeRawUnsafe(
         `UPDATE logistics_drayage_jobs

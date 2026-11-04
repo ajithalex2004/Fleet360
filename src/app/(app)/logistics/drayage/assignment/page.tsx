@@ -672,7 +672,12 @@ export default function DrayageAssignmentPage() {
 
   // Filter unassigned jobs & all jobs
   const unassignedJobs = useMemo(
-    () => jobs.filter((j) => j.status === 'PENDING' || !j.assignedVehicleId),
+    () =>
+      jobs.filter(
+        (j) =>
+          (j.status === 'PENDING' || !j.assignedVehicleId || j.status === 'FCL_REASSIGN' || j.status === 'MT_REASSIGN') &&
+          !['COMPLETED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CANCELLED'].includes(j.status),
+      ),
     [jobs],
   );
 
@@ -1406,10 +1411,12 @@ export default function DrayageAssignmentPage() {
       accessor: (j) =>
         j.assignedVehiclePlate
           ? `${j.assignedVehiclePlate} ${j.assignedDriverName || ''} ${j.assignedTrailerPlate || ''}`
+          : j.assignedTrailerPlate
+          ? `Pending Assignment (${j.assignedTrailerPlate})`
           : 'Pending Assignment',
       filter: 'text',
       render: (job) => {
-        const isAssigned = Boolean(job.assignedVehicleId);
+        const isAssigned = Boolean(job.assignedVehicleId) && !['FCL_REASSIGN', 'MT_REASSIGN'].includes(job.status);
         return isAssigned ? (
           <div className="space-y-0.5">
             <div className="font-semibold">{job.assignedVehiclePlate}</div>
@@ -1418,7 +1425,16 @@ export default function DrayageAssignmentPage() {
             </div>
           </div>
         ) : (
-          <span className="text-amber-400 text-[11px] font-medium">Pending Assignment</span>
+          <div className="space-y-0.5">
+            <span className="text-amber-400 text-[11px] font-medium block">
+              {['FCL_REASSIGN', 'MT_REASSIGN'].includes(job.status) ? 'Pending Reassignment' : 'Pending Assignment'}
+            </span>
+            {job.assignedTrailerPlate && (
+              <div className="text-[10px] text-[var(--text-muted)]">
+                Linked Chassis: {job.assignedTrailerPlate}
+              </div>
+            )}
+          </div>
         );
       },
     },
@@ -1427,7 +1443,20 @@ export default function DrayageAssignmentPage() {
       header: 'Status',
       accessor: (j) => j.status,
       filter: 'select',
-      selectOptions: ['PENDING', 'ASSIGNED', 'IN_TRANSIT', 'PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'COMPLETED'],
+      selectOptions: [
+        'PENDING',
+        'ASSIGNED',
+        'RE-ASSIGNED',
+        'FCL_REASSIGN',
+        'MT_REASSIGN',
+        'IN_TRANSIT',
+        'PLACED_AT_RAMP',
+        'PLACED_AT_YARD',
+        'TRAILER_DETACHED',
+        'CONTAINER_DETACHED',
+        'READY_FOR_PICKUP',
+        'COMPLETED',
+      ],
       render: (job) => <StatusPill status={job.status.toLowerCase()} label={job.status} />,
     },
     {
@@ -1437,7 +1466,14 @@ export default function DrayageAssignmentPage() {
       sortable: false,
       filter: false,
       render: (job) => {
-        const isAssigned = Boolean(job.assignedVehicleId);
+        const isReassign =
+          job.jobPhase === 'L1' &&
+          (Boolean(job.assignedVehicleId) ||
+            Boolean(job.trailerDetached) ||
+            ['FCL_REASSIGN', 'MT_REASSIGN', 'RE-ASSIGNED', 'PLACED_AT_YARD', 'PLACED_AT_RAMP', 'TRAILER_DETACHED', 'CONTAINER_DETACHED'].includes(
+              job.status,
+            ));
+        const isAssigned = isReassign || Boolean(job.assignedVehicleId);
         return (
           <div className="flex items-center justify-end">
             <button
