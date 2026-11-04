@@ -1207,6 +1207,69 @@ export default function DrayageAssignmentPage() {
     });
   }, [jobs, getDemurrageRisk]);
 
+  const resolveLinkedTrailerIdForJob = useCallback(
+    (job: DrayageJob | null | undefined): string => {
+      if (!job) return '';
+      const st = String(job.status || '').toUpperCase();
+      const hasLinkedOrDetachedChassis =
+        Boolean(job.trailerDetached) ||
+        job.jobPhase === 'L2' ||
+        [
+          'TRAILER_DETACHED',
+          'CONTAINER_DETACHED',
+          'REASSIGN_TRAILER_DETACHED',
+          'PLACED_AT_RAMP',
+          'REASSIGN_PLACED_AT_RAMP',
+          'PLACED_AT_YARD',
+          'REASSIGN_PLACED_AT_YARD',
+          'WAITING_MT_RETURN',
+          'READY_FOR_PICKUP',
+        ].includes(st) ||
+        Boolean(job.assignedTrailerId || job.assignedTrailerPlate);
+
+      if (!hasLinkedOrDetachedChassis) return '';
+
+      const matchedTrailer = trailers.find(
+        (t) =>
+          (job.assignedTrailerId && t.id === job.assignedTrailerId) ||
+          (job.assignedTrailerPlate &&
+            t.plateNumber.trim().toLowerCase() === job.assignedTrailerPlate.trim().toLowerCase()) ||
+          (job.containerNumber &&
+            t.linkedContainerNumber &&
+            t.linkedContainerNumber.trim().toLowerCase() === job.containerNumber.trim().toLowerCase()),
+      );
+
+      return matchedTrailer?.id || job.assignedTrailerId || '';
+    },
+    [trailers],
+  );
+
+  // Open modal for single job — auto-populate detached/linked chassis & existing gate token when reassigning or dispatching L2
+  const handleOpenAssign = useCallback(
+    (job: DrayageJob) => {
+      setAssigningJob(job);
+      setIsBogieAssign(false);
+      setSelectedJobIds([job.id]);
+      setSelectedVehicleId('');
+      setSelectedDriverId('');
+      setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
+      setTokenInput(job.tokenNumber || job.pcsTokenNumber || '');
+    },
+    [resolveLinkedTrailerIdForJob],
+  );
+
+  useEffect(() => {
+    if (!assigningJob || isBogieAssign || activeStreetTurnPair) return;
+    const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
+    if (linkedTrId) {
+      setSelectedTrailerId((prev) => prev || linkedTrId);
+    }
+    const existingToken = assigningJob.tokenNumber || assigningJob.pcsTokenNumber || '';
+    if (existingToken) {
+      setTokenInput((prev) => prev || existingToken);
+    }
+  }, [assigningJob, isBogieAssign, activeStreetTurnPair, resolveLinkedTrailerIdForJob]);
+
   // =========================================================================
   // FLEET DATA GRID (SMART DATA TABLE) COLUMNS
   // =========================================================================
@@ -1423,7 +1486,7 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk, portalMenuState?.job.id]);
+  ], [getDemurrageRisk, portalMenuState?.job.id, handleOpenAssign]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -1826,49 +1889,6 @@ export default function DrayageAssignmentPage() {
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error updating Smart Backhaul Hold');
     }
-  };
-
-  // Open modal for single job — auto-populate detached/linked chassis & existing gate token when reassigning or dispatching L2
-  const handleOpenAssign = (job: DrayageJob) => {
-    setAssigningJob(job);
-    setIsBogieAssign(false);
-    setSelectedJobIds([job.id]);
-    setSelectedVehicleId('');
-    setSelectedDriverId('');
-
-    const st = String(job.status || '').toUpperCase();
-    const hasLinkedOrDetachedChassis =
-      Boolean(job.trailerDetached) ||
-      job.jobPhase === 'L2' ||
-      [
-        'TRAILER_DETACHED',
-        'CONTAINER_DETACHED',
-        'REASSIGN_TRAILER_DETACHED',
-        'PLACED_AT_RAMP',
-        'REASSIGN_PLACED_AT_RAMP',
-        'PLACED_AT_YARD',
-        'REASSIGN_PLACED_AT_YARD',
-        'WAITING_MT_RETURN',
-        'READY_FOR_PICKUP',
-      ].includes(st) ||
-      Boolean(job.assignedTrailerId || job.assignedTrailerPlate);
-
-    const matchedTrailer = hasLinkedOrDetachedChassis
-      ? trailers.find(
-          (t) =>
-            (job.assignedTrailerId && t.id === job.assignedTrailerId) ||
-            (job.assignedTrailerPlate &&
-              t.plateNumber.trim().toLowerCase() === job.assignedTrailerPlate.trim().toLowerCase()) ||
-            (job.containerNumber &&
-              t.linkedContainerNumber &&
-              t.linkedContainerNumber.trim().toLowerCase() === job.containerNumber.trim().toLowerCase()),
-        )
-      : undefined;
-
-    setSelectedTrailerId(
-      matchedTrailer?.id || (hasLinkedOrDetachedChassis ? job.assignedTrailerId || '' : ''),
-    );
-    setTokenInput(job.tokenNumber || job.pcsTokenNumber || '');
   };
 
   // Open modal for bogie merge (strictly exactly 2 twenty-foot containers)
@@ -3538,6 +3558,14 @@ export default function DrayageAssignmentPage() {
                     if (loggedInDrv) {
                       setSelectedDriverId(loggedInDrv.id);
                     }
+                    if (assigningJob && !selectedTrailerId) {
+                      const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
+                      if (linkedTrId) setSelectedTrailerId(linkedTrId);
+                    }
+                    if (assigningJob && !tokenInput) {
+                      const existingToken = assigningJob.tokenNumber || assigningJob.pcsTokenNumber || '';
+                      if (existingToken) setTokenInput(existingToken);
+                    }
                   }}
                   options={primeMoverSelectOptions}
                   placeholder="-- Search & Choose Prime Mover --"
@@ -3691,7 +3719,7 @@ export default function DrayageAssignmentPage() {
                   return null;
                 })()}
                 <SearchableSelect
-                  value={selectedTrailerId}
+                  value={selectedTrailerId || resolveLinkedTrailerIdForJob(assigningJob)}
                   onChange={(val) => setSelectedTrailerId(val)}
                   options={(() => {
                     const baseOptions = trailers.map((t) => ({
