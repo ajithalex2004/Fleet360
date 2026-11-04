@@ -173,6 +173,9 @@ export async function POST(
             : sealCargoPhotoUrl,
           notes: combinedNotes || undefined,
           actor: driverActor,
+          latitude: body.latitude != null ? Number(body.latitude) : null,
+          longitude: body.longitude != null ? Number(body.longitude) : null,
+          location: body.location ? String(body.location) : null,
         });
       });
       emitDrayageEvent(tenantId, {
@@ -247,6 +250,9 @@ export async function POST(
 
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
       const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
+      const reqLat = body.latitude != null ? Number(body.latitude) : null;
+      const reqLng = body.longitude != null ? Number(body.longitude) : null;
+      const reqLoc = body.location ? String(body.location) : null;
       if (body.receiverName || body.photo || body.signatureDataUri || sealCargoPhotoUrl) {
         const baseReceiver = String(body.receiverName || body.driverName || 'Warehouse Dock Supervisor').trim();
         await submitJobPodEvidence(tx, {
@@ -260,6 +266,9 @@ export async function POST(
             : sealCargoPhotoUrl,
           notes,
           actor: driverActor,
+          latitude: reqLat,
+          longitude: reqLng,
+          location: reqLoc,
         });
       }
       return updateDrayageJobExecutionStatus(tx, {
@@ -271,6 +280,9 @@ export async function POST(
         etcTime,
         notes,
         actor: driverActor,
+        latitude: reqLat,
+        longitude: reqLng,
+        location: reqLoc,
       });
     });
 

@@ -544,6 +544,41 @@ export default function DriverTodayPage() {
   const seenJobKeysRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const initialJobLoadDoneRef = useRef(false);
+  const driverCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
+    let watchId: number | null = null;
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          driverCoordsRef.current = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 },
+      );
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          driverCoordsRef.current = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 15000 },
+      );
+    } catch {}
+    return () => {
+      if (watchId !== null && 'geolocation' in navigator) {
+        try {
+          navigator.geolocation.clearWatch(watchId);
+        } catch {}
+      }
+    };
+  }, []);
 
   const triggerMobileNotification = useCallback((title: string, body: string, tagKey?: string) => {
     try {
@@ -1003,6 +1038,62 @@ export default function DriverTodayPage() {
         ? `${activeSig.receiverName}${activeSig.receiverRole ? ` (${activeSig.receiverRole})` : ''}`
         : undefined;
 
+      const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
+      const tLat = job.terminalGeofence?.lat ?? 25.0112;
+      const tLng = job.terminalGeofence?.lng ?? 55.0612;
+      const wLat = job.warehouseGeofence?.lat ?? 24.9642;
+      const wLng = job.warehouseGeofence?.lng ?? 55.0915;
+      const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+      const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+      let stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
+      let fallbackLat = tLat;
+      let fallbackLng = tLng;
+
+      if (isL2Job) {
+        if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(upperTarget)) {
+          stageFacility = job.warehouseName || 'Consignee Warehouse';
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(upperTarget)) {
+          stageFacility = `E11 Corridor → ${job.terminalName || 'Port Terminal'}`;
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        }
+      } else {
+        if (
+          [
+            'ACCEPTED',
+            'ARRIVED_AT_PORT',
+            'AT_PORT',
+            'CONTAINER_PICKED',
+            'LOADED',
+            'UNDER_INSPECTION',
+          ].includes(upperTarget)
+        ) {
+          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(upperTarget)) {
+          stageFacility = `E11 Corridor → ${job.warehouseName || 'Consignee Warehouse'}`;
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          stageFacility = job.warehouseName || 'Consignee Warehouse';
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        }
+      }
+
+      const liveCoords = driverCoordsRef.current;
+      const finalLat = liveCoords?.lat ?? fallbackLat;
+      const finalLng = liveCoords?.lng ?? fallbackLng;
+      const capturedLocation = `${stageFacility} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+
       // Optimistic local state update so UI responds immediately
       setJobs((prev) =>
         prev.map((j) =>
@@ -1037,6 +1128,9 @@ export default function DriverTodayPage() {
           driverName,
           receiverName: receiverLabel,
           signatureDataUri: activeSig?.signatureDataUri || undefined,
+          latitude: finalLat,
+          longitude: finalLng,
+          location: capturedLocation,
         }),
       });
 

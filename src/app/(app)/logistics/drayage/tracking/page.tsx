@@ -34,12 +34,14 @@ import {
   Copy,
   ExternalLink,
   Share2,
+  MapPin,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  resolveOperationalMilestoneLocation,
   type DrayageAutomationConfig,
 } from '@/lib/logistics/drayage-domain';
 import {
@@ -178,6 +180,24 @@ interface StatusLog {
   notes: string;
   actor: string;
   timestamp: string;
+  location?: string;
+}
+
+function formatTimelineDateTime(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const datePart = d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timePart = d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${datePart}, ${timePart}`;
 }
 
 interface DispatchMessage {
@@ -586,9 +606,31 @@ export default function DrayageJobTrackingPage() {
           .replace(/·?\s*ETC\s+[^·]+(?=\s*·|$)/gi, '')
           .replace(/·?\s*(?:Customer|Client|Ramp)\s+Link[^·]*/gi, '')
           .replace(/^Execution stage updated to [A-Z0-9_-]+(?:\s*\((?:RAMP|YARD)\))?/i, '')
+          .replace(/\s*·?\s*\[LOC:[^\]]+\]/gi, '')
           .replace(/^\s*[·\-|]+\s*/, '')
           .replace(/\s*[·\-|]+\s*$/, '')
           .trim();
+
+        const matchedTerm = terminals.find(
+          (t) => t.name.trim().toLowerCase() === activeJob.terminalName.trim().toLowerCase(),
+        );
+        const matchedWh = warehouses.find(
+          (w) => w.name.trim().toLowerCase() === activeJob.warehouseName.trim().toLowerCase(),
+        );
+        const resolvedLocation =
+          l.location ||
+          resolveOperationalMilestoneLocation({
+            status: cleanStatus,
+            rawNotes: l.notes,
+            jobPhase: activeJob.jobPhase,
+            jobCode: activeJob.jobCode,
+            terminalName: activeJob.terminalName,
+            warehouseName: activeJob.warehouseName,
+            termLat: matchedTerm?.lat,
+            termLng: matchedTerm?.lng,
+            whLat: matchedWh?.lat,
+            whLng: matchedWh?.lng,
+          });
 
         const rawActor = (l.actor || '').trim();
         const baseActor = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -611,9 +653,10 @@ export default function DrayageJobTrackingPage() {
           status: cleanStatus,
           notes: cleanNotes,
           actor: displayActor,
+          location: resolvedLocation,
         };
       });
-  }, [statusLogs, activeJob, drivers, user?.username]);
+  }, [statusLogs, activeJob, drivers, terminals, warehouses, user?.username]);
 
   const jobMessages = useMemo(() => {
     if (!activeJob) return [];
@@ -2460,35 +2503,40 @@ export default function DrayageJobTrackingPage() {
                 {/* Dispatcher <-> Driver Chat */}
                 <Panel
                   title="Dispatcher ↔ Driver Communications"
-                  subtitle={
-                    chatBroadcast
-                      ? '📢 Broadcasting to All Active Drivers in Fleet (Push Notification)'
-                      : `👤 Driver: ${activeJob.assignedDriverName || 'Unassigned'}${activeJob.assignedVehiclePlate ? ` (${activeJob.assignedVehiclePlate})` : ''} · Job: ${activeJob.jobCode}`
-                  }
+                  subtitle="Real-time instructions & fleet broadcast channel"
                   icon={MessageSquare}
                   accent="blue"
-                  actions={
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                >
+                  <div className="flex flex-col h-[340px]">
+                    {/* Clean recipient & job context strip */}
+                    <div
+                      className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 mb-3 rounded-lg border text-xs ${
                         chatBroadcast
-                          ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                          : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                          : 'bg-blue-500/10 border-blue-500/25 text-[var(--text-main)]'
                       }`}
                     >
                       {chatBroadcast ? (
-                        <span>📢 Broadcast: All Active Drivers</span>
-                      ) : (
-                        <span>
-                          👤 {activeJob.assignedDriverName || 'Unassigned'} · {activeJob.jobCode}
+                        <span className="font-semibold flex items-center gap-1.5">
+                          <span>📢</span>
+                          <span>Broadcasting to All Active Drivers in Fleet</span>
                         </span>
+                      ) : (
+                        <>
+                          <span className="font-semibold truncate">
+                            👤 Driver: {activeJob.assignedDriverName || 'Unassigned'}
+                            {activeJob.assignedVehiclePlate ? ` (${activeJob.assignedVehiclePlate})` : ''}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-blue-600 text-white font-mono text-[11px] font-bold shrink-0">
+                            {activeJob.jobCode}
+                          </span>
+                        </>
                       )}
-                    </span>
-                  }
-                >
-                  <div className="flex flex-col h-[340px]">
+                    </div>
+
                     <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                       {jobMessages.length === 0 ? (
-                        <div className="py-12 text-center text-xs text-[var(--text-muted)]">
+                        <div className="py-10 text-center text-xs text-[var(--text-muted)]">
                           No dispatch messages on {activeJob.jobCode} ({activeJob.assignedDriverName || 'Unassigned'}) yet. Send an individual instruction or toggle Broadcast below.
                         </div>
                       ) : (
@@ -2498,38 +2546,40 @@ export default function DrayageJobTrackingPage() {
                           return (
                             <div
                               key={msg.id}
-                              className={`p-2.5 rounded-xl text-xs max-w-[85%] space-y-1 ${
+                              className={`p-3 rounded-xl text-xs max-w-[88%] space-y-1.5 ${
                                 isDriver
-                                  ? 'bg-[var(--bg-main)] border border-[var(--border-subtle)] mr-auto'
+                                  ? 'bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] mr-auto'
                                   : isBroadcastMsg
-                                  ? 'bg-amber-500/15 border border-amber-500/40 text-amber-100 ml-auto'
-                                  : 'bg-blue-600/15 border border-blue-500/30 text-blue-200 ml-auto'
+                                  ? 'bg-amber-500/10 border border-amber-500/30 text-[var(--text-main)] ml-auto'
+                                  : 'bg-blue-500/10 border border-blue-500/30 text-[var(--text-main)] ml-auto'
                               }`}
                             >
-                              <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-muted)]">
-                                <strong>{msg.senderName}</strong>
-                                <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              <div className="flex items-center justify-between gap-3 text-[10px] text-[var(--text-muted)]">
+                                <strong className="text-[11px] font-bold text-[var(--text-main)]">{msg.senderName}</strong>
+                                <span className="font-mono shrink-0">{formatTimelineDateTime(msg.createdAt)}</span>
                               </div>
-                              <p className="leading-relaxed text-[var(--text-main)]">{msg.message}</p>
-                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                {isBroadcastMsg && (
-                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                    📢 BROADCAST TO ALL DRIVERS
-                                  </span>
-                                )}
-                                {msg.isUrgent && (
-                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                                    URGENT
-                                  </span>
-                                )}
-                              </div>
+                              <p className="leading-relaxed text-[var(--text-main)] break-words">{msg.message}</p>
+                              {(isBroadcastMsg || msg.isUrgent) && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                  {isBroadcastMsg && (
+                                    <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                                      📢 BROADCAST TO ALL DRIVERS
+                                    </span>
+                                  )}
+                                  {msg.isUrgent && (
+                                    <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-500 border border-rose-500/30">
+                                      🚨 URGENT
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })
                       )}
                     </div>
 
-                    <form onSubmit={handleSendMessage} className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
+                    <form onSubmit={handleSendMessage} className="pt-3 mt-2 border-t border-[var(--border-subtle)] space-y-2.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -2540,16 +2590,17 @@ export default function DrayageJobTrackingPage() {
                               ? '📢 Type broadcast notification to ALL active drivers...'
                               : `Message ${activeJob.assignedDriverName || 'driver'} on ${activeJob.jobCode}...`
                           }
-                          className="flex-1 text-xs px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                          className="flex-1 min-w-0 text-xs px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
                         />
                         <button
                           type="submit"
                           disabled={sendingChat || !chatInput.trim()}
-                          className={`px-3.5 py-2 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 ${
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 shrink-0 ${
                             chatBroadcast ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
                           }`}
                         >
                           <Send className="w-3.5 h-3.5" />
+                          <span>Send</span>
                         </button>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2584,7 +2635,7 @@ export default function DrayageJobTrackingPage() {
                   icon={Clock}
                   accent="amber"
                 >
-                  <div className="h-[320px] overflow-y-auto space-y-3 pr-1">
+                  <div className="h-[340px] overflow-y-auto space-y-3 pr-1">
                     {jobLogs.length === 0 ? (
                       <div className="py-12 text-center text-xs text-[var(--text-muted)]">
                         No audit events recorded yet.
@@ -2593,15 +2644,18 @@ export default function DrayageJobTrackingPage() {
                       jobLogs.map((log) => (
                         <div key={log.id} className="flex items-start gap-2.5 text-xs">
                           <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                          <div className="space-y-0.5 min-w-0">
+                          <div className="space-y-0.5 min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-[var(--text-main)] font-mono text-[11px]">{log.status}</span>
-                              <span className="text-[10px] text-[var(--text-muted)]">
-                                {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {log.actor}
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                                {formatTimelineDateTime(log.timestamp)} · {log.actor}
                               </span>
                             </div>
-                            {log.notes ? (
-                              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">{log.notes}</p>
+                            {log.location ? (
+                              <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
+                                <span className="truncate">{log.location}</span>
+                              </div>
                             ) : null}
                           </div>
                         </div>

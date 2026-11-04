@@ -447,6 +447,139 @@ export interface DrayageStatusLog {
   notes: string;
   actor: string;
   timestamp: string;
+  location?: string;
+}
+
+const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
+  'ACCEPTED',
+  'ARRIVED_AT_PORT',
+  'AT_PORT',
+  'EMPTY_AT_PORT',
+  'CONTAINER_PICKED',
+  'LOADED',
+  'TRAILER_ATTACHED',
+  'UNDER_INSPECTION',
+  'EN_ROUTE_WAREHOUSE',
+  'EN_ROUTE_TERMINAL',
+  'IN_TRANSIT',
+  'PLACED_AT_RAMP',
+  'PLACED_AT_YARD',
+  'REASSIGN_PLACED_AT_RAMP',
+  'REASSIGN_PLACED_AT_YARD',
+  'EPOD_SIGNED',
+  'TRAILER_DETACHED',
+  'CONTAINER_DETACHED',
+  'REASSIGN_TRAILER_DETACHED',
+  'FCL_REASSIGN',
+  'MT_REASSIGN',
+  'READY_FOR_PICKUP',
+  'CONTAINER_OFFLOADED',
+  'CONTAINER_DROPPED',
+  'EMPTY_DEPOSITED',
+  'CONTAINER_DELIVERED',
+  'COMPLETED',
+]);
+
+export function resolveOperationalMilestoneLocation(args: {
+  status: string;
+  rawNotes?: string | null;
+  explicitLocation?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  jobPhase?: string | null;
+  jobCode?: string | null;
+  terminalName?: string | null;
+  warehouseName?: string | null;
+  termLat?: number | null;
+  termLng?: number | null;
+  whLat?: number | null;
+  whLng?: number | null;
+}): string | undefined {
+  const cleanStatus = String(args.status || '')
+    .replace(/^MILESTONE_ALERT_/i, '')
+    .trim()
+    .toUpperCase();
+
+  if (!MAJOR_OPERATIONAL_MILESTONE_STATUSES.has(cleanStatus)) {
+    return undefined;
+  }
+
+  const notesStr = String(args.rawNotes || '');
+  const locTagMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
+  if (locTagMatch && locTagMatch[1]?.trim()) {
+    return locTagMatch[1].trim();
+  }
+
+  if (args.explicitLocation && String(args.explicitLocation).trim()) {
+    return String(args.explicitLocation).trim();
+  }
+
+  const isL2 =
+    String(args.jobPhase || '').toUpperCase() === 'L2' ||
+    String(args.jobCode || '').toUpperCase().includes('-L2');
+  const terminalName = String(args.terminalName || 'DPW-Jebel Ali-T1').trim();
+  const warehouseName = String(args.warehouseName || 'Consignee Warehouse').trim();
+  const tLat = args.termLat != null && Number(args.termLat) !== 0 ? Number(args.termLat) : 25.0112;
+  const tLng = args.termLng != null && Number(args.termLng) !== 0 ? Number(args.termLng) : 55.0612;
+  const wLat = args.whLat != null && Number(args.whLat) !== 0 ? Number(args.whLat) : 24.9642;
+  const wLng = args.whLng != null && Number(args.whLng) !== 0 ? Number(args.whLng) : 55.0915;
+  const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+  const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+  const hasLiveCoords =
+    args.lat != null &&
+    args.lng != null &&
+    !isNaN(Number(args.lat)) &&
+    !isNaN(Number(args.lng)) &&
+    (Number(args.lat) !== 0 || Number(args.lng) !== 0);
+
+  let stageFacility = terminalName;
+  let stageLat = tLat;
+  let stageLng = tLng;
+
+  if (isL2) {
+    if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(cleanStatus)) {
+      stageFacility = warehouseName;
+      stageLat = wLat;
+      stageLng = wLng;
+    } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(cleanStatus)) {
+      stageFacility = `E11 Corridor → ${terminalName}`;
+      stageLat = cLat;
+      stageLng = cLng;
+    } else {
+      stageFacility = terminalName;
+      stageLat = tLat;
+      stageLng = tLng;
+    }
+  } else {
+    if (
+      [
+        'ACCEPTED',
+        'ARRIVED_AT_PORT',
+        'AT_PORT',
+        'CONTAINER_PICKED',
+        'LOADED',
+        'UNDER_INSPECTION',
+      ].includes(cleanStatus)
+    ) {
+      stageFacility = terminalName;
+      stageLat = tLat;
+      stageLng = tLng;
+    } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(cleanStatus)) {
+      stageFacility = `E11 Corridor → ${warehouseName}`;
+      stageLat = cLat;
+      stageLng = cLng;
+    } else {
+      stageFacility = warehouseName;
+      stageLat = wLat;
+      stageLng = wLng;
+    }
+  }
+
+  const finalLat = hasLiveCoords ? Number(args.lat) : stageLat;
+  const finalLng = hasLiveCoords ? Number(args.lng) : stageLng;
+
+  return `${stageFacility} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
 }
 
 export interface DrayageDispatchMessage {
@@ -1912,6 +2045,40 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       const rawActor = String(l.actor ?? '').trim();
       const baseActorName = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
       const matchedJob = jobByIdOrCode.get(jobId) || jobByIdOrCode.get(jobCode);
+      const matchedTerminal = matchedJob
+        ? terminals.find(
+            (t) =>
+              t.id === matchedJob.terminalId ||
+              t.name.trim().toLowerCase() === matchedJob.terminalName.trim().toLowerCase(),
+          )
+        : undefined;
+      const matchedWarehouse = matchedJob
+        ? warehouses.find(
+            (w) =>
+              w.id === matchedJob.warehouseId ||
+              w.name.trim().toLowerCase() === matchedJob.warehouseName.trim().toLowerCase(),
+          )
+        : undefined;
+
+      const resolvedLocation = resolveOperationalMilestoneLocation({
+        status: normalizedStatus,
+        rawNotes,
+        jobPhase: matchedJob?.jobPhase,
+        jobCode: matchedJob?.jobCode || jobCode,
+        terminalName: matchedJob?.terminalName,
+        warehouseName: matchedJob?.warehouseName,
+        termLat: matchedTerminal?.lat,
+        termLng: matchedTerminal?.lng,
+        whLat: matchedWarehouse?.lat,
+        whLng: matchedWarehouse?.lng,
+      });
+
+      const finalCleanedNotes = cleanedNotes
+        .replace(/\s*·?\s*\[LOC:[^\]]+\]/gi, '')
+        .replace(/^\s*[·\-|]+\s*/, '')
+        .replace(/\s*[·\-|]+\s*$/, '')
+        .trim();
+
       const matchedDriver =
         driverByLowerName.get(baseActorName.toLowerCase()) ||
         (matchedJob?.assignedDriverId ? driverById.get(matchedJob.assignedDriverId) : undefined) ||
@@ -1960,9 +2127,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         jobId,
         jobCode,
         status: normalizedStatus,
-        notes: cleanedNotes,
+        notes: finalCleanedNotes,
         actor: formattedActor,
         timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
+        ...(resolvedLocation ? { location: resolvedLocation } : {}),
       };
     });
 
@@ -3142,6 +3310,9 @@ export async function updateDrayageJobExecutionStatus(
     etcTime?: string | null;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -3273,11 +3444,20 @@ export async function updateDrayageJobExecutionStatus(
     effectiveEtcTime = new Date(String(job.etc_time)).toISOString();
   }
 
-  // Interpolate GPS coordinates depending on stage
+  // Interpolate GPS coordinates depending on stage (or use live driver GPS coordinates if supplied)
   let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
   let lng = job.current_lng != null ? Number(job.current_lng) : 55.0612;
 
-  if (effectiveStatus === 'IN_TRANSIT') {
+  if (
+    args.latitude != null &&
+    args.longitude != null &&
+    !isNaN(Number(args.latitude)) &&
+    !isNaN(Number(args.longitude)) &&
+    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0)
+  ) {
+    lat = Number(args.latitude);
+    lng = Number(args.longitude);
+  } else if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL'].includes(effectiveStatus)) {
     lat = 24.9850;
     lng = 55.0760;
   } else if (
@@ -3299,8 +3479,8 @@ export async function updateDrayageJobExecutionStatus(
     lat = 24.9642;
     lng = 55.0915;
   } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED'].includes(effectiveStatus)) {
-    lat = 25.0112;
-    lng = 55.0612;
+    lat = isL2Job ? 25.0112 : 24.9642;
+    lng = isL2Job ? 55.0612 : 55.0915;
   }
 
   await db.$executeRawUnsafe(
@@ -3355,9 +3535,9 @@ export async function updateDrayageJobExecutionStatus(
     await db.$executeRawUnsafe(
       `UPDATE logistics_drayage_containers
           SET status = $3,
-              empty_return_date = CASE WHEN $4::boolean THEN NOW() ELSE empty_return_date END,
-              linked_trailer_plate = CASE WHEN $4::boolean THEN NULL ELSE linked_trailer_plate END,
-              updated_at = NOW()
+               empty_return_date = CASE WHEN $4::boolean THEN NOW() ELSE empty_return_date END,
+               linked_trailer_plate = CASE WHEN $4::boolean THEN NULL ELSE linked_trailer_plate END,
+               updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
@@ -3403,12 +3583,19 @@ export async function updateDrayageJobExecutionStatus(
   }
 
   const logActor = args.actor || 'Dispatch Console';
+  const capturedLocation = resolveOperationalMilestoneLocation({
+    status: effectiveStatus,
+    explicitLocation: args.location ?? null,
+    lat: args.latitude != null ? Number(args.latitude) : null,
+    lng: args.longitude != null ? Number(args.longitude) : null,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    terminalName: job.terminal_name ? String(job.terminal_name) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+  });
+
   const stageDetails = [
-    placement ? `Placement: ${placement}` : '',
-    detached ? 'Chassis Detached' : '',
-    effectiveEtcTime
-      ? `Offloading ETC: ${new Date(effectiveEtcTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}`
-      : '',
+    capturedLocation ? `[LOC:${capturedLocation}]` : '',
     args.notes ? String(args.notes).trim() : '',
   ]
     .filter(Boolean)
@@ -5770,6 +5957,9 @@ export async function submitJobPodEvidence(
     photoUrl?: string | null;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -5797,6 +5987,17 @@ export async function submitJobPodEvidence(
     args.photoUrl ? String(args.photoUrl) : null,
   );
 
+  const epodLocation = resolveOperationalMilestoneLocation({
+    status: 'EPOD_SIGNED',
+    explicitLocation: args.location ?? null,
+    lat: args.latitude != null ? Number(args.latitude) : null,
+    lng: args.longitude != null ? Number(args.longitude) : null,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    terminalName: job.terminal_name ? String(job.terminal_name) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+  });
+
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
      VALUES ($1, $2, $3, $4, 'EPOD_SIGNED', $5, $6)`,
@@ -5804,7 +6005,7 @@ export async function submitJobPodEvidence(
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    `Digital ePOD & Placement Photo verified by ${receiver}.${args.notes ? ` ${args.notes}` : ''}`,
+    epodLocation ? `[LOC:${epodLocation}]` : '',
     args.actor || `${receiver} (Consignee Portal)`,
   );
 
