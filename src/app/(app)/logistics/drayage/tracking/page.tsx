@@ -191,8 +191,26 @@ interface DispatchMessage {
   createdAt: string;
 }
 
-function getOperationalStageIndex(status: string, trailerDetached?: boolean): number {
+function getOperationalStageIndex(status: string, trailerDetached?: boolean, isL2?: boolean): number {
   const s = (status || '').toUpperCase();
+  if (isL2) {
+    if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+      return 5;
+    }
+    if (s === 'UNDER_INSPECTION') {
+      return 4;
+    }
+    if (['AT_PORT', 'ARRIVED_AT_PORT', 'EMPTY_AT_PORT'].includes(s)) {
+      return 3;
+    }
+    if (['IN_TRANSIT', 'EN_ROUTE_TERMINAL', 'EN_ROUTE_WAREHOUSE'].includes(s)) {
+      return 2;
+    }
+    if (['LOADED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(s)) {
+      return 1;
+    }
+    return 0;
+  }
   if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
     return 6;
   }
@@ -526,6 +544,8 @@ export default function DrayageJobTrackingPage() {
       'ACCEPTED',
       'CONTAINER_PICKED',
       'TRAILER_ATTACHED',
+      'ARRIVED_AT_PORT',
+      'AT_PORT',
       'UNDER_INSPECTION',
       'EN_ROUTE_WAREHOUSE',
       'EN_ROUTE_TERMINAL',
@@ -1941,56 +1961,90 @@ export default function DrayageJobTrackingPage() {
 
                 {/* Execution Stage Action Buttons */}
                 {(() => {
-                  const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                  const isL2Job = activeJob.jobPhase === 'L2' || activeJob.jobCode.includes('-L2');
+                  const currentStage = getOperationalStageIndex(
+                    activeJob.status,
+                    activeJob.trailerDetached,
+                    isL2Job,
+                  );
                   const stages: Array<{
                     stageNum: number;
                     label: string;
                     variant?: 'default' | 'amber' | 'emerald';
                     onClick: () => void;
-                  }> = [
-                    {
-                      stageNum: 1,
-                      label: '1. Gated In Port',
-                      onClick: () => handleUpdateStatus('AT_PORT'),
-                    },
-                    {
-                      stageNum: 2,
-                      label: '2. Container Loaded',
-                      onClick: () => handleUpdateStatus('LOADED'),
-                    },
-                    {
-                      stageNum: 3,
-                      label: '3. In Transit (E11)',
-                      onClick: () => handleUpdateStatus('IN_TRANSIT'),
-                    },
-                    {
-                      stageNum: 4,
-                      label: '4. Placed at Ramp',
-                      onClick: () => {
-                        setTargetStatusForEtc('PLACED_AT_RAMP');
-                        setEtcModalOpen(true);
-                      },
-                    },
-                    {
-                      stageNum: 5,
-                      label: '5. Detach Trailer',
-                      variant: 'amber',
-                      onClick: () => {
-                        if (activeJob.jobPhase === 'L1' && !activeJob.etcTime) {
-                          setTargetStatusForEtc('CONTAINER_DETACHED');
-                          setEtcModalOpen(true);
-                        } else {
-                          handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true);
-                        }
-                      },
-                    },
-                    {
-                      stageNum: 6,
-                      label: '6. Complete & Deposit MT',
-                      variant: 'emerald',
-                      onClick: () => handleUpdateStatus('EMPTY_DEPOSITED', undefined, false),
-                    },
-                  ];
+                  }> = isL2Job
+                    ? [
+                        {
+                          stageNum: 1,
+                          label: '1. Container Picked (Warehouse)',
+                          onClick: () => handleUpdateStatus('CONTAINER_PICKED'),
+                        },
+                        {
+                          stageNum: 2,
+                          label: '2. En Route to Terminal',
+                          onClick: () => handleUpdateStatus('EN_ROUTE_TERMINAL'),
+                        },
+                        {
+                          stageNum: 3,
+                          label: '3. Arrived at Port',
+                          onClick: () => handleUpdateStatus('ARRIVED_AT_PORT'),
+                        },
+                        {
+                          stageNum: 4,
+                          label: '4. Under Inspection',
+                          onClick: () => handleUpdateStatus('UNDER_INSPECTION'),
+                        },
+                        {
+                          stageNum: 5,
+                          label: '5. Container Dropped (Complete L2)',
+                          variant: 'emerald',
+                          onClick: () => handleUpdateStatus('CONTAINER_DROPPED', undefined, true),
+                        },
+                      ]
+                    : [
+                        {
+                          stageNum: 1,
+                          label: '1. Gated In Port',
+                          onClick: () => handleUpdateStatus('AT_PORT'),
+                        },
+                        {
+                          stageNum: 2,
+                          label: '2. Container Loaded',
+                          onClick: () => handleUpdateStatus('LOADED'),
+                        },
+                        {
+                          stageNum: 3,
+                          label: '3. In Transit (E11)',
+                          onClick: () => handleUpdateStatus('IN_TRANSIT'),
+                        },
+                        {
+                          stageNum: 4,
+                          label: '4. Placed at Ramp',
+                          onClick: () => {
+                            setTargetStatusForEtc('PLACED_AT_RAMP');
+                            setEtcModalOpen(true);
+                          },
+                        },
+                        {
+                          stageNum: 5,
+                          label: '5. Detach Trailer',
+                          variant: 'amber',
+                          onClick: () => {
+                            if (activeJob.jobPhase === 'L1' && !activeJob.etcTime) {
+                              setTargetStatusForEtc('CONTAINER_DETACHED');
+                              setEtcModalOpen(true);
+                            } else {
+                              handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true);
+                            }
+                          },
+                        },
+                        {
+                          stageNum: 6,
+                          label: '6. Complete & Deposit MT',
+                          variant: 'emerald',
+                          onClick: () => handleUpdateStatus('EMPTY_DEPOSITED', undefined, false),
+                        },
+                      ];
 
                   return (
                     <div className="pt-2">

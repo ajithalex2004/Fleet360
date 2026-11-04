@@ -3015,8 +3015,30 @@ export async function assignDrayageJob(
   return { ok: true, tokenNumber: token };
 }
 
-function getDrayageOperationalStageIndex(status: string, trailerDetached?: boolean): number {
+function getDrayageOperationalStageIndex(
+  status: string,
+  trailerDetached?: boolean,
+  isL2?: boolean,
+): number {
   const s = (status || '').toUpperCase();
+  if (isL2) {
+    if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+      return 5;
+    }
+    if (s === 'UNDER_INSPECTION') {
+      return 4;
+    }
+    if (['AT_PORT', 'ARRIVED_AT_PORT', 'EMPTY_AT_PORT'].includes(s)) {
+      return 3;
+    }
+    if (['IN_TRANSIT', 'EN_ROUTE_TERMINAL', 'EN_ROUTE_WAREHOUSE'].includes(s)) {
+      return 2;
+    }
+    if (['LOADED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(s)) {
+      return 1;
+    }
+    return 0;
+  }
   if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
     return 6;
   }
@@ -3110,9 +3132,17 @@ export async function updateDrayageJobExecutionStatus(
     requestedStatusUpper === 'TRAILER_ATTACHED' ||
     requestedStatusUpper === 'ACCEPTED';
 
+  const isL2Job =
+    String(job.job_phase || '').toUpperCase() === 'L2' ||
+    String(job.job_code || '').toUpperCase().includes('-L2');
+
   if (args.status !== currentStatus && !isReassignTransition) {
-    const currentStage = getDrayageOperationalStageIndex(currentStatus, Boolean(job.trailer_detached));
-    const targetStage = getDrayageOperationalStageIndex(args.status, detached);
+    const currentStage = getDrayageOperationalStageIndex(
+      currentStatus,
+      Boolean(job.trailer_detached),
+      isL2Job,
+    );
+    const targetStage = getDrayageOperationalStageIndex(args.status, detached, isL2Job);
     if (currentStage >= 1 && targetStage >= 1) {
       if (targetStage < currentStage) {
         throw new Error(
