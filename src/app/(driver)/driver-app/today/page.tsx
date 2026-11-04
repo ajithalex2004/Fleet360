@@ -78,11 +78,20 @@ interface DrayageAssignment {
   rateAmountAed?: number;
   driverAllowanceAed?: number;
   notes?: string | null;
+  podSignatureName?: string | null;
+  podSignedAt?: string | null;
   podPhotoUrl?: string | null;
   terminalGeofence?: GeofenceTarget;
   warehouseGeofence?: GeofenceTarget;
   updatedAt?: string | null;
   messages?: DrayageChatMessage[];
+}
+
+interface EpodSignatureInfo {
+  receiverName: string;
+  receiverRole: string;
+  signatureDataUri: string;
+  signedAt: string;
 }
 
 interface NextStepMeta {
@@ -372,6 +381,69 @@ function openGoogleMapsNavigation(
   }
 }
 
+function escapeXml(unsafe = '') {
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function buildSignatureSvgDataUri(args: {
+  strokes: Array<Array<{ x: number; y: number }>>;
+  canvasWidth?: number;
+  canvasHeight?: number;
+  receiverName: string;
+  receiverRole?: string;
+  jobNumber: string;
+  containerNumber: string;
+  statusLabel: string;
+}): string {
+  const canvasWidth = args.canvasWidth || 340;
+  const canvasHeight = args.canvasHeight || 190;
+  const pathElements = args.strokes
+    .filter((pts) => pts.length > 0)
+    .map((pts) => {
+      if (pts.length === 1) {
+        const p = pts[0];
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2" fill="#0f172a" />`;
+      }
+      const d = pts
+        .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+        .join(' ');
+      return `<path d="${d}" stroke="#0f172a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />`;
+    })
+    .join('\n    ');
+
+  const timestampStr = `${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' })} GST`;
+  const headerTitle = `Fleet360 — Digital ePOD Signature (${escapeXml(args.statusLabel || 'FCL_DELIVERED')})`;
+  const subMeta = `Job: ${escapeXml(args.jobNumber || 'N/A')}${args.containerNumber ? ` | Container: ${escapeXml(args.containerNumber)}` : ''}`;
+  const signerLine = `Received By: ${escapeXml(args.receiverName)}${args.receiverRole ? ` (${escapeXml(args.receiverRole)})` : ''}`;
+
+  const svgWidth = Math.max(canvasWidth, 320);
+  const svgHeight = canvasHeight + 80;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+  <rect width="100%" height="100%" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="0" y="0" width="100%" height="36" rx="10" fill="#eff6ff"/>
+  <text x="14" y="16" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#1e3a8a">${headerTitle}</text>
+  <text x="14" y="30" font-family="Arial, sans-serif" font-size="9" fill="#475569">${subMeta}</text>
+  <g transform="translate(0, 38)">
+    <line x1="16" y1="${canvasHeight - 22}" x2="${svgWidth - 16}" y2="${canvasHeight - 22}" stroke="#cbd5e1" stroke-dasharray="4,4" stroke-width="1"/>
+    ${pathElements}
+  </g>
+  <text x="14" y="${svgHeight - 22}" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#0f172a">${signerLine}</text>
+  <text x="14" y="${svgHeight - 8}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">Signed on Glass: ${escapeXml(timestampStr)}</text>
+</svg>`;
+
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    const utf8 = unescape(encodeURIComponent(svg));
+    return `data:image/svg+xml;base64,${window.btoa(utf8)}`;
+  }
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export default function DriverTodayPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<DrayageAssignment[]>([]);
@@ -385,6 +457,22 @@ export default function DriverTodayPage() {
   // Ramp ETC selection modal state (LogiXL-Connect 1 Hr / 2 Hrs / 3 Hrs / 4 Hrs modal)
   const [showEtcModal, setShowEtcModal] = useState(false);
   const [pendingRampStatus, setPendingRampStatus] = useState<string>('PLACED_AT_RAMP');
+
+  // Sign-on-Glass ePOD Signature Pad Modal state (LogiXL-Connect SignaturePadModal parity)
+  const [epodSignatures, setEpodSignatures] = useState<Record<string, EpodSignatureInfo>>({});
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [pendingActionAfterSign, setPendingActionAfterSign] = useState<{
+    targetStatus: string;
+    label: string;
+    requireEtcModal?: boolean;
+  } | null>(null);
+  const [sigReceiverName, setSigReceiverName] = useState('');
+  const [sigReceiverRole, setSigReceiverRole] = useState('');
+  const [sigStrokes, setSigStrokes] = useState<Array<Array<{ x: number; y: number }>>>([]);
+  const [sigCurrentStroke, setSigCurrentStroke] = useState<Array<{ x: number; y: number }>>([]);
+  const isDrawingSigRef = useRef(false);
+  const sigCurrentStrokeRef = useRef<Array<{ x: number; y: number }>>([]);
+  const sigSvgRef = useRef<SVGSVGElement | null>(null);
 
   // Dispatcher <-> Driver chat & broadcast + job assignment notification state
   const [chatInput, setChatInput] = useState('');
@@ -829,6 +917,7 @@ export default function DriverTodayPage() {
     job: DrayageAssignment,
     newStatus: string,
     etcIsoString: string | null = null,
+    overrideSig: EpodSignatureInfo | null = null,
   ) => {
     if (isJobInactiveWaitingForL2(job)) {
       showToast('Please complete your active L2 job first to activate this L1 job.');
@@ -849,6 +938,11 @@ export default function DriverTodayPage() {
         ? 'YARD'
         : undefined;
 
+      const activeSig = overrideSig || epodSignatures[job.id] || null;
+      const receiverLabel = activeSig
+        ? `${activeSig.receiverName}${activeSig.receiverRole ? ` (${activeSig.receiverRole})` : ''}`
+        : undefined;
+
       // Optimistic local state update so UI responds immediately
       setJobs((prev) =>
         prev.map((j) =>
@@ -859,6 +953,8 @@ export default function DriverTodayPage() {
                 placementLocation: placementLocation || j.placementLocation,
                 trailerDetached: isFinishingDriverLeg ? true : newStatus === 'TRAILER_ATTACHED' ? false : j.trailerDetached,
                 etcTime: etcIsoString || j.etcTime,
+                podSignatureName: receiverLabel || j.podSignatureName,
+                podPhotoUrl: activeSig?.signatureDataUri || j.podPhotoUrl,
               }
             : j,
         ),
@@ -879,6 +975,8 @@ export default function DriverTodayPage() {
             : undefined,
           etc: etcIsoString,
           driverName,
+          receiverName: receiverLabel,
+          signatureDataUri: activeSig?.signatureDataUri || undefined,
         }),
       });
 
@@ -900,6 +998,219 @@ export default function DriverTodayPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  /**
+   * Matches LogiXL-Connect JobDetailScreen.js handleAction:
+   * Prompts for Receiver Sign-on-Glass ePOD Signature on Import FCL / Delivery / Placement / Dropoff milestones
+   * if not signed yet.
+   */
+  const handleActionWithEpodCheck = (
+    job: DrayageAssignment,
+    targetStatus: string,
+    label: string,
+  ) => {
+    const upper = targetStatus.toUpperCase();
+    const isRampTarget = upper === 'PLACED_AT_RAMP' || upper === 'REASSIGN_PLACED_AT_RAMP';
+    const isEpodDeliveryMilestone = [
+      'PLACED_AT_YARD',
+      'PLACED_AT_RAMP',
+      'REASSIGN_PLACED_AT_YARD',
+      'REASSIGN_PLACED_AT_RAMP',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'READY_FOR_PICKUP',
+      'CONTAINER_DROPPED',
+      'COMPLETED',
+    ].includes(upper);
+
+    const hasSignedAlready = Boolean(epodSignatures[job.id] || job.podSignatureName);
+
+    if (isEpodDeliveryMilestone && !hasSignedAlready) {
+      setPendingActionAfterSign({
+        targetStatus,
+        label,
+        requireEtcModal: isRampTarget,
+      });
+      setShowSignatureModal(true);
+      return;
+    }
+
+    if (isRampTarget) {
+      setPendingRampStatus(targetStatus);
+      setShowEtcModal(true);
+      return;
+    }
+
+    void handleStatusUpdate(job, targetStatus);
+  };
+
+  const getPointerCoordsInSvg = (e: React.PointerEvent<SVGSVGElement>): { x: number; y: number } => {
+    const svg = sigSvgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const scaleX = 340 / (rect.width || 340);
+    const scaleY = 190 / (rect.height || 190);
+    return {
+      x: Math.max(0, Math.min(340, (e.clientX - rect.left) * scaleX)),
+      y: Math.max(0, Math.min(190, (e.clientY - rect.top) * scaleY)),
+    };
+  };
+
+  const handleSigPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDrawingSigRef.current = true;
+    const pt = getPointerCoordsInSvg(e);
+    sigCurrentStrokeRef.current = [pt];
+    setSigCurrentStroke([pt]);
+  };
+
+  const handleSigPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isDrawingSigRef.current) return;
+    e.preventDefault();
+    const pt = getPointerCoordsInSvg(e);
+    sigCurrentStrokeRef.current = [...sigCurrentStrokeRef.current, pt];
+    setSigCurrentStroke([...sigCurrentStrokeRef.current]);
+  };
+
+  const handleSigPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isDrawingSigRef.current) return;
+    e.preventDefault();
+    isDrawingSigRef.current = false;
+    if (sigCurrentStrokeRef.current.length > 0) {
+      const finished = sigCurrentStrokeRef.current;
+      setSigStrokes((prev) => [...prev, finished]);
+      sigCurrentStrokeRef.current = [];
+      setSigCurrentStroke([]);
+    }
+  };
+
+  const clearSignaturePad = () => {
+    isDrawingSigRef.current = false;
+    sigCurrentStrokeRef.current = [];
+    setSigCurrentStroke([]);
+    setSigStrokes([]);
+  };
+
+  const handleConfirmSignaturePad = async () => {
+    if (!selectedJob) return;
+    const trimmedName = sigReceiverName.trim();
+    if (!trimmedName) {
+      showToast('Please enter Receiver Full Name before confirming ePOD signature.');
+      return;
+    }
+    const allStrokes = sigCurrentStroke.length > 0 ? [...sigStrokes, sigCurrentStroke] : sigStrokes;
+    if (allStrokes.length === 0) {
+      showToast('Please ask the receiver to sign inside the signature box using their finger.');
+      return;
+    }
+
+    const isL2Job = selectedJob.jobPhase === 'L2' || Boolean(selectedJob.jobCode?.includes('-L2'));
+    const epodCode = isL2Job || selectedJob.shipmentType === 'EXPORT' ? 'MT_DELIVERED' : 'FCL_DELIVERED';
+    const statusLabel = pendingActionAfterSign?.label || epodCode;
+
+    const signatureDataUri = buildSignatureSvgDataUri({
+      strokes: allStrokes,
+      receiverName: trimmedName,
+      receiverRole: sigReceiverRole.trim(),
+      jobNumber: selectedJob.jobCode,
+      containerNumber: selectedJob.containerNumber,
+      statusLabel,
+    });
+
+    const capturedSig: EpodSignatureInfo = {
+      receiverName: trimmedName,
+      receiverRole: sigReceiverRole.trim(),
+      signatureDataUri,
+      signedAt: new Date().toISOString(),
+    };
+
+    setEpodSignatures((prev) => ({
+      ...prev,
+      [selectedJob.id]: capturedSig,
+    }));
+
+    const receiverDisplay = `${trimmedName}${sigReceiverRole.trim() ? ` (${sigReceiverRole.trim()})` : ''}`;
+    setJobs((prev) =>
+      prev.map((j) =>
+        j.id === selectedJob.id
+          ? {
+              ...j,
+              podSignatureName: receiverDisplay,
+              podPhotoUrl: signatureDataUri,
+              podSignedAt: capturedSig.signedAt,
+            }
+          : j,
+      ),
+    );
+
+    const pending = pendingActionAfterSign;
+    setShowSignatureModal(false);
+    setPendingActionAfterSign(null);
+    setSigReceiverName('');
+    setSigReceiverRole('');
+    clearSignaturePad();
+
+    // If triggered by a delivery/placement button, proceed to ETC modal (for Ramp) or status update
+    if (pending) {
+      if (pending.requireEtcModal) {
+        // Also persist the ePOD signature immediately so it is saved while choosing ETC hours
+        try {
+          await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
+            method: 'POST',
+            credentials: 'include',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              action: 'EPOD_SIGN',
+              receiverName: receiverDisplay,
+              signatureDataUri,
+              notes: `Sign-on-Glass ePOD (${epodCode}) captured for ${pending.label}`,
+              driverName,
+            }),
+          });
+        } catch {}
+        setPendingRampStatus(pending.targetStatus);
+        setShowEtcModal(true);
+        return;
+      }
+      await handleStatusUpdate(selectedJob, pending.targetStatus, null, capturedSig);
+      return;
+    }
+
+    // Standalone ePOD signature capture
+    try {
+      await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          action: 'EPOD_SIGN',
+          receiverName: receiverDisplay,
+          signatureDataUri,
+          notes: `Sign-on-Glass ePOD (${epodCode}) signed by ${receiverDisplay}`,
+          driverName,
+        }),
+      });
+      showToast(`✅ Sign-on-Glass ePOD (${epodCode}) saved for ${selectedJob.jobCode}`);
+    } catch {
+      showToast(`Saved ePOD signature locally for ${selectedJob.jobCode}`);
+    }
+  };
+
+  const handleSkipSignatureAndProceed = async () => {
+    if (!selectedJob) return;
+    const pending = pendingActionAfterSign;
+    setShowSignatureModal(false);
+    setPendingActionAfterSign(null);
+    if (!pending) return;
+
+    if (pending.requireEtcModal) {
+      setPendingRampStatus(pending.targetStatus);
+      setShowEtcModal(true);
+      return;
+    }
+    await handleStatusUpdate(selectedJob, pending.targetStatus);
   };
 
   const handleSendChatMessage = async (e: React.FormEvent) => {
@@ -1026,6 +1337,19 @@ export default function DriverTodayPage() {
       'REASSIGN_PLACED_AT_RAMP',
       'REASSIGN_PLACED_AT_YARD',
     ].includes((selectedJob.status || '').toUpperCase());
+    const isL2Selected =
+      selectedJob.jobPhase === 'L2' || Boolean(selectedJob.jobCode && selectedJob.jobCode.includes('-L2'));
+    const epodDeliveryStatusCode =
+      isL2Selected || selectedJob.shipmentType === 'EXPORT' ? 'MT_DELIVERED' : 'FCL_DELIVERED';
+    const localSignedEpod = epodSignatures[selectedJob.id] || null;
+    const isEpodSigned = Boolean(localSignedEpod || selectedJob.podSignatureName);
+    const signedReceiverDisplay =
+      localSignedEpod
+        ? `${localSignedEpod.receiverName}${localSignedEpod.receiverRole ? ` • ${localSignedEpod.receiverRole}` : ''}`
+        : selectedJob.podSignatureName || '';
+    const signedEpodImage = localSignedEpod?.signatureDataUri || selectedJob.podPhotoUrl || null;
+    const allRenderSigStrokes =
+      sigCurrentStroke.length > 0 ? [...sigStrokes, sigCurrentStroke] : sigStrokes;
 
     return (
       <div className="min-h-screen bg-slate-100 pb-16 text-slate-900">
@@ -1122,6 +1446,44 @@ export default function DriverTodayPage() {
                   </div>
                 )}
 
+                {/* Sign-on-Glass ePOD Receiver Signature Section (LogiXL-Connect JobDetailScreen parity) */}
+                <div className="pt-1 border-t border-slate-100">
+                  {isEpodSigned ? (
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-extrabold text-emerald-800">
+                          ✅ ePOD Signed ({epodDeliveryStatusCode})
+                        </div>
+                        <div className="text-[11px] font-semibold text-emerald-700 truncate mt-0.5">
+                          Receiver: {signedReceiverDisplay}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingActionAfterSign(null);
+                          setShowSignatureModal(true);
+                        }}
+                        className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] hover:bg-emerald-100 transition"
+                      >
+                        Re-Sign
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => {
+                        setPendingActionAfterSign(null);
+                        setShowSignatureModal(true);
+                      }}
+                      className="w-full py-3 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-extrabold text-xs text-center transition active:scale-95"
+                    >
+                      ✍️ Capture Receiver Sign-on-Glass ({epodDeliveryStatusCode})
+                    </button>
+                  )}
+                </div>
+
                 {/* Dual Placement Choice: Placed @ Yard OR Placed @ Ramp */}
                 {nextStep.isDualChoice ? (
                   <div className="grid grid-cols-2 gap-3 pt-1">
@@ -1129,9 +1491,10 @@ export default function DriverTodayPage() {
                       type="button"
                       disabled={submitting}
                       onClick={() =>
-                        handleStatusUpdate(
+                        handleActionWithEpodCheck(
                           selectedJob,
                           isReassignJob ? 'REASSIGN_PLACED_AT_YARD' : 'PLACED_AT_YARD',
+                          'Placed @ Yard',
                         )
                       }
                       className="py-3.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-extrabold text-sm shadow-md transition active:scale-95 disabled:opacity-50"
@@ -1141,12 +1504,13 @@ export default function DriverTodayPage() {
                     <button
                       type="button"
                       disabled={submitting}
-                      onClick={() => {
-                        setPendingRampStatus(
+                      onClick={() =>
+                        handleActionWithEpodCheck(
+                          selectedJob,
                           isReassignJob ? 'REASSIGN_PLACED_AT_RAMP' : 'PLACED_AT_RAMP',
-                        );
-                        setShowEtcModal(true);
-                      }}
+                          'Placed @ Ramp',
+                        )
+                      }
                       className="py-3.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md transition active:scale-95 disabled:opacity-50"
                     >
                       Placed @ Ramp
@@ -1157,7 +1521,9 @@ export default function DriverTodayPage() {
                   <button
                     type="button"
                     disabled={submitting}
-                    onClick={() => handleStatusUpdate(selectedJob, nextStep.nextStatus)}
+                    onClick={() =>
+                      handleActionWithEpodCheck(selectedJob, nextStep.nextStatus, nextStep.label)
+                    }
                     style={{ backgroundColor: nextStep.color }}
                     className="w-full py-4 rounded-xl text-white font-extrabold text-base shadow-md hover:opacity-95 transition active:scale-95 disabled:opacity-50"
                   >
@@ -1381,6 +1747,26 @@ export default function DriverTodayPage() {
               </div>
             )}
 
+            {isEpodSigned && (
+              <div className="py-2 border-b border-slate-100 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">ePOD Signature</span>
+                  <span className="font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs">
+                    ✓ {signedReceiverDisplay}
+                  </span>
+                </div>
+                {signedEpodImage && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 flex justify-center">
+                    <img
+                      src={signedEpodImage}
+                      alt="Signed ePOD"
+                      className="max-h-36 w-auto rounded-lg object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-between py-1.5">
               <span className="text-slate-500 font-medium">Driver Allowance</span>
               <span className="font-extrabold text-emerald-600 text-base">
@@ -1426,6 +1812,179 @@ export default function DriverTodayPage() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Sign-on-Glass ePOD Signature Pad Modal (LogiXL-Connect SignaturePadModal.js parity) */}
+        {showSignatureModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-3.5">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-100 pb-2.5">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    ✍️ Sign-on-Glass ePOD ({epodDeliveryStatusCode})
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    {pendingActionAfterSign?.label || epodDeliveryStatusCode} · {selectedJob.jobCode} ·{' '}
+                    {selectedJob.containerNumber}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSignatureModal(false);
+                    setPendingActionAfterSign(null);
+                  }}
+                  className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Receiver Full Name & Role/ID Inputs */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Receiver Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={sigReceiverName}
+                    onChange={(e) => setSigReceiverName(e.target.value)}
+                    placeholder="e.g. Ahmed Al-Mansoor"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Role / ID (Opt)
+                  </label>
+                  <input
+                    type="text"
+                    value={sigReceiverRole}
+                    onChange={(e) => setSigReceiverRole(e.target.value)}
+                    placeholder="e.g. Ramp Supv"
+                    className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Touch Signature Box */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-600">
+                    Touch Signature Box (Sign with Finger)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSignaturePad}
+                    className="text-xs font-extrabold text-rose-600 hover:text-rose-700"
+                  >
+                    Clear Pad
+                  </button>
+                </div>
+
+                <div className="relative rounded-xl border-2 border-blue-500 bg-slate-50 overflow-hidden select-none touch-none">
+                  <svg
+                    ref={sigSvgRef}
+                    viewBox="0 0 340 190"
+                    className="w-full h-44 touch-none cursor-crosshair block"
+                    onPointerDown={handleSigPointerDown}
+                    onPointerMove={handleSigPointerMove}
+                    onPointerUp={handleSigPointerUp}
+                    onPointerCancel={handleSigPointerUp}
+                  >
+                    {/* Baseline */}
+                    <line
+                      x1="18"
+                      y1="158"
+                      x2="322"
+                      y2="158"
+                      stroke="#cbd5e1"
+                      strokeDasharray="4,4"
+                      strokeWidth="1.5"
+                    />
+                    {allRenderSigStrokes.length === 0 && (
+                      <text
+                        x="170"
+                        y="102"
+                        textAnchor="middle"
+                        fill="#cbd5e1"
+                        fontSize="24"
+                        fontWeight="800"
+                      >
+                        Sign Here
+                      </text>
+                    )}
+                    {allRenderSigStrokes.map((pts, sIdx) => {
+                      if (pts.length === 0) return null;
+                      if (pts.length === 1) {
+                        return (
+                          <circle
+                            key={`dot-${sIdx}`}
+                            cx={pts[0].x}
+                            cy={pts[0].y}
+                            r="2.2"
+                            fill="#0f172a"
+                          />
+                        );
+                      }
+                      const d = pts
+                        .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                        .join(' ');
+                      return (
+                        <path
+                          key={`stroke-${sIdx}`}
+                          d={d}
+                          stroke="#0f172a"
+                          strokeWidth="3"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      );
+                    })}
+                  </svg>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  By signing above, receiver acknowledges container condition &amp; seal integrity at{' '}
+                  {selectedJob.warehouseName || selectedJob.terminalName}.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmSignaturePad()}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md transition active:scale-95"
+                >
+                  ✍️ Confirm &amp; Save ePOD Signature
+                </button>
+
+                {pendingActionAfterSign && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSkipSignatureAndProceed()}
+                    className="w-full py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 font-bold text-xs transition"
+                  >
+                    Confirm {pendingActionAfterSign.label} Without Signature →
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSignatureModal(false);
+                    setPendingActionAfterSign(null);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
