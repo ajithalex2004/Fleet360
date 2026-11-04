@@ -651,7 +651,12 @@ export default function DrayageJobTrackingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update stage status');
-      showToast('success', `Job transitioned to ${newStatus}`);
+      const finalStatus =
+        data.status ||
+        (['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(newStatus.toUpperCase())
+          ? 'COMPLETED'
+          : newStatus);
+      showToast('success', `Job transitioned to ${finalStatus}`);
       await loadData();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error updating stage');

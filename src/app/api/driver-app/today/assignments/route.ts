@@ -456,8 +456,14 @@ export async function GET(req: NextRequest) {
             createdAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
           }));
 
+        const rawStatusUpper = (j.status || 'ASSIGNED').toUpperCase();
+        const normalizedStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
+          ? 'COMPLETED'
+          : j.status;
+
         return {
           ...j,
+          status: normalizedStatus,
           clientName,
           clientDestination,
           rateAmountAed: Number(j.rateAmountAed || 0),

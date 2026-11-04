@@ -596,22 +596,57 @@ export default function DriverTodayPage() {
           const newlyAssignedJobs: DrayageAssignment[] = [];
           let jobKeysUpdated = false;
 
+          // Check if driver has any active, uncompleted L2 job.
+          // While an L2 job is active, any queued L1 job remains INACTIVE (Waiting for L2 completion).
+          const hasActiveUncompletedL2 = fetched.some((item) => {
+            const itemSt = (item.status || 'ASSIGNED').toUpperCase();
+            const itemIsL2 =
+              item.jobPhase === 'L2' || Boolean(item.jobCode && item.jobCode.includes('-L2'));
+            return itemIsL2 && !HISTORY_STATUSES.has(itemSt);
+          });
+
           for (const j of fetched) {
             const st = (j.status || 'ASSIGNED').toUpperCase();
             if (HISTORY_STATUSES.has(st)) continue;
 
-            const assignKey = `${j.id}:${st}:${j.assignedVehiclePlate || ''}:${j.assignedTrailerPlate || ''}`;
-            const alreadyNotifiedByNative = Boolean(androidBridge?.isJobKeyNotified?.(assignKey));
+            const isL2 = j.jobPhase === 'L2' || Boolean(j.jobCode && j.jobCode.includes('-L2'));
+            const isReassignJob =
+              st === 'RE-ASSIGNED' ||
+              st === 'FCL_REASSIGN' ||
+              st === 'MT_REASSIGN' ||
+              st === 'TRAILER_ATTACHED' ||
+              st === 'REASSIGN_PLACED_AT_RAMP' ||
+              st === 'REASSIGN_PLACED_AT_YARD';
+
+            // If this is a queued L1 job while an L2 job is active, keep it INACTIVE and suppress notifications
+            // until the L2 job is completed.
+            if (!isL2 && !isReassignJob && hasActiveUncompletedL2) {
+              continue;
+            }
+
+            const isReassignStatus =
+              st === 'RE-ASSIGNED' || st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+            const assignPhase = isReassignStatus ? 'REASSIGN' : 'ASSIGN';
+            const assignKey = `${j.id}:${assignPhase}:${j.assignedVehiclePlate || ''}:${j.assignedTrailerPlate || ''}`;
+            const legacyAssignKey = `${j.id}:${st}:${j.assignedVehiclePlate || ''}:${j.assignedTrailerPlate || ''}`;
+
+            const alreadyNotifiedByNative =
+              Boolean(androidBridge?.isJobKeyNotified?.(assignKey)) ||
+              Boolean(androidBridge?.isJobKeyNotified?.(legacyAssignKey));
+
             if (alreadyNotifiedByNative && !seenJobKeysRef.current.has(assignKey)) {
               seenJobKeysRef.current.add(assignKey);
               jobKeysUpdated = true;
               continue;
             }
+
             if (!seenJobKeysRef.current.has(assignKey)) {
               seenJobKeysRef.current.add(assignKey);
               androidBridge?.markJobKeyNotified?.(assignKey);
               jobKeysUpdated = true;
-              if (initialJobLoadDoneRef.current || ASSIGNMENT_STATUSES.has(st)) {
+              // ONLY push a job notification when the job is in an initial assignment/reassignment status,
+              // NEVER on intermediate status updates (ACCEPTED, CONTAINER_PICKED, EN_ROUTE_TERMINAL, etc.)
+              if (ASSIGNMENT_STATUSES.has(st)) {
                 newlyAssignedJobs.push(j);
               }
             }
@@ -631,6 +666,7 @@ export default function DriverTodayPage() {
           for (const j of newlyAssignedJobs) {
             const st = (j.status || 'ASSIGNED').toUpperCase();
             const isReassigned = st === 'RE-ASSIGNED' || st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+            const assignPhase = isReassigned ? 'REASSIGN' : 'ASSIGN';
             const { pickupName, dropoffName } = getPickupAndDropoff(j);
             const notifTitle = isReassigned
               ? `🔄 Job Re-Assigned: ${j.jobCode}`
@@ -639,7 +675,7 @@ export default function DriverTodayPage() {
               j.assignedTrailerPlate || 'Assigned'
             } · ${pickupName} → ${dropoffName}`;
             showToast(`${notifTitle} — ${j.containerNumber} (${pickupName} → ${dropoffName})`);
-            triggerMobileNotification(notifTitle, notifBody, `job-assign-${j.id}-${st}`);
+            triggerMobileNotification(notifTitle, notifBody, `job-assign-${j.id}-${assignPhase}`);
           }
 
           // 2. Detect newly arrived Dispatcher messages (Broadcast or Individual)
@@ -757,6 +793,33 @@ export default function DriverTodayPage() {
     };
   }, [jobs]);
 
+  const hasActiveL2Job = useMemo(
+    () =>
+      activeJobs.some(
+        (j) =>
+          (j.jobPhase === 'L2' || Boolean(j.jobCode && j.jobCode.includes('-L2'))) &&
+          !HISTORY_STATUSES.has((j.status || '').toUpperCase()),
+      ),
+    [activeJobs],
+  );
+
+  const isJobInactiveWaitingForL2 = useCallback(
+    (job: DrayageAssignment) => {
+      const st = (job.status || 'ASSIGNED').toUpperCase();
+      if (HISTORY_STATUSES.has(st)) return false;
+      const isL2 = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
+      const isReassign =
+        st === 'RE-ASSIGNED' ||
+        st === 'FCL_REASSIGN' ||
+        st === 'MT_REASSIGN' ||
+        st === 'TRAILER_ATTACHED' ||
+        st === 'REASSIGN_PLACED_AT_RAMP' ||
+        st === 'REASSIGN_PLACED_AT_YARD';
+      return !isL2 && !isReassign && hasActiveL2Job;
+    },
+    [hasActiveL2Job],
+  );
+
   const selectedJob = useMemo(
     () => jobs.find((j) => j.id === selectedJobId) || null,
     [jobs, selectedJobId],
@@ -767,9 +830,19 @@ export default function DriverTodayPage() {
     newStatus: string,
     etcIsoString: string | null = null,
   ) => {
+    if (isJobInactiveWaitingForL2(job)) {
+      showToast('Please complete your active L2 job first to activate this L1 job.');
+      return;
+    }
     setSubmitting(true);
     try {
-      const isFinishingDriverLeg = HISTORY_STATUSES.has(newStatus.toUpperCase());
+      const upperTarget = newStatus.toUpperCase();
+      const isFinishingDriverLeg = HISTORY_STATUSES.has(upperTarget);
+      const effectiveTargetStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(
+        upperTarget,
+      )
+        ? 'COMPLETED'
+        : newStatus;
       const placementLocation = newStatus.includes('RAMP')
         ? 'RAMP'
         : newStatus.includes('YARD')
@@ -782,7 +855,7 @@ export default function DriverTodayPage() {
           j.id === job.id
             ? {
                 ...j,
-                status: newStatus,
+                status: effectiveTargetStatus,
                 placementLocation: placementLocation || j.placementLocation,
                 trailerDetached: isFinishingDriverLeg ? true : newStatus === 'TRAILER_ATTACHED' ? false : j.trailerDetached,
                 etcTime: etcIsoString || j.etcTime,
@@ -814,10 +887,10 @@ export default function DriverTodayPage() {
         showToast(errData?.error || 'Could not update status on server — retrying sync.');
       } else {
         if (isFinishingDriverLeg) {
-          showToast(`Job ${job.jobCode} completed & moved to History!`);
+          showToast(`Job ${job.jobCode} COMPLETED & moved to History!`);
           setSelectedJobId(null);
         } else {
-          showToast(`Status updated to ${newStatus.replace(/_/g, ' ')}`);
+          showToast(`Status updated to ${effectiveTargetStatus.replace(/_/g, ' ')}`);
         }
       }
 
@@ -1557,7 +1630,14 @@ export default function DriverTodayPage() {
           </div>
         ) : (
           displayedJobs.map((job) => {
-            const badge = getStatusBadgeStyle(job.status);
+            const isInactiveL1 = viewMode === 'active' && isJobInactiveWaitingForL2(job);
+            const badge = isInactiveL1
+              ? {
+                  bg: 'bg-slate-200 border-slate-400',
+                  text: 'text-slate-700',
+                  label: '⏳ INACTIVE · WAITING FOR L2',
+                }
+              : getStatusBadgeStyle(job.status);
             const nextStep = getNextStep(job);
             const { pickupName, pickupLat, pickupLng, dropoffName, dropoffLat, dropoffLng } =
               getPickupAndDropoff(job);
@@ -1565,7 +1645,11 @@ export default function DriverTodayPage() {
             return (
               <div
                 key={job.id}
-                className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3"
+                className={`rounded-2xl p-4 shadow-sm border space-y-3 transition ${
+                  isInactiveL1
+                    ? 'bg-slate-100/90 border-slate-300 opacity-75'
+                    : 'bg-white border-slate-200'
+                }`}
               >
                 {/* Card Header: Job Number, Token, Status Badge */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -1584,7 +1668,13 @@ export default function DriverTodayPage() {
                   </span>
                 </div>
 
-                                {/* Highlighted Yellow Trailer Box (LogiXL-Connect DashboardScreen parity) */}
+                {isInactiveL1 && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl px-3 py-2 text-[11px] font-bold text-amber-900">
+                    🔒 Inactive until L2 Job is completed — Complete your assigned L2 Empty Return job first to activate this L1 job.
+                  </div>
+                )}
+
+                {/* Highlighted Yellow Trailer Box (LogiXL-Connect DashboardScreen parity) */}
                 <div className="bg-amber-100 border border-amber-300 rounded-xl px-3 py-2 flex items-center justify-between">
                   <span className="text-xs font-extrabold text-amber-900">
                     🚛 TRAILER: {job.assignedTrailerPlate || 'Not Assigned'}
@@ -1601,7 +1691,13 @@ export default function DriverTodayPage() {
                   return (
                     <button
                       type="button"
-                      onClick={() => setSelectedJobId(job.id)}
+                      onClick={() => {
+                        if (isInactiveL1) {
+                          showToast('Complete your active L2 job first to activate this L1 job.');
+                          return;
+                        }
+                        setSelectedJobId(job.id);
+                      }}
                       className={`w-full text-left rounded-xl px-3 py-2.5 border transition flex items-start justify-between gap-2 ${
                         hasUrgent
                           ? 'bg-rose-50 border-rose-300 text-rose-950'
@@ -1705,11 +1801,23 @@ export default function DriverTodayPage() {
                 {/* Single Next Action Call-To-Action Button */}
                 <button
                   type="button"
-                  onClick={() => setSelectedJobId(job.id)}
-                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm shadow transition active:scale-95 flex items-center justify-center gap-2"
+                  onClick={() => {
+                    if (isInactiveL1) {
+                      showToast('Complete your active L2 job first to activate this L1 job.');
+                      return;
+                    }
+                    setSelectedJobId(job.id);
+                  }}
+                  className={`w-full py-3 rounded-xl font-extrabold text-sm shadow transition flex items-center justify-center gap-2 ${
+                    isInactiveL1
+                      ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95'
+                  }`}
                 >
                   <span>
-                    {nextStep
+                    {isInactiveL1
+                      ? '🔒 Inactive — Complete L2 Job First'
+                      : nextStep
                       ? `Next Action: ${nextStep.label} →`
                       : 'View Completed Job Details →'}
                   </span>

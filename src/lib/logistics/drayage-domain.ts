@@ -1410,14 +1410,28 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 4. Jobs
-  const jobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => ({
+  const jobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => {
+    const rawStatusUpper = String(r.status ?? 'PENDING').toUpperCase();
+    const normalizedJobStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
+      ? 'COMPLETED'
+      : String(r.status);
+    if (normalizedJobStatus === 'COMPLETED' && rawStatusUpper !== 'COMPLETED') {
+      pendingSyncWrites.push(
+        db.$executeRawUnsafe(
+          `UPDATE logistics_drayage_jobs SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          String(r.id),
+          String(r.tenant_id),
+        ).catch(() => {}),
+      );
+    }
+    return {
     id: String(r.id),
     tenantId: String(r.tenant_id),
     jobCode: String(r.job_code),
     jobPhase: (String(r.job_phase) === 'L2' ? 'L2' : 'L1'),
     parentJobId: r.parent_job_id ? String(r.parent_job_id) : null,
     shipmentType: (String(r.shipment_type) === 'EXPORT' ? 'EXPORT' : 'IMPORT'),
-    status: String(r.status),
+    status: normalizedJobStatus,
     priority: (['STANDARD', 'HIGH', 'URGENT'].includes(String(r.priority)) ? String(r.priority) : 'STANDARD') as DrayageJob['priority'],
     customerId: r.customer_id ? String(r.customer_id) : null,
     customerName: String(r.customer_name),
@@ -1467,7 +1481,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : (r.token_number ? 'BOOKED' : 'PENDING'),
     inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
     doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
-  }));
+    };
+  });
 
   // 5. Containers + Demurrage Calculation
   const terminalMap = new Map(terminals.map(t => [t.id, t]));
@@ -3158,10 +3173,14 @@ export async function updateDrayageJobExecutionStatus(
     }
   }
 
-  // LogiXL-Connect State Machine for Detach & Reassign:
+  // LogiXL-Connect State Machine for Detach & Reassign & Terminal Completion:
   // 1. L1 PLACED_AT_YARD + Detach -> FCL_REASSIGN (IMPORT) / MT_REASSIGN (EXPORT)
   // 2. REASSIGN_PLACED_AT_YARD + Detach -> READY_FOR_PICKUP (immediately eligible for L2)
+  // 3. CONTAINER_DROPPED / EMPTY_DEPOSITED / CONTAINER_DELIVERED -> COMPLETED
   let effectiveStatus = requestedStatusUpper;
+  if (['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED', 'COMPLETED'].includes(requestedStatusUpper)) {
+    effectiveStatus = 'COMPLETED';
+  }
   const isDetachSignal =
     ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes( requestedStatusUpper ) ||
     (detached && ['PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(requestedStatusUpper));
@@ -3234,7 +3253,7 @@ export async function updateDrayageJobExecutionStatus(
   ) {
     lat = 24.9642;
     lng = 55.0915;
-  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'COMPLETED'].includes(effectiveStatus)) {
+  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED'].includes(effectiveStatus)) {
     lat = 25.0112;
     lng = 55.0612;
   }
@@ -3262,9 +3281,23 @@ export async function updateDrayageJobExecutionStatus(
     args.notes ? String(args.notes) : null,
   );
 
-  // Sync container status: When placed at ramp or detached, container transitions to WAITING_MT_RETURN
+  // Sync container status & related parent jobs:
+  // When L2 is completed (or CONTAINER_DROPPED / EMPTY_DEPOSITED), mark any related jobs for the same container as COMPLETED
+  const isCompletedL2 =
+    (String(job.job_phase) === 'L2' || String(job.job_code || '').includes('-L2')) &&
+    (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED' || requestedStatusUpper === 'CONTAINER_DROPPED');
+
   if (job.container_id) {
-    const isCompletedL2 = String(job.job_phase) === 'L2' && (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED');
+    if (isCompletedL2) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET status = 'COMPLETED',
+                updated_at = NOW()
+          WHERE container_id = $1 AND tenant_id = $2 AND status != 'COMPLETED'`,
+        String(job.container_id),
+        args.tenantId,
+      ).catch(() => {});
+    }
     let cntStatus = effectiveStatus;
     if (
       isRampPlacement ||
@@ -3306,10 +3339,7 @@ export async function updateDrayageJobExecutionStatus(
       (detached && placement === 'YARD')
     ) {
       trOp = 'DETACHED_AT_YARD';
-    } else if (
-      String(job.job_phase) === 'L2' &&
-      (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED')
-    ) {
+    } else if (isCompletedL2 || effectiveStatus === 'COMPLETED') {
       trMaster = 'AVAILABLE';
       trOp = 'EMPTY';
     }
@@ -3338,6 +3368,20 @@ export async function updateDrayageJobExecutionStatus(
   ]
     .filter(Boolean)
     .join(' · ');
+
+  if (requestedStatusUpper !== effectiveStatus && ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(requestedStatusUpper)) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `log-${crypto.randomUUID().slice(0, 12)}`,
+      args.tenantId,
+      args.jobId,
+      String(job.job_code),
+      requestedStatusUpper,
+      stageDetails,
+      logActor,
+    );
+  }
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
