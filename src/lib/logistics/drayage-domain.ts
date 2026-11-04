@@ -1410,7 +1410,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 4. Jobs
-  const jobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => {
+  const mappedJobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => {
     const rawStatusUpper = String(r.status ?? 'PENDING').toUpperCase();
     const normalizedJobStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
       ? 'COMPLETED'
@@ -1483,6 +1483,40 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
     };
   });
+
+  // Deduplicate any race-condition duplicate jobs sharing the same (jobPhase, jobCode)
+  const jobsByPhaseCode = new Map<string, DrayageJob>();
+  const duplicateJobIdsToDelete: string[] = [];
+  const scoreJobProgress = (j: DrayageJob): number => {
+    const stage = getDrayageOperationalStageIndex(j.status, j.trailerDetached);
+    const hasDriverOrVehicle = Boolean(j.assignedDriverId || j.assignedVehicleId);
+    const nonPending = j.status.toUpperCase() !== 'PENDING';
+    return stage * 100 + (nonPending ? 20 : 0) + (hasDriverOrVehicle ? 10 : 0);
+  };
+  for (const job of mappedJobs) {
+    const key = `${job.jobPhase}:${job.jobCode.trim().toUpperCase()}`;
+    const existing = jobsByPhaseCode.get(key);
+    if (!existing) {
+      jobsByPhaseCode.set(key, job);
+      continue;
+    }
+    if (scoreJobProgress(job) > scoreJobProgress(existing)) {
+      duplicateJobIdsToDelete.push(existing.id);
+      jobsByPhaseCode.set(key, job);
+    } else {
+      duplicateJobIdsToDelete.push(job.id);
+    }
+  }
+  for (const dupId of duplicateJobIdsToDelete) {
+    pendingSyncWrites.push(
+      db.$executeRawUnsafe(
+        `DELETE FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2`,
+        dupId,
+        tenantId,
+      ).catch(() => {}),
+    );
+  }
+  const jobs: DrayageJob[] = Array.from(jobsByPhaseCode.values());
 
   // 5. Containers + Demurrage Calculation
   const terminalMap = new Map(terminals.map(t => [t.id, t]));
@@ -2023,31 +2057,38 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
             l1InMem.l2Activated = true;
             l1InMem.status = 'COMPLETED';
             l1InMem.etcAlertStatus = 'ACTIVATED';
-            jobs.unshift({
-              ...l1InMem,
-              id: act.l2JobId,
-              jobCode: act.l2JobCode,
-              jobPhase: 'L2',
-              parentJobId: l1InMem.id,
-              status: 'PENDING',
-              priority: 'HIGH',
-              assignedVehicleId: null,
-              assignedVehiclePlate: null,
-              assignedDriverId: null,
-              assignedDriverName: null,
-              assignedTrailerId: l1InMem.assignedTrailerId,
-              assignedTrailerPlate: l1InMem.assignedTrailerPlate,
-              placementLocation: null,
-              trailerDetached: false,
-              l2Activated: false,
-              etcTime: null,
-              etcAlertStatus: 'NEW',
-              rateAmountAed: 950,
-              driverAllowanceAed: 120,
-              notes: `Auto-generated L2 Empty Container Return from ${l1InMem.jobCode}`,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            });
+            const alreadyInJobs = jobs.some(
+              (j) =>
+                j.id === act.l2JobId ||
+                (j.jobPhase === 'L2' && j.jobCode.toUpperCase() === act.l2JobCode.toUpperCase()),
+            );
+            if (!alreadyInJobs) {
+              jobs.unshift({
+                ...l1InMem,
+                id: act.l2JobId,
+                jobCode: act.l2JobCode,
+                jobPhase: 'L2',
+                parentJobId: l1InMem.id,
+                status: 'PENDING',
+                priority: 'HIGH',
+                assignedVehicleId: null,
+                assignedVehiclePlate: null,
+                assignedDriverId: null,
+                assignedDriverName: null,
+                assignedTrailerId: l1InMem.assignedTrailerId,
+                assignedTrailerPlate: l1InMem.assignedTrailerPlate,
+                placementLocation: null,
+                trailerDetached: false,
+                l2Activated: false,
+                etcTime: null,
+                etcAlertStatus: 'NEW',
+                rateAmountAed: 950,
+                driverAllowanceAed: 120,
+                notes: `Auto-generated L2 Empty Container Return from ${l1InMem.jobCode}`,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+            }
           }
         }
       }
@@ -3873,6 +3914,45 @@ export async function activateL2EmptyReturnJob(
   );
   const l1 = jobRows[0];
   if (!l1) throw new Error('L1 Job not found');
+
+  const l2Code = String(l1.job_code).replace('L1', 'L2') || `DRY-L2-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // Idempotency & race guard: if an L2 job already exists for this L1 job or L2 jobCode, return it without inserting a duplicate
+  const existingL2Rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id, job_code, assigned_vehicle_plate, assigned_driver_name
+       FROM logistics_drayage_jobs
+      WHERE tenant_id = $1
+        AND job_phase = 'L2'
+        AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))
+      ORDER BY created_at ASC
+      LIMIT 1`,
+    args.tenantId,
+    args.l1JobId,
+    l2Code,
+  );
+  if (existingL2Rows.length > 0) {
+    const existingL2 = existingL2Rows[0];
+    if (!l1.l2_activated || String(l1.status).toUpperCase() !== 'COMPLETED') {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET l2_activated = TRUE,
+                status = 'COMPLETED',
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.l1JobId,
+        args.tenantId,
+      );
+    }
+    return {
+      ok: true,
+      l2JobId: String(existingL2.id),
+      l2JobCode: String(existingL2.job_code),
+      preAssigned: Boolean(existingL2.assigned_vehicle_plate),
+      vehiclePlate: existingL2.assigned_vehicle_plate ? String(existingL2.assigned_vehicle_plate) : undefined,
+      driverName: existingL2.assigned_driver_name ? String(existingL2.assigned_driver_name) : undefined,
+    };
+  }
+
   if (l1.l2_activated) throw new Error('L2 Empty Return is already activated for this container');
 
   const l1Status = String(l1.status || '').toUpperCase();
@@ -3887,20 +3967,44 @@ export async function activateL2EmptyReturnJob(
   }
 
   const l2Id = `job-l2-${crypto.randomUUID().slice(0, 10)}`;
-  const l2Code = String(l1.job_code).replace('L1', 'L2') || `DRY-L2-${Math.floor(1000 + Math.random() * 9000)}`;
   const rampLat = l1.current_lat != null ? Number(l1.current_lat) : 24.9642;
   const rampLng = l1.current_lng != null ? Number(l1.current_lng) : 55.0915;
 
-  // Mark L1 as COMPLETED / L2_ACTIVATED
-  await db.$executeRawUnsafe(
+  // Atomically claim L1 as COMPLETED / L2_ACTIVATED so concurrent triggers cannot insert twice
+  const claimedRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `UPDATE logistics_drayage_jobs
         SET l2_activated = TRUE,
             status = 'COMPLETED',
             updated_at = NOW()
-      WHERE id = $1 AND tenant_id = $2`,
+      WHERE id = $1 AND tenant_id = $2 AND COALESCE(l2_activated, FALSE) = FALSE
+      RETURNING id`,
     args.l1JobId,
     args.tenantId,
   );
+  if (claimedRows.length === 0) {
+    const concurrentL2Rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT id, job_code, assigned_vehicle_plate, assigned_driver_name
+         FROM logistics_drayage_jobs
+        WHERE tenant_id = $1
+          AND job_phase = 'L2'
+          AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))
+        ORDER BY created_at ASC
+        LIMIT 1`,
+      args.tenantId,
+      args.l1JobId,
+      l2Code,
+    );
+    if (concurrentL2Rows.length > 0) {
+      const concurrentL2 = concurrentL2Rows[0];
+      return {
+        ok: true,
+        l2JobId: String(concurrentL2.id),
+        l2JobCode: String(concurrentL2.job_code),
+        preAssigned: Boolean(concurrentL2.assigned_vehicle_plate),
+      };
+    }
+    throw new Error('L2 Empty Return is already activated for this container');
+  }
 
   const shouldPreAssign = Boolean(args.preAssignTractor);
 
