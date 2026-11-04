@@ -2079,19 +2079,19 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
 
     // (C) Role-Scoped Tracking Links (Customer, Client, Ramp) & Automated Milestone Alert Config
-    const customerToken = generateDrayageCustomerTrackingToken({
+    const customerToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
       role: 'CUSTOMER',
     });
-    const clientToken = generateDrayageCustomerTrackingToken({
+    const clientToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
       role: 'CLIENT',
     });
-    const rampToken = generateDrayageCustomerTrackingToken({
+    const rampToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
@@ -5757,6 +5757,56 @@ export function isRampLinkActive(job: {
  * Generates a role-scoped, HMAC-SHA256 signed capability token per (tenantId, jobCode, containerNumber, role)
  * so external stakeholders (Customer, Client, or Ramp Supervisor) can open `/track/drayage/[token]` without logging in.
  */
+const shortTrackingTokenCache = new Map<
+  string,
+  {
+    tenantId: string;
+    jobCode: string;
+    containerNumber: string;
+    role: DrayageTrackingPortalRole;
+  }
+>();
+
+const shortTrackingJobCache = new Map<
+  string,
+  {
+    tenantId: string;
+    jobCode: string;
+    containerNumber: string;
+  }
+>();
+
+export function generateDrayageShortTrackingToken(args: {
+  tenantId: string;
+  jobCode: string;
+  containerNumber?: string;
+  role?: DrayageTrackingPortalRole;
+}): string {
+  const role: DrayageTrackingPortalRole = args.role || 'CUSTOMER';
+  const rolePrefix = role === 'RAMP' ? 'r' : role === 'CLIENT' ? 'u' : 'c';
+  const cleanTenantId = String(args.tenantId).trim();
+  const cleanJobCode = String(args.jobCode).trim().toUpperCase();
+  const cleanContainer = String(args.containerNumber || '').trim().toUpperCase();
+  const sig = crypto
+    .createHmac('sha256', getDrayageTrackingTokenSecret())
+    .update(`${cleanTenantId}:${cleanJobCode}:${role}`)
+    .digest('base64url')
+    .slice(0, 8);
+  const token = `${rolePrefix}-${cleanJobCode}-${sig}`;
+  shortTrackingTokenCache.set(token, {
+    tenantId: cleanTenantId,
+    jobCode: cleanJobCode,
+    containerNumber: cleanContainer,
+    role,
+  });
+  shortTrackingJobCache.set(cleanJobCode, {
+    tenantId: cleanTenantId,
+    jobCode: cleanJobCode,
+    containerNumber: cleanContainer,
+  });
+  return token;
+}
+
 export function generateDrayageCustomerTrackingToken(args: {
   tenantId: string;
   jobCode: string;
@@ -5780,7 +5830,8 @@ export function generateDrayageCustomerTrackingToken(args: {
 }
 
 /**
- * Verifies a shareable drayage tracking token and extracts tenantId, jobCode, containerNumber, and role.
+ * Verifies a shareable drayage tracking token (both compact short tokens `c-DRY-L1-4943-xxxxxxxx`
+ * and full signed `trk_...` tokens) and extracts tenantId, jobCode, containerNumber, and role.
  */
 export function verifyDrayageCustomerTrackingToken(rawToken: string): {
   valid: boolean;
@@ -5791,6 +5842,36 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
 } {
   try {
     const cleaned = decodeURIComponent(String(rawToken || '').trim());
+
+    const shortMatch = cleaned.match(/^(c|u|r)-(.+)-([A-Za-z0-9_-]{8})$/);
+    if (shortMatch) {
+      const rolePrefix = shortMatch[1];
+      const jobCode = shortMatch[2].trim().toUpperCase();
+      const providedSig = shortMatch[3];
+      const role: DrayageTrackingPortalRole =
+        rolePrefix === 'r' ? 'RAMP' : rolePrefix === 'u' ? 'CLIENT' : 'CUSTOMER';
+      const cached = shortTrackingTokenCache.get(cleaned) || shortTrackingJobCache.get(jobCode);
+      if (cached) {
+        const expectedSig = crypto
+          .createHmac('sha256', getDrayageTrackingTokenSecret())
+          .update(`${cached.tenantId}:${cached.jobCode}:${role}`)
+          .digest('base64url')
+          .slice(0, 8);
+        const a = Buffer.from(providedSig, 'utf8');
+        const b = Buffer.from(expectedSig, 'utf8');
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          return {
+            valid: true,
+            tenantId: cached.tenantId,
+            jobCode: cached.jobCode,
+            containerNumber: cached.containerNumber,
+            role,
+          };
+        }
+      }
+      return { valid: false };
+    }
+
     const withoutPrefix = cleaned.startsWith('trk_') ? cleaned.slice(4) : cleaned;
     const dotIdx = withoutPrefix.lastIndexOf('.');
     if (dotIdx <= 0) return { valid: false };
@@ -5827,6 +5908,93 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
       containerNumber: String(parsed.c || '').toUpperCase(),
       role,
     };
+  } catch {
+    return { valid: false };
+  }
+}
+
+/**
+ * Resolves and verifies either a full `trk_...` token or a short token (`c-DRY-L1-4943-xxxxxxxx`),
+ * falling back to a DB job lookup by `job_code` + constant-time HMAC check on cold start.
+ */
+export async function resolveDrayageCustomerTrackingToken(
+  db: DrayageDbClient,
+  rawToken: string,
+): Promise<{
+  valid: boolean;
+  tenantId?: string;
+  jobCode?: string;
+  containerNumber?: string;
+  role?: DrayageTrackingPortalRole;
+}> {
+  const syncResult = verifyDrayageCustomerTrackingToken(rawToken);
+  if (syncResult.valid) return syncResult;
+
+  try {
+    const cleaned = decodeURIComponent(String(rawToken || '').trim());
+    const shortMatch = cleaned.match(/^(c|u|r)-(.+)-([A-Za-z0-9_-]{8})$/);
+    if (!shortMatch) return { valid: false };
+
+    const rolePrefix = shortMatch[1];
+    const jobCode = shortMatch[2].trim().toUpperCase();
+    const providedSig = shortMatch[3];
+    const role: DrayageTrackingPortalRole =
+      rolePrefix === 'r' ? 'RAMP' : rolePrefix === 'u' ? 'CLIENT' : 'CUSTOMER';
+
+    // If the job is already known in memory and verifyDrayageCustomerTrackingToken returned false,
+    // the signature is forged — reject immediately without querying the database.
+    if (shortTrackingJobCache.has(jobCode)) {
+      return { valid: false };
+    }
+
+    const rows = await Promise.race([
+      db.$queryRawUnsafe<
+        Array<{ tenant_id: string; job_code: string; container_number: string }>
+      >(
+        `SELECT tenant_id, job_code, container_number
+           FROM logistics_drayage_jobs
+          WHERE UPPER(job_code) = $1
+          LIMIT 20`,
+        jobCode,
+      ),
+      new Promise<Array<{ tenant_id: string; job_code: string; container_number: string }>>(
+        (resolve) => setTimeout(() => resolve([]), 2500),
+      ),
+    ]);
+
+    for (const row of rows) {
+      const candidateTenantId = String(row.tenant_id || '').trim();
+      const candidateJobCode = String(row.job_code || jobCode).trim().toUpperCase();
+      const candidateContainer = String(row.container_number || '').trim().toUpperCase();
+      const expectedSig = crypto
+        .createHmac('sha256', getDrayageTrackingTokenSecret())
+        .update(`${candidateTenantId}:${candidateJobCode}:${role}`)
+        .digest('base64url')
+        .slice(0, 8);
+      const a = Buffer.from(providedSig, 'utf8');
+      const b = Buffer.from(expectedSig, 'utf8');
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        shortTrackingTokenCache.set(cleaned, {
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+          role,
+        });
+        shortTrackingJobCache.set(candidateJobCode, {
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+        });
+        return {
+          valid: true,
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+          role,
+        };
+      }
+    }
+    return { valid: false };
   } catch {
     return { valid: false };
   }
@@ -6080,19 +6248,19 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     };
   }
 
-  const customerToken = generateDrayageCustomerTrackingToken({
+  const customerToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
     role: 'CUSTOMER',
   });
-  const clientToken = generateDrayageCustomerTrackingToken({
+  const clientToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
     role: 'CLIENT',
   });
-  const rampToken = generateDrayageCustomerTrackingToken({
+  const rampToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,

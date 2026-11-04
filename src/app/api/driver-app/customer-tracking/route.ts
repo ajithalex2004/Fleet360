@@ -6,6 +6,7 @@ import { withTenantRls } from '@/lib/rls';
 import {
   ensureDrayageSchema,
   verifyDrayageCustomerTrackingToken,
+  resolveDrayageCustomerTrackingToken,
   getPublicCustomerTrackingByToken,
   updateDrayageCustomerAlertPreferences,
   dispatchDrayageCustomerMilestoneAlert,
@@ -26,7 +27,10 @@ let schemaReady = false;
 export async function GET(req: NextRequest) {
   const t0 = performance.now();
   const rawToken = req.nextUrl.searchParams.get('token') || '';
-  const verified = verifyDrayageCustomerTrackingToken(rawToken);
+  let verified = verifyDrayageCustomerTrackingToken(rawToken);
+  if (!verified.valid) {
+    verified = await resolveDrayageCustomerTrackingToken(prisma, rawToken);
+  }
 
   if (!verified.valid || !verified.tenantId || !verified.jobCode) {
     return NextResponse.json(
@@ -110,7 +114,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const rawToken = String(body.token || '');
-    const verified = verifyDrayageCustomerTrackingToken(rawToken);
+    let verified = verifyDrayageCustomerTrackingToken(rawToken);
+    if (!verified.valid) {
+      verified = await resolveDrayageCustomerTrackingToken(prisma, rawToken);
+    }
 
     if (!verified.valid || !verified.tenantId || !verified.jobCode) {
       return NextResponse.json(

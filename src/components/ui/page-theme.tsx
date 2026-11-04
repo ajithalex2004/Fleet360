@@ -146,8 +146,8 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
   return (
     <section className={`rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden ${className}`}>
       {(translatedTitle || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
-          <div className="flex items-start gap-3 min-w-0">
+        <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
+          <div className={`flex ${translatedSubtitle ? 'items-start' : 'items-center'} gap-3 min-w-0 flex-1`}>
             {Icon && (
               <div className={`shrink-0 w-8 h-8 rounded-lg ${a.bg} flex items-center justify-center`}>
                 <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
@@ -158,7 +158,7 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
               {translatedSubtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{translatedSubtitle}</p>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
         </header>
       )}
       <div className="p-5">{children}</div>
