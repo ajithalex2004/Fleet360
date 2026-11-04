@@ -73,17 +73,22 @@ describe('driver vehicle login stays in the caller\'s tenant', () => {
     h.userFindUnique.mockResolvedValue({ id: 'drv-1', email: 'd@a.ae', employeeId: 'E1', userType: 'STAFF' });
     const res = await loginPOST(post('http://localhost/api/driver-app/auth/vehicle-login', { vehicleIdentifier: 'TRX-01' }));
     expect(res.status).toBe(403);
-    expect(h.rawQuery).not.toHaveBeenCalled();
+    // Only an explicit drivers.user_id link could match a non-driver account:
+    // the email / employee-id fallback ($5) is off for it.
+    const fallback = h.rawQuery.mock.calls.find((c) => c.length === 6);
+    expect(fallback?.[5]).toBe(false);
   });
 
   it('a driver account whose user id differs is matched by id, exact email or employee id only', async () => {
     h.driverFindFirst.mockResolvedValue(null);
     h.userFindUnique.mockResolvedValue({ id: 'u-9', email: 'd@a.ae', employeeId: 'E1', userType: 'DRIVER' });
     await loginGET(get('http://localhost/api/driver-app/auth/vehicle-login'));
-    expect(h.rawQuery).toHaveBeenCalled();
-    const [sql, ...params] = h.rawQuery.mock.calls[0];
-    expect(params).toEqual(['tenant-a', 'u-9', 'd@a.ae', 'E1']);
-    expect(sql).not.toMatch(/SPLIT_PART|license_number|first_name/);
+    // First the explicit link / same id, then the driver-only fallback.
+    expect(h.rawQuery.mock.calls[0].slice(1)).toEqual(['tenant-a', 'drv-1']); // the session's user id
+    const fallback = h.rawQuery.mock.calls.find((c) => c.length === 6)!;
+    const [sql, ...params] = fallback;
+    expect(params).toEqual(['tenant-a', 'u-9', 'd@a.ae', 'E1', true]);
+    expect(String(sql)).not.toMatch(/SPLIT_PART|license_number|first_name|username/);
   });
 
   it('lists only the caller\'s tenant\'s vehicles', async () => {
