@@ -186,6 +186,15 @@ export interface DrayageContainer {
   doRevalidatedAt?: string | null;
 }
 
+export interface DrayageRoutePoint {
+  lat: number;
+  lng: number;
+  timestamp: string;
+  location?: string;
+  status?: string;
+  speedKmh?: number;
+}
+
 export interface DrayageJob {
   id: string;
   tenantId: string;
@@ -246,6 +255,7 @@ export interface DrayageJob {
   riskRadar?: DrayageRiskRadarInfo;
   portSlotPrediction?: DrayagePortSlotPrediction;
   customerPortal?: DrayageCustomerPortalLink;
+  routePath?: DrayageRoutePoint[];
 }
 
 export type DrayageTrackingPortalRole = 'CUSTOMER' | 'CLIENT' | 'RAMP';
@@ -662,6 +672,10 @@ const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'LOADED',
   'TRAILER_ATTACHED',
   'UNDER_INSPECTION',
+  'INSPECTION_CLEARED',
+  'INSPECTION_REPORTED',
+  'INSPECTION_SKIPPED',
+  'PHOTO_UPLOADED',
   'EN_ROUTE_WAREHOUSE',
   'EN_ROUTE_TERMINAL',
   'IN_TRANSIT',
@@ -691,6 +705,136 @@ const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'COMPLETED',
 ]);
 
+const UAE_GEOGRAPHIC_REFERENCE_POINTS: Array<{
+  name: string;
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}> = [
+  // Abu Dhabi Island & Metropolitan
+  { name: 'Al Nahyan, Abu Dhabi', lat: 24.4594, lng: 54.3818, radiusKm: 2.5 },
+  { name: 'Al Mushrif, Abu Dhabi', lat: 24.4425, lng: 54.3965, radiusKm: 3.0 },
+  { name: 'Al Bateen, Abu Dhabi', lat: 24.4535, lng: 54.3425, radiusKm: 3.0 },
+  { name: 'Al Danah / Central Abu Dhabi', lat: 24.4882, lng: 54.3665, radiusKm: 3.0 },
+  { name: 'Al Zahiyah / Mina Zayed, Abu Dhabi', lat: 24.5135, lng: 54.3775, radiusKm: 3.5 },
+  { name: 'Al Reem Island, Abu Dhabi', lat: 24.4960, lng: 54.4060, radiusKm: 3.5 },
+  { name: 'Al Maqta / Rabdan, Abu Dhabi', lat: 24.4160, lng: 54.4820, radiusKm: 4.0 },
+  { name: 'Mussafah Industrial, Abu Dhabi', lat: 24.3540, lng: 54.5020, radiusKm: 6.5 },
+  { name: 'ICAD Industrial City, Abu Dhabi', lat: 24.3120, lng: 54.4780, radiusKm: 6.5 },
+  { name: 'Khalifa City, Abu Dhabi', lat: 24.4210, lng: 54.5750, radiusKm: 6.0 },
+  { name: 'Mohammed Bin Zayed City, Abu Dhabi', lat: 24.3510, lng: 54.5580, radiusKm: 6.0 },
+  { name: 'Yas Island / Shahama Corridor, Abu Dhabi', lat: 24.4950, lng: 54.6080, radiusKm: 7.0 },
+  { name: 'KEZAD / Khalifa Port, Abu Dhabi', lat: 24.7920, lng: 54.6820, radiusKm: 8.5 },
+  { name: 'Al Samha / Ghantoot (E11 Corridor)', lat: 24.8550, lng: 54.8450, radiusKm: 10.0 },
+  { name: 'Al Ain Logistics Corridor', lat: 24.2075, lng: 55.7447, radiusKm: 18.0 },
+  // Dubai & Jebel Ali Logistics Corridor
+  { name: 'Jebel Ali Port (T1/T2/T3), Dubai', lat: 25.0112, lng: 55.0612, radiusKm: 2.8 },
+  { name: 'JAFZA North Free Zone, Dubai', lat: 24.9910, lng: 55.0750, radiusKm: 3.0 },
+  { name: 'JAFZA South Logistics Zone, Dubai', lat: 24.9642, lng: 55.0915, radiusKm: 3.5 },
+  { name: 'National Industries Park (NIP), Dubai', lat: 24.9220, lng: 55.0680, radiusKm: 4.5 },
+  { name: 'Dubai South (DWC Logistics District)', lat: 24.8960, lng: 55.1450, radiusKm: 6.0 },
+  { name: 'Dubai Investments Park (DIP)', lat: 24.9850, lng: 55.1680, radiusKm: 5.5 },
+  { name: 'Al Yalayis / E311 Freight Corridor, Dubai', lat: 25.0020, lng: 55.1350, radiusKm: 5.0 },
+  { name: 'Al Marina / JLT, Dubai', lat: 25.0750, lng: 55.1420, radiusKm: 4.0 },
+  { name: 'Al Quoz Industrial Area, Dubai', lat: 25.1360, lng: 55.2280, radiusKm: 5.5 },
+  { name: 'Business Bay / Downtown, Dubai', lat: 25.1880, lng: 55.2680, radiusKm: 4.5 },
+  { name: 'Ras Al Khor Industrial, Dubai', lat: 25.1780, lng: 55.3520, radiusKm: 5.5 },
+  { name: 'Dubai Creek / Al Jaddaf, Dubai', lat: 25.2150, lng: 55.3280, radiusKm: 4.5 },
+  { name: 'Port Rashid / Al Mina, Dubai', lat: 25.2620, lng: 55.2780, radiusKm: 4.5 },
+  { name: 'Deira / Al Qusais Industrial, Dubai', lat: 25.2810, lng: 55.3880, radiusKm: 6.0 },
+  // Northern Emirates
+  { name: 'Sharjah Industrial Area', lat: 25.3180, lng: 55.4120, radiusKm: 8.5 },
+  { name: 'Ajman Industrial Zone', lat: 25.3890, lng: 55.4790, radiusKm: 8.0 },
+  { name: 'Saqr Port / Ras Al Khaimah', lat: 25.7890, lng: 55.9430, radiusKm: 18.0 },
+  { name: 'Fujairah Port Corridor', lat: 25.1288, lng: 56.3265, radiusKm: 18.0 },
+];
+
+function calcDistanceKmFast(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function resolveUaePlaceNameFromCoords(
+  lat: number,
+  lng: number,
+  options?: {
+    terminalName?: string | null;
+    termLat?: number | null;
+    termLng?: number | null;
+    warehouseName?: string | null;
+    whLat?: number | null;
+    whLng?: number | null;
+  },
+): string {
+  if (
+    options?.terminalName &&
+    options.termLat != null &&
+    options.termLng != null &&
+    calcDistanceKmFast(lat, lng, Number(options.termLat), Number(options.termLng)) <= 2.2
+  ) {
+    return String(options.terminalName).trim();
+  }
+  if (
+    options?.warehouseName &&
+    options.whLat != null &&
+    options.whLng != null &&
+    calcDistanceKmFast(lat, lng, Number(options.whLat), Number(options.whLng)) <= 2.0
+  ) {
+    return String(options.warehouseName).trim();
+  }
+
+  let bestName = '';
+  let bestDistKm = Infinity;
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = calcDistanceKmFast(lat, lng, ref.lat, ref.lng);
+    if (d <= ref.radiusKm && d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName) return bestName;
+
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = calcDistanceKmFast(lat, lng, ref.lat, ref.lng);
+    if (d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName && bestDistKm <= 25) {
+    return bestName;
+  }
+  if (lat >= 24.15 && lat <= 24.75 && lng >= 54.15 && lng <= 54.85) {
+    return 'Abu Dhabi Mobile GPS';
+  }
+  if (lat >= 24.80 && lat <= 25.32 && lng >= 54.90 && lng <= 55.55) {
+    return 'Dubai Mobile GPS';
+  }
+  return 'Driver Mobile GPS';
+}
+
+export function extractCoordsFromLocationText(text?: string | null): { lat: number; lng: number; prefix: string } | null {
+  if (!text) return null;
+  const m = String(text).match(/^(.*?)\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*$/);
+  if (!m) return null;
+  const lat = Number(m[2]);
+  const lng = Number(m[3]);
+  if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return null;
+  return {
+    prefix: m[1].trim(),
+    lat,
+    lng,
+  };
+}
+
 export function resolveOperationalMilestoneLocation(args: {
   status: string;
   rawNotes?: string | null;
@@ -715,27 +859,64 @@ export function resolveOperationalMilestoneLocation(args: {
     return undefined;
   }
 
-  const notesStr = String(args.rawNotes || '');
-  const locTagMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
-  if (locTagMatch && locTagMatch[1]?.trim()) {
-    return locTagMatch[1].trim();
-  }
-
-  if (args.explicitLocation && String(args.explicitLocation).trim()) {
-    return String(args.explicitLocation).trim();
-  }
-
-  const isL2 =
-    String(args.jobPhase || '').toUpperCase() === 'L2' ||
-    String(args.jobCode || '').toUpperCase().includes('-L2');
   const terminalName = String(args.terminalName || 'DPW-Jebel Ali-T1').trim();
   const warehouseName = String(args.warehouseName || 'Consignee Warehouse').trim();
   const tLat = args.termLat != null && Number(args.termLat) !== 0 ? Number(args.termLat) : 25.0112;
   const tLng = args.termLng != null && Number(args.termLng) !== 0 ? Number(args.termLng) : 55.0612;
   const wLat = args.whLat != null && Number(args.whLat) !== 0 ? Number(args.whLat) : 24.9642;
   const wLng = args.whLng != null && Number(args.whLng) !== 0 ? Number(args.whLng) : 55.0915;
-  const cLat = Number(((tLat + wLat) / 2).toFixed(4));
-  const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+  const isHardcodedFacilityPrefix = (prefix: string, lat: number, lng: number): boolean => {
+    const p = prefix.trim().toLowerCase();
+    if (!p) return true;
+    const termLower = terminalName.toLowerCase();
+    const whLower = warehouseName.toLowerCase();
+    if (
+      p === termLower ||
+      p === 'dpw-jebel ali-t1' ||
+      p === 'port terminal' ||
+      p.startsWith('e11 corridor') ||
+      p.includes(`→ ${termLower}`)
+    ) {
+      return calcDistanceKmFast(lat, lng, tLat, tLng) > 2.5;
+    }
+    if (
+      p === whLower ||
+      p === 'consignee warehouse' ||
+      p.includes(`→ ${whLower}`)
+    ) {
+      return calcDistanceKmFast(lat, lng, wLat, wLng) > 2.2;
+    }
+    return false;
+  };
+
+  const normalizeTaggedLocation = (rawLoc: string): string => {
+    const parsed = extractCoordsFromLocationText(rawLoc);
+    if (!parsed) return rawLoc.trim();
+    const { prefix, lat, lng } = parsed;
+    if (isHardcodedFacilityPrefix(prefix, lat, lng)) {
+      const truePlace = resolveUaePlaceNameFromCoords(lat, lng, {
+        terminalName,
+        termLat: tLat,
+        termLng: tLng,
+        warehouseName,
+        whLat: wLat,
+        whLng: wLng,
+      });
+      return `${truePlace} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    }
+    return `${prefix} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+  };
+
+  const notesStr = String(args.rawNotes || '');
+  const locTagMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
+  if (locTagMatch && locTagMatch[1]?.trim()) {
+    return normalizeTaggedLocation(locTagMatch[1].trim());
+  }
+
+  if (args.explicitLocation && String(args.explicitLocation).trim()) {
+    return normalizeTaggedLocation(String(args.explicitLocation).trim());
+  }
 
   const hasLiveCoords =
     args.lat != null &&
@@ -743,6 +924,26 @@ export function resolveOperationalMilestoneLocation(args: {
     !isNaN(Number(args.lat)) &&
     !isNaN(Number(args.lng)) &&
     (Number(args.lat) !== 0 || Number(args.lng) !== 0);
+
+  if (hasLiveCoords) {
+    const finalLat = Number(args.lat);
+    const finalLng = Number(args.lng);
+    const placeName = resolveUaePlaceNameFromCoords(finalLat, finalLng, {
+      terminalName,
+      termLat: tLat,
+      termLng: tLng,
+      warehouseName,
+      whLat: wLat,
+      whLng: wLng,
+    });
+    return `${placeName} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+  }
+
+  const isL2 =
+    String(args.jobPhase || '').toUpperCase() === 'L2' ||
+    String(args.jobCode || '').toUpperCase().includes('-L2');
+  const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+  const cLng = Number(((tLng + wLng) / 2).toFixed(4));
 
   let stageFacility = terminalName;
   let stageLat = tLat;
@@ -787,10 +988,7 @@ export function resolveOperationalMilestoneLocation(args: {
     }
   }
 
-  const finalLat = hasLiveCoords ? Number(args.lat) : stageLat;
-  const finalLng = hasLiveCoords ? Number(args.lng) : stageLng;
-
-  return `${stageFacility} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+  return `${stageFacility} (${stageLat.toFixed(4)}, ${stageLng.toFixed(4)})`;
 }
 
 export interface DrayageDispatchMessage {
@@ -1631,7 +1829,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           tenantId,
         ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_status_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 200`,
+      `SELECT * FROM logistics_drayage_status_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 600`,
       tenantId,
     ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
@@ -2242,9 +2440,101 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const nonMilestoneLogRows = statusLogRows.filter(
     (l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG',
   );
+
+  // Extract chronological GPS route path points (from 1-minute GPS_BREADCRUMB pings + tagged milestone logs)
+  // and track the most recent mobile GPS coordinate per job so any untagged milestone log can inherit it.
+  const routePathByJobKey = new Map<string, DrayageRoutePoint[]>();
+  const latestDriverCoordByJobKey = new Map<string, { lat: number; lng: number }>();
+
+  const chronologicalRows = [...nonMilestoneLogRows].reverse();
+  for (const l of chronologicalRows) {
+    const jId = String(l.job_id || '');
+    const jCode = String(l.job_code || '');
+    const st = String(l.status || '').trim().toUpperCase();
+    const notesStr = String(l.notes || '');
+    const tsIso = l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString();
+
+    let ptLat: number | null = null;
+    let ptLng: number | null = null;
+    let ptLoc: string | undefined;
+    let ptSpeed: number | undefined;
+
+    const latMatch = notesStr.match(/\[LAT:(-?\d+(?:\.\d+)?)\]/i);
+    const lngMatch = notesStr.match(/\[LNG:(-?\d+(?:\.\d+)?)\]/i);
+    const spdMatch = notesStr.match(/\[SPD:(-?\d+(?:\.\d+)?)\]/i);
+    const locMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
+
+    if (latMatch && lngMatch) {
+      ptLat = Number(latMatch[1]);
+      ptLng = Number(lngMatch[1]);
+    }
+    if (spdMatch) {
+      ptSpeed = Number(spdMatch[1]);
+    }
+    if (locMatch && locMatch[1]?.trim()) {
+      ptLoc = locMatch[1].trim();
+      if (ptLat == null || ptLng == null) {
+        const parsed = extractCoordsFromLocationText(ptLoc);
+        if (parsed) {
+          ptLat = parsed.lat;
+          ptLng = parsed.lng;
+        }
+      }
+    }
+
+    if (ptLat != null && ptLng != null && !isNaN(ptLat) && !isNaN(ptLng) && (ptLat !== 0 || ptLng !== 0)) {
+      const isStaticFallback =
+        (Math.abs(ptLat - 25.0112) < 0.0002 && Math.abs(ptLng - 55.0612) < 0.0002) ||
+        (Math.abs(ptLat - 24.9642) < 0.0002 && Math.abs(ptLng - 55.0915) < 0.0002) ||
+        (Math.abs(ptLat - 24.9850) < 0.0002 && Math.abs(ptLng - 55.0760) < 0.0002);
+      if (!isStaticFallback) {
+        if (jId) latestDriverCoordByJobKey.set(jId, { lat: ptLat, lng: ptLng });
+        if (jCode) latestDriverCoordByJobKey.set(jCode, { lat: ptLat, lng: ptLng });
+      }
+
+      const routePt: DrayageRoutePoint = {
+        lat: ptLat,
+        lng: ptLng,
+        timestamp: tsIso,
+        location: ptLoc,
+        status: st === 'GPS_BREADCRUMB' ? 'IN_TRANSIT_PING' : st,
+        ...(ptSpeed !== undefined ? { speedKmh: ptSpeed } : {}),
+      };
+      for (const key of [jId, jCode]) {
+        if (!key) continue;
+        const arr = routePathByJobKey.get(key) || [];
+        const prev = arr[arr.length - 1];
+        if (!prev || Math.abs(prev.lat - ptLat) > 0.00002 || Math.abs(prev.lng - ptLng) > 0.00002) {
+          arr.push(routePt);
+          routePathByJobKey.set(key, arr);
+        }
+      }
+    }
+  }
+
+  for (const j of jobs) {
+    const path = routePathByJobKey.get(j.id) || routePathByJobKey.get(j.jobCode) || [];
+    if (
+      j.currentLat != null &&
+      j.currentLng != null &&
+      (path.length === 0 ||
+        Math.abs(path[path.length - 1].lat - j.currentLat) > 0.00005 ||
+        Math.abs(path[path.length - 1].lng - j.currentLng) > 0.00005)
+    ) {
+      path.push({
+        lat: j.currentLat,
+        lng: j.currentLng,
+        timestamp: j.updatedAt,
+        status: j.status,
+      });
+    }
+    j.routePath = path;
+  }
+
   const directJobStageKeys = new Set<string>();
   for (const l of nonMilestoneLogRows) {
     const st = String(l.status ?? '').trim();
+    if (st.toUpperCase() === 'GPS_BREADCRUMB') continue;
     if (!/^MILESTONE_ALERT_/i.test(st)) {
       directJobStageKeys.add(`${String(l.job_id)}::${st.toUpperCase()}`);
       directJobStageKeys.add(`${String(l.job_code)}::${st.toUpperCase()}`);
@@ -2255,6 +2545,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const statusLogs: DrayageStatusLog[] = nonMilestoneLogRows
     .filter((l: Record<string, unknown>) => {
       const rawStatus = String(l.status ?? '').trim();
+      if (rawStatus.toUpperCase() === 'GPS_BREADCRUMB') return false;
       if (!/^MILESTONE_ALERT_/i.test(rawStatus)) return true;
       const cleanSt = rawStatus.replace(/^MILESTONE_ALERT_/i, '').toUpperCase();
       const jobKeyId = `${String(l.job_id)}::${cleanSt}`;
@@ -2302,9 +2593,18 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           )
         : undefined;
 
+      const knownDriverCoord =
+        latestDriverCoordByJobKey.get(jobId) ||
+        latestDriverCoordByJobKey.get(jobCode) ||
+        (matchedJob?.currentLat != null && matchedJob?.currentLng != null
+          ? { lat: matchedJob.currentLat, lng: matchedJob.currentLng }
+          : undefined);
+
       const resolvedLocation = resolveOperationalMilestoneLocation({
         status: normalizedStatus,
         rawNotes,
+        lat: knownDriverCoord?.lat,
+        lng: knownDriverCoord?.lng,
         jobPhase: matchedJob?.jobPhase,
         jobCode: matchedJob?.jobCode || jobCode,
         terminalName: matchedJob?.terminalName,
@@ -2317,6 +2617,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
       const finalCleanedNotes = cleanedNotes
         .replace(/\s*·?\s*\[LOC:[^\]]+\]/gi, '')
+        .replace(/\s*·?\s*\[(?:LAT|LNG|SPD):[^\]]+\]/gi, '')
         .replace(/^\s*[·\-|]+\s*/, '')
         .replace(/\s*[·\-|]+\s*$/, '')
         .trim();
@@ -3725,7 +4026,8 @@ export async function updateDrayageJobExecutionStatus(
             'CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED',
             'READY_FOR_PICKUP', 'PHOTO_UPLOADED', 'INSPECTION_SKIPPED',
             'INSPECTION_REPORTED', 'TRAILER_ATTACHED', 'ACCEPTED',
-            'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED'
+            'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED',
+            'GPS_BREADCRUMB'
           )
         ORDER BY created_at DESC
         LIMIT 1`,
@@ -3877,18 +4179,34 @@ export async function updateDrayageJobExecutionStatus(
   }
 
   // Interpolate GPS coordinates depending on stage (or use live driver GPS coordinates if supplied)
-  let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
-  let lng = job.current_lng != null ? Number(job.current_lng) : 55.0612;
+  const existingLat = job.current_lat != null ? Number(job.current_lat) : null;
+  const existingLng = job.current_lng != null ? Number(job.current_lng) : null;
+  const hasExistingRealCoords =
+    existingLat != null &&
+    existingLng != null &&
+    !isNaN(existingLat) &&
+    !isNaN(existingLng) &&
+    (existingLat !== 0 || existingLng !== 0) &&
+    !(Math.abs(existingLat - 25.0112) < 0.0002 && Math.abs(existingLng - 55.0612) < 0.0002) &&
+    !(Math.abs(existingLat - 24.9642) < 0.0002 && Math.abs(existingLng - 55.0915) < 0.0002) &&
+    !(Math.abs(existingLat - 24.9850) < 0.0002 && Math.abs(existingLng - 55.0760) < 0.0002);
 
-  if (
+  const hasLiveCoords =
     args.latitude != null &&
     args.longitude != null &&
     !isNaN(Number(args.latitude)) &&
     !isNaN(Number(args.longitude)) &&
-    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0)
-  ) {
+    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0);
+
+  let lat = existingLat ?? 25.0112;
+  let lng = existingLng ?? 55.0612;
+
+  if (hasLiveCoords) {
     lat = Number(args.latitude);
     lng = Number(args.longitude);
+  } else if (hasExistingRealCoords) {
+    lat = existingLat!;
+    lng = existingLng!;
   } else if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL'].includes(effectiveStatus)) {
     lat = 24.9850;
     lng = 55.0760;
@@ -3939,6 +4257,22 @@ export async function updateDrayageJobExecutionStatus(
     args.notes ? String(args.notes) : null,
     effectiveEtcAlertStatus,
   );
+
+  if (hasLiveCoords && job.assigned_vehicle_id) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE vehicles
+            SET current_lat = $3,
+                current_lng = $4,
+                updated_at = NOW()
+          WHERE id::text = $1 AND tenant_id::text = $2`,
+        String(job.assigned_vehicle_id),
+        args.tenantId,
+        lat,
+        lng,
+      )
+      .catch(() => {});
+  }
 
   // Sync container status & related parent jobs:
   // When L2 is completed (or CONTAINER_DROPPED / EMPTY_DEPOSITED), mark any related jobs for the same container as COMPLETED
@@ -4020,8 +4354,8 @@ export async function updateDrayageJobExecutionStatus(
   const capturedLocation = resolveOperationalMilestoneLocation({
     status: effectiveStatus,
     explicitLocation: args.location ?? null,
-    lat: args.latitude != null ? Number(args.latitude) : null,
-    lng: args.longitude != null ? Number(args.longitude) : null,
+    lat: hasLiveCoords ? Number(args.latitude) : hasExistingRealCoords ? existingLat : null,
+    lng: hasLiveCoords ? Number(args.longitude) : hasExistingRealCoords ? existingLng : null,
     jobPhase: job.job_phase ? String(job.job_phase) : null,
     jobCode: job.job_code ? String(job.job_code) : null,
     terminalName: job.terminal_name ? String(job.terminal_name) : null,
@@ -4118,6 +4452,133 @@ export async function updateDrayageJobExecutionStatus(
     status: effectiveStatus,
     etcTime: effectiveEtcTime,
     ...(l2ActivationResult ?? {}),
+  };
+}
+
+/**
+ * Records a 1-minute in-transit GPS breadcrumb ping from the Driver Mobile App
+ * while a job is active (ACCEPTED -> COMPLETED), updating live coordinates on both
+ * the drayage job and assigned tractor vehicle, and storing the breadcrumb point
+ * for the Corridor Telematics Radar Map route path.
+ */
+export async function recordDrayageDriverLocationPing(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    latitude: number;
+    longitude: number;
+    speedKmh?: number | null;
+    heading?: number | null;
+    location?: string | null;
+    actor?: string;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const lat = Number(args.latitude);
+  const lng = Number(args.longitude);
+  if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+    return { ok: false, skipped: true };
+  }
+
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
+       FROM logistics_drayage_jobs
+      WHERE id = $1 AND tenant_id = $2
+      LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) {
+    return { ok: false, skipped: true };
+  }
+
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET current_lat = $3,
+            current_lng = $4,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    args.jobId,
+    args.tenantId,
+    lat,
+    lng,
+  );
+
+  if (job.assigned_vehicle_id) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE vehicles
+            SET current_lat = $3,
+                current_lng = $4,
+                updated_at = NOW()
+          WHERE id::text = $1 AND tenant_id::text = $2`,
+        String(job.assigned_vehicle_id),
+        args.tenantId,
+        lat,
+        lng,
+      )
+      .catch(() => {});
+  }
+
+  const resolvedLoc = resolveOperationalMilestoneLocation({
+    status: String(job.status || 'IN_TRANSIT'),
+    explicitLocation: args.location ?? null,
+    lat,
+    lng,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    terminalName: job.terminal_name ? String(job.terminal_name) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+  });
+
+  const speedVal =
+    args.speedKmh != null && !isNaN(Number(args.speedKmh)) && Number(args.speedKmh) >= 0
+      ? Math.round(Number(args.speedKmh))
+      : null;
+  const noteParts = [
+    `[LOC:${resolvedLoc}]`,
+    speedVal !== null ? `[SPD:${speedVal}]` : '',
+  ].filter(Boolean);
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'GPS_BREADCRUMB', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    noteParts.join(' · '),
+    args.actor || 'Driver Mobile GPS',
+  );
+
+  // Keep only the latest 180 GPS_BREADCRUMB pings per job (3 hours at 1-minute interval)
+  await db
+    .$executeRawUnsafe(
+      `DELETE FROM logistics_drayage_status_logs
+        WHERE tenant_id = $1
+          AND job_id = $2
+          AND status = 'GPS_BREADCRUMB'
+          AND id NOT IN (
+            SELECT id FROM logistics_drayage_status_logs
+             WHERE tenant_id = $1 AND job_id = $2 AND status = 'GPS_BREADCRUMB'
+             ORDER BY created_at DESC
+             LIMIT 180
+          )`,
+      args.tenantId,
+      args.jobId,
+    )
+    .catch(() => {});
+
+  return {
+    ok: true,
+    jobId: args.jobId,
+    jobCode: String(job.job_code),
+    latitude: lat,
+    longitude: lng,
+    location: resolvedLoc,
+    recordedAt: new Date().toISOString(),
   };
 }
 
@@ -6444,29 +6905,58 @@ export async function submitJobPodEvidence(
   const receiver = (args.receiverName || 'Warehouse Bay Supervisor').trim();
   const signedAtIso = new Date().toISOString();
 
+  const hasLivePodCoords =
+    args.latitude != null &&
+    args.longitude != null &&
+    !isNaN(Number(args.latitude)) &&
+    !isNaN(Number(args.longitude)) &&
+    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0);
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET pod_signature_name = $3,
             pod_signed_at = NOW(),
             pod_photo_url = COALESCE($4, pod_photo_url),
+            current_lat = COALESCE($5::double precision, current_lat),
+            current_lng = COALESCE($6::double precision, current_lng),
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
     args.tenantId,
     receiver,
     args.photoUrl ? String(args.photoUrl) : null,
+    hasLivePodCoords ? Number(args.latitude) : null,
+    hasLivePodCoords ? Number(args.longitude) : null,
   );
+
+  const epodLat = hasLivePodCoords
+    ? Number(args.latitude)
+    : job.current_lat != null
+    ? Number(job.current_lat)
+    : null;
+  const epodLng = hasLivePodCoords
+    ? Number(args.longitude)
+    : job.current_lng != null
+    ? Number(job.current_lng)
+    : null;
 
   const epodLocation = resolveOperationalMilestoneLocation({
     status: 'EPOD_SIGNED',
     explicitLocation: args.location ?? null,
-    lat: args.latitude != null ? Number(args.latitude) : null,
-    lng: args.longitude != null ? Number(args.longitude) : null,
+    lat: epodLat,
+    lng: epodLng,
     jobPhase: job.job_phase ? String(job.job_phase) : null,
     jobCode: job.job_code ? String(job.job_code) : null,
     terminalName: job.terminal_name ? String(job.terminal_name) : null,
     warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
   });
+
+  const epodNotes = [
+    epodLocation ? `[LOC:${epodLocation}]` : '',
+    args.notes ? String(args.notes).trim() : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -6475,7 +6965,7 @@ export async function submitJobPodEvidence(
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    epodLocation ? `[LOC:${epodLocation}]` : '',
+    epodNotes,
     args.actor || `${receiver} (Consignee Portal)`,
   );
 
@@ -6647,6 +7137,9 @@ export async function clearPortInspection(
     clearedBy?: string;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -6658,6 +7151,7 @@ export async function clearPortInspection(
 
   let containerNumber = '';
   let jobCode = '';
+  let matchedJobRow: Record<string, unknown> | null = null;
 
   // Determine container and job references
   if (args.jobId) {
@@ -6667,6 +7161,7 @@ export async function clearPortInspection(
       args.tenantId,
     );
     if (jobRows[0]) {
+      matchedJobRow = jobRows[0];
       jobCode = String(jobRows[0].job_code);
       containerNumber = String(jobRows[0].container_number);
     }
@@ -6727,6 +7222,29 @@ export async function clearPortInspection(
   }
 
   // Audit log
+  const inspLat =
+    args.latitude != null && !isNaN(Number(args.latitude))
+      ? Number(args.latitude)
+      : matchedJobRow?.current_lat != null
+      ? Number(matchedJobRow.current_lat)
+      : null;
+  const inspLng =
+    args.longitude != null && !isNaN(Number(args.longitude))
+      ? Number(args.longitude)
+      : matchedJobRow?.current_lng != null
+      ? Number(matchedJobRow.current_lng)
+      : null;
+  const inspLocation = resolveOperationalMilestoneLocation({
+    status: 'INSPECTION_CLEARED',
+    explicitLocation: args.location ?? null,
+    lat: inspLat,
+    lng: inspLng,
+    jobPhase: matchedJobRow?.job_phase ? String(matchedJobRow.job_phase) : null,
+    jobCode: jobCode || null,
+    terminalName: matchedJobRow?.terminal_name ? String(matchedJobRow.terminal_name) : null,
+    warehouseName: matchedJobRow?.warehouse_name ? String(matchedJobRow.warehouse_name) : null,
+  });
+
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
      VALUES ($1, $2, $3, $4, 'INSPECTION_CLEARED', $5, $6)`,
@@ -6734,7 +7252,7 @@ export async function clearPortInspection(
     args.tenantId,
     args.jobId || `cnt-${containerNumber}`,
     jobCode || containerNumber || 'CLEARANCE',
-    `Port Authority inspection (${agency}) cleared by ${clearedBy}.${newSeal ? ` Verified new customs seal #${newSeal}.` : ''}${args.notes ? ` Remarks: ${args.notes}` : ''}`,
+    `${inspLocation ? `[LOC:${inspLocation}] · ` : ''}Port Authority inspection (${agency}) cleared by ${clearedBy}.${newSeal ? ` Verified new customs seal #${newSeal}.` : ''}${args.notes ? ` Remarks: ${args.notes}` : ''}`,
     args.actor || `${clearedBy} (Customs Clearance Desk)`,
   );
 
@@ -8067,6 +8585,7 @@ export async function getPublicCustomerTrackingByToken(
       etcTime: matchedJob.etcTime,
       currentLat: matchedJob.currentLat,
       currentLng: matchedJob.currentLng,
+      routePath: matchedJob.routePath || [],
       sealNumber: resolvedSealNumber,
       weightKg: resolvedWeightKg,
       inspectionStatus: matchedJob.inspectionStatus || 'CLEARED',

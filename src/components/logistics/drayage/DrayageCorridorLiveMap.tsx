@@ -65,6 +65,14 @@ export interface DrayageCorridorJob {
   etcTime?: string | null;
   currentLat?: number | null;
   currentLng?: number | null;
+  routePath?: Array<{
+    lat: number;
+    lng: number;
+    timestamp?: string;
+    location?: string;
+    status?: string;
+    speedKmh?: number;
+  }>;
   rateAmountAed: number;
   driverAllowanceAed?: number;
   cargoWeightKg?: number;
@@ -788,6 +796,28 @@ export default function DrayageCorridorLiveMap({
         flightpathPolylinesRef.current.push(flightpath);
       }
 
+      // Render 1-Minute In-Transit GPS Breadcrumb Route Path Polyline (ACCEPTED -> COMPLETED)
+      if (Array.isArray(job.routePath) && job.routePath.length >= 1) {
+        const pathPts = job.routePath
+          .filter((pt) => pt && !isNaN(Number(pt.lat)) && !isNaN(Number(pt.lng)))
+          .map((pt) => ({ lat: Number(pt.lat), lng: Number(pt.lng) }));
+        const lastPt = pathPts[pathPts.length - 1];
+        if (!lastPt || Math.abs(lastPt.lat - lat) > 0.0001 || Math.abs(lastPt.lng - lng) > 0.0001) {
+          pathPts.push({ lat, lng });
+        }
+        if (pathPts.length >= 2) {
+          const breadcrumbLine = new ctors.Polyline({
+            path: pathPts,
+            map,
+            strokeColor: isSelected ? '#2563EB' : job.jobPhase === 'L2' ? '#D97706' : '#0284C7',
+            strokeOpacity: isSelected ? 0.95 : 0.8,
+            strokeWeight: isSelected ? 4.5 : 3.2,
+            zIndex: isSelected ? 25 : 15,
+          });
+          flightpathPolylinesRef.current.push(breadcrumbLine);
+        }
+      }
+
       const marker = new ctors.Marker({
         position: { lat, lng },
         map,
@@ -824,6 +854,7 @@ export default function DrayageCorridorLiveMap({
             </div>
             <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px; margin-bottom: 8px; font-size: 10px;">
               Status: <strong style="color: #0284C7;">${job.status}</strong>
+              ${job.routePath && job.routePath.length > 0 ? `<div style="color: #059669; margin-top: 2px;">📍 Live GPS Path: ${job.routePath.length} pt${job.routePath.length === 1 ? '' : 's'} (1-min interval)</div>` : ''}
               ${job.etcTime ? `<div style="color: #D97706; margin-top: 2px;">⏳ ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>` : ''}
             </div>
             <div style="display: flex; gap: 4px;">

@@ -30,6 +30,10 @@ import {
   X,
 } from 'lucide-react';
 import { getApiEndpoint } from '@/lib/api-endpoint';
+import {
+  computeHaversineKm,
+  resolveUaePlaceNameFromCoords,
+} from '@/lib/logistics/drayage-domain';
 
 interface GeofenceTarget {
   name: string;
@@ -596,7 +600,14 @@ export default function DriverTodayPage() {
   const seenJobKeysRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const initialJobLoadDoneRef = useRef(false);
-  const driverCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const driverCoordsRef = useRef<{
+    lat: number;
+    lng: number;
+    speedKmh?: number | null;
+    heading?: number | null;
+    updatedAt: number;
+  } | null>(null);
+  const reverseGeocodeCacheRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
@@ -607,6 +618,12 @@ export default function DriverTodayPage() {
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
           };
         },
         () => {},
@@ -617,6 +634,12 @@ export default function DriverTodayPage() {
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
           };
         },
         () => {},
@@ -631,6 +654,171 @@ export default function DriverTodayPage() {
       }
     };
   }, []);
+
+  /**
+   * Captures the freshest live mobile GPS coordinates and resolves the true
+   * geographic place/street/district name (via reverse geocoding + UAE reference lookup).
+   * Only uses the job's terminal/warehouse name if the driver's coordinates are physically
+   * inside that terminal/warehouse geofence radius.
+   */
+  const captureLiveDriverLocation = useCallback(
+    async (
+      job: DrayageAssignment,
+      targetStatusUpper?: string,
+    ): Promise<{
+      lat: number;
+      lng: number;
+      speedKmh: number | null;
+      heading: number | null;
+      location: string;
+    }> => {
+      // 1. Try to refresh GPS if missing or older than 15 seconds (2.2s timeout so UI never blocks)
+      const now = Date.now();
+      if (
+        typeof window !== 'undefined' &&
+        'geolocation' in navigator &&
+        (!driverCoordsRef.current || now - driverCoordsRef.current.updatedAt > 15000)
+      ) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => resolve(), 2200);
+          try {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                clearTimeout(timer);
+                driverCoordsRef.current = {
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  speedKmh:
+                    pos.coords.speed != null && pos.coords.speed >= 0
+                      ? Math.round(pos.coords.speed * 3.6)
+                      : null,
+                  heading: pos.coords.heading ?? null,
+                  updatedAt: Date.now(),
+                };
+                resolve();
+              },
+              () => {
+                clearTimeout(timer);
+                resolve();
+              },
+              { enableHighAccuracy: true, timeout: 2000, maximumAge: 10000 },
+            );
+          } catch {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      }
+
+      const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
+      const tLat = job.terminalGeofence?.lat ?? 25.0112;
+      const tLng = job.terminalGeofence?.lng ?? 55.0612;
+      const wLat = job.warehouseGeofence?.lat ?? 24.9642;
+      const wLng = job.warehouseGeofence?.lng ?? 55.0915;
+      const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+      const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+      const st = (targetStatusUpper || job.status || 'ACCEPTED').toUpperCase();
+      let fallbackLat = tLat;
+      let fallbackLng = tLng;
+      if (isL2Job) {
+        if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(st)) {
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(st)) {
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        }
+      } else {
+        if (
+          [
+            'ACCEPTED',
+            'ARRIVED_AT_PORT',
+            'AT_PORT',
+            'CONTAINER_PICKED',
+            'LOADED',
+            'UNDER_INSPECTION',
+          ].includes(st)
+        ) {
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(st)) {
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        }
+      }
+
+      const live = driverCoordsRef.current;
+      const finalLat = live?.lat ?? fallbackLat;
+      const finalLng = live?.lng ?? fallbackLng;
+      const speedKmh = live?.speedKmh ?? null;
+      const heading = live?.heading ?? null;
+
+      // 2. Check if physically inside Terminal or Warehouse geofence radius
+      const termRadiusKm = Math.max(1.8, (job.terminalGeofence?.radiusMeters ?? 1200) / 1000);
+      const whRadiusKm = Math.max(1.5, (job.warehouseGeofence?.radiusMeters ?? 900) / 1000);
+      const distToTermKm = computeHaversineKm(finalLat, finalLng, tLat, tLng);
+      const distToWhKm = computeHaversineKm(finalLat, finalLng, wLat, wLng);
+
+      let placeName = '';
+      if (distToTermKm <= termRadiusKm && job.terminalName) {
+        placeName = job.terminalName;
+      } else if (distToWhKm <= whRadiusKm && job.warehouseName) {
+        placeName = job.warehouseName;
+      } else {
+        // Resolve real geographic locality/district from mobile coordinates
+        const cacheKey = `${finalLat.toFixed(3)},${finalLng.toFixed(3)}`;
+        const cached = reverseGeocodeCacheRef.current.get(cacheKey);
+        if (cached) {
+          placeName = cached;
+        } else {
+          try {
+            const ctrl = new AbortController();
+            const timeoutId = setTimeout(() => ctrl.abort(), 1400);
+            const geoRes = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${finalLat}&longitude=${finalLng}&localityLanguage=en`,
+              { signal: ctrl.signal },
+            );
+            clearTimeout(timeoutId);
+            if (geoRes.ok) {
+              const geoJson = (await geoRes.json()) as {
+                locality?: string;
+                city?: string;
+                principalSubdivision?: string;
+              };
+              const locality = (geoJson.locality || '').trim();
+              const city = (geoJson.city || geoJson.principalSubdivision || '').trim();
+              if (locality && city && locality.toLowerCase() !== city.toLowerCase()) {
+                placeName = `${locality}, ${city}`;
+              } else if (locality || city) {
+                placeName = locality || city;
+              }
+            }
+          } catch {}
+          if (!placeName) {
+            placeName = resolveUaePlaceNameFromCoords(finalLat, finalLng);
+          }
+          reverseGeocodeCacheRef.current.set(cacheKey, placeName);
+        }
+      }
+
+      const location = `${placeName} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+      return {
+        lat: finalLat,
+        lng: finalLng,
+        speedKmh,
+        heading,
+        location,
+      };
+    },
+    [],
+  );
 
   const triggerMobileNotification = useCallback((title: string, body: string, tagKey?: string) => {
     try {
@@ -1125,6 +1313,81 @@ export default function DriverTodayPage() {
     [jobs, selectedJobId],
   );
 
+  // Active jobs currently in execution (from Job Acceptance through Completion)
+  const inExecutionJobs = useMemo(
+    () =>
+      activeJobs.filter((j) => {
+        const st = (j.status || '').toUpperCase().trim();
+        if (!st || HISTORY_STATUSES.has(st)) return false;
+        if (
+          [
+            'PENDING',
+            'UNASSIGNED',
+            'ASSIGNED',
+            'RE-ASSIGNED',
+            'FCL_REASSIGN',
+            'MT_REASSIGN',
+            'FCL_REASSIGN TO RAMP',
+            'MT_REASSIGN TO RAMP',
+            'FCL_REASSIGN TO YARD',
+            'MT_REASSIGN TO YARD',
+            'FCL_REASSIGN_TO_RAMP',
+            'MT_REASSIGN_TO_RAMP',
+            'FCL_REASSIGN_TO_YARD',
+            'MT_REASSIGN_TO_YARD',
+          ].includes(st)
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [activeJobs],
+  );
+
+  // 1-Minute In-Transit GPS Breadcrumb Path Tracking (ACCEPTED -> COMPLETED)
+  useEffect(() => {
+    if (inExecutionJobs.length === 0) return;
+    let cancelled = false;
+
+    const sendLocationPingForActiveJobs = async () => {
+      if (cancelled) return;
+      for (const activeJob of inExecutionJobs) {
+        if (cancelled) break;
+        try {
+          const captured = await captureLiveDriverLocation(activeJob, activeJob.status);
+          if (cancelled) break;
+          await fetch(getApiEndpoint(`/api/driver/jobs/${activeJob.id}/status`), {
+            method: 'POST',
+            credentials: 'include',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              action: 'LOCATION_PING',
+              latitude: captured.lat,
+              longitude: captured.lng,
+              speedKmh: captured.speedKmh,
+              heading: captured.heading,
+              location: captured.location,
+              driverName,
+            }),
+          });
+        } catch {}
+      }
+    };
+
+    const initialTimer = setTimeout(() => {
+      void sendLocationPingForActiveJobs();
+    }, 2000);
+    const intervalId = setInterval(() => {
+      void sendLocationPingForActiveJobs();
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
+  }, [inExecutionJobs, captureLiveDriverLocation, getAuthHeaders, driverName]);
+
   const handleStatusUpdate = async (
     job: DrayageAssignment,
     newStatus: string,
@@ -1155,61 +1418,11 @@ export default function DriverTodayPage() {
         ? `${activeSig.receiverName}${activeSig.receiverRole ? ` (${activeSig.receiverRole})` : ''}`
         : undefined;
 
-      const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
-      const tLat = job.terminalGeofence?.lat ?? 25.0112;
-      const tLng = job.terminalGeofence?.lng ?? 55.0612;
-      const wLat = job.warehouseGeofence?.lat ?? 24.9642;
-      const wLng = job.warehouseGeofence?.lng ?? 55.0915;
-      const cLat = Number(((tLat + wLat) / 2).toFixed(4));
-      const cLng = Number(((tLng + wLng) / 2).toFixed(4));
-
-      let stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-      let fallbackLat = tLat;
-      let fallbackLng = tLng;
-
-      if (isL2Job) {
-        if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(upperTarget)) {
-          stageFacility = job.warehouseName || 'Consignee Warehouse';
-          fallbackLat = wLat;
-          fallbackLng = wLng;
-        } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(upperTarget)) {
-          stageFacility = `E11 Corridor → ${job.terminalName || 'Port Terminal'}`;
-          fallbackLat = cLat;
-          fallbackLng = cLng;
-        } else {
-          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-          fallbackLat = tLat;
-          fallbackLng = tLng;
-        }
-      } else {
-        if (
-          [
-            'ACCEPTED',
-            'ARRIVED_AT_PORT',
-            'AT_PORT',
-            'CONTAINER_PICKED',
-            'LOADED',
-            'UNDER_INSPECTION',
-          ].includes(upperTarget)
-        ) {
-          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-          fallbackLat = tLat;
-          fallbackLng = tLng;
-        } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(upperTarget)) {
-          stageFacility = `E11 Corridor → ${job.warehouseName || 'Consignee Warehouse'}`;
-          fallbackLat = cLat;
-          fallbackLng = cLng;
-        } else {
-          stageFacility = job.warehouseName || 'Consignee Warehouse';
-          fallbackLat = wLat;
-          fallbackLng = wLng;
-        }
-      }
-
-      const liveCoords = driverCoordsRef.current;
-      const finalLat = liveCoords?.lat ?? fallbackLat;
-      const finalLng = liveCoords?.lng ?? fallbackLng;
-      const capturedLocation = `${stageFacility} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+      const {
+        lat: finalLat,
+        lng: finalLng,
+        location: capturedLocation,
+      } = await captureLiveDriverLocation(job, upperTarget);
 
       // Optimistic local state update so UI responds immediately
       setJobs((prev) =>
@@ -1416,6 +1629,7 @@ export default function DriverTodayPage() {
       if (pending.requireEtcModal) {
         // Also persist the ePOD signature immediately so it is saved while choosing ETC hours
         try {
+          const epodLoc = await captureLiveDriverLocation(selectedJob, 'EPOD_SIGNED');
           await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
             method: 'POST',
             credentials: 'include',
@@ -1426,6 +1640,9 @@ export default function DriverTodayPage() {
               signatureDataUri,
               notes: `Sign-on-Glass ePOD (${epodCode}) captured for ${pending.label}`,
               driverName,
+              latitude: epodLoc.lat,
+              longitude: epodLoc.lng,
+              location: epodLoc.location,
             }),
           });
         } catch {}
@@ -1438,6 +1655,7 @@ export default function DriverTodayPage() {
 
     // Standalone ePOD signature capture
     try {
+      const epodLoc = await captureLiveDriverLocation(selectedJob, 'EPOD_SIGNED');
       await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
         method: 'POST',
         credentials: 'include',
@@ -1448,6 +1666,9 @@ export default function DriverTodayPage() {
           signatureDataUri,
           notes: `Sign-on-Glass ePOD (${epodCode}) signed by ${receiverDisplay}`,
           driverName,
+          latitude: epodLoc.lat,
+          longitude: epodLoc.lng,
+          location: epodLoc.location,
         }),
       });
       showToast(`✅ Sign-on-Glass ePOD (${epodCode}) saved for ${selectedJob.jobCode}`);

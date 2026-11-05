@@ -6,6 +6,7 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   updateDrayageJobExecutionStatus,
+  recordDrayageDriverLocationPing,
   submitJobPodEvidence,
   sendDispatchChatMessage,
   acknowledgeDrayageAlert,
@@ -142,6 +143,37 @@ export async function POST(
       });
     }
 
+    // 1c. 1-Minute In-Transit GPS Breadcrumb Ping (ACCEPTED -> COMPLETED)
+    if (action === 'LOCATION_PING') {
+      const lat = body.latitude != null ? Number(body.latitude) : NaN;
+      const lng = body.longitude != null ? Number(body.longitude) : NaN;
+      if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+        return NextResponse.json({ error: 'Valid latitude and longitude are required' }, { status: 400 });
+      }
+      const pingRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
+        return recordDrayageDriverLocationPing(tx, {
+          tenantId,
+          jobId,
+          latitude: lat,
+          longitude: lng,
+          speedKmh: body.speedKmh != null ? Number(body.speedKmh) : null,
+          heading: body.heading != null ? Number(body.heading) : null,
+          location: body.location ? String(body.location) : null,
+          actor: driverActor,
+        });
+      });
+      emitDrayageEvent(tenantId, {
+        type: 'telemetry_ping',
+        action: 'driver_location_ping',
+        jobId,
+      });
+      return NextResponse.json({
+        success: true,
+        ...pingRes,
+      });
+    }
+
     // 2. ISO 6346 Container & Bolt Seal Verification
     if (action === 'SCAN_VERIFY') {
       const scannedContainer = String(body.scannedContainerNumber ?? '').trim().toUpperCase();
@@ -158,6 +190,9 @@ export async function POST(
           clearedBy: driverActor,
           notes: `Gemini Vision OCR [${scanStage}]: Container (${scannedContainer})${scannedSeal ? `, Customs Seal (${scannedSeal})` : ''}${scannedEir ? `, EIR Gate Slip (${scannedEir})` : ''} verified via Driver Mobile App`,
           actor: driverActor,
+          latitude: body.latitude != null ? Number(body.latitude) : null,
+          longitude: body.longitude != null ? Number(body.longitude) : null,
+          location: body.location ? String(body.location) : null,
         });
       });
       emitDrayageEvent(tenantId, {

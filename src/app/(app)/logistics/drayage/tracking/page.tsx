@@ -99,6 +99,14 @@ interface DrayageJob {
   customsInspection: boolean;
   currentLat?: number | null;
   currentLng?: number | null;
+  routePath?: Array<{
+    lat: number;
+    lng: number;
+    timestamp?: string;
+    location?: string;
+    status?: string;
+    speedKmh?: number;
+  }>;
   cargoWeightKg?: number;
   shippingLine?: string;
   bogieJobId?: string | null;
@@ -642,20 +650,21 @@ export default function DrayageJobTrackingPage() {
         const matchedWh = warehouses.find(
           (w) => w.name.trim().toLowerCase() === activeJob.warehouseName.trim().toLowerCase(),
         );
-        const resolvedLocation =
-          l.location ||
-          resolveOperationalMilestoneLocation({
-            status: cleanStatus,
-            rawNotes: l.notes,
-            jobPhase: activeJob.jobPhase,
-            jobCode: activeJob.jobCode,
-            terminalName: activeJob.terminalName,
-            warehouseName: activeJob.warehouseName,
-            termLat: matchedTerm?.lat,
-            termLng: matchedTerm?.lng,
-            whLat: matchedWh?.lat,
-            whLng: matchedWh?.lng,
-          });
+        const resolvedLocation = resolveOperationalMilestoneLocation({
+          status: cleanStatus,
+          explicitLocation: l.location ?? null,
+          rawNotes: l.notes,
+          lat: activeJob.currentLat ?? null,
+          lng: activeJob.currentLng ?? null,
+          jobPhase: activeJob.jobPhase,
+          jobCode: activeJob.jobCode,
+          terminalName: activeJob.terminalName,
+          warehouseName: activeJob.warehouseName,
+          termLat: matchedTerm?.lat,
+          termLng: matchedTerm?.lng,
+          whLat: matchedWh?.lat,
+          whLng: matchedWh?.lng,
+        });
 
         const rawActor = (l.actor || '').trim();
         const baseActor = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
