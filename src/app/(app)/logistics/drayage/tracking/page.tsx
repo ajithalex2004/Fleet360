@@ -234,12 +234,14 @@ function getOperationalStageIndex(status: string, trailerDetached?: boolean, isL
     }
     return 0;
   }
-  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
-    return 6;
-  }
   if (
     isDrayageReassignStatus(s) ||
     [
+      'EMPTY_DEPOSITED',
+      'CONTAINER_DROPPED',
+      'CONTAINER_DELIVERED',
+      'COMPLETED',
+      'STREET_TURNED',
       'CONTAINER_DETACHED',
       'TRAILER_DETACHED',
       'REASSIGN_TRAILER_DETACHED',
@@ -250,18 +252,35 @@ function getOperationalStageIndex(status: string, trailerDetached?: boolean, isL
       'WAITING_MT_RETURN',
     ].includes(s)
   ) {
-    return 5;
+    return 6;
   }
   if (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
-    return trailerDetached ? 5 : 4;
+    return trailerDetached ? 6 : 5;
   }
   if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'EMPTY_AT_PORT'].includes(s)) {
+    return 4;
+  }
+  if (s === 'UNDER_INSPECTION') {
     return 3;
   }
-  if (['LOADED', 'CONTAINER_PICKED', 'UNDER_INSPECTION', 'TRAILER_ATTACHED'].includes(s)) {
+  if (['LOADED', 'CONTAINER_PICKED', 'AT_PORT', 'ARRIVED_AT_PORT', 'TRAILER_ATTACHED'].includes(s)) {
     return 2;
   }
-  if (['AT_PORT', 'ARRIVED_AT_PORT'].includes(s)) {
+  if (s === 'ACCEPTED') {
+    return 1;
+  }
+  return 0;
+}
+
+function getReassignStageIndex(status: string, trailerDetached?: boolean): number {
+  const s = (status || '').toUpperCase();
+  if (['REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP'].includes(s)) {
+    return 3;
+  }
+  if (['REASSIGN_PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
+    return trailerDetached ? 3 : 2;
+  }
+  if (s === 'TRAILER_ATTACHED') {
     return 1;
   }
   return 0;
@@ -304,7 +323,9 @@ export default function DrayageJobTrackingPage() {
   // Status updating
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [etcModalOpen, setEtcModalOpen] = useState(false);
-  const [targetStatusForEtc, setTargetStatusForEtc] = useState<'PLACED_AT_RAMP' | 'CONTAINER_DETACHED'>('PLACED_AT_RAMP');
+  const [targetStatusForEtc, setTargetStatusForEtc] = useState<
+    'PLACED_AT_RAMP' | 'REASSIGN_PLACED_AT_RAMP' | 'TRAILER_DETACHED' | 'CONTAINER_DETACHED'
+  >('PLACED_AT_RAMP');
   const [selectedEtcHours, setSelectedEtcHours] = useState(3);
   const [customEtcInput, setCustomEtcInput] = useState('');
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(DEFAULT_DRAYAGE_AUTOMATION_CONFIG);
@@ -1564,7 +1585,7 @@ export default function DrayageJobTrackingPage() {
                       const isInitialYardDrop =
                         activeEval.originLocation === 'YARD' &&
                         (activeEval.canReassign || ['PLACED_AT_YARD'].includes((activeJob.status || '').toUpperCase()));
-                      const canTriggerL2 = currentStage >= 4 && !isInitialYardDrop;
+                      const canTriggerL2 = currentStage >= 5 && !isInitialYardDrop;
                       return (
                         <button
                           onClick={handleTriggerL2}
@@ -2066,106 +2087,194 @@ export default function DrayageJobTrackingPage() {
                 {/* Execution Stage Action Buttons */}
                 {(() => {
                   const isL2Job = activeJob.jobPhase === 'L2' || activeJob.jobCode.includes('-L2');
-                  const currentStage = getOperationalStageIndex(
-                    activeJob.status,
-                    activeJob.trailerDetached,
-                    isL2Job,
-                  );
+                  const statusUpper = (activeJob.status || '').toUpperCase();
+                  const isReassignFlow =
+                    !isL2Job &&
+                    [
+                      'RE-ASSIGNED',
+                      'TRAILER_ATTACHED',
+                      'REASSIGN_PLACED_AT_RAMP',
+                      'REASSIGN_PLACED_AT_YARD',
+                      'REASSIGN_TRAILER_DETACHED',
+                      'READY_FOR_PICKUP',
+                    ].includes(statusUpper);
+                  const isYardToRampShunt =
+                    statusUpper === 'REASSIGN_PLACED_AT_RAMP' ||
+                    statusUpper === 'REASSIGN_TRAILER_DETACHED' ||
+                    (['RE-ASSIGNED', 'TRAILER_ATTACHED'].includes(statusUpper) &&
+                      (activeJob.placementLocation || '').toUpperCase() === 'YARD');
+
+                  const currentStage = isReassignFlow
+                    ? getReassignStageIndex(activeJob.status, activeJob.trailerDetached)
+                    : getOperationalStageIndex(
+                        activeJob.status,
+                        activeJob.trailerDetached,
+                        isL2Job,
+                      );
+                  const totalStages = isL2Job ? 5 : isReassignFlow ? 3 : 6;
+                  const chosenPlacementIsYard =
+                    statusUpper === 'PLACED_AT_YARD' ||
+                    statusUpper.includes('TO RAMP') ||
+                    statusUpper.includes('TO_RAMP') ||
+                    (activeJob.placementLocation || '').toUpperCase() === 'YARD';
+
                   const stages: Array<{
+                    key: string;
                     stageNum: number;
                     label: string;
-                    variant?: 'default' | 'amber' | 'emerald';
+                    isUnchosenBranch?: boolean;
                     onClick: () => void;
                   }> = isL2Job
                     ? [
                         {
+                          key: 'l2-1',
                           stageNum: 1,
-                          label: '1. Container Picked (Warehouse)',
+                          label: '1. Container Picked',
                           onClick: () => handleUpdateStatus('CONTAINER_PICKED'),
                         },
                         {
+                          key: 'l2-2',
                           stageNum: 2,
                           label: '2. En Route to Terminal',
                           onClick: () => handleUpdateStatus('EN_ROUTE_TERMINAL'),
                         },
                         {
+                          key: 'l2-3',
                           stageNum: 3,
                           label: '3. Arrived at Port',
                           onClick: () => handleUpdateStatus('ARRIVED_AT_PORT'),
                         },
                         {
+                          key: 'l2-4',
                           stageNum: 4,
                           label: '4. Under Inspection',
                           onClick: () => handleUpdateStatus('UNDER_INSPECTION'),
                         },
                         {
+                          key: 'l2-5',
                           stageNum: 5,
-                          label: '5. Container Dropped (Complete L2)',
-                          variant: 'emerald',
+                          label: '5. Container Dropped (Complete)',
                           onClick: () => handleUpdateStatus('CONTAINER_DROPPED', undefined, true),
                         },
                       ]
+                    : isReassignFlow
+                    ? [
+                        {
+                          key: 're-1',
+                          stageNum: 1,
+                          label: '1. Trailer Attached',
+                          onClick: () => handleUpdateStatus('TRAILER_ATTACHED', undefined, false),
+                        },
+                        isYardToRampShunt
+                          ? {
+                              key: 're-2-ramp',
+                              stageNum: 2,
+                              label: '2. Placed @ Ramp',
+                              onClick: () => {
+                                setTargetStatusForEtc('REASSIGN_PLACED_AT_RAMP');
+                                setEtcModalOpen(true);
+                              },
+                            }
+                          : {
+                              key: 're-2-yard',
+                              stageNum: 2,
+                              label: '2. Placed @ Yard',
+                              onClick: () => handleUpdateStatus('REASSIGN_PLACED_AT_YARD', 'YARD', false),
+                            },
+                        isYardToRampShunt
+                          ? {
+                              key: 're-3-detach',
+                              stageNum: 3,
+                              label: '3. Trailer Detached',
+                              onClick: () => handleUpdateStatus('REASSIGN_TRAILER_DETACHED', 'RAMP', true),
+                            }
+                          : {
+                              key: 're-3-ready',
+                              stageNum: 3,
+                              label: '3. Ready for Pickup',
+                              onClick: () => handleUpdateStatus('READY_FOR_PICKUP', 'YARD', true),
+                            },
+                      ]
                     : [
                         {
+                          key: 'l1-1',
                           stageNum: 1,
-                          label: '1. Gated In Port',
-                          onClick: () => handleUpdateStatus('AT_PORT'),
+                          label: '1. Job Accepted',
+                          onClick: () => handleUpdateStatus('ACCEPTED'),
                         },
                         {
+                          key: 'l1-2',
                           stageNum: 2,
-                          label: '2. Container Loaded',
-                          onClick: () => handleUpdateStatus('LOADED'),
+                          label: '2. Container Picked',
+                          onClick: () => handleUpdateStatus('CONTAINER_PICKED'),
                         },
                         {
+                          key: 'l1-3',
                           stageNum: 3,
-                          label: '3. In Transit (E11)',
-                          onClick: () => handleUpdateStatus('IN_TRANSIT'),
+                          label: '3. Under Inspection',
+                          onClick: () => handleUpdateStatus('UNDER_INSPECTION'),
                         },
                         {
+                          key: 'l1-4',
                           stageNum: 4,
-                          label: '4. Placed at Ramp',
+                          label: '4. En Route to Warehouse',
+                          onClick: () => handleUpdateStatus('EN_ROUTE_WAREHOUSE'),
+                        },
+                        {
+                          key: 'l1-5a',
+                          stageNum: 5,
+                          label: '5a. Placed @ Ramp',
+                          isUnchosenBranch: currentStage >= 5 && chosenPlacementIsYard,
                           onClick: () => {
                             setTargetStatusForEtc('PLACED_AT_RAMP');
                             setEtcModalOpen(true);
                           },
                         },
                         {
+                          key: 'l1-5b',
                           stageNum: 5,
-                          label: '5. Detach Trailer',
-                          variant: 'amber',
-                          onClick: () => {
-                            if (activeJob.jobPhase === 'L1' && !activeJob.etcTime) {
-                              setTargetStatusForEtc('CONTAINER_DETACHED');
-                              setEtcModalOpen(true);
-                            } else {
-                              handleUpdateStatus('CONTAINER_DETACHED', 'RAMP', true);
-                            }
-                          },
+                          label: '5b. Placed @ Yard',
+                          isUnchosenBranch: currentStage >= 5 && !chosenPlacementIsYard,
+                          onClick: () => handleUpdateStatus('PLACED_AT_YARD', 'YARD', false),
                         },
                         {
+                          key: 'l1-6',
                           stageNum: 6,
-                          label: '6. Complete & Deposit MT',
-                          variant: 'emerald',
-                          onClick: () => handleUpdateStatus('EMPTY_DEPOSITED', undefined, false),
+                          label: '6. Trailer Detached',
+                          onClick: () => {
+                            const placement: 'RAMP' | 'YARD' = chosenPlacementIsYard ? 'YARD' : 'RAMP';
+                            if (placement === 'RAMP' && !activeJob.etcTime) {
+                              setTargetStatusForEtc('TRAILER_DETACHED');
+                              setEtcModalOpen(true);
+                            } else {
+                              handleUpdateStatus('TRAILER_DETACHED', placement, true);
+                            }
+                          },
                         },
                       ];
 
                   return (
                     <div className="pt-2">
                       <div className="text-[11px] font-bold text-[var(--text-main)] mb-2 flex items-center justify-between">
-                        <span>Operational Stage Actions:</span>
+                        <span>
+                          Operational Stage Actions
+                          {isReassignFlow
+                            ? ` (${isYardToRampShunt ? 'Reassign Shunt: Yard → Ramp' : 'Reassign Shunt: Ramp → Yard'}):`
+                            : ':'}
+                        </span>
                         <span className="text-[10px] text-[var(--text-muted)]">
-                          {currentStage >= 6
+                          {currentStage >= totalStages
                             ? 'Workflow completed'
-                            : `Current Stage: ${currentStage}/6 · Only Stage ${currentStage + 1} is enabled`}
+                            : `Current Stage: ${currentStage}/${totalStages} · Only Stage ${currentStage + 1} is enabled`}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {stages.map((st) => {
-                          const isPast = st.stageNum < currentStage;
-                          const isCurrent = st.stageNum === currentStage;
+                          const isUnchosen = Boolean(st.isUnchosenBranch);
+                          const isPast = !isUnchosen && st.stageNum < currentStage;
+                          const isCurrent = !isUnchosen && st.stageNum === currentStage;
                           const isNext = st.stageNum === currentStage + 1;
-                          const isFuture = st.stageNum > currentStage + 1;
+                          const isFuture = st.stageNum > currentStage + 1 || isUnchosen;
 
                           let btnClass =
                             'px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all inline-flex items-center gap-1.5 ';
@@ -2183,7 +2292,9 @@ export default function DrayageJobTrackingPage() {
                               'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-35 cursor-not-allowed';
                           }
 
-                          const tooltip = isPast
+                          const tooltip = isUnchosen
+                            ? 'Alternate placement branch (not selected for this container)'
+                            : isPast
                             ? 'Completed stage (locked — cannot revert to a previous status)'
                             : isCurrent
                             ? 'Current active stage'
@@ -2193,7 +2304,7 @@ export default function DrayageJobTrackingPage() {
 
                           return (
                             <button
-                              key={st.stageNum}
+                              key={st.key}
                               onClick={isNext ? st.onClick : undefined}
                               disabled={updatingStatus || !isNext}
                               title={tooltip}
@@ -2961,7 +3072,12 @@ export default function DrayageJobTrackingPage() {
                   const etcIso = customEtcInput
                     ? new Date(customEtcInput).toISOString()
                     : new Date(Date.now() + selectedEtcHours * 3600000).toISOString();
-                  handleUpdateStatus(targetStatusForEtc, 'RAMP', targetStatusForEtc === 'CONTAINER_DETACHED', etcIso);
+                  handleUpdateStatus(
+                    targetStatusForEtc,
+                    'RAMP',
+                    targetStatusForEtc === 'CONTAINER_DETACHED' || targetStatusForEtc === 'TRAILER_DETACHED',
+                    etcIso,
+                  );
                   setEtcModalOpen(false);
                 }}
                 disabled={updatingStatus}

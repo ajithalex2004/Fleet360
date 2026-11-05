@@ -3622,7 +3622,7 @@ export async function assignDrayageJob(
   return { ok: true, tokenNumber: token };
 }
 
-function getDrayageOperationalStageIndex(
+export function getDrayageOperationalStageIndex(
   status: string,
   trailerDetached?: boolean,
   isL2?: boolean,
@@ -3646,12 +3646,14 @@ function getDrayageOperationalStageIndex(
     }
     return 0;
   }
-  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
-    return 6;
-  }
   if (
     isDrayageReassignStatus(s) ||
     [
+      'EMPTY_DEPOSITED',
+      'CONTAINER_DROPPED',
+      'CONTAINER_DELIVERED',
+      'COMPLETED',
+      'STREET_TURNED',
       'CONTAINER_DETACHED',
       'TRAILER_DETACHED',
       'REASSIGN_TRAILER_DETACHED',
@@ -3662,18 +3664,21 @@ function getDrayageOperationalStageIndex(
       'WAITING_MT_RETURN',
     ].includes(s)
   ) {
-    return 5;
+    return 6;
   }
   if (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
-    return trailerDetached ? 5 : 4;
+    return trailerDetached ? 6 : 5;
   }
   if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'EMPTY_AT_PORT'].includes(s)) {
+    return 4;
+  }
+  if (s === 'UNDER_INSPECTION') {
     return 3;
   }
-  if (['LOADED', 'CONTAINER_PICKED', 'UNDER_INSPECTION', 'TRAILER_ATTACHED'].includes(s)) {
+  if (['LOADED', 'CONTAINER_PICKED', 'AT_PORT', 'ARRIVED_AT_PORT', 'TRAILER_ATTACHED'].includes(s)) {
     return 2;
   }
-  if (['AT_PORT', 'ARRIVED_AT_PORT'].includes(s)) {
+  if (s === 'ACCEPTED') {
     return 1;
   }
   return 0;
@@ -4579,8 +4584,11 @@ export async function activateL2EmptyReturnJob(
   const l1Stage = getDrayageOperationalStageIndex(l1Status, Boolean(l1.trailer_detached));
   const l1Placement = String(l1.placement_location || '').toUpperCase();
   const isInitialYardDrop =
-    l1Placement === 'YARD' && ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(l1Status);
-  if (l1Stage < 4 || isInitialYardDrop) {
+    l1Placement === 'YARD' &&
+    (['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(l1Status) ||
+      l1Status.includes('TO RAMP') ||
+      l1Status.includes('TO_RAMP'));
+  if (l1Stage < 5 || isInitialYardDrop) {
     throw new Error(
       'L2 Empty Return can only be triggered after the container is Placed at Ramp, Ready for Pickup, or Detached after Reassignment.',
     );
@@ -4880,7 +4888,7 @@ export async function checkAndAutoActivateExpiredEtcJobs(
     try {
       const jobStatus = String(job.status || '').toUpperCase();
       const stage = getDrayageOperationalStageIndex(jobStatus, Boolean(job.trailer_detached));
-      if (stage < 4) continue;
+      if (stage < 5) continue;
 
       // 1. First Alert (<= 15m) or ETC Expiry on Ramp / Yard / Detached jobs transitions to directional Reassign status
       const isEtcAlertForReassign = [
@@ -7520,29 +7528,35 @@ export function formatMilestoneLabelForCustomer(status: string): {
 } {
   const s = String(status || '').toUpperCase();
   switch (s) {
-    case 'AT_PORT':
-    case 'ARRIVED_AT_PORT':
+    case 'ACCEPTED':
       return {
         stageNumber: 1,
-        title: '1. Gated In Port Terminal',
-        customerSummary: 'Prime mover has entered the port terminal gate via PCS token.',
+        title: '1. Job Accepted',
+        customerSummary: 'Driver has accepted the dispatch order and is proceeding to the terminal.',
       };
+    case 'AT_PORT':
+    case 'ARRIVED_AT_PORT':
     case 'LOADED':
     case 'CONTAINER_PICKED':
-    case 'UNDER_INSPECTION':
     case 'TRAILER_ATTACHED':
       return {
         stageNumber: 2,
-        title: '2. Container Loaded & Seal Verified',
-        customerSummary: 'Container has been mounted on chassis and customs seal / EIR verified.',
+        title: '2. Container Picked at Terminal',
+        customerSummary: 'Container has been mounted on chassis and gate-in / EIR verified.',
+      };
+    case 'UNDER_INSPECTION':
+      return {
+        stageNumber: 3,
+        title: '3. Under Inspection',
+        customerSummary: 'Container is undergoing regulatory / port terminal inspection.',
       };
     case 'IN_TRANSIT':
     case 'EN_ROUTE_WAREHOUSE':
     case 'EN_ROUTE_TERMINAL':
     case 'EMPTY_AT_PORT':
       return {
-        stageNumber: 3,
-        title: '3. In Transit on UAE Freight Corridor',
+        stageNumber: 4,
+        title: '4. En Route on UAE Freight Corridor',
         customerSummary: 'Prime mover is en route along the E11 / E311 freight corridor with live GPS tracking.',
       };
     case 'PLACED_AT_RAMP':
@@ -7550,30 +7564,32 @@ export function formatMilestoneLabelForCustomer(status: string): {
     case 'PLACED_AT_YARD':
     case 'REASSIGN_PLACED_AT_YARD':
       return {
-        stageNumber: 4,
-        title: '4. Placed at Customer Warehouse Ramp',
-        customerSummary: 'Container positioned at warehouse dock bay; offloading ETC countdown is active.',
+        stageNumber: 5,
+        title: s.includes('YARD') ? '5. Placed at Customer Yard' : '5. Placed at Customer Warehouse Ramp',
+        customerSummary: 'Container positioned at warehouse facility; offloading / staging active.',
       };
     case 'CONTAINER_DETACHED':
     case 'TRAILER_DETACHED':
     case 'REASSIGN_TRAILER_DETACHED':
     case 'READY_FOR_PICKUP':
     case 'WAITING_MT_RETURN':
-      return {
-        stageNumber: 5,
-        title: '5. Chassis Detached / Ready for Empty Return',
-        customerSummary: 'Container destuffing / drop-and-hook stage active; L2 Empty Return coordinated.',
-      };
     case 'EMPTY_DEPOSITED':
     case 'CONTAINER_DROPPED':
     case 'COMPLETED':
     case 'STREET_TURNED':
       return {
         stageNumber: 6,
-        title: '6. Completed & Empty Container Returned',
-        customerSummary: 'Empty container gate-in completed and EIR issued; drayage cycle closed.',
+        title: '6. Trailer Detached / Completed',
+        customerSummary: 'Stage completed and container status updated in dispatch console.',
       };
     default:
+      if (isDrayageReassignStatus(s)) {
+        return {
+          stageNumber: 6,
+          title: `6. ${status}`,
+          customerSummary: 'Container detached and queued for tractor reassignment shunt.',
+        };
+      }
       return {
         stageNumber: 0,
         title: '0. Dispatched & Assigned',
