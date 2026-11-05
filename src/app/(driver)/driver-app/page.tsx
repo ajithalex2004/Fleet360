@@ -713,35 +713,43 @@ export default function DriverAppLauncher() {
         if (now - lastSentRef.current >= 4000) {
           lastSentRef.current = now;
           try {
+            const token = localStorage.getItem('fleet360_driver_token') || '';
+            const pingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) {
+              pingHeaders.Authorization = `Bearer ${token}`;
+            }
+
             // Drain any offline-buffered samples first if connectivity just returned
             const queuedSamples = drainOfflineGpsSamples();
             for (const q of queuedSamples.slice(-5)) {
-              await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
+              await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: pingHeaders,
                 credentials: 'include',
                 body: JSON.stringify({
+                  action: 'LOCATION_PING',
                   vehicleId: vehicle.id,
-                  lat: q.latitude,
-                  lng: q.longitude,
+                  vehiclePlate: vehicle.licensePlate || undefined,
+                  latitude: q.latitude,
+                  longitude: q.longitude,
                   speedKmh: q.speedKmh,
                   heading: q.heading || 0,
-                  accuracy: Math.round(q.accuracyMeters ?? 15),
                 }),
               }).catch(() => {});
             }
 
-            const pingRes = await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
+            const pingRes = await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: pingHeaders,
               credentials: 'include',
               body: JSON.stringify({
+                action: 'LOCATION_PING',
                 vehicleId: vehicle.id,
-                lat: latitude,
-                lng: longitude,
+                vehiclePlate: vehicle.licensePlate || undefined,
+                latitude,
+                longitude,
                 speedKmh,
                 heading: heading || 0,
-                accuracy: Math.round(accuracyMeters ?? 10),
               }),
             });
 

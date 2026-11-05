@@ -207,10 +207,16 @@ export async function POST(req: NextRequest) {
 
       const rawLat = body.latitude != null ? Number(body.latitude) : (body.lat != null ? Number(body.lat) : NaN);
       const rawLng = body.longitude != null ? Number(body.longitude) : (body.lng != null ? Number(body.lng) : NaN);
+      const isDummyDubai =
+        !Number.isNaN(rawLat) &&
+        !Number.isNaN(rawLng) &&
+        Math.abs(rawLat - 25.2048) < 0.0005 &&
+        Math.abs(rawLng - 55.2708) < 0.0005;
       const hasLiveLoginCoords =
         !Number.isNaN(rawLat) &&
         !Number.isNaN(rawLng) &&
-        (rawLat !== 0 || rawLng !== 0);
+        (rawLat !== 0 || rawLng !== 0) &&
+        !isDummyDubai;
       const loginSpeedKmh =
         body.speedKmh != null && !Number.isNaN(Number(body.speedKmh)) && Number(body.speedKmh) >= 0
           ? Number(body.speedKmh)
@@ -237,12 +243,59 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      if (hasLiveLoginCoords) {
+      // Remove any legacy hardcoded Downtown Dubai (25.2048, 55.2708) placeholder pings for this vehicle
+      await prisma
+        .$executeRawUnsafe(
+          `DELETE FROM fleet.bus_gps_pings
+            WHERE vehicle_id = $1
+              AND tenant_id = $2
+              AND ABS(latitude - 25.2048) < 0.0005
+              AND ABS(longitude - 55.2708) < 0.0005`,
+          vehicle.id,
+          tenantId,
+        )
+        .catch(() => {});
+
+      let effectiveLat = hasLiveLoginCoords ? rawLat : NaN;
+      let effectiveLng = hasLiveLoginCoords ? rawLng : NaN;
+
+      if (!hasLiveLoginCoords) {
+        // Look up the most recent REAL GPS coordinate for this driver or vehicle from drayage jobs/vehicles/pings
+        const recentRealRows = await prisma
+          .$queryRawUnsafe<Array<{ lat: number | null; lng: number | null }>>(
+            `SELECT current_lat AS lat, current_lng AS lng
+               FROM logistics_drayage_jobs
+              WHERE tenant_id = $1
+                AND current_lat IS NOT NULL
+                AND current_lng IS NOT NULL
+                AND NOT (ABS(current_lat - 25.2048) < 0.0005 AND ABS(current_lng - 55.2708) < 0.0005)
+                AND NOT (ABS(current_lat - 25.0112) < 0.0005 AND ABS(current_lng - 55.0612) < 0.0005)
+                AND (
+                  assigned_vehicle_id = $2
+                  OR assigned_driver_id = $3
+                  OR LOWER(TRIM(COALESCE(assigned_driver_name, ''))) = LOWER(TRIM($4))
+                )
+              ORDER BY updated_at DESC
+              LIMIT 1`,
+            tenantId,
+            vehicle.id,
+            driver.id,
+            displayName(driver),
+          )
+          .catch(() => []);
+
+        if (recentRealRows[0]?.lat != null && recentRealRows[0]?.lng != null) {
+          effectiveLat = Number(recentRealRows[0].lat);
+          effectiveLng = Number(recentRealRows[0].lng);
+        }
+      }
+
+      if (!Number.isNaN(effectiveLat) && !Number.isNaN(effectiveLng) && (effectiveLat !== 0 || effectiveLng !== 0)) {
         await recordDrayageDriverLocationPing(prisma, {
           tenantId,
           jobId: 'LOGIN_PING',
-          latitude: rawLat,
-          longitude: rawLng,
+          latitude: effectiveLat,
+          longitude: effectiveLng,
           speedKmh: loginSpeedKmh,
           heading: loginHeading,
           location: typeof body.location === 'string' ? body.location : null,
@@ -252,28 +305,31 @@ export async function POST(req: NextRequest) {
           vehicleId: vehicle.id,
           vehiclePlate: effectivePlate(vehicle),
         }).catch(() => {});
-      }
-
-      if (canActivateMobileTracking) {
+      } else if (canActivateMobileTracking) {
         try {
           const lastKnown = await prisma.busGpsPing.findFirst({
             where: { vehicleId: vehicle.id, tenantId },
             orderBy: { occurredAt: 'desc' },
             select: { latitude: true, longitude: true, headingDeg: true },
           });
-          await prisma.busGpsPing.create({
-            data: {
-              tenantId,
-              vehicleId: vehicle.id,
-              latitude: hasLiveLoginCoords ? rawLat : (lastKnown?.latitude ?? 25.0112),
-              longitude: hasLiveLoginCoords ? rawLng : (lastKnown?.longitude ?? 55.0612),
-              speedKmh: loginSpeedKmh,
-              headingDeg: hasLiveLoginCoords ? loginHeading : (lastKnown?.headingDeg ?? 0),
-              accuracyM: 5,
-              occurredAt: new Date(),
-              source: 'DRIVER_APP',
-            },
-          });
+          if (
+            lastKnown &&
+            !(Math.abs(lastKnown.latitude - 25.2048) < 0.0005 && Math.abs(lastKnown.longitude - 55.2708) < 0.0005)
+          ) {
+            await prisma.busGpsPing.create({
+              data: {
+                tenantId,
+                vehicleId: vehicle.id,
+                latitude: lastKnown.latitude,
+                longitude: lastKnown.longitude,
+                speedKmh: loginSpeedKmh,
+                headingDeg: lastKnown.headingDeg ?? 0,
+                accuracyM: 5,
+                occurredAt: new Date(),
+                source: 'DRIVER_APP',
+              },
+            });
+          }
         } catch {
           // Ignore if bus_gps_pings table is not present
         }
@@ -286,9 +342,9 @@ export async function POST(req: NextRequest) {
         trimmedDeviceId,
         canActivateMobileTracking,
         validOdo,
-        hasLiveLoginCoords,
-        rawLat,
-        rawLng,
+        hasLiveLoginCoords: !Number.isNaN(effectiveLat) && !Number.isNaN(effectiveLng),
+        rawLat: effectiveLat,
+        rawLng: effectiveLng,
       };
     });
 

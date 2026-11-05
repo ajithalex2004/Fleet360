@@ -74,9 +74,9 @@ export async function GET(req: NextRequest) {
 
       const vehicleIds = vehicles.map((v) => v.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
 
-      // Fetch recent pings (up to 200) to allow speed delta and deceleration detection
-      // Fetch drivers, active shifts, active trips for geofence stop visits, and open alerts
-      const [allPings, drivers, activeShifts, activeTrips, openAlerts] = await Promise.all([
+      // Fetch recent pings (up to 300) to allow speed delta and deceleration detection
+      // Fetch drivers, active shifts, active trips for geofence stop visits, open alerts, and live vehicle/drayage coords
+      const [allPings, drivers, activeShifts, activeTrips, openAlerts, vehicleLiveCoords, drayageVehicleCoords] = await Promise.all([
         tx.busGpsPing.findMany({
           where: {
             tenantId,
@@ -155,12 +155,59 @@ export async function GET(req: NextRequest) {
             createdAt: true,
           },
         }),
+        tx
+          .$queryRawUnsafe<Array<{ id: string; current_lat: number | null; current_lng: number | null; updated_at: Date | null }>>(
+            `SELECT id::text AS id, current_lat, current_lng, updated_at
+               FROM vehicles
+              WHERE tenant_id::text = $1
+                AND current_lat IS NOT NULL
+                AND current_lng IS NOT NULL`,
+            tenantId,
+          )
+          .catch(() => []),
+        tx
+          .$queryRawUnsafe<Array<{ assigned_vehicle_id: string | null; current_lat: number | null; current_lng: number | null; updated_at: Date | null }>>(
+            `SELECT DISTINCT ON (assigned_vehicle_id)
+                assigned_vehicle_id,
+                current_lat,
+                current_lng,
+                updated_at
+               FROM logistics_drayage_jobs
+              WHERE tenant_id = $1
+                AND assigned_vehicle_id IS NOT NULL
+                AND current_lat IS NOT NULL
+                AND current_lng IS NOT NULL
+                AND NOT (ABS(current_lat - 25.2048) < 0.0005 AND ABS(current_lng - 55.2708) < 0.0005)
+                AND NOT (ABS(current_lat - 25.0112) < 0.0005 AND ABS(current_lng - 55.0612) < 0.0005)
+              ORDER BY assigned_vehicle_id, updated_at DESC`,
+            tenantId,
+          )
+          .catch(() => []),
       ]);
 
-      // Group pings by vehicleId (ordered descending by occurredAt)
+      const vehicleLiveCoordById = new Map(
+        vehicleLiveCoords
+          .filter(
+            (vc) =>
+              vc.current_lat != null &&
+              vc.current_lng != null &&
+              !(Math.abs(Number(vc.current_lat) - 25.2048) < 0.0005 && Math.abs(Number(vc.current_lng) - 55.2708) < 0.0005),
+          )
+          .map((vc) => [vc.id, vc]),
+      );
+      const drayageCoordByVehicleId = new Map(
+        drayageVehicleCoords
+          .filter((dc) => dc.assigned_vehicle_id && dc.current_lat != null && dc.current_lng != null)
+          .map((dc) => [String(dc.assigned_vehicle_id), dc]),
+      );
+
+      // Group pings by vehicleId (ordered descending by occurredAt), ignoring legacy 25.2048, 55.2708 placeholders
       const pingsByVehicleId = new Map<string, typeof allPings>();
       for (const p of allPings) {
         if (!p.vehicleId) continue;
+        if (Math.abs(p.latitude - 25.2048) < 0.0005 && Math.abs(p.longitude - 55.2708) < 0.0005) {
+          continue;
+        }
         const list = pingsByVehicleId.get(p.vehicleId) || [];
         list.push(p);
         pingsByVehicleId.set(p.vehicleId, list);
@@ -255,11 +302,35 @@ export async function GET(req: NextRequest) {
 
       const devices = vehicles.map((v) => {
         const vehiclePings = pingsByVehicleId.get(v.id) || [];
-        const ping = vehiclePings[0] || null;
+        const vCoord = vehicleLiveCoordById.get(v.id);
+        const dCoord = drayageCoordByVehicleId.get(v.id);
+
+        let ping = vehiclePings[0] || null;
+        if (!ping && vCoord && vCoord.current_lat != null && vCoord.current_lng != null) {
+          ping = {
+            vehicleId: v.id,
+            latitude: Number(vCoord.current_lat),
+            longitude: Number(vCoord.current_lng),
+            speedKmh: 0,
+            headingDeg: 0,
+            occurredAt: vCoord.updated_at ? new Date(vCoord.updated_at) : (v.updatedAt ? new Date(v.updatedAt) : now),
+            source: 'DRIVER_APP',
+          };
+        } else if (!ping && dCoord && dCoord.current_lat != null && dCoord.current_lng != null) {
+          ping = {
+            vehicleId: v.id,
+            latitude: Number(dCoord.current_lat),
+            longitude: Number(dCoord.current_lng),
+            speedKmh: 0,
+            headingDeg: 0,
+            occurredAt: v.updatedAt ? new Date(v.updatedAt) : (dCoord.updated_at ? new Date(dCoord.updated_at) : now),
+            source: 'DRIVER_APP',
+          };
+        }
         const prevPing = vehiclePings[1] || null;
 
         const hasHardwareDevice = Boolean(v.deviceId && v.deviceId.trim() !== '');
-        const isMobileTracking = Boolean(!hasHardwareDevice && ping && ping.source === 'DRIVER_APP');
+        const isMobileTracking = Boolean(!hasHardwareDevice && ((ping && ping.source === 'DRIVER_APP') || v.assignedDriverId));
 
         const activeShift = activeShiftByVehicleId.get(v.id);
         const assignedDriver = (v.assignedDriverId ? driverById.get(v.assignedDriverId) : null)

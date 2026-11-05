@@ -4949,6 +4949,7 @@ export async function updateDrayageJobExecutionStatus(
   );
 
   if (hasLiveCoords && job.assigned_vehicle_id) {
+    const vId = String(job.assigned_vehicle_id);
     await db
       .$executeRawUnsafe(
         `UPDATE vehicles
@@ -4956,12 +4957,40 @@ export async function updateDrayageJobExecutionStatus(
                 current_lng = $4,
                 updated_at = NOW()
           WHERE id::text = $1 AND tenant_id::text = $2`,
-        String(job.assigned_vehicle_id),
+        vId,
         args.tenantId,
         lat,
         lng,
       )
       .catch(() => {});
+
+    const isDummyDubai = Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005;
+    if (!isDummyDubai) {
+      await db
+        .$executeRawUnsafe(
+          `DELETE FROM fleet.bus_gps_pings
+            WHERE vehicle_id = $1
+              AND tenant_id = $2
+              AND ABS(latitude - 25.2048) < 0.0005
+              AND ABS(longitude - 55.2708) < 0.0005`,
+          vId,
+          args.tenantId,
+        )
+        .catch(() => {});
+      await db
+        .$executeRawUnsafe(
+          `INSERT INTO fleet.bus_gps_pings (
+             id, created_at, tenant_id, vehicle_id, latitude, longitude,
+             speed_kmh, heading_deg, accuracy_m, occurred_at, source
+           ) VALUES ($1, NOW(), $2, $3, $4, $5, 0, 0, 5, NOW(), 'DRIVER_APP')`,
+          crypto.randomUUID(),
+          args.tenantId,
+          vId,
+          lat,
+          lng,
+        )
+        .catch(() => {});
+    }
   }
 
   // Sync container status & related parent jobs:
@@ -5291,26 +5320,59 @@ export async function recordDrayageDriverLocationPing(
     }
   }
 
-  for (const vId of vehicleIdSet) {
-    await db
-      .$executeRawUnsafe(
-        `UPDATE vehicles
-            SET current_lat = $3,
-                current_lng = $4,
-                updated_at = NOW()
-          WHERE id::text = $1 AND tenant_id::text = $2`,
-        vId,
-        args.tenantId,
-        lat,
-        lng,
-      )
-      .catch(() => {});
-  }
-
   const speedVal =
     args.speedKmh != null && !isNaN(Number(args.speedKmh)) && Number(args.speedKmh) >= 0
       ? Math.round(Number(args.speedKmh))
       : null;
+  const headingVal =
+    args.heading != null && !isNaN(Number(args.heading)) ? Math.round(Number(args.heading)) : 0;
+  const isDummyDubai = Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005;
+
+  for (const vId of vehicleIdSet) {
+    if (!isDummyDubai) {
+      await db
+        .$executeRawUnsafe(
+          `UPDATE vehicles
+              SET current_lat = $3,
+                  current_lng = $4,
+                  updated_at = NOW()
+            WHERE id::text = $1 AND tenant_id::text = $2`,
+          vId,
+          args.tenantId,
+          lat,
+          lng,
+        )
+        .catch(() => {});
+
+      await db
+        .$executeRawUnsafe(
+          `DELETE FROM fleet.bus_gps_pings
+            WHERE vehicle_id = $1
+              AND tenant_id = $2
+              AND ABS(latitude - 25.2048) < 0.0005
+              AND ABS(longitude - 55.2708) < 0.0005`,
+          vId,
+          args.tenantId,
+        )
+        .catch(() => {});
+
+      await db
+        .$executeRawUnsafe(
+          `INSERT INTO fleet.bus_gps_pings (
+             id, created_at, tenant_id, vehicle_id, latitude, longitude,
+             speed_kmh, heading_deg, accuracy_m, occurred_at, source
+           ) VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, 5, NOW(), 'DRIVER_APP')`,
+          crypto.randomUUID(),
+          args.tenantId,
+          vId,
+          lat,
+          lng,
+          speedVal ?? 0,
+          headingVal,
+        )
+        .catch(() => {});
+    }
+  }
 
   let primaryResolvedLoc =
     args.location && String(args.location).trim()

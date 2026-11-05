@@ -65,44 +65,37 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
   const getTrackableVehicle = useCallback(() => {
     if (typeof window === 'undefined') return null;
     try {
+      const explicitlyDisabled = localStorage.getItem('fleet360_driver_tracking_active') === 'false';
+      if (explicitlyDisabled) return null;
+
       const stored = localStorage.getItem('fleet360_active_vehicle');
       let vehicle = stored ? JSON.parse(stored) : null;
 
-      // Default to Jennish John's assigned vehicle (96448) so tracking always starts right away
-      if (!vehicle || !vehicle.id) {
+      const driverVehicleId = localStorage.getItem('fleet360_driver_vehicle_id') || '';
+      const driverVehiclePlate = localStorage.getItem('fleet360_driver_vehicle_plate') || '';
+      const driverVehicleCode = localStorage.getItem('fleet360_driver_vehicle_code') || '';
+
+      if (driverVehicleId) {
         vehicle = {
-          id: '3c779fd8-d536-475c-a38e-9919909fab84',
-          vehicleCode: 'VEH-000247',
-          licensePlate: '96448',
-          make: 'HONDA',
-          model: 'PILOT',
-          year: 2022,
-          deviceId: '',
-          isDeviceBlank: true,
+          ...(vehicle || {}),
+          id: driverVehicleId,
+          vehicleCode: driverVehicleCode || vehicle?.vehicleCode || '',
+          licensePlate: driverVehiclePlate || vehicle?.licensePlate || '',
           canActivateMobileTracking: true,
+          isDeviceBlank: true,
         };
-        localStorage.setItem('fleet360_active_vehicle', JSON.stringify(vehicle));
+      }
+
+      if (!vehicle || !vehicle.id) {
+        return null;
       }
 
       vehicle.canActivateMobileTracking = true;
       vehicle.isDeviceBlank = true;
 
-      const explicitlyDisabled = localStorage.getItem('fleet360_driver_tracking_active') === 'false';
-      if (explicitlyDisabled) return null;
-
       return vehicle;
     } catch {
-      return {
-        id: '3c779fd8-d536-475c-a38e-9919909fab84',
-        vehicleCode: 'VEH-000247',
-        licensePlate: '96448',
-        make: 'HONDA',
-        model: 'PILOT',
-        year: 2022,
-        deviceId: '',
-        isDeviceBlank: true,
-        canActivateMobileTracking: true,
-      };
+      return null;
     }
   }, []);
 
@@ -147,6 +140,34 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
     if (isPingingRef.current) return;
     isPingingRef.current = true;
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_token') || '' : '';
+      const driverName = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_name') || '' : '';
+      const vehiclePlate = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_plate') || '' : '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const drayageEndpoint = getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status');
+      const drayageRes = await fetch(drayageEndpoint, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          action: 'LOCATION_PING',
+          vehicleId,
+          vehiclePlate: vehiclePlate || undefined,
+          driverName: driverName || undefined,
+          latitude: lat,
+          longitude: lng,
+          speedKmh: Math.max(0, Number(speedKmh) || 0),
+          heading: Math.max(0, Number(heading) || 0),
+        }),
+      }).catch(() => null);
+
       const endpoint = getApiEndpoint('/api/driver-app/telematics/live-location');
       const payload = {
         vehicleId,
@@ -159,14 +180,12 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        credentials: 'include',
+        headers,
         body: JSON.stringify(payload),
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
+      if (drayageRes?.ok || res?.ok) {
         setLastPingTime(new Date().toLocaleTimeString());
       }
     } catch (err) {
