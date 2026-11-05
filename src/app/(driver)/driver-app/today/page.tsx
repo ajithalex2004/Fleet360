@@ -112,6 +112,16 @@ const HISTORY_STATUSES = new Set([
   'REASSIGN_TRAILER_DETACHED',
   'READY_FOR_PICKUP',
   'CONTAINER_DROPPED',
+  'FCL_REASSIGN',
+  'MT_REASSIGN',
+  'MT_REASSIGN TO YARD',
+  'FCL_REASSIGN TO YARD',
+  'FCL_REASSIGN TO RAMP',
+  'MT_REASSIGN TO RAMP',
+  'MT_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_RAMP',
+  'MT_REASSIGN_TO_RAMP',
 ]);
 
 /**
@@ -123,8 +133,6 @@ function getNextStep(job: DrayageAssignment): NextStepMeta | null {
   const isL2 = job.jobPhase === 'L2' || (job.jobCode && job.jobCode.includes('-L2'));
   const isReassign =
     status === 'RE-ASSIGNED' ||
-    status === 'FCL_REASSIGN' ||
-    status === 'MT_REASSIGN' ||
     status === 'TRAILER_ATTACHED' ||
     status === 'REASSIGN_PLACED_AT_RAMP' ||
     status === 'REASSIGN_PLACED_AT_YARD';
@@ -135,18 +143,38 @@ function getNextStep(job: DrayageAssignment): NextStepMeta | null {
 
   // 1. Reassignment Workflow (Yard <-> Ramp / Reassigned Trailer)
   if (isReassign) {
+    const originLocation = (job.placementLocation || '').toUpperCase();
     switch (status) {
       case 'RE-ASSIGNED':
-      case 'FCL_REASSIGN':
-      case 'MT_REASSIGN':
         return {
           nextStatus: 'TRAILER_ATTACHED',
           label: 'Trailer Attached',
-          description: 'Confirm trailer is coupled to your tractor to begin moving container',
+          description:
+            originLocation === 'RAMP'
+              ? 'Confirm trailer is coupled at the Ramp to move container to the Yard'
+              : 'Confirm trailer is coupled at the Yard to move container to the Ramp',
           color: '#2563eb',
           isReassign: true,
         };
       case 'TRAILER_ATTACHED':
+        if (originLocation === 'RAMP') {
+          return {
+            nextStatus: 'REASSIGN_PLACED_AT_YARD',
+            label: 'Placed @ Yard',
+            description: 'Confirm container has been shunted from the Ramp and placed at the Yard',
+            color: '#f59e0b',
+            isReassign: true,
+          };
+        }
+        if (originLocation === 'YARD') {
+          return {
+            nextStatus: 'REASSIGN_PLACED_AT_RAMP',
+            label: 'Placed @ Ramp',
+            description: 'Confirm container has been shunted from the Yard and placed at the Ramp',
+            color: '#10b981',
+            isReassign: true,
+          };
+        }
         return {
           nextStatus: 'REASSIGN_PLACED',
           label: 'Select Placement',
@@ -284,8 +312,6 @@ function getStatusBadgeStyle(status: string): { bg: string; text: string; label:
     case 'ASSIGNED':
       return { bg: 'bg-amber-100 border-amber-300', text: 'text-amber-800', label: 'ASSIGNED' };
     case 'RE-ASSIGNED':
-    case 'FCL_REASSIGN':
-    case 'MT_REASSIGN':
       return { bg: 'bg-orange-100 border-orange-300', text: 'text-orange-800', label: 'RE-ASSIGNED' };
     case 'ACCEPTED':
       return { bg: 'bg-blue-100 border-blue-300', text: 'text-blue-800', label: 'ACCEPTED' };
@@ -311,6 +337,16 @@ function getStatusBadgeStyle(status: string): { bg: string; text: string; label:
     case 'CONTAINER_DROPPED':
     case 'COMPLETED':
     case 'EMPTY_DEPOSITED':
+    case 'FCL_REASSIGN':
+    case 'MT_REASSIGN':
+    case 'MT_REASSIGN TO YARD':
+    case 'FCL_REASSIGN TO YARD':
+    case 'FCL_REASSIGN TO RAMP':
+    case 'MT_REASSIGN TO RAMP':
+    case 'MT_REASSIGN_TO_YARD':
+    case 'FCL_REASSIGN_TO_YARD':
+    case 'FCL_REASSIGN_TO_RAMP':
+    case 'MT_REASSIGN_TO_RAMP':
       return { bg: 'bg-emerald-100 border-emerald-300', text: 'text-emerald-800', label: 'COMPLETED' };
     default:
       return { bg: 'bg-slate-100 border-slate-300', text: 'text-slate-700', label: s.replace(/_/g, ' ') };
@@ -319,18 +355,34 @@ function getStatusBadgeStyle(status: string): { bg: string; text: string; label:
 
 function getPickupAndDropoff(job: DrayageAssignment) {
   const isL2 = job.jobPhase === 'L2' || (job.jobCode && job.jobCode.includes('-L2'));
+  const statusUpper = (job.status || '').toUpperCase();
   const isReassign = [
     'RE-ASSIGNED',
-    'FCL_REASSIGN',
-    'MT_REASSIGN',
     'TRAILER_ATTACHED',
     'REASSIGN_PLACED_AT_RAMP',
     'REASSIGN_PLACED_AT_YARD',
     'REASSIGN_TRAILER_DETACHED',
     'READY_FOR_PICKUP',
-  ].includes((job.status || '').toUpperCase());
+  ].includes(statusUpper);
 
   if (isReassign) {
+    const originLoc = (job.placementLocation || '').toUpperCase();
+    const isRampToYard =
+      statusUpper === 'REASSIGN_PLACED_AT_YARD' ||
+      statusUpper === 'READY_FOR_PICKUP' ||
+      ((statusUpper === 'RE-ASSIGNED' || statusUpper === 'TRAILER_ATTACHED') && originLoc === 'RAMP');
+
+    if (isRampToYard) {
+      return {
+        pickupName: `${job.warehouseName || 'Client Warehouse'} (Ramp)`,
+        pickupLat: job.warehouseGeofence?.lat ?? null,
+        pickupLng: job.warehouseGeofence?.lng ?? null,
+        dropoffName: `${job.warehouseName || 'Client Yard'} (Yard)`,
+        dropoffLat: job.warehouseGeofence?.lat ?? null,
+        dropoffLng: job.warehouseGeofence?.lng ?? null,
+      };
+    }
+
     return {
       pickupName: `${job.warehouseName || 'Client Yard'} (Yard)`,
       pickupLat: job.warehouseGeofence?.lat ?? null,
@@ -1603,9 +1655,11 @@ export default function DriverTodayPage() {
 
                 {/* Sign-on-Glass ePOD Receiver Signature Section — Shown strictly at Container / Ramp Delivery */}
                 {!isL2Selected &&
-                  (['EN_ROUTE_WAREHOUSE', 'PLACED_AT_RAMP', 'TRAILER_ATTACHED', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                  ((['EN_ROUTE_WAREHOUSE', 'PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP'].includes(
                     (selectedJob.status || '').toUpperCase(),
                   ) ||
+                    ((selectedJob.status || '').toUpperCase() === 'TRAILER_ATTACHED' &&
+                      (selectedJob.placementLocation || '').toUpperCase() !== 'RAMP')) ||
                     isEpodSigned) && (
                     <div className="pt-1 border-t border-slate-100">
                       {isEpodSigned ? (

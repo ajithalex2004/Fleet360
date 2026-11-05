@@ -46,6 +46,8 @@ import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/Dra
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  evaluateDispatcherJobReassignState,
+  isDrayageReassignStatus,
   type DrayageAutomationConfig,
 } from '@/lib/logistics/drayage-domain';
 
@@ -693,11 +695,11 @@ export default function DrayageAssignmentPage() {
 
   const unassignedJobs = useMemo(
     () =>
-      jobs.filter(
-        (j) =>
-          (j.status === 'PENDING' || !j.assignedVehicleId || j.status === 'FCL_REASSIGN' || j.status === 'MT_REASSIGN') &&
-          !isJobCompletedOrSuperseded(j),
-      ),
+      jobs.filter((j) => {
+        if (isJobCompletedOrSuperseded(j)) return false;
+        const reassignState = evaluateDispatcherJobReassignState(j);
+        return j.status === 'PENDING' || !j.assignedVehicleId || reassignState.canReassign;
+      }),
     [jobs, isJobCompletedOrSuperseded],
   );
 
@@ -1267,6 +1269,7 @@ export default function DrayageAssignmentPage() {
       const hasLinkedOrDetachedChassis =
         Boolean(job.trailerDetached) ||
         job.jobPhase === 'L2' ||
+        isDrayageReassignStatus(st) ||
         [
           'TRAILER_DETACHED',
           'CONTAINER_DETACHED',
@@ -1302,6 +1305,16 @@ export default function DrayageAssignmentPage() {
     (job: DrayageJob) => {
       if (isJobCompletedOrSuperseded(job)) {
         showToast('error', `${job.jobCode} is already completed and cannot be reassigned.`);
+        return;
+      }
+      const reassignState = evaluateDispatcherJobReassignState(job);
+      if (reassignState.isWaitingForFirstRampAlert && reassignState.reassignLabel) {
+        showToast(
+          'error',
+          `${reassignState.reassignLabel} for ${job.jobCode} is locked until the First ETC Alert (T-15m)${
+            reassignState.minsLeft !== null ? ` (${reassignState.minsLeft}m remaining)` : ''
+          }.`,
+        );
         return;
       }
       setAssigningJob(job);
@@ -1461,7 +1474,8 @@ export default function DrayageAssignmentPage() {
           : 'Pending Assignment',
       filter: 'text',
       render: (job) => {
-        const isAssigned = Boolean(job.assignedVehicleId) && !['FCL_REASSIGN', 'MT_REASSIGN'].includes(job.status);
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        const isAssigned = Boolean(job.assignedVehicleId) && !isDrayageReassignStatus(job.status) && !reassignState.canReassign;
         return isAssigned ? (
           <div className="space-y-0.5">
             <div className="font-semibold">{job.assignedVehiclePlate}</div>
@@ -1472,7 +1486,9 @@ export default function DrayageAssignmentPage() {
         ) : (
           <div className="space-y-0.5">
             <span className="text-amber-400 text-[11px] font-medium block">
-              {['FCL_REASSIGN', 'MT_REASSIGN'].includes(job.status) ? 'Pending Reassignment' : 'Pending Assignment'}
+              {reassignState.canReassign && reassignState.reassignLabel
+                ? `Awaiting ${reassignState.reassignLabel}`
+                : 'Pending Assignment'}
             </span>
             {job.assignedTrailerPlate && (
               <div className="text-[10px] text-[var(--text-muted)]">
@@ -1486,23 +1502,31 @@ export default function DrayageAssignmentPage() {
     {
       key: 'status',
       header: 'Status',
-      accessor: (j) => j.status,
+      accessor: (j) => evaluateDispatcherJobReassignState(j).displayStatus,
       filter: 'select',
       selectOptions: [
         'PENDING',
         'ASSIGNED',
         'RE-ASSIGNED',
-        'FCL_REASSIGN',
-        'MT_REASSIGN',
+        'MT_Reassign to Yard',
+        'FCL_Reassign to Yard',
+        'FCL_Reassign to Ramp',
+        'MT_Reassign to Ramp',
         'IN_TRANSIT',
         'PLACED_AT_RAMP',
+        'REASSIGN_PLACED_AT_RAMP',
         'PLACED_AT_YARD',
+        'REASSIGN_PLACED_AT_YARD',
         'TRAILER_DETACHED',
+        'REASSIGN_TRAILER_DETACHED',
         'CONTAINER_DETACHED',
         'READY_FOR_PICKUP',
         'COMPLETED',
       ],
-      render: (job) => <StatusPill status={job.status.toLowerCase()} label={job.status} />,
+      render: (job) => {
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        return <StatusPill status={reassignState.displayStatus} label={reassignState.displayStatus} />;
+      },
     },
     {
       key: 'actions',
@@ -1528,14 +1552,67 @@ export default function DrayageAssignmentPage() {
             </div>
           );
         }
-        const isReassign =
-          job.jobPhase === 'L1' &&
-          (Boolean(job.assignedVehicleId) ||
-            Boolean(job.trailerDetached) ||
-            ['FCL_REASSIGN', 'MT_REASSIGN', 'RE-ASSIGNED', 'PLACED_AT_YARD', 'PLACED_AT_RAMP', 'TRAILER_DETACHED', 'CONTAINER_DETACHED'].includes(
-              job.status,
-            ));
-        const isAssigned = isReassign || Boolean(job.assignedVehicleId);
+
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        const stUpper = (job.status || '').toUpperCase();
+
+        // 1. Unassigned initial PENDING job -> Assign Fleet
+        if (stUpper === 'PENDING') {
+          return (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => handleOpenAssign(job)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors whitespace-nowrap"
+              >
+                Assign Fleet
+              </button>
+            </div>
+          );
+        }
+
+        // 2. Eligible for Directional Reassign (Placed at Yard -> to Ramp; OR Placed at Ramp + 1st Alert -> to Yard)
+        if (reassignState.canReassign && reassignState.reassignLabel) {
+          const isToRamp = reassignState.originLocation === 'YARD';
+          return (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => handleOpenAssign(job)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors whitespace-nowrap shadow-sm ${
+                  isToRamp
+                    ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30'
+                    : 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                }`}
+                title={`Reassign Prime Mover & Driver (${reassignState.reassignLabel})`}
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>{reassignState.reassignLabel}</span>
+              </button>
+            </div>
+          );
+        }
+
+        // 3. At Ramp BEFORE First ETC Alert -> Disabled until First Alert (T-15m)
+        if (reassignState.isWaitingForFirstRampAlert && reassignState.reassignLabel) {
+          return (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-55 whitespace-nowrap"
+                title={`Reassign is disabled while offloading at Ramp${
+                  reassignState.minsLeft !== null ? ` (${reassignState.minsLeft}m left)` : ''
+                }. Unlocks as "${reassignState.reassignLabel}" upon First Alert (T-15m).`}
+              >
+                <Clock className="w-3 h-3 text-amber-400" />
+                <span>{reassignState.reassignLabel}</span>
+              </button>
+            </div>
+          );
+        }
+
+        // 4. Active in-progress leg (Assigned / Re-Assigned / En Route)
         return (
           <div className="flex items-center justify-end">
             <button
@@ -1543,7 +1620,7 @@ export default function DrayageAssignmentPage() {
               onClick={() => handleOpenAssign(job)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors whitespace-nowrap"
             >
-              {isAssigned ? 'Reassign' : 'Assign Fleet'}
+              {job.assignedVehicleId ? 'Reassign' : 'Assign Fleet'}
             </button>
           </div>
         );
@@ -1661,6 +1738,7 @@ export default function DrayageAssignmentPage() {
       const isWarehousePickup =
         job.jobPhase === 'L2' ||
         Boolean(job.trailerDetached) ||
+        isDrayageReassignStatus(st) ||
         [
           'FCL_REASSIGN',
           'MT_REASSIGN',
@@ -3534,6 +3612,8 @@ export default function DrayageAssignmentPage() {
                         : '⚡ Confirm Inland Street-Turn Triangulation'
                     : isBogieAssign
                     ? '⚡ Dual-20FT Bogie Dispatch (Single Prime Mover)'
+                    : evaluateDispatcherJobReassignState(assigningJob).reassignLabel
+                    ? `${evaluateDispatcherJobReassignState(assigningJob).reassignLabel}: ${assigningJob.jobCode}`
                     : `Assign Assets: ${assigningJob.jobCode}`}
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -3543,7 +3623,7 @@ export default function DrayageAssignmentPage() {
                       : `Port Reload: Drop ${activeStreetTurnPair.inboundJob.jobCode} (${activeStreetTurnPair.originWarehouse} ➜ ${activeStreetTurnPair.terminalName}) + Pick ${activeStreetTurnPair.outboundJob.jobCode} (${activeStreetTurnPair.terminalName} ➜ ${activeStreetTurnPair.destWarehouse})`
                     : isBogieAssign
                     ? `Coupling two 20FT containers onto a 40FT/45FT skeletal/bogie trailer`
-                    : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize})`}
+                    : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize}) · ${assigningJob.shipmentType || 'IMPORT'}`}
                 </p>
               </div>
               <button

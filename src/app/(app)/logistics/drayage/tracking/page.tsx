@@ -41,6 +41,9 @@ import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/Dra
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  evaluateDispatcherJobReassignState,
+  isDrayageReassignStatus,
+  resolveDirectionalReassignStatus,
   resolveOperationalMilestoneLocation,
   type DrayageAutomationConfig,
 } from '@/lib/logistics/drayage-domain';
@@ -235,6 +238,7 @@ function getOperationalStageIndex(status: string, trailerDetached?: boolean, isL
     return 6;
   }
   if (
+    isDrayageReassignStatus(s) ||
     [
       'CONTAINER_DETACHED',
       'TRAILER_DETACHED',
@@ -766,13 +770,15 @@ export default function DrayageJobTrackingPage() {
     }
   };
 
-  // Dispatcher Reassign & Offload ETC Alerts (@ T-15m and Upon Expiry)
+  // Dispatcher Reassign & Offload ETC Alerts (@ T-15m First Alert, Upon Expiry, and Yard Staging)
   const reassignEtcAlerts = useMemo(() => {
     const items: Array<{
       job: DrayageJob;
-      alertLevel: 'EXPIRED' | 'T15_WARNING';
+      alertLevel: 'EXPIRED' | 'T15_WARNING' | 'YARD_STAGED';
       minsLeft: number | null;
       isYardReassign: boolean;
+      reassignLabel: string;
+      displayStatus: string;
     }> = [];
     for (const j of jobs) {
       if (j.jobPhase !== 'L1' || j.l2Activated) continue;
@@ -780,33 +786,54 @@ export default function DrayageJobTrackingPage() {
       if (['COMPLETED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'STREET_TURNED', 'CANCELLED'].includes(st)) {
         continue;
       }
-      const isReassignStatus = st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
-      const etcMs = j.etcTime ? new Date(j.etcTime).getTime() : null;
-      const minsLeft = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - nowTickMs) / 60000) : null;
-      const isYardReassign =
-        isReassignStatus ||
-        (j.placementLocation || '').toUpperCase() === 'YARD' ||
-        st === 'PLACED_AT_YARD' ||
-        st === 'REASSIGN_PLACED_AT_YARD';
+      const evalState = evaluateDispatcherJobReassignState(j, nowTickMs);
+      const minsLeft = evalState.minsLeft;
+      const isYardReassign = evalState.originLocation === 'YARD';
+      const reassignLabel =
+        evalState.reassignLabel ||
+        resolveDirectionalReassignStatus({
+          originLocation: isYardReassign ? 'YARD' : 'RAMP',
+          shipmentType: j.shipmentType,
+        });
 
-      if (isReassignStatus || (minsLeft !== null && minsLeft <= 0)) {
-        items.push({
-          job: j,
-          alertLevel: 'EXPIRED',
-          minsLeft,
-          isYardReassign,
-        });
-      } else if (minsLeft !== null && minsLeft > 0 && minsLeft <= 15) {
-        items.push({
-          job: j,
-          alertLevel: 'T15_WARNING',
-          minsLeft,
-          isYardReassign,
-        });
+      if (evalState.canReassign) {
+        if (isYardReassign) {
+          items.push({
+            job: j,
+            alertLevel: 'YARD_STAGED',
+            minsLeft,
+            isYardReassign: true,
+            reassignLabel,
+            displayStatus: evalState.displayStatus,
+          });
+        } else if (minsLeft !== null && minsLeft <= 0) {
+          items.push({
+            job: j,
+            alertLevel: 'EXPIRED',
+            minsLeft,
+            isYardReassign: false,
+            reassignLabel,
+            displayStatus: evalState.displayStatus,
+          });
+        } else {
+          items.push({
+            job: j,
+            alertLevel: 'T15_WARNING',
+            minsLeft,
+            isYardReassign: false,
+            reassignLabel,
+            displayStatus: evalState.displayStatus,
+          });
+        }
       }
     }
     return items.sort((a, b) => {
-      if (a.alertLevel !== b.alertLevel) return a.alertLevel === 'EXPIRED' ? -1 : 1;
+      if (a.alertLevel !== b.alertLevel) {
+        if (a.alertLevel === 'EXPIRED') return -1;
+        if (b.alertLevel === 'EXPIRED') return 1;
+        if (a.alertLevel === 'T15_WARNING') return -1;
+        return 1;
+      }
       return (a.minsLeft ?? 0) - (b.minsLeft ?? 0);
     });
   }, [jobs, nowTickMs]);
@@ -1202,7 +1229,7 @@ export default function DrayageJobTrackingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {reassignEtcAlerts.map(({ job, alertLevel, minsLeft, isYardReassign }) => {
+            {reassignEtcAlerts.map(({ job, alertLevel, minsLeft, isYardReassign, reassignLabel, displayStatus }) => {
               const isExpired = alertLevel === 'EXPIRED';
               const isSelected = activeJob?.id === job.id;
               return (
@@ -1212,6 +1239,8 @@ export default function DrayageJobTrackingPage() {
                   className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2.5 ${
                     isExpired
                       ? 'bg-rose-500/10 border-rose-500/40 hover:border-rose-400'
+                      : isYardReassign
+                      ? 'bg-indigo-500/10 border-indigo-500/40 hover:border-indigo-400'
                       : 'bg-amber-500/10 border-amber-500/40 hover:border-amber-400'
                   } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 >
@@ -1222,12 +1251,16 @@ export default function DrayageJobTrackingPage() {
                           className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                             isExpired
                               ? 'bg-rose-500 text-white animate-pulse'
+                              : isYardReassign
+                              ? 'bg-indigo-500 text-white'
                               : 'bg-amber-500 text-slate-950'
                           }`}
                         >
                           {isExpired
-                            ? '🚨 ETC EXPIRED · REASSIGN DUE'
-                            : `⏳ T-15M ALERT (${minsLeft}m left)`}
+                            ? `🚨 ETC EXPIRED · ${reassignLabel}`
+                            : isYardReassign
+                            ? `📦 YARD STAGED · ${reassignLabel}`
+                            : `⏳ FIRST ALERT (${minsLeft ?? 15}m left) · ${reassignLabel}`}
                         </span>
                         <span className="font-mono font-bold text-xs text-[var(--text-main)]">
                           {job.jobCode}
@@ -1235,25 +1268,29 @@ export default function DrayageJobTrackingPage() {
                         <span className="font-mono text-xs font-semibold text-blue-400">
                           {job.containerNumber} ({job.containerSize})
                         </span>
-                        <StatusPill status={job.status.toLowerCase()} label={job.status} />
+                        <StatusPill status={displayStatus} label={displayStatus} />
                       </div>
                       <div className="text-[11px] text-[var(--text-muted)] mt-1">
                         <strong className="text-[var(--text-main)]">{job.warehouseName}</strong> ({job.placementLocation || (isYardReassign ? 'YARD' : 'RAMP')}) · Customer: {job.customerName}
                       </div>
                       <div className="text-[11px] mt-0.5">
-                        {job.etcTime ? (
+                        {isYardReassign ? (
+                          <span className="text-indigo-300 font-bold">
+                            Placed at Yard — Dispatcher Reassign enabled as {reassignLabel}
+                          </span>
+                        ) : job.etcTime ? (
                           <span className={isExpired ? 'text-rose-300 font-bold' : 'text-amber-300 font-bold'}>
                             ETC: {new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             {' · '}
                             {isExpired
                               ? minsLeft !== null && minsLeft < 0
-                                ? `Expired ${Math.abs(minsLeft)}m ago — Reassign tractor now (FCL_REASSIGN / MT_REASSIGN)`
-                                : `Timer Expired — Reassign tractor now (FCL_REASSIGN / MT_REASSIGN)`
-                              : `Approaching expiry in ${minsLeft} minute(s) — Prepare tractor reassignment`}
+                                ? `Expired ${Math.abs(minsLeft)}m ago — Dispatcher Reassign enabled as ${reassignLabel}`
+                                : `Timer Expired — Dispatcher Reassign enabled as ${reassignLabel}`
+                              : `First Alert reached (${minsLeft}m left) — Dispatcher Reassign enabled as ${reassignLabel}`}
                           </span>
                         ) : (
                           <span className="text-rose-300 font-bold">
-                            Status {job.status} — Immediate Tractor Reassignment Required
+                            Status {displayStatus} — Immediate Tractor Reassignment Required
                           </span>
                         )}
                       </div>
@@ -1271,34 +1308,40 @@ export default function DrayageJobTrackingPage() {
                     >
                       Inspect Job
                     </button>
-                    <button
-                      type="button"
-                      disabled={updatingStatus}
-                      onClick={() => handleExtendEtc(30, job.id)}
-                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
-                      title="Extend ETC by +30 minutes"
-                    >
-                      +30m ETC
-                    </button>
-                    <button
-                      type="button"
-                      disabled={updatingStatus}
-                      onClick={() => handleExtendEtc(60, job.id)}
-                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
-                      title="Extend ETC by +1 hour"
-                    >
-                      +1h ETC
-                    </button>
+                    {!isYardReassign && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={updatingStatus}
+                          onClick={() => handleExtendEtc(30, job.id)}
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
+                          title="Extend ETC by +30 minutes"
+                        >
+                          +30m ETC
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updatingStatus}
+                          onClick={() => handleExtendEtc(60, job.id)}
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-amber-500/40 text-[11px] font-bold text-amber-400 hover:bg-amber-500/15 transition-colors"
+                          title="Extend ETC by +1 hour"
+                        >
+                          +1h ETC
+                        </button>
+                      </>
+                    )}
                     <Link
                       href="/logistics/drayage/assignment"
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
                         isExpired
                           ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-sm'
+                          : isYardReassign
+                          ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
                           : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm'
                       }`}
                     >
                       <Truck className="w-3 h-3" />
-                      <span>Reassign Tractor</span>
+                      <span>{reassignLabel}</span>
                     </Link>
                   </div>
                 </div>
@@ -1341,6 +1384,7 @@ export default function DrayageJobTrackingPage() {
             {jobs.map((job) => {
               const selected = activeJob?.id === job.id;
               const jobSt = (job.status || '').toUpperCase();
+              const jobEval = evaluateDispatcherJobReassignState(job, nowTickMs);
               const jobEtcMs = job.etcTime ? new Date(job.etcTime).getTime() : null;
               const jobMinsLeft =
                 jobEtcMs !== null && !isNaN(jobEtcMs) ? Math.ceil((jobEtcMs - nowTickMs) / 60000) : null;
@@ -1348,15 +1392,17 @@ export default function DrayageJobTrackingPage() {
                 job.jobPhase === 'L1' &&
                 !job.l2Activated &&
                 jobSt !== 'COMPLETED' &&
-                (jobSt === 'FCL_REASSIGN' || jobSt === 'MT_REASSIGN' || (jobMinsLeft !== null && jobMinsLeft <= 0));
+                jobEval.originLocation === 'RAMP' &&
+                jobEval.canReassign &&
+                jobMinsLeft !== null &&
+                jobMinsLeft <= 0;
               const isJobEtcT15 =
                 job.jobPhase === 'L1' &&
                 !job.l2Activated &&
                 jobSt !== 'COMPLETED' &&
                 !isJobEtcExpired &&
-                jobMinsLeft !== null &&
-                jobMinsLeft > 0 &&
-                jobMinsLeft <= 15;
+                jobEval.originLocation === 'RAMP' &&
+                jobEval.canReassign;
 
               return (
                 <div
@@ -1385,18 +1431,18 @@ export default function DrayageJobTrackingPage() {
                         {job.jobPhase}
                       </span>
                     </div>
-                    <StatusPill status={job.status.toLowerCase()} label={job.status} />
+                    <StatusPill status={jobEval.displayStatus} label={jobEval.displayStatus} />
                   </div>
 
                   {(isJobEtcExpired || isJobEtcT15) && (
                     <div className="mb-1.5">
                       {isJobEtcExpired ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
-                          🚨 ETC EXPIRED · REASSIGN REQUIRED
+                          🚨 ETC EXPIRED · {jobEval.reassignLabel}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
-                          ⏳ REASSIGN ALERT @ T-{jobMinsLeft}M
+                          ⏳ 1ST ALERT ({jobMinsLeft ?? 15}M) · {jobEval.reassignLabel}
                         </span>
                       )}
                     </div>
@@ -1440,7 +1486,10 @@ export default function DrayageJobTrackingPage() {
                       >
                         {activeJob.jobPhase} Trip
                       </span>
-                      <StatusPill status={activeJob.status.toLowerCase()} label={activeJob.status} />
+                      <StatusPill
+                        status={evaluateDispatcherJobReassignState(activeJob, nowTickMs).displayStatus}
+                        label={evaluateDispatcherJobReassignState(activeJob, nowTickMs).displayStatus}
+                      />
                     </div>
                     <p className="text-xs text-[var(--text-muted)] mt-1">
                       {activeJob.customerName} · {activeJob.shipmentType} Manifest
@@ -1503,11 +1552,10 @@ export default function DrayageJobTrackingPage() {
                     </button>
                     {activeJob.jobPhase === 'L1' && !activeJob.l2Activated && (() => {
                       const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
+                      const activeEval = evaluateDispatcherJobReassignState(activeJob, nowTickMs);
                       const isInitialYardDrop =
-                        activeJob.placementLocation === 'YARD' &&
-                        ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(
-                          (activeJob.status || '').toUpperCase(),
-                        );
+                        activeEval.originLocation === 'YARD' &&
+                        (activeEval.canReassign || ['PLACED_AT_YARD'].includes((activeJob.status || '').toUpperCase()));
                       const canTriggerL2 = currentStage >= 4 && !isInitialYardDrop;
                       return (
                         <button
@@ -1793,32 +1841,42 @@ export default function DrayageJobTrackingPage() {
                   (activeJob.etcTime ||
                     activeJob.placementLocation === 'RAMP' ||
                     activeJob.placementLocation === 'YARD' ||
-                    ['PLACED_AT_RAMP', 'PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                    isDrayageReassignStatus(activeJob.status) ||
+                    ['PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_RAMP'].includes(
                       (activeJob.status || '').toUpperCase(),
                     ) ||
                     activeJob.trailerDetached) && (() => {
                     const activeSt = (activeJob.status || '').toUpperCase();
-                    const activeEtcMs = activeJob.etcTime ? new Date(activeJob.etcTime).getTime() : null;
-                    const activeMinsLeft =
-                      activeEtcMs !== null && !isNaN(activeEtcMs)
-                        ? Math.ceil((activeEtcMs - nowTickMs) / 60000)
-                        : null;
+                    const reassignEval = evaluateDispatcherJobReassignState(activeJob, nowTickMs);
+                    const activeMinsLeft = reassignEval.minsLeft;
                     const isEtcExpired =
-                      activeSt === 'FCL_REASSIGN' ||
-                      activeSt === 'MT_REASSIGN' ||
-                      (activeMinsLeft !== null && activeMinsLeft <= 0);
+                      reassignEval.firstAlertReached &&
+                      activeMinsLeft !== null &&
+                      activeMinsLeft <= 0;
                     const isEtcT15 =
-                      !isEtcExpired && activeMinsLeft !== null && activeMinsLeft > 0 && activeMinsLeft <= 15;
+                      !isEtcExpired &&
+                      reassignEval.firstAlertReached &&
+                      activeMinsLeft !== null &&
+                      activeMinsLeft > 0 &&
+                      activeMinsLeft <= 15;
                     const isYardPlacement =
-                      activeJob.placementLocation === 'YARD' ||
-                      ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(activeSt);
+                      reassignEval.originLocation === 'YARD' ||
+                      activeSt === 'PLACED_AT_YARD' ||
+                      activeSt === 'FCL_REASSIGN TO RAMP' ||
+                      activeSt === 'MT_REASSIGN TO RAMP';
+                    const directionalStatusLabel =
+                      reassignEval.reassignLabel ||
+                      resolveDirectionalReassignStatus({
+                        originLocation: activeJob.placementLocation || 'RAMP',
+                        shipmentType: activeJob.shipmentType,
+                      });
 
                     return (
                       <div
                         className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition-all ${
                           isEtcExpired
                             ? 'bg-rose-500/15 border-rose-500/50'
-                            : isEtcT15
+                            : isEtcT15 || isYardPlacement
                             ? 'bg-amber-500/15 border-amber-500/50'
                             : 'bg-amber-500/10 border-amber-500/30'
                         }`}
@@ -1842,17 +1900,21 @@ export default function DrayageJobTrackingPage() {
                               >
                                 Destuffing, Yard &amp; Reassign Timer (ETC)
                               </span>
-                              {isEtcExpired ? (
+                              {isYardPlacement && reassignEval.canReassign ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950">
+                                  🅿️ PLACED AT YARD · {directionalStatusLabel} ENABLED
+                                </span>
+                              ) : isEtcExpired ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-500 text-white animate-pulse">
-                                  🚨 ETC EXPIRED — REASSIGN TRACTOR REQUIRED
+                                  🚨 ETC EXPIRED — {directionalStatusLabel} ENABLED
                                 </span>
                               ) : isEtcT15 ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
-                                  ⏳ T-15M DISPATCHER ALERT ({activeMinsLeft}m remaining) · PREPARE REASSIGN
+                                  ⏳ 1ST ALERT (T-15M · {activeMinsLeft}m left) — {directionalStatusLabel} ENABLED
                                 </span>
                               ) : activeJob.etcTime ? (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                  ⏳ ACTIVE TIMER ({activeMinsLeft}m left)
+                                  ⏳ OFFLOADING AT RAMP ({activeMinsLeft}m left · Reassign unlocks @ T-15m)
                                 </span>
                               ) : (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400">
@@ -1881,58 +1943,61 @@ export default function DrayageJobTrackingPage() {
                                     }
                                   >
                                     {isEtcExpired
-                                      ? 'Offloading / Yard timer expired — Dispatcher Reassign required (FCL_REASSIGN / MT_REASSIGN)'
-                                      : `${activeMinsLeft} mins remaining`}
-                                  </span>
-                                  {' · '}
-                                  <span className="text-sky-400 font-medium">
-                                    Alerts Dispatcher @ T-15m &amp; Upon Expiry
+                                      ? `Offloading timer expired — Dispatcher Reassign enabled (${directionalStatusLabel})`
+                                      : isEtcT15
+                                      ? `First Alert reached (${activeMinsLeft}m left) — Dispatcher Reassign enabled (${directionalStatusLabel})`
+                                      : `${activeMinsLeft} mins remaining (Reassign locked until T-15m alert)`}
                                   </span>
                                 </>
+                              ) : isYardPlacement ? (
+                                <span>
+                                  Container positioned at Yard — Dispatcher Reassign enabled:{' '}
+                                  <strong className="text-amber-300">{directionalStatusLabel}</strong>
+                                </span>
                               ) : (
-                                'Set ETC timer from console or driver app — Dispatcher will be alerted at T-15m and upon expiry'
+                                'Set ETC timer from console or driver app — Dispatcher Reassign unlocks at the first alert (T-15m)'
                               )}
                             </div>
                           </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                          {!activeJob.l2Activated && (
+                          {!activeJob.l2Activated && !isYardPlacement && (
                             <>
                               <button
                                 onClick={async () => {
                                   const t14Iso = new Date(Date.now() + 14 * 60 * 1000).toISOString();
                                   delete alertedEtcJobsRef.current[activeJob.id];
                                   await handleUpdateStatus(
-                                    activeJob.status === 'IN_TRANSIT' ? 'PLACED_AT_RAMP' : activeJob.status,
-                                    activeJob.placementLocation || 'RAMP',
-                                    activeJob.trailerDetached,
+                                    directionalStatusLabel,
+                                    'RAMP',
+                                    true,
                                     t14Iso,
                                   );
                                   showToast(
                                     'error',
-                                    `⏳ T-15M REASSIGN ALERT: ${activeJob.jobCode} (${activeJob.containerNumber}) is within 15 minutes of ETC expiry!`,
+                                    `⏳ 1ST ALERT (T-15M): ${directionalStatusLabel} enabled for ${activeJob.jobCode} (${activeJob.containerNumber})!`,
                                   );
                                 }}
                                 disabled={updatingStatus}
                                 className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 text-xs font-bold transition-colors"
-                                title="Set ETC to T-14 mins to test the T-15m Dispatcher Reassign Alert"
+                                title="Simulate First Alert (T-14 mins) to enable directional Reassign to Yard"
                               >
-                                ⏳ Test T-15m Alert
+                                ⏳ Test 1st Alert (T-15m)
                               </button>
                               <button
                                 onClick={async () => {
                                   const expIso = new Date(Date.now() - 60 * 1000).toISOString();
                                   delete alertedEtcJobsRef.current[activeJob.id];
                                   await handleUpdateStatus(
-                                    activeJob.shipmentType === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN',
-                                    activeJob.placementLocation || 'RAMP',
+                                    directionalStatusLabel,
+                                    'RAMP',
                                     true,
                                     expIso,
                                   );
                                   showToast(
                                     'error',
-                                    `🚨 ETC EXPIRED — Reassign Required for ${activeJob.jobCode} (${activeJob.containerNumber})!`,
+                                    `🚨 ETC EXPIRED — ${directionalStatusLabel} enabled for ${activeJob.jobCode} (${activeJob.containerNumber})!`,
                                   );
                                 }}
                                 disabled={updatingStatus}
@@ -1943,59 +2008,48 @@ export default function DrayageJobTrackingPage() {
                               </button>
                             </>
                           )}
-                          <button
-                            onClick={() => handleExtendEtc(60)}
-                            disabled={updatingStatus}
-                            className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
-                            title="Extend Offload ETC by 1 hour"
-                          >
-                            +1 Hour
-                          </button>
-                          <button
-                            onClick={() => handleExtendEtc(120)}
-                            disabled={updatingStatus}
-                            className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
-                            title="Extend Offload ETC by 2 hours"
-                          >
-                            +2 Hours
-                          </button>
-                          {(isEtcExpired || isYardPlacement) ? (
+                          {!isYardPlacement && (
+                            <>
+                              <button
+                                onClick={() => handleExtendEtc(60)}
+                                disabled={updatingStatus}
+                                className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                                title="Extend Offload ETC by 1 hour"
+                              >
+                                +1 Hour
+                              </button>
+                              <button
+                                onClick={() => handleExtendEtc(120)}
+                                disabled={updatingStatus}
+                                className="px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold transition-colors"
+                                title="Extend Offload ETC by 2 hours"
+                              >
+                                +2 Hours
+                              </button>
+                            </>
+                          )}
+                          {reassignEval.canReassign ? (
                             <Link
                               href="/logistics/drayage/assignment"
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition-colors shadow-sm"
-                              title="Open Assignment Queue to Reassign a Tractor for this container"
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
+                                isEtcExpired
+                                  ? 'bg-rose-500 hover:bg-rose-400 text-white'
+                                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                              }`}
+                              title={`Open Assignment Queue to execute ${directionalStatusLabel}`}
                             >
                               <Truck className="w-3 h-3" />
-                              <span>Reassign Tractor</span>
+                              <span>{directionalStatusLabel}</span>
                             </Link>
-                          ) : (
-                            !activeJob.l2Activated && (() => {
-                              const currentStage = getOperationalStageIndex(activeJob.status, activeJob.trailerDetached);
-                              const canTriggerL2 =
-                                currentStage >= 4 &&
-                                activeJob.placementLocation !== 'YARD' &&
-                                Boolean(activeJob.etcTime);
-                              return (
-                                <button
-                                  onClick={handleTriggerL2}
-                                  disabled={updatingStatus || !canTriggerL2}
-                                  title={
-                                    canTriggerL2
-                                      ? 'Activate L2 Empty Return job now'
-                                      : 'Requires container Placed at Ramp with Offloading ETC set'
-                                  }
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-sm ${
-                                    canTriggerL2
-                                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 cursor-pointer'
-                                      : 'bg-slate-500/20 text-[var(--text-muted)] opacity-50 cursor-not-allowed'
-                                  }`}
-                                >
-                                  <RefreshCw className="w-3 h-3" />
-                                  Trigger L2 Empty Return
-                                </button>
-                              );
-                            })()
-                          )}
+                          ) : reassignEval.isWaitingForFirstRampAlert ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-500/15 border border-slate-500/30 text-[var(--text-muted)] font-bold text-xs opacity-60 cursor-not-allowed"
+                              title="Reassign unlocks upon the first ETC alert (T-15m)"
+                            >
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              <span>{directionalStatusLabel} (Locked until 1st Alert)</span>
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     );

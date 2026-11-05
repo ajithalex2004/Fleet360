@@ -182,6 +182,13 @@ const PILLS: Record<string, string> = {
   warning:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
   danger:    'bg-rose-500/20 text-rose-300 border-rose-500/40',
   info:      'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+  fcl_reassign: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  mt_reassign: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  mt_reassign_to_yard: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  fcl_reassign_to_yard: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  fcl_reassign_to_ramp: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+  mt_reassign_to_ramp: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+  re_assigned: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
 };
 
 export function StatusPill({ status, label }: { status?: string; label?: string }) {
@@ -189,7 +196,8 @@ export function StatusPill({ status, label }: { status?: string; label?: string 
   const rawStatus = status ?? '—';
   const key = rawStatus.toLowerCase().replace(/[\s-]/g, '_');
   const cls = PILLS[key] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
-  const displayLabel = label ? tLabel(label) : tLabel(rawStatus.toUpperCase());
+  const isMixedCaseReassign = /reassign\s+to\s+(?:yard|ramp)/i.test(rawStatus);
+  const displayLabel = label ? tLabel(label) : isMixedCaseReassign ? rawStatus : tLabel(rawStatus.toUpperCase());
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cls}`}>
       {displayLabel}

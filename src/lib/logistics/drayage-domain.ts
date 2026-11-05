@@ -450,6 +450,209 @@ export interface DrayageStatusLog {
   location?: string;
 }
 
+export type DirectionalReassignLabel =
+  | 'MT_Reassign to Yard'
+  | 'FCL_Reassign to Yard'
+  | 'FCL_Reassign to Ramp'
+  | 'MT_Reassign to Ramp';
+
+export const DIRECTIONAL_REASSIGN_STATUS_UPPER_SET = new Set([
+  'FCL_REASSIGN',
+  'MT_REASSIGN',
+  'MT_REASSIGN TO YARD',
+  'FCL_REASSIGN TO YARD',
+  'FCL_REASSIGN TO RAMP',
+  'MT_REASSIGN TO RAMP',
+  'MT_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_RAMP',
+  'MT_REASSIGN_TO_RAMP',
+]);
+
+export function isDrayageReassignStatus(status?: string | null): boolean {
+  const s = String(status || '').trim().toUpperCase();
+  return DIRECTIONAL_REASSIGN_STATUS_UPPER_SET.has(s);
+}
+
+/**
+ * Resolves the directional Reassign status label based on origin placement (Ramp vs Yard)
+ * and shipmentType (IMPORT vs EXPORT):
+ * - Origin = RAMP (Placed at Ramp / Reassign Placed at Ramp):
+ *     - IMPORT -> 'MT_Reassign to Yard' (destuffed empty at ramp -> move to yard)
+ *     - EXPORT -> 'FCL_Reassign to Yard' (stuffed full at ramp -> move to yard)
+ * - Origin = YARD (Placed at Yard):
+ *     - IMPORT -> 'FCL_Reassign to Ramp' (staged full at yard -> move to ramp for destuffing)
+ *     - EXPORT -> 'MT_Reassign to Ramp' (staged empty at yard -> move to ramp for stuffing)
+ */
+export function resolveDirectionalReassignStatus(args: {
+  originLocation: 'RAMP' | 'YARD' | string | null | undefined;
+  shipmentType: 'IMPORT' | 'EXPORT' | string | null | undefined;
+}): DirectionalReassignLabel {
+  const loc = String(args.originLocation || 'RAMP').trim().toUpperCase();
+  const ship = String(args.shipmentType || 'IMPORT').trim().toUpperCase();
+  if (loc === 'YARD') {
+    return ship === 'EXPORT' ? 'MT_Reassign to Ramp' : 'FCL_Reassign to Ramp';
+  }
+  return ship === 'EXPORT' ? 'FCL_Reassign to Yard' : 'MT_Reassign to Yard';
+}
+
+export interface DispatcherJobReassignEvaluation {
+  canReassign: boolean;
+  isWaitingForFirstRampAlert: boolean;
+  reassignLabel: DirectionalReassignLabel | null;
+  displayStatus: string;
+  originLocation: 'RAMP' | 'YARD' | null;
+  firstAlertReached: boolean;
+  minsLeft: number | null;
+}
+
+export function evaluateDispatcherJobReassignState(
+  job: {
+    status?: string | null;
+    shipmentType?: 'IMPORT' | 'EXPORT' | string | null;
+    placementLocation?: 'RAMP' | 'YARD' | string | null;
+    trailerDetached?: boolean;
+    etcTime?: string | null;
+    etcAlertStatus?: string | null;
+  },
+  nowMs: number = Date.now(),
+): DispatcherJobReassignEvaluation {
+  const rawStatus = String(job.status || '').trim();
+  const s = rawStatus.toUpperCase();
+  const ship = String(job.shipmentType || 'IMPORT').trim().toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  const locUpper = String(job.placementLocation || '').trim().toUpperCase();
+
+  let minsLeft: number | null = null;
+  if (job.etcTime) {
+    const etcMs = new Date(job.etcTime).getTime();
+    if (!isNaN(etcMs)) {
+      minsLeft = Math.ceil((etcMs - nowMs) / 60000);
+    }
+  }
+  const alertUpper = String(job.etcAlertStatus || '').trim().toUpperCase();
+  const firstAlertReached =
+    alertUpper === 'T15_WARNING' ||
+    alertUpper === 'EXPIRED' ||
+    (minsLeft !== null && minsLeft <= 15);
+
+  if (s === 'MT_REASSIGN TO YARD' || s === 'MT_REASSIGN_TO_YARD') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'MT_Reassign to Yard',
+      displayStatus: 'MT_Reassign to Yard',
+      originLocation: 'RAMP',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN TO YARD' || s === 'FCL_REASSIGN_TO_YARD') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'FCL_Reassign to Yard',
+      displayStatus: 'FCL_Reassign to Yard',
+      originLocation: 'RAMP',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN TO RAMP' || s === 'FCL_REASSIGN_TO_RAMP') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'FCL_Reassign to Ramp',
+      displayStatus: 'FCL_Reassign to Ramp',
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'MT_REASSIGN TO RAMP' || s === 'MT_REASSIGN_TO_RAMP') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'MT_Reassign to Ramp',
+      displayStatus: 'MT_Reassign to Ramp',
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN' || s === 'MT_REASSIGN') {
+    const origin: 'RAMP' | 'YARD' = locUpper === 'YARD' ? 'YARD' : 'RAMP';
+    const label = resolveDirectionalReassignStatus({ originLocation: origin, shipmentType: ship });
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: label,
+      displayStatus: label,
+      originLocation: origin,
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+
+  // Origin = Yard (PLACED_AT_YARD or detached at YARD):
+  // Immediately eligible for FCL_Reassign to Ramp (Import) or MT_Reassign to Ramp (Export)
+  const isAtInitialYard =
+    s === 'PLACED_AT_YARD' ||
+    ((s === 'TRAILER_DETACHED' || s === 'CONTAINER_DETACHED') && locUpper === 'YARD');
+  if (isAtInitialYard) {
+    const label = resolveDirectionalReassignStatus({ originLocation: 'YARD', shipmentType: ship });
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: label,
+      displayStatus: label,
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+
+  // Origin = Ramp (PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP or detached at RAMP):
+  // Disabled before first alert; enabled and shown as MT_Reassign to Yard (Import) / FCL_Reassign to Yard (Export) upon first alert
+  const isAtRamp =
+    s === 'PLACED_AT_RAMP' ||
+    s === 'REASSIGN_PLACED_AT_RAMP' ||
+    ((s === 'TRAILER_DETACHED' || s === 'CONTAINER_DETACHED' || s === 'REASSIGN_TRAILER_DETACHED') &&
+      locUpper !== 'YARD');
+  if (isAtRamp) {
+    const label = resolveDirectionalReassignStatus({ originLocation: 'RAMP', shipmentType: ship });
+    if (firstAlertReached) {
+      return {
+        canReassign: true,
+        isWaitingForFirstRampAlert: false,
+        reassignLabel: label,
+        displayStatus: label,
+        originLocation: 'RAMP',
+        firstAlertReached: true,
+        minsLeft,
+      };
+    }
+    return {
+      canReassign: false,
+      isWaitingForFirstRampAlert: true,
+      reassignLabel: label,
+      displayStatus: rawStatus,
+      originLocation: 'RAMP',
+      firstAlertReached: false,
+      minsLeft,
+    };
+  }
+
+  return {
+    canReassign: false,
+    isWaitingForFirstRampAlert: false,
+    reassignLabel: null,
+    displayStatus: rawStatus,
+    originLocation: locUpper === 'YARD' ? 'YARD' : locUpper === 'RAMP' ? 'RAMP' : null,
+    firstAlertReached,
+    minsLeft,
+  };
+}
+
 const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'ACCEPTED',
   'ARRIVED_AT_PORT',
@@ -472,6 +675,14 @@ const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'REASSIGN_TRAILER_DETACHED',
   'FCL_REASSIGN',
   'MT_REASSIGN',
+  'MT_REASSIGN TO YARD',
+  'FCL_REASSIGN TO YARD',
+  'FCL_REASSIGN TO RAMP',
+  'MT_REASSIGN TO RAMP',
+  'MT_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_RAMP',
+  'MT_REASSIGN_TO_RAMP',
   'READY_FOR_PICKUP',
   'CONTAINER_OFFLOADED',
   'CONTAINER_DROPPED',
@@ -1544,16 +1755,34 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   // 4. Jobs
   const mappedJobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => {
-    const rawStatusUpper = String(r.status ?? 'PENDING').toUpperCase();
-    const normalizedJobStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
+    const rawStatusStr = String(r.status ?? 'PENDING').trim();
+    const rawStatusUpper = rawStatusStr.toUpperCase();
+    const rawPlacement = r.placement_location ? (String(r.placement_location) as 'RAMP' | 'YARD') : null;
+    const rawShipmentType = String(r.shipment_type) === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+    let normalizedJobStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
       ? 'COMPLETED'
-      : String(r.status);
-    if (normalizedJobStatus === 'COMPLETED' && rawStatusUpper !== 'COMPLETED') {
+      : rawStatusStr;
+    if (rawStatusUpper === 'FCL_REASSIGN' || rawStatusUpper === 'MT_REASSIGN') {
+      normalizedJobStatus = resolveDirectionalReassignStatus({
+        originLocation: rawPlacement === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: rawShipmentType,
+      });
+    } else if (rawStatusUpper === 'MT_REASSIGN TO YARD' || rawStatusUpper === 'MT_REASSIGN_TO_YARD') {
+      normalizedJobStatus = 'MT_Reassign to Yard';
+    } else if (rawStatusUpper === 'FCL_REASSIGN TO YARD' || rawStatusUpper === 'FCL_REASSIGN_TO_YARD') {
+      normalizedJobStatus = 'FCL_Reassign to Yard';
+    } else if (rawStatusUpper === 'FCL_REASSIGN TO RAMP' || rawStatusUpper === 'FCL_REASSIGN_TO_RAMP') {
+      normalizedJobStatus = 'FCL_Reassign to Ramp';
+    } else if (rawStatusUpper === 'MT_REASSIGN TO RAMP' || rawStatusUpper === 'MT_REASSIGN_TO_RAMP') {
+      normalizedJobStatus = 'MT_Reassign to Ramp';
+    }
+    if (normalizedJobStatus !== rawStatusStr) {
       pendingSyncWrites.push(
         db.$executeRawUnsafe(
-          `UPDATE logistics_drayage_jobs SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          `UPDATE logistics_drayage_jobs SET status = $3, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
           String(r.id),
           String(r.tenant_id),
+          normalizedJobStatus,
         ).catch(() => {}),
       );
     }
@@ -1722,13 +1951,20 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'CONTAINER_OFFLOADED',
     'FCL_REASSIGN',
     'MT_REASSIGN',
+    'MT_REASSIGN TO YARD',
+    'FCL_REASSIGN TO YARD',
+    'FCL_REASSIGN TO RAMP',
+    'MT_REASSIGN TO RAMP',
     'CONTAINER_DROPPED',
     'CONTAINER_DELIVERED',
     'PENDING',
     'CANCELLED',
   ]);
   for (const j of jobs) {
-    const isDriverLegActive = !finishedDriverLegStatuses.has(j.status) && !j.trailerDetached;
+    const isDriverLegActive =
+      !finishedDriverLegStatuses.has((j.status || '').toUpperCase()) &&
+      !isDrayageReassignStatus(j.status) &&
+      !j.trailerDetached;
     if (j.assignedVehicleId) {
       tripsCountByVehicle.set(j.assignedVehicleId, (tripsCountByVehicle.get(j.assignedVehicleId) || 0) + 1);
       if (isDriverLegActive) {
@@ -2148,31 +2384,77 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
 
-  // Check L1 ETC timers (LogiXL-Connect background_worker.go & status_helper.go pattern):
-  // 1) Any L1 job at Ramp / Yard / Detached whose ETC has expired (<= NOW()) transitions to FCL_REASSIGN / MT_REASSIGN
-  //    so the Dispatcher is alerted and can reassign a tractor. ETC expiry NEVER triggers L2 directly.
-  // 2) Only jobs that have reached READY_FOR_PICKUP (after Reassign) or CONTAINER_OFFLOADED auto-activate PENDING L2 Empty Return jobs.
+  // Check L1 ETC timers & Yard Placement directional Reassign state:
+  // 1) Based on PLACED_AT_YARD (or detached at YARD): immediately eligible for FCL_Reassign to Ramp (Import) / MT_Reassign to Ramp (Export).
+  // 2) Based on PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP (or detached at RAMP): upon the FIRST alert (<= 15m / T15_WARNING or EXPIRED),
+  //    enabled and shown as MT_Reassign to Yard (Import) / FCL_Reassign to Yard (Export).
+  // 3) Only jobs that have reached READY_FOR_PICKUP (after Reassign to Yard) or CONTAINER_OFFLOADED auto-activate PENDING L2 Empty Return jobs.
   {
     const nowMs = Date.now();
     for (const j of jobs) {
-      if (j.jobPhase !== 'L1' || j.l2Activated || !j.etcTime) continue;
+      if (j.jobPhase !== 'L1' || j.l2Activated) continue;
       const st = (j.status || '').toUpperCase();
+      const locUpper = String(j.placementLocation || '').toUpperCase();
+
+      // If detached at initial Yard and not yet in directional status, normalize to FCL_Reassign to Ramp / MT_Reassign to Ramp
+      if (
+        (st === 'PLACED_AT_YARD' && j.trailerDetached) ||
+        ((st === 'TRAILER_DETACHED' || st === 'CONTAINER_DETACHED') && locUpper === 'YARD')
+      ) {
+        const yardReassignStatus = resolveDirectionalReassignStatus({
+          originLocation: 'YARD',
+          shipmentType: j.shipmentType,
+        });
+        j.status = yardReassignStatus;
+        j.placementLocation = 'YARD';
+        j.assignedVehicleId = null;
+        j.assignedVehiclePlate = null;
+        j.assignedDriverId = null;
+        j.assignedDriverName = null;
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $3,
+                    placement_location = 'YARD',
+                    assigned_vehicle_id = NULL,
+                    assigned_vehicle_plate = NULL,
+                    assigned_driver_id = NULL,
+                    assigned_driver_name = NULL,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            yardReassignStatus,
+          ).catch(() => {}),
+        );
+        continue;
+      }
+
+      if (!j.etcTime) continue;
       const etcMs = new Date(j.etcTime).getTime();
       if (isNaN(etcMs)) continue;
       const minsLeft = Math.ceil((etcMs - nowMs) / 60000);
 
-      const isEligibleForReassignOnEtcExpiry = [
+      const isRampStatusEligibleForReassign = [
         'PLACED_AT_RAMP',
         'REASSIGN_PLACED_AT_RAMP',
-        'PLACED_AT_YARD',
         'TRAILER_DETACHED',
         'CONTAINER_DETACHED',
         'REASSIGN_TRAILER_DETACHED',
-      ].includes(st);
+      ].includes(st) && locUpper !== 'YARD';
 
-      if (minsLeft <= 0 && isEligibleForReassignOnEtcExpiry) {
-        const nextStatus = j.shipmentType === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
-        j.status = nextStatus;
+      const isDetachedAtRamp =
+        isRampStatusEligibleForReassign &&
+        (j.trailerDetached || ['TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
+
+      const rampReassignStatus = resolveDirectionalReassignStatus({
+        originLocation: 'RAMP',
+        shipmentType: j.shipmentType,
+      });
+
+      if (minsLeft <= 0 && isRampStatusEligibleForReassign) {
+        j.status = rampReassignStatus;
+        j.placementLocation = 'RAMP';
         j.etcAlertStatus = 'EXPIRED';
         j.assignedVehicleId = null;
         j.assignedVehiclePlate = null;
@@ -2182,6 +2464,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           db.$executeRawUnsafe(
             `UPDATE logistics_drayage_jobs
                 SET status = $3,
+                    placement_location = 'RAMP',
                     etc_alert_status = 'EXPIRED',
                     assigned_vehicle_id = NULL,
                     assigned_vehicle_plate = NULL,
@@ -2191,9 +2474,44 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               WHERE id = $1 AND tenant_id = $2`,
             j.id,
             tenantId,
-            nextStatus,
+            rampReassignStatus,
           ).catch(() => {}),
         );
+      } else if (minsLeft > 0 && minsLeft <= 15 && isRampStatusEligibleForReassign) {
+        j.etcAlertStatus = 'T15_WARNING';
+        if (isDetachedAtRamp) {
+          j.status = rampReassignStatus;
+          j.placementLocation = 'RAMP';
+          j.assignedVehicleId = null;
+          j.assignedVehiclePlate = null;
+          j.assignedDriverId = null;
+          j.assignedDriverName = null;
+          pendingSyncWrites.push(
+            db.$executeRawUnsafe(
+              `UPDATE logistics_drayage_jobs
+                  SET status = $3,
+                      placement_location = 'RAMP',
+                      etc_alert_status = 'T15_WARNING',
+                      assigned_vehicle_id = NULL,
+                      assigned_vehicle_plate = NULL,
+                      assigned_driver_id = NULL,
+                      assigned_driver_name = NULL,
+                      updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2`,
+              j.id,
+              tenantId,
+              rampReassignStatus,
+            ).catch(() => {}),
+          );
+        } else {
+          pendingSyncWrites.push(
+            db.$executeRawUnsafe(
+              `UPDATE logistics_drayage_jobs SET etc_alert_status = 'T15_WARNING', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+              j.id,
+              tenantId,
+            ).catch(() => {}),
+          );
+        }
       } else if (minsLeft <= 0 && j.etcAlertStatus !== 'EXPIRED' && j.etcAlertStatus !== 'ACTIVATED') {
         j.etcAlertStatus = 'EXPIRED';
       } else if (minsLeft > 0 && minsLeft <= 15 && j.etcAlertStatus === 'NEW') {
@@ -2724,14 +3042,23 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   for (const j of jobs) {
     const st = (j.status || '').toUpperCase();
-    const isReassignState = st === 'FCL_REASSIGN' || st === 'MT_REASSIGN';
+    const reassignEval = evaluateDispatcherJobReassignState(j);
     const hasEtc = Boolean(j.etcTime);
     const etcMs = hasEtc ? new Date(j.etcTime as string).getTime() : null;
     const minsRemaining = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - Date.now()) / 60000) : null;
-    const isExpired = isReassignState || (minsRemaining !== null && minsRemaining <= 0);
-    const isT15Warning = !isExpired && minsRemaining !== null && minsRemaining > 0 && minsRemaining <= 15;
+    const isExpired =
+      (minsRemaining !== null && minsRemaining <= 0) ||
+      String(j.etcAlertStatus || '').toUpperCase() === 'EXPIRED';
+    const isT15Warning =
+      !isExpired &&
+      ((minsRemaining !== null && minsRemaining > 0 && minsRemaining <= 15) ||
+        String(j.etcAlertStatus || '').toUpperCase() === 'T15_WARNING');
 
     if (j.jobPhase === 'L1' && !j.l2Activated && st !== 'COMPLETED') {
+      const actionLabel = reassignEval.reassignLabel || resolveDirectionalReassignStatus({
+        originLocation: j.placementLocation === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: j.shipmentType,
+      });
       if (isExpired) {
         const expKey = `etc-exp-${j.id}`;
         alerts.push({
@@ -2739,8 +3066,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           tenantId,
           type: 'REASSIGN_ETC_EXPIRED',
           severity: 'URGENT',
-          title: `🚨 ETC Expired — Reassign Required: ${j.jobCode} (${j.containerNumber})`,
-          message: `Offloading / Yard timer expired for ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'YARD/RAMP'}). Immediate Dispatcher Reassign or L2 Empty Return action required.`,
+          title: `🚨 ETC Expired — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Offloading timer expired for ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Dispatcher status enabled as ${actionLabel}.`,
           terminalName: j.terminalName,
           containerId: j.containerId,
           containerNumber: j.containerNumber,
@@ -2758,8 +3085,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           tenantId,
           type: 'REASSIGN_ETC_T15',
           severity: 'CRITICAL',
-          title: `⏳ T-15m Reassign Alert (${minsRemaining}m left) — ${j.jobCode} (${j.containerNumber})`,
-          message: `Container ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}) has ${minsRemaining} minute(s) remaining before ETC expiry. Prepare tractor for Reassign / Empty Return.`,
+          title: `⏳ First ETC Alert (${minsRemaining ?? 15}m left) — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Container ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}) reached first alert (${minsRemaining ?? 15}m left). Dispatcher Reassign unlocked as ${actionLabel}.`,
           terminalName: j.terminalName,
           containerId: j.containerId,
           containerNumber: j.containerNumber,
@@ -2770,7 +3097,29 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           acknowledged: ackSet.has(t15Key),
           createdAt: j.updatedAt,
         });
-      } else if (j.trailerDetached || st === 'CONTAINER_DETACHED' || st === 'PLACED_AT_RAMP' || st === 'PLACED_AT_YARD') {
+      } else if (
+        reassignEval.originLocation === 'YARD' &&
+        reassignEval.canReassign
+      ) {
+        const key = `det-l2-${j.id}`;
+        alerts.push({
+          id: key,
+          tenantId,
+          type: 'DETACHED_TRAILER',
+          severity: 'WARNING',
+          title: `Yard Staged — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Container ${j.containerNumber} placed at ${j.warehouseName} (YARD). Ready for Dispatcher ${actionLabel}.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(key),
+          createdAt: j.updatedAt,
+        });
+      } else if (j.trailerDetached || st === 'CONTAINER_DETACHED' || st === 'PLACED_AT_RAMP' || st === 'REASSIGN_PLACED_AT_RAMP') {
         const key = `det-l2-${j.id}`;
         alerts.push({
           id: key,
@@ -2781,7 +3130,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
             ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
             : `Detached Chassis at ${j.placementLocation ?? 'RAMP'} — ${j.containerNumber}`,
           message: hasEtc
-            ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Dispatcher alerts will fire at T-15m and upon ETC expiry.`
+            ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). ${actionLabel} will unlock upon first alert (T-15m).`
             : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Set ETC timer or Reassign once ready.`,
           terminalName: j.terminalName,
           containerId: j.containerId,
@@ -3082,9 +3431,11 @@ export async function assignDrayageJob(
   if (!job) throw new Error('Drayage job not found');
 
   const token = args.tokenNumber?.trim() || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
-  const prevStatus = String(job.status || '').toUpperCase();
+  const prevStatusRaw = String(job.status || '').trim();
+  const prevStatus = prevStatusRaw.toUpperCase();
   const isReassignment =
     Boolean(job.trailer_detached) ||
+    isDrayageReassignStatus(prevStatusRaw) ||
     [
       'PLACED_AT_YARD',
       'PLACED_AT_RAMP',
@@ -3100,9 +3451,30 @@ export async function assignDrayageJob(
     ].includes(prevStatus);
   const nextAssignStatus = isReassignment ? 'RE-ASSIGNED' : 'ASSIGNED';
 
+  let resolvedPlacementLocation = job.placement_location ? String(job.placement_location).toUpperCase() : null;
+  if (isReassignment) {
+    if (
+      prevStatus === 'PLACED_AT_YARD' ||
+      prevStatus.includes('TO RAMP') ||
+      prevStatus.includes('TO_RAMP') ||
+      resolvedPlacementLocation === 'YARD'
+    ) {
+      resolvedPlacementLocation = 'YARD';
+    } else if (
+      prevStatus === 'PLACED_AT_RAMP' ||
+      prevStatus === 'REASSIGN_PLACED_AT_RAMP' ||
+      prevStatus.includes('TO YARD') ||
+      prevStatus.includes('TO_YARD') ||
+      resolvedPlacementLocation === 'RAMP'
+    ) {
+      resolvedPlacementLocation = 'RAMP';
+    }
+  }
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET status = $10,
+            placement_location = COALESCE($11, placement_location),
             trailer_detached = FALSE,
             assigned_vehicle_id = $3,
             assigned_vehicle_plate = $4,
@@ -3123,6 +3495,7 @@ export async function assignDrayageJob(
     args.trailerPlate,
     token,
     nextAssignStatus,
+    resolvedPlacementLocation,
   );
 
   // Update trailer operational status
@@ -3271,6 +3644,7 @@ function getDrayageOperationalStageIndex(
     return 6;
   }
   if (
+    isDrayageReassignStatus(s) ||
     [
       'CONTAINER_DETACHED',
       'TRAILER_DETACHED',
@@ -3351,6 +3725,8 @@ export async function updateDrayageJobExecutionStatus(
   const prevOriginStatus = String(prevOriginRows[0]?.status || currentStatusUpper).toUpperCase();
 
   const isReassignTransition =
+    isDrayageReassignStatus(currentStatusUpper) ||
+    isDrayageReassignStatus(requestedStatusUpper) ||
     [
       'FCL_REASSIGN',
       'MT_REASSIGN',
@@ -3389,25 +3765,41 @@ export async function updateDrayageJobExecutionStatus(
     }
   }
 
-  // LogiXL-Connect State Machine for Detach & Reassign & Terminal Completion:
-  // 1. L1 PLACED_AT_YARD + Detach -> FCL_REASSIGN (IMPORT) / MT_REASSIGN (EXPORT)
-  // 2. REASSIGN_PLACED_AT_YARD + Detach -> READY_FOR_PICKUP (immediately eligible for L2)
-  // 3. CONTAINER_DROPPED / EMPTY_DEPOSITED / CONTAINER_DELIVERED -> COMPLETED
-  let effectiveStatus = requestedStatusUpper;
+  // Directional Reassign & Terminal Completion State Machine:
+  // 1. L1 PLACED_AT_YARD + Detach -> FCL_Reassign to Ramp (IMPORT) / MT_Reassign to Ramp (EXPORT)
+  // 2. L1 PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP + First ETC Alert (<= 15m) -> MT_Reassign to Yard (IMPORT) / FCL_Reassign to Yard (EXPORT)
+  // 3. REASSIGN_PLACED_AT_YARD + Detach -> READY_FOR_PICKUP (immediately eligible for L2)
+  // 4. CONTAINER_DROPPED / EMPTY_DEPOSITED / CONTAINER_DELIVERED -> COMPLETED
+  const jobShipmentType = String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  let effectiveStatus: string = requestedStatusUpper;
   if (['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED', 'COMPLETED'].includes(requestedStatusUpper)) {
     effectiveStatus = 'COMPLETED';
+  } else if (isDrayageReassignStatus(requestedStatusUpper)) {
+    if (requestedStatusUpper.includes('TO RAMP') || requestedStatusUpper.includes('TO_RAMP')) {
+      effectiveStatus = resolveDirectionalReassignStatus({ originLocation: 'YARD', shipmentType: jobShipmentType });
+      placement = 'YARD';
+    } else if (requestedStatusUpper.includes('TO YARD') || requestedStatusUpper.includes('TO_YARD')) {
+      effectiveStatus = resolveDirectionalReassignStatus({ originLocation: 'RAMP', shipmentType: jobShipmentType });
+      placement = 'RAMP';
+    } else {
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: String(placement || 'RAMP').toUpperCase() === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: jobShipmentType,
+      });
+    }
   }
   const isDetachSignal =
-    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes( requestedStatusUpper ) ||
+    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(requestedStatusUpper) ||
     (detached && ['PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(requestedStatusUpper));
 
   if (isDetachSignal) {
     detached = true;
     const isReassignYardDrop =
-      requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED' ||
       requestedStatusUpper === 'REASSIGN_PLACED_AT_YARD' ||
       prevOriginStatus === 'REASSIGN_PLACED_AT_YARD' ||
-      currentStatusUpper === 'REASSIGN_PLACED_AT_YARD';
+      currentStatusUpper === 'REASSIGN_PLACED_AT_YARD' ||
+      (requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED' &&
+        (String(placement || '').toUpperCase() === 'YARD' || prevOriginStatus === 'REASSIGN_PLACED_AT_YARD'));
     const isInitialYardDrop =
       !isReassignYardDrop &&
       (requestedStatusUpper === 'PLACED_AT_YARD' ||
@@ -3418,8 +3810,13 @@ export async function updateDrayageJobExecutionStatus(
       effectiveStatus = 'READY_FOR_PICKUP';
       if (!placement) placement = 'YARD';
     } else if (String(job.job_phase || 'L1') === 'L1' && isInitialYardDrop) {
-      effectiveStatus = String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: 'YARD',
+        shipmentType: jobShipmentType,
+      });
       placement = 'YARD';
+    } else if (requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED') {
+      placement = 'RAMP';
     }
   }
 
@@ -3444,6 +3841,30 @@ export async function updateDrayageJobExecutionStatus(
     effectiveEtcTime = new Date(String(job.etc_time)).toISOString();
   }
 
+  let effectiveEtcAlertStatus: string | null = null;
+  if (effectiveEtcTime) {
+    const minsLeft = Math.ceil((new Date(effectiveEtcTime).getTime() - Date.now()) / 60000);
+    if (minsLeft <= 0) {
+      effectiveEtcAlertStatus = 'EXPIRED';
+    } else if (minsLeft <= 15) {
+      effectiveEtcAlertStatus = 'T15_WARNING';
+    } else {
+      effectiveEtcAlertStatus = 'NEW';
+    }
+    if (
+      String(job.job_phase || 'L1') === 'L1' &&
+      isRampPlacement &&
+      minsLeft <= 15 &&
+      (detached || minsLeft <= 0)
+    ) {
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: 'RAMP',
+        shipmentType: jobShipmentType,
+      });
+      placement = 'RAMP';
+    }
+  }
+
   // Interpolate GPS coordinates depending on stage (or use live driver GPS coordinates if supplied)
   let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
   let lng = job.current_lng != null ? Number(job.current_lng) : 55.0612;
@@ -3461,6 +3882,7 @@ export async function updateDrayageJobExecutionStatus(
     lat = 24.9850;
     lng = 55.0760;
   } else if (
+    isDrayageReassignStatus(effectiveStatus) ||
     [
       'PLACED_AT_RAMP',
       'REASSIGN_PLACED_AT_RAMP',
@@ -3491,7 +3913,7 @@ export async function updateDrayageJobExecutionStatus(
             current_lat = $6,
             current_lng = $7,
             etc_time = $8::timestamptz,
-            etc_alert_status = CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END,
+            etc_alert_status = COALESCE($10, CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END),
             notes = CASE WHEN $9::text IS NOT NULL AND $9::text != '' THEN $9::text ELSE notes END,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
@@ -3504,6 +3926,7 @@ export async function updateDrayageJobExecutionStatus(
     lng,
     effectiveEtcTime,
     args.notes ? String(args.notes) : null,
+    effectiveEtcAlertStatus,
   );
 
   // Sync container status & related parent jobs:
@@ -4407,11 +4830,11 @@ export async function checkAndAutoActivateExpiredEtcJobs(
 
   const whereClause = tenantId
     ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND (
-         (etc_time IS NOT NULL AND etc_time <= NOW() AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
+         (etc_time IS NOT NULL AND etc_time <= NOW() + INTERVAL '15 minutes' AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
          OR status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED')
        )`
     : `job_phase = 'L1' AND l2_activated = FALSE AND (
-         (etc_time IS NOT NULL AND etc_time <= NOW() AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
+         (etc_time IS NOT NULL AND etc_time <= NOW() + INTERVAL '15 minutes' AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
          OR status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED')
        )`;
   const params = tenantId ? [tenantId] : [];
@@ -4453,8 +4876,8 @@ export async function checkAndAutoActivateExpiredEtcJobs(
       const stage = getDrayageOperationalStageIndex(jobStatus, Boolean(job.trailer_detached));
       if (stage < 4) continue;
 
-      // 1. ETC Expiry on Ramp / Yard / Detached jobs transitions to FCL_REASSIGN / MT_REASSIGN (LogiXL-Connect checkRampTimers)
-      const isEtcExpiredForReassign = [
+      // 1. First Alert (<= 15m) or ETC Expiry on Ramp / Yard / Detached jobs transitions to directional Reassign status
+      const isEtcAlertForReassign = [
         'PLACED_AT_RAMP',
         'REASSIGN_PLACED_AT_RAMP',
         'PLACED_AT_YARD',
@@ -4463,37 +4886,66 @@ export async function checkAndAutoActivateExpiredEtcJobs(
         'REASSIGN_TRAILER_DETACHED',
       ].includes(jobStatus);
 
-      if (isEtcExpiredForReassign) {
-        const nextStatus =
-          String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'MT_REASSIGN' : 'FCL_REASSIGN';
-        await db.$executeRawUnsafe(
-          `UPDATE logistics_drayage_jobs
-              SET status = $2,
-                  etc_alert_status = 'EXPIRED',
-                  assigned_vehicle_id = NULL,
-                  assigned_vehicle_plate = NULL,
-                  assigned_driver_id = NULL,
-                  assigned_driver_name = NULL,
-                  updated_at = NOW()
-            WHERE id = $1`,
-          job.id,
-          nextStatus,
-        );
-        await db.$executeRawUnsafe(
-          `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-           VALUES ($1, $2, $3, $4, $5, $6, 'ETC Background Worker')`,
-          `log-${crypto.randomUUID().slice(0, 12)}`,
-          String(job.tenant_id),
-          String(job.id),
-          String(job.job_code),
-          nextStatus,
-          'Auto-Trigger: ETC Timer Exceeded - Transitioned to Re-assignment status',
-        ).catch(() => {});
-        reassigned.push({
-          jobId: String(job.id),
-          jobCode: String(job.job_code),
-          newStatus: nextStatus,
+      if (isEtcAlertForReassign) {
+        const etcMs = job.etc_time ? new Date(job.etc_time).getTime() : 0;
+        const minsLeft = Math.ceil((etcMs - Date.now()) / 60000);
+        const isExpired = minsLeft <= 0;
+        const isDetachedOrExpired =
+          isExpired ||
+          Boolean(job.trailer_detached) ||
+          ['TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(jobStatus);
+        const originLoc =
+          jobStatus === 'PLACED_AT_YARD' || String(job.placement_location || '').toUpperCase() === 'YARD'
+            ? 'YARD'
+            : 'RAMP';
+        const nextStatus = resolveDirectionalReassignStatus({
+          originLocation: originLoc,
+          shipmentType: String(job.shipment_type || 'IMPORT'),
         });
+        const nextAlertStatus = isExpired ? 'EXPIRED' : 'T15_WARNING';
+
+        if (isDetachedOrExpired) {
+          await db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $2,
+                    placement_location = $3,
+                    etc_alert_status = $4,
+                    assigned_vehicle_id = NULL,
+                    assigned_vehicle_plate = NULL,
+                    assigned_driver_id = NULL,
+                    assigned_driver_name = NULL,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            job.id,
+            nextStatus,
+            originLoc,
+            nextAlertStatus,
+          );
+          await db.$executeRawUnsafe(
+            `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+             VALUES ($1, $2, $3, $4, $5, $6, 'ETC Background Worker')`,
+            `log-${crypto.randomUUID().slice(0, 12)}`,
+            String(job.tenant_id),
+            String(job.id),
+            String(job.job_code),
+            nextStatus,
+            `Auto-Trigger: First ETC Alert (${nextAlertStatus}) - Transitioned to ${nextStatus}`,
+          ).catch(() => {});
+          reassigned.push({
+            jobId: String(job.id),
+            jobCode: String(job.job_code),
+            newStatus: nextStatus,
+          });
+        } else {
+          await db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET etc_alert_status = $2,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            job.id,
+            nextAlertStatus,
+          );
+        }
         continue;
       }
 
