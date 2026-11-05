@@ -1,5 +1,6 @@
 package com.fleet360.driver;
 
+import android.Manifest;
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -9,23 +10,34 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -83,31 +95,65 @@ public class Fleet360DispatchService extends Service {
     private static final Set<String> ASSIGNMENT_STATUSES = new HashSet<>(Arrays.asList(
         "ASSIGNED",
         "PENDING",
+        "UNASSIGNED",
         "RE-ASSIGNED"
     ));
 
+    private static volatile Location latestLocation = null;
+
     private ScheduledExecutorService scheduler;
     private PowerManager.WakeLock wakeLock;
+    private LocationManager locationManager;
+    private boolean locationUpdatesRegistered = false;
+    private long lastLocationPingEpochMs = 0L;
+
+    private final LocationListener nativeLocationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            if (location != null && (location.getLatitude() != 0.0 || location.getLongitude() != 0.0)) {
+                latestLocation = location;
+            }
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+        @Override
+        public void onProviderEnabled(String provider) {}
+
+        @Override
+        public void onProviderDisabled(String provider) {}
+    };
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannels();
         acquireWakeLock();
+        startNativeLocationUpdates();
         startBackgroundPoller();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         createNotificationChannels();
+        startNativeLocationUpdates();
         try {
             Notification ongoing = buildOngoingForegroundNotification();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    BG_NOTIFICATION_ID,
-                    ongoing,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                );
+                int fgType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+                if (hasLocationPermission(this)) {
+                    fgType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+                }
+                try {
+                    startForeground(BG_NOTIFICATION_ID, ongoing, fgType);
+                } catch (Exception secEx) {
+                    startForeground(
+                        BG_NOTIFICATION_ID,
+                        ongoing,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    );
+                }
             } else {
                 startForeground(BG_NOTIFICATION_ID, ongoing);
             }
@@ -162,12 +208,131 @@ public class Fleet360DispatchService extends Service {
 
     @Override
     public void onDestroy() {
+        stopNativeLocationUpdates();
         if (scheduler != null) {
             scheduler.shutdownNow();
             scheduler = null;
         }
         releaseWakeLock();
         super.onDestroy();
+    }
+
+    private static boolean hasLocationPermission(Context context) {
+        if (context == null) return false;
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED
+            || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void startNativeLocationUpdates() {
+        if (!hasLocationPermission(this)) {
+            return;
+        }
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (locationManager == null) {
+                    locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                }
+                if (locationManager == null) return;
+
+                Location best = getBestAvailableLocation(Fleet360DispatchService.this);
+                if (best != null) {
+                    latestLocation = best;
+                }
+
+                if (!locationUpdatesRegistered) {
+                    try {
+                        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                            locationManager.requestLocationUpdates(
+                                LocationManager.GPS_PROVIDER,
+                                15000L,
+                                10.0f,
+                                nativeLocationListener,
+                                Looper.getMainLooper()
+                            );
+                            locationUpdatesRegistered = true;
+                        }
+                    } catch (Exception ignoredGps) {}
+
+                    try {
+                        if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                            locationManager.requestLocationUpdates(
+                                LocationManager.NETWORK_PROVIDER,
+                                20000L,
+                                15.0f,
+                                nativeLocationListener,
+                                Looper.getMainLooper()
+                            );
+                            locationUpdatesRegistered = true;
+                        }
+                    } catch (Exception ignoredNet) {}
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    private void stopNativeLocationUpdates() {
+        try {
+            if (locationManager != null && locationUpdatesRegistered) {
+                locationManager.removeUpdates(nativeLocationListener);
+                locationUpdatesRegistered = false;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static Location getBestAvailableLocation(Context context) {
+        Location candidate = latestLocation;
+        if (context == null || !hasLocationPermission(context)) {
+            return candidate;
+        }
+        try {
+            LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+            if (lm == null) return candidate;
+            String[] providers = new String[]{
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            };
+            for (String p : providers) {
+                try {
+                    Location loc = lm.getLastKnownLocation(p);
+                    if (loc == null || (loc.getLatitude() == 0.0 && loc.getLongitude() == 0.0)) {
+                        continue;
+                    }
+                    if (candidate == null || loc.getTime() > candidate.getTime()) {
+                        candidate = loc;
+                    }
+                } catch (Exception ignoredProvider) {}
+            }
+            if (candidate != null) {
+                latestLocation = candidate;
+            }
+        } catch (Exception ignored) {
+        }
+        return candidate;
+    }
+
+    public static String getLatestLocationJson(Context context) {
+        try {
+            Location loc = getBestAvailableLocation(context);
+            if (loc == null) return "";
+            JSONObject obj = new JSONObject();
+            obj.put("lat", loc.getLatitude());
+            obj.put("lng", loc.getLongitude());
+            if (loc.hasSpeed() && loc.getSpeed() >= 0) {
+                obj.put("speedKmh", Math.round(loc.getSpeed() * 3.6f));
+            }
+            if (loc.hasBearing()) {
+                obj.put("heading", Math.round(loc.getBearing()));
+            }
+            obj.put("updatedAt", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
+            return obj.toString();
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     @Override
@@ -256,12 +421,102 @@ public class Fleet360DispatchService extends Service {
             JSONArray broadcasts = data.optJSONArray("broadcastMessages");
 
             processJobsAndMessages(prefs, jobs, broadcasts);
+            transmitNativeLocationPingsIfDue(prefs, apiHost, token.trim(), jobs);
         } catch (Exception ignored) {
         } finally {
             if (conn != null) {
                 try {
                     conn.disconnect();
                 } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Transmits 1-minute (60,000 ms) native background GPS breadcrumb pings for any active
+     * in-execution job (ACCEPTED -> COMPLETED) even when the driver is in Google Maps
+     * or the device screen is locked.
+     */
+    private void transmitNativeLocationPingsIfDue(
+        SharedPreferences prefs,
+        String apiHost,
+        String token,
+        JSONArray jobs
+    ) {
+        if (jobs == null || jobs.length() == 0) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastLocationPingEpochMs < 60000L) {
+            return;
+        }
+
+        List<String> activeInExecutionJobIds = new ArrayList<>();
+        for (int i = 0; i < jobs.length(); i++) {
+            JSONObject j = jobs.optJSONObject(i);
+            if (j == null) continue;
+            String id = j.optString("id", "").trim();
+            if (id.isEmpty()) continue;
+            String st = j.optString("status", "").toUpperCase().trim();
+            if (st.isEmpty() || HISTORY_STATUSES.contains(st) || ASSIGNMENT_STATUSES.contains(st)) {
+                continue;
+            }
+            activeInExecutionJobIds.add(id);
+        }
+
+        if (activeInExecutionJobIds.isEmpty()) {
+            return;
+        }
+
+        Location loc = getBestAvailableLocation(this);
+        if (loc == null || (loc.getLatitude() == 0.0 && loc.getLongitude() == 0.0)) {
+            startNativeLocationUpdates();
+            return;
+        }
+
+        lastLocationPingEpochMs = now;
+        String driverName = prefs.getString(KEY_DRIVER_NAME, "Assigned Driver");
+
+        for (String jobId : activeInExecutionJobIds) {
+            HttpURLConnection pingConn = null;
+            try {
+                URL pingUrl = new URL(apiHost + "/api/driver/jobs/" + jobId + "/status");
+                pingConn = (HttpURLConnection) pingUrl.openConnection();
+                pingConn.setRequestMethod("POST");
+                pingConn.setConnectTimeout(8000);
+                pingConn.setReadTimeout(8000);
+                pingConn.setDoOutput(true);
+                pingConn.setUseCaches(false);
+                pingConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                pingConn.setRequestProperty("Accept", "application/json");
+                pingConn.setRequestProperty("Authorization", "Bearer " + token);
+
+                JSONObject payload = new JSONObject();
+                payload.put("action", "LOCATION_PING");
+                payload.put("latitude", loc.getLatitude());
+                payload.put("longitude", loc.getLongitude());
+                if (loc.hasSpeed() && loc.getSpeed() >= 0) {
+                    payload.put("speedKmh", Math.round(loc.getSpeed() * 3.6f));
+                }
+                if (loc.hasBearing()) {
+                    payload.put("heading", Math.round(loc.getBearing()));
+                }
+                if (driverName != null && !driverName.trim().isEmpty()) {
+                    payload.put("driverName", driverName.trim());
+                }
+
+                byte[] bodyBytes = payload.toString().getBytes(StandardCharsets.UTF_8);
+                try (OutputStream os = pingConn.getOutputStream()) {
+                    os.write(bodyBytes);
+                    os.flush();
+                }
+                pingConn.getResponseCode();
+            } catch (Exception ignoredPing) {
+            } finally {
+                if (pingConn != null) {
+                    try {
+                        pingConn.disconnect();
+                    } catch (Exception ignoredDisc) {}
                 }
             }
         }

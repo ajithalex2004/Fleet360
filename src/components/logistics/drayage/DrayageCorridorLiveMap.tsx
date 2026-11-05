@@ -403,6 +403,28 @@ function buildWarehouseMarkerSvg(zone: string): string {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
 
+/**
+ * Builds SVG icon for 1-Minute In-Transit GPS Breadcrumb Waypoints along a job's routePath.
+ */
+function buildBreadcrumbWaypointSvg(
+  indexOneBased: number,
+  isSelectedJob: boolean,
+  isMilestoneStage: boolean,
+  jobPhase: 'L1' | 'L2',
+): string {
+  const fillColor = isMilestoneStage
+    ? jobPhase === 'L2'
+      ? '#F59E0B'
+      : '#2563EB'
+    : '#10B981';
+  const strokeColor = isSelectedJob ? '#FEF08A' : '#FFFFFF';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.2"/>
+    <text x="12" y="15" font-size="8.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, monospace" font-weight="900" fill="#FFFFFF" text-anchor="middle">${indexOneBased}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
 export default function DrayageCorridorLiveMap({
   jobs,
   terminals,
@@ -796,11 +818,15 @@ export default function DrayageCorridorLiveMap({
         flightpathPolylinesRef.current.push(flightpath);
       }
 
-      // Render 1-Minute In-Transit GPS Breadcrumb Route Path Polyline (ACCEPTED -> COMPLETED)
+      // Render 1-Minute In-Transit GPS Breadcrumb Route Path Polyline & Clickable Waypoints (ACCEPTED -> COMPLETED)
       if (Array.isArray(job.routePath) && job.routePath.length >= 1) {
-        const pathPts = job.routePath
-          .filter((pt) => pt && !isNaN(Number(pt.lat)) && !isNaN(Number(pt.lng)))
-          .map((pt) => ({ lat: Number(pt.lat), lng: Number(pt.lng) }));
+        const validWaypoints = job.routePath.filter(
+          (pt) => pt && !isNaN(Number(pt.lat)) && !isNaN(Number(pt.lng)),
+        );
+        const pathPts = validWaypoints.map((pt) => ({
+          lat: Number(pt.lat),
+          lng: Number(pt.lng),
+        }));
         const lastPt = pathPts[pathPts.length - 1];
         if (!lastPt || Math.abs(lastPt.lat - lat) > 0.0001 || Math.abs(lastPt.lng - lng) > 0.0001) {
           pathPts.push({ lat, lng });
@@ -816,6 +842,76 @@ export default function DrayageCorridorLiveMap({
           });
           flightpathPolylinesRef.current.push(breadcrumbLine);
         }
+
+        // Render clickable breadcrumb waypoint markers along the path
+        validWaypoints.forEach((pt, idx) => {
+          const ptLat = Number(pt.lat);
+          const ptLng = Number(pt.lng);
+          const isMilestone = Boolean(
+            pt.status && pt.status !== 'IN_TRANSIT_PING' && pt.status !== 'GPS_BREADCRUMB',
+          );
+          const wpMarker = new ctors.Marker({
+            position: { lat: ptLat, lng: ptLng },
+            map,
+            title: `${job.jobCode} · Pt #${idx + 1}: ${pt.location || `${ptLat.toFixed(4)}, ${ptLng.toFixed(4)}`}`,
+            icon: {
+              url: buildBreadcrumbWaypointSvg(idx + 1, isSelected, isMilestone, job.jobPhase),
+              scaledSize: { width: isSelected ? 22 : 18, height: isSelected ? 22 : 18 },
+              anchor: { x: isSelected ? 11 : 9, y: isSelected ? 11 : 9 },
+            },
+            zIndex: isSelected ? 160 : 90,
+          });
+
+          wpMarker.addListener('click', () => {
+            onSelectJob?.(job.id);
+            setDrawerOpen(true);
+            if (!infoWindowRef.current) return;
+            const timeLabel = pt.timestamp
+              ? new Date(pt.timestamp).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  timeZone: 'Asia/Dubai',
+                })
+              : 'Live Telemetry';
+            const statusLabel =
+              pt.status === 'IN_TRANSIT_PING' || pt.status === 'GPS_BREADCRUMB'
+                ? '1-Min GPS Breadcrumb'
+                : pt.status || 'GPS Waypoint';
+            const locLabel = pt.location || `(${ptLat.toFixed(4)}, ${ptLng.toFixed(4)})`;
+            const wpHtml = `
+              <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; min-width: 240px; max-width: 290px; padding: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;">
+                  <strong style="font-size: 12px; font-family: monospace;">${job.jobCode} · Waypoint #${idx + 1}/${validWaypoints.length}</strong>
+                  <span style="background: ${isMilestone ? '#2563EB' : '#10B981'}; color: #FFFFFF; font-weight: 800; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
+                    ${statusLabel}
+                  </span>
+                </div>
+                <div style="margin-bottom: 4px; font-size: 11px;">
+                  📍 <strong>${locLabel}</strong>
+                </div>
+                <div style="margin-bottom: 4px; font-size: 11px; color: #475569;">
+                  🕒 Time: <strong>${timeLabel} GST</strong>
+                </div>
+                ${
+                  pt.speedKmh !== undefined && pt.speedKmh !== null
+                    ? `<div style="margin-bottom: 4px; font-size: 11px; color: #0284C7;">🚀 Speed: <strong>${pt.speedKmh} km/h</strong></div>`
+                    : ''
+                }
+                <div style="font-size: 10px; color: #64748B;">
+                  Container: <strong style="font-family: monospace;">${job.containerNumber}</strong> · Driver: <strong>${job.assignedDriverName || 'Assigned'}</strong>
+                </div>
+              </div>
+            `;
+            infoWindowRef.current.setContent(wpHtml);
+            infoWindowRef.current.setPosition({ lat: ptLat, lng: ptLng });
+            infoWindowRef.current.open({ map, anchor: wpMarker });
+          });
+
+          vehicleMarkersRef.current.push(wpMarker);
+        });
       }
 
       const marker = new ctors.Marker({
@@ -1212,6 +1308,58 @@ export default function DrayageCorridorLiveMap({
                 </div>
               )}
             </div>
+
+            {/* Live 1-Minute GPS Breadcrumb Trail */}
+            {activeJob.routePath && activeJob.routePath.length > 0 && (
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5" />
+                    In-Transit GPS Path (1-Min)
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono text-[10px] font-bold">
+                    {activeJob.routePath.length} pt{activeJob.routePath.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                  {[...activeJob.routePath]
+                    .slice(-8)
+                    .reverse()
+                    .map((pt, idx) => {
+                      const ptNum = activeJob.routePath!.length - idx;
+                      const tStr = pt.timestamp
+                        ? new Date(pt.timestamp).toLocaleTimeString('en-GB', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Asia/Dubai',
+                          })
+                        : 'Live';
+                      return (
+                        <button
+                          key={`${pt.lat}-${pt.lng}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            if (mapRef.current) {
+                              mapRef.current.panTo({ lat: pt.lat, lng: pt.lng });
+                              mapRef.current.setZoom(14);
+                            }
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-lg bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 flex items-center justify-between gap-2 text-[10px] transition-colors"
+                        >
+                          <span className="truncate text-slate-200">
+                            <strong className="text-emerald-400 font-mono mr-1">#{ptNum}</strong>
+                            {pt.location || `(${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)})`}
+                          </span>
+                          <span className="shrink-0 font-mono text-slate-400">
+                            {pt.speedKmh != null ? `${pt.speedKmh}km/h · ` : ''}
+                            {tStr}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
 
             {/* ETC Timer Countdown if Ramp Placement */}
             {activeJob.etcTime && (

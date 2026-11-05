@@ -2525,6 +2525,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         lat: j.currentLat,
         lng: j.currentLng,
         timestamp: j.updatedAt,
+        location: `${resolveUaePlaceNameFromCoords(j.currentLat, j.currentLng)} (${j.currentLat.toFixed(4)}, ${j.currentLng.toFixed(4)})`,
         status: j.status,
       });
     }

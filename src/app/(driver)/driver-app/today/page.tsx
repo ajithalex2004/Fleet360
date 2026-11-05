@@ -672,8 +672,43 @@ export default function DriverTodayPage() {
       heading: number | null;
       location: string;
     }> => {
-      // 1. Try to refresh GPS if missing or older than 15 seconds (2.2s timeout so UI never blocks)
+      // 1a. Check Native Android Bridge GPS first (zero latency in APK)
       const now = Date.now();
+      if (typeof window !== 'undefined') {
+        try {
+          const w = window as unknown as {
+            Fleet360Android?: {
+              getLastKnownLocationJson?: () => string;
+            };
+          };
+          const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+          if (nativeJson) {
+            const parsed = JSON.parse(nativeJson) as {
+              lat?: number;
+              lng?: number;
+              speedKmh?: number;
+              heading?: number;
+              updatedAt?: number;
+            };
+            if (
+              parsed &&
+              typeof parsed.lat === 'number' &&
+              typeof parsed.lng === 'number' &&
+              (parsed.lat !== 0 || parsed.lng !== 0)
+            ) {
+              driverCoordsRef.current = {
+                lat: parsed.lat,
+                lng: parsed.lng,
+                speedKmh: typeof parsed.speedKmh === 'number' ? parsed.speedKmh : null,
+                heading: typeof parsed.heading === 'number' ? parsed.heading : null,
+                updatedAt: parsed.updatedAt || now,
+              };
+            }
+          }
+        } catch {}
+      }
+
+      // 1b. Try to refresh GPS via WebView geolocation if missing or older than 15 seconds (2.2s timeout so UI never blocks)
       if (
         typeof window !== 'undefined' &&
         'geolocation' in navigator &&
