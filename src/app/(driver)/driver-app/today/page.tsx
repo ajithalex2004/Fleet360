@@ -30,10 +30,119 @@ import {
   X,
 } from 'lucide-react';
 import { getApiEndpoint } from '@/lib/api-endpoint';
-import {
-  computeHaversineKm,
-  resolveUaePlaceNameFromCoords,
-} from '@/lib/logistics/drayage-domain';
+
+function computeHaversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const UAE_GEOGRAPHIC_REFERENCE_POINTS: Array<{
+  name: string;
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}> = [
+  { name: 'Al Nahyan, Abu Dhabi', lat: 24.4594, lng: 54.3818, radiusKm: 2.5 },
+  { name: 'Al Mushrif, Abu Dhabi', lat: 24.4425, lng: 54.3965, radiusKm: 3.0 },
+  { name: 'Al Bateen, Abu Dhabi', lat: 24.4535, lng: 54.3425, radiusKm: 3.0 },
+  { name: 'Al Danah / Central Abu Dhabi', lat: 24.4882, lng: 54.3665, radiusKm: 3.0 },
+  { name: 'Al Zahiyah / Mina Zayed, Abu Dhabi', lat: 24.5135, lng: 54.3775, radiusKm: 3.5 },
+  { name: 'Al Reem Island, Abu Dhabi', lat: 24.4960, lng: 54.4060, radiusKm: 3.5 },
+  { name: 'Al Maqta / Rabdan, Abu Dhabi', lat: 24.4160, lng: 54.4820, radiusKm: 4.0 },
+  { name: 'Mussafah Industrial, Abu Dhabi', lat: 24.3540, lng: 54.5020, radiusKm: 6.5 },
+  { name: 'ICAD Industrial City, Abu Dhabi', lat: 24.3120, lng: 54.4780, radiusKm: 6.5 },
+  { name: 'Khalifa City, Abu Dhabi', lat: 24.4210, lng: 54.5750, radiusKm: 6.0 },
+  { name: 'Mohammed Bin Zayed City, Abu Dhabi', lat: 24.3510, lng: 54.5580, radiusKm: 6.0 },
+  { name: 'Yas Island / Shahama Corridor, Abu Dhabi', lat: 24.4950, lng: 54.6080, radiusKm: 7.0 },
+  { name: 'KEZAD / Khalifa Port, Abu Dhabi', lat: 24.7920, lng: 54.6820, radiusKm: 8.5 },
+  { name: 'Al Samha / Ghantoot (E11 Corridor)', lat: 24.8550, lng: 54.8450, radiusKm: 10.0 },
+  { name: 'Al Ain Logistics Corridor', lat: 24.2075, lng: 55.7447, radiusKm: 18.0 },
+  { name: 'Jebel Ali Port (T1/T2/T3), Dubai', lat: 25.0112, lng: 55.0612, radiusKm: 2.8 },
+  { name: 'JAFZA North Free Zone, Dubai', lat: 24.9910, lng: 55.0750, radiusKm: 3.0 },
+  { name: 'JAFZA South Logistics Zone, Dubai', lat: 24.9642, lng: 55.0915, radiusKm: 3.5 },
+  { name: 'National Industries Park (NIP), Dubai', lat: 24.9220, lng: 55.0680, radiusKm: 4.5 },
+  { name: 'Dubai South (DWC Logistics District)', lat: 24.8960, lng: 55.1450, radiusKm: 6.0 },
+  { name: 'Dubai Investments Park (DIP)', lat: 24.9850, lng: 55.1680, radiusKm: 5.5 },
+  { name: 'Al Yalayis / E311 Freight Corridor, Dubai', lat: 25.0020, lng: 55.1350, radiusKm: 5.0 },
+  { name: 'Al Marina / JLT, Dubai', lat: 25.0750, lng: 55.1420, radiusKm: 4.0 },
+  { name: 'Al Quoz Industrial Area, Dubai', lat: 25.1360, lng: 55.2280, radiusKm: 5.5 },
+  { name: 'Business Bay / Downtown, Dubai', lat: 25.1880, lng: 55.2680, radiusKm: 4.5 },
+  { name: 'Ras Al Khor Industrial, Dubai', lat: 25.1780, lng: 55.3520, radiusKm: 5.5 },
+  { name: 'Dubai Creek / Al Jaddaf, Dubai', lat: 25.2150, lng: 55.3280, radiusKm: 4.5 },
+  { name: 'Port Rashid / Al Mina, Dubai', lat: 25.2620, lng: 55.2780, radiusKm: 4.5 },
+  { name: 'Deira / Al Qusais Industrial, Dubai', lat: 25.2810, lng: 55.3880, radiusKm: 6.0 },
+  { name: 'Sharjah Industrial Area', lat: 25.3180, lng: 55.4120, radiusKm: 8.5 },
+  { name: 'Ajman Industrial Zone', lat: 25.3890, lng: 55.4790, radiusKm: 8.0 },
+  { name: 'Saqr Port / Ras Al Khaimah', lat: 25.7890, lng: 55.9430, radiusKm: 18.0 },
+  { name: 'Fujairah Port Corridor', lat: 25.1288, lng: 56.3265, radiusKm: 18.0 },
+];
+
+function resolveUaePlaceNameFromCoords(
+  lat: number,
+  lng: number,
+  options?: {
+    terminalName?: string | null;
+    termLat?: number | null;
+    termLng?: number | null;
+    warehouseName?: string | null;
+    whLat?: number | null;
+    whLng?: number | null;
+  },
+): string {
+  if (
+    options?.terminalName &&
+    options.termLat != null &&
+    options.termLng != null &&
+    computeHaversineKm(lat, lng, Number(options.termLat), Number(options.termLng)) <= 2.2
+  ) {
+    return String(options.terminalName).trim();
+  }
+  if (
+    options?.warehouseName &&
+    options.whLat != null &&
+    options.whLng != null &&
+    computeHaversineKm(lat, lng, Number(options.whLat), Number(options.whLng)) <= 2.0
+  ) {
+    return String(options.warehouseName).trim();
+  }
+
+  let bestName = '';
+  let bestDistKm = Infinity;
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = computeHaversineKm(lat, lng, ref.lat, ref.lng);
+    if (d <= ref.radiusKm && d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName) return bestName;
+
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = computeHaversineKm(lat, lng, ref.lat, ref.lng);
+    if (d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName && bestDistKm <= 25) {
+    return bestName;
+  }
+  if (lat >= 24.15 && lat <= 24.75 && lng >= 54.15 && lng <= 54.85) {
+    return 'Abu Dhabi Mobile GPS';
+  }
+  if (lat >= 24.80 && lat <= 25.32 && lng >= 54.90 && lng <= 55.55) {
+    return 'Dubai Mobile GPS';
+  }
+  return 'Driver Mobile GPS';
+}
 
 interface GeofenceTarget {
   name: string;

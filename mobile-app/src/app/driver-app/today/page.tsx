@@ -31,6 +31,119 @@ import {
 } from 'lucide-react';
 import { getApiEndpoint } from '@/lib/api-endpoint';
 
+function computeHaversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const UAE_GEOGRAPHIC_REFERENCE_POINTS: Array<{
+  name: string;
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}> = [
+  { name: 'Al Nahyan, Abu Dhabi', lat: 24.4594, lng: 54.3818, radiusKm: 2.5 },
+  { name: 'Al Mushrif, Abu Dhabi', lat: 24.4425, lng: 54.3965, radiusKm: 3.0 },
+  { name: 'Al Bateen, Abu Dhabi', lat: 24.4535, lng: 54.3425, radiusKm: 3.0 },
+  { name: 'Al Danah / Central Abu Dhabi', lat: 24.4882, lng: 54.3665, radiusKm: 3.0 },
+  { name: 'Al Zahiyah / Mina Zayed, Abu Dhabi', lat: 24.5135, lng: 54.3775, radiusKm: 3.5 },
+  { name: 'Al Reem Island, Abu Dhabi', lat: 24.4960, lng: 54.4060, radiusKm: 3.5 },
+  { name: 'Al Maqta / Rabdan, Abu Dhabi', lat: 24.4160, lng: 54.4820, radiusKm: 4.0 },
+  { name: 'Mussafah Industrial, Abu Dhabi', lat: 24.3540, lng: 54.5020, radiusKm: 6.5 },
+  { name: 'ICAD Industrial City, Abu Dhabi', lat: 24.3120, lng: 54.4780, radiusKm: 6.5 },
+  { name: 'Khalifa City, Abu Dhabi', lat: 24.4210, lng: 54.5750, radiusKm: 6.0 },
+  { name: 'Mohammed Bin Zayed City, Abu Dhabi', lat: 24.3510, lng: 54.5580, radiusKm: 6.0 },
+  { name: 'Yas Island / Shahama Corridor, Abu Dhabi', lat: 24.4950, lng: 54.6080, radiusKm: 7.0 },
+  { name: 'KEZAD / Khalifa Port, Abu Dhabi', lat: 24.7920, lng: 54.6820, radiusKm: 8.5 },
+  { name: 'Al Samha / Ghantoot (E11 Corridor)', lat: 24.8550, lng: 54.8450, radiusKm: 10.0 },
+  { name: 'Al Ain Logistics Corridor', lat: 24.2075, lng: 55.7447, radiusKm: 18.0 },
+  { name: 'Jebel Ali Port (T1/T2/T3), Dubai', lat: 25.0112, lng: 55.0612, radiusKm: 2.8 },
+  { name: 'JAFZA North Free Zone, Dubai', lat: 24.9910, lng: 55.0750, radiusKm: 3.0 },
+  { name: 'JAFZA South Logistics Zone, Dubai', lat: 24.9642, lng: 55.0915, radiusKm: 3.5 },
+  { name: 'National Industries Park (NIP), Dubai', lat: 24.9220, lng: 55.0680, radiusKm: 4.5 },
+  { name: 'Dubai South (DWC Logistics District)', lat: 24.8960, lng: 55.1450, radiusKm: 6.0 },
+  { name: 'Dubai Investments Park (DIP)', lat: 24.9850, lng: 55.1680, radiusKm: 5.5 },
+  { name: 'Al Yalayis / E311 Freight Corridor, Dubai', lat: 25.0020, lng: 55.1350, radiusKm: 5.0 },
+  { name: 'Al Marina / JLT, Dubai', lat: 25.0750, lng: 55.1420, radiusKm: 4.0 },
+  { name: 'Al Quoz Industrial Area, Dubai', lat: 25.1360, lng: 55.2280, radiusKm: 5.5 },
+  { name: 'Business Bay / Downtown, Dubai', lat: 25.1880, lng: 55.2680, radiusKm: 4.5 },
+  { name: 'Ras Al Khor Industrial, Dubai', lat: 25.1780, lng: 55.3520, radiusKm: 5.5 },
+  { name: 'Dubai Creek / Al Jaddaf, Dubai', lat: 25.2150, lng: 55.3280, radiusKm: 4.5 },
+  { name: 'Port Rashid / Al Mina, Dubai', lat: 25.2620, lng: 55.2780, radiusKm: 4.5 },
+  { name: 'Deira / Al Qusais Industrial, Dubai', lat: 25.2810, lng: 55.3880, radiusKm: 6.0 },
+  { name: 'Sharjah Industrial Area', lat: 25.3180, lng: 55.4120, radiusKm: 8.5 },
+  { name: 'Ajman Industrial Zone', lat: 25.3890, lng: 55.4790, radiusKm: 8.0 },
+  { name: 'Saqr Port / Ras Al Khaimah', lat: 25.7890, lng: 55.9430, radiusKm: 18.0 },
+  { name: 'Fujairah Port Corridor', lat: 25.1288, lng: 56.3265, radiusKm: 18.0 },
+];
+
+function resolveUaePlaceNameFromCoords(
+  lat: number,
+  lng: number,
+  options?: {
+    terminalName?: string | null;
+    termLat?: number | null;
+    termLng?: number | null;
+    warehouseName?: string | null;
+    whLat?: number | null;
+    whLng?: number | null;
+  },
+): string {
+  if (
+    options?.terminalName &&
+    options.termLat != null &&
+    options.termLng != null &&
+    computeHaversineKm(lat, lng, Number(options.termLat), Number(options.termLng)) <= 2.2
+  ) {
+    return String(options.terminalName).trim();
+  }
+  if (
+    options?.warehouseName &&
+    options.whLat != null &&
+    options.whLng != null &&
+    computeHaversineKm(lat, lng, Number(options.whLat), Number(options.whLng)) <= 2.0
+  ) {
+    return String(options.warehouseName).trim();
+  }
+
+  let bestName = '';
+  let bestDistKm = Infinity;
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = computeHaversineKm(lat, lng, ref.lat, ref.lng);
+    if (d <= ref.radiusKm && d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName) return bestName;
+
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = computeHaversineKm(lat, lng, ref.lat, ref.lng);
+    if (d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName && bestDistKm <= 25) {
+    return bestName;
+  }
+  if (lat >= 24.15 && lat <= 24.75 && lng >= 54.15 && lng <= 54.85) {
+    return 'Abu Dhabi Mobile GPS';
+  }
+  if (lat >= 24.80 && lat <= 25.32 && lng >= 54.90 && lng <= 55.55) {
+    return 'Dubai Mobile GPS';
+  }
+  return 'Driver Mobile GPS';
+}
+
 interface GeofenceTarget {
   name: string;
   type: 'CIRCLE' | 'POLYGON';
@@ -91,6 +204,9 @@ interface EpodSignatureInfo {
   receiverName: string;
   receiverRole: string;
   signatureDataUri: string;
+  uploadedPodDataUri?: string | null;
+  uploadedPodFileName?: string | null;
+  captureMethod?: 'SIGN_ON_GLASS' | 'UPLOADED_POD' | 'BOTH';
   signedAt: string;
 }
 
@@ -523,7 +639,7 @@ export default function DriverTodayPage() {
     return `${hh}:${min}`;
   });
 
-  // Sign-on-Glass ePOD Signature Pad Modal state (LogiXL-Connect SignaturePadModal parity)
+  // Sign-on-Glass ePOD & Signed POD Upload Modal state
   const [epodSignatures, setEpodSignatures] = useState<Record<string, EpodSignatureInfo>>({});
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [sigModalKey, setSigModalKey] = useState(0);
@@ -534,11 +650,18 @@ export default function DriverTodayPage() {
   } | null>(null);
   const [sigReceiverName, setSigReceiverName] = useState('');
   const [sigReceiverRole, setSigReceiverRole] = useState('');
+  const [receiverNameError, setReceiverNameError] = useState(false);
+  const [epodCaptureTab, setEpodCaptureTab] = useState<'sign' | 'upload'>('sign');
+  const [uploadedPodDataUri, setUploadedPodDataUri] = useState<string | null>(null);
+  const [uploadedPodFileName, setUploadedPodFileName] = useState<string | null>(null);
   const [sigStrokes, setSigStrokes] = useState<Array<Array<{ x: number; y: number }>>>([]);
   const [sigCurrentStroke, setSigCurrentStroke] = useState<Array<{ x: number; y: number }>>([]);
   const isDrawingSigRef = useRef(false);
   const sigCurrentStrokeRef = useRef<Array<{ x: number; y: number }>>([]);
   const sigSvgRef = useRef<SVGSVGElement | null>(null);
+  const receiverNameInputRef = useRef<HTMLInputElement | null>(null);
+  const podUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const podCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const openEtcModalWithDefaults = useCallback((rampStatus: string) => {
     const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -567,6 +690,10 @@ export default function DriverTodayPage() {
       setSigStrokes([]);
       setSigReceiverName('');
       setSigReceiverRole('');
+      setReceiverNameError(false);
+      setEpodCaptureTab('sign');
+      setUploadedPodDataUri(null);
+      setUploadedPodFileName(null);
       setSigModalKey((prev) => prev + 1);
       setPendingActionAfterSign(pendingAction);
       setShowSignatureModal(true);
@@ -574,7 +701,7 @@ export default function DriverTodayPage() {
     [],
   );
 
-  // Ensure Sign-on-Glass fields & pad are always cleared whenever the modal opens
+  // Ensure Sign-on-Glass & Upload fields are always cleared whenever the modal opens
   useEffect(() => {
     if (showSignatureModal) {
       isDrawingSigRef.current = false;
@@ -583,6 +710,10 @@ export default function DriverTodayPage() {
       setSigStrokes([]);
       setSigReceiverName('');
       setSigReceiverRole('');
+      setReceiverNameError(false);
+      setEpodCaptureTab('sign');
+      setUploadedPodDataUri(null);
+      setUploadedPodFileName(null);
     }
   }, [showSignatureModal]);
 
@@ -596,7 +727,14 @@ export default function DriverTodayPage() {
   const seenJobKeysRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const initialJobLoadDoneRef = useRef(false);
-  const driverCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const driverCoordsRef = useRef<{
+    lat: number;
+    lng: number;
+    speedKmh?: number | null;
+    heading?: number | null;
+    updatedAt: number;
+  } | null>(null);
+  const reverseGeocodeCacheRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
@@ -607,6 +745,12 @@ export default function DriverTodayPage() {
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
           };
         },
         () => {},
@@ -617,6 +761,12 @@ export default function DriverTodayPage() {
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
           };
         },
         () => {},
@@ -631,6 +781,206 @@ export default function DriverTodayPage() {
       }
     };
   }, []);
+
+  /**
+   * Captures the freshest live mobile GPS coordinates and resolves the true
+   * geographic place/street/district name (via reverse geocoding + UAE reference lookup).
+   * Only uses the job's terminal/warehouse name if the driver's coordinates are physically
+   * inside that terminal/warehouse geofence radius.
+   */
+  const captureLiveDriverLocation = useCallback(
+    async (
+      job: DrayageAssignment,
+      targetStatusUpper?: string,
+    ): Promise<{
+      lat: number;
+      lng: number;
+      speedKmh: number | null;
+      heading: number | null;
+      location: string;
+    }> => {
+      // 1a. Check Native Android Bridge GPS first (zero latency in APK)
+      const now = Date.now();
+      if (typeof window !== 'undefined') {
+        try {
+          const w = window as unknown as {
+            Fleet360Android?: {
+              getLastKnownLocationJson?: () => string;
+            };
+          };
+          const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+          if (nativeJson) {
+            const parsed = JSON.parse(nativeJson) as {
+              lat?: number;
+              lng?: number;
+              speedKmh?: number;
+              heading?: number;
+              updatedAt?: number;
+            };
+            if (
+              parsed &&
+              typeof parsed.lat === 'number' &&
+              typeof parsed.lng === 'number' &&
+              (parsed.lat !== 0 || parsed.lng !== 0)
+            ) {
+              driverCoordsRef.current = {
+                lat: parsed.lat,
+                lng: parsed.lng,
+                speedKmh: typeof parsed.speedKmh === 'number' ? parsed.speedKmh : null,
+                heading: typeof parsed.heading === 'number' ? parsed.heading : null,
+                updatedAt: parsed.updatedAt || now,
+              };
+            }
+          }
+        } catch {}
+      }
+
+      // 1b. Try to refresh GPS via WebView geolocation if missing or older than 15 seconds (2.2s timeout so UI never blocks)
+      if (
+        typeof window !== 'undefined' &&
+        'geolocation' in navigator &&
+        (!driverCoordsRef.current || now - driverCoordsRef.current.updatedAt > 15000)
+      ) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => resolve(), 2200);
+          try {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                clearTimeout(timer);
+                driverCoordsRef.current = {
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  speedKmh:
+                    pos.coords.speed != null && pos.coords.speed >= 0
+                      ? Math.round(pos.coords.speed * 3.6)
+                      : null,
+                  heading: pos.coords.heading ?? null,
+                  updatedAt: Date.now(),
+                };
+                resolve();
+              },
+              () => {
+                clearTimeout(timer);
+                resolve();
+              },
+              { enableHighAccuracy: true, timeout: 2000, maximumAge: 10000 },
+            );
+          } catch {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      }
+
+      const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
+      const tLat = job.terminalGeofence?.lat ?? 25.0112;
+      const tLng = job.terminalGeofence?.lng ?? 55.0612;
+      const wLat = job.warehouseGeofence?.lat ?? 24.9642;
+      const wLng = job.warehouseGeofence?.lng ?? 55.0915;
+      const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+      const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+      const st = (targetStatusUpper || job.status || 'ACCEPTED').toUpperCase();
+      let fallbackLat = tLat;
+      let fallbackLng = tLng;
+      if (isL2Job) {
+        if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(st)) {
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(st)) {
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        }
+      } else {
+        if (
+          [
+            'ACCEPTED',
+            'ARRIVED_AT_PORT',
+            'AT_PORT',
+            'CONTAINER_PICKED',
+            'LOADED',
+            'UNDER_INSPECTION',
+          ].includes(st)
+        ) {
+          fallbackLat = tLat;
+          fallbackLng = tLng;
+        } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(st)) {
+          fallbackLat = cLat;
+          fallbackLng = cLng;
+        } else {
+          fallbackLat = wLat;
+          fallbackLng = wLng;
+        }
+      }
+
+      const live = driverCoordsRef.current;
+      const finalLat = live?.lat ?? fallbackLat;
+      const finalLng = live?.lng ?? fallbackLng;
+      const speedKmh = live?.speedKmh ?? null;
+      const heading = live?.heading ?? null;
+
+      // 2. Check if physically inside Terminal or Warehouse geofence radius
+      const termRadiusKm = Math.max(1.8, (job.terminalGeofence?.radiusMeters ?? 1200) / 1000);
+      const whRadiusKm = Math.max(1.5, (job.warehouseGeofence?.radiusMeters ?? 900) / 1000);
+      const distToTermKm = computeHaversineKm(finalLat, finalLng, tLat, tLng);
+      const distToWhKm = computeHaversineKm(finalLat, finalLng, wLat, wLng);
+
+      let placeName = '';
+      if (distToTermKm <= termRadiusKm && job.terminalName) {
+        placeName = job.terminalName;
+      } else if (distToWhKm <= whRadiusKm && job.warehouseName) {
+        placeName = job.warehouseName;
+      } else {
+        // Resolve real geographic locality/district from mobile coordinates
+        const cacheKey = `${finalLat.toFixed(3)},${finalLng.toFixed(3)}`;
+        const cached = reverseGeocodeCacheRef.current.get(cacheKey);
+        if (cached) {
+          placeName = cached;
+        } else {
+          try {
+            const ctrl = new AbortController();
+            const timeoutId = setTimeout(() => ctrl.abort(), 1400);
+            const geoRes = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${finalLat}&longitude=${finalLng}&localityLanguage=en`,
+              { signal: ctrl.signal },
+            );
+            clearTimeout(timeoutId);
+            if (geoRes.ok) {
+              const geoJson = (await geoRes.json()) as {
+                locality?: string;
+                city?: string;
+                principalSubdivision?: string;
+              };
+              const locality = (geoJson.locality || '').trim();
+              const city = (geoJson.city || geoJson.principalSubdivision || '').trim();
+              if (locality && city && locality.toLowerCase() !== city.toLowerCase()) {
+                placeName = `${locality}, ${city}`;
+              } else if (locality || city) {
+                placeName = locality || city;
+              }
+            }
+          } catch {}
+          if (!placeName) {
+            placeName = resolveUaePlaceNameFromCoords(finalLat, finalLng);
+          }
+          reverseGeocodeCacheRef.current.set(cacheKey, placeName);
+        }
+      }
+
+      const location = `${placeName} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+      return {
+        lat: finalLat,
+        lng: finalLng,
+        speedKmh,
+        heading,
+        location,
+      };
+    },
+    [],
+  );
 
   const triggerMobileNotification = useCallback((title: string, body: string, tagKey?: string) => {
     try {
@@ -1125,6 +1475,81 @@ export default function DriverTodayPage() {
     [jobs, selectedJobId],
   );
 
+  // Active jobs currently in execution (from Job Acceptance through Completion)
+  const inExecutionJobs = useMemo(
+    () =>
+      activeJobs.filter((j) => {
+        const st = (j.status || '').toUpperCase().trim();
+        if (!st || HISTORY_STATUSES.has(st)) return false;
+        if (
+          [
+            'PENDING',
+            'UNASSIGNED',
+            'ASSIGNED',
+            'RE-ASSIGNED',
+            'FCL_REASSIGN',
+            'MT_REASSIGN',
+            'FCL_REASSIGN TO RAMP',
+            'MT_REASSIGN TO RAMP',
+            'FCL_REASSIGN TO YARD',
+            'MT_REASSIGN TO YARD',
+            'FCL_REASSIGN_TO_RAMP',
+            'MT_REASSIGN_TO_RAMP',
+            'FCL_REASSIGN_TO_YARD',
+            'MT_REASSIGN_TO_YARD',
+          ].includes(st)
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [activeJobs],
+  );
+
+  // 1-Minute In-Transit GPS Breadcrumb Path Tracking (ACCEPTED -> COMPLETED)
+  useEffect(() => {
+    if (inExecutionJobs.length === 0) return;
+    let cancelled = false;
+
+    const sendLocationPingForActiveJobs = async () => {
+      if (cancelled) return;
+      for (const activeJob of inExecutionJobs) {
+        if (cancelled) break;
+        try {
+          const captured = await captureLiveDriverLocation(activeJob, activeJob.status);
+          if (cancelled) break;
+          await fetch(getApiEndpoint(`/api/driver/jobs/${activeJob.id}/status`), {
+            method: 'POST',
+            credentials: 'include',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              action: 'LOCATION_PING',
+              latitude: captured.lat,
+              longitude: captured.lng,
+              speedKmh: captured.speedKmh,
+              heading: captured.heading,
+              location: captured.location,
+              driverName,
+            }),
+          });
+        } catch {}
+      }
+    };
+
+    const initialTimer = setTimeout(() => {
+      void sendLocationPingForActiveJobs();
+    }, 2000);
+    const intervalId = setInterval(() => {
+      void sendLocationPingForActiveJobs();
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
+  }, [inExecutionJobs, captureLiveDriverLocation, getAuthHeaders, driverName]);
+
   const handleStatusUpdate = async (
     job: DrayageAssignment,
     newStatus: string,
@@ -1150,66 +1575,16 @@ export default function DriverTodayPage() {
         ? 'YARD'
         : undefined;
 
-      const activeSig = overrideSig || epodSignatures[job.id] || null;
+      const activeSig = overrideSig;
       const receiverLabel = activeSig
         ? `${activeSig.receiverName}${activeSig.receiverRole ? ` (${activeSig.receiverRole})` : ''}`
         : undefined;
 
-      const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
-      const tLat = job.terminalGeofence?.lat ?? 25.0112;
-      const tLng = job.terminalGeofence?.lng ?? 55.0612;
-      const wLat = job.warehouseGeofence?.lat ?? 24.9642;
-      const wLng = job.warehouseGeofence?.lng ?? 55.0915;
-      const cLat = Number(((tLat + wLat) / 2).toFixed(4));
-      const cLng = Number(((tLng + wLng) / 2).toFixed(4));
-
-      let stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-      let fallbackLat = tLat;
-      let fallbackLng = tLng;
-
-      if (isL2Job) {
-        if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(upperTarget)) {
-          stageFacility = job.warehouseName || 'Consignee Warehouse';
-          fallbackLat = wLat;
-          fallbackLng = wLng;
-        } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(upperTarget)) {
-          stageFacility = `E11 Corridor → ${job.terminalName || 'Port Terminal'}`;
-          fallbackLat = cLat;
-          fallbackLng = cLng;
-        } else {
-          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-          fallbackLat = tLat;
-          fallbackLng = tLng;
-        }
-      } else {
-        if (
-          [
-            'ACCEPTED',
-            'ARRIVED_AT_PORT',
-            'AT_PORT',
-            'CONTAINER_PICKED',
-            'LOADED',
-            'UNDER_INSPECTION',
-          ].includes(upperTarget)
-        ) {
-          stageFacility = job.terminalName || 'DPW-Jebel Ali-T1';
-          fallbackLat = tLat;
-          fallbackLng = tLng;
-        } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(upperTarget)) {
-          stageFacility = `E11 Corridor → ${job.warehouseName || 'Consignee Warehouse'}`;
-          fallbackLat = cLat;
-          fallbackLng = cLng;
-        } else {
-          stageFacility = job.warehouseName || 'Consignee Warehouse';
-          fallbackLat = wLat;
-          fallbackLng = wLng;
-        }
-      }
-
-      const liveCoords = driverCoordsRef.current;
-      const finalLat = liveCoords?.lat ?? fallbackLat;
-      const finalLng = liveCoords?.lng ?? fallbackLng;
-      const capturedLocation = `${stageFacility} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+      const {
+        lat: finalLat,
+        lng: finalLng,
+        location: capturedLocation,
+      } = await captureLiveDriverLocation(job, upperTarget);
 
       // Optimistic local state update so UI responds immediately
       setJobs((prev) =>
@@ -1272,8 +1647,16 @@ export default function DriverTodayPage() {
   };
 
   /**
-   * Prompts for Receiver Sign-on-Glass ePOD Signature strictly at Container Delivery / Ramp Delivery
-   * (PLACED_AT_RAMP or REASSIGN_PLACED_AT_RAMP) if not signed yet.
+   * Post-Ramp ePOD Interception (Sign-on-Glass OR Signed POD Upload):
+   * - Initial placement at Ramp (PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP) opens the ETC modal directly.
+   * - Path A (Ramp-to-Yard Shunt after MT_Reassign to Yard / FCL_Reassign to Yard):
+   *   Once the tractor is assigned (RE-ASSIGNED with placementLocation === 'RAMP') and couples at the ramp
+   *   (TRAILER_ATTACHED) to move the container to the yard (REASSIGN_PLACED_AT_YARD), intercept and require ePOD
+   *   before allowing the transition to proceed.
+   * - Path B (Direct Completion from Ramp — No Yard Shunt):
+   *   If the container stays at the ramp until READY_FOR_PICKUP (without moving to the yard) or transitions to
+   *   READY_FOR_PICKUP without a signed POD (!job.podPhotoUrl), intercept at READY_FOR_PICKUP so no job ever
+   *   completes its warehouse leg without a signed POD.
    */
   const handleActionWithEpodCheck = (
     job: DrayageAssignment,
@@ -1281,27 +1664,58 @@ export default function DriverTodayPage() {
     label: string,
   ) => {
     const upper = targetStatus.toUpperCase();
+    const currentUpper = (job.status || '').toUpperCase();
+    const placementUpper = (job.placementLocation || '').toUpperCase();
     const isL2Job = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
     const isRampTarget = upper === 'PLACED_AT_RAMP' || upper === 'REASSIGN_PLACED_AT_RAMP';
-    const isEpodDeliveryMilestone = !isL2Job && isRampTarget;
-
-    const hasSignedAlready = Boolean(epodSignatures[job.id] || job.podSignatureName);
-
-    if (isEpodDeliveryMilestone && !hasSignedAlready) {
-      openSignatureModalFresh({
-        targetStatus,
-        label,
-        requireEtcModal: isRampTarget,
-      });
-      return;
-    }
 
     if (isRampTarget) {
       openEtcModalWithDefaults(targetStatus);
       return;
     }
 
+    const localSig = epodSignatures[job.id];
+    const hasPodEvidence = Boolean(
+      localSig?.signatureDataUri ||
+        localSig?.uploadedPodDataUri ||
+        job.podPhotoUrl ||
+        job.podSignatureName,
+    );
+
+    // Path A: Tractor coupled at Ramp (TRAILER_ATTACHED with placementLocation === 'RAMP') moving container to Yard (REASSIGN_PLACED_AT_YARD)
+    const isPathARampToYardShunt =
+      upper === 'REASSIGN_PLACED_AT_YARD' ||
+      (currentUpper === 'TRAILER_ATTACHED' && placementUpper === 'RAMP');
+
+    // Path B: Direct completion / READY_FOR_PICKUP without a signed POD (!job.podPhotoUrl)
+    const isPathBReadyForPickupWithoutPod =
+      upper === 'READY_FOR_PICKUP' && !job.podPhotoUrl && !hasPodEvidence;
+
+    if (!isL2Job && (isPathARampToYardShunt || isPathBReadyForPickupWithoutPod) && !hasPodEvidence) {
+      openSignatureModalFresh({
+        targetStatus,
+        label,
+        requireEtcModal: false,
+      });
+      return;
+    }
+
     void handleStatusUpdate(job, targetStatus);
+  };
+
+  const handlePodFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUri) return;
+      setUploadedPodDataUri(dataUri);
+      setUploadedPodFileName(file.name || `Signed-POD-${Date.now()}.jpg`);
+      showToast(`Signed POD "${file.name}" attached`);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const getPointerCoordsInSvg = (e: React.PointerEvent<SVGSVGElement>): { x: number; y: number } => {
@@ -1356,12 +1770,23 @@ export default function DriverTodayPage() {
     if (!selectedJob) return;
     const trimmedName = sigReceiverName.trim();
     if (!trimmedName) {
-      showToast('Please enter Receiver Full Name before confirming ePOD signature.');
+      setReceiverNameError(true);
+      receiverNameInputRef.current?.focus();
+      showToast('⚠️ Please enter the Name of the Person who signed in the Name column to proceed.');
       return;
     }
+    setReceiverNameError(false);
+
     const allStrokes = sigCurrentStroke.length > 0 ? [...sigStrokes, sigCurrentStroke] : sigStrokes;
-    if (allStrokes.length === 0) {
-      showToast('Please ask the receiver to sign inside the signature box using their finger.');
+    const hasDrawnSignature = allStrokes.length > 0;
+    const hasUploadedPod = Boolean(uploadedPodDataUri);
+
+    if (!hasDrawnSignature && !hasUploadedPod) {
+      showToast(
+        epodCaptureTab === 'upload'
+          ? 'Please capture a photo or upload the signed POD document before confirming.'
+          : 'Please ask the receiver to sign inside the signature box OR switch to Upload Signed POD.',
+      );
       return;
     }
 
@@ -1369,19 +1794,32 @@ export default function DriverTodayPage() {
     const epodCode = isL2Job || selectedJob.shipmentType === 'EXPORT' ? 'MT_DELIVERED' : 'FCL_DELIVERED';
     const statusLabel = pendingActionAfterSign?.label || epodCode;
 
-    const signatureDataUri = buildSignatureSvgDataUri({
-      strokes: allStrokes,
-      receiverName: trimmedName,
-      receiverRole: sigReceiverRole.trim(),
-      jobNumber: selectedJob.jobCode,
-      containerNumber: selectedJob.containerNumber,
-      statusLabel,
-    });
+    const signatureSvgDataUri = hasDrawnSignature
+      ? buildSignatureSvgDataUri({
+          strokes: allStrokes,
+          receiverName: trimmedName,
+          receiverRole: sigReceiverRole.trim(),
+          jobNumber: selectedJob.jobCode,
+          containerNumber: selectedJob.containerNumber,
+          statusLabel,
+        })
+      : '';
+
+    const finalPodDataUri = uploadedPodDataUri || signatureSvgDataUri;
+    const captureMethod: 'SIGN_ON_GLASS' | 'UPLOADED_POD' | 'BOTH' =
+      hasDrawnSignature && hasUploadedPod
+        ? 'BOTH'
+        : hasUploadedPod
+        ? 'UPLOADED_POD'
+        : 'SIGN_ON_GLASS';
 
     const capturedSig: EpodSignatureInfo = {
       receiverName: trimmedName,
       receiverRole: sigReceiverRole.trim(),
-      signatureDataUri,
+      signatureDataUri: finalPodDataUri,
+      uploadedPodDataUri: uploadedPodDataUri || null,
+      uploadedPodFileName: uploadedPodFileName || null,
+      captureMethod,
       signedAt: new Date().toISOString(),
     };
 
@@ -1397,7 +1835,7 @@ export default function DriverTodayPage() {
           ? {
               ...j,
               podSignatureName: receiverDisplay,
-              podPhotoUrl: signatureDataUri,
+              podPhotoUrl: finalPodDataUri,
               podSignedAt: capturedSig.signedAt,
             }
           : j,
@@ -1409,51 +1847,53 @@ export default function DriverTodayPage() {
     setPendingActionAfterSign(null);
     setSigReceiverName('');
     setSigReceiverRole('');
+    setReceiverNameError(false);
+    setUploadedPodDataUri(null);
+    setUploadedPodFileName(null);
     clearSignaturePad();
 
-    // If triggered by a delivery/placement button, proceed to ETC modal (for Ramp) or status update
-    if (pending) {
-      if (pending.requireEtcModal) {
-        // Also persist the ePOD signature immediately so it is saved while choosing ETC hours
-        try {
-          await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
-            method: 'POST',
-            credentials: 'include',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({
-              action: 'EPOD_SIGN',
-              receiverName: receiverDisplay,
-              signatureDataUri,
-              notes: `Sign-on-Glass ePOD (${epodCode}) captured for ${pending.label}`,
-              driverName,
-            }),
-          });
-        } catch {}
-        openEtcModalWithDefaults(pending.targetStatus);
-        return;
-      }
-      await handleStatusUpdate(selectedJob, pending.targetStatus, null, capturedSig);
-      return;
-    }
+    const methodDesc =
+      captureMethod === 'BOTH'
+        ? `Sign-on-Glass + Signed POD Document (${uploadedPodFileName || 'Attached'})`
+        : captureMethod === 'UPLOADED_POD'
+        ? `Signed POD Document Uploaded (${uploadedPodFileName || 'Attached'})`
+        : `Sign-on-Glass ePOD (${epodCode})`;
 
-    // Standalone ePOD signature capture
+    // Always record dedicated Lifecycle Event (POD_SIGNED / EPOD_CAPTURED) in logistics_drayage_status_logs
     try {
+      const epodLoc = await captureLiveDriverLocation(selectedJob, 'POD_SIGNED');
       await fetch(getApiEndpoint(`/api/driver/jobs/${selectedJob.id}/status`), {
         method: 'POST',
         credentials: 'include',
         headers: getAuthHeaders(),
         body: JSON.stringify({
           action: 'EPOD_SIGN',
+          eventStatus: 'POD_SIGNED / EPOD_CAPTURED',
+          captureMethod,
           receiverName: receiverDisplay,
-          signatureDataUri,
-          notes: `Sign-on-Glass ePOD (${epodCode}) signed by ${receiverDisplay}`,
+          signatureDataUri: finalPodDataUri,
+          uploadedPodDataUri: uploadedPodDataUri || undefined,
+          notes: `${methodDesc}${pending ? ` · Stage: ${pending.label}` : ''}`,
           driverName,
+          latitude: epodLoc.lat,
+          longitude: epodLoc.lng,
+          location: epodLoc.location,
         }),
       });
-      showToast(`✅ Sign-on-Glass ePOD (${epodCode}) saved for ${selectedJob.jobCode}`);
-    } catch {
-      showToast(`Saved ePOD signature locally for ${selectedJob.jobCode}`);
+    } catch {}
+
+    // If triggered by a post-ramp / READY_FOR_PICKUP button, proceed with the status transition
+    if (pending) {
+      if (pending.requireEtcModal) {
+        openEtcModalWithDefaults(pending.targetStatus);
+        return;
+      }
+      await handleStatusUpdate(selectedJob, pending.targetStatus, null, null);
+      return;
     }
+
+    showToast(`✅ ${methodDesc} saved & logged in Lifecycle for ${selectedJob.jobCode}`);
+    await fetchDriverJobs(true);
   };
 
   const handleSkipSignatureAndProceed = async () => {
@@ -1718,23 +2158,25 @@ export default function DriverTodayPage() {
                   </div>
                 )}
 
-                {/* Sign-on-Glass ePOD Receiver Signature Section — Shown strictly at Container / Ramp Delivery */}
+                {/* Post-Ramp ePOD Signing & Signed POD Upload Section (MT_Reassign to Yard / FCL_Reassign to Yard / Direct Completion) */}
                 {!isL2Selected &&
-                  ((['EN_ROUTE_WAREHOUSE', 'PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                  ((['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_YARD', 'READY_FOR_PICKUP'].includes(
                     (selectedJob.status || '').toUpperCase(),
                   ) ||
-                    ((selectedJob.status || '').toUpperCase() === 'TRAILER_ATTACHED' &&
-                      (selectedJob.placementLocation || '').toUpperCase() !== 'RAMP')) ||
+                    (['TRAILER_ATTACHED', 'RE-ASSIGNED'].includes(
+                      (selectedJob.status || '').toUpperCase(),
+                    ) &&
+                      (selectedJob.placementLocation || '').toUpperCase() === 'RAMP')) ||
                     isEpodSigned) && (
                     <div className="pt-1 border-t border-slate-100">
                       {isEpodSigned ? (
                         <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="text-xs font-extrabold text-emerald-800">
-                              ✅ ePOD Signed ({epodDeliveryStatusCode})
+                              ✅ ePOD Signed / Uploaded ({epodDeliveryStatusCode})
                             </div>
                             <div className="text-[11px] font-semibold text-emerald-700 truncate mt-0.5">
-                              Receiver: {signedReceiverDisplay}
+                              Signed By: {signedReceiverDisplay}
                             </div>
                           </div>
                           <button
@@ -1742,7 +2184,7 @@ export default function DriverTodayPage() {
                             onClick={() => openSignatureModalFresh(null)}
                             className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[11px] hover:bg-emerald-100 transition"
                           >
-                            Re-Sign
+                            Update POD
                           </button>
                         </div>
                       ) : (
@@ -1752,7 +2194,7 @@ export default function DriverTodayPage() {
                           onClick={() => openSignatureModalFresh(null)}
                           className="w-full py-3 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-600 text-emerald-800 font-extrabold text-xs text-center transition active:scale-95"
                         >
-                          ✍️ Capture Receiver Sign-on-Glass ({epodDeliveryStatusCode})
+                          ✍️ Sign-on-Glass OR Upload Signed POD ({epodDeliveryStatusCode})
                         </button>
                       )}
                     </div>
@@ -1791,18 +2233,40 @@ export default function DriverTodayPage() {
                     </button>
                   </div>
                 ) : (
-                  /* Single Prominent Next Action Button */
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() =>
-                      handleActionWithEpodCheck(selectedJob, nextStep.nextStatus, nextStep.label)
-                    }
-                    style={{ backgroundColor: nextStep.color }}
-                    className="w-full py-4 rounded-xl text-white font-extrabold text-base shadow-md hover:opacity-95 transition active:scale-95 disabled:opacity-50"
-                  >
-                    {submitting ? 'Updating…' : nextStep.label}
-                  </button>
+                  /* Single Prominent Next Action Button (+ Path B Direct Ramp Completion when at PLACED_AT_RAMP) */
+                  <div className="space-y-2.5">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        handleActionWithEpodCheck(selectedJob, nextStep.nextStatus, nextStep.label)
+                      }
+                      style={{ backgroundColor: nextStep.color }}
+                      className="w-full py-4 rounded-xl text-white font-extrabold text-base shadow-md hover:opacity-95 transition active:scale-95 disabled:opacity-50"
+                    >
+                      {submitting ? 'Updating…' : nextStep.label}
+                    </button>
+
+                    {!isL2Selected &&
+                      ['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP'].includes(
+                        (selectedJob.status || '').toUpperCase(),
+                      ) && (
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() =>
+                            handleActionWithEpodCheck(
+                              selectedJob,
+                              'READY_FOR_PICKUP',
+                              'Ready for Pickup (Direct Ramp Completion)',
+                            )
+                          }
+                          className="w-full py-3 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-800 font-extrabold text-xs shadow-sm transition active:scale-95 disabled:opacity-50"
+                        >
+                          ✓ Direct Completion from Ramp (Ready for Pickup + ePOD)
+                        </button>
+                      )}
+                  </div>
                 )}
               </div>
             ) : (
@@ -2152,15 +2616,15 @@ export default function DriverTodayPage() {
           </div>
         )}
 
-        {/* Sign-on-Glass ePOD Signature Pad Modal (LogiXL-Connect SignaturePadModal.js parity) */}
+        {/* Dual-Provision ePOD Modal: Sign-on-Glass OR Upload Signed POD Document */}
         {showSignatureModal && (
           <div key={sigModalKey} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-3.5">
+            <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-3.5 max-h-[92vh] overflow-y-auto">
               {/* Header */}
               <div className="flex items-start justify-between border-b border-slate-100 pb-2.5">
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900">
-                    ✍️ Sign-on-Glass ePOD ({epodDeliveryStatusCode})
+                    ✍️ Post-Ramp ePOD: Sign OR Upload Signed POD ({epodDeliveryStatusCode})
                   </h3>
                   <p className="text-xs text-slate-500 font-semibold mt-0.5">
                     {pendingActionAfterSign?.label || epodDeliveryStatusCode} · {selectedJob.jobCode} ·{' '}
@@ -2172,6 +2636,7 @@ export default function DriverTodayPage() {
                   onClick={() => {
                     setShowSignatureModal(false);
                     setPendingActionAfterSign(null);
+                    setReceiverNameError(false);
                   }}
                   className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
                 >
@@ -2179,120 +2644,263 @@ export default function DriverTodayPage() {
                 </button>
               </div>
 
-              {/* Receiver Full Name & Role/ID Inputs */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    Receiver Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    name={`receiver_name_${sigModalKey}`}
-                    autoComplete="off"
-                    value={sigReceiverName}
-                    onChange={(e) => setSigReceiverName(e.target.value)}
-                    placeholder="e.g. Ahmed Al-Mansoor"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
+              {/* Receiver Full Name (Person Signed) & Role/ID Inputs */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="col-span-2">
+                    <label
+                      className={`block text-[11px] font-extrabold mb-1 ${
+                        receiverNameError ? 'text-rose-600' : 'text-slate-600'
+                      }`}
+                    >
+                      Name of Person Signed (Receiver) *
+                    </label>
+                    <input
+                      ref={receiverNameInputRef}
+                      type="text"
+                      name={`receiver_name_${sigModalKey}`}
+                      autoComplete="off"
+                      value={sigReceiverName}
+                      onChange={(e) => {
+                        setSigReceiverName(e.target.value);
+                        if (e.target.value.trim().length > 0 && receiverNameError) {
+                          setReceiverNameError(false);
+                        }
+                      }}
+                      placeholder="e.g. Ahmed Al-Mansoor"
+                      className={`w-full px-3 py-2 rounded-xl text-xs font-bold focus:outline-none transition ${
+                        receiverNameError
+                          ? 'bg-rose-50 border-2 border-rose-500 text-rose-900 ring-4 ring-rose-500/20 animate-pulse placeholder:text-rose-400'
+                          : 'bg-slate-50 border border-slate-300 text-slate-900 focus:border-blue-600'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Role / ID (Opt)
+                    </label>
+                    <input
+                      type="text"
+                      name={`receiver_role_${sigModalKey}`}
+                      autoComplete="off"
+                      value={sigReceiverRole}
+                      onChange={(e) => setSigReceiverRole(e.target.value)}
+                      placeholder="e.g. Ramp Supv"
+                      className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    Role / ID (Opt)
-                  </label>
-                  <input
-                    type="text"
-                    name={`receiver_role_${sigModalKey}`}
-                    autoComplete="off"
-                    value={sigReceiverRole}
-                    onChange={(e) => setSigReceiverRole(e.target.value)}
-                    placeholder="e.g. Ramp Supv"
-                    className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
+
+                {receiverNameError && (
+                  <div className="px-3 py-2 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 text-[11px] font-extrabold flex items-center gap-1.5">
+                    <span>
+                      ⚠️ Required: Please enter the Name of the Person who signed the POD in the Name column above before proceeding.
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Touch Signature Box */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-600">
-                    Touch Signature Box (Sign with Finger)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearSignaturePad}
-                    className="text-xs font-extrabold text-rose-600 hover:text-rose-700"
-                  >
-                    Clear Pad
-                  </button>
-                </div>
+              {/* Dual Provision Mode Selector: Sign-on-Glass vs. Upload Signed POD */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEpodCaptureTab('sign')}
+                  className={`py-2 px-2.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
+                    epodCaptureTab === 'sign'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>✍️ Sign-on-Glass</span>
+                  {allRenderSigStrokes.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white text-[9px]">✓</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEpodCaptureTab('upload')}
+                  className={`py-2 px-2.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
+                    epodCaptureTab === 'upload'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📄 Upload Signed POD</span>
+                  {uploadedPodDataUri && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white text-[9px]">✓</span>
+                  )}
+                </button>
+              </div>
 
-                <div className="relative rounded-xl border-2 border-blue-500 bg-slate-50 overflow-hidden select-none touch-none">
-                  <svg
-                    ref={sigSvgRef}
-                    viewBox="0 0 340 190"
-                    className="w-full h-44 touch-none cursor-crosshair block"
-                    onPointerDown={handleSigPointerDown}
-                    onPointerMove={handleSigPointerMove}
-                    onPointerUp={handleSigPointerUp}
-                    onPointerCancel={handleSigPointerUp}
-                  >
-                    {/* Baseline */}
-                    <line
-                      x1="18"
-                      y1="158"
-                      x2="322"
-                      y2="158"
-                      stroke="#cbd5e1"
-                      strokeDasharray="4,4"
-                      strokeWidth="1.5"
-                    />
-                    {allRenderSigStrokes.length === 0 && (
-                      <text
-                        x="170"
-                        y="102"
-                        textAnchor="middle"
-                        fill="#cbd5e1"
-                        fontSize="24"
-                        fontWeight="800"
-                      >
-                        Sign Here
-                      </text>
-                    )}
-                    {allRenderSigStrokes.map((pts, sIdx) => {
-                      if (pts.length === 0) return null;
-                      if (pts.length === 1) {
+              {/* Hidden file inputs for Camera Capture & Document Upload */}
+              <input
+                ref={podCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePodFileSelected}
+                className="hidden"
+              />
+              <input
+                ref={podUploadInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={handlePodFileSelected}
+                className="hidden"
+              />
+
+              {epodCaptureTab === 'sign' ? (
+                /* Option 1: Touch Signature Box */
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-600">
+                      Touch Signature Box (Sign with Finger)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearSignaturePad}
+                      className="text-xs font-extrabold text-rose-600 hover:text-rose-700"
+                    >
+                      Clear Pad
+                    </button>
+                  </div>
+
+                  <div className="relative rounded-xl border-2 border-blue-500 bg-slate-50 overflow-hidden select-none touch-none">
+                    <svg
+                      ref={sigSvgRef}
+                      viewBox="0 0 340 190"
+                      className="w-full h-44 touch-none cursor-crosshair block"
+                      onPointerDown={handleSigPointerDown}
+                      onPointerMove={handleSigPointerMove}
+                      onPointerUp={handleSigPointerUp}
+                      onPointerCancel={handleSigPointerUp}
+                    >
+                      {/* Baseline */}
+                      <line
+                        x1="18"
+                        y1="158"
+                        x2="322"
+                        y2="158"
+                        stroke="#cbd5e1"
+                        strokeDasharray="4,4"
+                        strokeWidth="1.5"
+                      />
+                      {allRenderSigStrokes.length === 0 && (
+                        <text
+                          x="170"
+                          y="102"
+                          textAnchor="middle"
+                          fill="#cbd5e1"
+                          fontSize="24"
+                          fontWeight="800"
+                        >
+                          Sign Here
+                        </text>
+                      )}
+                      {allRenderSigStrokes.map((pts, sIdx) => {
+                        if (pts.length === 0) return null;
+                        if (pts.length === 1) {
+                          return (
+                            <circle
+                              key={`dot-${sIdx}`}
+                              cx={pts[0].x}
+                              cy={pts[0].y}
+                              r="2.2"
+                              fill="#0f172a"
+                            />
+                          );
+                        }
+                        const d = pts
+                          .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                          .join(' ');
                         return (
-                          <circle
-                            key={`dot-${sIdx}`}
-                            cx={pts[0].x}
-                            cy={pts[0].y}
-                            r="2.2"
-                            fill="#0f172a"
+                          <path
+                            key={`stroke-${sIdx}`}
+                            d={d}
+                            stroke="#0f172a"
+                            strokeWidth="3"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                           />
                         );
-                      }
-                      const d = pts
-                        .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-                        .join(' ');
-                      return (
-                        <path
-                          key={`stroke-${sIdx}`}
-                          d={d}
-                          stroke="#0f172a"
-                          strokeWidth="3"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      );
-                    })}
-                  </svg>
+                      })}
+                    </svg>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    By signing above, receiver acknowledges container condition &amp; seal integrity at{' '}
+                    {selectedJob.warehouseName || selectedJob.terminalName}.
+                  </p>
                 </div>
-                <p className="text-[10px] text-slate-400">
-                  By signing above, receiver acknowledges container condition &amp; seal integrity at{' '}
-                  {selectedJob.warehouseName || selectedJob.terminalName}.
-                </p>
-              </div>
+              ) : (
+                /* Option 2: Upload / Capture Signed Physical POD */
+                <div className="space-y-2.5">
+                  <div className="text-[11px] font-bold text-slate-600">
+                    Upload or Capture Stamped &amp; Signed Physical POD
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => podCameraInputRef.current?.click()}
+                      className="py-3 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Take POD Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => podUploadInputRef.current?.click()}
+                      className="py-3 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Upload POD File</span>
+                    </button>
+                  </div>
+
+                  {uploadedPodDataUri ? (
+                    <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-extrabold text-emerald-800 truncate">
+                          ✓ Attached: {uploadedPodFileName || 'Signed-POD'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadedPodDataUri(null);
+                            setUploadedPodFileName(null);
+                          }}
+                          className="text-[11px] font-extrabold text-rose-600 hover:text-rose-700 shrink-0"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {uploadedPodDataUri.startsWith('data:image/') ? (
+                        <div className="rounded-lg bg-white border border-emerald-200 p-1.5 flex justify-center">
+                          <img
+                            src={uploadedPodDataUri}
+                            alt="Uploaded Signed POD"
+                            className="max-h-36 w-auto rounded object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-[11px] font-semibold text-emerald-700 bg-white rounded-lg p-2 border border-emerald-200">
+                          📄 PDF / Document ready for upload ({uploadedPodFileName})
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center space-y-1">
+                      <div className="text-xs font-bold text-slate-600">
+                        No Signed POD Document Attached Yet
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Tap &quot;Take POD Photo&quot; to photograph the stamped paper POD or &quot;Upload POD File&quot; to attach an image/PDF.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-1">
@@ -2301,7 +2909,7 @@ export default function DriverTodayPage() {
                   onClick={() => void handleConfirmSignaturePad()}
                   className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md transition active:scale-95"
                 >
-                  ✍️ Confirm &amp; Save ePOD Signature
+                  ✍️ Confirm &amp; Save ePOD (Record Lifecycle Event)
                 </button>
 
                 {pendingActionAfterSign && (
@@ -2319,6 +2927,7 @@ export default function DriverTodayPage() {
                   onClick={() => {
                     setShowSignatureModal(false);
                     setPendingActionAfterSign(null);
+                    setReceiverNameError(false);
                   }}
                   className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs"
                 >
