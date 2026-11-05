@@ -67,15 +67,23 @@ public class Fleet360DispatchService extends Service {
         "COMPLETED",
         "EMPTY_DEPOSITED",
         "DELIVERED",
-        "CANCELLED"
+        "CANCELLED",
+        "FCL_REASSIGN",
+        "MT_REASSIGN",
+        "MT_REASSIGN TO YARD",
+        "FCL_REASSIGN TO YARD",
+        "FCL_REASSIGN TO RAMP",
+        "MT_REASSIGN TO RAMP",
+        "MT_REASSIGN_TO_YARD",
+        "FCL_REASSIGN_TO_YARD",
+        "FCL_REASSIGN_TO_RAMP",
+        "MT_REASSIGN_TO_RAMP"
     ));
 
     private static final Set<String> ASSIGNMENT_STATUSES = new HashSet<>(Arrays.asList(
         "ASSIGNED",
         "PENDING",
-        "RE-ASSIGNED",
-        "FCL_REASSIGN",
-        "MT_REASSIGN"
+        "RE-ASSIGNED"
     ));
 
     private ScheduledExecutorService scheduler;
@@ -307,10 +315,7 @@ public class Fleet360DispatchService extends Service {
                 String jobCode = j.optString("jobCode", "Job");
                 String jobPhase = j.optString("jobPhase", "");
                 boolean isL2 = "L2".equalsIgnoreCase(jobPhase) || jobCode.contains("-L2");
-                boolean isReassigned =
-                    "RE-ASSIGNED".equals(status) ||
-                    "FCL_REASSIGN".equals(status) ||
-                    "MT_REASSIGN".equals(status);
+                boolean isReassigned = "RE-ASSIGNED".equals(status);
                 boolean isReassignWorkflow =
                     isReassigned ||
                     "TRAILER_ATTACHED".equals(status) ||
@@ -349,8 +354,14 @@ public class Fleet360DispatchService extends Service {
                         String pickupName;
                         String dropoffName;
                         if (isReassigned) {
-                            pickupName = (warehouseName.isEmpty() ? "Client Yard" : warehouseName) + " (Yard)";
-                            dropoffName = (warehouseName.isEmpty() ? "Client Warehouse" : warehouseName) + " (Ramp)";
+                            String placementLoc = j.optString("placementLocation", "").toUpperCase();
+                            if ("RAMP".equals(placementLoc)) {
+                                pickupName = (warehouseName.isEmpty() ? "Client Warehouse" : warehouseName) + " (Ramp)";
+                                dropoffName = (warehouseName.isEmpty() ? "Client Yard" : warehouseName) + " (Yard)";
+                            } else {
+                                pickupName = (warehouseName.isEmpty() ? "Client Yard" : warehouseName) + " (Yard)";
+                                dropoffName = (warehouseName.isEmpty() ? "Client Warehouse" : warehouseName) + " (Ramp)";
+                            }
                         } else if (isL2) {
                             pickupName = warehouseName.isEmpty() ? "Customer Warehouse" : warehouseName;
                             dropoffName = terminalName.isEmpty() ? "Port Terminal" : terminalName;
