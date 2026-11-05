@@ -2502,6 +2502,9 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'EMPTY_DEPOSITED',
     'COMPLETED',
     'EPOD_SIGNED',
+    'POD_SIGNED',
+    'EPOD_CAPTURED',
+    'POD_SIGNED / EPOD_CAPTURED',
     'DRIVER_EXPENSE_RECEIPT',
   ]);
   const DISPATCHER_STAGE_STATUSES = new Set([
@@ -4653,7 +4656,9 @@ export async function updateDrayageJobExecutionStatus(
             'READY_FOR_PICKUP', 'PHOTO_UPLOADED', 'INSPECTION_SKIPPED',
             'INSPECTION_REPORTED', 'TRAILER_ATTACHED', 'ACCEPTED',
             'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED',
-            'GPS_BREADCRUMB'
+            'GPS_BREADCRUMB', 'EPOD_SIGNED', 'POD_SIGNED', 'EPOD_CAPTURED',
+            'POD_SIGNED / EPOD_CAPTURED', 'RETURN_TERMINAL_CHANGED', 'JOB_EDITED',
+            'DRIVER_EXPENSE_RECEIPT'
           )
         ORDER BY created_at DESC
         LIMIT 1`,
@@ -7793,6 +7798,8 @@ export async function submitJobPodEvidence(
     latitude?: number | null;
     longitude?: number | null;
     location?: string | null;
+    eventStatus?: string;
+    captureMethod?: 'SIGN_ON_GLASS' | 'UPLOADED_POD' | 'BOTH' | string;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -7842,6 +7849,8 @@ export async function submitJobPodEvidence(
     ? Number(job.current_lng)
     : null;
 
+  const lifecycleEventStatus = (args.eventStatus || 'POD_SIGNED / EPOD_CAPTURED').trim();
+
   const epodLocation = resolveOperationalMilestoneLocation({
     status: 'EPOD_SIGNED',
     explicitLocation: args.location ?? null,
@@ -7853,8 +7862,16 @@ export async function submitJobPodEvidence(
     warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
   });
 
+  const methodLabel =
+    args.captureMethod === 'UPLOADED_POD'
+      ? 'Signed POD Document Uploaded'
+      : args.captureMethod === 'BOTH'
+      ? 'Sign-on-Glass + Signed POD Uploaded'
+      : 'Sign-on-Glass ePOD';
+
   const epodNotes = [
     epodLocation ? `[LOC:${epodLocation}]` : '',
+    `Signed by: ${receiver} (${methodLabel})`,
     args.notes ? String(args.notes).trim() : '',
   ]
     .filter(Boolean)
@@ -7862,11 +7879,12 @@ export async function submitJobPodEvidence(
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, 'EPOD_SIGNED', $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     `log-${crypto.randomUUID().slice(0, 12)}`,
     args.tenantId,
     args.jobId,
     String(job.job_code),
+    lifecycleEventStatus,
     epodNotes,
     args.actor || `${receiver} (Consignee Portal)`,
   );
@@ -7875,6 +7893,7 @@ export async function submitJobPodEvidence(
     ok: true,
     jobId: args.jobId,
     receiverName: receiver,
+    eventStatus: lifecycleEventStatus,
     signedAt: signedAtIso,
     photoUrl: args.photoUrl ?? null,
   };

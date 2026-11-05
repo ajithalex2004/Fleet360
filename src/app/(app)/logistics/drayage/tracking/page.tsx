@@ -38,6 +38,7 @@ import {
   Pencil,
   ArrowUpDown,
   Lock,
+  FileText,
   X,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
@@ -135,6 +136,9 @@ interface DrayageJob {
   bogieJobId?: string | null;
   streetTurnJobId?: string | null;
   doExpiryDate?: string | null;
+  podSignatureName?: string | null;
+  podSignedAt?: string | null;
+  podPhotoUrl?: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -3046,25 +3050,65 @@ export default function DrayageJobTrackingPage() {
                         No audit events recorded yet.
                       </div>
                     ) : (
-                      jobLogs.map((log) => (
-                        <div key={log.id} className="flex items-start gap-2.5 text-xs">
-                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                          <div className="space-y-0.5 min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-[var(--text-main)] font-mono text-[11px]">{log.status}</span>
-                              <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                                {formatTimelineDateTime(log.timestamp)} · {log.actor}
-                              </span>
-                            </div>
-                            {log.location ? (
-                              <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
-                                <span className="truncate">{log.location}</span>
+                      jobLogs.map((log) => {
+                        const statusUpper = String(log.status || '').toUpperCase();
+                        const isPodEvent =
+                          statusUpper.includes('POD_SIGNED') ||
+                          statusUpper.includes('EPOD_CAPTURED') ||
+                          statusUpper.includes('EPOD_SIGNED');
+                        return (
+                          <div key={log.id} className="flex items-start gap-2.5 text-xs">
+                            <div
+                              className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                                isPodEvent ? 'bg-emerald-500 ring-2 ring-emerald-500/30' : 'bg-blue-500'
+                              }`}
+                            />
+                            <div className="space-y-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`font-bold font-mono text-[11px] ${
+                                    isPodEvent
+                                      ? 'px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                                      : 'text-[var(--text-main)]'
+                                  }`}
+                                >
+                                  {isPodEvent ? `✍️ ${log.status}` : log.status}
+                                </span>
+                                <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                                  {formatTimelineDateTime(log.timestamp)} · {log.actor}
+                                </span>
+                                {isPodEvent && activeJob.podPhotoUrl && (
+                                  <a
+                                    href={activeJob.podPhotoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={`Signed-POD-${activeJob.jobCode}`}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold transition-colors"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>View Signed POD</span>
+                                  </a>
+                                )}
                               </div>
-                            ) : null}
+                              {log.notes ? (
+                                <div
+                                  className={`text-[11px] leading-snug ${
+                                    isPodEvent ? 'text-emerald-300 font-semibold' : 'text-[var(--text-muted)]'
+                                  }`}
+                                >
+                                  {log.notes}
+                                </div>
+                              ) : null}
+                              {log.location ? (
+                                <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                                  <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
+                                  <span className="truncate">{log.location}</span>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </Panel>

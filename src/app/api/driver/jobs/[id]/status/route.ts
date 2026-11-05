@@ -211,11 +211,13 @@ export async function POST(
       });
     }
 
-    // 3. Sign-on-Glass ePOD Signature Submission
+    // 3. Sign-on-Glass ePOD Signature / Uploaded Signed POD Submission
     if (action === 'EPOD_SIGN') {
       const receiverName = String(body.receiverName ?? 'Warehouse Dock Supervisor').trim();
       const rampBayNumber = body.rampBayNumber ? String(body.rampBayNumber).trim() : '';
       const sealCargoPhotoUrl = body.sealCargoPhotoUrl ? String(body.sealCargoPhotoUrl) : null;
+      const captureMethod = body.captureMethod ? String(body.captureMethod) : undefined;
+      const eventStatus = body.eventStatus ? String(body.eventStatus) : 'POD_SIGNED / EPOD_CAPTURED';
       const combinedNotes = [
         rampBayNumber ? `Ramp Bay: ${rampBayNumber}` : '',
         body.notes ? String(body.notes) : '',
@@ -230,7 +232,9 @@ export async function POST(
           tenantId,
           jobId,
           receiverName: rampBayNumber ? `${receiverName} (${rampBayNumber})` : receiverName,
-          photoUrl: body.signatureDataUri
+          photoUrl: body.uploadedPodDataUri
+            ? String(body.uploadedPodDataUri)
+            : body.signatureDataUri
             ? String(body.signatureDataUri)
             : body.photo
             ? String(body.photo)
@@ -240,6 +244,8 @@ export async function POST(
           latitude: body.latitude != null ? Number(body.latitude) : null,
           longitude: body.longitude != null ? Number(body.longitude) : null,
           location: body.location ? String(body.location) : null,
+          eventStatus,
+          captureMethod,
         });
       });
       emitDrayageEvent(tenantId, {
