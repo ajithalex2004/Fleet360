@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export const DRIVER_OTA_BUNDLE_VERSION =
-  process.env.DRIVER_OTA_BUNDLE_VERSION || '2026.11.08-ota.1';
+  process.env.DRIVER_OTA_BUNDLE_VERSION || '2026.11.09-ota.1';
 export const DRIVER_MIN_NATIVE_APK_VERSION =
   process.env.DRIVER_MIN_NATIVE_APK_VERSION || '1.4.0';
 

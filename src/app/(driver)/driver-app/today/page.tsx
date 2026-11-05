@@ -2555,9 +2555,10 @@ export default function DriverTodayPage() {
                             <span>{msg.senderName || (isDriver ? driverName : 'Port Operations Desk')}</span>
                             <span>
                               {msg.createdAt
-                                ? new Date(msg.createdAt).toLocaleTimeString([], {
+                                ? new Date(msg.createdAt).toLocaleTimeString('en-US', {
                                     hour: '2-digit',
                                     minute: '2-digit',
+                                    timeZone: 'Asia/Dubai',
                                   })
                                 : ''}
                             </span>
@@ -2685,9 +2686,10 @@ export default function DriverTodayPage() {
               <div className="flex justify-between py-1.5 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Offload ETC</span>
                 <span className="font-bold text-emerald-700">
-                  {new Date(selectedJob.etcTime).toLocaleTimeString([], {
+                  {new Date(selectedJob.etcTime).toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
+                    timeZone: 'Asia/Dubai',
                   })}
                 </span>
               </div>
@@ -3266,9 +3268,10 @@ export default function DriverTodayPage() {
                       </span>
                       <span>
                         {b.createdAt
-                          ? new Date(b.createdAt).toLocaleTimeString([], {
+                          ? new Date(b.createdAt).toLocaleTimeString('en-US', {
                               hour: '2-digit',
                               minute: '2-digit',
+                              timeZone: 'Asia/Dubai',
                             })
                           : ''}
                       </span>

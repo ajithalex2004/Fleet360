@@ -14,7 +14,7 @@
  *    to manually download and reinstall the `.apk`.
  */
 
-export const LOCAL_OTA_BUNDLE_VERSION = '2026.11.08-ota.1';
+export const LOCAL_OTA_BUNDLE_VERSION = '2026.11.09-ota.1';
 const OFFLINE_GPS_QUEUE_KEY = 'fleet360_driver_offline_gps_queue_v1';
 const LOCAL_OTA_STORAGE_KEY = 'fleet360_driver_ota_version';
 
