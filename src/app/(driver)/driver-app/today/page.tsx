@@ -734,18 +734,6 @@ export default function DriverTodayPage() {
     } catch {}
   }, []);
 
-  const handleDismissBroadcast = useCallback((msgId: string) => {
-    setDismissedBroadcastIds((prev) => {
-      const next = prev.includes(msgId) ? prev : [...prev, msgId];
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('fleet360_dismissed_broadcast_ids', JSON.stringify(next));
-        } catch {}
-      }
-      return next;
-    });
-  }, []);
-
   // Inspection photo / attachment state
   const [attachedDocs, setAttachedDocs] = useState<Record<string, string[]>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -788,6 +776,53 @@ export default function DriverTodayPage() {
     return headers;
   }, []);
 
+  const isMessageActiveAndUnacknowledged = useCallback(
+    (msg: DrayageChatMessage) => {
+      if (!msg) return false;
+      if (dismissedBroadcastIds.includes(msg.id)) return false;
+      if (msg.createdAt) {
+        const ts = new Date(msg.createdAt).getTime();
+        if (!Number.isNaN(ts) && Date.now() - ts > 12 * 60 * 60 * 1000) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [dismissedBroadcastIds],
+  );
+
+  const handleDismissBroadcast = useCallback(
+    (msgId: string) => {
+      setDismissedBroadcastIds((prev) => {
+        const next = prev.includes(msgId) ? prev : [...prev, msgId];
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('fleet360_dismissed_broadcast_ids', JSON.stringify(next));
+          } catch {}
+        }
+        return next;
+      });
+      setBroadcastMessages((prev) => prev.filter((b) => b.id !== msgId));
+      setJobs((prev) =>
+        prev.map((j) => ({
+          ...j,
+          messages: (j.messages || []).filter((m) => m.id !== msgId),
+        })),
+      );
+      void fetch(getApiEndpoint('/api/driver/jobs/BROADCAST/status'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          action: 'ACK_BROADCAST',
+          messageId: msgId,
+        }),
+      }).catch(() => {});
+      showToast('Broadcast message acknowledged ✓');
+    },
+    [getAuthHeaders, showToast],
+  );
+
   const fetchDriverJobs = useCallback(
     async (silent = false) => {
       if (!silent) setRefreshing(true);
@@ -799,11 +834,41 @@ export default function DriverTodayPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          const fetched: DrayageAssignment[] = Array.isArray(data.drayageJobs)
+          const twelveHoursMs = 12 * 60 * 60 * 1000;
+          const nowMs = Date.now();
+          const localDismissedSet = new Set<string>();
+          if (typeof window !== 'undefined') {
+            try {
+              const rawDismissed = localStorage.getItem('fleet360_dismissed_broadcast_ids');
+              if (rawDismissed) {
+                const parsed = JSON.parse(rawDismissed);
+                if (Array.isArray(parsed)) {
+                  for (const id of parsed) {
+                    if (typeof id === 'string') localDismissedSet.add(id);
+                  }
+                }
+              }
+            } catch {}
+          }
+          const filterFreshUnacked = (m: DrayageChatMessage) => {
+            if (!m) return false;
+            if (localDismissedSet.has(m.id)) return false;
+            if (m.createdAt) {
+              const ts = new Date(m.createdAt).getTime();
+              if (!Number.isNaN(ts) && nowMs - ts > twelveHoursMs) return false;
+            }
+            return true;
+          };
+
+          const rawFetched: DrayageAssignment[] = Array.isArray(data.drayageJobs)
             ? data.drayageJobs
             : [];
+          const fetched: DrayageAssignment[] = rawFetched.map((j) => ({
+            ...j,
+            messages: Array.isArray(j.messages) ? j.messages.filter(filterFreshUnacked) : [],
+          }));
           const fetchedBroadcasts: DrayageChatMessage[] = Array.isArray(data.broadcastMessages)
-            ? data.broadcastMessages
+            ? (data.broadcastMessages as DrayageChatMessage[]).filter(filterFreshUnacked)
             : [];
           setJobs(fetched);
           setBroadcastMessages(fetchedBroadcasts);
@@ -1792,89 +1857,107 @@ export default function DriverTodayPage() {
           </div>
 
           {/* 2B. Dispatcher <-> Driver Communications Card */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-blue-200 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="text-xs font-extrabold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
-                <MessageSquare className="w-4 h-4 text-blue-600" />
-                <span>Dispatcher ↔ Driver Messages</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                {(selectedJob.messages || []).length}{' '}
-                {(selectedJob.messages || []).length === 1 ? 'Message' : 'Messages'}
-              </span>
-            </div>
-
-            <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-              {!selectedJob.messages || selectedJob.messages.length === 0 ? (
-                <div className="py-4 text-center text-xs text-slate-400">
-                  No dispatcher instructions yet for this job. You can send a message to Port Operations Desk below.
+          {(() => {
+            const visibleJobMessages = (selectedJob.messages || []).filter(
+              isMessageActiveAndUnacknowledged,
+            );
+            return (
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-blue-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                    <span>Dispatcher ↔ Driver Messages</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    {visibleJobMessages.length}{' '}
+                    {visibleJobMessages.length === 1 ? 'Message' : 'Messages'}
+                  </span>
                 </div>
-              ) : (
-                selectedJob.messages.map((msg) => {
-                  const isDriver = (msg.senderRole || '').toUpperCase() === 'DRIVER';
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`p-3 rounded-xl text-xs space-y-1 ${
-                        isDriver
-                          ? 'bg-slate-100 border border-slate-200 text-slate-900 ml-6'
-                          : msg.isUrgent
-                          ? 'bg-rose-50 border-2 border-rose-400 text-slate-900 mr-6'
-                          : 'bg-blue-600 text-white mr-6 shadow-sm'
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
-                          isDriver ? 'text-slate-500' : msg.isUrgent ? 'text-rose-700' : 'text-blue-100'
-                        }`}
-                      >
-                        <span>{msg.senderName || (isDriver ? driverName : 'Port Operations Desk')}</span>
-                        <span>
-                          {msg.createdAt
-                            ? new Date(msg.createdAt).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : ''}
-                        </span>
-                      </div>
-                      <p className="text-xs font-semibold leading-relaxed">{msg.message}</p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {msg.isBroadcast && (
-                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-amber-400 text-slate-950 uppercase">
-                            📢 BROADCAST TO ALL DRIVERS
-                          </span>
-                        )}
-                        {msg.isUrgent && (
-                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase">
-                            URGENT INSTRUCTION
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
 
-            <form onSubmit={handleSendChatMessage} className="flex items-center gap-2 pt-2 border-t border-slate-100">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Reply to Port Operations Desk..."
-                className="flex-1 text-xs px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium focus:outline-none focus:border-blue-500"
-              />
-              <button
-                type="submit"
-                disabled={sendingChat || !chatInput.trim()}
-                className="px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition active:scale-95 disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Send</span>
-              </button>
-            </form>
-          </div>
+                <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                  {visibleJobMessages.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-slate-400">
+                      No dispatcher instructions yet for this job. You can send a message to Port Operations Desk below.
+                    </div>
+                  ) : (
+                    visibleJobMessages.map((msg) => {
+                      const isDriver = (msg.senderRole || '').toUpperCase() === 'DRIVER';
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`p-3 rounded-xl text-xs space-y-1 ${
+                            isDriver
+                              ? 'bg-slate-100 border border-slate-200 text-slate-900 ml-6'
+                              : msg.isUrgent
+                              ? 'bg-rose-50 border-2 border-rose-400 text-slate-900 mr-6'
+                              : 'bg-blue-600 text-white mr-6 shadow-sm'
+                          }`}
+                        >
+                          <div
+                            className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
+                              isDriver ? 'text-slate-500' : msg.isUrgent ? 'text-rose-700' : 'text-blue-100'
+                            }`}
+                          >
+                            <span>{msg.senderName || (isDriver ? driverName : 'Port Operations Desk')}</span>
+                            <span>
+                              {msg.createdAt
+                                ? new Date(msg.createdAt).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : ''}
+                            </span>
+                          </div>
+                          <p className="text-xs font-semibold leading-relaxed">{msg.message}</p>
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {msg.isBroadcast && (
+                                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-amber-400 text-slate-950 uppercase">
+                                  📢 BROADCAST TO ALL DRIVERS
+                                </span>
+                              )}
+                              {msg.isUrgent && (
+                                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase">
+                                  URGENT INSTRUCTION
+                                </span>
+                              )}
+                            </div>
+                            {msg.isBroadcast && (
+                              <button
+                                type="button"
+                                onClick={() => handleDismissBroadcast(msg.id)}
+                                className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-[10px] transition shadow-sm"
+                              >
+                                Acknowledge ✓
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <form onSubmit={handleSendChatMessage} className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Reply to Port Operations Desk..."
+                    className="flex-1 text-xs px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendingChat || !chatInput.trim()}
+                    className="px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition active:scale-95 disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send</span>
+                  </button>
+                </form>
+              </div>
+            );
+          })()}
 
           {/* 3. Job Details Card (LogiXL-Connect JobDetailScreen parity) */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-2.5 text-sm">
@@ -2253,7 +2336,7 @@ export default function DriverTodayPage() {
   // VIEW 1: SIMPLIFIED MY JOBS DASHBOARD (LogiXL-Connect DashboardScreen.js)
   // ══════════════════════════════════════════════════════════════════════════
   const displayedJobs = viewMode === 'active' ? activeJobs : historyJobs;
-  const activeBroadcasts = broadcastMessages.filter((b) => !dismissedBroadcastIds.includes(b.id));
+  const activeBroadcasts = broadcastMessages.filter(isMessageActiveAndUnacknowledged);
 
   return (
     <div className="min-h-screen bg-slate-100 pb-20 text-slate-900">
@@ -2350,7 +2433,7 @@ export default function DriverTodayPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-900">
                 <Bell className="w-4 h-4 text-amber-600" />
-                <span>📢 Fleet Broadcast Notifications ({broadcastMessages.length})</span>
+                <span>📢 Fleet Broadcast Notifications ({activeBroadcasts.length})</span>
               </div>
               {showNotificationsPanel && (
                 <button
@@ -2363,57 +2446,53 @@ export default function DriverTodayPage() {
               )}
             </div>
 
-            {(showNotificationsPanel ? broadcastMessages : activeBroadcasts).length === 0 ? (
+            {activeBroadcasts.length === 0 ? (
               <div className="text-xs text-amber-800 py-2">
-                No fleet broadcast announcements from Port Operations Desk yet.
+                No active broadcast announcements from Port Operations Desk.
               </div>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {(showNotificationsPanel ? [...broadcastMessages].reverse() : [...activeBroadcasts].reverse()).map(
-                  (b) => (
-                    <div
-                      key={b.id}
-                      className={`rounded-xl p-3 border text-xs space-y-1 ${
-                        b.isUrgent
-                          ? 'bg-rose-50 border-rose-300 text-rose-950'
-                          : 'bg-white border-amber-200 text-slate-900'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
-                        <span className="text-amber-900 font-extrabold">
-                          📢 {b.senderName || 'Port Operations Desk'} · ALL DRIVERS
-                        </span>
-                        <span>
-                          {b.createdAt
-                            ? new Date(b.createdAt).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : ''}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold leading-relaxed">{b.message}</p>
-                      <div className="flex items-center justify-between pt-1">
-                        <div>
-                          {b.isUrgent && (
-                            <span className="inline-block px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black uppercase">
-                              URGENT BROADCAST
-                            </span>
-                          )}
-                        </div>
-                        {!dismissedBroadcastIds.includes(b.id) && (
-                          <button
-                            type="button"
-                            onClick={() => handleDismissBroadcast(b.id)}
-                            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] transition"
-                          >
-                            Acknowledge ✓
-                          </button>
+                {[...activeBroadcasts].reverse().map((b) => (
+                  <div
+                    key={b.id}
+                    className={`rounded-xl p-3 border text-xs space-y-1 ${
+                      b.isUrgent
+                        ? 'bg-rose-50 border-rose-300 text-rose-950'
+                        : 'bg-white border-amber-200 text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                      <span className="text-amber-900 font-extrabold">
+                        📢 {b.senderName || 'Port Operations Desk'} · ALL DRIVERS
+                      </span>
+                      <span>
+                        {b.createdAt
+                          ? new Date(b.createdAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold leading-relaxed">{b.message}</p>
+                    <div className="flex items-center justify-between pt-1">
+                      <div>
+                        {b.isUrgent && (
+                          <span className="inline-block px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black uppercase">
+                            URGENT BROADCAST
+                          </span>
                         )}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDismissBroadcast(b.id)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] transition"
+                      >
+                        Acknowledge ✓
+                      </button>
                     </div>
-                  ),
-                )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -2501,9 +2580,13 @@ export default function DriverTodayPage() {
                 </div>
 
                 {/* Dispatcher Message Preview Banner (if Dispatcher sent instructions) */}
-                {job.messages && job.messages.length > 0 && (() => {
-                  const latestMsg = job.messages[job.messages.length - 1];
-                  const hasUrgent = job.messages.some((m) => m.isUrgent);
+                {(() => {
+                  const visibleCardMessages = (job.messages || []).filter(
+                    isMessageActiveAndUnacknowledged,
+                  );
+                  if (visibleCardMessages.length === 0) return null;
+                  const latestMsg = visibleCardMessages[visibleCardMessages.length - 1];
+                  const hasUrgent = visibleCardMessages.some((m) => m.isUrgent);
                   return (
                     <button
                       type="button"
@@ -2535,7 +2618,7 @@ export default function DriverTodayPage() {
                         </p>
                       </div>
                       <span className="shrink-0 px-2 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-extrabold">
-                        {job.messages.length} {job.messages.length === 1 ? 'Msg' : 'Msgs'} →
+                        {visibleCardMessages.length} {visibleCardMessages.length === 1 ? 'Msg' : 'Msgs'} →
                       </span>
                     </button>
                   );

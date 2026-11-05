@@ -664,14 +664,22 @@ export default function DrayageJobTrackingPage() {
 
   const jobMessages = useMemo(() => {
     if (!activeJob) return [];
-    return messages.filter(
-      (m) =>
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    return messages.filter((m) => {
+      if (m.createdAt) {
+        const ts = new Date(m.createdAt).getTime();
+        if (!isNaN(ts) && nowTickMs - ts > twelveHoursMs) {
+          return false;
+        }
+      }
+      return (
         m.jobId === activeJob.id ||
         m.jobCode === activeJob.jobCode ||
         m.jobId === 'BROADCAST' ||
-        m.jobCode === 'BROADCAST',
-    );
-  }, [messages, activeJob]);
+        m.jobCode === 'BROADCAST'
+      );
+    });
+  }, [messages, activeJob, nowTickMs]);
 
   // Handle stage transition
   const handleUpdateStatus = async (

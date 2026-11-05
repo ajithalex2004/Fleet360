@@ -252,7 +252,15 @@ export async function GET(req: NextRequest) {
     let drayageJobs: Array<Record<string, unknown>> = [];
     let broadcastMessages: Array<Record<string, unknown>> = [];
     try {
-      const [drayageRows, gfRows, termRows, whRows, clientRows, msgRows] = await Promise.all([
+      // Automatically erase any messages older than 12 hours
+      await tx
+        .$executeRawUnsafe(
+          `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+          tenantId,
+        )
+        .catch(() => {});
+
+      const [drayageRows, gfRows, termRows, whRows, clientRows, msgRows, broadcastAckRows] = await Promise.all([
         tx.$queryRawUnsafe<DrayageJobRow[]>(
           `
             SELECT
@@ -361,12 +369,35 @@ export async function GET(req: NextRequest) {
             SELECT id, job_id, sender_role, sender_name, message, is_urgent, created_at
             FROM logistics_drayage_messages
             WHERE tenant_id = $1
+              AND created_at >= NOW() - INTERVAL '12 hours'
             ORDER BY created_at ASC
           `,
             tenantId,
           )
           .catch(() => []),
+        tx
+          .$queryRawUnsafe<Array<{ alert_key: string }>>(
+            `
+            SELECT alert_key
+            FROM logistics_drayage_alerts
+            WHERE tenant_id = $1
+              AND acknowledged = TRUE
+              AND alert_key LIKE 'BROADCAST_ACK:%'
+          `,
+            tenantId,
+          )
+          .catch(() => []),
       ]);
+
+      const ackedBroadcastIds = new Set<string>();
+      for (const row of broadcastAckRows) {
+        const key = String(row.alert_key || '');
+        if (key.startsWith(`BROADCAST_ACK:${ctx.userId}:`)) {
+          ackedBroadcastIds.add(key.slice(`BROADCAST_ACK:${ctx.userId}:`.length));
+        } else if (key.startsWith('BROADCAST_ACK:msg-')) {
+          ackedBroadcastIds.add(key.slice('BROADCAST_ACK:'.length));
+        }
+      }
 
       const parseGeofenceCoords = (raw?: string | null): Array<{ lat: number; lng: number }> => {
         if (!raw) return [];
@@ -445,7 +476,11 @@ export async function GET(req: NextRequest) {
         };
 
         const jobMessages = msgRows
-          .filter((m) => m.job_id === j.id || m.job_id === 'BROADCAST')
+          .filter(
+            (m) =>
+              m.job_id === j.id ||
+              (m.job_id === 'BROADCAST' && !ackedBroadcastIds.has(m.id)),
+          )
           .map((m) => ({
             id: m.id,
             senderRole: m.sender_role,
@@ -478,7 +513,7 @@ export async function GET(req: NextRequest) {
       });
 
       broadcastMessages = msgRows
-        .filter((m) => m.job_id === 'BROADCAST')
+        .filter((m) => m.job_id === 'BROADCAST' && !ackedBroadcastIds.has(m.id))
         .map((m) => ({
           id: m.id,
           senderRole: m.sender_role,

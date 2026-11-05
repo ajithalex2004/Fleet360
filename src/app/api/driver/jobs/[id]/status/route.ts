@@ -8,9 +8,11 @@ import {
   updateDrayageJobExecutionStatus,
   submitJobPodEvidence,
   sendDispatchChatMessage,
+  acknowledgeDrayageAlert,
   clearPortInspection,
   submitDriverExpenseReceipt,
 } from '@/lib/logistics/drayage-domain';
+import { requireDriverSession } from '@/lib/driver-session';
 import { emitDrayageEvent } from '@/lib/logistics/drayage-events';
 
 async function resolveDriverActorLabel(
@@ -110,6 +112,33 @@ export async function POST(
         success: true,
         id: chatRes.id,
         createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 1b. Acknowledge Fleet Broadcast Message (persisted in DB per-driver & tenant)
+    if (action === 'ACK_BROADCAST') {
+      const messageId = String(body.messageId || jobId || '').trim();
+      if (!messageId) {
+        return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
+      }
+      await withTenantRls(prisma, tenantId, async (tx) => {
+        const ctx = await requireDriverSession(req).catch(() => null);
+        const driverId = ctx && !(ctx instanceof NextResponse) ? ctx.userId : null;
+        if (driverId) {
+          await acknowledgeDrayageAlert(tx, {
+            tenantId,
+            alertKey: `BROADCAST_ACK:${driverId}:${messageId}`,
+          });
+        }
+        await acknowledgeDrayageAlert(tx, {
+          tenantId,
+          alertKey: `BROADCAST_ACK:${messageId}`,
+        });
+      });
+      return NextResponse.json({
+        success: true,
+        messageId,
+        acknowledgedAt: new Date().toISOString(),
       });
     }
 

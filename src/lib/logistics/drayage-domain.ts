@@ -1482,6 +1482,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     });
   }
 
+  // Automatically erase any chat/broadcast messages older than 12 hours
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+    tenantId,
+  ).catch(() => {});
+
   const cachedMaster = getCachedDrayageMasterData(tenantId);
 
   // Parallelize operational SQL queries (and master queries only when master cache misses)
@@ -1629,7 +1635,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       tenantId,
     ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_messages WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 200`,
+      `SELECT * FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '12 hours' ORDER BY created_at ASC LIMIT 200`,
       tenantId,
     ),
     db.$queryRawUnsafe<Array<{ alert_key: string; acknowledged: boolean }>>(
@@ -5128,6 +5134,10 @@ export async function sendDispatchChatMessage(
   },
 ) {
   await ensureDrayageSchema(db);
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+    args.tenantId,
+  ).catch(() => {});
   const isBroadcast = Boolean(args.isBroadcast || args.jobId === 'BROADCAST');
   let jobCode = 'BROADCAST';
   if (!isBroadcast) {
