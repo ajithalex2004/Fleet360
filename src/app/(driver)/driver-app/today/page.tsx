@@ -735,39 +735,80 @@ export default function DriverTodayPage() {
     updatedAt: number;
   } | null>(null);
   const reverseGeocodeCacheRef = useRef<Map<string, string>>(new Map());
+  const initialGpsLoginSyncSentRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
     let watchId: number | null = null;
+
+    const pushImmediateLoginGpsFix = (lat: number, lng: number, speedKmh: number | null, heading: number | null) => {
+      if (initialGpsLoginSyncSentRef.current || (lat === 0 && lng === 0)) return;
+      initialGpsLoginSyncSentRef.current = true;
+      try {
+        const placeName = resolveUaePlaceNameFromCoords(lat, lng);
+        const location = `${placeName} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        const storedVehicleId = localStorage.getItem('fleet360_driver_vehicle_id') || '';
+        const storedVehiclePlate = localStorage.getItem('fleet360_driver_vehicle_plate') || '';
+        const storedDriverName = localStorage.getItem('fleet360_driver_name') || 'Assigned Driver';
+        const storedToken = localStorage.getItem('fleet360_driver_token') || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (storedToken) {
+          headers.Authorization = `Bearer ${storedToken}`;
+        }
+        void fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+          method: 'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({
+            action: 'LOCATION_PING',
+            latitude: lat,
+            longitude: lng,
+            speedKmh,
+            heading,
+            location,
+            driverName: storedDriverName,
+            vehicleId: storedVehicleId || undefined,
+            vehiclePlate: storedVehiclePlate || undefined,
+          }),
+        }).catch(() => {});
+      } catch {}
+    };
+
     try {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          const speedKmh =
+            pos.coords.speed != null && pos.coords.speed >= 0
+              ? Math.round(pos.coords.speed * 3.6)
+              : null;
+          const heading = pos.coords.heading ?? null;
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            speedKmh:
-              pos.coords.speed != null && pos.coords.speed >= 0
-                ? Math.round(pos.coords.speed * 3.6)
-                : null,
-            heading: pos.coords.heading ?? null,
+            speedKmh,
+            heading,
             updatedAt: Date.now(),
           };
+          pushImmediateLoginGpsFix(pos.coords.latitude, pos.coords.longitude, speedKmh, heading);
         },
         () => {},
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 },
       );
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
+          const speedKmh =
+            pos.coords.speed != null && pos.coords.speed >= 0
+              ? Math.round(pos.coords.speed * 3.6)
+              : null;
+          const heading = pos.coords.heading ?? null;
           driverCoordsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            speedKmh:
-              pos.coords.speed != null && pos.coords.speed >= 0
-                ? Math.round(pos.coords.speed * 3.6)
-                : null,
-            heading: pos.coords.heading ?? null,
+            speedKmh,
+            heading,
             updatedAt: Date.now(),
           };
+          pushImmediateLoginGpsFix(pos.coords.latitude, pos.coords.longitude, speedKmh, heading);
         },
         () => {},
         { enableHighAccuracy: true, maximumAge: 15000 },
@@ -1091,6 +1132,7 @@ export default function DriverTodayPage() {
   // Driver & Vehicle session info from localStorage
   const [driverName, setDriverName] = useState('Driver');
   const [vehiclePlate, setVehiclePlate] = useState<string | null>(null);
+  const [vehicleId, setVehicleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1104,6 +1146,7 @@ export default function DriverTodayPage() {
       if (rawVeh) {
         const parsed = JSON.parse(rawVeh);
         setVehiclePlate(parsed.licensePlate || parsed.vehicleCode || null);
+        setVehicleId(parsed.id || null);
       }
     } catch {}
   }, []);
@@ -1475,80 +1518,160 @@ export default function DriverTodayPage() {
     [jobs, selectedJobId],
   );
 
-  // Active jobs currently in execution (from Job Acceptance through Completion)
-  const inExecutionJobs = useMemo(
+  // All active/assigned jobs for this logged-in driver (including ASSIGNED & RE-ASSIGNED right from Login)
+  const trackedJobs = useMemo(
     () =>
       activeJobs.filter((j) => {
         const st = (j.status || '').toUpperCase().trim();
         if (!st || HISTORY_STATUSES.has(st)) return false;
-        if (
-          [
-            'PENDING',
-            'UNASSIGNED',
-            'ASSIGNED',
-            'RE-ASSIGNED',
-            'FCL_REASSIGN',
-            'MT_REASSIGN',
-            'FCL_REASSIGN TO RAMP',
-            'MT_REASSIGN TO RAMP',
-            'FCL_REASSIGN TO YARD',
-            'MT_REASSIGN TO YARD',
-            'FCL_REASSIGN_TO_RAMP',
-            'MT_REASSIGN_TO_RAMP',
-            'FCL_REASSIGN_TO_YARD',
-            'MT_REASSIGN_TO_YARD',
-          ].includes(st)
-        ) {
-          return false;
-        }
+        if (['PENDING', 'UNASSIGNED', 'CANCELLED'].includes(st)) return false;
         return true;
       }),
     [activeJobs],
   );
 
-  // 1-Minute In-Transit GPS Breadcrumb Path Tracking (ACCEPTED -> COMPLETED)
+  // Immediate On-Login GPS Sync + Continuous 1-Minute Background Telemetry (Login -> Logout)
   useEffect(() => {
-    if (inExecutionJobs.length === 0) return;
     let cancelled = false;
 
-    const sendLocationPingForActiveJobs = async () => {
+    const sendLocationPingForSessionAndJobs = async () => {
       if (cancelled) return;
-      for (const activeJob of inExecutionJobs) {
-        if (cancelled) break;
-        try {
-          const captured = await captureLiveDriverLocation(activeJob, activeJob.status);
+
+      if (trackedJobs.length > 0) {
+        for (const activeJob of trackedJobs) {
           if (cancelled) break;
-          await fetch(getApiEndpoint(`/api/driver/jobs/${activeJob.id}/status`), {
-            method: 'POST',
-            credentials: 'include',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({
-              action: 'LOCATION_PING',
-              latitude: captured.lat,
-              longitude: captured.lng,
-              speedKmh: captured.speedKmh,
-              heading: captured.heading,
-              location: captured.location,
-              driverName,
-            }),
-          });
-        } catch {}
+          try {
+            const captured = await captureLiveDriverLocation(activeJob, activeJob.status);
+            if (cancelled) break;
+            await fetch(getApiEndpoint(`/api/driver/jobs/${activeJob.id}/status`), {
+              method: 'POST',
+              credentials: 'include',
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                action: 'LOCATION_PING',
+                latitude: captured.lat,
+                longitude: captured.lng,
+                speedKmh: captured.speedKmh,
+                heading: captured.heading,
+                location: captured.location,
+                driverName,
+                vehicleId: vehicleId || undefined,
+                vehiclePlate: vehiclePlate || activeJob.assignedVehiclePlate || undefined,
+              }),
+            });
+          } catch {}
+        }
+        return;
       }
+
+      // Even when the driver has no active job yet (or only History jobs), capture & sync
+      // the logged-in driver's and tractor's live GPS location at Login and every 1 minute.
+      try {
+        const now = Date.now();
+        if (typeof window !== 'undefined') {
+          try {
+            const w = window as unknown as {
+              Fleet360Android?: { getLastKnownLocationJson?: () => string };
+            };
+            const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+            if (nativeJson) {
+              const parsed = JSON.parse(nativeJson) as {
+                lat?: number;
+                lng?: number;
+                speedKmh?: number;
+                heading?: number;
+                updatedAt?: number;
+              };
+              if (
+                parsed &&
+                typeof parsed.lat === 'number' &&
+                typeof parsed.lng === 'number' &&
+                (parsed.lat !== 0 || parsed.lng !== 0)
+              ) {
+                driverCoordsRef.current = {
+                  lat: parsed.lat,
+                  lng: parsed.lng,
+                  speedKmh: typeof parsed.speedKmh === 'number' ? parsed.speedKmh : null,
+                  heading: typeof parsed.heading === 'number' ? parsed.heading : null,
+                  updatedAt: parsed.updatedAt || now,
+                };
+              }
+            }
+          } catch {}
+        }
+
+        if (
+          typeof window !== 'undefined' &&
+          'geolocation' in navigator &&
+          (!driverCoordsRef.current || now - driverCoordsRef.current.updatedAt > 15000)
+        ) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(() => resolve(), 2200);
+            try {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  clearTimeout(timer);
+                  driverCoordsRef.current = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    speedKmh:
+                      pos.coords.speed != null && pos.coords.speed >= 0
+                        ? Math.round(pos.coords.speed * 3.6)
+                        : null,
+                    heading: pos.coords.heading ?? null,
+                    updatedAt: Date.now(),
+                  };
+                  resolve();
+                },
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { enableHighAccuracy: true, timeout: 2000, maximumAge: 10000 },
+              );
+            } catch {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+        }
+
+        if (cancelled) return;
+        const live = driverCoordsRef.current;
+        if (!live || (live.lat === 0 && live.lng === 0)) return;
+        const placeName = resolveUaePlaceNameFromCoords(live.lat, live.lng);
+        const location = `${placeName} (${live.lat.toFixed(4)}, ${live.lng.toFixed(4)})`;
+
+        await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            action: 'LOCATION_PING',
+            latitude: live.lat,
+            longitude: live.lng,
+            speedKmh: live.speedKmh ?? null,
+            heading: live.heading ?? null,
+            location,
+            driverName,
+            vehicleId: vehicleId || undefined,
+            vehiclePlate: vehiclePlate || undefined,
+          }),
+        });
+      } catch {}
     };
 
-    const initialTimer = setTimeout(() => {
-      void sendLocationPingForActiveJobs();
-    }, 2000);
+    // Fire immediately at Login / session mount, and then every 1 minute (60,000 ms)
+    void sendLocationPingForSessionAndJobs();
     const intervalId = setInterval(() => {
-      void sendLocationPingForActiveJobs();
+      void sendLocationPingForSessionAndJobs();
     }, 60000);
 
     return () => {
       cancelled = true;
-      clearTimeout(initialTimer);
       clearInterval(intervalId);
     };
-  }, [inExecutionJobs, captureLiveDriverLocation, getAuthHeaders, driverName]);
+  }, [trackedJobs, captureLiveDriverLocation, getAuthHeaders, driverName, vehicleId, vehiclePlate]);
 
   const handleStatusUpdate = async (
     job: DrayageAssignment,

@@ -112,6 +112,9 @@ public class Fleet360DispatchService extends Service {
         public void onLocationChanged(Location location) {
             if (location != null && (location.getLatitude() != 0.0 || location.getLongitude() != 0.0)) {
                 latestLocation = location;
+                if (lastLocationPingEpochMs == 0L && scheduler != null && !scheduler.isShutdown()) {
+                    scheduler.execute(Fleet360DispatchService.this::pollAssignmentsAndMessages);
+                }
             }
         }
 
@@ -434,9 +437,10 @@ public class Fleet360DispatchService extends Service {
     }
 
     /**
-     * Transmits 1-minute (60,000 ms) native background GPS breadcrumb pings for any active
-     * in-execution job (ACCEPTED -> COMPLETED) even when the driver is in Google Maps
-     * or the device screen is locked.
+     * Transmits immediate on-login + 1-minute (60,000 ms) native background GPS breadcrumb pings
+     * for the logged-in driver and any active/assigned jobs (ASSIGNED -> COMPLETED), even when
+     * no job is assigned yet (via DRIVER_TELEMETRY), when the driver is in Google Maps, or when
+     * the device screen is locked.
      */
     private void transmitNativeLocationPingsIfDue(
         SharedPreferences prefs,
@@ -444,28 +448,34 @@ public class Fleet360DispatchService extends Service {
         String token,
         JSONArray jobs
     ) {
-        if (jobs == null || jobs.length() == 0) return;
-
         long now = System.currentTimeMillis();
-        if (now - lastLocationPingEpochMs < 60000L) {
+        if (lastLocationPingEpochMs > 0L && (now - lastLocationPingEpochMs < 60000L)) {
             return;
         }
 
-        List<String> activeInExecutionJobIds = new ArrayList<>();
-        for (int i = 0; i < jobs.length(); i++) {
-            JSONObject j = jobs.optJSONObject(i);
-            if (j == null) continue;
-            String id = j.optString("id", "").trim();
-            if (id.isEmpty()) continue;
-            String st = j.optString("status", "").toUpperCase().trim();
-            if (st.isEmpty() || HISTORY_STATUSES.contains(st) || ASSIGNMENT_STATUSES.contains(st)) {
-                continue;
+        List<String> targetJobIds = new ArrayList<>();
+        if (jobs != null) {
+            for (int i = 0; i < jobs.length(); i++) {
+                JSONObject j = jobs.optJSONObject(i);
+                if (j == null) continue;
+                String id = j.optString("id", "").trim();
+                if (id.isEmpty()) continue;
+                String st = j.optString("status", "").toUpperCase().trim();
+                if (
+                    st.isEmpty() ||
+                    HISTORY_STATUSES.contains(st) ||
+                    "PENDING".equals(st) ||
+                    "UNASSIGNED".equals(st) ||
+                    "CANCELLED".equals(st)
+                ) {
+                    continue;
+                }
+                targetJobIds.add(id);
             }
-            activeInExecutionJobIds.add(id);
         }
 
-        if (activeInExecutionJobIds.isEmpty()) {
-            return;
+        if (targetJobIds.isEmpty()) {
+            targetJobIds.add("DRIVER_TELEMETRY");
         }
 
         Location loc = getBestAvailableLocation(this);
@@ -477,7 +487,7 @@ public class Fleet360DispatchService extends Service {
         lastLocationPingEpochMs = now;
         String driverName = prefs.getString(KEY_DRIVER_NAME, "Assigned Driver");
 
-        for (String jobId : activeInExecutionJobIds) {
+        for (String jobId : targetJobIds) {
             HttpURLConnection pingConn = null;
             try {
                 URL pingUrl = new URL(apiHost + "/api/driver/jobs/" + jobId + "/status");

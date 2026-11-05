@@ -284,9 +284,18 @@ function buildDrayageMarkerSvg(
   const plate = job.assignedVehiclePlate || 'TRACTOR';
   const cntNum = job.containerNumber ? job.containerNumber.slice(0, 11) : job.jobCode;
 
-  // Radar Pulse if Selected or Moving
+  // Radar Pulse if Selected or Active/Assigned Driver
   let radarPulse = '';
-  if (isSelected || job.status === 'IN_TRANSIT') {
+  const stUpper = (job.status || '').toUpperCase();
+  if (
+    isSelected ||
+    stUpper === 'IN_TRANSIT' ||
+    stUpper === 'EN_ROUTE_WAREHOUSE' ||
+    stUpper === 'EN_ROUTE_TERMINAL' ||
+    stUpper === 'ACCEPTED' ||
+    stUpper === 'ASSIGNED' ||
+    stUpper === 'RE-ASSIGNED'
+  ) {
     radarPulse = `
       <circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
         <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
@@ -425,11 +434,44 @@ function buildBreadcrumbWaypointSvg(
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
 
+function buildLoggedInTractorMarkerSvg(v: DrayageCorridorVehicle): string {
+  const mainColor = '#10B981'; // Emerald for Online Tractor
+  const badgeColor = '#047857';
+  const plate = (v.plateNumber || 'TRACTOR').slice(0, 10);
+  const driverLabel = (v.assignedDriverName || 'ONLINE').slice(0, 11);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="88" viewBox="0 0 96 88">
+    <circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
+      <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.85;0.25;0" dur="1.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="48" cy="28" r="22" fill="${mainColor}" stroke="#FFFFFF" stroke-width="2.5"/>
+    <path d="M36 29 L36 20 C36 18 38 17 40 17 L48 17 L52 23 L58 23 L58 30 L36 30 Z" fill="#FFFFFF"/>
+    <circle cx="41" cy="31" r="2.8" fill="#1E293B"/>
+    <circle cx="53" cy="31" r="2.8" fill="#1E293B"/>
+    <g transform="translate(16, 2)">
+      <rect x="0" y="0" width="64" height="14" rx="4" fill="${badgeColor}" stroke="#FFFFFF" stroke-width="1.2"/>
+      <text x="32" y="10" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">ONLINE GPS</text>
+    </g>
+    <g transform="translate(8, 54)">
+      <rect x="0" y="0" width="80" height="20" rx="5" fill="#0F172A" stroke="${mainColor}" stroke-width="1.8"/>
+      <text x="40" y="13.5" font-size="9" font-family="ui-monospace, monospace" font-weight="900" fill="#F8FAFC" text-anchor="middle" letter-spacing="0.5">${plate}</text>
+    </g>
+    <g transform="translate(14, 73)">
+      <rect x="0" y="0" width="68" height="12" rx="3" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
+      <text x="34" y="9" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="700" fill="#A7F3D0" text-anchor="middle">${driverLabel}</text>
+    </g>
+  </svg>`;
+
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
 export default function DrayageCorridorLiveMap({
   jobs,
   terminals,
   warehouses,
   geofences,
+  vehicles = [],
   selectedJobId,
   onSelectJob,
   onVerifyEdi,
@@ -978,6 +1020,70 @@ export default function DrayageCorridorLiveMap({
       vehicleMarkersRef.current.push(marker);
     });
 
+    // Also render logged-in tractors from `vehicles` that are not already plotted via a job marker
+    const renderedPlates = new Set(
+      filteredJobs
+        .map((j) => (j.assignedVehiclePlate || '').trim().toUpperCase())
+        .filter(Boolean),
+    );
+    vehicles.forEach((v) => {
+      if (!v.assignedDriverName) return;
+      const plateKey = (v.plateNumber || '').trim().toUpperCase();
+      if (plateKey && renderedPlates.has(plateKey)) return;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          (v.plateNumber || '').toLowerCase().includes(q) ||
+          (v.assignedDriverName || '').toLowerCase().includes(q) ||
+          (v.activeJobCode || '').toLowerCase().includes(q);
+        if (!match) return;
+      }
+      if (!v.lat || !v.lng || isNaN(Number(v.lat)) || isNaN(Number(v.lng))) return;
+      const vLat = Number(v.lat);
+      const vLng = Number(v.lng);
+
+      const vMarker = new ctors.Marker({
+        position: { lat: vLat, lng: vLng },
+        map,
+        title: `${v.plateNumber} · ${v.assignedDriverName} (Online GPS)`,
+        icon: {
+          url: buildLoggedInTractorMarkerSvg(v),
+          scaledSize: { width: 56, height: 52 },
+          anchor: { x: 28, y: 44 },
+        },
+        zIndex: 95,
+      });
+
+      vMarker.addListener('click', () => {
+        if (!infoWindowRef.current) return;
+        const vHtml = `
+          <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; min-width: 240px; max-width: 290px; padding: 4px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;">
+              <strong style="font-size: 13px; font-family: monospace;">${v.plateNumber}</strong>
+              <span style="background: #10B981; color: #FFFFFF; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
+                ONLINE · 1-MIN GPS
+              </span>
+            </div>
+            <div style="margin-bottom: 4px; font-size: 11px;">
+              Driver: <strong>${v.assignedDriverName}</strong>
+            </div>
+            <div style="margin-bottom: 4px; font-size: 11px; color: #475569;">
+              Tractor: <strong>${v.make || ''} ${v.model || ''}</strong> (${v.status || 'AVAILABLE'})
+            </div>
+            <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px; font-size: 10px; color: #065F46;">
+              📍 Live Coordinates: <strong>${vLat.toFixed(4)}, ${vLng.toFixed(4)}</strong>
+              <div style="margin-top: 2px;">🕒 Active 1-Min Telemetry Since Login</div>
+            </div>
+          </div>
+        `;
+        infoWindowRef.current.setContent(vHtml);
+        infoWindowRef.current.setPosition({ lat: vLat, lng: vLng });
+        infoWindowRef.current.open({ map, anchor: vMarker });
+      });
+
+      vehicleMarkersRef.current.push(vMarker);
+    });
+
     // Render Bogie Pairing Tethers
     if (showBogieLinks) {
       bogieTetherMap.forEach((points) => {
@@ -994,7 +1100,7 @@ export default function DrayageCorridorLiveMap({
         }
       });
     }
-  }, [filteredJobs, selectedJobId, showBogieLinks, showStreetTurnLinks, onSelectJob]);
+  }, [filteredJobs, vehicles, searchQuery, selectedJobId, showBogieLinks, showStreetTurnLinks, onSelectJob]);
 
   // 7. Pan and Zoom to Selected Job when selectedJobId changes
   useEffect(() => {

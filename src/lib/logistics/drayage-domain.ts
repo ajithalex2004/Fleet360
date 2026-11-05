@@ -2291,12 +2291,42 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       driverIdByVehicleId.set(vId, dId);
     }
   }
+  const liveVehicleCoordsById = new Map<string, { lat: number; lng: number }>();
   for (const v of rawVehicles) {
     const vId = String(v.id);
     if (v.assigned_driver_id) {
       const dId = String(v.assigned_driver_id);
       driverIdByVehicleId.set(vId, dId);
       vehicleIdByDriverId.set(dId, vId);
+    }
+    const vLat = v.current_lat != null ? Number(v.current_lat) : NaN;
+    const vLng = v.current_lng != null ? Number(v.current_lng) : NaN;
+    if (!isNaN(vLat) && !isNaN(vLng) && (vLat !== 0 || vLng !== 0)) {
+      liveVehicleCoordsById.set(vId, { lat: vLat, lng: vLng });
+    }
+  }
+
+  // Ensure any active/assigned job whose vehicle has live login/1-min GPS telemetry inherits the live coordinates
+  for (const j of jobs) {
+    const isDriverLegActive =
+      !finishedDriverLegStatuses.has((j.status || '').toUpperCase()) &&
+      !isDrayageReassignStatus(j.status) &&
+      !j.trailerDetached;
+    if (!isDriverLegActive) continue;
+    const vehId = j.assignedVehicleId || (j.assignedDriverId ? vehicleIdByDriverId.get(j.assignedDriverId) : undefined);
+    const vehCoords = vehId ? liveVehicleCoordsById.get(vehId) : undefined;
+    if (!vehCoords) continue;
+    const jLat = j.currentLat;
+    const jLng = j.currentLng;
+    const isStaticFallback =
+      jLat == null ||
+      jLng == null ||
+      (Math.abs(jLat - 25.0112) < 0.0003 && Math.abs(jLng - 55.0612) < 0.0003) ||
+      (Math.abs(jLat - 24.9642) < 0.0003 && Math.abs(jLng - 55.0915) < 0.0003) ||
+      (Math.abs(jLat - 24.9850) < 0.0003 && Math.abs(jLng - 55.0760) < 0.0003);
+    if (isStaticFallback) {
+      j.currentLat = vehCoords.lat;
+      j.currentLng = vehCoords.lng;
     }
   }
 
@@ -2309,6 +2339,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (loggedInDriverId ? driverNameById.get(loggedInDriverId) ?? null : null) ??
       activeJob?.assignedDriverName ??
       null;
+    const vLat = v.current_lat != null ? Number(v.current_lat) : null;
+    const vLng = v.current_lng != null ? Number(v.current_lng) : null;
     return {
       id,
       plateNumber: String(v.plate_number),
@@ -2327,8 +2359,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       assignedDriverId: resolvedDriverId,
       assignedDriverName: resolvedDriverName,
       activeJobCode: activeJob?.jobCode ?? null,
-      lat: activeJob?.currentLat ?? (v.current_lat != null ? Number(v.current_lat) : (25.0080 + (idx % 5) * 0.008)),
-      lng: activeJob?.currentLng ?? (v.current_lng != null ? Number(v.current_lng) : (55.0640 + (idx % 5) * 0.009)),
+      lat: vLat ?? activeJob?.currentLat ?? (25.0080 + (idx % 5) * 0.008),
+      lng: vLng ?? activeJob?.currentLng ?? (55.0640 + (idx % 5) * 0.009),
       updatedAt: v.updated_at instanceof Date ? v.updated_at.toISOString() : (typeof v.updated_at === 'string' ? v.updated_at : null),
       assignedTripsCount: tripsCountByVehicle.get(id) || 0,
     };
@@ -4394,6 +4426,29 @@ export async function assignDrayageJob(
     }
   }
 
+  // If the assigned vehicle already has live GPS coordinates from a logged-in driver,
+  // copy those coordinates onto the job immediately upon assignment.
+  let liveVehLat: number | null = null;
+  let liveVehLng: number | null = null;
+  if (args.vehicleId) {
+    const vehCoordRows = await db
+      .$queryRawUnsafe<Array<{ current_lat: number | null; current_lng: number | null }>>(
+        `SELECT current_lat, current_lng
+           FROM vehicles
+          WHERE id::text = $1 AND tenant_id::text = $2
+          LIMIT 1`,
+        args.vehicleId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    const candLat = vehCoordRows[0]?.current_lat != null ? Number(vehCoordRows[0].current_lat) : NaN;
+    const candLng = vehCoordRows[0]?.current_lng != null ? Number(vehCoordRows[0].current_lng) : NaN;
+    if (!isNaN(candLat) && !isNaN(candLng) && (candLat !== 0 || candLng !== 0)) {
+      liveVehLat = candLat;
+      liveVehLng = candLng;
+    }
+  }
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET status = $10,
@@ -4410,6 +4465,8 @@ export async function assignDrayageJob(
             pcs_slot_start = COALESCE($12::timestamptz, pcs_slot_start),
             pcs_slot_end = COALESCE($13::timestamptz, pcs_slot_end),
             pcs_token_status = 'BOOKED',
+            current_lat = COALESCE($14::double precision, current_lat),
+            current_lng = COALESCE($15::double precision, current_lng),
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
@@ -4425,6 +4482,8 @@ export async function assignDrayageJob(
     resolvedPlacementLocation,
     resolvedSlotStart,
     resolvedSlotEnd,
+    liveVehLat,
+    liveVehLng,
   );
 
   // Update trailer operational status
@@ -5087,9 +5146,11 @@ export async function updateDrayageJobExecutionStatus(
 }
 
 /**
- * Records a 1-minute in-transit GPS breadcrumb ping from the Driver Mobile App
- * while a job is active (ACCEPTED -> COMPLETED), updating live coordinates on both
- * the drayage job and assigned tractor vehicle, and storing the breadcrumb point
+ * Records an immediate Login GPS coordinate and continuous 1-minute background GPS
+ * breadcrumb pings from the Driver Mobile App starting from Driver Login (including
+ * idle logged-in tractors, ASSIGNED / RE-ASSIGNED jobs, and ACCEPTED -> COMPLETED jobs),
+ * updating live coordinates on both the assigned tractor vehicle (`vehicles`) and any
+ * active/assigned drayage jobs (`logistics_drayage_jobs`), and storing breadcrumb points
  * for the Corridor Telematics Radar Map route path.
  */
 export async function recordDrayageDriverLocationPing(
@@ -5103,6 +5164,10 @@ export async function recordDrayageDriverLocationPing(
     heading?: number | null;
     location?: string | null;
     actor?: string;
+    driverId?: string | null;
+    driverName?: string | null;
+    vehicleId?: string | null;
+    vehiclePlate?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -5112,32 +5177,121 @@ export async function recordDrayageDriverLocationPing(
     return { ok: false, skipped: true };
   }
 
-  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
-       FROM logistics_drayage_jobs
-      WHERE id = $1 AND tenant_id = $2
-      LIMIT 1`,
-    args.jobId,
-    args.tenantId,
-  );
-  const job = jobRows[0];
-  if (!job) {
-    return { ok: false, skipped: true };
+  const isSessionLevelPing =
+    !args.jobId ||
+    args.jobId === 'DRIVER_TELEMETRY' ||
+    args.jobId === 'LOGIN_PING' ||
+    args.jobId === 'BROADCAST';
+
+  const cleanDriverId = args.driverId ? String(args.driverId).trim() : '';
+  const cleanDriverName = (args.driverName || args.actor || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  const cleanVehicleId = args.vehicleId ? String(args.vehicleId).trim() : '';
+  const cleanVehiclePlate = args.vehiclePlate ? String(args.vehiclePlate).trim() : '';
+
+  // 1. Update live GPS coordinates on the logged-in driver's vehicle in `vehicles` right from Login
+  const vehicleIdSet = new Set<string>();
+  if (cleanVehicleId) vehicleIdSet.add(cleanVehicleId);
+
+  if (cleanVehicleId || cleanVehiclePlate || cleanDriverId) {
+    const matchedVehicles = await db
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM vehicles
+          WHERE tenant_id::text = $1
+            AND deleted_at IS NULL
+            AND (
+              ($2 <> '' AND id::text = $2)
+              OR ($3 <> '' AND (
+                UPPER(COALESCE(license_plate, '')) = UPPER($3)
+                OR UPPER(COALESCE(plate_number, '')) = UPPER($3)
+                OR UPPER(COALESCE(vehicle_code, '')) = UPPER($3)
+                OR UPPER(COALESCE(registration_no, '')) = UPPER($3)
+              ))
+              OR ($4 <> '' AND assigned_driver_id::text = $4)
+            )
+          LIMIT 5`,
+        args.tenantId,
+        cleanVehicleId,
+        cleanVehiclePlate,
+        cleanDriverId,
+      )
+      .catch(() => []);
+    for (const v of matchedVehicles) {
+      if (v.id) vehicleIdSet.add(String(v.id));
+    }
   }
 
-  await db.$executeRawUnsafe(
-    `UPDATE logistics_drayage_jobs
-        SET current_lat = $3,
-            current_lng = $4,
-            updated_at = NOW()
-      WHERE id = $1 AND tenant_id = $2`,
-    args.jobId,
-    args.tenantId,
-    lat,
-    lng,
-  );
+  // 2. Find target active/assigned drayage jobs (including ASSIGNED & RE-ASSIGNED right after Login)
+  const targetJobs: Array<Record<string, unknown>> = [];
+  const seenJobIds = new Set<string>();
 
-  if (job.assigned_vehicle_id) {
+  if (!isSessionLevelPing) {
+    const directRows = await db
+      .$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
+           FROM logistics_drayage_jobs
+          WHERE id = $1 AND tenant_id = $2
+          LIMIT 1`,
+        args.jobId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (directRows[0]) {
+      targetJobs.push(directRows[0]);
+      seenJobIds.add(String(directRows[0].id));
+      if (directRows[0].assigned_vehicle_id) {
+        vehicleIdSet.add(String(directRows[0].assigned_vehicle_id));
+      }
+    }
+  }
+
+  if (isSessionLevelPing || targetJobs.length === 0) {
+    if (cleanDriverId || cleanDriverName || cleanVehicleId || cleanVehiclePlate) {
+      const driverJobRows = await db
+        .$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
+             FROM logistics_drayage_jobs
+            WHERE tenant_id = $1
+              AND COALESCE(trailer_detached, FALSE) = FALSE
+              AND UPPER(COALESCE(status, '')) NOT IN (
+                'PENDING', 'UNASSIGNED', 'CANCELLED', 'COMPLETED',
+                'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED',
+                'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED',
+                'READY_FOR_PICKUP', 'FCL_REASSIGN', 'MT_REASSIGN',
+                'MT_REASSIGN TO YARD', 'FCL_REASSIGN TO YARD',
+                'FCL_REASSIGN TO RAMP', 'MT_REASSIGN TO RAMP'
+              )
+              AND (
+                ($2 <> '' AND assigned_driver_id = $2)
+                OR ($3 <> '' AND LOWER(TRIM(COALESCE(assigned_driver_name, ''))) = LOWER($3))
+                OR ($4 <> '' AND assigned_vehicle_id = $4)
+                OR ($5 <> '' AND UPPER(TRIM(COALESCE(assigned_vehicle_plate, ''))) = UPPER($5))
+              )
+            ORDER BY updated_at DESC
+            LIMIT 10`,
+          args.tenantId,
+          cleanDriverId,
+          cleanDriverName,
+          cleanVehicleId,
+          cleanVehiclePlate,
+        )
+        .catch(() => []);
+      for (const r of driverJobRows) {
+        const jId = String(r.id);
+        if (!seenJobIds.has(jId)) {
+          seenJobIds.add(jId);
+          targetJobs.push(r);
+        }
+        if (r.assigned_vehicle_id) {
+          vehicleIdSet.add(String(r.assigned_vehicle_id));
+        }
+      }
+    }
+  }
+
+  for (const vId of vehicleIdSet) {
     await db
       .$executeRawUnsafe(
         `UPDATE vehicles
@@ -5145,7 +5299,7 @@ export async function recordDrayageDriverLocationPing(
                 current_lng = $4,
                 updated_at = NOW()
           WHERE id::text = $1 AND tenant_id::text = $2`,
-        String(job.assigned_vehicle_id),
+        vId,
         args.tenantId,
         lat,
         lng,
@@ -5153,62 +5307,90 @@ export async function recordDrayageDriverLocationPing(
       .catch(() => {});
   }
 
-  const resolvedLoc = resolveOperationalMilestoneLocation({
-    status: String(job.status || 'IN_TRANSIT'),
-    explicitLocation: args.location ?? null,
-    lat,
-    lng,
-    jobPhase: job.job_phase ? String(job.job_phase) : null,
-    jobCode: job.job_code ? String(job.job_code) : null,
-    terminalName: job.terminal_name ? String(job.terminal_name) : null,
-    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
-  });
-
   const speedVal =
     args.speedKmh != null && !isNaN(Number(args.speedKmh)) && Number(args.speedKmh) >= 0
       ? Math.round(Number(args.speedKmh))
       : null;
-  const noteParts = [
-    `[LOC:${resolvedLoc}]`,
-    speedVal !== null ? `[SPD:${speedVal}]` : '',
-  ].filter(Boolean);
 
-  await db.$executeRawUnsafe(
-    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, 'GPS_BREADCRUMB', $5, $6)`,
-    `log-${crypto.randomUUID().slice(0, 12)}`,
-    args.tenantId,
-    args.jobId,
-    String(job.job_code),
-    noteParts.join(' · '),
-    args.actor || 'Driver Mobile GPS',
-  );
+  let primaryResolvedLoc =
+    args.location && String(args.location).trim()
+      ? String(args.location).trim()
+      : `${resolveUaePlaceNameFromCoords(lat, lng)} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-  // Keep only the latest 180 GPS_BREADCRUMB pings per job (3 hours at 1-minute interval)
-  await db
-    .$executeRawUnsafe(
-      `DELETE FROM logistics_drayage_status_logs
-        WHERE tenant_id = $1
-          AND job_id = $2
-          AND status = 'GPS_BREADCRUMB'
-          AND id NOT IN (
-            SELECT id FROM logistics_drayage_status_logs
-             WHERE tenant_id = $1 AND job_id = $2 AND status = 'GPS_BREADCRUMB'
-             ORDER BY created_at DESC
-             LIMIT 180
-          )`,
+  for (const job of targetJobs) {
+    const jId = String(job.id);
+    const jCode = String(job.job_code);
+
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET current_lat = $3,
+              current_lng = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      jId,
       args.tenantId,
-      args.jobId,
-    )
-    .catch(() => {});
+      lat,
+      lng,
+    );
+
+    const resolvedLoc = resolveOperationalMilestoneLocation({
+      status: String(job.status || 'IN_TRANSIT'),
+      explicitLocation: args.location ?? null,
+      lat,
+      lng,
+      jobPhase: job.job_phase ? String(job.job_phase) : null,
+      jobCode: jCode,
+      terminalName: job.terminal_name ? String(job.terminal_name) : null,
+      warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+    });
+    if (resolvedLoc) {
+      primaryResolvedLoc = resolvedLoc;
+    }
+
+    const noteParts = [
+      resolvedLoc ? `[LOC:${resolvedLoc}]` : '',
+      speedVal !== null ? `[SPD:${speedVal}]` : '',
+    ].filter(Boolean);
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+       VALUES ($1, $2, $3, $4, 'GPS_BREADCRUMB', $5, $6)`,
+      `log-${crypto.randomUUID().slice(0, 12)}`,
+      args.tenantId,
+      jId,
+      jCode,
+      noteParts.join(' · '),
+      args.actor || 'Driver Mobile GPS',
+    );
+
+    // Keep only the latest 180 GPS_BREADCRUMB pings per job (3 hours at 1-minute interval)
+    await db
+      .$executeRawUnsafe(
+        `DELETE FROM logistics_drayage_status_logs
+          WHERE tenant_id = $1
+            AND job_id = $2
+            AND status = 'GPS_BREADCRUMB'
+            AND id NOT IN (
+              SELECT id FROM logistics_drayage_status_logs
+               WHERE tenant_id = $1 AND job_id = $2 AND status = 'GPS_BREADCRUMB'
+               ORDER BY created_at DESC
+               LIMIT 180
+            )`,
+        args.tenantId,
+        jId,
+      )
+      .catch(() => {});
+  }
 
   return {
     ok: true,
-    jobId: args.jobId,
-    jobCode: String(job.job_code),
+    jobId: targetJobs[0] ? String(targetJobs[0].id) : args.jobId,
+    jobCode: targetJobs[0] ? String(targetJobs[0].job_code) : 'DRIVER_TELEMETRY',
+    updatedJobsCount: targetJobs.length,
+    updatedVehiclesCount: vehicleIdSet.size,
     latitude: lat,
     longitude: lng,
-    location: resolvedLoc,
+    location: primaryResolvedLoc,
     recordedAt: new Date().toISOString(),
   };
 }

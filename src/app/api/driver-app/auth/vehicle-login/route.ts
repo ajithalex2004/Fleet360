@@ -16,6 +16,8 @@ import { residencyClaimForTenant } from '@/lib/db-router';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getDriverTenantContext } from '@/lib/driver-session';
 import { matchDriverProfileForUser } from '@/lib/drivers/driver-login-user';
+import { recordDrayageDriverLocationPing } from '@/lib/logistics/drayage-domain';
+import { emitDrayageEvent } from '@/lib/logistics/drayage-events';
 
 const VEHICLE_SELECT = {
   id: true,
@@ -203,6 +205,21 @@ export async function POST(req: NextRequest) {
       const validOdo =
         odoNum !== null && !Number.isNaN(odoNum) && odoNum > 0 ? odoNum : null;
 
+      const rawLat = body.latitude != null ? Number(body.latitude) : (body.lat != null ? Number(body.lat) : NaN);
+      const rawLng = body.longitude != null ? Number(body.longitude) : (body.lng != null ? Number(body.lng) : NaN);
+      const hasLiveLoginCoords =
+        !Number.isNaN(rawLat) &&
+        !Number.isNaN(rawLng) &&
+        (rawLat !== 0 || rawLng !== 0);
+      const loginSpeedKmh =
+        body.speedKmh != null && !Number.isNaN(Number(body.speedKmh)) && Number(body.speedKmh) >= 0
+          ? Number(body.speedKmh)
+          : 0;
+      const loginHeading =
+        body.heading != null && !Number.isNaN(Number(body.heading))
+          ? Number(body.heading)
+          : 0;
+
       // Clear this driver from any other vehicle they were previously logged into
       await prisma.vehicle
         .updateMany({
@@ -220,6 +237,23 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      if (hasLiveLoginCoords) {
+        await recordDrayageDriverLocationPing(prisma, {
+          tenantId,
+          jobId: 'LOGIN_PING',
+          latitude: rawLat,
+          longitude: rawLng,
+          speedKmh: loginSpeedKmh,
+          heading: loginHeading,
+          location: typeof body.location === 'string' ? body.location : null,
+          actor: displayName(driver),
+          driverId: driver.id,
+          driverName: displayName(driver),
+          vehicleId: vehicle.id,
+          vehiclePlate: effectivePlate(vehicle),
+        }).catch(() => {});
+      }
+
       if (canActivateMobileTracking) {
         try {
           const lastKnown = await prisma.busGpsPing.findFirst({
@@ -231,10 +265,10 @@ export async function POST(req: NextRequest) {
             data: {
               tenantId,
               vehicleId: vehicle.id,
-              latitude: lastKnown?.latitude ?? 25.2048,
-              longitude: lastKnown?.longitude ?? 55.2708,
-              speedKmh: 0,
-              headingDeg: lastKnown?.headingDeg ?? 0,
+              latitude: hasLiveLoginCoords ? rawLat : (lastKnown?.latitude ?? 25.0112),
+              longitude: hasLiveLoginCoords ? rawLng : (lastKnown?.longitude ?? 55.0612),
+              speedKmh: loginSpeedKmh,
+              headingDeg: hasLiveLoginCoords ? loginHeading : (lastKnown?.headingDeg ?? 0),
               accuracyM: 5,
               occurredAt: new Date(),
               source: 'DRIVER_APP',
@@ -252,6 +286,9 @@ export async function POST(req: NextRequest) {
         trimmedDeviceId,
         canActivateMobileTracking,
         validOdo,
+        hasLiveLoginCoords,
+        rawLat,
+        rawLng,
       };
     });
 
@@ -270,7 +307,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { vehicle, driver, trimmedDeviceId, canActivateMobileTracking, validOdo } = outcome;
+    const { vehicle, driver, trimmedDeviceId, canActivateMobileTracking, validOdo, hasLiveLoginCoords, rawLat, rawLng } = outcome;
+
+    if (hasLiveLoginCoords) {
+      emitDrayageEvent(tenantId, {
+        type: 'telemetry_ping',
+        action: 'driver_login_location',
+        vehicleId: vehicle.id,
+        lat: rawLat,
+        lng: rawLng,
+      });
+    }
 
     const sessionToken = await signSession({
       userId: driver.id,

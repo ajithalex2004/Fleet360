@@ -143,13 +143,18 @@ export async function POST(
       });
     }
 
-    // 1c. 1-Minute In-Transit GPS Breadcrumb Ping (ACCEPTED -> COMPLETED)
+    // 1c. Immediate Login GPS + 1-Minute Background Telemetry Ping (Login -> Logout)
     if (action === 'LOCATION_PING') {
       const lat = body.latitude != null ? Number(body.latitude) : NaN;
       const lng = body.longitude != null ? Number(body.longitude) : NaN;
       if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
         return NextResponse.json({ error: 'Valid latitude and longitude are required' }, { status: 400 });
       }
+      const sessionCtx = await requireDriverSession(req).catch(() => null);
+      const sessionDriverId =
+        sessionCtx && !(sessionCtx instanceof NextResponse) ? sessionCtx.userId : null;
+      const resolvedDriverId = sessionDriverId || (body.driverId ? String(body.driverId) : null);
+
       const pingRes = await withTenantRls(prisma, tenantId, async (tx) => {
         const driverActor = await resolveDriverActorLabel(tx, tenantId, jobId, body.driverName);
         return recordDrayageDriverLocationPing(tx, {
@@ -161,12 +166,16 @@ export async function POST(
           heading: body.heading != null ? Number(body.heading) : null,
           location: body.location ? String(body.location) : null,
           actor: driverActor,
+          driverId: resolvedDriverId,
+          driverName: body.driverName ? String(body.driverName) : driverActor,
+          vehicleId: body.vehicleId ? String(body.vehicleId) : null,
+          vehiclePlate: body.vehiclePlate ? String(body.vehiclePlate) : null,
         });
       });
       emitDrayageEvent(tenantId, {
         type: 'telemetry_ping',
         action: 'driver_location_ping',
-        jobId,
+        jobId: pingRes.jobId || jobId,
       });
       return NextResponse.json({
         success: true,
