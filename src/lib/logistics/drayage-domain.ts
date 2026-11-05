@@ -101,8 +101,9 @@ export interface MappedFleetVehicle {
   assignedDriverId: string | null;
   assignedDriverName: string | null;
   activeJobCode: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
+  hasLiveGps?: boolean;
   updatedAt?: string | null;
   assignedTripsCount?: number;
 }
@@ -1791,6 +1792,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     ackRows,
     automationConfig,
     dispatcherUserRows,
+    latestPingRows,
   ] = await Promise.all([
     cachedMaster
       ? Promise.resolve(cachedMaster.terminalRows)
@@ -1834,8 +1836,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               vehicle_group,
               fuel_type,
               COALESCE(fuel_level_pct, fuel_level::int, 85) AS fuel_level_pct,
-              COALESCE(current_lat, 25.0112) AS current_lat,
-              COALESCE(current_lng, 55.0612) AS current_lng,
+              current_lat,
+              current_lng,
               COALESCE(current_mileage, 45000) AS current_mileage,
               COALESCE(next_service_km, 55000) AS next_service_km,
               registration_expiry,
@@ -1942,6 +1944,14 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         END, u.username ASC
         LIMIT 10`,
       tenantId,
+    ).catch(() => []),
+    db.$queryRawUnsafe<Array<{ vehicle_id: string; latitude: number; longitude: number }>>(
+      `SELECT DISTINCT ON (vehicle_id) vehicle_id, latitude, longitude
+         FROM fleet.bus_gps_pings
+        WHERE latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND NOT (ABS(latitude - 25.2048) < 0.0005 AND ABS(longitude - 55.2708) < 0.0005)
+        ORDER BY vehicle_id, occurred_at DESC`,
     ).catch(() => []),
   ]);
 
@@ -2291,6 +2301,26 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       driverIdByVehicleId.set(vId, dId);
     }
   }
+  const isRealGpsCoord = (lat: number | null | undefined, lng: number | null | undefined): lat is number => {
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return false;
+    if (lat === 0 && lng === 0) return false;
+    if (Math.abs(lat - 25.0112) < 0.0004 && (Math.abs(lng - 55.0612) < 0.0004 || Math.abs(lng - 55.0617) < 0.0004)) return false;
+    if (Math.abs(lat - 25.2048) < 0.0004 && Math.abs(lng - 55.2708) < 0.0004) return false;
+    if (Math.abs(lat - 24.9642) < 0.0004 && Math.abs(lng - 55.0915) < 0.0004) return false;
+    if (Math.abs(lat - 24.9850) < 0.0004 && Math.abs(lng - 55.0760) < 0.0004) return false;
+    return true;
+  };
+
+  const latestPingByVehicleId = new Map<string, { lat: number; lng: number }>();
+  for (const p of latestPingRows) {
+    const vId = String(p.vehicle_id || '');
+    const pLat = Number(p.latitude);
+    const pLng = Number(p.longitude);
+    if (vId && isRealGpsCoord(pLat, pLng)) {
+      latestPingByVehicleId.set(vId, { lat: pLat, lng: pLng });
+    }
+  }
+
   const liveVehicleCoordsById = new Map<string, { lat: number; lng: number }>();
   for (const v of rawVehicles) {
     const vId = String(v.id);
@@ -2301,8 +2331,26 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
     const vLat = v.current_lat != null ? Number(v.current_lat) : NaN;
     const vLng = v.current_lng != null ? Number(v.current_lng) : NaN;
-    if (!isNaN(vLat) && !isNaN(vLng) && (vLat !== 0 || vLng !== 0)) {
+    if (isRealGpsCoord(vLat, vLng)) {
       liveVehicleCoordsById.set(vId, { lat: vLat, lng: vLng });
+    } else {
+      const pingCoords = latestPingByVehicleId.get(vId);
+      if (pingCoords) {
+        liveVehicleCoordsById.set(vId, pingCoords);
+      } else {
+        const loggedInDrvId = driverIdByVehicleId.get(vId);
+        const recentJobWithCoords = jobs.find(
+          (j) =>
+            (j.assignedVehicleId === vId || (loggedInDrvId && j.assignedDriverId === loggedInDrvId)) &&
+            isRealGpsCoord(j.currentLat, j.currentLng),
+        );
+        if (recentJobWithCoords && recentJobWithCoords.currentLat != null && recentJobWithCoords.currentLng != null) {
+          liveVehicleCoordsById.set(vId, {
+            lat: recentJobWithCoords.currentLat,
+            lng: recentJobWithCoords.currentLng,
+          });
+        }
+      }
     }
   }
 
@@ -2316,15 +2364,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const vehId = j.assignedVehicleId || (j.assignedDriverId ? vehicleIdByDriverId.get(j.assignedDriverId) : undefined);
     const vehCoords = vehId ? liveVehicleCoordsById.get(vehId) : undefined;
     if (!vehCoords) continue;
-    const jLat = j.currentLat;
-    const jLng = j.currentLng;
-    const isStaticFallback =
-      jLat == null ||
-      jLng == null ||
-      (Math.abs(jLat - 25.0112) < 0.0003 && Math.abs(jLng - 55.0612) < 0.0003) ||
-      (Math.abs(jLat - 24.9642) < 0.0003 && Math.abs(jLng - 55.0915) < 0.0003) ||
-      (Math.abs(jLat - 24.9850) < 0.0003 && Math.abs(jLng - 55.0760) < 0.0003);
-    if (isStaticFallback) {
+    if (!isRealGpsCoord(j.currentLat, j.currentLng)) {
       j.currentLat = vehCoords.lat;
       j.currentLng = vehCoords.lng;
     }
@@ -2339,8 +2379,11 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (loggedInDriverId ? driverNameById.get(loggedInDriverId) ?? null : null) ??
       activeJob?.assignedDriverName ??
       null;
-    const vLat = v.current_lat != null ? Number(v.current_lat) : null;
-    const vLng = v.current_lng != null ? Number(v.current_lng) : null;
+    const resolvedCoords =
+      liveVehicleCoordsById.get(id) ??
+      (activeJob && isRealGpsCoord(activeJob.currentLat, activeJob.currentLng)
+        ? { lat: activeJob.currentLat!, lng: activeJob.currentLng! }
+        : null);
     return {
       id,
       plateNumber: String(v.plate_number),
@@ -2359,8 +2402,9 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       assignedDriverId: resolvedDriverId,
       assignedDriverName: resolvedDriverName,
       activeJobCode: activeJob?.jobCode ?? null,
-      lat: vLat ?? activeJob?.currentLat ?? (25.0080 + (idx % 5) * 0.008),
-      lng: vLng ?? activeJob?.currentLng ?? (55.0640 + (idx % 5) * 0.009),
+      lat: resolvedCoords ? resolvedCoords.lat : null,
+      lng: resolvedCoords ? resolvedCoords.lng : null,
+      hasLiveGps: Boolean(resolvedCoords),
       updatedAt: v.updated_at instanceof Date ? v.updated_at.toISOString() : (typeof v.updated_at === 'string' ? v.updated_at : null),
       assignedTripsCount: tripsCountByVehicle.get(id) || 0,
     };
@@ -5780,17 +5824,25 @@ export async function findBest4FactorAssetsForRampPickup(
 
   const scored = pool.map((v) => {
     const vId = String(v.id);
-    const vLat = v.current_lat != null && Number(v.current_lat) !== 0 ? Number(v.current_lat) : 24.985;
-    const vLng = v.current_lng != null && Number(v.current_lng) !== 0 ? Number(v.current_lng) : 55.076;
-    const distanceKm = computeHaversineKm(vLat, vLng, args.targetLat, args.targetLng);
+    const rawLat = v.current_lat != null ? Number(v.current_lat) : NaN;
+    const rawLng = v.current_lng != null ? Number(v.current_lng) : NaN;
+    const hasRealCoords =
+      !isNaN(rawLat) &&
+      !isNaN(rawLng) &&
+      (rawLat !== 0 || rawLng !== 0) &&
+      !(Math.abs(rawLat - 25.0112) < 0.0005 && (Math.abs(rawLng - 55.0612) < 0.0005 || Math.abs(rawLng - 55.0617) < 0.0005)) &&
+      !(Math.abs(rawLat - 25.2048) < 0.0005 && Math.abs(rawLng - 55.2708) < 0.0005);
+    const distanceKm = hasRealCoords ? computeHaversineKm(rawLat, rawLng, args.targetLat, args.targetLng) : 999;
 
     // 1. Proximity (Default 60%, Super Admin configurable)
-    let proximityScore = 100;
-    if (distanceKm <= 3) proximityScore = 100;
-    else if (distanceKm <= 10) proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
-    else if (distanceKm <= 30) proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
-    else if (distanceKm <= 70) proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
-    else proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+    let proximityScore = 0;
+    if (hasRealCoords) {
+      if (distanceKm <= 3) proximityScore = 100;
+      else if (distanceKm <= 10) proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
+      else if (distanceKm <= 30) proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
+      else if (distanceKm <= 70) proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
+      else proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+    }
 
     // 2. Idleness (Default 25%, Super Admin configurable)
     let idleHours = 2.4;
@@ -5836,11 +5888,18 @@ export async function findBest4FactorAssetsForRampPickup(
       driverId: dId,
       driverName: driverFullName,
       totalScore,
-      distanceKm: Math.round(distanceKm * 10) / 10,
+      distanceKm: hasRealCoords ? Math.round(distanceKm * 10) / 10 : 0,
+      hasLiveGps: hasRealCoords,
+      hasLoggedInDriver: Boolean(v.assigned_driver_id),
     };
   });
 
-  scored.sort((a, b) => b.totalScore - a.totalScore);
+  scored.sort((a, b) => {
+    const aActive = a.hasLoggedInDriver || a.hasLiveGps ? 1 : 0;
+    const bActive = b.hasLoggedInDriver || b.hasLiveGps ? 1 : 0;
+    if (bActive !== aActive) return bActive - aActive;
+    return b.totalScore - a.totalScore;
+  });
   const best = scored[0];
 
   let trailerId = args.preferredTrailerId ? String(args.preferredTrailerId) : '';
@@ -8278,7 +8337,7 @@ export async function bookPcsToken(
     args.tenantId,
     args.jobId || `cnt-${args.containerId}`,
     targetJobCode || targetContainerNumber || 'PCS-APPOINTMENT',
-    `Dubai Trade / ATLP e-Token ${tokenNumber} confirmed. Port Gate slot window: ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+    `Dubai Trade / ATLP e-Token ${tokenNumber} confirmed. Port Gate slot window: ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })} – ${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })} GST.`,
     args.actor || 'PCS Integration Gateway',
   );
 
@@ -8507,7 +8566,7 @@ export async function revalidateDeliveryOrder(
     args.tenantId,
     args.jobId || `cnt-${containerNumber}`,
     jobCode || containerNumber || 'EDO-SYNC',
-    `Electronic Delivery Order (eDO) revalidated via Dubai Trade / ATLP API. Valid until ${newExpiry.toLocaleDateString()} (+${daysToAdd} days).`,
+    `Electronic Delivery Order (eDO) revalidated via Dubai Trade / ATLP API. Valid until ${newExpiry.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' })} (+${daysToAdd} days).`,
     args.actor || 'Shipping Line eDO Interface',
   );
 

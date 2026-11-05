@@ -236,7 +236,13 @@ function getVehicleShareUrls(d: DeviceItem) {
   const lat = d.lastPing?.latitude || d.location?.latitude || 24.4539;
   const lng = d.lastPing?.longitude || d.location?.longitude || 54.3773;
   const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
-  const now = new Date().toLocaleTimeString();
+  const now = new Date().toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Dubai',
+    hour12: true,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 
   const msg = [
     `*Fleet360 Live Vehicle Location*`,
@@ -996,7 +1002,7 @@ export default function TelematicsPage() {
                         <div className="bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
                           <div className="text-[10px] text-[var(--text-muted)] font-sans uppercase">Last Ping</div>
                           <div className="font-semibold text-[var(--text-main)] text-xs">
-                            {sel.lastPing ? new Date(sel.lastPing.occurredAt).toLocaleTimeString() : 'Never'}
+                            {sel.lastPing ? new Date(sel.lastPing.occurredAt).toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Never'}
                           </div>
                         </div>
                       </div>
@@ -1208,10 +1214,10 @@ export default function TelematicsPage() {
                             {d.location || d.lastPing ? (
                               <div className="space-y-0.5">
                                 <div className="font-mono text-xs font-medium text-[var(--text-main)]">
-                                  {d.location?.timeFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleTimeString() : '—')}
+                                  {d.location?.timeFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')}
                                 </div>
                                 <div className="text-[10px] text-[var(--text-faint)] font-mono">
-                                  {d.location?.dateFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleDateString() : '')}
+                                  {d.location?.dateFormatted || (d.lastPing ? new Date(d.lastPing.occurredAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' }) : '')}
                                 </div>
                                 <div className="inline-flex items-center gap-1 text-[10px] text-cyan-400/90 font-medium">
                                   <Clock className="w-2.5 h-2.5" />
@@ -1551,7 +1557,7 @@ export default function TelematicsPage() {
                           </div>
                           <div className="text-sm font-bold font-mono text-emerald-400 flex items-center justify-end gap-1">
                             <Clock className="w-3.5 h-3.5" />
-                            {new Date(trip.estimatedArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(trip.estimatedArrival).toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
                       )}
@@ -1863,7 +1869,7 @@ export default function TelematicsPage() {
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-xs text-rose-300">{a.title}</span>
                         <span className="text-[10px] text-[var(--text-muted)]">
-                          {new Date(a.createdAt).toLocaleDateString()}
+                          {new Date(a.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' })}
                         </span>
                       </div>
                       <p className="text-[11px] text-[var(--text-muted)]">{a.description}</p>

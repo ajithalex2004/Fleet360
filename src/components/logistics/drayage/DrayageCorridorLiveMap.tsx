@@ -993,7 +993,7 @@ export default function DrayageCorridorLiveMap({
             <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px; margin-bottom: 8px; font-size: 10px;">
               Status: <strong style="color: #0284C7;">${job.status}</strong>
               ${job.routePath && job.routePath.length > 0 ? `<div style="color: #059669; margin-top: 2px;">📍 Live GPS Path: ${job.routePath.length} pt${job.routePath.length === 1 ? '' : 's'} (1-min interval)</div>` : ''}
-              ${job.etcTime ? `<div style="color: #D97706; margin-top: 2px;">⏳ ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>` : ''}
+              ${job.etcTime ? `<div style="color: #D97706; margin-top: 2px;">⏳ ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}</div>` : ''}
             </div>
             <div style="display: flex; gap: 4px;">
               <button id="btn-focus-${job.id}" style="flex: 1; background: #2563EB; color: #FFFFFF; border: none; border-radius: 4px; padding: 5px 8px; font-size: 11px; font-weight: bold; cursor: pointer;">
@@ -1476,7 +1476,7 @@ export default function DrayageCorridorLiveMap({
                     Destuffing ETC Timer
                   </span>
                   <strong className="font-mono text-white">
-                    {new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}
                   </strong>
                 </div>
                 <div className="text-[10px] text-slate-400">

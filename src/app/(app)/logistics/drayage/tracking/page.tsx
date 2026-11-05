@@ -229,11 +229,13 @@ function formatTimelineDateTime(iso: string): string {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'Asia/Dubai',
   });
   const timePart = d.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: 'Asia/Dubai',
   });
   return `${datePart}, ${timePart}`;
 }
@@ -865,7 +867,7 @@ export default function DrayageJobTrackingPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to extend ETC');
       delete alertedEtcJobsRef.current[jobIdToExtend];
-      showToast('success', `ETC extended by +${minutesToAdd}m (New ETC: ${new Date(data.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`);
+      showToast('success', `ETC extended by +${minutesToAdd}m (New ETC: ${new Date(data.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })})`);
       await loadData();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error extending ETC');
@@ -1414,7 +1416,7 @@ export default function DrayageJobTrackingPage() {
                           </span>
                         ) : job.etcTime ? (
                           <span className={isExpired ? 'text-rose-300 font-bold' : 'text-amber-300 font-bold'}>
-                            ETC: {new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            ETC: {new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}
                             {' · '}
                             {isExpired
                               ? minsLeft !== null && minsLeft < 0

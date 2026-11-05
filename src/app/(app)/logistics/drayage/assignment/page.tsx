@@ -182,6 +182,7 @@ interface MappedVehicle {
   nextServiceKm?: number | null;
   lat?: number | null;
   lng?: number | null;
+  hasLiveGps?: boolean;
   updatedAt?: string | null;
   assignedTripsCount?: number;
   assignedDriverId?: string | null;
@@ -347,6 +348,7 @@ interface Vehicle4FactorScore {
   availabilityScore: number; // 5%
   totalScore: number;        // 100%
   distanceKm: number;
+  hasLiveGps: boolean;
   idleHours: number;
   tripsToday: number;
   fuelPct: number;
@@ -2061,21 +2063,35 @@ export default function DrayageAssignmentPage() {
       candidateDriver?: MappedDriver
     ): Vehicle4FactorScore => {
       // 1. 📍 Proximity Score (60%) — GPS distance to pickup terminal / corridor
-      const vLat = typeof vehicle.lat === 'number' && vehicle.lat !== 0 ? vehicle.lat : 25.0112;
-      const vLng = typeof vehicle.lng === 'number' && vehicle.lng !== 0 ? vehicle.lng : 55.0617;
-      const distanceKm = getHaversineDistanceKm(vLat, vLng, targetTerminalLoc.lat, targetTerminalLoc.lng);
+      const isLegacyFallbackCoord = (lat?: number | null, lng?: number | null) => {
+        if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return true;
+        if (lat === 0 && lng === 0) return true;
+        if (Math.abs(lat - 25.0112) < 0.0005 && (Math.abs(lng - 55.0612) < 0.0005 || Math.abs(lng - 55.0617) < 0.0005)) return true;
+        if (Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005) return true;
+        return false;
+      };
+      const hasRealCoords =
+        typeof vehicle.hasLiveGps === 'boolean'
+          ? vehicle.hasLiveGps && typeof vehicle.lat === 'number' && typeof vehicle.lng === 'number'
+          : !isLegacyFallbackCoord(vehicle.lat, vehicle.lng);
 
-      let proximityScore = 100;
-      if (distanceKm <= 3) {
-        proximityScore = 100; // Directly at port gate or adjacent yard
-      } else if (distanceKm <= 10) {
-        proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
-      } else if (distanceKm <= 30) {
-        proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
-      } else if (distanceKm <= 70) {
-        proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
-      } else {
-        proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+      const distanceKm = hasRealCoords
+        ? getHaversineDistanceKm(vehicle.lat as number, vehicle.lng as number, targetTerminalLoc.lat, targetTerminalLoc.lng)
+        : 0;
+
+      let proximityScore = 0;
+      if (hasRealCoords) {
+        if (distanceKm <= 3) {
+          proximityScore = 100; // Directly at port gate or adjacent yard
+        } else if (distanceKm <= 10) {
+          proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
+        } else if (distanceKm <= 30) {
+          proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
+        } else if (distanceKm <= 70) {
+          proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
+        } else {
+          proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+        }
       }
 
       // 2. ⏱️ Idleness Score (25%) — Turnaround queue / dwell time (FIFO balancing)
@@ -2160,7 +2176,8 @@ export default function DrayageAssignmentPage() {
         workloadScore,
         availabilityScore,
         totalScore,
-        distanceKm: Math.round(distanceKm * 10) / 10,
+        distanceKm: hasRealCoords ? Math.round(distanceKm * 10) / 10 : 0,
+        hasLiveGps: hasRealCoords,
         idleHours,
         tripsToday,
         fuelPct,
@@ -2197,8 +2214,13 @@ export default function DrayageAssignmentPage() {
         return calculate4FactorScore(v, targetLoc, candidateDrv);
       });
 
-      // Sort descending by 4-factor composite score
-      scoredList.sort((a, b) => b.totalScore - a.totalScore);
+      // Sort descending by logged-in/live-telemetry status first, then 4-factor composite score
+      scoredList.sort((a, b) => {
+        const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
+        const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+        if (bActive !== aActive) return bActive - aActive;
+        return b.totalScore - a.totalScore;
+      });
       scoredList.forEach((item, index) => {
         if (index === 0) item.rankBadge = '🥇';
         else if (index === 1) item.rankBadge = '🥈';
@@ -2280,7 +2302,12 @@ export default function DrayageAssignmentPage() {
         drivers[0];
       return calculate4FactorScore(v, targetTerminalLoc, candidateDrv);
     });
-    scored.sort((a, b) => b.totalScore - a.totalScore);
+    scored.sort((a, b) => {
+      const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
+      const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+      if (bActive !== aActive) return bActive - aActive;
+      return b.totalScore - a.totalScore;
+    });
     scored.forEach((item, idx) => {
       if (idx === 0) item.rankBadge = '🥇';
       else if (idx === 1) item.rankBadge = '🥈';
@@ -2303,10 +2330,13 @@ export default function DrayageAssignmentPage() {
         const drvName =
           s.vehicle.assignedDriverName ||
           drivers.find((d) => d.id === s.vehicle.assignedDriverId || d.assignedVehicleId === s.vehicle.id)?.fullName;
+        const proxLabel = s.hasLiveGps
+          ? `${s.distanceKm}km (${s.proximityScore}pts)`
+          : `No Live GPS (${s.proximityScore}pts)`;
         return {
           value: s.vehicle.id,
           label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model}${drvName ? ` (${drvName})` : ''} [${s.totalScore}% Match]`,
-          sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}📍 ${s.distanceKm}km (${s.proximityScore}pts) • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today`,
+          sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}📍 ${proxLabel} • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today`,
           badge: drvName ? `👤 ${drvName}` : `${s.totalScore}% Match`,
         };
       });
@@ -2582,7 +2612,12 @@ export default function DrayageAssignmentPage() {
         return calculate4FactorScore(v, terminalLoc, candidateDrv);
       });
 
-      scored.sort((a, b) => b.totalScore - a.totalScore);
+      scored.sort((a, b) => {
+      const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
+      const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+      if (bActive !== aActive) return bActive - aActive;
+      return b.totalScore - a.totalScore;
+    });
       const topScored = scored[0];
       const vIdx = availV.findIndex((v) => v.id === topScored.vehicle.id);
       const veh = availV.splice(vIdx >= 0 ? vIdx : 0, 1)[0];
@@ -4124,7 +4159,7 @@ export default function DrayageAssignmentPage() {
                           <span>Proximity ({automationConfig.weightProximityPct ?? 60}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
-                          {currentVehicleScore.distanceKm} km
+                          {currentVehicleScore.hasLiveGps ? `${currentVehicleScore.distanceKm} km` : 'No Live GPS'}
                         </div>
                         <div className="text-[9px] text-emerald-400">Score: {currentVehicleScore.proximityScore}/100</div>
                       </div>
