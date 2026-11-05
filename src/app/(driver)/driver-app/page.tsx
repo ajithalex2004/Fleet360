@@ -713,7 +713,10 @@ export default function DriverAppLauncher() {
         if (now - lastSentRef.current >= 4000) {
           lastSentRef.current = now;
           try {
-            const token = localStorage.getItem('fleet360_driver_token') || '';
+            const token =
+              localStorage.getItem('fleet360_session_token') ||
+              localStorage.getItem('fleet360_driver_token') ||
+              '';
             const pingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) {
               pingHeaders.Authorization = `Bearer ${token}`;

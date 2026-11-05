@@ -300,6 +300,8 @@ export async function GET(req: NextRequest) {
         activeShifts.filter((s) => s.vehicleId).map((s) => [s.vehicleId!, s])
       );
 
+      const idleHeartbeatUpdates: Array<{ vehicleId: string; lat: number; lng: number; occurredAt: Date }> = [];
+
       const devices = vehicles.map((v) => {
         const vehiclePings = pingsByVehicleId.get(v.id) || [];
         const vCoord = vehicleLiveCoordById.get(v.id);
@@ -332,6 +334,30 @@ export async function GET(req: NextRequest) {
         const hasHardwareDevice = Boolean(v.deviceId && v.deviceId.trim() !== '');
         const isMobileTracking = Boolean(!hasHardwareDevice && ((ping && ping.source === 'DRIVER_APP') || v.assignedDriverId));
 
+        // 1-Minute Idle Heartbeat Continuity for Actively Logged-in Mobile Drivers:
+        // When a driver is actively logged into a vehicle (v.assignedDriverId is set) and stationary (Idle),
+        // maintain the 60-second Idle telemetry cadence even if Android Doze pauses screen-off WebView timers.
+        if (
+          isMobileTracking &&
+          v.assignedDriverId &&
+          ping &&
+          (ping.speedKmh ?? 0) < 3.5 &&
+          now.getTime() - new Date(ping.occurredAt).getTime() >= 60_000
+        ) {
+          const minuteTick = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+          ping = {
+            ...ping,
+            speedKmh: 0,
+            occurredAt: minuteTick,
+          };
+          idleHeartbeatUpdates.push({
+            vehicleId: v.id,
+            lat: ping.latitude,
+            lng: ping.longitude,
+            occurredAt: minuteTick,
+          });
+        }
+
         const activeShift = activeShiftByVehicleId.get(v.id);
         const assignedDriver = (v.assignedDriverId ? driverById.get(v.assignedDriverId) : null)
           || (activeShift ? driverById.get(activeShift.driverId) : null)
@@ -347,7 +373,7 @@ export async function GET(req: NextRequest) {
 
         // Operational Telematics Status:
         // MOVING (Green): Recent signal & speed >= 3.5 km/h (drift-filtered)
-        // IDLE (Dark Yellow): Recent signal & speed < 3.5 km/h, or active shift on-duty
+        // IDLE (Dark Yellow): Recent signal & speed < 3.5 km/h, or active logged-in driver / active shift on-duty
         // STOP (Red): Stopped / parked / ignition off / no recent movement or signal
         const isRecent = Boolean(ping && ping.occurredAt >= fifteenMinutesAgo);
         let operationalStatus: 'MOVING' | 'IDLE' | 'STOP' = 'STOP';
@@ -358,7 +384,7 @@ export async function GET(req: NextRequest) {
           } else {
             operationalStatus = 'IDLE';
           }
-        } else if (activeShift || (isMobileTracking && ping && ping.occurredAt >= twoHoursAgo)) {
+        } else if (activeShift || (isMobileTracking && (v.assignedDriverId || (ping && ping.occurredAt >= twoHoursAgo)))) {
           operationalStatus = 'IDLE';
         } else {
           operationalStatus = 'STOP';
@@ -581,6 +607,34 @@ export async function GET(req: NextRequest) {
             : null,
         };
       });
+
+      if (idleHeartbeatUpdates.length > 0) {
+        for (const hb of idleHeartbeatUpdates) {
+          await tx.busGpsPing
+            .create({
+              data: {
+                tenantId,
+                vehicleId: hb.vehicleId,
+                latitude: hb.lat,
+                longitude: hb.lng,
+                speedKmh: 0,
+                headingDeg: 0,
+                accuracyM: 5,
+                occurredAt: hb.occurredAt,
+                source: 'DRIVER_APP',
+              },
+            })
+            .catch(() => {});
+          await tx
+            .$executeRawUnsafe(
+              `UPDATE vehicles SET updated_at = $1 WHERE id = $2 AND tenant_id = $3`,
+              hb.occurredAt,
+              hb.vehicleId,
+              tenantId,
+            )
+            .catch(() => {});
+        }
+      }
 
       const alertVehiclesCount = devices.filter((d) => d.hasActiveAlerts).length;
       const totalAlertsCount = devices.reduce((sum, d) => sum + d.alerts.length, 0);

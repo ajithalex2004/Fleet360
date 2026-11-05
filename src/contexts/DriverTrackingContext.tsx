@@ -140,9 +140,24 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
     if (isPingingRef.current) return;
     isPingingRef.current = true;
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_token') || '' : '';
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('fleet360_session_token') ||
+            localStorage.getItem('fleet360_driver_token') ||
+            ''
+          : '';
       const driverName = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_name') || '' : '';
-      const vehiclePlate = typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_plate') || '' : '';
+      let vehiclePlate =
+        typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_plate') || '' : '';
+      if (!vehiclePlate && typeof window !== 'undefined') {
+        try {
+          const activeVehRaw = localStorage.getItem('fleet360_active_vehicle');
+          if (activeVehRaw) {
+            const parsedVeh = JSON.parse(activeVehRaw);
+            vehiclePlate = parsedVeh?.licensePlate || parsedVeh?.vehicleCode || '';
+          }
+        } catch {}
+      }
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -186,7 +201,7 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
       }).catch(() => null);
 
       if (drayageRes?.ok || res?.ok) {
-        setLastPingTime(new Date().toLocaleTimeString());
+        setLastPingTime(new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Dubai' }));
       }
     } catch (err) {
       console.debug('[driver-tracking] Ping send error:', err);
@@ -197,14 +212,48 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
 
   // High accuracy position query from hardware GPS
   const queryCurrentPosition = useCallback(async (): Promise<{ lat: number; lng: number; speed: number; heading: number; accuracy: number } | null> => {
+    // 0. Check Native Android Bridge GPS first (zero latency in APK foreground service)
+    if (typeof window !== 'undefined') {
+      try {
+        const w = window as unknown as {
+          Fleet360Android?: { getLastKnownLocationJson?: () => string };
+        };
+        const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+        if (nativeJson) {
+          const parsed = JSON.parse(nativeJson) as {
+            lat?: number;
+            lng?: number;
+            speedKmh?: number;
+            heading?: number;
+          };
+          if (
+            parsed &&
+            typeof parsed.lat === 'number' &&
+            typeof parsed.lng === 'number' &&
+            (parsed.lat !== 0 || parsed.lng !== 0)
+          ) {
+            const rawSpd = typeof parsed.speedKmh === 'number' && parsed.speedKmh > 0 ? parsed.speedKmh : 0;
+            const spd = filterGpsDriftSpeed(rawSpd, parsed.lat, parsed.lng, lastCoordsRef.current);
+            return {
+              lat: parsed.lat,
+              lng: parsed.lng,
+              speed: spd,
+              heading: typeof parsed.heading === 'number' ? parsed.heading : 0,
+              accuracy: 5,
+            };
+          }
+        }
+      } catch {}
+    }
+
     // 1. Try native @capacitor/geolocation (FusedLocationProvider on Android)
     try {
       const mod = await import('@capacitor/geolocation');
       if (mod?.Geolocation) {
         const pos = await mod.Geolocation.getCurrentPosition({
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 5000,
+          timeout: 6000,
+          maximumAge: 15000,
         });
         if (pos?.coords && typeof pos.coords.latitude === 'number' && typeof pos.coords.longitude === 'number') {
           const rawSpd = pos.coords.speed != null && pos.coords.speed > 0
@@ -230,8 +279,8 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
         const webPos = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 5000,
+            timeout: 6000,
+            maximumAge: 15000,
           });
         });
         if (webPos?.coords) {
@@ -252,9 +301,26 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
       }
     }
 
-    // 3. Fallback to last known REAL coordinates if previously acquired
+    // 3. Fallback to last known REAL coordinates if previously acquired (or cached in localStorage)
     if (lastCoordsRef.current) {
       return { ...lastCoordsRef.current, speed: 0 };
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedRaw = localStorage.getItem('fleet360_last_known_coords');
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (typeof cached?.lat === 'number' && typeof cached?.lng === 'number' && (cached.lat !== 0 || cached.lng !== 0)) {
+            return {
+              lat: cached.lat,
+              lng: cached.lng,
+              speed: 0,
+              heading: cached.heading || 0,
+              accuracy: cached.accuracy || 5,
+            };
+          }
+        }
+      } catch {}
     }
 
     // Never return fake coordinates
@@ -317,6 +383,11 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
             };
 
             lastCoordsRef.current = realCoords;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('fleet360_last_known_coords', JSON.stringify(realCoords));
+              } catch {}
+            }
             setCurrentCoords({ lat: latitude, lng: longitude });
             setCurrentSpeed(spd);
 
@@ -349,7 +420,13 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
           const loc = await queryCurrentPosition();
           if (!loc) return;
 
-          lastCoordsRef.current = { lat: loc.lat, lng: loc.lng, heading: loc.heading, accuracy: loc.accuracy };
+          const latestCoords = { lat: loc.lat, lng: loc.lng, heading: loc.heading, accuracy: loc.accuracy };
+          lastCoordsRef.current = latestCoords;
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('fleet360_last_known_coords', JSON.stringify(latestCoords));
+            } catch {}
+          }
           setCurrentCoords({ lat: loc.lat, lng: loc.lng });
           setCurrentSpeed(loc.speed);
           void sendPing(v.id, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);

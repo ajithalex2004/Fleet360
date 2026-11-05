@@ -745,12 +745,33 @@ export default function DriverTodayPage() {
       if (initialGpsLoginSyncSentRef.current || (lat === 0 && lng === 0)) return;
       initialGpsLoginSyncSentRef.current = true;
       try {
+        localStorage.setItem(
+          'fleet360_last_known_coords',
+          JSON.stringify({ lat, lng, speedKmh, heading, updatedAt: Date.now() }),
+        );
+      } catch {}
+      try {
         const placeName = resolveUaePlaceNameFromCoords(lat, lng);
         const location = `${placeName} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-        const storedVehicleId = localStorage.getItem('fleet360_driver_vehicle_id') || '';
-        const storedVehiclePlate = localStorage.getItem('fleet360_driver_vehicle_plate') || '';
+        let storedVehicleId = localStorage.getItem('fleet360_driver_vehicle_id') || '';
+        let storedVehiclePlate = localStorage.getItem('fleet360_driver_vehicle_plate') || '';
+        if (!storedVehicleId || !storedVehiclePlate) {
+          try {
+            const rawVeh = localStorage.getItem('fleet360_active_vehicle');
+            if (rawVeh) {
+              const parsedVeh = JSON.parse(rawVeh);
+              if (!storedVehicleId && parsedVeh?.id) storedVehicleId = parsedVeh.id;
+              if (!storedVehiclePlate) {
+                storedVehiclePlate = parsedVeh?.licensePlate || parsedVeh?.vehicleCode || '';
+              }
+            }
+          } catch {}
+        }
         const storedDriverName = localStorage.getItem('fleet360_driver_name') || 'Assigned Driver';
-        const storedToken = localStorage.getItem('fleet360_driver_token') || '';
+        const storedToken =
+          localStorage.getItem('fleet360_session_token') ||
+          localStorage.getItem('fleet360_driver_token') ||
+          '';
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (storedToken) {
           headers.Authorization = `Bearer ${storedToken}`;
@@ -1220,7 +1241,18 @@ export default function DriverTodayPage() {
     async (silent = false) => {
       if (!silent) setRefreshing(true);
       try {
-        const res = await fetch(getApiEndpoint('/api/driver-app/today/assignments'), {
+        let assignmentsPath = '/api/driver-app/today/assignments';
+        const c = driverCoordsRef.current;
+        if (c && typeof c.lat === 'number' && typeof c.lng === 'number' && (c.lat !== 0 || c.lng !== 0)) {
+          const qs = new URLSearchParams({
+            lat: String(c.lat),
+            lng: String(c.lng),
+            speedKmh: String(c.speedKmh ?? 0),
+            heading: String(c.heading ?? 0),
+          });
+          assignmentsPath = `/api/driver-app/today/assignments?${qs.toString()}`;
+        }
+        const res = await fetch(getApiEndpoint(assignmentsPath), {
           credentials: 'include',
           headers: getAuthHeaders(),
           cache: 'no-store',
@@ -1530,15 +1562,24 @@ export default function DriverTodayPage() {
     [activeJobs],
   );
 
+  // Keep a ref to trackedJobs so the 4-second job poll does NOT tear down and reset the 60-second telemetry timer
+  const trackedJobsRef = useRef<DrayageAssignment[]>(trackedJobs);
+  trackedJobsRef.current = trackedJobs;
+  const trackedJobsKey = useMemo(
+    () => trackedJobs.map((j) => `${j.id}:${j.status}`).join('|'),
+    [trackedJobs],
+  );
+
   // Immediate On-Login GPS Sync + Continuous 1-Minute Background Telemetry (Login -> Logout)
   useEffect(() => {
     let cancelled = false;
 
     const sendLocationPingForSessionAndJobs = async () => {
       if (cancelled) return;
+      const currentTrackedJobs = trackedJobsRef.current;
 
-      if (trackedJobs.length > 0) {
-        for (const activeJob of trackedJobs) {
+      if (currentTrackedJobs.length > 0) {
+        for (const activeJob of currentTrackedJobs) {
           if (cancelled) break;
           try {
             const captured = await captureLiveDriverLocation(activeJob, activeJob.status);
@@ -1606,12 +1647,12 @@ export default function DriverTodayPage() {
           (!driverCoordsRef.current || now - driverCoordsRef.current.updatedAt > 15000)
         ) {
           await new Promise<void>((resolve) => {
-            const timer = setTimeout(() => resolve(), 2200);
+            const timer = setTimeout(() => resolve(), 3500);
             try {
               navigator.geolocation.getCurrentPosition(
                 (pos) => {
                   clearTimeout(timer);
-                  driverCoordsRef.current = {
+                  const nextCoords = {
                     lat: pos.coords.latitude,
                     lng: pos.coords.longitude,
                     speedKmh:
@@ -1621,19 +1662,45 @@ export default function DriverTodayPage() {
                     heading: pos.coords.heading ?? null,
                     updatedAt: Date.now(),
                   };
+                  driverCoordsRef.current = nextCoords;
+                  try {
+                    localStorage.setItem('fleet360_last_known_coords', JSON.stringify(nextCoords));
+                  } catch {}
                   resolve();
                 },
                 () => {
                   clearTimeout(timer);
                   resolve();
                 },
-                { enableHighAccuracy: true, timeout: 2000, maximumAge: 10000 },
+                { enableHighAccuracy: true, timeout: 3200, maximumAge: 30000 },
               );
             } catch {
               clearTimeout(timer);
               resolve();
             }
           });
+        }
+
+        if (!driverCoordsRef.current && typeof window !== 'undefined') {
+          try {
+            const cachedRaw = localStorage.getItem('fleet360_last_known_coords');
+            if (cachedRaw) {
+              const cached = JSON.parse(cachedRaw);
+              if (
+                typeof cached?.lat === 'number' &&
+                typeof cached?.lng === 'number' &&
+                (cached.lat !== 0 || cached.lng !== 0)
+              ) {
+                driverCoordsRef.current = {
+                  lat: cached.lat,
+                  lng: cached.lng,
+                  speedKmh: 0,
+                  heading: cached.heading ?? null,
+                  updatedAt: cached.updatedAt || now,
+                };
+              }
+            }
+          } catch {}
         }
 
         if (cancelled) return;
@@ -1671,7 +1738,7 @@ export default function DriverTodayPage() {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [trackedJobs, captureLiveDriverLocation, getAuthHeaders, driverName, vehicleId, vehiclePlate]);
+  }, [trackedJobsKey, captureLiveDriverLocation, getAuthHeaders, driverName, vehicleId, vehiclePlate]);
 
   const handleStatusUpdate = async (
     job: DrayageAssignment,

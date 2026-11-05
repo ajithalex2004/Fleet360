@@ -210,6 +210,102 @@ export async function GET(req: NextRequest) {
           driverNameToken = (drvRows[0].first_name || driverFullName.split(' ')[0] || '').trim();
         }
       }
+
+      // Sync 1-minute telemetry heartbeat for the driver's logged-in vehicle on poll
+      const qLat = Number(req.nextUrl.searchParams.get('lat'));
+      const qLng = Number(req.nextUrl.searchParams.get('lng'));
+      const qSpeed = Number(req.nextUrl.searchParams.get('speedKmh') || 0);
+      const qHeading = Number(req.nextUrl.searchParams.get('heading') || 0);
+      const hasValidQueryCoords =
+        !Number.isNaN(qLat) &&
+        !Number.isNaN(qLng) &&
+        (qLat !== 0 || qLng !== 0) &&
+        !(Math.abs(qLat - 25.2048) < 0.0005 && Math.abs(qLng - 55.2708) < 0.0005);
+
+      const loggedInVehicles = await tx
+        .$queryRawUnsafe<
+          Array<{
+            id: string;
+            current_lat: number | null;
+            current_lng: number | null;
+            last_ping_at: Date | null;
+          }>
+        >(
+          `SELECT
+              v.id::text AS id,
+              v.current_lat,
+              v.current_lng,
+              (
+                SELECT MAX(p.occurred_at)
+                  FROM fleet.bus_gps_pings p
+                 WHERE p.vehicle_id = v.id::text
+              ) AS last_ping_at
+             FROM vehicles v
+             LEFT JOIN drivers d ON d.id = v.assigned_driver_id AND d.tenant_id = v.tenant_id
+            WHERE v.tenant_id = $1
+              AND v.deleted_at IS NULL
+              AND (
+                v.assigned_driver_id = $2
+                OR d.user_id = $2
+                OR ($3 <> '' AND LOWER(COALESCE(d.name, '')) = LOWER($3))
+              )
+            ORDER BY v.updated_at DESC
+            LIMIT 1`,
+          tenantId,
+          ctx.userId,
+          driverFullName,
+        )
+        .catch(() => []);
+
+      const activeVeh = loggedInVehicles[0];
+      if (activeVeh) {
+        const effLat = hasValidQueryCoords ? qLat : activeVeh.current_lat;
+        const effLng = hasValidQueryCoords ? qLng : activeVeh.current_lng;
+        const lastPingMs = activeVeh.last_ping_at ? new Date(activeVeh.last_ping_at).getTime() : 0;
+        const movedSignificantly =
+          hasValidQueryCoords &&
+          activeVeh.current_lat != null &&
+          activeVeh.current_lng != null &&
+          (Math.abs(qLat - Number(activeVeh.current_lat)) > 0.0002 ||
+            Math.abs(qLng - Number(activeVeh.current_lng)) > 0.0002);
+
+        if (
+          effLat != null &&
+          effLng != null &&
+          (Date.now() - lastPingMs >= 60_000 || movedSignificantly)
+        ) {
+          await tx.busGpsPing
+            .create({
+              data: {
+                tenantId,
+                vehicleId: activeVeh.id,
+                latitude: Number(effLat),
+                longitude: Number(effLng),
+                speedKmh: hasValidQueryCoords && !Number.isNaN(qSpeed) && qSpeed >= 0 ? qSpeed : 0,
+                headingDeg: hasValidQueryCoords && !Number.isNaN(qHeading) ? qHeading : 0,
+                accuracyM: 5,
+                occurredAt: new Date(),
+                source: 'DRIVER_APP',
+              },
+            })
+            .catch(() => {});
+
+          await tx
+            .$executeRawUnsafe(
+              `UPDATE vehicles
+                  SET current_lat = $1,
+                      current_lng = $2,
+                      updated_at = NOW()
+                WHERE id = $3
+                  AND tenant_id = $4`,
+              Number(effLat),
+              Number(effLng),
+              activeVeh.id,
+              tenantId,
+            )
+            .catch(() => {});
+        }
+      }
     } catch {
       // ignore lookup error
     }

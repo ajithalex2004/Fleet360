@@ -124,7 +124,37 @@ export async function loadDriverActor(
     userId,
     driver.id,
   );
-  const shift = shifts[0];
+  let shift = shifts[0];
+
+  // Fallback for Logistics / Drayage drivers who bind to a tractor via /api/driver-app/auth/vehicle-login
+  // (which sets vehicles.assigned_driver_id = driver.id) or have assigned_vehicle_id on their driver profile.
+  if (!shift?.vehicle_id) {
+    const assignedVehicles = await tx
+      .$queryRawUnsafe<Array<{ vehicle_id: string; plate: string | null }>>(
+        `SELECT v.id::text AS vehicle_id, COALESCE(v.license_plate, v.vehicle_code) AS plate
+           FROM vehicles v
+          WHERE v.tenant_id = $1
+            AND v.deleted_at IS NULL
+            AND (
+              v.assigned_driver_id IN ($2::text, $3::text)
+              OR v.id::text = (
+                SELECT d.assigned_vehicle_id::text
+                  FROM drivers d
+                 WHERE d.tenant_id = $1 AND d.id = $3
+                 LIMIT 1
+              )
+            )
+          ORDER BY (v.assigned_driver_id IN ($2::text, $3::text)) DESC, v.updated_at DESC
+          LIMIT 1`,
+        tenantId,
+        userId,
+        driver.id,
+      )
+      .catch(() => []);
+    if (assignedVehicles[0]?.vehicle_id) {
+      shift = assignedVehicles[0];
+    }
+  }
 
   return {
     tenantId,

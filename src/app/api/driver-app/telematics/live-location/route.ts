@@ -102,26 +102,32 @@ export async function POST(req: NextRequest) {
         accuracy = 0,
       } = body;
 
-      if (typeof lat !== 'number' || typeof lng !== 'number') {
+      if (
+        typeof lat !== 'number' ||
+        typeof lng !== 'number' ||
+        Number.isNaN(lat) ||
+        Number.isNaN(lng) ||
+        (lat === 0 && lng === 0) ||
+        (Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005)
+      ) {
         return withCorsHeaders(
-          NextResponse.json({ error: 'Valid lat and lng numbers are required' }, { status: 400 }),
+          NextResponse.json({ error: 'Valid non-placeholder lat and lng numbers are required' }, { status: 400 }),
           origin,
         );
       }
 
-      const vehicle = actor.activeTrip?.vehicle ?? null;
+      const vehicle = actor.activeTrip?.vehicle ?? actor.shiftVehicle ?? null;
       const foreign = rejectForeignIdentifiers(actor, body, vehicle);
       if (foreign) return withCorsHeaders(foreign, origin);
 
       // Live position is tracked in BusGpsPing, the table the telematics
-      // gateway and geofence evaluator read. The vehicle is the one on the
-      // driver's own IN_PROGRESS trip; the client does not choose it.
+      // gateway and geofence evaluator read, as well as the vehicle's current_lat/current_lng.
       if (!vehicle) {
         return withCorsHeaders(
           NextResponse.json({
             ok: true,
             recorded: false,
-            reason: 'No trip in progress for this driver; location not recorded.',
+            reason: 'No active vehicle session or trip in progress for this driver; location not recorded.',
             timestamp: new Date().toISOString(),
           }),
           origin,
@@ -141,6 +147,21 @@ export async function POST(req: NextRequest) {
           source: 'DRIVER_APP',
         },
       });
+
+      await tx
+        .$executeRawUnsafe(
+          `UPDATE vehicles
+              SET current_lat = $1,
+                  current_lng = $2,
+                  updated_at = NOW()
+            WHERE id = $3
+              AND tenant_id = $4`,
+          lat,
+          lng,
+          vehicle.id,
+          tenantId,
+        )
+        .catch(() => {});
 
       const dbMs = performance.now() - dbStart;
       const totalMs = performance.now() - t0;
