@@ -33,6 +33,7 @@ import {
   Mail,
   MoreVertical,
   Pencil,
+  Lock,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -51,6 +52,7 @@ import {
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  canChangeDrayageReturnTerminal,
   evaluateDispatcherJobReassignState,
   isDrayageReassignStatus,
   type DrayageAutomationConfig,
@@ -68,6 +70,10 @@ interface DrayageJob {
   warehouseId?: string | null;
   terminalName: string;
   terminalId?: string | null;
+  returnTerminalName?: string | null;
+  returnTerminalId?: string | null;
+  originTerminalName?: string | null;
+  originTerminalId?: string | null;
   containerNumber: string;
   containerSize: string;
   containerType: string;
@@ -526,12 +532,19 @@ export default function DrayageAssignmentPage() {
   const [activeStreetTurnPair, setActiveStreetTurnPair] = useState<StreetTurnRecommendation | null>(null);
   const [holdLeg3InModal, setHoldLeg3InModal] = useState<boolean>(true);
 
+  // Return Terminal Redirection Modal State
+  const [changingReturnTerminalJob, setChangingReturnTerminalJob] = useState<DrayageJob | null>(null);
+  const [newReturnTerminalId, setNewReturnTerminalId] = useState('');
+  const [returnTerminalReason, setReturnTerminalReason] = useState('');
+  const [submittingReturnTerminal, setSubmittingReturnTerminal] = useState(false);
+
   // Assignment Modal Fields
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedTrailerId, setSelectedTrailerId] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [tokenSlotStartHour, setTokenSlotStartHour] = useState<number>(6);
+  const [assignReturnTerminalId, setAssignReturnTerminalId] = useState('');
   const [submittingAssign, setSubmittingAssign] = useState(false);
 
   const formatShortHourAmPm = useCallback((hour24: number): string => {
@@ -838,9 +851,12 @@ export default function DrayageAssignmentPage() {
     const slotEnd = slotStart + 2;
     const slotTime = `${String(slotStart).padStart(2, '0')}:00 - ${String(slotEnd).padStart(2, '0')}:00`;
 
-    const isSameTerminal = job2
-      ? job1.terminalName.trim().toLowerCase() === job2.terminalName.trim().toLowerCase()
-      : true;
+    const term1 = (job1.returnTerminalName || job1.terminalName || '').trim().toLowerCase();
+    const term2 = job2
+      ? (job2.returnTerminalName || job2.terminalName || '').trim().toLowerCase()
+      : term1;
+
+    const isSameTerminal = job2 ? term1 === term2 : true;
 
     return {
       slotTime,
@@ -1032,8 +1048,8 @@ export default function DrayageAssignmentPage() {
       return { lat: 24.9602, lng: 55.0615 };
     };
 
-    // 1. Inbound containers: L1 Placed at Ramp / Ready for Pickup containers OR unassigned L2 Empty Return jobs
-    //    Exclude initial Yard Drops (PLACED_AT_YARD / FCL_REASSIGN / MT_REASSIGN) which are still full (FCL) awaiting Yard-to-Ramp shunting
+    // 1. Inbound containers: L1 Placed at Ramp / MT_Reassign to Yard / Ready for Pickup containers OR unassigned L2 Empty Return jobs
+    //    Exclude initial full (FCL) Yard Drops (PLACED_AT_YARD / FCL_REASSIGN) which are still loaded awaiting Yard-to-Ramp shunting
     const l2Inbound = jobs.filter((j) => {
       if (j.streetTurnJobId || j.status === 'STREET_TURNED' || j.status === 'COMPLETED' || j.status === 'CANCELLED') {
         return false;
@@ -1043,16 +1059,26 @@ export default function DrayageAssignmentPage() {
       }
       if (j.jobPhase === 'L1' && !j.l2Activated) {
         const st = (j.status || '').toUpperCase();
-        const isInitialYardDrop =
-          ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st) ||
+        const isInitialFclYardDrop =
+          ['PLACED_AT_YARD', 'FCL_REASSIGN', 'FCL_REASSIGN TO RAMP'].includes(st) ||
           (j.placementLocation === 'YARD' &&
-            !['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
-        if (isInitialYardDrop) return false;
+            ![
+              'READY_FOR_PICKUP',
+              'CONTAINER_OFFLOADED',
+              'REASSIGN_TRAILER_DETACHED',
+              'REASSIGN_PLACED_AT_YARD',
+              'MT_REASSIGN',
+              'MT_REASSIGN TO YARD',
+            ].includes(st));
+        if (isInitialFclYardDrop) return false;
         return (
           Boolean(j.trailerDetached) ||
           [
             'PLACED_AT_RAMP',
             'REASSIGN_PLACED_AT_RAMP',
+            'REASSIGN_PLACED_AT_YARD',
+            'MT_REASSIGN',
+            'MT_REASSIGN TO YARD',
             'CONTAINER_DETACHED',
             'TRAILER_DETACHED',
             'REASSIGN_TRAILER_DETACHED',
@@ -1091,6 +1117,7 @@ export default function DrayageAssignmentPage() {
 
     const candidates: StreetTurnRecommendation[] = [];
     for (const j2 of l2Inbound) {
+      const j2ReturnTerminal = (j2.returnTerminalName || j2.terminalName || '').trim();
       for (const j1 of l1Outbound) {
         if (j2.id === j1.id) continue;
 
@@ -1098,9 +1125,9 @@ export default function DrayageAssignmentPage() {
         const zoneL1 = getWarehouseZone(j1.warehouseName, j1.warehouseId);
         const sameZone = zoneL2.toLowerCase() === zoneL1.toLowerCase();
 
-        // Terminal Match (e.g. DIC -> Port T1 Empty Drop + Port T1 -> JAFZA South Import Pick)
+        // Terminal Match using effective L2 Return Terminal (supports post-port-exit terminal redirection!)
         const termMatch =
-          j2.terminalName.trim().toLowerCase() === j1.terminalName.trim().toLowerCase();
+          j2ReturnTerminal.toLowerCase() === (j1.terminalName || '').trim().toLowerCase();
 
         // Proximity Match: Same Zone or Corridor Cluster (JAFZA / NIP / Dubai South / DIC)
         const isClusterMatch =
@@ -1166,7 +1193,8 @@ export default function DrayageAssignmentPage() {
 
           leg3Candidate = j3;
           leg3Risk = getDemurrageRisk(j3);
-          const t3Key = (j3.terminalName || '').trim().toLowerCase();
+          const j3ReturnTerminal = (j3.returnTerminalName || j3.terminalName || '').trim();
+          const t3Key = j3ReturnTerminal.toLowerCase();
           // Exclude j1 if j1 is at the same terminal as j3
           const otherL1AtT3 =
             (outboundCountByTerminal.get(t3Key) || 0) -
@@ -1229,9 +1257,9 @@ export default function DrayageAssignmentPage() {
           containerType: j2.containerType || 'DRY',
           originWarehouse: j2.warehouseName,
           destWarehouse: j1.warehouseName,
-          zone: zoneL2 === zoneL1 ? zoneL2 : `${zoneL2} ➜ ${j1.terminalName} ➜ ${zoneL1}`,
+          zone: zoneL2 === zoneL1 ? zoneL2 : `${zoneL2} ➜ ${j1.terminalName || j2ReturnTerminal} ➜ ${zoneL1}`,
           interWarehouseDistanceKm: interDist,
-          terminalName: j1.terminalName || j2.terminalName,
+          terminalName: j1.terminalName || j2ReturnTerminal,
           tasSlot: tas.slotTime,
           combinedRevenueAed:
             (j2.rateAmountAed || 1200) +
@@ -1287,7 +1315,8 @@ export default function DrayageAssignmentPage() {
       // Only non-urgent L2 empty returns (> 36h free time remaining)
       if (risk.hoursRemaining <= 36) continue;
 
-      const tKey = (j.terminalName || '').trim().toLowerCase();
+      const returnTermName = (j.returnTerminalName || j.terminalName || '').trim();
+      const tKey = returnTermName.toLowerCase();
       const outboundL1AtTerminal = outboundL1ByTerminal.get(tKey) || 0;
       const isCurrentlyHeld = Boolean((j.notes || '').includes('[SMART_BACKHAUL_HOLD]'));
 
@@ -1299,15 +1328,15 @@ export default function DrayageAssignmentPage() {
           job: j,
           risk,
           zone,
-          terminalName: j.terminalName,
+          terminalName: returnTermName,
           outboundL1AtTerminal,
           estimatedDeadheadKmAvoided: 34,
           fuelRiskAvoidedAed: 245,
           isCurrentlyHeld,
           linkedDaisyChainPairId: linkedDaisyChain?.id,
           recommendationText: linkedDaisyChain
-            ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${j.terminalName} L1 Import backhaul arrives.`
-            : `${j.jobCode} (${zone} ➜ ${j.terminalName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${j.terminalName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a 34 km empty return.`,
+            ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${returnTermName} L1 Import backhaul arrives.`
+            : `${j.jobCode} (${zone} ➜ ${returnTermName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${returnTermName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a 34 km empty return.`,
         });
       }
     }
@@ -1368,6 +1397,65 @@ export default function DrayageAssignmentPage() {
     [trailers],
   );
 
+  const handleOpenChangeReturnTerminal = useCallback(
+    (job: DrayageJob) => {
+      if (!canChangeDrayageReturnTerminal(job)) {
+        showToast(
+          'error',
+          `Return Terminal is locked on ${job.jobCode} (${job.status}). It is only unlocked from EN_ROUTE_WAREHOUSE (post-port exit) through Warehouse Ramp/Yard/Ready for Pickup and L2 - PENDING.`,
+        );
+        return;
+      }
+      const currentRetTermName = (job.returnTerminalName || job.terminalName || '').trim();
+      const matchedTerm = terminals.find(
+        (t) =>
+          (job.returnTerminalId && t.id === job.returnTerminalId) ||
+          t.name.trim().toLowerCase() === currentRetTermName.toLowerCase(),
+      );
+      setChangingReturnTerminalJob(job);
+      setNewReturnTerminalId(matchedTerm?.id || terminals[0]?.id || '');
+      setReturnTerminalReason('');
+    },
+    [terminals],
+  );
+
+  const handleConfirmReturnTerminalChange = async () => {
+    if (!changingReturnTerminalJob) return;
+    const selectedTerm = terminals.find((t) => t.id === newReturnTerminalId);
+    if (!selectedTerm) {
+      showToast('error', 'Please select a target Return Terminal');
+      return;
+    }
+    try {
+      setSubmittingReturnTerminal(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'change_return_terminal',
+          jobId: changingReturnTerminalJob.id,
+          returnTerminalId: selectedTerm.id,
+          returnTerminalName: selectedTerm.name,
+          reason: returnTerminalReason.trim() || undefined,
+          actor: user?.username || 'Dispatcher',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 Return Terminal');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        `↪ Redirected L2 Empty Return Terminal for ${changingReturnTerminalJob.containerNumber} (${changingReturnTerminalJob.jobCode}) from ${data.originTerminalName} ➜ ${data.returnTerminalName}! Smart Analysis re-evaluated.`,
+      );
+      setChangingReturnTerminalJob(null);
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error updating Return Terminal');
+    } finally {
+      setSubmittingReturnTerminal(false);
+    }
+  };
+
   // Open modal for single job — auto-populate detached/linked chassis when reassigning or dispatching L2; keep token blank
   const handleOpenAssign = useCallback(
     (job: DrayageJob) => {
@@ -1393,8 +1481,15 @@ export default function DrayageAssignmentPage() {
       setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
       setTokenInput(job.tokenNumber || '');
       setTokenSlotStartHour(extractStartHourFromJob(job));
+      const currentRetTermName = (job.returnTerminalName || job.terminalName || '').trim();
+      const matchedTerm = terminals.find(
+        (t) =>
+          (job.returnTerminalId && t.id === job.returnTerminalId) ||
+          t.name.trim().toLowerCase() === currentRetTermName.toLowerCase(),
+      );
+      setAssignReturnTerminalId(matchedTerm?.id || job.returnTerminalId || job.terminalId || '');
     },
-    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded, extractStartHourFromJob],
+    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded, extractStartHourFromJob, terminals],
   );
 
   useEffect(() => {
@@ -1472,14 +1567,71 @@ export default function DrayageAssignmentPage() {
     },
     {
       key: 'terminalName',
-      header: 'Terminal',
-      accessor: (j) => j.terminalName || '—',
+      header: 'Terminal & L2 Return',
+      accessor: (j) =>
+        `${j.terminalName || ''} ${j.returnTerminalName || ''} ${j.originTerminalName || ''}`.trim() || '—',
       filter: 'text',
-      render: (job) => (
-        <div className="text-xs font-medium text-[var(--text-main)] max-w-[160px] truncate" title={job.terminalName || '—'}>
-          {job.terminalName || '—'}
-        </div>
-      ),
+      render: (job) => {
+        const originTerm = (job.originTerminalName || job.terminalName || '').trim();
+        const returnTerm = (job.returnTerminalName || job.terminalName || '').trim();
+        const isRedirected = Boolean(originTerm && returnTerm && originTerm.toLowerCase() !== returnTerm.toLowerCase());
+        const canChangeReturn = canChangeDrayageReturnTerminal(job);
+
+        return (
+          <div className="max-w-[195px] space-y-1">
+            <div
+              className="text-xs font-medium text-[var(--text-main)] truncate"
+              title={
+                job.jobPhase === 'L2'
+                  ? `L2 Drop-off Terminal: ${returnTerm || '—'}`
+                  : `L1 Pickup Terminal: ${job.terminalName || '—'}`
+              }
+            >
+              {job.jobPhase === 'L2' ? returnTerm || '—' : job.terminalName || '—'}
+            </div>
+            {isRedirected && (
+              <div
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/35 text-[10px] font-bold text-violet-300 max-w-full truncate"
+                title={
+                  job.jobPhase === 'L2'
+                    ? `Redirected L2 Empty Return from ${originTerm} ➜ ${returnTerm}`
+                    : `L2 Empty Return redirected from ${originTerm} ➜ ${returnTerm}`
+                }
+              >
+                <span>↪ L2 Return: {returnTerm}</span>
+              </div>
+            )}
+            <div>
+              {canChangeReturn ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenChangeReturnTerminal(job);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 hover:bg-cyan-500/25 text-[10px] font-bold transition-colors whitespace-nowrap"
+                  title="Unlocked: Change L2 Empty Return Terminal (Post-Port Exit through L2 - PENDING)"
+                >
+                  <ArrowUpDown className="w-2.5 h-2.5 shrink-0" />
+                  <span>Change Return</span>
+                </button>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[9px] font-semibold opacity-65 cursor-not-allowed whitespace-nowrap"
+                  title={
+                    job.jobPhase === 'L2'
+                      ? 'Locked: L2 Return Terminal is locked after L2 - PENDING (Vehicle Assigned)'
+                      : 'Locked: Change Return Terminal unlocks at EN_ROUTE_WAREHOUSE (after exiting the port)'
+                  }
+                >
+                  <Lock className="w-2.5 h-2.5 shrink-0" />
+                  <span>Return Locked</span>
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: 'demurrage',
@@ -1766,7 +1918,15 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk, portalMenuState?.job.id, handleOpenAssign, isJobCompletedOrSuperseded]);
+  ], [
+    getDemurrageRisk,
+    portalMenuState?.job.id,
+    handleOpenAssign,
+    handleOpenChangeReturnTerminal,
+    isJobCompletedOrSuperseded,
+    extractStartHourFromJob,
+    formatJobTokenWindowBadge,
+  ]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -2350,6 +2510,10 @@ export default function DrayageAssignmentPage() {
         );
         setSelectedJobIds([]);
       } else if (assigningJob) {
+        const selectedRetTerm =
+          canChangeDrayageReturnTerminal(assigningJob) && assignReturnTerminalId
+            ? terminals.find((t) => t.id === assignReturnTerminalId)
+            : undefined;
         const res = await fetch('/api/logistics/drayage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2365,6 +2529,8 @@ export default function DrayageAssignmentPage() {
             tokenNumber: tokenInput,
             pcsSlotStart,
             pcsSlotEnd,
+            returnTerminalId: selectedRetTerm?.id,
+            returnTerminalName: selectedRetTerm?.name,
             actor: user?.username || undefined,
           }),
         });
@@ -4100,6 +4266,43 @@ export default function DrayageAssignmentPage() {
                 />
               </div>
 
+              {/* L2 Empty Return Terminal Selector (Unlocked from EN_ROUTE_WAREHOUSE through L2 - PENDING) */}
+              {assigningJob && !isBogieAssign && !activeStreetTurnPair && canChangeDrayageReturnTerminal(assigningJob) && (
+                <div className="space-y-2 p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                      <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>L2 Empty Return Terminal (Drop-Off Destination)</span>
+                    </label>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-300">
+                      Unlocked · {assigningJob.jobPhase} - {assigningJob.status}
+                    </span>
+                  </div>
+                  <select
+                    value={assignReturnTerminalId}
+                    onChange={(e) => setAssignReturnTerminalId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-cyan-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-cyan-400 text-xs cursor-pointer"
+                  >
+                    {terminals.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.code} · {t.emirate})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                    <span>
+                      Origin Pickup Terminal:{' '}
+                      <strong className="text-[var(--text-main)]">
+                        {assigningJob.originTerminalName || assigningJob.terminalName}
+                      </strong>
+                    </span>
+                    <span className="text-cyan-300 font-semibold">
+                      Locks automatically once L2 reaches ASSIGNED
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Port Gate Token & PCS Pre-Dispatch Interlock + 2-Hour Slot Time Window */}
               <div className="space-y-3 p-3.5 rounded-xl bg-[var(--bg-main)]/60 border border-[var(--border-subtle)]">
                 <div className="flex items-center justify-between">
@@ -4288,6 +4491,148 @@ export default function DrayageAssignmentPage() {
                 className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors"
               >
                 Save Token & Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change L2 Return Terminal Modal */}
+      {changingReturnTerminalJob && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-cyan-500/40 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                  <ArrowUpDown className="w-4 h-4 text-cyan-400" />
+                  <span>Change L2 Empty Return Terminal ({changingReturnTerminalJob.jobCode})</span>
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Container <strong className="font-mono text-[var(--text-main)]">{changingReturnTerminalJob.containerNumber}</strong> ({changingReturnTerminalJob.containerSize}) · Consignee: <strong className="text-[var(--text-main)]">{changingReturnTerminalJob.warehouseName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Eligibility Window Banner */}
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-emerald-300 flex items-center gap-1.5 text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Unlocked Eligibility Window ({changingReturnTerminalJob.jobPhase} · {changingReturnTerminalJob.status})</span>
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    Unlocked from <code className="font-mono">EN_ROUTE_WAREHOUSE</code> (post-port exit) through <code className="font-mono">PLACED_AT_RAMP</code> / <code className="font-mono">PLACED_AT_YARD</code> / <code className="font-mono">MT_Reassign to Yard</code>, <code className="font-mono">READY_FOR_PICKUP</code>, and <code className="font-mono">L2 - PENDING</code>.
+                  </div>
+                </div>
+              </div>
+
+              {/* Origin vs Current Return Terminal Summary */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block">
+                    L1 Origin Pickup Terminal
+                  </span>
+                  <strong className="text-xs text-[var(--text-main)] block truncate">
+                    {changingReturnTerminalJob.originTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/30 space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-cyan-400 block">
+                    Current L2 Return Terminal
+                  </span>
+                  <strong className="text-xs text-cyan-300 block truncate">
+                    {changingReturnTerminalJob.returnTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Target L2 Return Terminal Selector */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  New L2 Empty Return Terminal *
+                </label>
+                <select
+                  value={newReturnTerminalId}
+                  onChange={(e) => setNewReturnTerminalId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-cyan-400 text-xs cursor-pointer"
+                >
+                  {terminals.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code} · {t.emirate})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Live Smart Analysis Impact Preview */}
+              {(() => {
+                const targetTerm = terminals.find((t) => t.id === newReturnTerminalId);
+                if (!targetTerm) return null;
+                const matchingOutboundL1 = unassignedJobs.filter(
+                  (j) =>
+                    j.jobPhase === 'L1' &&
+                    j.status === 'PENDING' &&
+                    !j.trailerDetached &&
+                    (j.terminalName || '').trim().toLowerCase() === targetTerm.name.trim().toLowerCase(),
+                );
+                return (
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 space-y-1">
+                    <div className="font-bold text-blue-300 flex items-center justify-between text-[11px]">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Smart Analysis Live Impact @ {targetTerm.name}</span>
+                      </span>
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                        {matchingOutboundL1.length} Pending L1 Pickup(s)
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)]">
+                      {matchingOutboundL1.length > 0
+                        ? `✓ Redirecting L2 return to ${targetTerm.name} unlocks immediate Port Terminal Reload / 3-Leg Daisy-Chain pairing with ${matchingOutboundL1.map((j) => j.jobCode).slice(0, 3).join(', ')} (0.0 km terminal handoff).`
+                        : `ℹ️ ${targetTerm.name} currently has 0 pending L1 pickups. Smart Backhaul Hold Advisor will monitor DO free time to prevent an empty return if needed.`}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Reason / Shipping Line Instruction */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  Redirection Reason / Shipping Line Instruction (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={returnTerminalReason}
+                  onChange={(e) => setReturnTerminalReason(e.target.value)}
+                  placeholder="e.g. Shipping line empty depot redirection / Berth congestion at origin terminal"
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-cyan-400 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingReturnTerminal || !newReturnTerminalId}
+                onClick={handleConfirmReturnTerminalChange}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-500 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {submittingReturnTerminal ? 'Updating Return Terminal...' : 'Confirm Return Terminal Change'}
               </button>
             </div>
           </div>

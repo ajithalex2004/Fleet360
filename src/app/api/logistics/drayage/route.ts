@@ -9,6 +9,7 @@ import {
   getDrayageWorkspaceData,
   createDrayageJobsBatch,
   updateDrayageJobDetails,
+  updateDrayageReturnTerminal,
   assignDrayageJob,
   updateDrayageJobExecutionStatus,
   activateL2EmptyReturnJob,
@@ -398,7 +399,32 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        case 'change_return_terminal': {
+          const jobId = String(body.jobId ?? '').trim();
+          if (!jobId) {
+            throw new Error('jobId is required to change the Return Terminal');
+          }
+          return updateDrayageReturnTerminal(tx, {
+            tenantId,
+            jobId,
+            returnTerminalId: body.returnTerminalId ? String(body.returnTerminalId).trim() : null,
+            returnTerminalName: body.returnTerminalName ? String(body.returnTerminalName).trim() : null,
+            reason: body.reason ? String(body.reason).trim() : null,
+            actor: dispatcherActor,
+          });
+        }
+
         case 'assign_job': {
+          if (body.returnTerminalId || body.returnTerminalName) {
+            await updateDrayageReturnTerminal(tx, {
+              tenantId,
+              jobId: String(body.jobId),
+              returnTerminalId: body.returnTerminalId ? String(body.returnTerminalId).trim() : null,
+              returnTerminalName: body.returnTerminalName ? String(body.returnTerminalName).trim() : null,
+              reason: body.returnTerminalReason ? String(body.returnTerminalReason).trim() : 'Set during L2 Fleet Assignment',
+              actor: dispatcherActor,
+            }).catch(() => {});
+          }
           return assignDrayageJob(tx, {
             tenantId,
             jobId: String(body.jobId),

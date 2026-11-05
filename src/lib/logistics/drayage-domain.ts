@@ -160,6 +160,8 @@ export interface DrayageContainer {
   customerName: string;
   terminalId: string | null;
   terminalName: string;
+  returnTerminalId?: string | null;
+  returnTerminalName?: string | null;
   warehouseId: string | null;
   warehouseName: string;
   doExpiryDate: string | null;
@@ -210,6 +212,10 @@ export interface DrayageJob {
   warehouseName: string;
   terminalId: string | null;
   terminalName: string;
+  returnTerminalId?: string | null;
+  returnTerminalName?: string | null;
+  originTerminalId?: string | null;
+  originTerminalName?: string | null;
   containerId: string | null;
   containerNumber: string;
   containerSize: string;
@@ -665,6 +671,82 @@ export function evaluateDispatcherJobReassignState(
   };
 }
 
+/**
+ * Determines whether "Change Return Terminal" is unlocked for a job:
+ * - Unlocked starting from EN_ROUTE_WAREHOUSE (as soon as the container exits the port on L1),
+ *   through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP,
+ *   and L2 - PENDING (before L2 Vehicle Assignment).
+ * - Locked before EN_ROUTE_WAREHOUSE on L1, and locked after L2 - PENDING (once L2 is ASSIGNED or later).
+ */
+export function canChangeDrayageReturnTerminal(job: {
+  jobPhase?: 'L1' | 'L2' | string | null;
+  jobCode?: string | null;
+  status?: string | null;
+  l2Activated?: boolean;
+  assignedVehicleId?: string | null;
+  assignedVehiclePlate?: string | null;
+}): boolean {
+  const phase =
+    String(job.jobPhase || '').trim().toUpperCase() === 'L2' ||
+    String(job.jobCode || '').toUpperCase().includes('-L2')
+      ? 'L2'
+      : 'L1';
+  const st = String(job.status || '').trim().toUpperCase();
+
+  if (phase === 'L2') {
+    return (
+      (st === 'PENDING' || st === 'WAITING_MT_RETURN') &&
+      !job.assignedVehicleId &&
+      !job.assignedVehiclePlate
+    );
+  }
+
+  if (job.l2Activated || ['COMPLETED', 'CANCELLED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED'].includes(st)) {
+    return false;
+  }
+
+  if (isDrayageReassignStatus(st)) {
+    return true;
+  }
+
+  const allowedL1Statuses = new Set([
+    'EN_ROUTE_WAREHOUSE',
+    'IN_TRANSIT',
+    'PLACED_AT_RAMP',
+    'REASSIGN_PLACED_AT_RAMP',
+    'PLACED_AT_YARD',
+    'REASSIGN_PLACED_AT_YARD',
+    'CONTAINER_DETACHED',
+    'TRAILER_DETACHED',
+    'REASSIGN_TRAILER_DETACHED',
+    'RE-ASSIGNED',
+    'READY_FOR_PICKUP',
+    'CONTAINER_OFFLOADED',
+    'WAITING_MT_RETURN',
+  ]);
+
+  return allowedL1Statuses.has(st);
+}
+
+export function parseReturnTerminalTag(notes?: string | null): {
+  returnTerminalId: string | null;
+  returnTerminalName: string;
+  originTerminalName?: string;
+} | null {
+  if (!notes) return null;
+  const m = String(notes).match(/\[RETURN_TERM:([^|]*)\|([^|\]]+)(?:\|FROM:([^\]]+))?\]/i);
+  if (!m) return null;
+  const returnTerminalId = m[1]?.trim() ? m[1].trim() : null;
+  const returnTerminalName = (m[2] || '').trim();
+  const originTerminalName = m[3]?.trim() ? m[3].trim() : undefined;
+  if (!returnTerminalName) return null;
+  return {
+    returnTerminalId,
+    returnTerminalName,
+    originTerminalName,
+  };
+}
+
 const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'ACCEPTED',
   'ARRIVED_AT_PORT',
@@ -701,6 +783,7 @@ const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
   'MT_REASSIGN_TO_RAMP',
   'READY_FOR_PICKUP',
   'CONTAINER_OFFLOADED',
+  'RETURN_TERMINAL_CHANGED',
   'CONTAINER_DROPPED',
   'EMPTY_DEPOSITED',
   'CONTAINER_DELIVERED',
@@ -2007,6 +2090,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     warehouseName: String(r.warehouse_name),
     terminalId: r.terminal_id ? String(r.terminal_id) : null,
     terminalName: String(r.terminal_name),
+    returnTerminalId: r.return_terminal_id ? String(r.return_terminal_id) : (r.terminal_id ? String(r.terminal_id) : null),
+    returnTerminalName: r.return_terminal_name ? String(r.return_terminal_name) : String(r.terminal_name),
+    originTerminalId: r.terminal_id ? String(r.terminal_id) : null,
+    originTerminalName: String(r.terminal_name),
     containerId: r.container_id ? String(r.container_id) : null,
     containerNumber: String(r.container_number),
     containerSize: String(r.container_size ?? '40HC'),
@@ -2114,6 +2201,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       customerName: String(r.customer_name),
       terminalId: r.terminal_id ? String(r.terminal_id) : null,
       terminalName: String(r.terminal_name),
+      returnTerminalId: r.return_terminal_id ? String(r.return_terminal_id) : (r.terminal_id ? String(r.terminal_id) : null),
+      returnTerminalName: r.return_terminal_name ? String(r.return_terminal_name) : String(r.terminal_name),
       warehouseId: r.warehouse_id ? String(r.warehouse_id) : null,
       warehouseName: String(r.warehouse_name),
       doExpiryDate: r.do_expiry_date ? new Date(String(r.do_expiry_date)).toISOString() : null,
@@ -2427,6 +2516,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'TRACTOR_SWAPPED_SLOT_RESCUE',
     'DO_REVALIDATED',
     'JOB_EDITED',
+    'RETURN_TERMINAL_CHANGED',
   ]);
   const SYSTEM_DISPATCHER_ACTORS = new Set([
     'customer alert engine (whatsapp + email)',
@@ -2446,8 +2536,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
 
   // Extract chronological GPS route path points (from 1-minute GPS_BREADCRUMB pings + tagged milestone logs)
   // and track the most recent mobile GPS coordinate per job so any untagged milestone log can inherit it.
+  // Also extract any RETURN_TERMINAL_CHANGED overrides so L1 and L2 jobs and Smart Analysis always reflect the redirected return terminal.
   const routePathByJobKey = new Map<string, DrayageRoutePoint[]>();
   const latestDriverCoordByJobKey = new Map<string, { lat: number; lng: number }>();
+  const returnTerminalOverrideByJobKey = new Map<
+    string,
+    { returnTerminalId: string | null; returnTerminalName: string; originTerminalName?: string }
+  >();
 
   const chronologicalRows = [...nonMilestoneLogRows].reverse();
   for (const l of chronologicalRows) {
@@ -2456,6 +2551,22 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const st = String(l.status || '').trim().toUpperCase();
     const notesStr = String(l.notes || '');
     const tsIso = l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString();
+
+    if (st === 'RETURN_TERMINAL_CHANGED') {
+      const parsedReturn = parseReturnTerminalTag(notesStr);
+      if (parsedReturn) {
+        if (jId) returnTerminalOverrideByJobKey.set(jId, parsedReturn);
+        if (jCode) {
+          returnTerminalOverrideByJobKey.set(jCode, parsedReturn);
+          returnTerminalOverrideByJobKey.set(jCode.toUpperCase(), parsedReturn);
+          if (jCode.toUpperCase().includes('-L1-')) {
+            returnTerminalOverrideByJobKey.set(jCode.toUpperCase().replace('-L1-', '-L2-'), parsedReturn);
+          } else if (jCode.toUpperCase().includes('-L2-')) {
+            returnTerminalOverrideByJobKey.set(jCode.toUpperCase().replace('-L2-', '-L1-'), parsedReturn);
+          }
+        }
+      }
+    }
 
     let ptLat: number | null = null;
     let ptLng: number | null = null;
@@ -2516,6 +2627,67 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }
 
   for (const j of jobs) {
+    const parentL1 =
+      j.jobPhase === 'L2'
+        ? jobs.find(
+            (cand) =>
+              cand.jobPhase === 'L1' &&
+              (cand.id === j.parentJobId ||
+                cand.jobCode.toUpperCase() === j.jobCode.toUpperCase().replace('-L2-', '-L1-')),
+          )
+        : undefined;
+
+    const rtOverride =
+      returnTerminalOverrideByJobKey.get(j.id) ||
+      returnTerminalOverrideByJobKey.get(j.jobCode) ||
+      returnTerminalOverrideByJobKey.get(j.jobCode.toUpperCase()) ||
+      (j.parentJobId ? returnTerminalOverrideByJobKey.get(j.parentJobId) : undefined);
+
+    if (j.jobPhase === 'L1') {
+      j.originTerminalId = j.terminalId;
+      j.originTerminalName = j.terminalName;
+      if (rtOverride) {
+        j.returnTerminalId = rtOverride.returnTerminalId ?? j.returnTerminalId ?? j.terminalId;
+        j.returnTerminalName = rtOverride.returnTerminalName || j.returnTerminalName || j.terminalName;
+      } else {
+        j.returnTerminalId = j.returnTerminalId || j.terminalId;
+        j.returnTerminalName = j.returnTerminalName || j.terminalName;
+      }
+    } else {
+      j.originTerminalId = parentL1?.terminalId ?? j.originTerminalId ?? j.terminalId;
+      j.originTerminalName =
+        rtOverride?.originTerminalName || parentL1?.terminalName || j.originTerminalName || j.terminalName;
+      const effectiveL2TermId =
+        rtOverride?.returnTerminalId ??
+        parentL1?.returnTerminalId ??
+        j.returnTerminalId ??
+        j.terminalId;
+      const effectiveL2TermName =
+        rtOverride?.returnTerminalName ||
+        parentL1?.returnTerminalName ||
+        j.returnTerminalName ||
+        j.terminalName;
+      j.returnTerminalId = effectiveL2TermId;
+      j.returnTerminalName = effectiveL2TermName;
+      if (effectiveL2TermName && effectiveL2TermName !== j.terminalName) {
+        j.terminalId = effectiveL2TermId;
+        j.terminalName = effectiveL2TermName;
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET terminal_id = $3,
+                    terminal_name = $4,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            effectiveL2TermId,
+            effectiveL2TermName,
+          ).catch(() => {}),
+        );
+      }
+    }
+
     const path = routePathByJobKey.get(j.id) || routePathByJobKey.get(j.jobCode) || [];
     if (
       j.currentLat != null &&
@@ -2622,6 +2794,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       const finalCleanedNotes = cleanedNotes
         .replace(/\s*·?\s*\[LOC:[^\]]+\]/gi, '')
         .replace(/\s*·?\s*\[(?:LAT|LNG|SPD):[^\]]+\]/gi, '')
+        .replace(/\s*·?\s*\[RETURN_TERM:[^\]]+\]/gi, '')
         .replace(/^\s*[·\-|]+\s*/, '')
         .replace(/\s*[·\-|]+\s*$/, '')
         .trim();
@@ -2864,6 +3037,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
                 (j.jobPhase === 'L2' && j.jobCode.toUpperCase() === act.l2JobCode.toUpperCase()),
             );
             if (!alreadyInJobs) {
+              const targetReturnTermId = l1InMem.returnTerminalId || l1InMem.terminalId;
+              const targetReturnTermName = l1InMem.returnTerminalName || l1InMem.terminalName;
               jobs.unshift({
                 ...l1InMem,
                 id: act.l2JobId,
@@ -2872,6 +3047,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
                 parentJobId: l1InMem.id,
                 status: 'PENDING',
                 priority: 'HIGH',
+                terminalId: targetReturnTermId,
+                terminalName: targetReturnTermName,
+                returnTerminalId: targetReturnTermId,
+                returnTerminalName: targetReturnTermName,
+                originTerminalId: l1InMem.originTerminalId || l1InMem.terminalId,
+                originTerminalName: l1InMem.originTerminalName || l1InMem.terminalName,
                 assignedVehicleId: null,
                 assignedVehiclePlate: null,
                 assignedDriverId: null,
@@ -5542,7 +5723,39 @@ export async function activateL2EmptyReturnJob(
 
   const shouldPreAssign = Boolean(args.preAssignTractor);
 
-  // Create L2 Empty Return Job (from Warehouse back to Port Terminal)
+  // Resolve any redirected L2 Return Terminal set during L1 (EN_ROUTE_WAREHOUSE -> PLACED_AT_RAMP/YARD -> READY_FOR_PICKUP)
+  let targetReturnTerminalId: string | null = l1.return_terminal_id
+    ? String(l1.return_terminal_id)
+    : l1.terminal_id
+    ? String(l1.terminal_id)
+    : null;
+  let targetReturnTerminalName: string = l1.return_terminal_name
+    ? String(l1.return_terminal_name)
+    : String(l1.terminal_name);
+
+  const rtLogRows = await db
+    .$queryRawUnsafe<Array<{ notes: string }>>(
+      `SELECT notes
+         FROM logistics_drayage_status_logs
+        WHERE tenant_id = $1
+          AND (job_id = $2 OR UPPER(job_code) = UPPER($3))
+          AND status = 'RETURN_TERMINAL_CHANGED'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      args.tenantId,
+      args.l1JobId,
+      String(l1.job_code),
+    )
+    .catch(() => []);
+  if (rtLogRows[0]?.notes) {
+    const parsedRt = parseReturnTerminalTag(rtLogRows[0].notes);
+    if (parsedRt) {
+      targetReturnTerminalId = parsedRt.returnTerminalId ?? targetReturnTerminalId;
+      targetReturnTerminalName = parsedRt.returnTerminalName || targetReturnTerminalName;
+    }
+  }
+
+  // Create L2 Empty Return Job (from Warehouse back to Target Return Terminal)
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_jobs (
       id, tenant_id, job_code, job_phase, parent_job_id, shipment_type, status, priority,
@@ -5568,8 +5781,8 @@ export async function activateL2EmptyReturnJob(
     String(l1.customer_name),
     l1.warehouse_id ? String(l1.warehouse_id) : null,
     String(l1.warehouse_name),
-    l1.terminal_id ? String(l1.terminal_id) : null,
-    String(l1.terminal_name),
+    targetReturnTerminalId,
+    targetReturnTerminalName,
     l1.container_id ? String(l1.container_id) : null,
     String(l1.container_number),
     String(l1.container_size ?? '40HC'),
@@ -5579,8 +5792,23 @@ export async function activateL2EmptyReturnJob(
     l1.assigned_trailer_plate ? String(l1.assigned_trailer_plate) : null,
     rampLat,
     rampLng,
-    `Auto-generated L2 Empty Container Return from ${l1.job_code}`,
+    targetReturnTerminalName !== String(l1.terminal_name)
+      ? `Auto-generated L2 Empty Container Return from ${l1.job_code} (Return Terminal Redirected: ${l1.terminal_name} → ${targetReturnTerminalName})`
+      : `Auto-generated L2 Empty Container Return from ${l1.job_code}`,
   );
+
+  await db
+    .$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET return_terminal_id = $3,
+              return_terminal_name = $4
+        WHERE id = $1 AND tenant_id = $2`,
+      l2Id,
+      args.tenantId,
+      targetReturnTerminalId,
+      targetReturnTerminalName,
+    )
+    .catch(() => {});
 
   let preAssignedInfo: {
     vehiclePlate?: string;
@@ -5602,7 +5830,7 @@ export async function activateL2EmptyReturnJob(
     });
 
     if (bestMatch) {
-      const termLower = String(l1.terminal_name ?? '').toLowerCase();
+      const termLower = String(targetReturnTerminalName ?? '').toLowerCase();
       const tokenPrefix = termLower.includes('khalifa') || termLower.includes('ad ports') ? 'MQT-L2' : 'DPW-L2';
       const tokenNumber = `${tokenPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -5651,7 +5879,7 @@ export async function activateL2EmptyReturnJob(
 
   const logNote = preAssignedInfo
     ? `L2 Empty Return ${l2Code} activated & Pre-Assigned to ${preAssignedInfo.vehiclePlate} (${preAssignedInfo.driverName}) via 4-Factor Telematics Match [${preAssignedInfo.matchScorePct}% Match · ${preAssignedInfo.distanceKm} km]`
-    : `L2 Empty Container Return ${l2Code} activated for container ${l1.container_number}`;
+    : `L2 Empty Container Return ${l2Code} activated for container ${l1.container_number} (Return Terminal: ${targetReturnTerminalName})`;
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -5670,6 +5898,223 @@ export async function activateL2EmptyReturnJob(
     l2JobCode: l2Code,
     preAssigned: Boolean(preAssignedInfo),
     ...preAssignedInfo,
+  };
+}
+
+export async function updateDrayageReturnTerminal(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    returnTerminalId?: string | null;
+    returnTerminalName?: string | null;
+    reason?: string | null;
+    actor?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const jobPhase =
+    String(job.job_phase || '').trim().toUpperCase() === 'L2' ||
+    String(job.job_code || '').toUpperCase().includes('-L2')
+      ? 'L2'
+      : 'L1';
+  const jobStatus = String(job.status || 'PENDING').trim();
+
+  // Enforce the exact status window:
+  // Unlocked starting from EN_ROUTE_WAREHOUSE on L1, through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP, and L2 - PENDING.
+  // Locked before EN_ROUTE_WAREHOUSE on L1 and locked after L2 - PENDING.
+  const isAllowed = canChangeDrayageReturnTerminal({
+    jobPhase,
+    jobCode: String(job.job_code || ''),
+    status: jobStatus,
+    l2Activated: Boolean(job.l2_activated),
+    assignedVehicleId: job.assigned_vehicle_id ? String(job.assigned_vehicle_id) : null,
+    assignedVehiclePlate: job.assigned_vehicle_plate ? String(job.assigned_vehicle_plate) : null,
+  });
+
+  if (!isAllowed) {
+    throw new Error(
+      jobPhase === 'L1'
+        ? `Return Terminal can only be changed after the container exits the port on L1 (starting from EN_ROUTE_WAREHOUSE through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP). Current status: ${jobStatus}.`
+        : `Return Terminal for L2 jobs can only be changed while in PENDING status (before L2 Vehicle Assignment). Current status: ${jobStatus}.`,
+    );
+  }
+
+  // Resolve target terminal from Terminal Master
+  let resolvedTerminalId: string | null = args.returnTerminalId ? String(args.returnTerminalId).trim() : null;
+  let resolvedTerminalName: string = args.returnTerminalName ? String(args.returnTerminalName).trim() : '';
+
+  if (resolvedTerminalId) {
+    const termRows = await db
+      .$queryRawUnsafe<Array<{ id: string; name: string }>>(
+        `SELECT id, name FROM logistics_drayage_terminals WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        resolvedTerminalId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (termRows[0]) {
+      resolvedTerminalId = String(termRows[0].id);
+      resolvedTerminalName = String(termRows[0].name);
+    }
+  } else if (resolvedTerminalName) {
+    const termRows = await db
+      .$queryRawUnsafe<Array<{ id: string; name: string }>>(
+        `SELECT id, name FROM logistics_drayage_terminals WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1`,
+        args.tenantId,
+        resolvedTerminalName,
+      )
+      .catch(() => []);
+    if (termRows[0]) {
+      resolvedTerminalId = String(termRows[0].id);
+      resolvedTerminalName = String(termRows[0].name);
+    }
+  }
+
+  if (!resolvedTerminalName) {
+    throw new Error('Please select a valid Return Terminal.');
+  }
+
+  // Determine previous / origin terminal name for audit logging
+  let originTerminalName = String(job.terminal_name || 'Port Terminal');
+  if (jobPhase === 'L2' && job.parent_job_id) {
+    const parentRows = await db
+      .$queryRawUnsafe<Array<{ terminal_name: string }>>(
+        `SELECT terminal_name FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        String(job.parent_job_id),
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (parentRows[0]?.terminal_name) {
+      originTerminalName = String(parentRows[0].terminal_name);
+    }
+  }
+
+  const prevReturnRows = await db
+    .$queryRawUnsafe<Array<{ notes: string }>>(
+      `SELECT notes
+         FROM logistics_drayage_status_logs
+        WHERE tenant_id = $1
+          AND (job_id = $2 OR UPPER(job_code) = UPPER($3))
+          AND status = 'RETURN_TERMINAL_CHANGED'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      args.tenantId,
+      args.jobId,
+      String(job.job_code),
+    )
+    .catch(() => []);
+  const prevParsed = prevReturnRows[0]?.notes ? parseReturnTerminalTag(prevReturnRows[0].notes) : null;
+  const previousEffectiveTerminalName =
+    prevParsed?.returnTerminalName ||
+    (job.return_terminal_name ? String(job.return_terminal_name) : String(job.terminal_name));
+
+  // 1. If L2 job (in PENDING status), update terminal_id and terminal_name directly on the L2 job
+  if (jobPhase === 'L2') {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET terminal_id = $3,
+              terminal_name = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+      resolvedTerminalId,
+      resolvedTerminalName,
+    );
+  } else {
+    // Touch updated_at on L1 job so caches refresh
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+    );
+    // Also update any already-spawned PENDING L2 child job if one exists
+    const l2Code = String(job.job_code).replace('-L1-', '-L2-');
+    await db
+      .$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET terminal_id = $4,
+                terminal_name = $5,
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND job_phase = 'L2'
+            AND status = 'PENDING'
+            AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))`,
+        args.tenantId,
+        args.jobId,
+        l2Code,
+        resolvedTerminalId,
+        resolvedTerminalName,
+      )
+      .catch(() => {});
+  }
+
+  // 2. Update return_terminal_id / return_terminal_name columns if migration is applied
+  await db
+    .$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET return_terminal_id = $3,
+              return_terminal_name = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+      resolvedTerminalId,
+      resolvedTerminalName,
+    )
+    .catch(() => {});
+
+  if (job.container_id) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE logistics_drayage_containers
+            SET return_terminal_id = $3,
+                return_terminal_name = $4,
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        String(job.container_id),
+        args.tenantId,
+        resolvedTerminalId,
+        resolvedTerminalName,
+      )
+      .catch(() => {});
+  }
+
+  // 3. Record RETURN_TERMINAL_CHANGED in logistics_drayage_status_logs (both for Timeline Audit & Zero-DDL persistence)
+  const reasonSuffix = args.reason && String(args.reason).trim() ? ` — Reason: ${String(args.reason).trim()}` : '';
+  const structuredTag = `[RETURN_TERM:${resolvedTerminalId || ''}|${resolvedTerminalName}|FROM:${originTerminalName}]`;
+  const auditNote = `${structuredTag} L2 Empty Return Terminal changed: ${previousEffectiveTerminalName} → ${resolvedTerminalName} (Origin L1 Pickup: ${originTerminalName})${reasonSuffix}`;
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'RETURN_TERMINAL_CHANGED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    auditNote,
+    args.actor || 'Dispatch Console',
+  );
+
+  return {
+    ok: true,
+    jobId: args.jobId,
+    jobCode: String(job.job_code),
+    jobPhase,
+    originTerminalName,
+    previousReturnTerminalName: previousEffectiveTerminalName,
+    returnTerminalId: resolvedTerminalId,
+    returnTerminalName: resolvedTerminalName,
   };
 }
 

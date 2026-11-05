@@ -36,6 +36,9 @@ import {
   Share2,
   MapPin,
   Pencil,
+  ArrowUpDown,
+  Lock,
+  X,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
@@ -46,6 +49,7 @@ import {
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  canChangeDrayageReturnTerminal,
   evaluateDispatcherJobReassignState,
   isDrayageReassignStatus,
   resolveDirectionalReassignStatus,
@@ -89,6 +93,11 @@ interface DrayageJob {
   warehouseName: string;
   terminalId?: string | null;
   terminalName: string;
+  returnTerminalId?: string | null;
+  returnTerminalName?: string | null;
+  originTerminalId?: string | null;
+  originTerminalName?: string | null;
+  assignedVehicleId?: string | null;
   containerId: string | null;
   containerNumber: string;
   containerSize: string;
@@ -362,11 +371,76 @@ export default function DrayageJobTrackingPage() {
   const [nowTickMs, setNowTickMs] = useState(() => Date.now());
   const alertedEtcJobsRef = useRef<Record<string, 'T15' | 'EXPIRED'>>({});
 
+  // Return Terminal Redirection Modal State
+  const [changingReturnTerminalJob, setChangingReturnTerminalJob] = useState<DrayageJob | null>(null);
+  const [newReturnTerminalId, setNewReturnTerminalId] = useState('');
+  const [returnTerminalReason, setReturnTerminalReason] = useState('');
+  const [submittingReturnTerminal, setSubmittingReturnTerminal] = useState(false);
+
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4500);
+  };
+
+  const handleOpenChangeReturnTerminal = useCallback(
+    (job: DrayageJob) => {
+      if (!canChangeDrayageReturnTerminal(job)) {
+        showToast(
+          'error',
+          `Return Terminal is locked on ${job.jobCode} (${job.status}). It is only unlocked from EN_ROUTE_WAREHOUSE (post-port exit) through Warehouse Ramp/Yard/Ready for Pickup and L2 - PENDING.`,
+        );
+        return;
+      }
+      const currentRetTermName = (job.returnTerminalName || job.terminalName || '').trim();
+      const matchedTerm = terminals.find(
+        (t) =>
+          (job.returnTerminalId && t.id === job.returnTerminalId) ||
+          t.name.trim().toLowerCase() === currentRetTermName.toLowerCase(),
+      );
+      setChangingReturnTerminalJob(job);
+      setNewReturnTerminalId(matchedTerm?.id || terminals[0]?.id || '');
+      setReturnTerminalReason('');
+    },
+    [terminals],
+  );
+
+  const handleConfirmReturnTerminalChange = async () => {
+    if (!changingReturnTerminalJob) return;
+    const selectedTerm = terminals.find((t) => t.id === newReturnTerminalId);
+    if (!selectedTerm) {
+      showToast('error', 'Please select a target Return Terminal');
+      return;
+    }
+    try {
+      setSubmittingReturnTerminal(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'change_return_terminal',
+          jobId: changingReturnTerminalJob.id,
+          returnTerminalId: selectedTerm.id,
+          returnTerminalName: selectedTerm.name,
+          reason: returnTerminalReason.trim() || undefined,
+          actor: user?.username || 'Dispatcher',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 Return Terminal');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        `↪ Redirected L2 Empty Return Terminal for ${changingReturnTerminalJob.containerNumber} (${changingReturnTerminalJob.jobCode}) from ${data.originTerminalName} ➜ ${data.returnTerminalName}!`,
+      );
+      setChangingReturnTerminalJob(null);
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error updating Return Terminal');
+    } finally {
+      setSubmittingReturnTerminal(false);
+    }
   };
 
   const loadData = useCallback(async (forceFreshInput?: boolean | unknown) => {
@@ -1524,8 +1598,18 @@ export default function DrayageJobTrackingPage() {
                   </div>
 
                   <div className="text-[11px] text-[var(--text-muted)] truncate mt-1">
-                    {job.terminalName} → {job.warehouseName}
+                    {job.jobPhase === 'L2'
+                      ? `${job.warehouseName} → ${job.returnTerminalName || job.terminalName}`
+                      : `${job.terminalName} → ${job.warehouseName}`}
                   </div>
+                  {job.returnTerminalName &&
+                    job.originTerminalName &&
+                    job.returnTerminalName.trim().toLowerCase() !==
+                      job.originTerminalName.trim().toLowerCase() && (
+                      <div className="text-[10px] font-semibold text-violet-400 truncate mt-0.5">
+                        ↪ L2 Return: {job.returnTerminalName}
+                      </div>
+                    )}
 
                   <div className="text-[10px] text-[var(--text-muted)] pt-2 mt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
                     <span>{job.assignedVehiclePlate || 'Tractor unassigned'}</span>
@@ -1622,6 +1706,35 @@ export default function DrayageJobTrackingPage() {
                       <Pencil className="w-3.5 h-3.5" />
                       Edit Job
                     </button>
+                    {(() => {
+                      const canChangeRet = canChangeDrayageReturnTerminal(activeJob);
+                      return (
+                        <button
+                          type="button"
+                          disabled={!canChangeRet}
+                          onClick={() => handleOpenChangeReturnTerminal(activeJob)}
+                          title={
+                            canChangeRet
+                              ? 'Unlocked: Change L2 Empty Return Terminal (Post-Port Exit through L2 - PENDING)'
+                              : activeJob.jobPhase === 'L2'
+                              ? 'Locked: L2 Return Terminal is locked after L2 - PENDING (Vehicle Assigned)'
+                              : 'Locked: Change Return Terminal unlocks starting at EN_ROUTE_WAREHOUSE (after exiting the port)'
+                          }
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${
+                            canChangeRet
+                              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25 cursor-pointer'
+                              : 'bg-slate-500/10 border-[var(--border-subtle)] text-[var(--text-muted)] opacity-50 cursor-not-allowed'
+                          }`}
+                        >
+                          {canChangeRet ? (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400" />
+                          ) : (
+                            <Lock className="w-3.5 h-3.5" />
+                          )}
+                          <span>Change Return Terminal</span>
+                        </button>
+                      );
+                    })()}
                     <button
                       onClick={() => setShowLegModal(true)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500/40 transition-colors"
@@ -1695,6 +1808,75 @@ export default function DrayageJobTrackingPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Origin Pickup Terminal & L2 Empty Return Terminal Bar */}
+                {(() => {
+                  const originTerm = (activeJob.originTerminalName || activeJob.terminalName || '').trim();
+                  const returnTerm = (activeJob.returnTerminalName || activeJob.terminalName || '').trim();
+                  const isRedirected = Boolean(
+                    originTerm && returnTerm && originTerm.toLowerCase() !== returnTerm.toLowerCase(),
+                  );
+                  const canChangeRet = canChangeDrayageReturnTerminal(activeJob);
+                  return (
+                    <div
+                      className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                        isRedirected
+                          ? 'bg-violet-500/10 border-violet-500/35'
+                          : 'bg-[var(--bg-main)] border-[var(--border-subtle)]'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="text-[var(--text-muted)]">L1 Origin Terminal:</span>
+                          <strong className="text-[var(--text-main)]">{originTerm}</strong>
+                        </div>
+                        <span className="text-[var(--text-muted)]">•</span>
+                        <div className="flex items-center gap-1.5">
+                          <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="text-[var(--text-muted)]">L2 Empty Return Terminal:</span>
+                          <strong className={isRedirected ? 'text-violet-300' : 'text-[var(--text-main)]'}>
+                            {returnTerm}
+                          </strong>
+                          {isRedirected && (
+                            <span className="px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-500/40 text-[10px] font-bold text-violet-300">
+                              Redirected
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {canChangeRet ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenChangeReturnTerminal(activeJob)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25 text-[11px] font-bold transition-colors"
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                            <span>Change Return Terminal</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-500/10 border border-[var(--border-subtle)] text-[10px] font-semibold text-[var(--text-muted)] opacity-70"
+                            title={
+                              activeJob.jobPhase === 'L2'
+                                ? 'Locked after L2 - PENDING'
+                                : 'Unlocks starting from EN_ROUTE_WAREHOUSE (after exiting the port)'
+                            }
+                          >
+                            <Lock className="w-3 h-3" />
+                            <span>
+                              {activeJob.jobPhase === 'L2'
+                                ? 'Locked (Past L2 - PENDING)'
+                                : 'Locked until EN_ROUTE_WAREHOUSE'}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* =========================================================================
                     DEMURRAGE, DETENTION & PORT SLOT RISK INTELLIGENCE PANEL (Shown on clicking Urgent Demurrage Alert)
@@ -3134,6 +3316,113 @@ export default function DrayageJobTrackingPage() {
                 className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
                 Confirm & Start Timer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change L2 Return Terminal Modal */}
+      {changingReturnTerminalJob && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-cyan-500/40 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                  <ArrowUpDown className="w-4 h-4 text-cyan-400" />
+                  <span>Change L2 Empty Return Terminal ({changingReturnTerminalJob.jobCode})</span>
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Container <strong className="font-mono text-[var(--text-main)]">{changingReturnTerminalJob.containerNumber}</strong> ({changingReturnTerminalJob.containerSize}) · Consignee: <strong className="text-[var(--text-main)]">{changingReturnTerminalJob.warehouseName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-emerald-300 flex items-center gap-1.5 text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Unlocked Eligibility Window ({changingReturnTerminalJob.jobPhase} · {changingReturnTerminalJob.status})</span>
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    Unlocked from <code className="font-mono">EN_ROUTE_WAREHOUSE</code> (post-port exit) through <code className="font-mono">PLACED_AT_RAMP</code> / <code className="font-mono">PLACED_AT_YARD</code> / <code className="font-mono">MT_Reassign to Yard</code>, <code className="font-mono">READY_FOR_PICKUP</code>, and <code className="font-mono">L2 - PENDING</code>.
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block">
+                    L1 Origin Pickup Terminal
+                  </span>
+                  <strong className="text-xs text-[var(--text-main)] block truncate">
+                    {changingReturnTerminalJob.originTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/30 space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-cyan-400 block">
+                    Current L2 Return Terminal
+                  </span>
+                  <strong className="text-xs text-cyan-300 block truncate">
+                    {changingReturnTerminalJob.returnTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  New L2 Empty Return Terminal *
+                </label>
+                <select
+                  value={newReturnTerminalId}
+                  onChange={(e) => setNewReturnTerminalId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-cyan-400 text-xs cursor-pointer"
+                >
+                  {terminals.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code} · {t.emirate})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  Redirection Reason / Shipping Line Instruction (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={returnTerminalReason}
+                  onChange={(e) => setReturnTerminalReason(e.target.value)}
+                  placeholder="e.g. Shipping line empty depot redirection / Berth congestion at origin terminal"
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-cyan-400 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingReturnTerminal || !newReturnTerminalId}
+                onClick={handleConfirmReturnTerminalChange}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-500 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {submittingReturnTerminal ? 'Updating Return Terminal...' : 'Confirm Return Terminal Change'}
               </button>
             </div>
           </div>
