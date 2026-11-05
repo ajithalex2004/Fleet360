@@ -85,6 +85,7 @@ interface ConsigneeDestinationModalProps {
   warehouses?: DrayageWarehouseData[];
   onClientCreated?: (newClient: DrayageClientOption) => void;
   defaultClientId?: string | null;
+  forceNewFacility?: boolean;
 }
 
 const DEFAULT_INDUSTRIAL_ZONES = [
@@ -147,6 +148,7 @@ export function ConsigneeDestinationModal({
   warehouses,
   onClientCreated,
   defaultClientId,
+  forceNewFacility = false,
 }: ConsigneeDestinationModalProps) {
   // Main form state
   const [selectedExistingWarehouseId, setSelectedExistingWarehouseId] = useState<string>('');
@@ -358,7 +360,7 @@ export function ConsigneeDestinationModal({
       setCustomerName(initialCName);
 
       const clientWhs = getWarehousesForClient(initialCid, initialCName);
-      if (clientWhs.length > 0) {
+      if (clientWhs.length > 0 && !forceNewFacility) {
         applyWarehouseToForm(clientWhs[0]);
       } else {
         setSelectedExistingWarehouseId('');
@@ -379,7 +381,7 @@ export function ConsigneeDestinationModal({
         setGeofenceCoordinatesJson('[]');
       }
     }
-  }, [isOpen, initialData, clients, defaultClientId]);
+  }, [isOpen, initialData, clients, defaultClientId, forceNewFacility]);
 
   // Handle client selection change
   const handleClientChange = (cId: string) => {

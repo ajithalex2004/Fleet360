@@ -521,6 +521,7 @@ export default function DrayageAssignmentPage() {
   const [assigningJob, setAssigningJob] = useState<DrayageJob | null>(null);
   const [editingTokenJob, setEditingTokenJob] = useState<DrayageJob | null>(null);
   const [newTokenValue, setNewTokenValue] = useState('');
+  const [editTokenSlotStartHour, setEditTokenSlotStartHour] = useState<number>(6);
   const [isBogieAssign, setIsBogieAssign] = useState(false);
   const [activeStreetTurnPair, setActiveStreetTurnPair] = useState<StreetTurnRecommendation | null>(null);
   const [holdLeg3InModal, setHoldLeg3InModal] = useState<boolean>(true);
@@ -530,7 +531,66 @@ export default function DrayageAssignmentPage() {
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedTrailerId, setSelectedTrailerId] = useState('');
   const [tokenInput, setTokenInput] = useState('');
+  const [tokenSlotStartHour, setTokenSlotStartHour] = useState<number>(6);
   const [submittingAssign, setSubmittingAssign] = useState(false);
+
+  const formatShortHourAmPm = useCallback((hour24: number): string => {
+    const h = ((hour24 % 24) + 24) % 24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12} ${ampm}`;
+  }, []);
+
+  const formatFullHourAmPm = useCallback((hour24: number): string => {
+    const h = ((hour24 % 24) + 24) % 24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:00 ${ampm}`;
+  }, []);
+
+  const formatTwoHourWindowLabel = useCallback(
+    (startHour: number): string => {
+      const s = ((startHour % 24) + 24) % 24;
+      const e = (s + 2) % 24;
+      return `${formatShortHourAmPm(s)} to ${formatShortHourAmPm(e)}`;
+    },
+    [formatShortHourAmPm],
+  );
+
+  const buildSlotWindowIsoPair = useCallback((startHour: number): { pcsSlotStart: string; pcsSlotEnd: string } => {
+    const s = ((startHour % 24) + 24) % 24;
+    const startDt = new Date();
+    startDt.setHours(s, 0, 0, 0);
+    const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+    return {
+      pcsSlotStart: startDt.toISOString(),
+      pcsSlotEnd: endDt.toISOString(),
+    };
+  }, []);
+
+  const extractStartHourFromJob = useCallback((job: DrayageJob | null | undefined): number => {
+    if (job?.pcsSlotStart) {
+      const dt = new Date(job.pcsSlotStart);
+      if (!Number.isNaN(dt.getTime())) {
+        return dt.getHours();
+      }
+    }
+    return 6; // Default 6 AM to 8 AM
+  }, []);
+
+  const formatJobTokenWindowBadge = useCallback(
+    (job: DrayageJob): string | null => {
+      if (job.pcsSlotStart && job.pcsSlotEnd) {
+        const sDt = new Date(job.pcsSlotStart);
+        const eDt = new Date(job.pcsSlotEnd);
+        if (!Number.isNaN(sDt.getTime()) && !Number.isNaN(eDt.getTime())) {
+          return `${formatShortHourAmPm(sDt.getHours())} to ${formatShortHourAmPm(eDt.getHours())}`;
+        }
+      }
+      return null;
+    },
+    [formatShortHourAmPm],
+  );
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -1331,9 +1391,10 @@ export default function DrayageAssignmentPage() {
       setSelectedVehicleId('');
       setSelectedDriverId('');
       setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
-      setTokenInput('');
+      setTokenInput(job.tokenNumber || '');
+      setTokenSlotStartHour(extractStartHourFromJob(job));
     },
-    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded],
+    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded, extractStartHourFromJob],
   );
 
   useEffect(() => {
@@ -1437,39 +1498,52 @@ export default function DrayageAssignmentPage() {
     {
       key: 'tokenNumber',
       header: 'Port Gate Token & PCS',
-      accessor: (j) => j.tokenNumber || 'No Token',
+      accessor: (j) =>
+        `${j.tokenNumber || 'No Token'} ${formatJobTokenWindowBadge(j) || ''}`.trim(),
       filter: 'text',
-      render: (job) => (
-        <div className="space-y-1">
-          {job.tokenNumber ? (
-            <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
-              <Key className="w-3 h-3 shrink-0" />
-              <span>{job.tokenNumber}</span>
-              <button
-                onClick={() => {
-                  setEditingTokenJob(job);
-                  setNewTokenValue(job.tokenNumber || '');
-                }}
-                className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
-              >
-                Edit
-              </button>
-            </div>
-          ) : (
-            <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
-          )}
-          {job.inspectionStatus === 'HOLD_PENDING' && (
-            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-              Customs Hold Pending
-            </span>
-          )}
-          {job.doStatus === 'EXPIRED' && (
-            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
-              eDO Expired
-            </span>
-          )}
-        </div>
-      ),
+      render: (job) => {
+        const slotWindowBadge = formatJobTokenWindowBadge(job);
+        return (
+          <div className="space-y-1">
+            {job.tokenNumber ? (
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
+                  <Key className="w-3 h-3 shrink-0" />
+                  <span>{job.tokenNumber}</span>
+                  <button
+                    onClick={() => {
+                      setEditingTokenJob(job);
+                      setNewTokenValue(job.tokenNumber || '');
+                      setEditTokenSlotStartHour(extractStartHourFromJob(job));
+                    }}
+                    className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
+                  >
+                    Edit
+                  </button>
+                </div>
+                {slotWindowBadge && (
+                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/25 text-[10px] font-semibold text-blue-300">
+                    <Clock className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                    <span>{slotWindowBadge}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
+            )}
+            {job.inspectionStatus === 'HOLD_PENDING' && (
+              <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                Customs Hold Pending
+              </span>
+            )}
+            {job.doStatus === 'EXPIRED' && (
+              <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                eDO Expired
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'assignedAssets',
@@ -2103,6 +2177,7 @@ export default function DrayageAssignmentPage() {
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
     setTokenInput(combo.job1.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(combo.job1));
   };
 
   const handleSwapBogieSequence = () => {
@@ -2132,7 +2207,8 @@ export default function DrayageAssignmentPage() {
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(resolveLinkedTrailerIdForJob(pair.inboundJob) || rec.trailerId);
-    setTokenInput('');
+    setTokenInput(pair.inboundJob.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(pair.inboundJob));
   };
 
   const handleToggleBackhaulHold = async (job: DrayageJob, hold: boolean) => {
@@ -2182,6 +2258,7 @@ export default function DrayageAssignmentPage() {
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
     setTokenInput(firstJob.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(firstJob));
   };
 
   // Confirm single / bogie assignment modal
@@ -2194,6 +2271,8 @@ export default function DrayageAssignmentPage() {
     const veh = vehicles.find((v) => v.id === selectedVehicleId);
     const drv = drivers.find((d) => d.id === selectedDriverId);
     const tr = trailers.find((t) => t.id === effectiveTrailerId);
+    const { pcsSlotStart, pcsSlotEnd } = buildSlotWindowIsoPair(tokenSlotStartHour);
+    const slotWindowLabel = formatTwoHourWindowLabel(tokenSlotStartHour);
 
     try {
       setSubmittingAssign(true);
@@ -2215,6 +2294,8 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
             actor: user?.username || undefined,
           }),
         });
@@ -2230,7 +2311,7 @@ export default function DrayageAssignmentPage() {
               : `Street-Turn ${data.streetTurnRef}`;
         showToast(
           'success',
-          `⚡ ${modeLabel} executed! Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂) & AED ${data.fuelSavingsAed}!`
+          `⚡ ${modeLabel} executed! Window: ${slotWindowLabel} · Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂)!`
         );
         setActiveStreetTurnPair(null);
         setSelectedJobIds([]);
@@ -2256,6 +2337,8 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
             actor: user?.username || undefined,
           }),
         });
@@ -2263,7 +2346,7 @@ export default function DrayageAssignmentPage() {
         if (!res.ok) throw new Error(data.error || 'Failed to assign Bogie trip');
         showToast(
           'success',
-          `⚡ Dual-20FT Bogie dispatch ${data.bogieRef} confirmed! Total Payload: ${(data.totalPayloadKg / 1000).toFixed(1)}T (${data.isWeightCompliant ? 'Road Compliant' : 'Overweight Risk'}).`
+          `⚡ Dual-20FT Bogie dispatch ${data.bogieRef} confirmed (${slotWindowLabel})! Total Payload: ${(data.totalPayloadKg / 1000).toFixed(1)}T.`
         );
         setSelectedJobIds([]);
       } else if (assigningJob) {
@@ -2280,12 +2363,14 @@ export default function DrayageAssignmentPage() {
             trailerId: effectiveTrailerId,
             trailerPlate: tr?.plateNumber || assigningJob?.assignedTrailerPlate || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
             actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to assign job');
-        showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber}!`);
+        showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber} (${slotWindowLabel})!`);
       }
       setAssigningJob(null);
       setActiveStreetTurnPair(null);
@@ -2595,6 +2680,8 @@ export default function DrayageAssignmentPage() {
   const handleUpdateToken = async () => {
     if (!editingTokenJob || !newTokenValue.trim()) return;
     try {
+      const { pcsSlotStart, pcsSlotEnd } = buildSlotWindowIsoPair(editTokenSlotStartHour);
+      const slotWindowLabel = formatTwoHourWindowLabel(editTokenSlotStartHour);
       const res = await fetch('/api/logistics/drayage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2602,11 +2689,13 @@ export default function DrayageAssignmentPage() {
           action: 'update_token',
           jobId: editingTokenJob.id,
           tokenNumber: newTokenValue.trim().toUpperCase(),
+          pcsSlotStart,
+          pcsSlotEnd,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update token');
-      showToast('success', `Token updated to ${data.tokenNumber}!`);
+      showToast('success', `Token updated to ${data.tokenNumber} (${slotWindowLabel})!`);
       setEditingTokenJob(null);
       invalidateDrayageClientCache();
       await loadData(true);
@@ -4011,19 +4100,74 @@ export default function DrayageAssignmentPage() {
                 />
               </div>
 
-              {/* Port Gate Token & PCS Pre-Dispatch Interlock */}
-              <div className="space-y-2">
+              {/* Port Gate Token & PCS Pre-Dispatch Interlock + 2-Hour Slot Time Window */}
+              <div className="space-y-3 p-3.5 rounded-xl bg-[var(--bg-main)]/60 border border-[var(--border-subtle)]">
                 <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[var(--text-muted)]">Port Gate Token / Appointment Code</label>
-
+                  <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Gate / Port Token & Appointment Time Window</span>
+                  </label>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[10px] font-bold text-blue-300">
+                    <Clock className="w-2.5 h-2.5 text-blue-400" />
+                    <span>{formatTwoHourWindowLabel(tokenSlotStartHour)} (2 Hrs Gap)</span>
+                  </span>
                 </div>
-                <input
-                  type="text"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. DPW-T1-884120"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500"
-                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                  <div className="sm:col-span-5 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      Token / Appointment Code
+                    </span>
+                    <input
+                      type="text"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. DPW-T1-884120"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500 text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      Slot Start Time
+                    </span>
+                    <select
+                      value={tokenSlotStartHour}
+                      onChange={(e) => setTokenSlotStartHour(Number(e.target.value))}
+                      className="w-full px-2.5 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-blue-500 text-xs cursor-pointer"
+                    >
+                      {Array.from({ length: 24 }, (_, hr) => (
+                        <option key={hr} value={hr}>
+                          {formatShortHourAmPm(hr)} ({formatTwoHourWindowLabel(hr)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      End Time (+2 Hrs)
+                    </span>
+                    <div
+                      className="w-full px-2.5 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-bold text-xs flex items-center justify-between select-none"
+                      title="Automatically calculated as Start Time + 2 Hours"
+                    >
+                      <span>{formatShortHourAmPm((tokenSlotStartHour + 2) % 24)}</span>
+                      <span className="text-[10px] font-mono text-blue-400/90">+2h</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] pt-0.5">
+                  <span>
+                    Selected Port Gate Window:{' '}
+                    <strong className="text-[var(--text-main)]">
+                      {formatFullHourAmPm(tokenSlotStartHour)} – {formatFullHourAmPm((tokenSlotStartHour + 2) % 24)}
+                    </strong>{' '}
+                    ({formatTwoHourWindowLabel(tokenSlotStartHour)})
+                  </span>
+                  <span className="text-emerald-400 font-medium">Auto 2-Hr Slot</span>
+                </div>
 
                 {assigningJob && (assigningJob.inspectionStatus === 'HOLD_PENDING' || assigningJob.doStatus === 'EXPIRED') && (
                   <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1">
@@ -4074,19 +4218,63 @@ export default function DrayageAssignmentPage() {
       {/* Edit Token Modal */}
       {editingTokenJob && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-5 space-y-4">
-            <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-              <Key className="w-4 h-4 text-emerald-400" />
-              Update Gate Token for {editingTokenJob.jobCode}
-            </h4>
-            <input
-              type="text"
-              value={newTokenValue}
-              onChange={(e) => setNewTokenValue(e.target.value.toUpperCase())}
-              placeholder="e.g. DPW-TKN-9021"
-              className="w-full text-xs font-mono font-bold p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 uppercase"
-            />
-            <div className="flex justify-end gap-2 pt-2">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Key className="w-4 h-4 text-emerald-400" />
+                Update Gate Token & 2-Hr Slot for {editingTokenJob.jobCode}
+              </h4>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[10px] font-bold text-blue-300">
+                <Clock className="w-2.5 h-2.5 text-blue-400" />
+                <span>{formatTwoHourWindowLabel(editTokenSlotStartHour)}</span>
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  Gate / Port Token Number
+                </label>
+                <input
+                  type="text"
+                  value={newTokenValue}
+                  onChange={(e) => setNewTokenValue(e.target.value.toUpperCase())}
+                  placeholder="e.g. DPW-TKN-9021"
+                  className="w-full text-xs font-mono font-bold p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 uppercase"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    Slot Start Time
+                  </label>
+                  <select
+                    value={editTokenSlotStartHour}
+                    onChange={(e) => setEditTokenSlotStartHour(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-blue-500 text-xs cursor-pointer"
+                  >
+                    {Array.from({ length: 24 }, (_, hr) => (
+                      <option key={hr} value={hr}>
+                        {formatShortHourAmPm(hr)} ({formatTwoHourWindowLabel(hr)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    End Time (Auto +2 Hrs)
+                  </label>
+                  <div className="w-full p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-bold text-xs flex items-center justify-between select-none">
+                    <span>{formatShortHourAmPm((editTokenSlotStartHour + 2) % 24)}</span>
+                    <span className="text-[10px] font-mono text-blue-400">+2 Hrs Gap</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
               <button
                 type="button"
                 onClick={() => setEditingTokenJob(null)}
@@ -4099,7 +4287,7 @@ export default function DrayageAssignmentPage() {
                 onClick={handleUpdateToken}
                 className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors"
               >
-                Save Token
+                Save Token & Slot
               </button>
             </div>
           </div>

@@ -3147,12 +3147,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const slotEndIso = new Date(slotEndMs).toISOString();
     const fmtSlot = (ms: number) =>
       new Date(ms).toLocaleTimeString('en-US', {
-        hour: '2-digit',
+        hour: 'numeric',
         minute: '2-digit',
-        hour12: false,
+        hour12: true,
         timeZone: 'Asia/Dubai',
       });
-    const slotWindowLabel = `${fmtSlot(slotStartMs)} - ${fmtSlot(slotEndMs)}`;
+    const slotWindowLabel = `${fmtSlot(slotStartMs)} – ${fmtSlot(slotEndMs)}`;
     const slotBufferMinutes = Math.round((slotEndMs - predictedGateArrivalMs) / 60000);
     const willMissSlot = !isCompleted && Boolean(j.tokenNumber || j.pcsTokenNumber) && slotBufferMinutes < 0;
     const slotRiskStatus: DrayagePortSlotPrediction['slotRiskStatus'] = isCompleted
@@ -3533,6 +3533,10 @@ export interface CreateDrayageJobBatchInput {
     containerNumber: string;
     size: string;
     containerType: string;
+    warehouseId?: string | null;
+    warehouseName?: string | null;
+    rateAmountAed?: number;
+    driverAllowanceAed?: number;
     doExpiryDate?: string | null;
     dischargeDate?: string | null;
     sealNumber?: string | null;
@@ -3571,7 +3575,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
 
   const safeCustomerName = String(input.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper';
   const safeTerminalName = String(input.terminalName || 'Jebel Ali Port - Terminal 1').trim() || 'Jebel Ali Port - Terminal 1';
-  const safeWarehouseName = String(input.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub';
+  const defaultWarehouseName = String(input.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub';
   const safeShipmentType = input.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT';
   const safePriority = String(input.priority || 'STANDARD').trim() || 'STANDARD';
 
@@ -3593,8 +3597,17 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
     const safeSize = String(item.size || '40HC').trim() || '40HC';
     const safeCntType = String(item.containerType || 'DRY').trim() || 'DRY';
     const safeWeightKg = safeFinite(item.weightKg, 22000) > 0 ? safeFinite(item.weightKg, 22000) : 22000;
-    const safeRateAed = safeFinite(input.rateAmountAed, safeCntType === 'REEFER' ? 2100 : 1550);
-    const safeDriverAllowAed = safeFinite(input.driverAllowanceAed, 150);
+    const itemWarehouseId = item.warehouseId || input.warehouseId || null;
+    const itemWarehouseName =
+      String(item.warehouseName || defaultWarehouseName).trim() || defaultWarehouseName;
+    const safeRateAed = safeFinite(
+      item.rateAmountAed ?? input.rateAmountAed,
+      safeCntType === 'REEFER' ? 2100 : 1550,
+    );
+    const safeDriverAllowAed = safeFinite(
+      item.driverAllowanceAed ?? input.driverAllowanceAed,
+      150,
+    );
 
     if (existingCnt[0]?.id) {
       await db.$executeRawUnsafe(
@@ -3628,8 +3641,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         safeCustomerName,
         input.terminalId ?? null,
         safeTerminalName,
-        input.warehouseId ?? null,
-        safeWarehouseName,
+        itemWarehouseId,
+        itemWarehouseName,
         doExpiryIso,
         dischargeIso,
         item.sealNumber ? String(item.sealNumber).trim() : null,
@@ -3661,8 +3674,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         safeCustomerName,
         input.terminalId ?? null,
         safeTerminalName,
-        input.warehouseId ?? null,
-        safeWarehouseName,
+        itemWarehouseId,
+        itemWarehouseName,
         doExpiryIso,
         dischargeIso,
         item.sealNumber && String(item.sealNumber).trim()
@@ -3696,8 +3709,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
       safePriority,
       input.customerId ?? null,
       safeCustomerName,
-      input.warehouseId ?? null,
-      safeWarehouseName,
+      itemWarehouseId,
+      itemWarehouseName,
       input.terminalId ?? null,
       safeTerminalName,
       containerId,
@@ -4126,6 +4139,8 @@ export async function assignDrayageJob(
     trailerId: string;
     trailerPlate: string;
     tokenNumber: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
     actor?: string;
   },
 ) {
@@ -4140,6 +4155,21 @@ export async function assignDrayageJob(
   if (!job) throw new Error('Drayage job not found');
 
   const token = args.tokenNumber?.trim() || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
+  let resolvedSlotStart: string | null = null;
+  let resolvedSlotEnd: string | null = null;
+  if (args.pcsSlotStart && String(args.pcsSlotStart).trim()) {
+    const startDt = new Date(String(args.pcsSlotStart).trim());
+    if (!Number.isNaN(startDt.getTime())) {
+      resolvedSlotStart = startDt.toISOString();
+      const endDt =
+        args.pcsSlotEnd && String(args.pcsSlotEnd).trim()
+          ? new Date(String(args.pcsSlotEnd).trim())
+          : new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+      resolvedSlotEnd = !Number.isNaN(endDt.getTime())
+        ? endDt.toISOString()
+        : new Date(startDt.getTime() + 2 * 60 * 60 * 1000).toISOString();
+    }
+  }
   const prevStatusRaw = String(job.status || '').trim();
   const prevStatus = prevStatusRaw.toUpperCase();
   const isReassignment =
@@ -4192,6 +4222,10 @@ export async function assignDrayageJob(
             assigned_trailer_id = $7,
             assigned_trailer_plate = $8,
             token_number = $9,
+            pcs_token_number = $9,
+            pcs_slot_start = COALESCE($12::timestamptz, pcs_slot_start),
+            pcs_slot_end = COALESCE($13::timestamptz, pcs_slot_end),
+            pcs_token_status = 'BOOKED',
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
@@ -4205,13 +4239,15 @@ export async function assignDrayageJob(
     token,
     nextAssignStatus,
     resolvedPlacementLocation,
+    resolvedSlotStart,
+    resolvedSlotEnd,
   );
 
   // Update trailer operational status
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_trailers
         SET master_status = 'IN_USE',
-            operational_status = $3,
+             operational_status = $3,
             linked_container_number = $4,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
@@ -4221,18 +4257,25 @@ export async function assignDrayageJob(
     String(job.container_number),
   );
 
-  // Update container linked trailer
+  // Update container linked trailer & PCS token window
   if (job.container_id) {
     await db.$executeRawUnsafe(
       `UPDATE logistics_drayage_containers
           SET linked_trailer_plate = $3,
               status = $4,
+              pcs_token_number = $5,
+              pcs_slot_start = COALESCE($6::timestamptz, pcs_slot_start),
+              pcs_slot_end = COALESCE($7::timestamptz, pcs_slot_end),
+              pcs_token_status = 'BOOKED',
               updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
       args.trailerPlate,
       String(job.job_phase) === 'L2' ? 'EMPTY_RETURN_ASSIGNED' : 'TOKEN_ASSIGNED',
+      token,
+      resolvedSlotStart,
+      resolvedSlotEnd,
     );
   }
 
@@ -6743,6 +6786,8 @@ export async function executeStreetTurnTriangulation(
     trailerId?: string;
     trailerPlate?: string;
     tokenNumber?: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
     actor?: string;
   },
 ) {
@@ -6865,6 +6910,8 @@ export async function executeStreetTurnTriangulation(
         trailerId: args.trailerId,
         trailerPlate: args.trailerPlate || 'DXB-TR-9901',
         tokenNumber: token,
+        pcsSlotStart: args.pcsSlotStart,
+        pcsSlotEnd: args.pcsSlotEnd,
       });
     }
   }
@@ -6881,6 +6928,8 @@ export async function executeStreetTurnTriangulation(
       trailerId: args.trailerId,
       trailerPlate: args.trailerPlate || 'DXB-TR-9901',
       tokenNumber: token,
+      pcsSlotStart: args.pcsSlotStart,
+      pcsSlotEnd: args.pcsSlotEnd,
     });
   }
 
@@ -6919,6 +6968,8 @@ export async function executeStreetTurnTriangulation(
         trailerId: args.trailerId,
         trailerPlate: args.trailerPlate || 'DXB-TR-9901',
         tokenNumber: token,
+        pcsSlotStart: args.pcsSlotStart,
+        pcsSlotEnd: args.pcsSlotEnd,
       });
     }
   }
@@ -7062,6 +7113,8 @@ export async function executeBogiePairDispatch(
     trailerId: string;
     trailerPlate: string;
     tokenNumber?: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
     actor?: string;
   },
 ) {
@@ -7131,6 +7184,8 @@ export async function executeBogiePairDispatch(
       trailerId: args.trailerId,
       trailerPlate: args.trailerPlate,
       tokenNumber: token,
+      pcsSlotStart: args.pcsSlotStart,
+      pcsSlotEnd: args.pcsSlotEnd,
     });
   }
 
