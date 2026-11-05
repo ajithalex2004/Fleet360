@@ -7366,9 +7366,28 @@ export async function findStreetTurnCandidates(
 ): Promise<StreetTurnMatch[]> {
   const workspace = await getDrayageWorkspaceData(db, tenantId);
   const whCoordsByName = new Map<string, { lat: number; lng: number }>();
+  const whAllowanceByName = new Map<string, number>();
   for (const w of workspace.warehouses) {
     whCoordsByName.set(w.name.toLowerCase(), { lat: w.lat, lng: w.lng });
+    if (w.driverAllowanceAed && w.driverAllowanceAed > 0) {
+      whAllowanceByName.set(w.name.toLowerCase(), w.driverAllowanceAed);
+    }
   }
+  const termCoordsByKey = new Map<string, { lat: number; lng: number }>();
+  for (const t of workspace.terminals) {
+    termCoordsByKey.set(t.name.toLowerCase(), { lat: t.lat, lng: t.lng });
+    termCoordsByKey.set(t.code.toLowerCase(), { lat: t.lat, lng: t.lng });
+  }
+  const resolveTerminalCoords = (termName?: string | null): { lat: number; lng: number } => {
+    const key = (termName || '').trim().toLowerCase();
+    const exact = termCoordsByKey.get(key);
+    if (exact) return exact;
+    if (key.includes('khalifa') || key.includes('auh')) return { lat: 24.8432, lng: 54.7121 };
+    if (key.includes('rashid')) return { lat: 25.2697, lng: 55.2758 };
+    if (key.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+    if (key.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+    return { lat: 25.0112, lng: 55.0617 };
+  };
 
   const resolveWarehouseCoords = (job: DrayageJob): { lat: number; lng: number } => {
     const exact = whCoordsByName.get((job.warehouseName || '').toLowerCase());
@@ -7476,11 +7495,28 @@ export async function findStreetTurnCandidates(
         continue;
       }
 
-      const deadheadKmSaved = sameTerminalReload && !isExportOutbound
-        ? 38
-        : Math.max(44, Math.round(58 - interDist));
+      const tInbound = resolveTerminalCoords(inbound.returnTerminalName || inbound.terminalName);
+      const tOutbound = resolveTerminalCoords(exp.terminalName);
+      const distInboundWhToTermKm = Math.max(2.0, Math.round(computeHaversineKm(c1.lat, c1.lng, tInbound.lat, tInbound.lng) * 1.25 * 10) / 10);
+      const distOutboundTermToWhKm = Math.max(2.0, Math.round(computeHaversineKm(tOutbound.lat, tOutbound.lng, c2.lat, c2.lng) * 1.25 * 10) / 10);
+      const interTermKm = sameTerminalReload ? 0 : Math.round(computeHaversineKm(tInbound.lat, tInbound.lng, tOutbound.lat, tOutbound.lng) * 1.25 * 10) / 10;
+
+      const rawDeadheadSavedKm = sameTerminalReload && !isExportOutbound
+        ? distInboundWhToTermKm + distOutboundTermToWhKm - interTermKm
+        : distInboundWhToTermKm + distOutboundTermToWhKm - interDist;
+      const deadheadKmSaved = Math.max(1.0, Math.round(rawDeadheadSavedKm * 10) / 10);
       const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
-      const fuelSavingsAed = Math.round(deadheadKmSaved * 4.5 + 420);
+      const inboundAllowAed =
+        inbound.driverAllowanceAed ||
+        whAllowanceByName.get((inbound.warehouseName || '').toLowerCase()) ||
+        150;
+      const PORT_GATE_FEE_AED = 35;
+      const savedAllowanceAndGateAed = sameTerminalReload && !isExportOutbound
+        ? inboundAllowAed + PORT_GATE_FEE_AED
+        : inboundAllowAed + 2 * PORT_GATE_FEE_AED;
+      const fuelSavingsAed = Math.round(deadheadKmSaved * 3.85 + savedAllowanceAndGateAed);
+      const gateDwellSavedHrs = sameTerminalReload && !isExportOutbound ? 1.5 : 2.2;
+      const turnaroundHoursSaved = Math.round((deadheadKmSaved / 45 + gateDwellSavedHrs) * 10) / 10;
       const isReefer = (inbound.containerType || 'DRY').toUpperCase().includes('REEFER');
       const containerGrade = sameTerminalReload && !isExportOutbound
         ? `Port Dual-Transaction @ ${exp.terminalName} (0 km Handoff)`
@@ -7513,7 +7549,7 @@ export async function findStreetTurnCandidates(
         deadheadKmSaved,
         co2SavedKg,
         fuelSavingsAed,
-        turnaroundHoursSaved: 4.5,
+        turnaroundHoursSaved,
         score: Math.min(100, score),
       });
     }
@@ -7743,9 +7779,53 @@ export async function executeStreetTurnTriangulation(
     args.actor || 'Dispatcher Console',
   );
 
-  const deadheadKmSaved = args.leg3JobId && !args.holdLeg3 ? 68 : 52;
+  // Compute actual dynamic savings from terminal and warehouse records
+  const [termRows, whRows] = await Promise.all([
+    db.$queryRawUnsafe<Array<{ id: string; name: string; code: string; lat: number; lng: number }>>(
+      `SELECT id, name, code, lat, lng FROM logistics_drayage_terminals WHERE tenant_id = $1`,
+      args.tenantId,
+    ).catch(() => []),
+    db.$queryRawUnsafe<Array<{ id: string; name: string; lat: number; lng: number; driver_allowance_aed: number | null }>>(
+      `SELECT id, name, lat, lng, driver_allowance_aed FROM logistics_drayage_warehouses WHERE tenant_id = $1`,
+      args.tenantId,
+    ).catch(() => []),
+  ]);
+  const resolveWhCoordRow = (r: Record<string, unknown>) => {
+    const wId = r.warehouse_id ? String(r.warehouse_id) : '';
+    const wName = String(r.warehouse_name || '').toLowerCase();
+    const m = whRows.find((w) => w.id === wId || w.name.toLowerCase() === wName);
+    if (m && m.lat && m.lng) return { lat: Number(m.lat), lng: Number(m.lng), allowance: Number(m.driver_allowance_aed || 150) };
+    return { lat: 24.9602, lng: 55.0615, allowance: 150 };
+  };
+  const resolveTermCoordRow = (r: Record<string, unknown>) => {
+    const tId = String(r.return_terminal_id || r.terminal_id || '');
+    const tName = String(r.return_terminal_name || r.terminal_name || '').toLowerCase();
+    const m = termRows.find((t) => t.id === tId || t.name.toLowerCase() === tName || t.code.toLowerCase() === tName);
+    if (m && m.lat && m.lng) return { lat: Number(m.lat), lng: Number(m.lng) };
+    if (tName.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+    return { lat: 25.0112, lng: 55.0617 };
+  };
+  const wL2 = resolveWhCoordRow(l2);
+  const tL2 = resolveTermCoordRow(l2);
+  const wExp = resolveWhCoordRow(exp);
+  const tExp = resolveTermCoordRow(exp);
+  const dWh2Term2 = Math.max(2.0, computeHaversineKm(wL2.lat, wL2.lng, tL2.lat, tL2.lng) * 1.25);
+  const dTerm1Wh1 = Math.max(2.0, computeHaversineKm(tExp.lat, tExp.lng, wExp.lat, wExp.lng) * 1.25);
+  const dWh2Wh1 = isExportBoxReuse ? computeHaversineKm(wL2.lat, wL2.lng, wExp.lat, wExp.lng) * 1.25 : 0;
+  let leg3SavedKm = 0;
+  if (leg3 && args.leg3JobId && !args.holdLeg3) {
+    const w3 = resolveWhCoordRow(leg3);
+    const t3 = resolveTermCoordRow(leg3);
+    leg3SavedKm = Math.max(2.0, computeHaversineKm(t3.lat, t3.lng, w3.lat, w3.lng) * 1.25 - computeHaversineKm(wExp.lat, wExp.lng, w3.lat, w3.lng) * 1.25);
+  }
+  const deadheadKmSaved = Math.max(1.0, Math.round((dWh2Term2 + dTerm1Wh1 - dWh2Wh1 + leg3SavedKm) * 10) / 10);
   const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
-  const fuelSavingsAed = args.leg3JobId && !args.holdLeg3 ? 980 : 750;
+  const l2AllowAed = Number(l2.driver_allowance_aed || wL2.allowance || 150);
+  const l3AllowAed = leg3 && !args.holdLeg3 ? Number(leg3.driver_allowance_aed || 150) : 0;
+  const savedAllowAndGate = isExportBoxReuse
+    ? l2AllowAed + 70
+    : l2AllowAed + 35 + (leg3 && !args.holdLeg3 ? Math.round(l3AllowAed * 0.5) + 35 : 0);
+  const fuelSavingsAed = Math.round(deadheadKmSaved * 3.85 + savedAllowAndGate);
 
   return {
     ok: true,

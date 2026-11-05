@@ -218,6 +218,8 @@ interface DrayageTerminal {
   emirate: string;
   lat?: number;
   lng?: number;
+  tripAmountAed?: number;
+  driverAllowanceAed?: number;
 }
 
 interface DrayageWarehouse {
@@ -228,6 +230,8 @@ interface DrayageWarehouse {
   address: string;
   lat?: number;
   lng?: number;
+  tripAmountAed?: number;
+  driverAllowanceAed?: number;
 }
 
 interface DemurrageRisk {
@@ -948,9 +952,59 @@ export default function DrayageAssignmentPage() {
         const drop1 = r1.hoursRemaining <= r2.hoursRemaining ? j1 : j2;
         const drop2 = drop1.id === j1.id ? j2 : j1;
 
-        const combinedRevenueAed = (j1.rateAmountAed || 1450) + (j2.rateAmountAed || 1450);
-        const combinedAllowanceAed = (j1.driverAllowanceAed || 150) + (j2.driverAllowanceAed || 150);
+        const resolveBogieWh = (whName: string, whId?: string | null) => {
+          if (whId) {
+            const wh = warehouses.find((w) => w.id === whId);
+            if (wh) return wh;
+          }
+          return warehouses.find((w) => w.name.toLowerCase() === (whName || '').toLowerCase());
+        };
+        const wh1Obj = resolveBogieWh(j1.warehouseName, j1.warehouseId);
+        const wh2Obj = resolveBogieWh(j2.warehouseName, j2.warehouseId);
+
+        const combinedRevenueAed =
+          (j1.rateAmountAed || wh1Obj?.tripAmountAed || 1450) +
+          (j2.rateAmountAed || wh2Obj?.tripAmountAed || 1450);
+        const combinedAllowanceAed =
+          (j1.driverAllowanceAed || wh1Obj?.driverAllowanceAed || 150) +
+          (j2.driverAllowanceAed || wh2Obj?.driverAllowanceAed || 150);
         const hasUrgentDemurrage = r1.level === 'CRITICAL' || r2.level === 'CRITICAL' || r1.level === 'EXPIRED' || r2.level === 'EXPIRED';
+
+        // Actual Dynamic Fuel Saving % for Dual-20FT Bogie vs 2 Separate Trips
+        const resolveTermCoord = (termName?: string | null) => {
+          const match = terminals.find(
+            (t) => t.name.toLowerCase() === (termName || '').toLowerCase() || t.code.toLowerCase() === (termName || '').toLowerCase(),
+          );
+          if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+            return { lat: match.lat, lng: match.lng };
+          }
+          const lower = (termName || '').toLowerCase();
+          if (lower.includes('khalifa') || lower.includes('auh')) return { lat: 24.8432, lng: 54.7121 };
+          if (lower.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+          if (lower.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+          return { lat: 25.0112, lng: 55.0617 };
+        };
+        const tCoord = resolveTermCoord(j1.terminalName);
+        const w1Coord = wh1Obj?.lat && wh1Obj?.lng ? { lat: wh1Obj.lat, lng: wh1Obj.lng } : { lat: 24.9602, lng: 55.0615 };
+        const w2Coord = wh2Obj?.lat && wh2Obj?.lng ? { lat: wh2Obj.lat, lng: wh2Obj.lng } : { lat: 24.9602, lng: 55.0615 };
+        const distFn = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+          const R = 6371;
+          const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+          const dLon = ((b.lng - a.lng) * Math.PI) / 180;
+          const s =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          return Math.max(2.0, R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s)) * 1.25);
+        };
+        const dTermW1 = distFn(tCoord, w1Coord);
+        const dTermW2 = distFn(tCoord, w2Coord);
+        const dW1W2 = sameZone && w1Coord.lat === w2Coord.lat && w1Coord.lng === w2Coord.lng ? 0 : distFn(w1Coord, w2Coord);
+        const separateRoundTripKm = 2 * dTermW1 + 2 * dTermW2;
+        const bogieRoundTripEffectiveKm = (dTermW1 + dW1W2 + dTermW2) * 1.08;
+        const dynamicFuelSavingPct = Math.max(
+          15,
+          Math.min(55, Math.round(((separateRoundTripKm - bogieRoundTripEffectiveKm) / Math.max(1, separateRoundTripKm)) * 100)),
+        );
 
         const tas = getTasSlotWindow(j1, j2);
 
@@ -973,7 +1027,7 @@ export default function DrayageAssignmentPage() {
           dropSequence: [`Drop #1: ${drop1.warehouseName} (${drop1.customerName})`, `Drop #2: ${drop2.warehouseName} (${drop2.customerName})`],
           combinedRevenueAed,
           combinedAllowanceAed,
-          fuelSavingPct: 45,
+          fuelSavingPct: dynamicFuelSavingPct,
           hasUrgentDemurrage,
           tasSlot: tas.slotTime,
           score,
@@ -1001,7 +1055,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalCombos;
-  }, [unassignedJobs, automationConfig.bogieWindowHours, automationConfig.bogieMaxPayloadKg, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [unassignedJobs, warehouses, terminals, automationConfig.bogieWindowHours, automationConfig.bogieMaxPayloadKg, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
   // ZONE-BASED STREET-TURN MATCHING ENGINE (L2 Empty Warehouse -> Pending Export Booking)
@@ -1218,13 +1272,96 @@ export default function DrayageAssignmentPage() {
           : 'Grade A · Export Seaworthy / CW';
         const sourcePhase: 'L1_RAMP' | 'L2_EMPTY' = j2.jobPhase === 'L1' ? 'L1_RAMP' : 'L2_EMPTY';
 
-        const deadheadSaved = isPortTerminalReload
-          ? leg3Candidate && !holdLeg3Recommended
-            ? 68
-            : 54
-          : Math.max(48, Math.round(62 - interDist));
+        // 100% Actual Dynamic Calculations from Terminal-to-Warehouse Coordinates & Job Allowances
+        const resolveTerminalCoordsLocal = (termId?: string | null, termName?: string | null): { lat: number; lng: number } => {
+          const match = terminals.find(
+            (t) =>
+              (termId && t.id === termId) ||
+              (termName && (t.name.toLowerCase() === termName.toLowerCase() || t.code.toLowerCase() === termName.toLowerCase())),
+          );
+          if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+            return { lat: match.lat, lng: match.lng };
+          }
+          const lower = (termName || '').toLowerCase();
+          if (lower.includes('khalifa') || lower.includes('auh') || lower.includes('abu dhabi')) return { lat: 24.8432, lng: 54.7121 };
+          if (lower.includes('rashid')) return { lat: 25.2697, lng: 55.2758 };
+          if (lower.includes('sharjah') || lower.includes('khalid')) return { lat: 25.3582, lng: 55.3721 };
+          if (lower.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+          if (lower.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+          if (lower.includes('t4')) return { lat: 24.9895, lng: 55.0381 };
+          return { lat: 25.0112, lng: 55.0617 };
+        };
+        const resolveWarehouseObj = (whName: string, whId?: string | null) => {
+          if (whId) {
+            const wh = warehouses.find((w) => w.id === whId);
+            if (wh) return wh;
+          }
+          return warehouses.find((w) => w.name.toLowerCase() === (whName || '').toLowerCase());
+        };
+        const resolveActualAllowanceAed = (job: DrayageJob): number => {
+          if (typeof job.driverAllowanceAed === 'number' && job.driverAllowanceAed > 0) return job.driverAllowanceAed;
+          const wh = resolveWarehouseObj(job.warehouseName, job.warehouseId);
+          if (wh && typeof wh.driverAllowanceAed === 'number' && wh.driverAllowanceAed > 0) return wh.driverAllowanceAed;
+          return 150;
+        };
+        const resolveActualRevenueAed = (job: DrayageJob): number => {
+          if (typeof job.rateAmountAed === 'number' && job.rateAmountAed > 0) return job.rateAmountAed;
+          const wh = resolveWarehouseObj(job.warehouseName, job.warehouseId);
+          if (wh && typeof wh.tripAmountAed === 'number' && wh.tripAmountAed > 0) return wh.tripAmountAed;
+          return 1450;
+        };
+        const roadDistKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number =>
+          Math.round(haversineKm(a.lat, a.lng, b.lat, b.lng) * 1.25 * 10) / 10;
+
+        const t2Coords = resolveTerminalCoordsLocal(j2.returnTerminalId || j2.terminalId, j2ReturnTerminal);
+        const t1Coords = resolveTerminalCoordsLocal(j1.terminalId, j1.terminalName);
+        const distWh2ToTerm2Km = Math.max(2.0, roadDistKm(c2, t2Coords));
+        const distTerm1ToWh1Km = Math.max(2.0, roadDistKm(t1Coords, c1));
+        const interTerminalKm = termMatch ? 0 : roadDistKm(t2Coords, t1Coords);
+
+        let leg3DeadheadSavedKm = 0;
+        if (leg3Candidate && !holdLeg3Recommended) {
+          const c3 = resolveWarehouseCoords(leg3Candidate.warehouseName, leg3Candidate.warehouseId);
+          const t3Coords = resolveTerminalCoordsLocal(
+            leg3Candidate.returnTerminalId || leg3Candidate.terminalId,
+            leg3Candidate.returnTerminalName || leg3Candidate.terminalName,
+          );
+          const distTerm3ToWh3Km = Math.max(2.0, roadDistKm(t3Coords, c3));
+          const distWh1ToWh3Km = roadDistKm(c1, c3);
+          leg3DeadheadSavedKm = Math.max(2.0, distTerm3ToWh3Km - distWh1ToWh3Km);
+        }
+
+        // 1. Actual Deadhead Saved (km):
+        //    - Port Terminal Reload: Avoids Tractor #1 empty bobtail return (t2 -> c2) + Tractor #2 empty bobtail approach (c1 -> t1), minus interTerminalKm (0 km when same terminal)
+        //    - Inland Street Turn: Avoids empty return leg (c2 -> t2) + empty pickup leg (t1 -> c1), minus direct inter-warehouse repositioning (interDist)
+        const rawDeadheadSavedKm = isPortTerminalReload
+          ? distWh2ToTerm2Km + distTerm1ToWh1Km - interTerminalKm + leg3DeadheadSavedKm
+          : distWh2ToTerm2Km + distTerm1ToWh1Km - interDist;
+        const deadheadSaved = Math.max(1.0, Math.round(rawDeadheadSavedKm * 10) / 10);
+
+        // 2. Actual Carbon Avoided (kg CO2): Actual Deadhead Saved (km) * 0.95 kg CO2/km (heavy-duty diesel prime mover factor)
         const co2Saved = Math.round(deadheadSaved * 0.95 * 10) / 10;
-        const fuelSaved = Math.round(deadheadSaved * 4.5 + 400);
+
+        // 3. Actual Direct Cost Saved (AED):
+        //    (Actual Deadhead Saved km * 3.85 AED/km fuel & wear) + Actual Saved Driver Trip Allowance + Avoided Port Gate Fee (35 AED/pass)
+        const allow2Aed = resolveActualAllowanceAed(j2);
+        const allow1Aed = resolveActualAllowanceAed(j1);
+        const allow3Aed = leg3Candidate && !holdLeg3Recommended ? resolveActualAllowanceAed(leg3Candidate) : 0;
+        const rev2Aed = resolveActualRevenueAed(j2);
+        const rev1Aed = resolveActualRevenueAed(j1);
+        const rev3Aed = leg3Candidate && !holdLeg3Recommended ? resolveActualRevenueAed(leg3Candidate) : 0;
+        const PORT_GATE_FEE_AED = 35;
+        const savedAllowanceAndGateAed = isPortTerminalReload
+          ? allow2Aed + PORT_GATE_FEE_AED + (leg3Candidate && !holdLeg3Recommended ? Math.round(allow3Aed * 0.5) + PORT_GATE_FEE_AED : 0)
+          : allow2Aed + 2 * PORT_GATE_FEE_AED;
+        const fuelSaved = Math.round(deadheadSaved * 3.85 + savedAllowanceAndGateAed);
+
+        // 4. Actual Turnaround Saved (hrs):
+        //    Actual avoided deadhead driving hours (at 45 km/h corridor average) + avoided port gate queue & terminal dwell hours
+        const gateDwellSavedHrs = isPortTerminalReload
+          ? 1.5 + (leg3Candidate && !holdLeg3Recommended ? 1.2 : 0)
+          : 2.2;
+        const turnaroundHoursSaved = Math.round((deadheadSaved / 45 + gateDwellSavedHrs) * 10) / 10;
 
         const r2 = getDemurrageRisk(j2);
         const r1 = getDemurrageRisk(j1);
@@ -1263,18 +1400,12 @@ export default function DrayageAssignmentPage() {
           interWarehouseDistanceKm: interDist,
           terminalName: j1.terminalName || j2ReturnTerminal,
           tasSlot: tas.slotTime,
-          combinedRevenueAed:
-            (j2.rateAmountAed || 1200) +
-            (j1.rateAmountAed || 1450) +
-            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.rateAmountAed || 1150 : 0),
-          combinedAllowanceAed:
-            (j2.driverAllowanceAed || 120) +
-            (j1.driverAllowanceAed || 150) +
-            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.driverAllowanceAed || 120 : 0),
+          combinedRevenueAed: rev2Aed + rev1Aed + rev3Aed,
+          combinedAllowanceAed: allow2Aed + allow1Aed + allow3Aed,
           deadheadKmSaved: deadheadSaved,
           co2SavedKg: co2Saved,
           fuelSavingsAed: fuelSaved,
-          turnaroundHoursSaved: leg3Candidate ? 5.5 : 4.0,
+          turnaroundHoursSaved,
           hasUrgentDemurrage: hasUrgent,
           score,
         });
@@ -1296,7 +1427,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalStreetTurns;
-  }, [jobs, unassignedJobs, warehouses, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [jobs, unassignedJobs, warehouses, terminals, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
   // SMART BACKHAUL HOLD ADVISOR (Non-Urgent L2 Empties to Deadhead Terminals like T2)
@@ -1326,24 +1457,58 @@ export default function DrayageAssignmentPage() {
       if (outboundL1AtTerminal === 0 || isCurrentlyHeld) {
         const zone = getWarehouseZone(j.warehouseName, j.warehouseId);
         const linkedDaisyChain = streetTurnPairs.find((p) => p.leg3Job?.id === j.id);
+        const whMatch =
+          (j.warehouseId ? warehouses.find((w) => w.id === j.warehouseId) : undefined) ||
+          warehouses.find((w) => w.name.toLowerCase() === (j.warehouseName || '').toLowerCase());
+        const whCoord =
+          whMatch && typeof whMatch.lat === 'number' && typeof whMatch.lng === 'number' && whMatch.lat !== 0
+            ? { lat: whMatch.lat, lng: whMatch.lng }
+            : { lat: 24.9602, lng: 55.0615 };
+        const termMatch = terminals.find(
+          (t) =>
+            t.id === (j.returnTerminalId || j.terminalId) ||
+            t.name.toLowerCase() === tKey ||
+            t.code.toLowerCase() === tKey,
+        );
+        const termCoord =
+          termMatch && typeof termMatch.lat === 'number' && typeof termMatch.lng === 'number' && termMatch.lat !== 0
+            ? { lat: termMatch.lat, lng: termMatch.lng }
+            : tKey.includes('t2')
+              ? { lat: 25.0185, lng: 55.0562 }
+              : { lat: 25.0112, lng: 55.0617 };
+        const R = 6371;
+        const dLat = ((termCoord.lat - whCoord.lat) * Math.PI) / 180;
+        const dLon = ((termCoord.lng - whCoord.lng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((whCoord.lat * Math.PI) / 180) *
+            Math.cos((termCoord.lat * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const actualDeadheadKm = Math.max(
+          2.0,
+          Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.25 * 10) / 10,
+        );
+        const actualAllowanceAed = j.driverAllowanceAed || whMatch?.driverAllowanceAed || 150;
+        const actualFuelRiskAed = Math.round(actualDeadheadKm * 3.85 + actualAllowanceAed);
         items.push({
           job: j,
           risk,
           zone,
           terminalName: returnTermName,
           outboundL1AtTerminal,
-          estimatedDeadheadKmAvoided: 34,
-          fuelRiskAvoidedAed: 245,
+          estimatedDeadheadKmAvoided: actualDeadheadKm,
+          fuelRiskAvoidedAed: actualFuelRiskAed,
           isCurrentlyHeld,
           linkedDaisyChainPairId: linkedDaisyChain?.id,
           recommendationText: linkedDaisyChain
             ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${returnTermName} L1 Import backhaul arrives.`
-            : `${j.jobCode} (${zone} ➜ ${returnTermName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${returnTermName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a 34 km empty return.`,
+            : `${j.jobCode} (${zone} ➜ ${returnTermName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${returnTermName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a ${actualDeadheadKm} km empty return.`,
         });
       }
     }
     return items;
-  }, [unassignedJobs, getDemurrageRisk, getWarehouseZone, streetTurnPairs]);
+  }, [unassignedJobs, warehouses, terminals, getDemurrageRisk, getWarehouseZone, streetTurnPairs]);
 
   // High Demurrage, Line Detention (<24h) & Port Slot Miss Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -3370,8 +3535,8 @@ export default function DrayageAssignmentPage() {
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)] leading-snug">
                             {pair.holdLeg3Recommended
-                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.terminalName}. Hold Leg 3 to avoid 34 km empty return.`
-                              : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.terminalName})`}
+                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName}. Hold Leg 3 to avoid empty return deadhead.`
+                              : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName})`}
                           </div>
                         </div>
                       )}

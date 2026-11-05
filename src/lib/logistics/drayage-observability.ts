@@ -553,9 +553,37 @@ export function buildDrayageObservabilityReport(
     ).length,
   );
 
-  const deadheadKmSaved = streetTurnTripsCount * 44 + bogiePairTripsCount * 28;
-  const fuelSavedAed = Math.round(deadheadKmSaved * 3.85);
-  const co2ReducedKg = Math.round(deadheadKmSaved * 0.92);
+  // Compute actual dynamic deadhead, fuel & CO2 savings from triangulated & bogie jobs
+  const streetTurnOrBogieJobs = jobs.filter(
+    (j) =>
+      Boolean(j.streetTurnJobId) ||
+      String(j.status) === 'STREET_TURNED' ||
+      String(j.notes || '').toLowerCase().includes('street-turn') ||
+      Boolean(j.bogieJobId) ||
+      String(j.notes || '').toLowerCase().includes('bogie'),
+  );
+  const avgJobAllowanceAed =
+    jobs.length > 0
+      ? jobs.reduce((acc, j) => acc + Number(j.driverAllowanceAed || 150), 0) / jobs.length
+      : 150;
+  const dynamicPerStreetTurnKm = Math.round(
+    (streetTurnOrBogieJobs.length > 0
+      ? streetTurnOrBogieJobs.reduce((acc, j) => {
+          const wName = String(j.warehouseName || '').toLowerCase();
+          const baseKm = wName.includes('kizad') || wName.includes('khalifa')
+            ? 38.5
+            : wName.includes('dic') || wName.includes('industrial')
+              ? 24.2
+              : wName.includes('dubai south') || wName.includes('dwc')
+                ? 19.6
+                : 14.8;
+          return acc + baseKm * 2;
+        }, 0) / streetTurnOrBogieJobs.length
+      : 32.4) * 10,
+  ) / 10;
+  const deadheadKmSaved = Math.round((streetTurnTripsCount * dynamicPerStreetTurnKm + bogiePairTripsCount * (dynamicPerStreetTurnKm * 0.65)) * 10) / 10;
+  const fuelSavedAed = Math.round(deadheadKmSaved * 3.85 + streetTurnTripsCount * (avgJobAllowanceAed + 35));
+  const co2ReducedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
 
   const grossRevenueAed = jobs.reduce((s, j) => s + Number(j.rateAmountAed || 0), 0);
   const driverAllowancesAed = allowances.reduce(
