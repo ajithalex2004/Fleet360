@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Mail,
   MoreVertical,
+  Pencil,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -43,6 +44,10 @@ import {
   subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DrayageEditJobModal,
+  type EditJobMasterOption,
+} from '@/components/logistics/drayage/DrayageEditJobModal';
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -354,6 +359,8 @@ export default function DrayageAssignmentPage() {
   const [trailers, setTrailers] = useState<DrayageTrailer[]>(cached?.trailers || []);
   const [terminals, setTerminals] = useState<DrayageTerminal[]>(cached?.terminals || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
+  const [customers, setCustomers] = useState<EditJobMasterOption[]>(cached?.customers || []);
+  const [editJobTarget, setEditJobTarget] = useState<DrayageJob | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
 
   // Smart Analysis UI state
@@ -544,6 +551,7 @@ export default function DrayageAssignmentPage() {
       setTrailers(data?.trailers || []);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
+      setCustomers(data?.customers || []);
       if (data?.automationConfig) {
         setAutomationConfig({
           ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -1535,9 +1543,25 @@ export default function DrayageAssignmentPage() {
       sortable: false,
       filter: false,
       render: (job) => {
+        const editBtn = (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditJobTarget(job);
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-blue-400 hover:border-blue-500/40 text-[11px] font-semibold transition-colors whitespace-nowrap"
+            title={`Edit ${job.jobCode}`}
+          >
+            <Pencil className="w-3 h-3" />
+            <span>Edit</span>
+          </button>
+        );
+
         if (isJobCompletedOrSuperseded(job)) {
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
               <span
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-60 whitespace-nowrap"
                 title={
@@ -1559,7 +1583,8 @@ export default function DrayageAssignmentPage() {
         // 1. Unassigned initial PENDING job -> Assign Fleet
         if (stUpper === 'PENDING') {
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
               <button
                 type="button"
                 onClick={() => handleOpenAssign(job)}
@@ -1575,7 +1600,8 @@ export default function DrayageAssignmentPage() {
         if (reassignState.canReassign && reassignState.reassignLabel) {
           const isToRamp = reassignState.originLocation === 'YARD';
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
               <button
                 type="button"
                 onClick={() => handleOpenAssign(job)}
@@ -1596,7 +1622,8 @@ export default function DrayageAssignmentPage() {
         // 3. At Ramp BEFORE First ETC Alert -> Disabled until First Alert (T-15m)
         if (reassignState.isWaitingForFirstRampAlert && reassignState.reassignLabel) {
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
               <button
                 type="button"
                 disabled
@@ -1614,7 +1641,8 @@ export default function DrayageAssignmentPage() {
 
         // 4. Active in-progress leg (Assigned / Re-Assigned / En Route)
         return (
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-1.5">
+            {editBtn}
             <button
               type="button"
               onClick={() => handleOpenAssign(job)}
@@ -4428,6 +4456,21 @@ export default function DrayageAssignmentPage() {
           </div>
         </div>
       )}
+
+      <DrayageEditJobModal
+        open={Boolean(editJobTarget)}
+        job={editJobTarget}
+        customers={customers}
+        terminals={terminals}
+        warehouses={warehouses}
+        onClose={() => setEditJobTarget(null)}
+        onSaved={async (msg) => {
+          invalidateDrayageClientCache();
+          showToast('success', msg);
+          await loadData(true);
+        }}
+        onError={(msg) => showToast('error', msg)}
+      />
 
       <DrayageSuperAdminConfigModal
         open={configModalOpen}

@@ -35,9 +35,14 @@ import {
   ExternalLink,
   Share2,
   MapPin,
+  Pencil,
 } from 'lucide-react';
 import { KpiCard, PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DrayageEditJobModal,
+  type EditJobMasterOption,
+} from '@/components/logistics/drayage/DrayageEditJobModal';
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -78,13 +83,18 @@ interface DrayageJob {
   shipmentType: string;
   status: string;
   priority: string;
+  customerId?: string | null;
   customerName: string;
+  warehouseId?: string | null;
   warehouseName: string;
+  terminalId?: string | null;
   terminalName: string;
   containerId: string | null;
   containerNumber: string;
   containerSize: string;
   containerType: string;
+  sealNumber?: string | null;
+  dischargeDate?: string | null;
   tokenNumber: string | null;
   assignedVehiclePlate: string | null;
   assignedDriverName: string | null;
@@ -97,6 +107,10 @@ interface DrayageJob {
   rateAmountAed: number;
   driverAllowanceAed: number;
   customsInspection: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
   currentLat?: number | null;
   currentLng?: number | null;
   routePath?: Array<{
@@ -305,6 +319,8 @@ export default function DrayageJobTrackingPage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [terminals, setTerminals] = useState<DrayageCorridorTerminal[]>([]);
   const [warehouses, setWarehouses] = useState<DrayageCorridorWarehouse[]>([]);
+  const [customers, setCustomers] = useState<EditJobMasterOption[]>([]);
+  const [editJobTarget, setEditJobTarget] = useState<DrayageJob | null>(null);
   const [geofences, setGeofences] = useState<DrayageCorridorGeofence[]>([]);
   const [vehicles, setVehicles] = useState<DrayageCorridorVehicle[]>([]);
   const [drivers, setDrivers] = useState<Array<{ id: string; fullName: string; employeeId?: string | null; licenseNumber?: string | null }>>([]);
@@ -366,6 +382,7 @@ export default function DrayageJobTrackingPage() {
       setMessages(data.messages || []);
       setTerminals(data.terminals || []);
       setWarehouses(data.warehouses || []);
+      setCustomers(data.customers || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
       setDrivers(data.drivers || []);
@@ -466,6 +483,7 @@ export default function DrayageJobTrackingPage() {
       setMessages(data.messages || []);
       setTerminals(data.terminals || []);
       setWarehouses(data.warehouses || []);
+      setCustomers(data.customers || []);
       setGeofences(data.geofences || []);
       setVehicles(data.vehicles || []);
       setDrivers(data.drivers || []);
@@ -1469,7 +1487,21 @@ export default function DrayageJobTrackingPage() {
                         {job.jobPhase}
                       </span>
                     </div>
-                    <StatusPill status={jobEval.displayStatus} label={jobEval.displayStatus} />
+                    <div className="flex items-center gap-1.5">
+                      <StatusPill status={jobEval.displayStatus} label={jobEval.displayStatus} />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedJobId(job.id);
+                          setEditJobTarget(job);
+                        }}
+                        className="p-1 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-blue-400 hover:border-blue-500/40 transition-colors"
+                        title={`Edit ${job.jobCode}`}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
 
                   {(isJobEtcExpired || isJobEtcT15) && (
@@ -1581,6 +1613,15 @@ export default function DrayageJobTrackingPage() {
                         </button>
                       </>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setEditJobTarget(activeJob)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 border border-blue-500/40 text-xs font-bold text-blue-400 hover:bg-blue-600/25 transition-colors"
+                      title="Edit Job & Container Details"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit Job
+                    </button>
                     <button
                       onClick={() => setShowLegModal(true)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-main)] hover:border-blue-500/40 transition-colors"
@@ -3098,6 +3139,22 @@ export default function DrayageJobTrackingPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Job Modal */}
+      <DrayageEditJobModal
+        open={Boolean(editJobTarget)}
+        job={editJobTarget}
+        customers={customers}
+        terminals={terminals}
+        warehouses={warehouses}
+        onClose={() => setEditJobTarget(null)}
+        onSaved={async (msg) => {
+          invalidateDrayageClientCache();
+          showToast('success', msg);
+          await loadData(true);
+        }}
+        onError={(msg) => showToast('error', msg)}
+      />
 
       {/* Super Admin Drayage Configuration Modal */}
       <DrayageSuperAdminConfigModal

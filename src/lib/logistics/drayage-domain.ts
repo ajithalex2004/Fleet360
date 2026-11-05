@@ -240,6 +240,8 @@ export interface DrayageJob {
   createdAt: string;
   updatedAt: string;
   cargoWeightKg?: number;
+  sealNumber?: string | null;
+  dischargeDate?: string | null;
   shippingLine?: string;
   bogieJobId?: string | null;
   streetTurnJobId?: string | null;
@@ -2424,6 +2426,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'PCS_SLOT_AUTO_REBOOKED',
     'TRACTOR_SWAPPED_SLOT_RESCUE',
     'DO_REVALIDATED',
+    'JOB_EDITED',
   ]);
   const SYSTEM_DISPATCHER_ACTORS = new Set([
     'customer alert engine (whatsapp + email)',
@@ -2912,6 +2915,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const linkedCnt =
       (j.containerId ? containerById.get(j.containerId) : undefined) ||
       containerByNumber.get(j.containerNumber.toUpperCase());
+    if (linkedCnt) {
+      j.sealNumber = linkedCnt.sealNumber ?? null;
+      j.dischargeDate = linkedCnt.dischargeDate ?? null;
+      if (linkedCnt.weightKg && linkedCnt.weightKg > 0) {
+        j.cargoWeightKg = linkedCnt.weightKg;
+      }
+    }
     const term =
       (j.terminalId ? terminalMap.get(j.terminalId) : undefined) ||
       terminals.find(t => t.name.toLowerCase() === j.terminalName.toLowerCase());
@@ -3711,6 +3721,397 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
   }
 
   return { createdCount: createdJobs.length, jobCodes: createdJobs };
+}
+
+export interface UpdateDrayageJobInput {
+  tenantId: string;
+  jobId: string;
+  containerNumber?: string;
+  containerSize?: string;
+  containerType?: string;
+  sealNumber?: string | null;
+  weightKg?: number | null;
+  shipmentType?: 'IMPORT' | 'EXPORT';
+  priority?: 'STANDARD' | 'HIGH' | 'URGENT';
+  customerId?: string | null;
+  customerName?: string;
+  terminalId?: string | null;
+  terminalName?: string;
+  warehouseId?: string | null;
+  warehouseName?: string;
+  doExpiryDate?: string | null;
+  dischargeDate?: string | null;
+  tokenNumber?: string | null;
+  rateAmountAed?: number;
+  driverAllowanceAed?: number;
+  customsInspection?: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
+  notes?: string | null;
+  actor?: string;
+}
+
+export async function updateDrayageJobDetails(
+  db: DrayageDbClient,
+  input: UpdateDrayageJobInput,
+) {
+  await ensureDrayageSchema(db);
+
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    input.jobId,
+    input.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const safeIsoOrNull = (val: unknown): string | null => {
+    if (!val || typeof val !== 'string' || !val.trim()) return null;
+    const d = new Date(val.trim());
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
+  const oldContainerNumber = String(job.container_number ?? '').trim().toUpperCase();
+  const nextContainerNumber =
+    input.containerNumber && String(input.containerNumber).trim()
+      ? String(input.containerNumber).trim().toUpperCase()
+      : oldContainerNumber;
+  const nextContainerSize =
+    input.containerSize && String(input.containerSize).trim()
+      ? String(input.containerSize).trim().toUpperCase()
+      : String(job.container_size ?? '40HC');
+  const nextContainerType =
+    input.containerType && String(input.containerType).trim()
+      ? String(input.containerType).trim().toUpperCase()
+      : String(job.container_type ?? 'DRY');
+  const nextShipmentType =
+    input.shipmentType === 'EXPORT' || input.shipmentType === 'IMPORT'
+      ? input.shipmentType
+      : String(job.shipment_type) === 'EXPORT'
+      ? 'EXPORT'
+      : 'IMPORT';
+  const nextPriority =
+    input.priority && ['STANDARD', 'HIGH', 'URGENT'].includes(String(input.priority).toUpperCase())
+      ? (String(input.priority).toUpperCase() as 'STANDARD' | 'HIGH' | 'URGENT')
+      : (String(job.priority ?? 'STANDARD') as 'STANDARD' | 'HIGH' | 'URGENT');
+
+  const nextCustomerId =
+    input.customerId !== undefined ? (input.customerId || null) : (job.customer_id ? String(job.customer_id) : null);
+  const nextCustomerName =
+    input.customerName && String(input.customerName).trim()
+      ? String(input.customerName).trim()
+      : String(job.customer_name ?? 'Enterprise Shipper');
+
+  const nextTerminalId =
+    input.terminalId !== undefined ? (input.terminalId || null) : (job.terminal_id ? String(job.terminal_id) : null);
+  const nextTerminalName =
+    input.terminalName && String(input.terminalName).trim()
+      ? String(input.terminalName).trim()
+      : String(job.terminal_name ?? 'DPW-Jebel Ali-T1');
+
+  const nextWarehouseId =
+    input.warehouseId !== undefined ? (input.warehouseId || null) : (job.warehouse_id ? String(job.warehouse_id) : null);
+  const nextWarehouseName =
+    input.warehouseName && String(input.warehouseName).trim()
+      ? String(input.warehouseName).trim()
+      : String(job.warehouse_name ?? 'Consignee Warehouse');
+
+  const nextDoExpiryIso =
+    input.doExpiryDate !== undefined
+      ? safeIsoOrNull(input.doExpiryDate)
+      : job.do_expiry_date
+      ? new Date(String(job.do_expiry_date)).toISOString()
+      : null;
+
+  const nextDischargeIso =
+    input.dischargeDate !== undefined ? safeIsoOrNull(input.dischargeDate) : null;
+
+  const nextTokenNumber =
+    input.tokenNumber !== undefined
+      ? (input.tokenNumber && String(input.tokenNumber).trim()
+          ? String(input.tokenNumber).trim().toUpperCase()
+          : null)
+      : job.token_number
+      ? String(job.token_number)
+      : null;
+
+  const nextRateAed =
+    input.rateAmountAed !== undefined && Number.isFinite(Number(input.rateAmountAed)) && Number(input.rateAmountAed) >= 0
+      ? Number(input.rateAmountAed)
+      : Number(job.rate_amount_aed ?? 1550);
+
+  const nextDriverAllowanceAed =
+    input.driverAllowanceAed !== undefined &&
+    Number.isFinite(Number(input.driverAllowanceAed)) &&
+    Number(input.driverAllowanceAed) >= 0
+      ? Number(input.driverAllowanceAed)
+      : Number(job.driver_allowance_aed ?? 150);
+
+  const nextWeightKg =
+    input.weightKg !== undefined && Number.isFinite(Number(input.weightKg)) && Number(input.weightKg) > 0
+      ? Number(input.weightKg)
+      : Number(job.cargo_weight_kg ?? 22000);
+
+  const nextSealNumber =
+    input.sealNumber !== undefined
+      ? (input.sealNumber && String(input.sealNumber).trim() ? String(input.sealNumber).trim() : null)
+      : undefined;
+
+  const nextCustomsInspection =
+    input.customsInspection !== undefined ? Boolean(input.customsInspection) : Boolean(job.customs_inspection);
+  const nextMunicipalityInspection =
+    input.municipalityInspection !== undefined
+      ? Boolean(input.municipalityInspection)
+      : Boolean(job.municipality_inspection);
+  const nextCpipInspection =
+    input.cpipInspection !== undefined ? Boolean(input.cpipInspection) : Boolean(job.cpip_inspection);
+  const nextMercInspection =
+    input.mercInspection !== undefined ? Boolean(input.mercInspection) : Boolean(job.merc_inspection);
+  const nextBoxcareInspection =
+    input.boxcareInspection !== undefined ? Boolean(input.boxcareInspection) : Boolean(job.boxcare_inspection);
+
+  const nextNotes =
+    input.notes !== undefined
+      ? (input.notes && String(input.notes).trim() ? String(input.notes).trim() : null)
+      : job.notes
+      ? String(job.notes)
+      : null;
+
+  const nextShippingLine = detectShippingLine(nextContainerNumber);
+
+  // Build concise summary of changes for audit log
+  const changes: string[] = [];
+  if (nextContainerNumber !== oldContainerNumber) {
+    changes.push(`Container: ${oldContainerNumber} → ${nextContainerNumber}`);
+  }
+  if (nextContainerSize !== String(job.container_size ?? '') || nextContainerType !== String(job.container_type ?? '')) {
+    changes.push(`Spec: ${nextContainerSize} ${nextContainerType}`);
+  }
+  if (nextCustomerName !== String(job.customer_name ?? '')) {
+    changes.push(`Customer: ${nextCustomerName}`);
+  }
+  if (nextTerminalName !== String(job.terminal_name ?? '')) {
+    changes.push(`Terminal: ${nextTerminalName}`);
+  }
+  if (nextWarehouseName !== String(job.warehouse_name ?? '')) {
+    changes.push(`Consignee: ${nextWarehouseName}`);
+  }
+  if (nextRateAed !== Number(job.rate_amount_aed ?? 0)) {
+    changes.push(`Rate: AED ${nextRateAed}`);
+  }
+  if (nextDriverAllowanceAed !== Number(job.driver_allowance_aed ?? 0)) {
+    changes.push(`Allowance: AED ${nextDriverAllowanceAed}`);
+  }
+  if (nextPriority !== String(job.priority ?? '')) {
+    changes.push(`Priority: ${nextPriority}`);
+  }
+
+  // 1. Update main job row
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET container_number = $3,
+            container_size = $4,
+            container_type = $5,
+            shipment_type = $6,
+            priority = $7,
+            customer_id = $8,
+            customer_name = $9,
+            terminal_id = $10,
+            terminal_name = $11,
+            warehouse_id = $12,
+            warehouse_name = $13,
+            do_expiry_date = $14::timestamptz,
+            token_number = $15,
+            pcs_token_number = COALESCE($15, pcs_token_number),
+            rate_amount_aed = $16,
+            driver_allowance_aed = $17,
+            cargo_weight_kg = $18,
+            shipping_line = $19,
+            customs_inspection = $20,
+            municipality_inspection = $21,
+            cpip_inspection = $22,
+            merc_inspection = $23,
+            boxcare_inspection = $24,
+            notes = $25,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    input.jobId,
+    input.tenantId,
+    nextContainerNumber,
+    nextContainerSize,
+    nextContainerType,
+    nextShipmentType,
+    nextPriority,
+    nextCustomerId,
+    nextCustomerName,
+    nextTerminalId,
+    nextTerminalName,
+    nextWarehouseId,
+    nextWarehouseName,
+    nextDoExpiryIso,
+    nextTokenNumber,
+    nextRateAed,
+    nextDriverAllowanceAed,
+    nextWeightKg,
+    nextShippingLine,
+    nextCustomsInspection,
+    nextMunicipalityInspection,
+    nextCpipInspection,
+    nextMercInspection,
+    nextBoxcareInspection,
+    nextNotes,
+  );
+
+  // 2. Sync container / route metadata to any linked L1/L2 paired job
+  const parentJobId = job.parent_job_id ? String(job.parent_job_id) : null;
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET container_number = $3,
+            container_size = $4,
+            container_type = $5,
+            customer_id = $6,
+            customer_name = $7,
+            terminal_id = $8,
+            terminal_name = $9,
+            warehouse_id = $10,
+            warehouse_name = $11,
+            do_expiry_date = COALESCE($12::timestamptz, do_expiry_date),
+            shipping_line = $13,
+            updated_at = NOW()
+      WHERE tenant_id = $1
+        AND id <> $2
+        AND (parent_job_id = $2 OR ($14::text IS NOT NULL AND id = $14::text))`,
+    input.tenantId,
+    input.jobId,
+    nextContainerNumber,
+    nextContainerSize,
+    nextContainerType,
+    nextCustomerId,
+    nextCustomerName,
+    nextTerminalId,
+    nextTerminalName,
+    nextWarehouseId,
+    nextWarehouseName,
+    nextDoExpiryIso,
+    nextShippingLine,
+    parentJobId,
+  ).catch(() => {});
+
+  // 3. Update linked Container record in `logistics_drayage_containers`
+  const containerId = job.container_id ? String(job.container_id) : null;
+  if (containerId || oldContainerNumber) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET container_number = $4,
+              size = $5,
+              container_type = $6,
+              shipment_type = $7,
+              customer_id = $8,
+              customer_name = $9,
+              terminal_id = $10,
+              terminal_name = $11,
+              warehouse_id = $12,
+              warehouse_name = $13,
+              do_expiry_date = COALESCE($14::timestamptz, do_expiry_date),
+              discharge_date = COALESCE($15::timestamptz, discharge_date),
+              seal_number = CASE WHEN $16::boolean THEN $17 ELSE seal_number END,
+              weight_kg = $18,
+              customs_inspection = $19,
+              municipality_inspection = $20,
+              cpip_inspection = $21,
+              merc_inspection = $22,
+              boxcare_inspection = $23,
+              updated_at = NOW()
+        WHERE tenant_id = $1
+          AND ((id = $2 AND $2 IS NOT NULL) OR UPPER(container_number) = UPPER($3))`,
+      input.tenantId,
+      containerId,
+      oldContainerNumber,
+      nextContainerNumber,
+      nextContainerSize,
+      nextContainerType,
+      nextShipmentType,
+      nextCustomerId,
+      nextCustomerName,
+      nextTerminalId,
+      nextTerminalName,
+      nextWarehouseId,
+      nextWarehouseName,
+      nextDoExpiryIso,
+      nextDischargeIso,
+      nextSealNumber !== undefined,
+      nextSealNumber ?? null,
+      nextWeightKg,
+      nextCustomsInspection,
+      nextMunicipalityInspection,
+      nextCpipInspection,
+      nextMercInspection,
+      nextBoxcareInspection,
+    ).catch(() => {});
+  }
+
+  // 4. Sync trailer linked_container_number if container number changed
+  if (nextContainerNumber !== oldContainerNumber) {
+    const trailerId = job.assigned_trailer_id ? String(job.assigned_trailer_id) : null;
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_trailers
+          SET linked_container_number = $4,
+              updated_at = NOW()
+        WHERE tenant_id = $1
+          AND ((id = $2 AND $2 IS NOT NULL) OR UPPER(linked_container_number) = UPPER($3))`,
+      input.tenantId,
+      trailerId,
+      oldContainerNumber,
+      nextContainerNumber,
+    ).catch(() => {});
+  }
+
+  // 5. Sync pending driver allowance if allowance or container number changed
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_allowances
+        SET container_number = $3,
+            route_summary = $4,
+            allowance_amount_aed = CASE WHEN status = 'PENDING' THEN $5 ELSE allowance_amount_aed END,
+            total_amount_aed = CASE
+              WHEN status = 'PENDING' THEN
+                $5 + COALESCE(port_gate_fee_aed, 0) + COALESCE(overnight_halt_aed, 0) +
+                COALESCE(bogie_bonus_aed, 0) + COALESCE(street_turn_bonus_aed, 0) + COALESCE(inspection_bonus_aed, 0)
+              ELSE total_amount_aed
+            END
+      WHERE tenant_id = $1 AND job_id = $2`,
+    input.tenantId,
+    input.jobId,
+    nextContainerNumber,
+    `${nextTerminalName} → ${nextWarehouseName}`,
+    nextDriverAllowanceAed,
+  ).catch(() => {});
+
+  // 6. Record audit log entry
+  const logSummary =
+    changes.length > 0
+      ? `Job details edited (${changes.join(' · ')})`
+      : `Job details updated for ${nextContainerNumber}`;
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'JOB_EDITED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    input.tenantId,
+    input.jobId,
+    String(job.job_code),
+    logSummary,
+    input.actor || 'dispatcher',
+  ).catch(() => {});
+
+  return {
+    ok: true,
+    jobId: input.jobId,
+    jobCode: String(job.job_code),
+    containerNumber: nextContainerNumber,
+    changes,
+  };
 }
 
 export async function assignDrayageJob(

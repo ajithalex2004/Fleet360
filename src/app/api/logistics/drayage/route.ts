@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import {
   getDrayageWorkspaceData,
   createDrayageJobsBatch,
+  updateDrayageJobDetails,
   assignDrayageJob,
   updateDrayageJobExecutionStatus,
   activateL2EmptyReturnJob,
@@ -330,6 +331,64 @@ export async function POST(req: NextRequest) {
             driverAllowanceAed: Number.isFinite(parsedAllow) && parsedAllow >= 0 ? parsedAllow : 150,
             notes: body.notes ?? null,
             containers: Array.isArray(body.containers) ? body.containers : [],
+          });
+        }
+
+        case 'edit_job':
+        case 'update_job': {
+          const jobId = String(body.jobId ?? '').trim();
+          if (!jobId) {
+            throw new Error('jobId is required to edit a job');
+          }
+          return updateDrayageJobDetails(tx, {
+            tenantId,
+            jobId,
+            containerNumber:
+              body.containerNumber !== undefined ? String(body.containerNumber).trim().toUpperCase() : undefined,
+            containerSize: body.containerSize !== undefined ? String(body.containerSize).trim() : undefined,
+            containerType: body.containerType !== undefined ? String(body.containerType).trim() : undefined,
+            sealNumber: body.sealNumber !== undefined ? (body.sealNumber ? String(body.sealNumber).trim() : null) : undefined,
+            weightKg:
+              body.weightKg !== undefined && Number.isFinite(Number(body.weightKg))
+                ? Number(body.weightKg)
+                : undefined,
+            shipmentType:
+              body.shipmentType === 'EXPORT' || body.shipmentType === 'IMPORT'
+                ? body.shipmentType
+                : undefined,
+            priority:
+              body.priority && ['STANDARD', 'HIGH', 'URGENT'].includes(String(body.priority).toUpperCase())
+                ? (String(body.priority).toUpperCase() as 'STANDARD' | 'HIGH' | 'URGENT')
+                : undefined,
+            customerId: body.customerId !== undefined ? (body.customerId ? String(body.customerId) : null) : undefined,
+            customerName: body.customerName !== undefined ? String(body.customerName).trim() : undefined,
+            terminalId: body.terminalId !== undefined ? (body.terminalId ? String(body.terminalId) : null) : undefined,
+            terminalName: body.terminalName !== undefined ? String(body.terminalName).trim() : undefined,
+            warehouseId: body.warehouseId !== undefined ? (body.warehouseId ? String(body.warehouseId) : null) : undefined,
+            warehouseName: body.warehouseName !== undefined ? String(body.warehouseName).trim() : undefined,
+            doExpiryDate: body.doExpiryDate !== undefined ? (body.doExpiryDate ? String(body.doExpiryDate) : null) : undefined,
+            dischargeDate: body.dischargeDate !== undefined ? (body.dischargeDate ? String(body.dischargeDate) : null) : undefined,
+            tokenNumber: body.tokenNumber !== undefined ? (body.tokenNumber ? String(body.tokenNumber).trim() : null) : undefined,
+            rateAmountAed:
+              body.rateAmountAed !== undefined && Number.isFinite(Number(body.rateAmountAed))
+                ? Number(body.rateAmountAed)
+                : undefined,
+            driverAllowanceAed:
+              body.driverAllowanceAed !== undefined && Number.isFinite(Number(body.driverAllowanceAed))
+                ? Number(body.driverAllowanceAed)
+                : undefined,
+            customsInspection:
+              body.customsInspection !== undefined ? Boolean(body.customsInspection) : undefined,
+            municipalityInspection:
+              body.municipalityInspection !== undefined ? Boolean(body.municipalityInspection) : undefined,
+            cpipInspection:
+              body.cpipInspection !== undefined ? Boolean(body.cpipInspection) : undefined,
+            mercInspection:
+              body.mercInspection !== undefined ? Boolean(body.mercInspection) : undefined,
+            boxcareInspection:
+              body.boxcareInspection !== undefined ? Boolean(body.boxcareInspection) : undefined,
+            notes: body.notes !== undefined ? (body.notes ? String(body.notes) : null) : undefined,
+            actor: dispatcherActor,
           });
         }
 
