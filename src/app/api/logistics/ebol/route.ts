@@ -7,26 +7,40 @@ import {
   DigitalEBOLRecord,
 } from '@/lib/digital-ebol-engine';
 
-const EBOL_STORE: Record<string, DigitalEBOLRecord> = {};
+const EBOL_STORE_BY_TENANT = new Map<string, Record<string, DigitalEBOLRecord>>();
+
+function getTenantEbolStore(tenantId: string): Record<string, DigitalEBOLRecord> {
+  let store = EBOL_STORE_BY_TENANT.get(tenantId);
+  if (!store) {
+    store = {};
+    EBOL_STORE_BY_TENANT.set(tenantId, store);
+  }
+  return store;
+}
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
+  const tenantStore = getTenantEbolStore(auth.tenantId);
   const ebolNumber = req.nextUrl.searchParams.get('ebolNumber');
-  if (ebolNumber && EBOL_STORE[ebolNumber]) {
-    return NextResponse.json({ success: true, ebol: EBOL_STORE[ebolNumber] });
+  if (ebolNumber && tenantStore[ebolNumber]) {
+    return NextResponse.json({ success: true, ebol: tenantStore[ebolNumber] });
   }
 
   return NextResponse.json({
     success: true,
-    records: Object.values(EBOL_STORE),
+    records: Object.values(tenantStore),
   });
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json();
@@ -34,8 +48,9 @@ export async function POST(req: NextRequest) {
     // actual (unchanged) runtime behavior — it does not itself validate
     // missing required fields, same as before.
     const body = stripTenantOwnershipFields(rawBody) as Parameters<typeof createDigitalEBOL>[0];
-    const ebol = createDigitalEBOL(body);
-    EBOL_STORE[ebol.ebolNumber] = ebol;
+    const ebol = createDigitalEBOL({ ...body, tenantId: auth.tenantId });
+    const tenantStore = getTenantEbolStore(auth.tenantId);
+    tenantStore[ebol.ebolNumber] = ebol;
 
     return NextResponse.json({
       success: true,

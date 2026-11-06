@@ -124,11 +124,21 @@ export async function getPortalUserById(tenantId: string, id: string): Promise<P
 /** Find a portal user by email (case-insensitive) across tenants. Used
  *  on login when we don't yet know the tenant — caller must check that
  *  the returned user's tenant matches the requested tenant. */
-export async function findPortalUserByEmail(email: string): Promise<PortalUser | null> {
+export async function findPortalUserByEmail(email: string, tenantId?: string): Promise<PortalUser | null> {
+  if (tenantId) {
+    const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE lower(email) = lower($1) AND tenant_id = $2 AND deleted_at IS NULL
+        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+        LIMIT 1`,
+      email.trim(), tenantId,
+    ));
+    return rows[0] ? rowToApi(rows[0]) : null;
+  }
   const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
       `SELECT ${SELECT} FROM customer_portal_users
         WHERE lower(email) = lower($1) AND deleted_at IS NULL
-        ORDER BY created_at DESC
+        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
         LIMIT 1`,
       email.trim(),
   ));
@@ -136,12 +146,28 @@ export async function findPortalUserByEmail(email: string): Promise<PortalUser |
 }
 
 /** Returns the row INCLUDING the password hash. Internal only — never
- *  return the hash via API. */
-export async function _findUserWithHashByEmail(email: string): Promise<(PortalUser & { passwordHash: string | null }) | null> {
+ *  return the hash via API. Prioritizes active rows with a password hash
+ *  set so an unaccepted invite in a second tenant cannot shadow an active
+ *  portal user during login. */
+export async function _findUserWithHashByEmail(
+  email: string,
+  tenantId?: string,
+): Promise<(PortalUser & { passwordHash: string | null }) | null> {
+  if (tenantId) {
+    const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM customer_portal_users
+        WHERE lower(email) = lower($1) AND tenant_id = $2 AND deleted_at IS NULL
+        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+        LIMIT 1`,
+      email.trim(), tenantId,
+    ));
+    if (!rows[0]) return null;
+    return { ...rowToApi(rows[0]), passwordHash: rows[0].password_hash };
+  }
   const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
       `SELECT ${SELECT} FROM customer_portal_users
         WHERE lower(email) = lower($1) AND deleted_at IS NULL
-        ORDER BY created_at DESC
+        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
         LIMIT 1`,
       email.trim(),
   ));

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const toNumber = (value: unknown): number | null => {
@@ -22,9 +22,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-      const tenantWhere = ' AND so.tenant_id = $1';
-      const params = [tenantId];
-
       try {
         const rows = await tx.$queryRawUnsafe<Array<{
           id: string;
@@ -47,7 +44,7 @@ export async function GET(req: NextRequest) {
               SELECT DISTINCT ON (shipment_order_id)
                      shipment_order_id, latitude, longitude, source, occurred_at
                 FROM logistics_tracking_events
-               WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+               WHERE tenant_id = $1 AND latitude IS NOT NULL AND longitude IS NOT NULL
                ORDER BY shipment_order_id, occurred_at DESC, created_at DESC
             ),
             latest_pod AS (
@@ -57,14 +54,14 @@ export async function GET(req: NextRequest) {
                      NULLIF(gps->>'lng', '')::numeric AS longitude,
                      delivered_at
                 FROM logistics_pod_events
-               WHERE gps IS NOT NULL
+               WHERE tenant_id = $1 AND gps IS NOT NULL
                ORDER BY shipment_order_id, created_at DESC
             ),
             origin_stop AS (
               SELECT DISTINCT ON (shipment_order_id)
                      shipment_order_id, latitude, longitude
                 FROM logistics_shipment_stops
-               WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+               WHERE tenant_id = $1 AND latitude IS NOT NULL AND longitude IS NOT NULL
                ORDER BY shipment_order_id, sequence_no ASC
             )
             SELECT so.id,
@@ -91,10 +88,11 @@ export async function GET(req: NextRequest) {
               LEFT JOIN latest_pod lp ON lp.shipment_order_id = so.id
               LEFT JOIN origin_stop os ON os.shipment_order_id = so.id
              WHERE so.deleted_at IS NULL
-               AND so.status IN ('ASSIGNED','DISPATCHED','ENROUTE_PICKUP','LOADED','ENROUTE_DELIVERY','DELIVERED')${tenantWhere}
+               AND so.tenant_id = $1
+               AND so.status IN ('ASSIGNED','DISPATCHED','ENROUTE_PICKUP','LOADED','IN_TRANSIT','ENROUTE_DELIVERY','DELIVERED')
              ORDER BY so.updated_at DESC, so.created_at DESC
              LIMIT 200`,
-          ...params,
+          tenantId,
         );
 
         return NextResponse.json(rows.map(row => ({
@@ -124,4 +122,3 @@ export async function GET(req: NextRequest) {
       }
   });
 }
-

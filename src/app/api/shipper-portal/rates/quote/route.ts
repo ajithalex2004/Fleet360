@@ -8,25 +8,23 @@
  *   1. Authenticate via shipper-portal session cookie.
  *   2. Stamp customerId from the session (NEVER from the body — a shipper
  *      can only request a rate for their own contracts).
- *   3. Mint a Bearer JWT from the tenant + customer identity and forward
- *      the request to the Go rate engine.
- *   4. Relay Go's response back to the browser unchanged.
- *
- * The same engine is used as for operator quotes — contract-aware, with the
- * spot-market fallback. Returns the same QuoteResult the operator UI gets;
- * the shipper form uses it for a live estimate.
+ *   3. Try the upstream Go rate engine if configured and reachable; otherwise
+ *      fall back seamlessly to the local TypeScript rate engine (quoteShipment)
+ *      under tenant RLS so rate previews always work even without the Go binary.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { signJwtForBackend } from '@/lib/auth/jwt';
-
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { quoteShipment } from '@/lib/logistics/rate-engine';
 
 /** Role of backend tokens minted for shipper-portal users (no staff rights). */
 const SHIPPER_PORTAL_BACKEND_ROLE = 'SHIPPER_PORTAL';
 export const runtime = 'nodejs';
 
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? '';
 
 interface IncomingBody {
   origin?: string | null;
@@ -61,47 +59,58 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let token: string;
-  try {
-    // Mint a JWT scoped to the shipper's tenant with the shipper portal's
-    // own role. The rate engine only needs the tenant; it never needs, and
-    // must not receive, tenant-admin rights (Go grants those to TENANT_ADMIN
-    // tokens, e.g. backend/handlers/admin_tenants.go).
-    token = await signJwtForBackend({
-      userId: auth.userId,
-      tenantId: auth.tenantId,
-      role: SHIPPER_PORTAL_BACKEND_ROLE,
-    });
-    } catch (err) {
-    console.warn('[shipper-portal/rates/quote] backend JWT sign failed:', err instanceof Error ? err.message : err);
-    return NextResponse.json({ error: 'Rate engine is not available right now.' }, { status: 503 });
+  // If GO_BACKEND_URL is explicitly configured, try upstream first and fall back to local TS engine on error
+  if (GO_BACKEND_URL) {
+    try {
+      const token = await signJwtForBackend({
+        userId: auth.userId,
+        tenantId: auth.tenantId,
+        role: SHIPPER_PORTAL_BACKEND_ROLE,
+      });
+
+      const res = await fetch(`${GO_BACKEND_URL}/api/v1/logistics/rates/quote`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin: body.origin.trim(),
+          destination: body.destination.trim(),
+          vehicleType: body.vehicleType ?? null,
+          serviceLevel: body.serviceLevel ?? null,
+          customerId: auth.customerId,
+          shipmentDate: body.shipmentDate ?? null,
+          distanceKm: body.distanceKm ?? null,
+          totalWeightKg: body.totalWeightKg ?? null,
+        }),
+      });
+      if (res.ok) {
+        const text = await res.text();
+        return new NextResponse(text, {
+          status: res.status,
+          headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
+        });
+      }
+    } catch {
+      // Fall through to local TS rate engine
+    }
   }
 
   try {
-    const res = await fetch(`${GO_BACKEND_URL}/api/v1/logistics/rates/quote`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        origin: body.origin.trim(),
-        destination: body.destination.trim(),
+    const quote = await withTenantRls(prisma, auth.tenantId, () =>
+      quoteShipment({
+        tenantId: auth.tenantId,
+        origin: body.origin!.trim(),
+        destination: body.destination!.trim(),
         vehicleType: body.vehicleType ?? null,
         serviceLevel: body.serviceLevel ?? null,
-        // Customer id is ALWAYS the session's — never the body. This is what
-        // lets the engine match customer-scoped contracts; trusting the body
-        // would let one shipper preview another shipper's rates.
         customerId: auth.customerId,
         shipmentDate: body.shipmentDate ?? null,
         distanceKm: body.distanceKm ?? null,
-        totalWeightKg: body.totalWeightKg ?? null,
+        weightKg: body.totalWeightKg ?? null,
       }),
-    });
-    const text = await res.text();
-    return new NextResponse(text, {
-      status: res.status,
-      headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
-    });
-    } catch (err) {
-    console.error('[shipper-portal/rates/quote] upstream call failed', err);
-    return NextResponse.json({ error: 'Rate engine is unreachable.' }, { status: 502 });
+    );
+    return NextResponse.json(quote);
+  } catch (err) {
+    console.error('[shipper-portal/rates/quote] local quoteShipment failed', err);
+    return NextResponse.json({ error: 'Failed to calculate rate quote.' }, { status: 500 });
   }
 }

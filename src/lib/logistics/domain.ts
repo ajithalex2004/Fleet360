@@ -13,12 +13,14 @@ type JsonRecord = Record<string, unknown>;
 
 export type LogisticsShipmentStatus =
   | 'DRAFT'
+  | 'SUBMITTED'
   | 'PENDING'
   | 'APPROVED'
   | 'ASSIGNED'
   | 'DISPATCHED'
   | 'ENROUTE_PICKUP'
   | 'LOADED'
+  | 'IN_TRANSIT'
   | 'ENROUTE_DELIVERY'
   | 'DELIVERED'
   | 'POD_SUBMITTED'
@@ -5112,25 +5114,26 @@ export async function postFreightSettlementToFinance(args: {
     allowClosed: true,
   });
 
-  const [customerCharge] = await prisma.$queryRawUnsafe<Array<{
+  const customerCharges = await prisma.$queryRawUnsafe<Array<{
     id: string;
+    charge_type: string;
     total_amount: string | number;
     currency: string;
     description: string | null;
     invoice_id: string | null;
     metadata: JsonRecord | null;
   }>>(
-    `SELECT id, total_amount, currency, description, invoice_id, metadata
+    `SELECT id, charge_type, total_amount, currency, description, invoice_id, metadata
        FROM logistics_freight_charges
       WHERE tenant_id = $1
         AND shipment_order_id = $2
         AND charge_side = 'CUSTOMER'
         AND billing_status IN ('READY','POSTED')
-      ORDER BY created_at DESC
-      LIMIT 1`,
+      ORDER BY created_at ASC`,
     args.tenantId,
     args.shipmentOrderId,
   );
+  const customerCharge = customerCharges[0];
 
   const [carrierCharge] = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -5205,26 +5208,35 @@ export async function postFreightSettlementToFinance(args: {
   const results: Array<Record<string, unknown>> = [];
   const currency = customerCharge?.currency ?? carrierCharge?.currency ?? shipment.currency ?? 'AED';
 
-  if (customerCharge) {
+  if (customerCharge && customerCharges.length > 0) {
     const existing = await getFinancePosting({
       tenantId: args.tenantId,
       shipmentOrderId: args.shipmentOrderId,
       postingType: 'CUSTOMER_INVOICE',
       sourceRecordId: customerCharge.id,
     });
-    if (existing?.financeInvoiceId || customerCharge.invoice_id) {
-      results.push({ postingType: 'CUSTOMER_INVOICE', mode: 'existing', financeInvoiceId: existing?.financeInvoiceId ?? customerCharge.invoice_id });
+    const existingInvoiceId = existing?.financeInvoiceId ?? customerCharges.find(c => c.invoice_id)?.invoice_id ?? null;
+    if (existingInvoiceId) {
+      results.push({ postingType: 'CUSTOMER_INVOICE', mode: 'existing', financeInvoiceId: existingInvoiceId });
     } else {
       const invoiceNo = await nextFinanceInvoiceNo(args.tenantId);
-      const amount = numberOrNull(customerCharge.total_amount) ?? 0;
-      const lineItems = [{
-        description: customerCharge.description ?? `Freight service for ${shipment.shipment_no}`,
-        qty: 1,
-        unitPrice: amount,
-        amount,
-        sourceModule: 'LOGISTICS',
-        shipmentOrderId: shipment.id,
-      }];
+      const lineItems = customerCharges.map((chg) => {
+        const lineAmt = Math.round((numberOrNull(chg.total_amount) ?? 0) * 100) / 100;
+        return {
+          description: chg.description ?? `${chg.charge_type || 'Freight'} charge for ${shipment.shipment_no}`,
+          qty: 1,
+          unitPrice: lineAmt,
+          amount: lineAmt,
+          chargeId: chg.id,
+          chargeType: chg.charge_type,
+          sourceModule: 'LOGISTICS',
+          shipmentOrderId: shipment.id,
+        };
+      });
+      const subtotal = Math.round(lineItems.reduce((sum, item) => sum + item.amount, 0) * 100) / 100;
+      const vatAmount = Math.round(subtotal * 5) / 100;
+      const totalAmount = Math.round((subtotal + vatAmount) * 100) / 100;
+
       // Use the canonical ledger upsert — idempotent on (module_source, reference_type, reference_id).
       const { financeInvoiceId } = await upsertFinanceInvoice({
         tenantId:      args.tenantId,
@@ -5238,9 +5250,9 @@ export async function postFreightSettlementToFinance(args: {
         serviceType:   'LOGISTICS',
         description:   `Logistics freight invoice for ${shipment.shipment_no}`,
         lineItems,
-        subtotal:      amount,
-        vatAmount:     0,
-        totalAmount:   amount,
+        subtotal,
+        vatAmount,
+        totalAmount,
         currency,
         paymentStatus: 'SENT',
         notes:         `Created from logistics shipment ${shipment.shipment_no}`,
@@ -5255,22 +5267,24 @@ export async function postFreightSettlementToFinance(args: {
           shipmentOrderId: shipment.id,
           shipmentNo:      shipment.shipment_no,
           chargeId:        customerCharge.id,
+          chargeIds:       customerCharges.map(c => c.id),
           route: {
             origin:      shipment.origin_name      ?? shipment.origin_address      ?? null,
             destination: shipment.destination_name ?? shipment.destination_address ?? null,
           },
         },
       });
+      const chargeIds = customerCharges.map(c => c.id);
       await prisma.$executeRawUnsafe(
         `UPDATE logistics_freight_charges
             SET billing_status = 'POSTED',
                 invoice_id = $1,
                 updated_at = NOW()
           WHERE tenant_id = $2
-            AND id = $3`,
+            AND id = ANY($3::text[])`,
         financeInvoiceId,
         args.tenantId,
-        customerCharge.id,
+        chargeIds,
       );
       const posting = await insertFinancePosting({
         tenantId:        args.tenantId,
@@ -5278,9 +5292,9 @@ export async function postFreightSettlementToFinance(args: {
         postingType:     'CUSTOMER_INVOICE',
         sourceRecordId:  customerCharge.id,
         financeInvoiceId,
-        amount,
+        amount:          totalAmount,
         currency,
-        metadata: { invoiceNo, shipmentNo: shipment.shipment_no },
+        metadata: { invoiceNo, shipmentNo: shipment.shipment_no, subtotal, vatAmount, totalAmount, chargeCount: chargeIds.length },
       });
       results.push({ postingType: 'CUSTOMER_INVOICE', mode: 'created', financeInvoiceId, posting });
     }
@@ -7713,7 +7727,7 @@ export async function awardCarrierBid(args: {
 // `LogisticsValidationError` is defined earlier in this file; we re-use it
 // rather than introduce an import-cycle through lib/logistics/errors.
 
-interface CarrierAppDeviceRecord {
+export interface CarrierAppDeviceRecord {
   id: string;
   deviceId?: string;
   tenantId: string;
@@ -7724,7 +7738,112 @@ interface CarrierAppDeviceRecord {
   revokedAt?: string | null;
 }
 
-export async function issueCarrierAppDevice(_input: {
+let carrierAppAndBroadcastSchemaReady: Promise<void> | null = null;
+
+async function ensureCarrierAppAndBroadcastSchema(): Promise<void> {
+  if (carrierAppAndBroadcastSchemaReady) return carrierAppAndBroadcastSchemaReady;
+  carrierAppAndBroadcastSchemaReady = (async () => {
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS logistics_carrier_app_devices (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          carrier_id TEXT NOT NULL,
+          driver_id TEXT,
+          token_hash TEXT NOT NULL UNIQUE,
+          platform TEXT,
+          push_token TEXT,
+          expires_at TIMESTAMPTZ NOT NULL,
+          revoked_at TIMESTAMPTZ,
+          created_by TEXT,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS logistics_carrier_presence (
+          tenant_id TEXT NOT NULL,
+          carrier_id TEXT NOT NULL,
+          driver_id TEXT,
+          vehicle_id TEXT,
+          vehicle_type TEXT,
+          availability TEXT NOT NULL DEFAULT 'IDLE',
+          latitude DOUBLE PRECISION NOT NULL,
+          longitude DOUBLE PRECISION NOT NULL,
+          accuracy_m DOUBLE PRECISION,
+          heading DOUBLE PRECISION,
+          speed_kph DOUBLE PRECISION,
+          battery_pct DOUBLE PRECISION,
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (tenant_id, carrier_id)
+        )
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS logistics_load_broadcasts (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          shipment_order_id TEXT NOT NULL,
+          rfq_id TEXT,
+          status TEXT NOT NULL DEFAULT 'BROADCASTING',
+          amount NUMERIC(14,2) NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'AED',
+          pickup_lat DOUBLE PRECISION,
+          pickup_lng DOUBLE PRECISION,
+          radius_km DOUBLE PRECISION,
+          vehicle_type TEXT,
+          response_deadline_min INTEGER NOT NULL DEFAULT 10,
+          auto_assign BOOLEAN NOT NULL DEFAULT FALSE,
+          expires_at TIMESTAMPTZ NOT NULL,
+          assigned_offer_id TEXT,
+          assigned_carrier_id TEXT,
+          created_by TEXT,
+          notes TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS logistics_load_broadcast_offers (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          broadcast_id TEXT NOT NULL,
+          shipment_order_id TEXT NOT NULL,
+          rfq_id TEXT,
+          carrier_id TEXT NOT NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL DEFAULT 'OFFERED',
+          amount NUMERIC(14,2) NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'AED',
+          distance_km DOUBLE PRECISION,
+          expires_at TIMESTAMPTZ NOT NULL,
+          responded_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    } catch {
+      carrierAppAndBroadcastSchemaReady = null;
+    }
+  })();
+  return carrierAppAndBroadcastSchemaReady;
+}
+
+function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+export async function issueCarrierAppDevice(input: {
   tenantId: string;
   carrierId: string;
   driverId?: string | null;
@@ -7735,16 +7854,83 @@ export async function issueCarrierAppDevice(_input: {
   createdBy?: string | null;
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
-}): Promise<{ id: string; token: string; expiresAt: string }> {
-  void _input;
-  throw new LogisticsValidationError(['issueCarrierAppDevice is not yet implemented — track Layer 2.5 follow-up.']);
+}): Promise<{ id: string; deviceId: string; token: string; expiresAt: string }> {
+  await ensureCarrierAppAndBroadcastSchema();
+  const carrierRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id FROM logistics_carriers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
+    input.carrierId,
+    input.tenantId,
+  );
+  if (!carrierRows[0]) {
+    throw new LogisticsValidationError(['Carrier not found for this tenant']);
+  }
+
+  const id = `cad-${randomBytes(8).toString('hex')}`;
+  const token = `cad_${randomBytes(24).toString('hex')}`;
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const ttlHours = input.ttlHours && input.ttlHours > 0 ? input.ttlHours : 24 * 90;
+  const expiresAt = new Date(Date.now() + ttlHours * 3_600_000).toISOString();
+  const resolvedDriverId = input.driverId ?? input.driverIdValue ?? null;
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO logistics_carrier_app_devices (
+       id, tenant_id, carrier_id, driver_id, token_hash,
+       platform, push_token, expires_at, created_by, metadata, created_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::timestamptz,$9,$10::jsonb,NOW(),NOW())`,
+    id,
+    input.tenantId,
+    input.carrierId,
+    resolvedDriverId,
+    tokenHash,
+    input.platform ?? null,
+    input.pushToken ?? null,
+    expiresAt,
+    input.createdBy ?? input.actorUserId ?? null,
+    jsonParam(input.metadata ?? {}),
+  );
+
+  return { id, deviceId: id, token, expiresAt };
 }
 
 export async function resolveCarrierAppDevice(token: string): Promise<CarrierAppDeviceRecord | null> {
-  // Stub: real implementation verifies the hashed token, returns the device
-  // record (or null if expired/revoked), and runs the TTL check.
-  void token;
-  throw new LogisticsValidationError(['resolveCarrierAppDevice is not yet implemented — track Layer 2.5 follow-up.']);
+  const clean = String(token ?? '').trim();
+  if (!clean) return null;
+  await ensureCarrierAppAndBroadcastSchema();
+  const tokenHash = createHash('sha256').update(clean).digest('hex');
+
+  const rows = await withPlatformAdmin(prisma, (tx) =>
+    tx.$queryRawUnsafe<Array<{
+      id: string;
+      tenant_id: string;
+      carrier_id: string;
+      driver_id: string | null;
+      token_hash: string;
+      expires_at: Date | string;
+      revoked_at: Date | string | null;
+    }>>(
+      `SELECT id, tenant_id, carrier_id, driver_id, token_hash, expires_at, revoked_at
+         FROM logistics_carrier_app_devices
+        WHERE token_hash = $1
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        LIMIT 1`,
+      tokenHash,
+    ),
+  ).catch(() => []);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    deviceId: row.id,
+    tenantId: row.tenant_id,
+    carrierId: row.carrier_id,
+    driverId: row.driver_id,
+    tokenHash: row.token_hash,
+    expiresAt: iso(row.expires_at) ?? new Date().toISOString(),
+    revokedAt: iso(row.revoked_at),
+  };
 }
 
 export interface CarrierPresenceInput {
@@ -7768,9 +7954,180 @@ export interface CarrierPresenceInput {
   metadata?: JsonRecord | null;
 }
 
-export async function upsertCarrierPresence(_input: CarrierPresenceInput): Promise<{ ok: true }> {
-  void _input;
-  throw new LogisticsValidationError(['upsertCarrierPresence is not yet implemented — track Layer 2.5 follow-up.']);
+export async function upsertCarrierPresence(input: CarrierPresenceInput): Promise<{ ok: true }> {
+  await ensureCarrierAppAndBroadcastSchema();
+  const lat = Number(input.latitude ?? input.lat);
+  const lng = Number(input.longitude ?? input.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    throw new LogisticsValidationError(['Valid latitude and longitude are required for carrier presence']);
+  }
+
+  const rawAvail = String(input.availability ?? (input.online === false ? 'OFFLINE' : 'IDLE')).toUpperCase();
+  const availability = rawAvail === 'AVAILABLE' ? 'IDLE' : rawAvail === 'BUSY' ? 'ON_JOB' : rawAvail;
+  const speedKph = input.speedKph ?? (input.speedMps != null ? Number(input.speedMps) * 3.6 : null);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO logistics_carrier_presence (
+       tenant_id, carrier_id, driver_id, vehicle_id, vehicle_type,
+       availability, latitude, longitude, accuracy_m, heading,
+       speed_kph, battery_pct, last_seen_at, metadata, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13::timestamptz, NOW()),$14::jsonb,NOW())
+     ON CONFLICT (tenant_id, carrier_id)
+     DO UPDATE SET
+       driver_id = COALESCE(EXCLUDED.driver_id, logistics_carrier_presence.driver_id),
+       vehicle_id = COALESCE(EXCLUDED.vehicle_id, logistics_carrier_presence.vehicle_id),
+       vehicle_type = COALESCE(EXCLUDED.vehicle_type, logistics_carrier_presence.vehicle_type),
+       availability = EXCLUDED.availability,
+       latitude = EXCLUDED.latitude,
+       longitude = EXCLUDED.longitude,
+       accuracy_m = EXCLUDED.accuracy_m,
+       heading = EXCLUDED.heading,
+       speed_kph = EXCLUDED.speed_kph,
+       battery_pct = COALESCE(EXCLUDED.battery_pct, logistics_carrier_presence.battery_pct),
+       last_seen_at = EXCLUDED.last_seen_at,
+       metadata = COALESCE(EXCLUDED.metadata, logistics_carrier_presence.metadata),
+       updated_at = NOW()
+     WHERE logistics_carrier_presence.tenant_id = EXCLUDED.tenant_id`,
+    input.tenantId,
+    input.carrierId,
+    input.driverId ?? null,
+    input.vehicleId ?? null,
+    input.vehicleType ?? null,
+    availability,
+    lat,
+    lng,
+    input.accuracyM ?? null,
+    input.heading ?? null,
+    speedKph,
+    input.batteryPct ?? null,
+    input.lastSeenAt ?? null,
+    jsonParam(input.metadata ?? {}),
+  );
+
+  return { ok: true };
+}
+
+export async function resolveShipmentPickupGeo(
+  tenantId: string,
+  shipmentOrderId: string,
+): Promise<{ lat: number; lng: number } | null> {
+  const stopRows = await prisma.$queryRawUnsafe<Array<{ latitude: string | number | null; longitude: string | number | null }>>(
+    `SELECT latitude, longitude
+       FROM logistics_shipment_stops
+      WHERE tenant_id = $1
+        AND shipment_order_id = $2
+        AND UPPER(stop_type) = 'PICKUP'
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+      ORDER BY sequence_no ASC
+      LIMIT 1`,
+    tenantId,
+    shipmentOrderId,
+  ).catch(() => []);
+
+  if (stopRows[0] && stopRows[0].latitude != null && stopRows[0].longitude != null) {
+    const lat = Number(stopRows[0].latitude);
+    const lng = Number(stopRows[0].longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  const shipRows = await prisma.$queryRawUnsafe<Array<{ metadata: JsonRecord | null }>>(
+    `SELECT metadata
+       FROM logistics_shipment_orders
+      WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+      LIMIT 1`,
+    shipmentOrderId,
+    tenantId,
+  ).catch(() => []);
+
+  const md = shipRows[0]?.metadata ?? null;
+  if (md && typeof md === 'object') {
+    const lat = Number(md.pickupLat ?? md.originLat ?? (md.pickup as JsonRecord | undefined)?.lat);
+    const lng = Number(md.pickupLng ?? md.originLng ?? (md.pickup as JsonRecord | undefined)?.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
+}
+
+export async function findNearestIdleCarriers(args: {
+  tenantId: string;
+  shipmentOrderId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  vehicleType?: string | null;
+  limit?: number | null;
+  radiusKm?: number | null;
+  maxStaleSeconds?: number | null;
+  enableComplianceFilter?: boolean;
+}): Promise<Array<{ carrierId: string; carrierName: string | null; distanceKm: number; effectiveDistanceKm: number; vehicleType: string | null }>> {
+  await ensureCarrierAppAndBroadcastSchema();
+
+  let lat = args.lat != null ? Number(args.lat) : null;
+  let lng = args.lng != null ? Number(args.lng) : null;
+
+  if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && args.shipmentOrderId) {
+    const geo = await resolveShipmentPickupGeo(args.tenantId, args.shipmentOrderId);
+    if (geo) {
+      lat = geo.lat;
+      lng = geo.lng;
+    }
+  }
+
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return [];
+  }
+
+  const radiusKm = args.radiusKm != null && args.radiusKm > 0 ? Number(args.radiusKm) : 25;
+  const maxStaleSeconds = args.maxStaleSeconds != null && args.maxStaleSeconds > 0 ? Number(args.maxStaleSeconds) : 300;
+  const limit = Math.min(Math.max(Number(args.limit ?? 3) || 3, 1), 50);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    carrier_id: string;
+    carrier_name: string | null;
+    latitude: number | string;
+    longitude: number | string;
+    vehicle_type: string | null;
+  }>>(
+    `SELECT p.carrier_id,
+            c.name AS carrier_name,
+            p.latitude,
+            p.longitude,
+            p.vehicle_type
+       FROM logistics_carrier_presence p
+       INNER JOIN logistics_carriers c
+         ON c.id = p.carrier_id
+        AND c.tenant_id = p.tenant_id
+      WHERE p.tenant_id = $1
+        AND c.deleted_at IS NULL
+        AND COALESCE(c.status, 'ACTIVE') = 'ACTIVE'
+        AND p.availability IN ('IDLE', 'AVAILABLE')
+        AND p.last_seen_at >= NOW() - ($2::int * INTERVAL '1 second')
+        AND ($3::text IS NULL OR p.vehicle_type IS NULL OR LOWER(p.vehicle_type) = LOWER($3))`,
+    args.tenantId,
+    maxStaleSeconds,
+    args.vehicleType?.trim() || null,
+  ).catch(() => []);
+
+  const candidates = rows
+    .map((r) => {
+      const dKm = haversineDistanceKm(lat!, lng!, Number(r.latitude), Number(r.longitude));
+      return {
+        carrierId: r.carrier_id,
+        carrierName: r.carrier_name ?? null,
+        distanceKm: dKm,
+        effectiveDistanceKm: dKm,
+        vehicleType: r.vehicle_type ?? null,
+      };
+    })
+    .filter((c) => c.distanceKm <= radiusKm)
+    .sort((a, b) => a.effectiveDistanceKm - b.effectiveDistanceKm);
+
+  return candidates.slice(0, limit);
 }
 
 interface LoadBroadcastInput {
@@ -7804,18 +8161,224 @@ interface LoadBroadcastInput {
   notes?: string | null;
 }
 
-export async function createLoadBroadcast(_input: LoadBroadcastInput): Promise<{ id: string }> {
-  void _input;
-  throw new LogisticsValidationError(['createLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+export async function createLoadBroadcast(input: LoadBroadcastInput): Promise<{
+  id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  expiresAt: string;
+  offers: Array<{
+    id: string;
+    carrierId: string;
+    carrierName: string | null;
+    status: string;
+    distanceKm: number | null;
+    offerUrl?: string;
+  }>;
+}> {
+  await ensureCarrierAppAndBroadcastSchema();
+  const carrierIds = Array.from(new Set((input.carrierIds ?? []).filter(Boolean)));
+  if (carrierIds.length === 0) {
+    throw new LogisticsValidationError(['At least one carrier must be selected for load broadcast']);
+  }
+  const amount = Number(input.amount ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new LogisticsValidationError(['A positive fixed offer amount is required']);
+  }
+
+  const currency = (input.currency ?? 'AED').trim().toUpperCase();
+  const deadlineMin = Math.min(Math.max(Number(input.responseDeadlineMin ?? 10) || 10, 1), 1440);
+  const expiresAt = input.expiresAt ?? new Date(Date.now() + deadlineMin * 60_000).toISOString();
+  const pickupLat = input.pickupLat ?? input.originLat ?? input.lat ?? null;
+  const pickupLng = input.pickupLng ?? input.originLng ?? input.lng ?? null;
+  const broadcastId = `lbc-${randomBytes(8).toString('hex')}`;
+
+  // Supersede previous active broadcasts for this shipment
+  await prisma.$executeRawUnsafe(
+    `UPDATE logistics_load_broadcasts
+        SET status = 'SUPERSEDED', updated_at = NOW()
+      WHERE tenant_id = $1
+        AND shipment_order_id = $2
+        AND status IN ('BROADCASTING', 'CONFIRMING')`,
+    input.tenantId,
+    input.shipmentOrderId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO logistics_load_broadcasts (
+       id, tenant_id, shipment_order_id, rfq_id, status, amount, currency,
+       pickup_lat, pickup_lng, radius_km, vehicle_type, response_deadline_min,
+       auto_assign, expires_at, created_by, notes, created_at, updated_at
+     ) VALUES ($1,$2,$3,$4,'BROADCASTING',$5,$6,$7,$8,$9,$10,$11,$12,$13::timestamptz,$14,$15,NOW(),NOW())`,
+    broadcastId,
+    input.tenantId,
+    input.shipmentOrderId,
+    input.rfqId ?? null,
+    amount,
+    currency,
+    pickupLat,
+    pickupLng,
+    input.radiusKm ?? null,
+    input.vehicleType ?? input.vehicleTypeRequired ?? null,
+    deadlineMin,
+    Boolean(input.autoAssign),
+    expiresAt,
+    input.createdBy ?? input.actorUserId ?? null,
+    input.notes ?? null,
+  );
+
+  const carrierRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    name: string | null;
+    latitude: number | string | null;
+    longitude: number | string | null;
+  }>>(
+    `SELECT c.id, c.name, p.latitude, p.longitude
+       FROM logistics_carriers c
+       LEFT JOIN logistics_carrier_presence p
+         ON p.carrier_id = c.id AND p.tenant_id = c.tenant_id
+      WHERE c.tenant_id = $1 AND c.id = ANY($2::text[])`,
+    input.tenantId,
+    carrierIds,
+  ).catch(() => []);
+  const carrierMap = new Map(carrierRows.map(c => [c.id, c]));
+
+  const offers: Array<{
+    id: string;
+    carrierId: string;
+    carrierName: string | null;
+    status: string;
+    distanceKm: number | null;
+    offerUrl?: string;
+  }> = [];
+
+  for (const carrierId of carrierIds) {
+    const offerId = `bco-${randomBytes(8).toString('hex')}`;
+    const rawToken = `bco_${randomBytes(20).toString('hex')}`;
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const cInfo = carrierMap.get(carrierId);
+    const distanceKm =
+      pickupLat != null &&
+      pickupLng != null &&
+      cInfo?.latitude != null &&
+      cInfo?.longitude != null
+        ? haversineDistanceKm(Number(pickupLat), Number(pickupLng), Number(cInfo.latitude), Number(cInfo.longitude))
+        : null;
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO logistics_load_broadcast_offers (
+         id, tenant_id, broadcast_id, shipment_order_id, rfq_id,
+         carrier_id, token_hash, status, amount, currency,
+         distance_km, expires_at, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'OFFERED',$8,$9,$10,$11::timestamptz,NOW(),NOW())`,
+      offerId,
+      input.tenantId,
+      broadcastId,
+      input.shipmentOrderId,
+      input.rfqId ?? null,
+      carrierId,
+      tokenHash,
+      amount,
+      currency,
+      distanceKm,
+      expiresAt,
+    );
+
+    const offerUrl = input.baseUrl
+      ? `${input.baseUrl.replace(/\/$/, '')}/carrier-portal/offer?token=${encodeURIComponent(rawToken)}`
+      : undefined;
+
+    offers.push({
+      id: offerId,
+      carrierId,
+      carrierName: cInfo?.name ?? null,
+      status: 'OFFERED',
+      distanceKm,
+      offerUrl,
+    });
+  }
+
+  return {
+    id: broadcastId,
+    status: 'BROADCASTING',
+    amount,
+    currency,
+    expiresAt,
+    offers,
+  };
 }
 
 export async function getActiveLoadBroadcast(
-  _tenantId: string,
-  _shipmentOrderId: string,
-): Promise<{ id: string } | null> {
-  void _tenantId;
-  void _shipmentOrderId;
-  throw new LogisticsValidationError(['getActiveLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+  tenantId: string,
+  shipmentOrderId: string,
+): Promise<{
+  id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  expiresAt: string | null;
+  offers: Array<{
+    id: string;
+    carrierId: string;
+    carrierName: string | null;
+    status: string;
+    distanceKm: number | null;
+  }>;
+} | null> {
+  await ensureCarrierAppAndBroadcastSchema();
+
+  const bRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    status: string;
+    amount: string | number;
+    currency: string;
+    expires_at: Date | string | null;
+  }>>(
+    `SELECT id, status, amount, currency, expires_at
+       FROM logistics_load_broadcasts
+      WHERE tenant_id = $1
+        AND shipment_order_id = $2
+        AND status NOT IN ('SUPERSEDED', 'CANCELLED')
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    tenantId,
+    shipmentOrderId,
+  ).catch(() => []);
+
+  const b = bRows[0];
+  if (!b) return null;
+
+  const oRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    carrier_id: string;
+    carrier_name: string | null;
+    status: string;
+    distance_km: string | number | null;
+  }>>(
+    `SELECT o.id, o.carrier_id, c.name AS carrier_name, o.status, o.distance_km
+       FROM logistics_load_broadcast_offers o
+       LEFT JOIN logistics_carriers c
+         ON c.id = o.carrier_id AND c.tenant_id = o.tenant_id
+      WHERE o.tenant_id = $1 AND o.broadcast_id = $2
+      ORDER BY o.distance_km ASC NULLS LAST, o.created_at ASC`,
+    tenantId,
+    b.id,
+  ).catch(() => []);
+
+  return {
+    id: b.id,
+    status: b.status,
+    amount: Number(b.amount),
+    currency: b.currency,
+    expiresAt: iso(b.expires_at),
+    offers: oRows.map((o) => ({
+      id: o.id,
+      carrierId: o.carrier_id,
+      carrierName: o.carrier_name ?? null,
+      status: o.status,
+      distanceKm: o.distance_km != null ? Number(o.distance_km) : null,
+    })),
+  };
 }
 
 export interface BroadcastAssignInput {
@@ -7834,47 +8397,300 @@ export interface BroadcastAssignInput {
   actorRole?: string | null;
 }
 
-export async function assignBroadcast(_input: BroadcastAssignInput): Promise<{ assignmentId: string }> {
-  void _input;
-  throw new LogisticsValidationError(['assignBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+export async function assignBroadcast(input: BroadcastAssignInput): Promise<{ assignmentId: string }> {
+  await ensureCarrierAppAndBroadcastSchema();
+
+  const offerRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    broadcast_id: string;
+    shipment_order_id: string;
+    rfq_id: string | null;
+    carrier_id: string;
+    status: string;
+    amount: string | number;
+    currency: string;
+    broadcast_status: string;
+  }>>(
+    `SELECT o.id, o.broadcast_id, o.shipment_order_id, o.rfq_id, o.carrier_id,
+            o.status, o.amount, o.currency, b.status AS broadcast_status
+       FROM logistics_load_broadcast_offers o
+       INNER JOIN logistics_load_broadcasts b
+         ON b.id = o.broadcast_id AND b.tenant_id = o.tenant_id
+      WHERE o.tenant_id = $1
+        AND ($2::text IS NULL OR o.id = $2)
+        AND ($3::text IS NULL OR o.broadcast_id = $3)
+        AND ($4::text IS NULL OR o.carrier_id = $4)
+      ORDER BY o.created_at DESC
+      LIMIT 1`,
+    input.tenantId,
+    input.offerId ?? null,
+    input.broadcastId ?? null,
+    input.carrierId ?? null,
+  );
+
+  const offer = offerRows[0];
+  if (!offer) {
+    throw new Error('Broadcast offer not found');
+  }
+  if (offer.broadcast_status === 'ASSIGNED' && offer.status !== 'ASSIGNED') {
+    throw new Error('Broadcast has already been resolved and assigned to another driver');
+  }
+
+  const blockers = await getCarrierAwardComplianceBlockers({
+    tenantId: input.tenantId,
+    carrierId: offer.carrier_id,
+    vehicleId: input.vehicleId ?? null,
+    driverId: input.driverId ?? null,
+    requireVehicle: false,
+  });
+  const errorBlockers = blockers.filter((b) => b.severity === 'ERROR');
+  const overrideAllowed = Boolean(input.overrideCompliance && input.actorRole === 'SUPER_ADMIN');
+  if (errorBlockers.length > 0 && !overrideAllowed) {
+    throw complianceBlockedError('Driver compliance blocks this assignment', errorBlockers);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      `UPDATE logistics_load_broadcast_offers
+          SET status = CASE WHEN id = $1 THEN 'ASSIGNED' ELSE 'SUPERSEDED' END,
+              updated_at = NOW()
+        WHERE tenant_id = $2 AND broadcast_id = $3`,
+      offer.id,
+      input.tenantId,
+      offer.broadcast_id,
+    );
+    await tx.$executeRawUnsafe(
+      `UPDATE logistics_load_broadcasts
+          SET status = 'ASSIGNED',
+              assigned_offer_id = $1,
+              assigned_carrier_id = $2,
+              updated_at = NOW()
+        WHERE tenant_id = $3 AND id = $4`,
+      offer.id,
+      offer.carrier_id,
+      input.tenantId,
+      offer.broadcast_id,
+    );
+    if (offer.rfq_id) {
+      await tx.$executeRawUnsafe(
+        `UPDATE logistics_freight_rfqs
+            SET status = 'AWARDED', updated_at = NOW()
+          WHERE tenant_id = $1 AND id = $2`,
+        input.tenantId,
+        offer.rfq_id,
+      );
+    }
+    await tx.$executeRawUnsafe(
+      `UPDATE logistics_shipment_orders
+          SET marketplace_status = 'AWARDED',
+              status = CASE
+                WHEN status IN ('DRAFT','SUBMITTED','PENDING','APPROVED') THEN 'ASSIGNED'
+                ELSE status
+              END,
+              assigned_carrier_id = $1,
+              assigned_driver_id = COALESCE($2, assigned_driver_id),
+              assigned_vehicle_id = COALESCE($3, assigned_vehicle_id),
+              carrier_cost_amount = $4,
+              updated_at = NOW(),
+              updated_by = $5
+        WHERE tenant_id = $6 AND id = $7`,
+      offer.carrier_id,
+      input.driverId ?? null,
+      input.vehicleId ?? null,
+      offer.amount,
+      input.actorUserId ?? 'broadcast-assign',
+      input.tenantId,
+      offer.shipment_order_id,
+    );
+  });
+
+  const assignment = await createShipmentAssignment({
+    tenantId: input.tenantId,
+    shipmentOrderId: offer.shipment_order_id,
+    carrierId: offer.carrier_id,
+    driverId: input.driverId ?? null,
+    vehicleId: input.vehicleId ?? null,
+    assignmentType: 'CARRIER',
+    status: 'ASSIGNED',
+    costAmount: numberOrNull(offer.amount),
+    currency: offer.currency,
+    metadata: {
+      source: 'broadcast-assign',
+      broadcastId: offer.broadcast_id,
+      offerId: offer.id,
+      rfqId: offer.rfq_id,
+      assignedBy: input.actorUserId ?? null,
+    },
+  });
+
+  await prepareFreightFinancialSettlement({
+    tenantId: input.tenantId,
+    shipmentOrderId: offer.shipment_order_id,
+    rfqId: offer.rfq_id,
+    assignmentId: assignment?.id ?? null,
+    carrierId: offer.carrier_id,
+    driverId: input.driverId ?? null,
+    carrierAmount: numberOrNull(offer.amount) ?? 0,
+    currency: offer.currency,
+    actorUserId: input.actorUserId ?? null,
+  }).catch(() => null);
+
+  return { assignmentId: assignment?.id ?? offer.id };
 }
 
-export async function findNearestIdleCarriers(_args: {
-  tenantId: string;
-  shipmentOrderId?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  vehicleType?: string | null;
-  limit?: number | null;
-  radiusKm?: number | null;
-  maxStaleSeconds?: number | null;
-  enableComplianceFilter?: boolean;
-}): Promise<Array<{ carrierId: string; carrierName?: string; distanceKm: number; effectiveDistanceKm?: number | null }>> {
-  void _args;
-  throw new LogisticsValidationError(['findNearestIdleCarriers is not yet implemented — track Layer 2.5 follow-up.']);
-}
+export async function resolveBroadcastOffer(token: string): Promise<{ valid: boolean; offer?: JsonRecord } | null> {
+  const clean = String(token ?? '').trim();
+  if (!clean) return null;
+  await ensureCarrierAppAndBroadcastSchema();
+  const tokenHash = createHash('sha256').update(clean).digest('hex');
 
-export async function resolveBroadcastOffer(token: string): Promise<{ valid: boolean; offer?: JsonRecord }> {
-  void token;
-  throw new LogisticsValidationError(['resolveBroadcastOffer is not yet implemented — track Layer 2.5 follow-up.']);
+  const rows = await withPlatformAdmin(prisma, (tx) =>
+    tx.$queryRawUnsafe<Array<{
+      id: string;
+      tenant_id: string;
+      broadcast_id: string;
+      shipment_order_id: string;
+      rfq_id: string | null;
+      carrier_id: string;
+      carrier_name: string | null;
+      status: string;
+      amount: string | number;
+      currency: string;
+      distance_km: string | number | null;
+      expires_at: Date | string;
+      broadcast_status: string;
+      shipment_no: string | null;
+      origin_name: string | null;
+      origin_address: string | null;
+      destination_name: string | null;
+      destination_address: string | null;
+      requested_vehicle_type: string | null;
+      pickup_window_from: Date | string | null;
+      delivery_window_to: Date | string | null;
+    }>>(
+      `SELECT o.id, o.tenant_id, o.broadcast_id, o.shipment_order_id, o.rfq_id,
+              o.carrier_id, c.name AS carrier_name, o.status, o.amount, o.currency,
+              o.distance_km, o.expires_at, b.status AS broadcast_status,
+              so.shipment_no, so.origin_name, so.origin_address,
+              so.destination_name, so.destination_address,
+              so.requested_vehicle_type, so.pickup_window_from, so.delivery_window_to
+         FROM logistics_load_broadcast_offers o
+         INNER JOIN logistics_load_broadcasts b
+           ON b.id = o.broadcast_id AND b.tenant_id = o.tenant_id
+         INNER JOIN logistics_shipment_orders so
+           ON so.id = o.shipment_order_id AND so.tenant_id = o.tenant_id
+         LEFT JOIN logistics_carriers c
+           ON c.id = o.carrier_id AND c.tenant_id = o.tenant_id
+        WHERE o.token_hash = $1
+        LIMIT 1`,
+      tokenHash,
+    ),
+  ).catch(() => []);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const isExpired = new Date(row.expires_at).getTime() <= Date.now();
+  return {
+    valid: !isExpired && !['SUPERSEDED', 'CANCELLED'].includes(row.broadcast_status),
+    offer: {
+      id: row.id,
+      broadcastId: row.broadcast_id,
+      shipmentOrderId: row.shipment_order_id,
+      rfqId: row.rfq_id,
+      carrierId: row.carrier_id,
+      carrierName: row.carrier_name,
+      status: isExpired && row.status === 'OFFERED' ? 'TIMEOUT' : row.status,
+      broadcastStatus: row.broadcast_status,
+      amount: Number(row.amount),
+      currency: row.currency,
+      distanceKm: row.distance_km != null ? Number(row.distance_km) : null,
+      expiresAt: iso(row.expires_at),
+      shipmentNo: row.shipment_no,
+      origin: row.origin_name ?? row.origin_address,
+      destination: row.destination_name ?? row.destination_address,
+      vehicleType: row.requested_vehicle_type,
+      pickupWindowFrom: iso(row.pickup_window_from),
+      deliveryWindowTo: iso(row.delivery_window_to),
+    },
+  };
 }
 
 export async function respondToBroadcastOffer(
-  _token: string,
-  _action: 'accept' | 'decline',
-): Promise<{ ok: true }> {
-  void _token;
-  void _action;
-  throw new LogisticsValidationError(['respondToBroadcastOffer is not yet implemented — track Layer 2.5 follow-up.']);
-}
+  token: string,
+  action: 'accept' | 'decline',
+): Promise<{ ok: true; status?: string; offerId?: string; broadcastId?: string }> {
+  const clean = String(token ?? '').trim();
+  if (!clean) throw new Error('Offer token is required');
+  await ensureCarrierAppAndBroadcastSchema();
+  const tokenHash = createHash('sha256').update(clean).digest('hex');
 
-export async function resolveShipmentPickupGeo(
-  _tenantId: string,
-  _shipmentOrderId: string,
-): Promise<{ lat: number; lng: number } | null> {
-  void _tenantId;
-  void _shipmentOrderId;
-  throw new LogisticsValidationError(['resolveShipmentPickupGeo is not yet implemented — track Layer 2.5 follow-up.']);
+  const rows = await withPlatformAdmin(prisma, (tx) =>
+    tx.$queryRawUnsafe<Array<{
+      id: string;
+      tenant_id: string;
+      broadcast_id: string;
+      carrier_id: string;
+      status: string;
+      expires_at: Date | string;
+      broadcast_status: string;
+      auto_assign: boolean;
+    }>>(
+      `SELECT o.id, o.tenant_id, o.broadcast_id, o.carrier_id, o.status, o.expires_at,
+              b.status AS broadcast_status, b.auto_assign
+         FROM logistics_load_broadcast_offers o
+         INNER JOIN logistics_load_broadcasts b
+           ON b.id = o.broadcast_id AND b.tenant_id = o.tenant_id
+        WHERE o.token_hash = $1
+        LIMIT 1`,
+      tokenHash,
+    ),
+  );
+
+  const row = rows[0];
+  if (!row) throw new Error('Offer link is invalid');
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    throw new Error('This offer has expired');
+  }
+  if (['ASSIGNED', 'SUPERSEDED', 'CANCELLED'].includes(row.broadcast_status)) {
+    throw new Error('This load has already been taken');
+  }
+
+  const nextStatus = action === 'decline' ? 'DECLINED' : 'ACCEPTED';
+
+  await withPlatformAdmin(prisma, async (tx) => {
+    await tx.$executeRawUnsafe(
+      `UPDATE logistics_load_broadcast_offers
+          SET status = $1, responded_at = NOW(), updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3`,
+      nextStatus,
+      row.id,
+      row.tenant_id,
+    );
+    if (action === 'accept' && row.broadcast_status === 'BROADCASTING') {
+      await tx.$executeRawUnsafe(
+        `UPDATE logistics_load_broadcasts
+            SET status = 'CONFIRMING', updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        row.broadcast_id,
+        row.tenant_id,
+      );
+    }
+  });
+
+  if (action === 'accept' && row.auto_assign) {
+    await runWithTenantContext(row.tenant_id, async () => {
+      await assignBroadcast({
+        tenantId: row.tenant_id,
+        offerId: row.id,
+        broadcastId: row.broadcast_id,
+        carrierId: row.carrier_id,
+        actorUserId: 'broadcast-auto-assign',
+      });
+    }).catch(() => null);
+  }
+
+  return { ok: true, status: nextStatus, offerId: row.id, broadcastId: row.broadcast_id };
 }
 
 export interface ShipperOnboardingListFilter {

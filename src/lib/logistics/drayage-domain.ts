@@ -1399,7 +1399,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   if (Number(cliCountRows[0]?.cnt ?? 0) === 0) {
     const defaultClients = [
       {
-        id: `cli-al-futtaim-${tenantId.slice(0, 8)}`,
+        id: `cli-al-futtaim-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Al-Futtaim Logistics LLC',
         code: 'ALF-LOG',
         contactPerson: 'Tariq Al-Mansoori',
@@ -1413,7 +1413,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'Priority FCL client. Direct gate delivery to JAFZA South Gate 5 ramp.',
       },
       {
-        id: `cli-landmark-${tenantId.slice(0, 8)}`,
+        id: `cli-landmark-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Landmark Retail Distribution',
         code: 'LMK-RET',
         contactPerson: 'Saeed Al-Hashemi',
@@ -1427,7 +1427,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'High volume import accounts. Rapid turn-around required.',
       },
       {
-        id: `cli-chalhoub-${tenantId.slice(0, 8)}`,
+        id: `cli-chalhoub-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Chalhoub Luxury Supply Chain',
         code: 'CHB-LUX',
         contactPerson: 'Nadia Haddad',
@@ -1441,7 +1441,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'Bonded transit clearance and temperature-controlled reefer cargo.',
       },
       {
-        id: `cli-adnoc-${tenantId.slice(0, 8)}`,
+        id: `cli-adnoc-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'ADNOC Industrial Polymers',
         code: 'ADN-POL',
         contactPerson: 'Rashid Al-Nuaimi',
@@ -1482,7 +1482,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
 
     const defaultWarehouses = [
       {
-        id: `wh-jafza-${tenantId.slice(0, 8)}`,
+        id: `wh-jafza-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[0]?.id ?? null,
         customerName: existingCustomers[0]?.name_en ?? 'Al-Futtaim Logistics LLC',
         name: 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
@@ -1495,7 +1495,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 50 482 9910',
       },
       {
-        id: `wh-nip-${tenantId.slice(0, 8)}`,
+        id: `wh-nip-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[1]?.id ?? null,
         customerName: existingCustomers[1]?.name_en ?? 'Landmark Retail Distribution',
         name: 'National Industries Park (NIP) Mega Automated DC',
@@ -1508,7 +1508,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 52 819 3320',
       },
       {
-        id: `wh-dwc-${tenantId.slice(0, 8)}`,
+        id: `wh-dwc-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[2]?.id ?? null,
         customerName: existingCustomers[2]?.name_en ?? 'Chalhoub Luxury Supply Chain',
         name: 'Dubai South Aviation & Cold-Chain Hub',
@@ -1521,7 +1521,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 55 301 7741',
       },
       {
-        id: `wh-kizad-${tenantId.slice(0, 8)}`,
+        id: `wh-kizad-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[3]?.id ?? null,
         customerName: existingCustomers[3]?.name_en ?? 'ADNOC Industrial Polymers',
         name: 'KEZAD Integrated Polymer & Cold Depot',
@@ -1545,7 +1545,8 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
            SET geofence_configured = true,
                geofence_radius_meters = 800,
                trip_amount_aed = 1550,
-               driver_allowance_aed = 150`,
+               driver_allowance_aed = 150
+         WHERE logistics_drayage_warehouses.tenant_id = EXCLUDED.tenant_id`,
         w.id, tenantId, w.customerId, w.customerName, w.name, w.zone, w.address, w.lat, w.lng, w.ramps, w.contact, w.phone,
       );
     }
@@ -1557,11 +1558,11 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   );
   if (Number(trCountRows[0]?.cnt ?? 0) === 0) {
     const defaultTrailers = [
-      { id: `tr-9901-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 24.9850, lng: 55.0760 },
-      { id: `tr-9902-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'JAFZA South Yard', lat: 24.9642, lng: 55.0915 },
-      { id: `tr-9903-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9903', type: '45FT_REEFER_CHASSIS', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 25.0080, lng: 55.0640 },
-      { id: `tr-8801-${tenantId.slice(0, 8)}`, plate: 'AUH-TR-8801', type: '20FT_SKELETAL', tons: 34, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Khalifa Port Marshalling Yard', lat: 24.8055, lng: 54.6462 },
-      { id: `tr-7704-${tenantId.slice(0, 8)}`, plate: 'SHJ-TR-7704', type: '40FT_LOWBED', tons: 60, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'National Industries Park Yard', lat: 24.9310, lng: 55.0750 },
+      { id: `tr-9901-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 24.9850, lng: 55.0760 },
+      { id: `tr-9902-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'JAFZA South Yard', lat: 24.9642, lng: 55.0915 },
+      { id: `tr-9903-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9903', type: '45FT_REEFER_CHASSIS', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 25.0080, lng: 55.0640 },
+      { id: `tr-8801-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'AUH-TR-8801', type: '20FT_SKELETAL', tons: 34, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Khalifa Port Marshalling Yard', lat: 24.8055, lng: 54.6462 },
+      { id: `tr-7704-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'SHJ-TR-7704', type: '40FT_LOWBED', tons: 60, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'National Industries Park Yard', lat: 24.9310, lng: 55.0750 },
     ];
     for (const tr of defaultTrailers) {
       await db.$executeRawUnsafe(
@@ -1575,45 +1576,8 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
-  // Ensure dedicated Heavy Prime Movers / Tractors exist for Drayage logistics
-  const primeMoverCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt
-       FROM vehicles
-      WHERE tenant_id = $1
-        AND deleted_at IS NULL
-        AND (
-          vehicle_usage = 'LOGISTICS'
-          OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR')
-          OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
-        )`,
-    tenantId,
-  ).catch(() => [{ cnt: 0 }]);
-
-  if (Number(primeMoverCountRows[0]?.cnt ?? 0) === 0) {
-    const tag = tenantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'TRX';
-    const defaultPrimeMovers = [
-      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4011`, make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024, lat: 25.0112, lng: 55.0612, fuel: 88, mileage: 42000, nextService: 50000, idleHours: 4.5 },
-      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4012`, make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024, lat: 24.9850, lng: 55.0760, fuel: 94, mileage: 38000, nextService: 45000, idleHours: 2.5 },
-      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4013`, make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023, lat: 24.9642, lng: 55.0915, fuel: 75, mileage: 65000, nextService: 70000, idleHours: 5.8 },
-      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4014`, make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024, lat: 24.9310, lng: 55.0750, fuel: 68, mileage: 51000, nextService: 60000, idleHours: 1.2 },
-      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: `AUH-${tag}-3021`, make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023, lat: 24.8055, lng: 54.6462, fuel: 82, mileage: 78000, nextService: 85000, idleHours: 3.0 },
-    ];
-    for (const pm of defaultPrimeMovers) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO vehicles (
-          id, tenant_id, plate_number, license_plate, registration_no,
-          make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active,
-          current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km,
-          created_at, updated_at
-        )
-        SELECT $1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,$7,$8,$9,$9,$10,$11,NOW(),NOW() - ($12 || ' hours')::interval
-        WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $2)
-        ON CONFLICT DO NOTHING`,
-        pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
-        pm.lat, pm.lng, pm.fuel, pm.mileage, pm.nextService, String(pm.idleHours),
-      ).catch(() => {});
-    }
-  }
+  // Automatic seeding of prime mover vehicles into the shared vehicles table on GET is disabled
+  // to avoid polluting tenant fleet registries or colliding across tenants.
 
   // Automatic seeding of sample drivers (Salim Al Harthi, Rashid Al-Marri, etc.) is disabled.
 
@@ -1846,15 +1810,11 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(updated_at, NOW() - INTERVAL '3.5 hours') AS updated_at
          FROM vehicles
         WHERE deleted_at IS NULL
+          AND tenant_id = $1
           AND (
             vehicle_usage = 'LOGISTICS'
-            OR (
-              tenant_id = $1
-              AND (
-                type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
-                OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
-              )
-            )
+            OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
+            OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
           )
         ORDER BY CASE WHEN status = 'AVAILABLE' THEN 0 ELSE 1 END, plate_number ASC
         LIMIT 60`,
@@ -1888,7 +1848,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               d.assigned_vehicle_id
          FROM drivers d
         WHERE d.deleted_at IS NULL
-          AND (d.tenant_id = $1 OR d.driver_type = 'LOGISTICS')
+          AND d.tenant_id = $1
         ORDER BY CASE WHEN d.driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, d.first_name ASC NULLS LAST
         LIMIT 60`,
       tenantId,
@@ -5730,7 +5690,7 @@ export async function saveTenantAutomationConfig(
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
      VALUES ($1, $2, 'CONFIG_AUTO_L2_DISPATCH_T30', $3, NOW())
-     ON CONFLICT (id) DO UPDATE SET acknowledged = $3, updated_at = NOW()`,
+     ON CONFLICT (id) DO UPDATE SET acknowledged = $3, updated_at = NOW() WHERE logistics_drayage_alerts.tenant_id = EXCLUDED.tenant_id`,
     alertId,
     args.tenantId,
     nextConfig.autoL2DispatchEnabled,
@@ -5792,7 +5752,7 @@ export async function findBest4FactorAssetsForRampPickup(
         `SELECT id, plate_number, license_plate, make, model, status, current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km, assigned_driver_id, updated_at
            FROM vehicles
           WHERE deleted_at IS NULL
-            AND (tenant_id = $1 OR vehicle_usage = 'LOGISTICS')
+            AND tenant_id = $1
           LIMIT 50`,
         args.tenantId,
       )
@@ -5802,7 +5762,7 @@ export async function findBest4FactorAssetsForRampPickup(
         `SELECT id, first_name, last_name, name, status, assigned_vehicle_id
            FROM drivers
           WHERE deleted_at IS NULL
-            AND (tenant_id = $1 OR driver_type = 'LOGISTICS')
+            AND tenant_id = $1
           LIMIT 50`,
         args.tenantId,
       )
@@ -5946,7 +5906,7 @@ export async function findBest4FactorAssetsForRampPickup(
 
   return {
     ...best,
-    trailerId: trailerId || `tr-9901-${args.tenantId.slice(0, 8)}`,
+    trailerId: trailerId || `tr-9901-${crypto.createHash('sha256').update(args.tenantId).digest('hex').slice(0, 12)}`,
     trailerPlate: trailerPlate || 'DXB-TR-9901',
   };
 }
@@ -6873,11 +6833,11 @@ export async function acknowledgeDrayageAlert(
   args: { tenantId: string; alertKey: string },
 ) {
   await ensureDrayageSchema(db);
-  const id = `ack-${args.tenantId.slice(0, 8)}-${args.alertKey}`;
+  const id = `ack-${crypto.createHash('sha256').update(args.tenantId).digest('hex').slice(0, 12)}-${args.alertKey}`;
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
      VALUES ($1, $2, $3, TRUE, NOW())
-     ON CONFLICT (id) DO UPDATE SET acknowledged = TRUE, updated_at = NOW()`,
+     ON CONFLICT (id) DO UPDATE SET acknowledged = TRUE, updated_at = NOW() WHERE logistics_drayage_alerts.tenant_id = EXCLUDED.tenant_id`,
     id,
     args.tenantId,
     args.alertKey,

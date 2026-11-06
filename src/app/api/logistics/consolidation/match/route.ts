@@ -1,88 +1,111 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import {
+  matchConsolidatedBackhaulLoads,
+  SAMPLE_CONSOLIDATION_CANDIDATES,
+  ConsolidationShipmentCandidate,
+} from '@/lib/load-consolidation-engine';
 
-interface ActiveConsolidationPool {
-  poolId: string;
-  corridorName: string;
-  truckClass: string;
-  totalCapacityPallets: number;
-  allocatedPallets: number;
-  availablePallets: number;
-  totalCapacityTons: number;
-  allocatedTons: number;
-  availableTons: number;
-  discountPercent: number;
-  scheduledDeparture: string;
-  activeShippers: string[];
+async function loadTenantConsolidationCandidates(tenantId: string): Promise<ConsolidationShipmentCandidate[]> {
+  const rows = await withTenantRls(prisma, tenantId, async (tx) => {
+    return tx.$queryRawUnsafe<Array<{
+      id: string;
+      shipment_no: string;
+      cargo_owner_name: string | null;
+      origin_name: string | null;
+      origin_address: string | null;
+      destination_name: string | null;
+      destination_address: string | null;
+      total_weight_kg: string | number | null;
+      total_volume_cbm: string | number | null;
+      total_pieces: number | null;
+      quoted_price: string | number | null;
+      pickup_window_from: Date | null;
+      delivery_window_to: Date | null;
+    }>>(
+      `SELECT id, shipment_no, cargo_owner_name,
+              origin_name, origin_address,
+              destination_name, destination_address,
+              total_weight_kg, total_volume_cbm, total_pieces,
+              quoted_price, pickup_window_from, delivery_window_to
+         FROM logistics_shipment_orders
+        WHERE tenant_id = $1
+          AND deleted_at IS NULL
+          AND status IN ('PENDING', 'SUBMITTED', 'APPROVED')
+        ORDER BY created_at DESC
+        LIMIT 50`,
+      tenantId,
+    );
+  }).catch(() => []);
+
+  if (!rows.length) return SAMPLE_CONSOLIDATION_CANDIDATES;
+
+  return rows.map((r) => ({
+    shipmentRef: r.shipment_no,
+    shipperName: r.cargo_owner_name || 'Tenant Shipper',
+    originCorridor: r.origin_name || r.origin_address || 'JAFZA South',
+    destinationCorridor: r.destination_name || r.destination_address || 'Abu Dhabi / KEZAD',
+    pickupDate: r.pickup_window_from ? r.pickup_window_from.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    weightKg: Number(r.total_weight_kg ?? 1200) || 1200,
+    volumeCbm: Number(r.total_volume_cbm ?? 6) || 6,
+    palletCount: Number(r.total_pieces ?? 4) || 4,
+    cargoType: 'Dry Retail',
+    standaloneRateAed: Number(r.quoted_price ?? 1450) || 1450,
+  }));
 }
 
-const ACTIVE_CONSOLIDATION_POOLS: ActiveConsolidationPool[] = [
-  {
-    poolId: 'POOL-E11-DXB-AUH-01',
-    corridorName: 'JAFZA Base ➔ Dubai Mall ➔ Abu Dhabi Kizad (E11)',
-    truckClass: '7-Ton Curtain Sider',
-    totalCapacityPallets: 10,
-    allocatedPallets: 4,
-    availablePallets: 6,
-    totalCapacityTons: 7.0,
-    allocatedTons: 2.8,
-    availableTons: 4.2,
-    discountPercent: 20,
-    scheduledDeparture: '2026-09-03T16:00:00.000Z',
-    activeShippers: ['EIN360', 'Chalhoub Group'],
-  },
-  {
-    poolId: 'POOL-E311-DXB-SHJ-02',
-    corridorName: 'DSO Tech Depot ➔ Deira ➔ Sharjah SAIF Zone (E311)',
-    truckClass: '3-Ton Reefer Box (-18°C)',
-    totalCapacityPallets: 6,
-    allocatedPallets: 2,
-    availablePallets: 4,
-    totalCapacityTons: 3.0,
-    allocatedTons: 1.1,
-    availableTons: 1.9,
-    discountPercent: 15,
-    scheduledDeparture: '2026-09-03T17:30:00.000Z',
-    activeShippers: ['Emaar Properties'],
-  },
-];
-
 export async function GET(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const maxWeightKg = Number(req.nextUrl.searchParams.get('maxWeightKg') || 15000);
+  const maxVolumeCbm = Number(req.nextUrl.searchParams.get('maxVolumeCbm') || 65);
+  const candidates = await loadTenantConsolidationCandidates(auth.tenantId);
+
+  const summary = matchConsolidatedBackhaulLoads(
+    candidates,
+    maxWeightKg,
+    maxVolumeCbm
+  );
 
   return NextResponse.json({
     success: true,
-    pools: ACTIVE_CONSOLIDATION_POOLS,
+    candidates,
+    summary,
   });
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json();
     const body = stripTenantOwnershipFields(rawBody);
-    const { pallets = 2, weightTons = 1.0, corridor = 'E11' } = body;
+    const candidates: ConsolidationShipmentCandidate[] =
+      Array.isArray(body?.candidates) && body.candidates.length > 0
+        ? body.candidates
+        : await loadTenantConsolidationCandidates(auth.tenantId);
 
-    const matchedPool = ACTIVE_CONSOLIDATION_POOLS.find(
-      (p) =>
-        p.availablePallets >= Number(pallets) &&
-        p.availableTons >= Number(weightTons)
-    ) || ACTIVE_CONSOLIDATION_POOLS[0];
+    const maxWeightKg = Number(body?.maxWeightKg || 15000);
+    const maxVolumeCbm = Number(body?.maxVolumeCbm || 65);
+
+    const summary = matchConsolidatedBackhaulLoads(candidates, maxWeightKg, maxVolumeCbm);
 
     return NextResponse.json({
       success: true,
-      eligible: true,
-      pool: matchedPool,
-      estimatedSavingsAed: Math.round(550 * (matchedPool.discountPercent / 100)),
-      co2ReductionKg: 18.5,
+      summary,
     });
   } catch (err) {
     console.error('[api/logistics/consolidation/match POST]', err);
-    return NextResponse.json({ error: 'Failed to match consolidation pool' }, { status: 500 });
+    return NextResponse.json({ error: 'Consolidation matching failed' }, { status: 500 });
   }
 }

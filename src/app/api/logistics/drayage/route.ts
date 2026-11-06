@@ -843,7 +843,7 @@ export async function POST(req: NextRequest) {
             if (!cntNum) {
               throw new Error('Container Number is mandatory.');
             }
-            const id = `cnt-${crypto.randomUUID().slice(0, 12)}`;
+            const id = `cnt-${crypto.randomUUID()}`;
             const doExp = safeIso(item.doExpiryDate, 5 * 86400000);
             const disch = safeIso(item.dischargeDate, 0);
             const weightKg = safeNum(item.weightKg, 22000) > 0 ? safeNum(item.weightKg, 22000) : 22000;
@@ -890,7 +890,7 @@ export async function POST(req: NextRequest) {
           if (!plateNum) {
             throw new Error('Trailer Plate Number is mandatory.');
           }
-          const id = `tr-${crypto.randomUUID().slice(0, 10)}`;
+          const id = `tr-${crypto.randomUUID()}`;
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_trailers (
               id, tenant_id, plate_number, trailer_type, capacity_tons,
@@ -941,7 +941,7 @@ export async function POST(req: NextRequest) {
         }
 
         case 'save_geofence': {
-          const id = body.id ? String(body.id) : `gf-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `gf-${crypto.randomUUID()}`;
           const gfShape = body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
           const effectiveRadius = gfShape === 'POLYGON' ? 0 : Number(body.radiusMeters ?? 1500);
           const coords = Array.isArray(body.coordinates)
@@ -1023,7 +1023,7 @@ export async function POST(req: NextRequest) {
 
         case 'create_terminal':
         case 'save_terminal': {
-          const id = body.id ? String(body.id) : `term-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `term-${crypto.randomUUID()}`;
           const termName = String(body.name ?? '').trim();
           const termCode = String(body.code ?? '').toUpperCase().trim();
           if (!termName || !termCode) {
@@ -1133,7 +1133,8 @@ export async function POST(req: NextRequest) {
                      center_lat = EXCLUDED.center_lat,
                      center_lng = EXCLUDED.center_lng,
                      radius_meters = EXCLUDED.radius_meters,
-                     coordinates_json = EXCLUDED.coordinates_json`,
+                     coordinates_json = EXCLUDED.coordinates_json
+               WHERE logistics_drayage_geofences.tenant_id = EXCLUDED.tenant_id`,
               gfId,
               tenantId,
               id,
@@ -1166,7 +1167,7 @@ export async function POST(req: NextRequest) {
 
         case 'create_client':
         case 'save_client': {
-          const id = body.id ? String(body.id) : `cli-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `cli-${crypto.randomUUID()}`;
           const name = String(body.name ?? '').trim();
           const code = String(body.code ?? '').trim().toUpperCase();
           if (!name || !code) {
@@ -1232,7 +1233,7 @@ export async function POST(req: NextRequest) {
           if (!String(body.name ?? '').trim()) {
             throw new Error('Facility / Warehouse Name is mandatory.');
           }
-          const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `wh-${crypto.randomUUID()}`;
           const geofenceConfigured = Boolean(body.geofenceConfigured);
           const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
           const geofenceRadiusMeters = geofenceType === 'POLYGON' ? safeNum(body.geofenceRadiusMeters, 0) : safeNum(body.geofenceRadiusMeters, 800);
@@ -1366,7 +1367,7 @@ export async function POST(req: NextRequest) {
           await tx.$executeRawUnsafe(
             `INSERT INTO drivers (
               id, tenant_id, name, first_name, last_name, phone, contact_number,
-              license_number, license_expiry, status, assignment_type, created_at, updated_at
+              license_number, license_expiry, status, driver_type, created_at, updated_at
             ) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8::timestamptz,'ACTIVE','LOGISTICS',NOW(),NOW())`,
             id,
             tenantId,

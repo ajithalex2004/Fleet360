@@ -4,8 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json();
@@ -15,7 +17,6 @@ export async function POST(req: NextRequest) {
       vehiclePlate = 'DXB-K-94821',
       currentTempC = -13.5,
       thresholdTempC = -15.0,
-      consignee = 'Dubai Mall Logistics Dock',
     } = body;
 
     const alertMessage = `🚨 COLD-CHAIN BREACH ALERT: Vehicle ${vehiclePlate} on trip ${tripRef} recorded temperature ${currentTempC}°C (Exceeds maximum safe threshold ${thresholdTempC}°C). Automated reefer boost triggered. Dispatch and QA notified.`;

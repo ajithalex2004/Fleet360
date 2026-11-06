@@ -78,11 +78,22 @@ interface StopRow {
 
 interface ShipmentRow {
   id: string;
+  shipment_no?: string | null;
+  origin_name?: string | null;
+  origin_address?: string | null;
+  destination_name?: string | null;
+  destination_address?: string | null;
+  pickup_window_from?: string | null;
+  pickup_window_to?: string | null;
+  delivery_window_from?: string | null;
+  delivery_window_to?: string | null;
   total_weight_kg: string | number | null;
   total_volume_cbm: string | number | null;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_VEHICLE_CAPACITY_KG = 3000;
 
 function num(v: string | number | null | undefined, fallback = 0): number {
   if (v == null) return fallback;
@@ -111,16 +122,20 @@ async function loadAndGeocode(req: OptimizeRequest): Promise<LoadedData> {
   const { tenantId } = req;
 
   const vehicles = await prisma.$queryRawUnsafe<VehicleRow[]>(
-    `SELECT id, license_plate,
+    `SELECT id, COALESCE(plate_number, license_plate) AS license_plate,
             payload_capacity_kg, payload_capacity_cbm,
             depot_latitude, depot_longitude, cost_per_km
        FROM vehicles
-      WHERE id = ANY($1::text[]) AND deleted_at IS NULL`,
-    req.vehicleIds,
+      WHERE id = ANY($1::text[]) AND tenant_id = $2 AND deleted_at IS NULL`,
+    req.vehicleIds, tenantId,
   );
 
   const shipments = await prisma.$queryRawUnsafe<ShipmentRow[]>(
-    `SELECT id, total_weight_kg, total_volume_cbm
+    `SELECT id, shipment_no, origin_name, origin_address,
+            destination_name, destination_address,
+            pickup_window_from::text, pickup_window_to::text,
+            delivery_window_from::text, delivery_window_to::text,
+            total_weight_kg, total_volume_cbm
        FROM logistics_shipment_orders
       WHERE id = ANY($1::text[]) AND tenant_id = $2 AND deleted_at IS NULL`,
     req.shipmentIds, tenantId,
@@ -136,6 +151,44 @@ async function loadAndGeocode(req: OptimizeRequest): Promise<LoadedData> {
       ORDER BY shipment_order_id, sequence_no`,
     req.shipmentIds, tenantId,
   );
+
+  // Synthesize PICKUP / DELIVERY stops for any shipment missing stop rows
+  const existingStopShipments = new Set(stops.map(s => s.shipment_order_id));
+  for (const ship of shipments) {
+    if (existingStopShipments.has(ship.id)) continue;
+    const pickupAddr = ship.origin_address || ship.origin_name || null;
+    const deliveryAddr = ship.destination_address || ship.destination_name || null;
+    if (pickupAddr) {
+      stops.push({
+        id: `${ship.id}-pickup`,
+        shipment_order_id: ship.id,
+        sequence_no: 1,
+        stop_type: 'PICKUP',
+        address: pickupAddr,
+        location_name: ship.origin_name ?? null,
+        latitude: null,
+        longitude: null,
+        planned_arrival_at: ship.pickup_window_from ?? null,
+        planned_depart_at: ship.pickup_window_to ?? null,
+        service_duration_minutes: 15,
+      });
+    }
+    if (deliveryAddr) {
+      stops.push({
+        id: `${ship.id}-delivery`,
+        shipment_order_id: ship.id,
+        sequence_no: 2,
+        stop_type: 'DELIVERY',
+        address: deliveryAddr,
+        location_name: ship.destination_name ?? null,
+        latitude: null,
+        longitude: null,
+        planned_arrival_at: ship.delivery_window_from ?? null,
+        planned_depart_at: ship.delivery_window_to ?? null,
+        service_duration_minutes: 15,
+      });
+    }
+  }
 
   // Geocode any stop missing coordinates.
   const geocodeFailures: OptimizeResponse['geocodeFailures'] = [];
@@ -254,16 +307,20 @@ async function assemble(data: LoadedData, req: OptimizeRequest): Promise<Assembl
     detourFactor: req.config?.detourFactor,
   });
 
-  const solverVehicles: SolverVehicle[] = data.vehicles.map(v => ({
-    vehicleId: v.id,
-    driverId: null, // driver assignment is a later concern; left null for v1
-    capacityKg: num(v.payload_capacity_kg, 0),
-    capacityCbm: num(v.payload_capacity_cbm, Number.MAX_SAFE_INTEGER),
-    costPerKm: num(v.cost_per_km, 0),
-    shiftStartMin: 480,  // 08:00 default — driver shift columns wired in later
-    shiftEndMin: 1080,   // 18:00 default
-    maxDriveMin: 600,    // 10h default
-  }));
+  const solverVehicles: SolverVehicle[] = data.vehicles.map(v => {
+    const rawCapKg = num(v.payload_capacity_kg, 0);
+    const rawCapCbm = num(v.payload_capacity_cbm, 0);
+    return {
+      vehicleId: v.id,
+      driverId: null, // driver assignment is a later concern; left null for v1
+      capacityKg: rawCapKg > 0 ? rawCapKg : DEFAULT_VEHICLE_CAPACITY_KG,
+      capacityCbm: rawCapCbm > 0 ? rawCapCbm : Number.MAX_SAFE_INTEGER,
+      costPerKm: num(v.cost_per_km, 0),
+      shiftStartMin: 480,  // 08:00 default — driver shift columns wired in later
+      shiftEndMin: 1080,   // 18:00 default
+      maxDriveMin: 600,    // 10h default
+    };
+  });
 
   return {
     solverInput: {
@@ -308,6 +365,47 @@ async function persistPlan(args: {
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
+
+export async function listPlannerInputs(tenantId: string): Promise<{
+  vehicles: Array<Record<string, unknown>>;
+  shipments: Array<Record<string, unknown>>;
+}> {
+  await ensureRouteOptimizerSchema();
+
+  const vehicles = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id,
+            COALESCE(plate_number, license_plate) AS license_plate,
+            make, model, vehicle_usage, status,
+            COALESCE(payload_capacity_kg, 3000) AS payload_capacity_kg,
+            payload_capacity_cbm,
+            depot_latitude, depot_longitude, cost_per_km
+       FROM vehicles
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND COALESCE(status, 'ACTIVE') NOT IN ('INACTIVE', 'RETIRED', 'SOLD')
+      ORDER BY plate_number ASC NULLS LAST
+      LIMIT 200`,
+    tenantId,
+  ).catch(() => []);
+
+  const shipments = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id, shipment_no, status, priority,
+            cargo_owner_name, origin_name, origin_address,
+            destination_name, destination_address,
+            pickup_window_from::text, pickup_window_to::text,
+            delivery_window_from::text, delivery_window_to::text,
+            requested_vehicle_type, total_weight_kg, total_volume_cbm
+       FROM logistics_shipment_orders
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND status IN ('DRAFT', 'SUBMITTED', 'PENDING', 'APPROVED')
+      ORDER BY created_at DESC
+      LIMIT 200`,
+    tenantId,
+  ).catch(() => []);
+
+  return { vehicles, shipments };
+}
 
 export async function runOptimization(req: OptimizeRequest): Promise<OptimizeResponse> {
   await ensureRouteOptimizerSchema();
@@ -370,14 +468,17 @@ export async function commitPlan(tenantId: string, planId: string, actorUserId: 
         `INSERT INTO logistics_assignments (
            tenant_id, shipment_order_id, vehicle_id, driver_id,
            assignment_type, status, route_plan_id, sequence_in_route
-         ) VALUES ($1,$2,$3,$4,'CARRIER','ASSIGNED',$5,$6)`,
+         ) VALUES ($1,$2,$3,$4,'INTERNAL_FLEET','ASSIGNED',$5,$6)`,
         tenantId, shipmentId, route.vehicleId, route.driverId, planId, i + 1,
       );
       await prisma.$executeRawUnsafe(
         `UPDATE logistics_shipment_orders
-            SET status = 'ASSIGNED', updated_at = NOW()
+            SET status = 'ASSIGNED',
+                assigned_vehicle_id = $3,
+                assigned_driver_id = COALESCE($4, assigned_driver_id),
+                updated_at = NOW()
           WHERE id = $1 AND tenant_id = $2 AND status NOT IN ('DELIVERED','CANCELLED','CLOSED')`,
-        shipmentId, tenantId,
+        shipmentId, tenantId, route.vehicleId, route.driverId,
       ).catch(() => { /* status flip is best-effort */ });
       created += 1;
     }
@@ -407,7 +508,7 @@ export async function getPlan(tenantId: string, planId: string): Promise<{ id: s
   await ensureRouteOptimizerSchema();
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string; status: string; result: RouteOptimizerResult }>>(
     `SELECT id, status, result FROM logistics_route_plans
-      WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
     planId, tenantId,
   );
   return rows[0] ?? null;
@@ -416,8 +517,9 @@ export async function getPlan(tenantId: string, planId: string): Promise<{ id: s
 /**
  * Re-validate a plan after the operator manually reordered stops or moved a
  * shipment between routes. We DON'T re-optimise — the operator's sequence is
- * authoritative — but we recompute timing + violation flags so the UI shows
- * fresh badges. The edited result is written back to the DRAFT plan.
+ * authoritative — but we recompute timing, cumulative load, and violation
+ * flags so the UI shows fresh badges. The edited result is written back to
+ * the DRAFT plan.
  *
  * editedRoutes: the new per-vehicle stop ordering (stopIds in sequence).
  * Stops not present in any edited route are treated as unassigned.
@@ -437,49 +539,136 @@ export async function revalidatePlan(args: {
   const prev = existing.result;
 
   // Build a lookup of every RouteStop in the previous result by stopId so we
-  // can re-sequence without re-deriving from the DB.
+  // can re-sequence and derive per-shipment weight/volume deltas.
   const stopById = new Map<string, { route: SolvedRouteLike; stop: RouteStopLike }>();
+  const shipmentWeightMap = new Map<string, { weightKg: number; volumeCbm: number }>();
+
   for (const route of prev.routes) {
+    let prevKg = 0;
+    let prevCbm = 0;
     for (const stop of route.stops) {
       stopById.set(stop.stopId, { route, stop });
+      const deltaKg = Math.abs(stop.loadAfterKg - prevKg);
+      const deltaCbm = Math.abs(stop.loadAfterCbm - prevCbm);
+      if (stop.type === 'PICKUP' && deltaKg > 0) {
+        shipmentWeightMap.set(stop.shipmentId, { weightKg: deltaKg, volumeCbm: deltaCbm });
+      }
+      prevKg = stop.loadAfterKg;
+      prevCbm = stop.loadAfterCbm;
     }
   }
 
-  // Re-sequence each edited route. Recompute distance/duration is out of
-  // scope for v1 (would need the matrix again); we preserve per-stop legs and
-  // recompute only the order-dependent flags (load tracking + window onTime
-  // are order-dependent but use the stored per-stop windows).
-  const rebuiltRoutes = args.editedRoutes.map(er => {
-    const orderedStops = er.stopOrder
-      .map(id => stopById.get(id)?.stop)
-      .filter((s): s is RouteStopLike => !!s)
-      .map((s, i) => ({ ...s, sequence: i + 1 }));
+  // Load vehicle capacities so we can check CAPACITY violations after manual moves
+  const vehicleIds = args.editedRoutes.map(r => r.vehicleId);
+  const vehicleCapRows = vehicleIds.length > 0
+    ? await prisma.$queryRawUnsafe<Array<{ id: string; payload_capacity_kg: string | number | null; payload_capacity_cbm: string | number | null }>>(
+        `SELECT id, payload_capacity_kg, payload_capacity_cbm
+           FROM vehicles
+          WHERE id = ANY($1::text[]) AND tenant_id = $2 AND deleted_at IS NULL`,
+        vehicleIds, args.tenantId,
+      ).catch(() => [])
+    : [];
+  const vehicleCapMap = new Map(
+    vehicleCapRows.map(v => [
+      v.id,
+      {
+        capKg: num(v.payload_capacity_kg, 0) > 0 ? num(v.payload_capacity_kg, 0) : DEFAULT_VEHICLE_CAPACITY_KG,
+        capCbm: num(v.payload_capacity_cbm, 0) > 0 ? num(v.payload_capacity_cbm, 0) : Number.MAX_SAFE_INTEGER,
+      },
+    ]),
+  );
 
-    // Re-flag pickup-before-delivery as a hard check; if violated, surface it.
+  const rebuiltRoutes = args.editedRoutes.map(er => {
+    const rawStops = er.stopOrder
+      .map(id => stopById.get(id)?.stop)
+      .filter((s): s is RouteStopLike => !!s);
+
     const violations: SolvedRouteLike['violations'] = [];
     const seenPickup = new Set<string>();
-    for (const s of orderedStops) {
-      if (s.type === 'PICKUP') seenPickup.add(s.shipmentId);
-      else if (!seenPickup.has(s.shipmentId)) {
+    let runningKg = 0;
+    let runningCbm = 0;
+    let peakKg = 0;
+    let peakCbm = 0;
+    let clockMin = 480; // 08:00 shift start
+    let totalDistanceKm = 0;
+
+    const vCap = vehicleCapMap.get(er.vehicleId) ?? { capKg: DEFAULT_VEHICLE_CAPACITY_KG, capCbm: Number.MAX_SAFE_INTEGER };
+
+    const orderedStops: RouteStopLike[] = rawStops.map((s, i) => {
+      const dims = shipmentWeightMap.get(s.shipmentId) ?? { weightKg: 0, volumeCbm: 0 };
+      const legKm = Math.max(0, s.distanceFromPrevKm ?? 0);
+      totalDistanceKm += legKm;
+      const driveMin = Math.max(5, Math.round(legKm * 1.2));
+      const serviceMin = Math.max(5, (s.departMin ?? 0) - (s.arriveMin ?? 0) || 15);
+      const rawArrive = clockMin + driveMin;
+      const arriveMin = s.windowFromMin != null ? Math.max(rawArrive, s.windowFromMin) : rawArrive;
+      const departMin = arriveMin + serviceMin;
+      clockMin = departMin;
+
+      const lateMinutes = s.windowToMin != null && arriveMin > s.windowToMin ? arriveMin - s.windowToMin : 0;
+      const onTime = lateMinutes === 0;
+
+      if (s.type === 'PICKUP') {
+        seenPickup.add(s.shipmentId);
+        runningKg += dims.weightKg;
+        runningCbm += dims.volumeCbm;
+      } else {
+        if (!seenPickup.has(s.shipmentId)) {
+          violations.push({
+            stopId: s.stopId,
+            kind: 'TIME_WINDOW',
+            detail: `Delivery for ${s.shipmentId} sequenced before its pickup`,
+          });
+        }
+        runningKg = Math.max(0, runningKg - dims.weightKg);
+        runningCbm = Math.max(0, runningCbm - dims.volumeCbm);
+      }
+
+      if (runningKg > peakKg) peakKg = runningKg;
+      if (runningCbm > peakCbm) peakCbm = runningCbm;
+
+      if (runningKg > vCap.capKg) {
+        violations.push({
+          stopId: s.stopId,
+          kind: 'CAPACITY',
+          detail: `Load ${Math.round(runningKg)}kg exceeds vehicle capacity ${Math.round(vCap.capKg)}kg`,
+        });
+      }
+
+      if (!onTime) {
         violations.push({
           stopId: s.stopId,
           kind: 'TIME_WINDOW',
-          detail: `Delivery for ${s.shipmentId} sequenced before its pickup`,
+          detail: `${lateMinutes}min late`,
         });
       }
-    }
-    // Carry forward time-window violations recorded on each stop.
-    for (const s of orderedStops) {
-      if (!s.onTime) {
-        violations.push({ stopId: s.stopId, kind: 'TIME_WINDOW', detail: `${s.lateMinutes}min late` });
-      }
-    }
+
+      return {
+        ...s,
+        sequence: i + 1,
+        arriveMin,
+        departMin,
+        onTime,
+        lateMinutes,
+        loadAfterKg: Math.round(runningKg * 100) / 100,
+        loadAfterCbm: Math.round(runningCbm * 100) / 100,
+      };
+    });
 
     const prevRoute = prev.routes.find(r => r.vehicleId === er.vehicleId);
+    const totalDurationMin = Math.max(0, clockMin - 480);
+    const weightPct = vCap.capKg > 0 ? Math.min(100, Math.round((peakKg / vCap.capKg) * 100)) : 0;
+    const volumePct = vCap.capCbm < Number.MAX_SAFE_INTEGER && vCap.capCbm > 0
+      ? Math.min(100, Math.round((peakCbm / vCap.capCbm) * 100))
+      : (prevRoute?.capacityUtilization.volumePct ?? 0);
+
     return {
       ...(prevRoute ?? { driverId: null, totalDistanceKm: 0, totalDurationMin: 0, capacityUtilization: { weightPct: 0, volumePct: 0 }, estimatedCost: 0 }),
       vehicleId: er.vehicleId,
       stops: orderedStops,
+      totalDistanceKm: Math.round((totalDistanceKm || prevRoute?.totalDistanceKm || 0) * 10) / 10,
+      totalDurationMin: totalDurationMin || prevRoute?.totalDurationMin || 0,
+      capacityUtilization: { weightPct, volumePct },
       violations,
     } as SolvedRouteLike;
   });
@@ -490,15 +679,22 @@ export async function revalidatePlan(args: {
 
   const unassigned = [
     ...prev.unassigned.filter(u => !assignedShipmentIds.has(u.shipmentId)),
-    ...[...unassignSet].map(id => ({ shipmentId: id, reason: 'NO_VEHICLE_MATCH' as const, detail: 'Manually unassigned by operator' })),
+    ...[...unassignSet]
+      .filter(id => !assignedShipmentIds.has(id))
+      .map(id => ({ shipmentId: id, reason: 'NO_VEHICLE_MATCH' as const, detail: 'Manually unassigned by operator' })),
   ];
+
+  const totalDistanceKm = Math.round(rebuiltRoutes.reduce((s, r) => s + r.totalDistanceKm, 0) * 10) / 10;
+  const totalDurationMin = rebuiltRoutes.reduce((s, r) => s + r.totalDurationMin, 0);
 
   const result: RouteOptimizerResult = {
     routes: rebuiltRoutes as RouteOptimizerResult['routes'],
     unassigned,
     summary: {
       ...prev.summary,
-      vehiclesUsed: rebuiltRoutes.length,
+      totalDistanceKm,
+      totalDurationMin,
+      vehiclesUsed: rebuiltRoutes.filter(r => r.stops.length > 0).length,
       shipmentsAssigned: assignedShipmentIds.size,
       shipmentsUnassigned: unassigned.length,
       timeWindowViolations: rebuiltRoutes.reduce((s, r) => s + r.violations.filter(v => v.kind === 'TIME_WINDOW').length, 0),
@@ -508,10 +704,16 @@ export async function revalidatePlan(args: {
   await prisma.$executeRawUnsafe(
     `UPDATE logistics_route_plans
         SET result = $1::jsonb, updated_at = NOW(),
-            shipments_assigned = $2, vehicles_used = $3
-      WHERE id = $4 AND tenant_id = $5`,
-    JSON.stringify(result), result.summary.shipmentsAssigned, result.summary.vehiclesUsed,
-    args.planId, args.tenantId,
+            total_distance_km = $2, total_duration_min = $3,
+            shipments_assigned = $4, vehicles_used = $5
+      WHERE id = $6 AND tenant_id = $7`,
+    JSON.stringify(result),
+    result.summary.totalDistanceKm,
+    result.summary.totalDurationMin,
+    result.summary.shipmentsAssigned,
+    result.summary.vehiclesUsed,
+    args.planId,
+    args.tenantId,
   );
 
   return { id: args.planId, status: 'DRAFT', result };
@@ -533,6 +735,7 @@ export async function listPlans(tenantId: string, opts: { status?: string | null
             shipments_in, shipments_assigned, vehicles_used, estimated_cost::text
        FROM logistics_route_plans
       WHERE tenant_id = $1
+        AND deleted_at IS NULL
         AND created_at >= $2::timestamptz
         AND ($3::text IS NULL OR status = $3)
       ORDER BY created_at DESC

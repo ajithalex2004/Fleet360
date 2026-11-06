@@ -5,11 +5,12 @@ import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'logistics:stats';
 
-const activeShipmentStatuses = ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'ENROUTE_DELIVERY', 'ACTIVE'];
+const activeShipmentStatuses = ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'IN_TRANSIT', 'ENROUTE_DELIVERY', 'ACTIVE'];
 const completedShipmentStatuses = ['CLOSED', 'COMPLETED', 'DELIVERED', 'POD_SUBMITTED'];
+const pendingShipmentStatuses = ['PENDING', 'SUBMITTED'];
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
@@ -36,25 +37,6 @@ function iso(value: Date | string | null | undefined) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-// 8 raw SQL queries on every page load — wrap in cacheRead. The page
-// also auto-refreshes every 30s, but the server cache means the auto-
-// refresh now hits the Data Cache instead of Neon. Per-tenant key keeps
-// responses isolated (no `public` because the URL doesn't carry the
-// tenantId — see server-cache.ts for the security rationale).
-//
-// Runs inside unstable_cache (via cacheRead), which strips Next.js request
-// context - next/headers() is unavailable there, so the plain prisma client's
-// header-based auto-scoping middleware never engages. Every query below
-// already has its own explicit tenant_id filter, but RLS is force-applied to
-// the runtime role regardless of that filter - with no scope ever set, it
-// silently zeroed out every one of these queries for every tenant, and each
-// .catch(zero) masked it as an empty/zero result rather than a visible
-// error. withTenantRls sets app.tenant_id explicitly and gives every query
-// below the same pinned, scoped connection. All queries share ONE
-// connection (the tx), so they must run sequentially, not via Promise.all -
-// concurrent queries on a single Prisma transaction client are unsupported
-// and can interleave in ways that break RLS scoping. See runSequential in
-// src/lib/rls.ts.
 const getLogisticsStats = cacheRead(
   async (tenantId: string) => withTenantRls(prisma, tenantId, async (tx) => {
     const [
@@ -109,8 +91,9 @@ const getLogisticsStats = cacheRead(
       tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM logistics_shipment_orders
-          WHERE tenant_id = $1 AND deleted_at IS NULL AND status = 'PENDING'`,
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND status = ANY($2::text[])`,
         tenantId,
+        pendingShipmentStatuses,
       ).catch(zero),
 
       tx.$queryRawUnsafe<CountRow[]>(
@@ -162,9 +145,7 @@ export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
-
     return NextResponse.json({ error: authz.error }, { status: authz.status });
-
   }
 
   const { tenantId } = authz;

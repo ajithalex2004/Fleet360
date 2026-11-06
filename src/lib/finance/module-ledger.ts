@@ -87,23 +87,30 @@ export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<Modul
   const paidAmount        = p.paidAmount      ?? 0;
   const sourceContractIds = p.sourceContractIds ?? null;
 
-  type Row = { id: string };
+  type Row = { id: string; payment_status?: string | null };
 
-  // Lookup keyed on (module_source, reference_type, reference_id).
+  // Lookup keyed on (module_source, reference_type, reference_id, tenant_id).
   // Cast reference_id::text so comparison works whether the column is UUID or TEXT.
   const [existing] = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT id FROM finance_invoices
+    `SELECT id, payment_status FROM finance_invoices
       WHERE deleted_at IS NULL
         AND module_source       = $1
         AND reference_type      = $2
         AND reference_id::text  = $3
+        AND tenant_id           = $4
       LIMIT 1`,
     p.moduleSource,
     p.referenceType,
     p.referenceId,
+    p.tenantId,
   );
 
   if (existing?.id) {
+    const existingStatus = String(existing.payment_status ?? '').toUpperCase();
+    const effectivePaymentStatus =
+      p.paymentStatus === 'DRAFT' && ['SENT', 'PAID', 'PARTIALLY_PAID', 'POSTED'].includes(existingStatus)
+        ? existingStatus
+        : p.paymentStatus;
     await prisma.$executeRawUnsafe(
       `UPDATE finance_invoices
           SET client_name          = $2,
@@ -135,14 +142,14 @@ export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<Modul
               source_contract_ids  = $26::text[],
               source_payload       = $27::jsonb,
               updated_at           = NOW()
-        WHERE id = $1`,
+        WHERE id = $1 AND tenant_id = $20`,
       existing.id,
       p.clientName, p.clientEmail ?? null, p.clientPhone ?? null,
       p.serviceType, p.moduleSource, p.description,
       lineItemsJson,
       p.subtotal, discountAmount, vatRate, p.vatAmount, p.totalAmount, paidAmount,
       currency, issueDate, p.dueDate ?? null,
-      p.paymentStatus, p.notes ?? null,
+      effectivePaymentStatus, p.notes ?? null,
       p.tenantId,
       p.sourceEntityType ?? null, p.sourceEntityId ?? null, p.sourceEntityNo ?? null,
       p.sourceCustomerId ?? null, p.sourceCustomerName ?? null,
@@ -538,8 +545,11 @@ export async function mirrorLogisticsShipmentToFinance(
     `SELECT id, shipment_no, cargo_owner_customer_id, cargo_owner_name,
             cargo_owner_email, cargo_owner_phone, status, currency,
             origin_name, destination_name
-       FROM logistics_shipment_orders WHERE id = $1 LIMIT 1`,
+       FROM logistics_shipment_orders
+      WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+      LIMIT 1`,
     shipmentOrderId,
+    tenantId,
   );
   if (!shipment) return { mirrored: false, reason: 'shipment_not_found' };
 
@@ -548,20 +558,25 @@ export async function mirrorLogisticsShipmentToFinance(
             amount, tax_amount, total_amount, currency
        FROM logistics_freight_charges
       WHERE shipment_order_id = $1
+        AND tenant_id = $2
         AND charge_side = 'CUSTOMER'
         AND deleted_at IS NULL`,
     shipmentOrderId,
+    tenantId,
   );
   if (!charges.length) return { mirrored: false, reason: 'no_customer_charges' };
 
-  const lineItems = charges.map(c => ({
-    description:  c.description ?? c.charge_type,
-    qty:          Number(c.quantity ?? 1),
-    unitPrice:    Number(c.unit_rate ?? c.amount ?? 0),
-    amount:       Number(c.amount ?? 0),
-    lineType:     c.charge_type,
-    sourceModule: 'LOGISTICS',
-  }));
+  const lineItems = charges.map(c => {
+    const baseAmount = Number(c.amount ?? c.total_amount ?? 0);
+    return {
+      description:  c.description ?? c.charge_type,
+      qty:          Number(c.quantity ?? 1),
+      unitPrice:    Number(c.unit_rate ?? baseAmount),
+      amount:       baseAmount,
+      lineType:     c.charge_type,
+      sourceModule: 'LOGISTICS',
+    };
+  });
 
   const subtotal   = lineItems.reduce((s, l) => s + l.amount, 0);
   const vatAmount  = parseFloat((subtotal * 0.05).toFixed(2));
