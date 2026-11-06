@@ -415,7 +415,51 @@ export default function TenantsPage() {
     } finally { setSaving(false); }
   };
 
+  const exportDataInventory = async (t: TenantRow) => {
+    try {
+      const [detailRes, dryRunRes] = await Promise.all([
+        fetch(`/api/admin/tenants/${t.id}`, { cache: 'no-store' }),
+        fetch(`/api/admin/tenants/${t.id}/hard-delete?dryRun=true`, { method: 'POST' }),
+      ]);
+      const detail = detailRes.ok ? await detailRes.json().catch(() => ({})) : {};
+      const dryRun = dryRunRes.ok ? await dryRunRes.json().catch(() => ({})) : {};
+      const report = {
+        generatedAt: new Date().toISOString(),
+        tenant: {
+          id: t.id,
+          name: t.name,
+          code: t.code ?? null,
+          plan: t.plan ?? 'STANDARD',
+          domain: t.domain ?? null,
+          contactEmail: t.contactEmail ?? null,
+          isActive: Boolean(t.isActive),
+          usersCount: t._count?.userTenants ?? detail?.userTenants?.length ?? 0,
+          rolesCount: t._count?.roles ?? detail?.roles?.length ?? 0,
+        },
+        modules: detail?.modules ?? t.modules ?? [],
+        featureFlags: detail?.featureFlags ?? {},
+        tableRowInventory: dryRun?.tables ?? dryRun?.counts ?? [],
+        totalScopedRows: dryRun?.totalRows ?? 0,
+      };
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tenant-inventory-${(t.code || t.id).toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Could not generate tenant data inventory.');
+    }
+  };
+
   const toggleActive = async (t: TenantRow) => {
+    if (t.isActive) {
+      const ok = window.confirm(
+        `Suspend / Deactivate "${t.name}"?\n\nAll active user sessions for this tenant will be signed out within 60 seconds and this action will be recorded in the Platform Audit Log.`,
+      );
+      if (!ok) return;
+    }
     await fetch(`/api/admin/tenants/${t.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !t.isActive }),
@@ -550,6 +594,15 @@ export default function TenantsPage() {
                 className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30">
                 Ticket Types
               </Link>
+              <Link href={`/admin/tenants/${t.id}/settings`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30">
+                Settings &amp; Security
+              </Link>
+              <button onClick={() => void exportDataInventory(t)}
+                title="Download pre-offboarding JSON inventory of all tenant records across every table"
+                className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
+                ↓ Export Inventory
+              </button>
               <button onClick={() => impersonate(t)}
                 disabled={!t.isActive}
                 className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed">

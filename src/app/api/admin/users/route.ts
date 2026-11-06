@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
         { headers: { 'Cache-Control': 'private, no-store' } },
       );
     });
-    } catch (e) {
+  } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users error:', e);
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
@@ -213,7 +213,11 @@ async function handlePOST(req: NextRequest) {
 
   try {
     const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
+    const requestedTenantId =
+      typeof bodyRaw?.tenantId === 'string' && bodyRaw.tenantId.trim()
+        ? bodyRaw.tenantId.trim()
+        : undefined;
+    const body = stripTenantOwnershipFields(bodyRaw);
 
     const {
       id, username, email,
@@ -223,8 +227,12 @@ async function handlePOST(req: NextRequest) {
       isActive = true,
       moduleAccess,   // e.g. { fleet: true, maintenance: true, rental: false }
       // Role assignment
-      tenantId, roleId,
+      roleId,
     } = body;
+
+    const tenantId = isSuperAdmin(req.headers)
+      ? requestedTenantId
+      : (authz.tenantId || undefined);
 
     if (!username?.trim()) {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
@@ -233,12 +241,19 @@ async function handlePOST(req: NextRequest) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    // Quota: count active members in the target tenant against maxUsers.
+    // Quota: count active members in the target tenant against the target tenant's own maxUsers plan limit.
     if (tenantId) {
-      const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
-      const current = await withPlatformAdmin(prisma, (tx) =>
-        tx.userTenant.count({ where: { tenantId, isActive: true } })
-      );
+      const { tenantPlan, current } = await withPlatformAdmin(prisma, async (tx) => {
+        const targetTenant = await tx.tenant.findUnique({
+          where: { id: tenantId },
+          select: { plan: true },
+        });
+        const count = await tx.userTenant.count({ where: { tenantId, isActive: true } });
+        return {
+          tenantPlan: ((targetTenant?.plan as string | undefined) ?? req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode,
+          current: count,
+        };
+      });
       const gate = requireUnderQuota({ plan: tenantPlan, resource: 'maxUsers', current });
       if (gate) return gate;
     }
@@ -343,7 +358,7 @@ async function handlePOST(req: NextRequest) {
 
       return NextResponse.json({ ...user, userTenant }, { status: 201 });
     });
-    } catch (e) {
+  } catch (e) {
     console.error('[Admin Hub] POST /api/admin/users error:', e);
     const err = e as { code?: string; meta?: { target?: string[] } };
     if (err?.code === 'P2002') {

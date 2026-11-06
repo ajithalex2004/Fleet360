@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/admin/roles/override
  *
- * Create a tenant-specific override of a platform role.
+ * Create a tenant-specific override of a platform role, or a brand-new
+ * custom role scoped to the requesting tenant.
  *
  * Why this exists:
  *   The platform ships a default role catalog (e.g. "Finance Manager") with a
@@ -14,8 +15,10 @@ export const dynamic = 'force-dynamic';
  *   is isolation.
  *
  *   This endpoint creates a sibling `Role` row with the same `code`, scoped
- *   to the requesting tenant. The new role is NOT a system role and is fully
- *   editable in the standard Roles & Permissions page.
+ *   to the requesting tenant, or creates a new custom `Role` row for the
+ *   tenant when `name` and `code` are supplied without `sourceRoleId`. The
+ *   new role is NOT a system role and is fully editable in the standard
+ *   Roles & Permissions page.
  *
  * Permission resolution at runtime (separate work):
  *   When a user logs in and is assigned a role, the system should prefer the
@@ -27,10 +30,10 @@ export const dynamic = 'force-dynamic';
  * Behavior:
  *   - Source role must exist and be a platform/system role (tenantId is NULL
  *     or isSystem=true). Cannot override a tenant override.
- *   - tenantId must be present in the request body and must be the caller's
- *     tenant (the middleware's x-tenant-id header is the source of truth).
- *   - 409 if an override already exists for (tenantId, code) — caller should
- *     use the existing one.
+ *   - tenantId must be present in the request body (for Super Admin) or
+ *     derived from the caller's tenant (`x-tenant-id` header).
+ *   - 409 if an override/role already exists for (tenantId, code) — caller
+ *     should use the existing one.
  *   - Copies every RolePermission row from the source role to the new role.
  *
  * Response: 201 with the new role including its permission count.
@@ -39,7 +42,7 @@ export const dynamic = 'force-dynamic';
 import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -51,7 +54,6 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
     // Tenant identity comes from the middleware-injected header — never
@@ -63,23 +65,94 @@ async function handlePOST(req: NextRequest) {
     const isSuperAdmin = role === 'SUPER_ADMIN';
 
     const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
-    const { sourceRoleId, tenantId: bodyTenantId } = body as {
+    const bodyTenantId =
+      typeof bodyRaw?.tenantId === 'string' && bodyRaw.tenantId.trim()
+        ? bodyRaw.tenantId.trim()
+        : undefined;
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const {
+      sourceRoleId,
+      name: customName,
+      code: customCode,
+      description: customDescription,
+      permissionIds = [],
+    } = body as {
       sourceRoleId?: string;
-      tenantId?: string;
+      name?: string;
+      code?: string;
+      description?: string;
+      permissionIds?: string[];
     };
 
-    if (!sourceRoleId) {
-      return NextResponse.json({ error: 'sourceRoleId is required' }, { status: 400 });
-    }
-
     // Tenant resolution:
-    //   - Super admin: must supply tenantId in body (headerTenantId may be
+    //   - Super admin: may supply tenantId in body (headerTenantId may be
     //     a different context if they're impersonating).
     //   - Tenant admin: headerTenantId is authoritative.
     const tenantId = isSuperAdmin ? (bodyTenantId ?? headerTenantId) : headerTenantId;
     if (!tenantId) {
       return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+    }
+
+    // Custom role creation path (when sourceRoleId is omitted and name + code are supplied)
+    if (!sourceRoleId) {
+      const trimmedName = customName?.trim() ?? '';
+      const trimmedCode = customCode?.trim().toUpperCase().replace(/\s+/g, '_') ?? '';
+      if (!trimmedName || !trimmedCode) {
+        return NextResponse.json(
+          { error: 'Either sourceRoleId or both name and code are required' },
+          { status: 400 },
+        );
+      }
+      if (trimmedCode === 'SUPER_ADMIN') {
+        return NextResponse.json(
+          { error: 'A tenant role cannot use the SUPER_ADMIN code.' },
+          { status: 400 },
+        );
+      }
+
+      const customResult = await withPlatformAdmin(prisma, async (tx) => {
+        const existing = await tx.role.findUnique({
+          where: { tenantId_code: { tenantId, code: trimmedCode } },
+        });
+        if (existing) {
+          return {
+            error: `A role with code "${trimmedCode}" already exists for this tenant.`,
+            status: 409 as const,
+            existingRoleId: existing.id,
+          };
+        }
+
+        const newRole = await tx.role.create({
+          data: {
+            tenantId,
+            name: trimmedName,
+            code: trimmedCode,
+            description: customDescription?.trim() || null,
+            isSystem: false,
+            permissions: Array.isArray(permissionIds) && permissionIds.length > 0
+              ? {
+                  create: permissionIds.map((permissionId: string) => ({ permissionId })),
+                }
+              : undefined,
+          },
+          include: { _count: { select: { permissions: true, userTenants: true } } },
+        });
+
+        return { ok: true as const, role: newRole };
+      });
+
+      if ('error' in customResult) {
+        return NextResponse.json(
+          {
+            error: customResult.error,
+            ...('existingRoleId' in customResult ? { existingRoleId: customResult.existingRoleId } : {}),
+          },
+          { status: customResult.status },
+        );
+      }
+
+      await revalidateCache(ROLES_TAG);
+      return NextResponse.json(customResult.role, { status: 201 });
     }
 
     // All DB work goes through withPlatformAdmin — Role is multi-tenant via
@@ -153,7 +226,7 @@ async function handlePOST(req: NextRequest) {
     // New override means the cached role list (per tenant) is stale.
     await revalidateCache(ROLES_TAG);
     return NextResponse.json(result.role, { status: 201 });
-    } catch (e) {
+  } catch (e) {
     console.error('[POST /api/admin/roles/override]', e);
     const message = e instanceof Error ? e.message : 'Failed to create override';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -4,7 +4,7 @@ import { holdersOfRole, revokeRoleHolders } from '@/lib/auth/session-revocation'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -57,7 +57,7 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { permissions, ...data } = body;
+    const { permissions: _permissions, ...data } = body;
     if (!isSuperAdmin(req.headers)) {
       // A role's code is what gets signed into its holders' sessions, and
       // a tenant copy must keep its platform role's code. Tenant admins
@@ -70,8 +70,23 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
         { status: 400 },
       );
     }
+
+    // Enforce the DB invariant `chk_roles_system_template`: `(tenant_id IS NULL) = is_system`.
+    if (data.isSystem !== undefined) {
+      const expectedIsSystem = access.owner === null;
+      if (Boolean(data.isSystem) !== expectedIsSystem) {
+        return NextResponse.json(
+          {
+            error: expectedIsSystem
+              ? 'Platform roles (tenantId IS NULL) must remain system roles. Create a tenant override to customize a role for a specific tenant.'
+              : 'Tenant-owned roles cannot be marked as system roles.',
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // Super Admin can update any role including system roles
-    // This allows editing name, description, isSystem flag etc.
     const holders = data.code !== undefined ? await holdersOfRole(params.id) : null;
     const role = await withPlatformAdmin(prisma, (tx) =>
       tx.role.update({
@@ -110,7 +125,7 @@ async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: str
     await revokeRoleHolders(holders, 'role-deleted', authz.userId);
     await revalidateCache(CACHE_TAG);
     return NextResponse.json({ success: true });
-    } catch (e) {
+  } catch (e) {
     console.error('DELETE /api/admin/roles/[id] error:', e);
     if (
       e instanceof Prisma.PrismaClientKnownRequestError &&

@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { ShieldCheck, Plus, X, Save, AlertCircle, ArrowLeft, Trash2, Eye, EyeOff } from 'lucide-react';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
 
@@ -26,6 +27,8 @@ interface SsoConfig {
 interface Role { id: string; name: string; code: string; }
 
 export default function SsoConfigPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const params   = useParams<{ id: string }>();
   const tenantId = params?.id ?? '';
 
@@ -52,9 +55,10 @@ export default function SsoConfigPage() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const [ssoRes, tenantRes] = await Promise.all([
+      const [ssoRes, tenantRes, rolesRes] = await Promise.all([
         fetch(`/api/admin/tenants/${tenantId}/sso`),
         fetch(`/api/admin/tenants/${tenantId}`),
+        fetch(`/api/admin/roles?tenantId=${encodeURIComponent(tenantId)}&lite=true`),
       ]);
       if (ssoRes.ok) {
         const data = await ssoRes.json();
@@ -69,11 +73,25 @@ export default function SsoConfigPage() {
           setIsActive(c.isActive);
         }
       }
+      let fallbackRoles: Role[] = [];
       if (tenantRes.ok) {
         const t = await tenantRes.json();
         setTenantName(t?.name ?? '');
-        const list: Role[] = (t?.roles ?? []).map((r: { id: string; name: string; code: string }) => ({ id: r.id, name: r.name, code: r.code }));
-        setRoles(list);
+        fallbackRoles = (t?.roles ?? []).map((r: { id: string; name: string; code: string }) => ({ id: r.id, name: r.name, code: r.code }));
+      }
+      if (rolesRes.ok) {
+        const roleData = await rolesRes.json().catch(() => []);
+        if (Array.isArray(roleData) && roleData.length > 0) {
+          setRoles(
+            roleData
+              .filter((r: { code?: string }) => r.code !== 'SUPER_ADMIN')
+              .map((r: { id: string; name: string; code: string }) => ({ id: r.id, name: r.name, code: r.code })),
+          );
+        } else {
+          setRoles(fallbackRoles);
+        }
+      } else {
+        setRoles(fallbackRoles);
       }
     } finally {
       setLoading(false);
@@ -154,9 +172,9 @@ export default function SsoConfigPage() {
             {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
           </p>
         </div>
-        <Link href="/admin/tenants"
+        <Link href={isSuperAdmin ? '/admin/tenants' : '/admin/company-profile'}
           className={`${BACK_BUTTON} shrink-0`}>
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
+          <ArrowLeft className="w-3.5 h-3.5" /> {isSuperAdmin ? 'Back to Tenants' : 'Back to Company Profile'}
         </Link>
       </div>
 
@@ -240,7 +258,7 @@ export default function SsoConfigPage() {
             <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Default role for new users</label>
             <select value={defaultRoleId} onChange={e => setDefaultRoleId(e.target.value)}
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-              <option value="">Auto (TENANT_ADMIN)</option>
+              <option value="">Auto (VIEWER — least privilege)</option>
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>

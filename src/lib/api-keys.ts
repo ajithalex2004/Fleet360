@@ -15,6 +15,7 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 export const API_KEY_PREFIX_TAG = 'xlk_';
 export const API_KEY_PREFIX_LEN = 12; // chars stored as the searchable prefix
@@ -71,14 +72,19 @@ export async function verifyApiKey(plaintext: string): Promise<ApiKeyMatch | nul
   if (!prefix) return null;
   const hash = hashApiKey(plaintext);
 
-  const rows = await prisma.$queryRawUnsafe<{
-    id: string; tenant_id: string; name: string; key_hash: string; scopes: string[]; revoked: boolean;
-  }[]>(
-    `SELECT id::text, tenant_id, name, key_hash, scopes, revoked
-     FROM tenant_api_keys
-     WHERE prefix = $1
-     LIMIT 5`,
-    prefix,
+  // `tenant_api_keys` has FORCE ROW LEVEL SECURITY enabled; during initial
+  // Bearer authentication we do not yet know which tenant owns the prefix,
+  // so we query inside `withPlatformAdmin` (`app.tenant_id = '*'`).
+  const rows = await withPlatformAdmin(prisma, (tx) =>
+    tx.$queryRawUnsafe<{
+      id: string; tenant_id: string; name: string; key_hash: string; scopes: string[]; revoked: boolean;
+    }[]>(
+      `SELECT id::text, tenant_id, name, key_hash, scopes, revoked
+       FROM tenant_api_keys
+       WHERE prefix = $1
+       LIMIT 5`,
+      prefix,
+    ),
   ).catch(() => []);
 
   for (const r of rows) {
@@ -97,9 +103,12 @@ export async function verifyApiKey(plaintext: string): Promise<ApiKeyMatch | nul
 
 /** Fire-and-forget last_used update. Caller does not await. */
 export async function touchApiKeyUsage(id: string, ip: string | null): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `UPDATE tenant_api_keys SET last_used_at = NOW(), last_used_ip = $2 WHERE id = $1::uuid`,
-    id, ip,
+  await withPlatformAdmin(prisma, (tx) =>
+    tx.$executeRawUnsafe(
+      `UPDATE tenant_api_keys SET last_used_at = NOW(), last_used_ip = $2 WHERE id = $1::uuid`,
+      id,
+      ip,
+    ),
   ).catch(() => {});
 }
 

@@ -304,7 +304,7 @@ export default function BookingPortal() {
               New Booking Intake →
             </Link>
             <Link
-              href="/admin/corporate-clients"
+              href="/customer-mgmt"
               className="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-black/10 dark:border-white/10 transition-all"
             >
               Corporate Hub

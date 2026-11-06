@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { EMIRATES, emirateOf, isValidTrn, normalizeTrn } from '@/lib/finance/uae';
 
@@ -57,7 +58,7 @@ function Field({ label, hint, error, children }: { label: string; hint?: React.R
 }
 
 export default function CompanyProfilePage() {
-  const { user } = usePermissions();
+  const { user, tenant } = usePermissions();
   const canEdit = ADMIN_ROLES.includes(user?.roleCode ?? '');
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -233,6 +234,54 @@ export default function CompanyProfilePage() {
                 </Field>
               </div>
             </div>
+
+            {canEdit && tenant?.id && (
+              <div className={card}>
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--text-main)]">🛡️ Company Administration, Security & Branding</h2>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Configure single sign-on, API keys, user invitations, white-label branding, ticket SLAs, and security policies for your organisation.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <Link href={`/admin/tenants/${tenant.id}/invitations`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-emerald-500/40 transition-all">
+                    <div className="text-xs font-semibold text-emerald-300">✉️ User Invitations</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Invite new team members & manage pending links</div>
+                  </Link>
+                  <Link href={`/admin/tenants/${tenant.id}/sso`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-violet-500/40 transition-all">
+                    <div className="text-xs font-semibold text-violet-300">🔐 Single Sign-On (OIDC)</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Okta, Microsoft Entra ID, Google Workspace SSO</div>
+                  </Link>
+                  <Link href={`/admin/tenants/${tenant.id}/api-keys`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-amber-500/40 transition-all">
+                    <div className="text-xs font-semibold text-amber-300">🔑 API Keys</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Programmatic access keys & rate-limit tiers</div>
+                  </Link>
+                  <Link href={`/admin/tenants/${tenant.id}/branding`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-pink-500/40 transition-all">
+                    <div className="text-xs font-semibold text-pink-300">🎨 White-Label Branding</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Company logo, primary colours & portal theme</div>
+                  </Link>
+                  <Link href={`/admin/tenants/${tenant.id}/ticket-types`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-cyan-500/40 transition-all">
+                    <div className="text-xs font-semibold text-cyan-300">🎫 Service-Ticket Types & SLAs</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Customise helpdesk categories & SLA targets</div>
+                  </Link>
+                  <Link href={`/admin/tenants/${tenant.id}/settings`}
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-blue-500/40 transition-all">
+                    <div className="text-xs font-semibold text-blue-300">⚙️ Security & Dispatch Settings</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">MFA policy, session timeout, IP allowlist & dispatch</div>
+                  </Link>
+                  <Link href="/admin/subscription"
+                    className="p-3.5 rounded-xl bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] hover:border-indigo-500/40 transition-all">
+                    <div className="text-xs font-semibold text-indigo-300">💳 Subscription & Plan</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">Plan quotas, vehicle/user usage & billing history</div>
+                  </Link>
+                </div>
+              </div>
+            )}
 
             {profile.updatedAt && (
               <p className="text-xs text-[var(--text-faint)] text-center">

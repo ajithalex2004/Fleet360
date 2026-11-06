@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import PasswordInput from '@/components/ui/PasswordInput';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PhoneCell from '@/components/ui/PhoneCell';
@@ -7,6 +8,7 @@ import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import { SWITCH_OFF } from '@/lib/ui/toggle';
 import UserAccessDialog from '@/components/admin/UserAccessDialog';
 import NewUserDialog from '@/components/admin/NewUserDialog';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 interface User {
   id: string;
@@ -38,6 +40,9 @@ interface Tenant { id: string; name: string; code?: string }
 const USER_TYPES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'CUSTOMER', 'VIEWER'];
 
 export default function UsersPage() {
+  const { user: currentUser, tenant: currentTenant, impersonatedBy } = usePermissions();
+  const isSuperAdmin = currentUser?.roleCode === 'SUPER_ADMIN' && !impersonatedBy;
+
   const [users, setUsers]     = useState<User[]>([]);
   const [roles, setRoles]     = useState<Role[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -59,6 +64,14 @@ export default function UsersPage() {
 
   const [editForm, setEditForm]   = useState<Partial<User & { newPassword: string }>>({});
   const [assignForm, setAssignForm] = useState({ tenantId: '', roleId: '' });
+
+  const resolveTargetTenantId = useCallback(
+    (u?: User | null) =>
+      u?.memberships?.[0]?.tenantId ||
+      (tenants.length === 1 ? tenants[0].id : '') ||
+      (!isSuperAdmin ? currentTenant?.id ?? '' : ''),
+    [tenants, isSuperAdmin, currentTenant?.id],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +114,7 @@ export default function UsersPage() {
       ? `Disable ${name}? They will be signed out and unable to sign in until enabled again.`
       : `Enable ${name}? They will be able to sign in again.`;
     if (!confirm(ask)) return;
-    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    const targetTenantId = resolveTargetTenantId(u);
     const res = targetTenantId
       ? await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
           method: 'POST',
@@ -109,10 +122,10 @@ export default function UsersPage() {
           body: JSON.stringify({ action: 'update-member', userId: u.id, isActive: !u.isActive }),
         })
       : await fetch(`/api/admin/users/${u.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !u.isActive }),
-    });
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !u.isActive }),
+        });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       setError(d.error ?? `Failed to ${u.isActive ? 'disable' : 'enable'} the user (${res.status})`);
@@ -147,6 +160,58 @@ export default function UsersPage() {
     } finally { setSaving(false); }
   };
 
+  const handleRevokeSessions = async (u: User) => {
+    if (!window.confirm(`Sign out all active sessions for ${u.email}?`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}/revoke-sessions`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Failed to revoke sessions');
+      setNotice(`Active sessions revoked for ${u.email}.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to revoke sessions');
+    }
+  };
+
+  const handleRemoveFromCompany = async (u: User, tenantId: string, tenantName?: string) => {
+    const label = tenantName || currentTenant?.name || 'this company';
+    if (!window.confirm(`Remove ${u.email} from ${label}?\n\nTheir membership in ${label} will be removed and active sessions signed out.`)) return;
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenantId}/users?userId=${encodeURIComponent(u.id)}`, {
+        method: 'DELETE',
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.message || d.error || 'Failed to remove user from company');
+      setNotice(`Removed ${u.email} from ${label}.`);
+      load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to remove user from company');
+    }
+  };
+
+  const handleResetMfa = async (u: User) => {
+    const targetTenantId = resolveTargetTenantId(u) || currentTenant?.id || u.memberships?.[0]?.tenantId;
+    if (!targetTenantId) {
+      setFormError('Assign user to a tenant first before resetting MFA.');
+      return;
+    }
+    if (!window.confirm(`Reset 2FA / MFA for ${u.email}?\n\nThis clears their authenticator secret and recovery codes and signs out active sessions.`)) return;
+    setSaving(true); setFormError('');
+    try {
+      const res = await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset-mfa', userId: u.id }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.message || d.error || 'Failed to reset MFA');
+      setNotice(d.message || `MFA reset for ${u.email}.`);
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : 'Failed to reset MFA');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openEditModal = (u: User) => {
     setShowEdit(u);
     setEditForm({
@@ -163,7 +228,7 @@ export default function UsersPage() {
     setLines(null);
     // Reporting lines in this company, for the Direct Manager / Department
     // Head approvers (Admin > Workflows).
-    const targetTenantId = u.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+    const targetTenantId = resolveTargetTenantId(u);
     fetch(targetTenantId ? `/api/admin/tenants/${targetTenantId}/users?userId=${u.id}` : `/api/admin/users/${u.id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setLines({
@@ -190,7 +255,7 @@ export default function UsersPage() {
         // Sent once loaded: '' clears a line.
         ...(lines ? { managerUserId: lines.managerUserId, departmentHeadUserId: lines.departmentHeadUserId } : {}),
       };
-      const targetTenantId = showEdit.memberships?.[0]?.tenantId || (tenants.length === 1 ? tenants[0].id : '');
+      const targetTenantId = resolveTargetTenantId(showEdit);
       if (targetTenantId) {
         const res = await fetch(`/api/admin/tenants/${targetTenantId}/users`, {
           method: 'POST',
@@ -251,10 +316,20 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-[var(--text-main)]">User Management</h1>
           <p className="text-xs text-[var(--text-muted)] mt-1">{users.length} users — global identity &amp; module access control</p>
         </div>
-        <button onClick={() => { setShowCreate(true); setFormError(''); }}
-          className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold text-sm hover:opacity-90">
-          + New User
-        </button>
+        <div className="flex items-center gap-2.5">
+          {currentTenant?.id && (
+            <Link
+              href={`/admin/tenants/${currentTenant.id}/invitations`}
+              className="px-4 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded-xl font-semibold text-sm transition-colors"
+            >
+              ✉️ Invitations
+            </Link>
+          )}
+          <button onClick={() => { setShowCreate(true); setFormError(''); }}
+            className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold text-sm hover:opacity-90">
+            + New User
+          </button>
+        </div>
       </div>
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
@@ -373,8 +448,25 @@ export default function UsersPage() {
                               : 'bg-green-500/10 hover:bg-green-500/20 text-green-500 border-green-500/30'}`}>
                             {u.isActive ? 'Disable' : 'Enable'}
                           </button>
-                          {/* Hard delete — hidden for protected accounts. The server enforces the same whitelist. */}
-                          {u.email !== 'admin@xl-mobility.com' && (
+                          <button onClick={() => handleRevokeSessions(u)}
+                            title="Force sign-out all active sessions for this user"
+                            className="px-2.5 py-1.5 text-xs bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-lg transition-colors whitespace-nowrap">
+                            Sign Out
+                          </button>
+                          {resolveTargetTenantId(u) && u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => {
+                                const tid = resolveTargetTenantId(u)!;
+                                const m = (u.memberships ?? []).find((x) => x.tenantId === tid);
+                                void handleRemoveFromCompany(u, tid, m?.tenantName);
+                              }}
+                              title="Remove user membership from this company"
+                              className="px-2.5 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap">
+                              Remove
+                            </button>
+                          )}
+                          {/* Hard delete — platform SUPER_ADMIN only, hidden for protected accounts. */}
+                          {isSuperAdmin && u.email !== 'admin@xl-mobility.com' && (
                             <button
                               onClick={() => setHardDeleteTarget(u)}
                               className="px-2.5 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap">
@@ -395,7 +487,7 @@ export default function UsersPage() {
       {/* ── New User (company, role, department, module access, sign-in) ── */}
       {showCreate && (
         <NewUserDialog
-          tenants={tenants.map(t => ({ id: t.id, name: t.name }))}
+          tenants={tenants.length > 0 ? tenants.map(t => ({ id: t.id, name: t.name })) : (currentTenant ? [{ id: currentTenant.id, name: currentTenant.name }] : [])}
           onClose={() => setShowCreate(false)}
           onDone={(message) => { setShowCreate(false); setNotice(message); load(); }}
         />
@@ -512,13 +604,23 @@ export default function UsersPage() {
                   placeholder="Min. 8 characters" minLength={8} autoComplete="new-password" />
               </div>
               {/* Actions */}
-              <div className="flex gap-3 justify-end pt-2">
-                <button type="button" onClick={() => setShowEdit(null)}
-                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
-                <button type="submit" disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
-                  {saving ? 'Saving…' : 'Save Changes'}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleResetMfa(showEdit)}
+                  disabled={saving}
+                  className="px-3.5 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold disabled:opacity-50"
+                >
+                  🔐 Reset 2FA / MFA
                 </button>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setShowEdit(null)}
+                    className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
+                  <button type="submit" disabled={saving}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
+                    {saving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -11,6 +11,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { Headphones, ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import type { TicketType, TenantTicketTypeAccess } from '@/types/service-tickets';
@@ -34,6 +35,8 @@ interface Row extends TenantTicketTypeAccess {
 }
 
 export default function TicketTypesAccessPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const params   = useParams<{ id: string }>();
   const tenantId = params?.id ?? '';
 
@@ -116,9 +119,9 @@ export default function TicketTypesAccessPage() {
             <span className="ml-2 text-[var(--text-faint)]">· toggle which ticket types this tenant can use, and override the default SLA</span>
           </p>
         </div>
-        <Link href="/admin/tenants"
+        <Link href={isSuperAdmin ? '/admin/tenants' : '/admin/company-profile'}
           className={`${BACK_BUTTON} shrink-0`}>
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
+          <ArrowLeft className="w-3.5 h-3.5" /> {isSuperAdmin ? 'Back to Tenants' : 'Back to Company Profile'}
         </Link>
       </div>
 

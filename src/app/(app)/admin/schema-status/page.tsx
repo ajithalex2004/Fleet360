@@ -1,5 +1,5 @@
-import SystemHealthDashboardView from '@/components/admin/system-health-dashboard';
+import { redirect } from 'next/navigation';
 
 export default function SchemaStatusPage() {
-  return <SystemHealthDashboardView isPublic={false} initialTab="schema-status" />;
+  redirect('/admin/health?tab=schema-status');
 }

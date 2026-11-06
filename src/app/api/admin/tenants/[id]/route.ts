@@ -9,6 +9,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { readTenantFeatureFlags } from '@/lib/tenant-features';
+import { logAudit as logPlatformAudit } from '@/lib/platform-audit-log';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -77,6 +78,20 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
         revokedBy: authz.userId,
       });
     }
+    if (typeof data.isActive === 'boolean') {
+      await logPlatformAudit({
+        action: data.isActive ? 'tenant.reactivate' : 'tenant.suspend',
+        targetType: 'tenant',
+        targetId: params.id,
+        targetName: tenant.name,
+        performedBy: {
+          userId: authz.userId ?? undefined,
+          email: req.headers.get('x-user-email') ?? undefined,
+        },
+        dryRun: false,
+        metadata: { isActive: data.isActive, plan: tenant.plan },
+      });
+    }
     // Bust the list cache so the tenants page and the platform
     // dashboard's stat card see the change on the next render.
     revalidateCache([CACHE_TAG]);
@@ -100,6 +115,17 @@ async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: str
       tx.tenant.update({ where: { id: params.id }, data: { isActive: false } }),
     );
     await revokeSessionsSafely({ tenantId: params.id, reason: 'tenant-deactivated', revokedBy: authz.userId });
+    await logPlatformAudit({
+      action: 'tenant.suspend',
+      targetType: 'tenant',
+      targetId: params.id,
+      performedBy: {
+        userId: authz.userId ?? undefined,
+        email: req.headers.get('x-user-email') ?? undefined,
+      },
+      dryRun: false,
+      metadata: { source: 'DELETE /api/admin/tenants/[id]' },
+    });
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
     } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }

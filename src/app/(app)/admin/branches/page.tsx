@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Branch {
@@ -99,10 +100,11 @@ function Field({ label, name, type = 'text', placeholder = '', required = false,
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function BranchModal({
-  branch, tenants, onClose, onSaved
+  branch, tenants, defaultTenantId, onClose, onSaved
 }: {
   branch: Branch | null;
   tenants: Tenant[];
+  defaultTenantId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -123,7 +125,7 @@ function BranchModal({
     costCenterCode: branch.cost_center_code ?? '',
     isDefault: branch.is_default,
     notes: branch.notes ?? '',
-  } : { ...EMPTY_FORM });
+  } : { ...EMPTY_FORM, tenantId: defaultTenantId || (tenants.length === 1 ? tenants[0].id : '') });
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
@@ -181,7 +183,7 @@ function BranchModal({
             <select
               value={form.tenantId}
               onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))}
-              disabled={isEdit}
+              disabled={isEdit || tenants.length === 1}
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50 disabled:opacity-60"
             >
               <option value="">Select a tenant…</option>
@@ -397,6 +399,9 @@ function DeleteConfirmModal({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function BranchesPage() {
+  const { user, tenant: sessionTenant, impersonatedBy } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN' && !impersonatedBy;
+
   const [branches,  setBranches]  = useState<Branch[]>([]);
   const [tenants,   setTenants]   = useState<Tenant[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -418,12 +423,17 @@ export default function BranchesPage() {
         fetch(`/api/tenant-branches?${params}`, { cache: 'no-store' }),
         fetch('/api/admin/tenants?limit=200',   { cache: 'no-store' }),
       ]);
-      const [bData, tData] = await Promise.all([bRes.json(), tRes.json()]);
+      const [bData, tData] = await Promise.all([bRes.json(), tRes.json().catch(() => [])]);
       setBranches(bData.data ?? []);
-      setTenants(Array.isArray(tData) ? tData : (tData.data ?? []));
+      const fetchedTenants = Array.isArray(tData) ? tData : (tData.data ?? []);
+      if (fetchedTenants.length > 0) {
+        setTenants(fetchedTenants);
+      } else if (sessionTenant?.id) {
+        setTenants([{ id: sessionTenant.id, name: sessionTenant.name, code: sessionTenant.code }]);
+      }
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [filter.tenantId, filter.emirate]);
+  }, [filter.tenantId, filter.emirate, sessionTenant?.id, sessionTenant?.name, sessionTenant?.code]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -552,14 +562,16 @@ export default function BranchesPage() {
           onChange={e => setFilter(f => ({ ...f, search: e.target.value }))}
           className="flex-1 min-w-48 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40"
         />
-        <select
-          value={filter.tenantId}
-          onChange={e => setFilter(f => ({ ...f, tenantId: e.target.value }))}
-          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none"
-        >
-          <option value="">All Tenants</option>
-          {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        {isSuperAdmin && (
+          <select
+            value={filter.tenantId}
+            onChange={e => setFilter(f => ({ ...f, tenantId: e.target.value }))}
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none"
+          >
+            <option value="">All Tenants</option>
+            {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
         <select
           value={filter.emirate}
           onChange={e => setFilter(f => ({ ...f, emirate: e.target.value }))}
@@ -696,6 +708,7 @@ export default function BranchesPage() {
         <BranchModal
           branch={modal.branch}
           tenants={tenants}
+          defaultTenantId={!isSuperAdmin ? sessionTenant?.id : undefined}
           onClose={() => setModal({ open: false, branch: null })}
           onSaved={load}
         />

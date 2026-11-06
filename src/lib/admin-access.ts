@@ -170,7 +170,7 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'workflows/[id]/duplicate':                    { POST: 'admin' },
   'workflows/[id]/steps':                        { GET: 'admin', POST: 'admin' },
   'workflows/[id]/steps/[id]':                   { PUT: 'admin', DELETE: 'admin' },
-  'workflows/stats':                             { GET: 'platform' },  // counts across all tenants
+  'workflows/stats':                             { GET: 'admin' },     // scoped to tenant for non-super-admins
 };
 
 const ADMIN_PREFIX = '/api/admin/';
