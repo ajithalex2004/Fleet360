@@ -4429,6 +4429,35 @@ export async function assignDrayageJob(
         ? endDt.toISOString()
         : new Date(startDt.getTime() + 2 * 60 * 60 * 1000).toISOString();
     }
+  } else if (job.pcs_slot_start) {
+    const existingStart = new Date(String(job.pcs_slot_start));
+    if (!Number.isNaN(existingStart.getTime())) {
+      resolvedSlotStart = existingStart.toISOString();
+      const existingEnd = job.pcs_slot_end
+        ? new Date(String(job.pcs_slot_end))
+        : new Date(existingStart.getTime() + 2 * 60 * 60 * 1000);
+      resolvedSlotEnd = !Number.isNaN(existingEnd.getTime())
+        ? existingEnd.toISOString()
+        : new Date(existingStart.getTime() + 2 * 60 * 60 * 1000).toISOString();
+    }
+  } else {
+    // Default 2-hour UAE (UTC+4) gate slot window when assigning a token without an explicit slot
+    const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    const uaeHour = uaeNow.getUTCHours();
+    const defaultStartDt = new Date(
+      Date.UTC(
+        uaeNow.getUTCFullYear(),
+        uaeNow.getUTCMonth(),
+        uaeNow.getUTCDate(),
+        uaeHour - 4,
+        0,
+        0,
+        0,
+      ),
+    );
+    const defaultEndDt = new Date(defaultStartDt.getTime() + 2 * 60 * 60 * 1000);
+    resolvedSlotStart = defaultStartDt.toISOString();
+    resolvedSlotEnd = defaultEndDt.toISOString();
   }
   const prevStatusRaw = String(job.status || '').trim();
   const prevStatus = prevStatusRaw.toUpperCase();
@@ -4652,7 +4681,12 @@ export async function assignDrayageJob(
     console.warn('[assignDrayageJob] milestone alert warning:', err);
   });
 
-  return { ok: true, tokenNumber: token };
+  return {
+    ok: true,
+    tokenNumber: token,
+    pcsSlotStart: resolvedSlotStart,
+    pcsSlotEnd: resolvedSlotEnd,
+  };
 }
 
 export function getDrayageOperationalStageIndex(

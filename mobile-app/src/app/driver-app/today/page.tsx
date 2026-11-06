@@ -180,6 +180,9 @@ interface DrayageAssignment {
   warehouseName: string;
   tokenNumber?: string | null;
   pcsTokenNumber?: string | null;
+  pcsSlotStart?: string | null;
+  pcsSlotEnd?: string | null;
+  tokenTimeSlot?: string | null;
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
   assignedVehiclePlate: string | null;
@@ -198,6 +201,32 @@ interface DrayageAssignment {
   warehouseGeofence?: GeofenceTarget;
   updatedAt?: string | null;
   messages?: DrayageChatMessage[];
+}
+
+function formatDriverTokenTimeSlot(job: DrayageAssignment | null | undefined): string | null {
+  if (!job) return null;
+  if (job.tokenTimeSlot && job.tokenTimeSlot.trim()) {
+    return job.tokenTimeSlot.trim();
+  }
+  if (job.pcsSlotStart) {
+    const sDt = new Date(job.pcsSlotStart);
+    if (!Number.isNaN(sDt.getTime())) {
+      const eDt = job.pcsSlotEnd
+        ? new Date(job.pcsSlotEnd)
+        : new Date(sDt.getTime() + 2 * 60 * 60 * 1000);
+      const fmtHour = (d: Date) => {
+        const uaeH = (d.getUTCHours() + 4) % 24;
+        const mins = d.getUTCMinutes();
+        const ampm = uaeH >= 12 ? 'PM' : 'AM';
+        const h12 = uaeH % 12 === 0 ? 12 : uaeH % 12;
+        return `${String(h12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
+      };
+      if (!Number.isNaN(eDt.getTime())) {
+        return `${fmtHour(sDt)} – ${fmtHour(eDt)}`;
+      }
+    }
+  }
+  return null;
 }
 
 interface EpodSignatureInfo {
@@ -2289,11 +2318,21 @@ export default function DriverTodayPage() {
                   {badge.label}
                 </div>
               </div>
-              {selectedJob.tokenNumber && (
+              {(selectedJob.tokenNumber || selectedJob.pcsTokenNumber) && (
                 <div className="text-right">
-                  <div className="text-[11px] text-blue-100 font-semibold uppercase">Port Token</div>
-                  <div className="mt-1 bg-amber-300 text-slate-900 font-extrabold text-xs px-2.5 py-1 rounded-md">
-                    {selectedJob.tokenNumber}
+                  <div className="text-[11px] text-blue-100 font-semibold uppercase">
+                    Port Token &amp; Time Slot
+                  </div>
+                  <div className="mt-1 inline-flex flex-col items-end gap-1">
+                    <span className="bg-amber-300 text-slate-900 font-extrabold text-xs px-2.5 py-1 rounded-md shadow-sm">
+                      {selectedJob.tokenNumber || selectedJob.pcsTokenNumber}
+                    </span>
+                    {formatDriverTokenTimeSlot(selectedJob) && (
+                      <span className="inline-flex items-center gap-1 bg-blue-800/90 border border-blue-400/50 text-amber-200 font-extrabold text-[11px] px-2.5 py-0.5 rounded-md">
+                        <Clock className="w-3 h-3 text-amber-300" />
+                        <span>{formatDriverTokenTimeSlot(selectedJob)}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -2664,7 +2703,15 @@ export default function DriverTodayPage() {
             <div className="flex justify-between py-1.5 border-b border-slate-100">
               <span className="text-slate-500 font-medium">Trip Token</span>
               <span className="font-bold text-amber-700">
-                {selectedJob.tokenNumber || 'Not Required'}
+                {selectedJob.tokenNumber || selectedJob.pcsTokenNumber || 'Not Required'}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Token Time Slot</span>
+              <span className="font-extrabold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded text-xs inline-flex items-center gap-1">
+                <Clock className="w-3 h-3 text-blue-600" />
+                <span>{formatDriverTokenTimeSlot(selectedJob) || 'Open / Not Assigned'}</span>
               </span>
             </div>
 
@@ -3348,14 +3395,22 @@ export default function DriverTodayPage() {
                     : 'bg-white border-slate-200'
                 }`}
               >
-                {/* Card Header: Job Number, Token, Status Badge */}
+                {/* Card Header: Job Number, Token & Time Slot, Status Badge */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
                   <div>
                     <div className="text-base font-extrabold text-slate-900">{job.jobCode}</div>
-                    {job.tokenNumber && (
-                      <span className="mt-1 inline-block bg-amber-300 text-slate-900 font-extrabold text-[11px] px-2 py-0.5 rounded">
-                        TOKEN: {job.tokenNumber}
-                      </span>
+                    {(job.tokenNumber || job.pcsTokenNumber) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="inline-block bg-amber-300 text-slate-900 font-extrabold text-[11px] px-2 py-0.5 rounded">
+                          TOKEN: {job.tokenNumber || job.pcsTokenNumber}
+                        </span>
+                        {formatDriverTokenTimeSlot(job) && (
+                          <span className="inline-flex items-center gap-1 bg-blue-100 border border-blue-300 text-blue-900 font-extrabold text-[11px] px-2 py-0.5 rounded">
+                            <Clock className="w-3 h-3 text-blue-700" />
+                            <span>SLOT: {formatDriverTokenTimeSlot(job)}</span>
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <span
@@ -3452,6 +3507,17 @@ export default function DriverTodayPage() {
                       {job.containerNumber} ({job.containerSize} {job.containerType})
                     </span>
                   </div>
+                  {(job.tokenNumber || job.pcsTokenNumber || formatDriverTokenTimeSlot(job)) && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-semibold">Port Token &amp; Slot:</span>
+                      <span className="font-extrabold text-amber-800 text-right">
+                        {job.tokenNumber || job.pcsTokenNumber || 'Token'}
+                        {formatDriverTokenTimeSlot(job)
+                          ? ` • ${formatDriverTokenTimeSlot(job)}`
+                          : ''}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-semibold">Allowance:</span>
                     <span className="font-extrabold text-emerald-600">

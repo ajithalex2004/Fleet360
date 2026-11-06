@@ -467,7 +467,17 @@ export async function POST(req: NextRequest) {
                     pcs_slot_end = COALESCE($5::timestamptz, pcs_slot_end),
                     pcs_token_status = 'BOOKED',
                     updated_at = NOW()
-              WHERE id = $1 AND tenant_id = $2`,
+              WHERE tenant_id = $2
+                AND (
+                  id = $1
+                  OR street_turn_job_id = $1
+                  OR bogie_job_id = $1
+                  OR id IN (
+                    SELECT COALESCE(street_turn_job_id, bogie_job_id)
+                      FROM logistics_drayage_jobs
+                     WHERE id = $1 AND tenant_id = $2
+                  )
+                )`,
             String(body.jobId),
             tenantId,
             token,

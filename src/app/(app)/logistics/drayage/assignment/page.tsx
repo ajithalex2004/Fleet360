@@ -578,8 +578,18 @@ export default function DrayageAssignmentPage() {
 
   const buildSlotWindowIsoPair = useCallback((startHour: number): { pcsSlotStart: string; pcsSlotEnd: string } => {
     const s = ((startHour % 24) + 24) % 24;
-    const startDt = new Date();
-    startDt.setHours(s, 0, 0, 0);
+    const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    const startDt = new Date(
+      Date.UTC(
+        uaeNow.getUTCFullYear(),
+        uaeNow.getUTCMonth(),
+        uaeNow.getUTCDate(),
+        s - 4,
+        0,
+        0,
+        0,
+      ),
+    );
     const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
     return {
       pcsSlotStart: startDt.toISOString(),
@@ -591,10 +601,10 @@ export default function DrayageAssignmentPage() {
     if (job?.pcsSlotStart) {
       const dt = new Date(job.pcsSlotStart);
       if (!Number.isNaN(dt.getTime())) {
-        return dt.getHours();
+        return (dt.getUTCHours() + 4) % 24;
       }
     }
-    return 6; // Default 6 AM to 8 AM
+    return 7; // Default 7 AM to 9 AM
   }, []);
 
   const formatJobTokenWindowBadge = useCallback(
@@ -603,7 +613,9 @@ export default function DrayageAssignmentPage() {
         const sDt = new Date(job.pcsSlotStart);
         const eDt = new Date(job.pcsSlotEnd);
         if (!Number.isNaN(sDt.getTime()) && !Number.isNaN(eDt.getTime())) {
-          return `${formatShortHourAmPm(sDt.getHours())} to ${formatShortHourAmPm(eDt.getHours())}`;
+          const sHr = (sDt.getUTCHours() + 4) % 24;
+          const eHr = (eDt.getUTCHours() + 4) % 24;
+          return `${formatShortHourAmPm(sHr)} to ${formatShortHourAmPm(eHr)}`;
         }
       }
       return null;

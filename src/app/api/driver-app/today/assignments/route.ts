@@ -592,9 +592,64 @@ export async function GET(req: NextRequest) {
           ? 'COMPLETED'
           : j.status;
 
+        const resolvedToken = (j.tokenNumber || j.pcsTokenNumber || '').trim() || null;
+        let resolvedSlotStartIso =
+          j.pcsSlotStart && !Number.isNaN(new Date(j.pcsSlotStart).getTime())
+            ? new Date(j.pcsSlotStart).toISOString()
+            : null;
+        let resolvedSlotEndIso =
+          j.pcsSlotEnd && !Number.isNaN(new Date(j.pcsSlotEnd).getTime())
+            ? new Date(j.pcsSlotEnd).toISOString()
+            : null;
+
+        if (resolvedToken && !resolvedSlotStartIso) {
+          const refBase = j.updatedAt ? new Date(j.updatedAt) : new Date();
+          const uaeRef = new Date(
+            (Number.isNaN(refBase.getTime()) ? Date.now() : refBase.getTime()) + 4 * 60 * 60 * 1000,
+          );
+          const uaeHr = uaeRef.getUTCHours();
+          const fallbackStart = new Date(
+            Date.UTC(
+              uaeRef.getUTCFullYear(),
+              uaeRef.getUTCMonth(),
+              uaeRef.getUTCDate(),
+              uaeHr - 4,
+              0,
+              0,
+              0,
+            ),
+          );
+          const fallbackEnd = new Date(fallbackStart.getTime() + 2 * 60 * 60 * 1000);
+          resolvedSlotStartIso = fallbackStart.toISOString();
+          resolvedSlotEndIso = fallbackEnd.toISOString();
+        } else if (resolvedSlotStartIso && !resolvedSlotEndIso) {
+          resolvedSlotEndIso = new Date(
+            new Date(resolvedSlotStartIso).getTime() + 2 * 60 * 60 * 1000,
+          ).toISOString();
+        }
+
+        const formatUaeSlotTime = (iso: string): string => {
+          const dt = new Date(iso);
+          const uaeTotalHours = (dt.getUTCHours() + 4) % 24;
+          const mins = dt.getUTCMinutes();
+          const ampm = uaeTotalHours >= 12 ? 'PM' : 'AM';
+          const hr12 = uaeTotalHours % 12 === 0 ? 12 : uaeTotalHours % 12;
+          return `${String(hr12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
+        };
+
+        const tokenTimeSlot =
+          resolvedSlotStartIso && resolvedSlotEndIso
+            ? `${formatUaeSlotTime(resolvedSlotStartIso)} – ${formatUaeSlotTime(resolvedSlotEndIso)}`
+            : null;
+
         return {
           ...j,
           status: normalizedStatus,
+          tokenNumber: resolvedToken,
+          pcsTokenNumber: resolvedToken,
+          pcsSlotStart: resolvedSlotStartIso,
+          pcsSlotEnd: resolvedSlotEndIso,
+          tokenTimeSlot,
           clientName,
           clientDestination,
           rateAmountAed: Number(j.rateAmountAed || 0),
