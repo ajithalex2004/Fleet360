@@ -202,10 +202,21 @@ export async function GET(req: NextRequest) {
       );
 
       // Group pings by vehicleId (ordered descending by occurredAt), ignoring legacy 25.2048, 55.2708 placeholders
+      // and ignoring synthetic minute-tick server heartbeats (where seconds === 0 && ms === 0 && speed === 0)
       const pingsByVehicleId = new Map<string, typeof allPings>();
       for (const p of allPings) {
         if (!p.vehicleId) continue;
         if (Math.abs(p.latitude - 25.2048) < 0.0005 && Math.abs(p.longitude - 55.2708) < 0.0005) {
+          continue;
+        }
+        const occ = new Date(p.occurredAt);
+        const isSyntheticHeartbeat =
+          p.source === 'DRIVER_APP' &&
+          (p.speedKmh ?? 0) === 0 &&
+          (p.headingDeg ?? 0) === 0 &&
+          occ.getSeconds() === 0 &&
+          occ.getMilliseconds() === 0;
+        if (isSyntheticHeartbeat) {
           continue;
         }
         const list = pingsByVehicleId.get(p.vehicleId) || [];
@@ -300,14 +311,13 @@ export async function GET(req: NextRequest) {
         activeShifts.filter((s) => s.vehicleId).map((s) => [s.vehicleId!, s])
       );
 
-      const idleHeartbeatUpdates: Array<{ vehicleId: string; lat: number; lng: number; occurredAt: Date }> = [];
-
       const devices = vehicles.map((v) => {
         const vehiclePings = pingsByVehicleId.get(v.id) || [];
         const vCoord = vehicleLiveCoordById.get(v.id);
         const dCoord = drayageCoordByVehicleId.get(v.id);
 
-        let ping = vehiclePings[0] || null;
+        const actualPing = vehiclePings[0] || null;
+        let ping = actualPing;
         if (!ping && vCoord && vCoord.current_lat != null && vCoord.current_lng != null) {
           ping = {
             vehicleId: v.id,
@@ -315,7 +325,7 @@ export async function GET(req: NextRequest) {
             longitude: Number(vCoord.current_lng),
             speedKmh: 0,
             headingDeg: 0,
-            occurredAt: vCoord.updated_at ? new Date(vCoord.updated_at) : (v.updatedAt ? new Date(v.updatedAt) : now),
+            occurredAt: vCoord.updated_at ? new Date(vCoord.updated_at) : (v.updatedAt ? new Date(v.updatedAt) : twoHoursAgo),
             source: 'DRIVER_APP',
           };
         } else if (!ping && dCoord && dCoord.current_lat != null && dCoord.current_lng != null) {
@@ -325,44 +335,22 @@ export async function GET(req: NextRequest) {
             longitude: Number(dCoord.current_lng),
             speedKmh: 0,
             headingDeg: 0,
-            occurredAt: v.updatedAt ? new Date(v.updatedAt) : (dCoord.updated_at ? new Date(dCoord.updated_at) : now),
+            occurredAt: dCoord.updated_at ? new Date(dCoord.updated_at) : twoHoursAgo,
             source: 'DRIVER_APP',
           };
         }
         const prevPing = vehiclePings[1] || null;
 
         const hasHardwareDevice = Boolean(v.deviceId && v.deviceId.trim() !== '');
-        const isMobileTracking = Boolean(!hasHardwareDevice && ((ping && ping.source === 'DRIVER_APP') || v.assignedDriverId));
-
-        // 1-Minute Idle Heartbeat Continuity for Actively Logged-in Mobile Drivers:
-        // When a driver is actively logged into a vehicle (v.assignedDriverId is set) and stationary (Idle),
-        // maintain the 60-second Idle telemetry cadence even if Android Doze pauses screen-off WebView timers.
-        if (
-          isMobileTracking &&
-          v.assignedDriverId &&
-          ping &&
-          (ping.speedKmh ?? 0) < 3.5 &&
-          now.getTime() - new Date(ping.occurredAt).getTime() >= 60_000
-        ) {
-          const minuteTick = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
-          ping = {
-            ...ping,
-            speedKmh: 0,
-            occurredAt: minuteTick,
-          };
-          idleHeartbeatUpdates.push({
-            vehicleId: v.id,
-            lat: ping.latitude,
-            lng: ping.longitude,
-            occurredAt: minuteTick,
-          });
-        }
-
         const activeShift = activeShiftByVehicleId.get(v.id);
         const assignedDriver = (v.assignedDriverId ? driverById.get(v.assignedDriverId) : null)
           || (activeShift ? driverById.get(activeShift.driverId) : null)
           || driverByVehicleId.get(v.id)
           || null;
+
+        const isMobileTracking = Boolean(
+          !hasHardwareDevice && ((actualPing && actualPing.source === 'DRIVER_APP') || v.assignedDriverId || assignedDriver)
+        );
 
         const driverInfo = assignedDriver ? {
           id: assignedDriver.id,
@@ -372,20 +360,26 @@ export async function GET(req: NextRequest) {
         } : null;
 
         // Operational Telematics Status:
-        // MOVING (Green): Recent signal & speed >= 3.5 km/h (drift-filtered)
-        // IDLE (Dark Yellow): Recent signal & speed < 3.5 km/h, or active logged-in driver / active shift on-duty
-        // STOP (Red): Stopped / parked / ignition off / no recent movement or signal
-        const isRecent = Boolean(ping && ping.occurredAt >= fifteenMinutesAgo);
-        let operationalStatus: 'MOVING' | 'IDLE' | 'STOP' = 'STOP';
+        // MOVING (Green): Active logged-in driver / recent GPS ping & speed >= 3.5 km/h
+        // IDLE (Dark Yellow): Active logged-in driver / recent GPS ping & speed < 3.5 km/h
+        // SWITCHED_OFF (Slate): Mobile-tracked driver/vehicle where the driver is NOT logged in
+        // STOP (Red): Hardware-tracked vehicle with ignition off / no recent signal
+        const isRecent = Boolean(actualPing && actualPing.occurredAt >= fifteenMinutesAgo);
+        const isDriverLoggedIn = Boolean(
+          activeShift || (actualPing && actualPing.source === 'DRIVER_APP' && actualPing.occurredAt >= fifteenMinutesAgo)
+        );
+        let operationalStatus: 'MOVING' | 'IDLE' | 'STOP' | 'SWITCHED_OFF' = 'SWITCHED_OFF';
 
         if (isRecent) {
-          if ((ping?.speedKmh ?? 0) >= 3.5) {
+          if ((actualPing?.speedKmh ?? 0) >= 3.5) {
             operationalStatus = 'MOVING';
           } else {
             operationalStatus = 'IDLE';
           }
-        } else if (activeShift || (isMobileTracking && (v.assignedDriverId || (ping && ping.occurredAt >= twoHoursAgo)))) {
+        } else if (activeShift) {
           operationalStatus = 'IDLE';
+        } else if (!hasHardwareDevice || isMobileTracking) {
+          operationalStatus = 'SWITCHED_OFF';
         } else {
           operationalStatus = 'STOP';
         }
@@ -588,6 +582,7 @@ export async function GET(req: NextRequest) {
           operationalStatus,
           connectionStatus: operationalStatus,
           isMobileTracking,
+          isDriverLoggedIn,
           isDeviceBlank: !hasHardwareDevice,
           driver: driverInfo,
           job: jobInfo,
@@ -599,7 +594,7 @@ export async function GET(req: NextRequest) {
             ? {
                 latitude: ping.latitude,
                 longitude: ping.longitude,
-                speedKmh: ping.speedKmh ?? 0,
+                speedKmh: isDriverLoggedIn || isRecent ? (ping.speedKmh ?? 0) : 0,
                 headingDeg: ping.headingDeg ?? 0,
                 occurredAt: ping.occurredAt.toISOString(),
                 source: ping.source ?? 'TRACKER',
@@ -607,34 +602,6 @@ export async function GET(req: NextRequest) {
             : null,
         };
       });
-
-      if (idleHeartbeatUpdates.length > 0) {
-        for (const hb of idleHeartbeatUpdates) {
-          await tx.busGpsPing
-            .create({
-              data: {
-                tenantId,
-                vehicleId: hb.vehicleId,
-                latitude: hb.lat,
-                longitude: hb.lng,
-                speedKmh: 0,
-                headingDeg: 0,
-                accuracyM: 5,
-                occurredAt: hb.occurredAt,
-                source: 'DRIVER_APP',
-              },
-            })
-            .catch(() => {});
-          await tx
-            .$executeRawUnsafe(
-              `UPDATE vehicles SET updated_at = $1 WHERE id = $2 AND tenant_id = $3`,
-              hb.occurredAt,
-              hb.vehicleId,
-              tenantId,
-            )
-            .catch(() => {});
-        }
-      }
 
       const alertVehiclesCount = devices.filter((d) => d.hasActiveAlerts).length;
       const totalAlertsCount = devices.reduce((sum, d) => sum + d.alerts.length, 0);
@@ -645,6 +612,7 @@ export async function GET(req: NextRequest) {
         movingCount: devices.filter((d) => d.operationalStatus === 'MOVING').length,
         idleCount: devices.filter((d) => d.operationalStatus === 'IDLE').length,
         stopCount: devices.filter((d) => d.operationalStatus === 'STOP').length,
+        switchedOffCount: devices.filter((d) => d.operationalStatus === 'SWITCHED_OFF').length,
         onlineCount: devices.filter((d) => d.operationalStatus === 'MOVING' || d.operationalStatus === 'IDLE').length,
         mobileTrackingCount: devices.filter((d) => d.isMobileTracking).length,
         alertVehiclesCount,

@@ -195,9 +195,10 @@ interface DeviceItem {
   simCardNo: string | null;
   odometerKm: number;
   fuelLevelPercent: number | null;
-  operationalStatus: 'MOVING' | 'IDLE' | 'STOP';
-  connectionStatus?: 'MOVING' | 'IDLE' | 'STOP' | string;
+  operationalStatus: 'MOVING' | 'IDLE' | 'STOP' | 'SWITCHED_OFF';
+  connectionStatus?: 'MOVING' | 'IDLE' | 'STOP' | 'SWITCHED_OFF' | string;
   isMobileTracking?: boolean;
+  isDriverLoggedIn?: boolean;
   isDeviceBlank?: boolean;
   driver?: {
     id: string;
@@ -227,8 +228,15 @@ interface DeviceItem {
 }
 
 function getVehicleShareUrls(d: DeviceItem) {
-  const statusStr = (d.operationalStatus || d.connectionStatus || 'STOP').toUpperCase();
-  const statusLabel = statusStr === 'MOVING' ? '🟢 Moving' : statusStr === 'IDLE' ? '🟡 Idle' : '🔴 Stop';
+  const statusStr = (d.operationalStatus || d.connectionStatus || 'SWITCHED_OFF').toUpperCase();
+  const statusLabel =
+    statusStr === 'MOVING'
+      ? '🟢 Moving'
+      : statusStr === 'IDLE'
+      ? '🟡 Idle'
+      : statusStr === 'SWITCHED_OFF'
+      ? '⚫ Switched Off'
+      : '🔴 Stop';
   const speedText = d.lastPing ? `${d.lastPing.speedKmh.toFixed(0)} km/h` : '0 km/h';
   const locationText = d.location?.locationName || (d.lastPing ? `${d.lastPing.latitude.toFixed(5)}, ${d.lastPing.longitude.toFixed(5)}` : 'Location unknown');
   const driverText = d.driver ? `Driver: ${d.driver.name} (${d.driver.phone || 'No phone'})` : 'Driver: Unassigned';
@@ -267,7 +275,7 @@ function getVehicleShareUrls(d: DeviceItem) {
 export default function TelematicsPage() {
   const [loading, setLoading] = useState(true);
   const [devices, setDevices] = useState<DeviceItem[]>([]);
-  const [filter, setFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOP' | 'ALERTS'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'SWITCHED_OFF' | 'STOP' | 'ALERTS'>('ALL');
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -610,6 +618,7 @@ export default function TelematicsPage() {
 
   const movingCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'MOVING').length;
   const idleCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'IDLE').length;
+  const switchedOffCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'SWITCHED_OFF').length;
   const stopCount = devices.filter((d) => (d.operationalStatus || d.connectionStatus) === 'STOP').length;
   const alertVehiclesCount = devices.filter((d) => d.hasActiveAlerts || (d.alerts && d.alerts.length > 0)).length;
 
@@ -697,17 +706,17 @@ export default function TelematicsPage() {
         </div>
 
         <div 
-          onClick={() => setFilter('STOP')}
-          className={`p-4 rounded-2xl bg-rose-950/30 border cursor-pointer transition ${
-            filter === 'STOP' ? 'border-rose-500 shadow-md ring-1 ring-rose-500/30' : 'border-rose-500/30 hover:border-rose-500/50'
+          onClick={() => setFilter('SWITCHED_OFF')}
+          className={`p-4 rounded-2xl bg-slate-900/50 border cursor-pointer transition ${
+            filter === 'SWITCHED_OFF' ? 'border-slate-400 shadow-md ring-1 ring-slate-400/30' : 'border-slate-500/30 hover:border-slate-400/50'
           } space-y-1`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">Stop (Red)</p>
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+            <p className="text-xs text-slate-300 font-bold uppercase tracking-wider">Switched Off</p>
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
           </div>
-          <p className="text-2xl font-bold text-rose-300">{stopCount}</p>
-          <p className="text-[11px] text-rose-500/80">Parked / Ignition OFF</p>
+          <p className="text-2xl font-bold text-slate-200">{switchedOffCount + stopCount}</p>
+          <p className="text-[11px] text-slate-400/90">Driver Logged Out · GPS Off</p>
         </div>
 
         <div 
@@ -798,7 +807,7 @@ export default function TelematicsPage() {
           {/* Filter, View Toggle, and Search Bar */}
           <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
             <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
-              {(['ALL', 'MOVING', 'IDLE', 'STOP', 'ALERTS'] as const).map((status) => (
+              {(['ALL', 'MOVING', 'IDLE', 'SWITCHED_OFF', 'STOP', 'ALERTS'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
@@ -814,6 +823,8 @@ export default function TelematicsPage() {
                     ? '🟢 Moving'
                     : status === 'IDLE'
                     ? '🟡 Idle'
+                    : status === 'SWITCHED_OFF'
+                    ? '⚫ Switched Off'
                     : status === 'STOP'
                     ? '🔴 Stop'
                     : '🚨 With Alerts'}
@@ -869,8 +880,10 @@ export default function TelematicsPage() {
               <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl relative">
                 <FleetLiveMap
                   positions={filtered.map((d, index) => {
-                    const isMoving = (d.operationalStatus || d.connectionStatus) === 'MOVING';
-                    const isIdle = (d.operationalStatus || d.connectionStatus) === 'IDLE';
+                    const rawStatus = d.operationalStatus || d.connectionStatus || 'SWITCHED_OFF';
+                    const isMoving = rawStatus === 'MOVING';
+                    const isIdle = rawStatus === 'IDLE';
+                    const isSwitchedOff = rawStatus === 'SWITCHED_OFF';
 
                     // Use reported coordinates or default clustered in UAE corridor
                     const defaultBaseLat = 25.1972 + ((index * 7) % 20) * 0.015 - 0.1;
@@ -889,8 +902,8 @@ export default function TelematicsPage() {
                       vehicle_plate: d.licensePlate || d.vehicleCode || 'Asset',
                       lat,
                       lng,
-                      status: isMoving ? 'EN_ROUTE' : isIdle ? 'IDLE' : 'OFFLINE',
-                      operationalStatus: isMoving ? 'MOVING' : isIdle ? 'IDLE' : 'STOP',
+                      status: isMoving ? 'EN_ROUTE' : isIdle ? 'IDLE' : isSwitchedOff ? 'SWITCHED_OFF' : 'OFFLINE',
+                      operationalStatus: isMoving ? 'MOVING' : isIdle ? 'IDLE' : isSwitchedOff ? 'SWITCHED_OFF' : 'STOP',
                       is_online: isMoving || isIdle,
                       seconds_since_ping: secondsSincePing,
                       speed_kmh: d.lastPing?.speedKmh ?? 0,
@@ -923,8 +936,10 @@ export default function TelematicsPage() {
                   </div>
                 );
 
-                const isMoving = (sel.operationalStatus || sel.connectionStatus) === 'MOVING';
-                const isIdle = (sel.operationalStatus || sel.connectionStatus) === 'IDLE';
+                const selStatus = sel.operationalStatus || sel.connectionStatus || 'SWITCHED_OFF';
+                const isMoving = selStatus === 'MOVING';
+                const isIdle = selStatus === 'IDLE';
+                const isSwitchedOff = selStatus === 'SWITCHED_OFF';
 
                 return (
                   <div className="p-4 bg-[var(--bg-surface)] border border-cyan-500/40 rounded-2xl shadow-lg space-y-3">
@@ -947,6 +962,11 @@ export default function TelematicsPage() {
                               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                                 Idle
+                              </span>
+                            ) : isSwitchedOff ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/40 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                Switched Off
                               </span>
                             ) : (
                               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
@@ -1138,8 +1158,10 @@ export default function TelematicsPage() {
                     </tr>
                   ) : (
                     filtered.map((d) => {
-                      const isMoving = (d.operationalStatus || d.connectionStatus) === 'MOVING';
-                      const isIdle = (d.operationalStatus || d.connectionStatus) === 'IDLE';
+                      const rowStatus = d.operationalStatus || d.connectionStatus || 'SWITCHED_OFF';
+                      const isMoving = rowStatus === 'MOVING';
+                      const isIdle = rowStatus === 'IDLE';
+                      const isSwitchedOff = rowStatus === 'SWITCHED_OFF';
 
                       return (
                         <tr key={d.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
@@ -1241,6 +1263,11 @@ export default function TelematicsPage() {
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
                                     <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                                     Idle
+                                  </span>
+                                ) : isSwitchedOff ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/40">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    Switched Off
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">

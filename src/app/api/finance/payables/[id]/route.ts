@@ -82,10 +82,7 @@ export async function PATCH(
   const { tenantId } = authz;
 
   const body = stripTenantOwnershipFields(await req.json());
-  const action = body.action as string | undefined; // submit | approve | reject | post | void
-  // A company's purchase / payable approval workflow (Admin > Workflows)
-  // decides submitted payables: approve / reject go to the level that is
-  // waiting, and the payable can't be voided until the workflow has decided.
+  const action = body.action as string | undefined; // submit | approve | reject | post | record_payment | void
   if (action === 'approve' || action === 'reject') {
     const gated = await approvalGate({
       headers: req.headers, tenantId, referenceType: 'finance_payable', referenceId: params.id,
@@ -103,7 +100,7 @@ export async function PATCH(
 
       // Fetch current row
       const [current] = await tx.$queryRawUnsafe<
-        (Row & { status: string; total_amount: string; module: string; description: string; payable_number: string; tenant_id: string })[]
+        (Row & { status: string; total_amount: string; paid_amount?: string; module: string; description: string; payable_number: string; tenant_id: string })[]
       >(
         `SELECT * FROM finance_payables WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
@@ -174,10 +171,20 @@ export async function PATCH(
         const payableModule = (current.module as string) ?? 'GENERAL';
         const desc     = (current.description as string) ?? String(current.payable_number);
 
-        // Auto-create a DRAFT journal entry: debit Expense account, credit AP control account
-        const expenseCode = payableModule === 'MAINTENANCE' ? '5100' :
-                            payableModule === 'LOGISTICS'    ? '5200' :
-                            payableModule === 'LEASING'      ? '5300' : '5900';
+        // Map header account codes (5100 -> 5120, 5200 -> 5210, 5300 -> 5390, 2100 -> 2110)
+        // so posted AP journal lines land on leaf accounts (is_header = FALSE) in finance.finance_chart_of_accounts
+        const rawExpenseCode = payableModule === 'MAINTENANCE' ? '5120' :
+                               payableModule === 'LOGISTICS'    ? '5210' :
+                               payableModule === 'LEASING'      ? '5390' : '5390';
+        const headerToLeaf: Record<string, string> = {
+          '5100': '5120',
+          '5200': '5210',
+          '5300': '5390',
+          '2100': '2110',
+        };
+        const expenseCode = headerToLeaf[rawExpenseCode] ?? rawExpenseCode;
+        const apControlCode = headerToLeaf['2100'];
+
         let je: { id: string; number: string } | null = null;
         try {
           je = await createDraftJournalEntry({
@@ -190,10 +197,10 @@ export async function PATCH(
             currency:   (current.currency as string) ?? 'AED',
             preparedBy: postedBy,
             costCentre: (current.cost_centre as string) ?? 'GENERAL',
-            debit:  { code: expenseCode, name: 'Expense',             description: desc },
-            credit: { code: '2100',      name: 'Accounts Payable',    description: desc },
+            debit:  { code: expenseCode,   name: 'Expense',          description: desc },
+            credit: { code: apControlCode, name: 'Accounts Payable', description: desc },
           });
-          } catch (e) { /* non-fatal — payable still posts */ }
+        } catch (e) { /* non-fatal — payable still posts */ }
 
         await tx.$executeRawUnsafe(
           `UPDATE finance_payables
@@ -206,6 +213,50 @@ export async function PATCH(
           `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
         ).catch(() => []);
         return NextResponse.json({ ...updated, journalEntry: je });
+      }
+
+      if (action === 'record_payment') {
+        const paymentAmount = parseFloat(String(body.amount ?? body.paymentAmount ?? current.total_amount ?? 0));
+        if (!(paymentAmount > 0)) {
+          return NextResponse.json({ error: 'Valid payment amount is required' }, { status: 400 });
+        }
+        const totalAmt = parseFloat(String(current.total_amount ?? 0));
+        const prevPaid = parseFloat(String(current.paid_amount ?? 0));
+        const newPaid  = Math.min(totalAmt, prevPaid + paymentAmount);
+        const newPayStatus = newPaid >= totalAmt ? 'PAID' : newPaid > 0 ? 'PARTIAL' : 'UNPAID';
+        const payDate = body.paymentDate ?? body.payment_date ?? now.slice(0, 10);
+        const payMethod = body.paymentMethod ?? body.payment_method ?? 'BANK_TRANSFER';
+        const payRef = body.reference ?? null;
+
+        await tx.$executeRawUnsafe(
+          `UPDATE finance_payables
+              SET paid_amount = $1::numeric,
+                  payment_status = $2,
+                  updated_at = $3::timestamptz
+            WHERE id::text = $4 AND tenant_id = $5`,
+          newPaid, newPayStatus, now, params.id, tenantId,
+        );
+
+        await tx.$executeRawUnsafe('SAVEPOINT ap_payment_insert').catch(() => {});
+        await tx.$executeRawUnsafe(
+          `INSERT INTO finance_payments
+             (id, tenant_id, amount, payment_date, payment_method, reference, notes)
+           VALUES (gen_random_uuid(), $1, $2::numeric, $3::date, $4, $5, $6)`,
+          tenantId,
+          paymentAmount,
+          payDate,
+          payMethod,
+          payRef,
+          `AP Payable ${current.payable_number}`,
+        ).then(
+          () => tx.$executeRawUnsafe('RELEASE SAVEPOINT ap_payment_insert').catch(() => {}),
+          () => tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT ap_payment_insert').catch(() => {}),
+        );
+
+        const [updated] = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
+        ).catch(() => []);
+        return NextResponse.json(updated);
       }
 
       if (action === 'void') {
@@ -310,4 +361,3 @@ export async function DELETE(
       return NextResponse.json({ deleted: true });
   });
 }
-

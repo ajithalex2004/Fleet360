@@ -183,6 +183,8 @@ interface MappedVehicle {
   lat?: number | null;
   lng?: number | null;
   hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' | string;
   updatedAt?: string | null;
   assignedTripsCount?: number;
   assignedDriverId?: string | null;
@@ -377,8 +379,9 @@ export default function DrayageAssignmentPage() {
 
   // Smart Analysis UI state
   const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
+  const [showUrgentDemurrageAlert, setShowUrgentDemurrageAlert] = useState(false);
   const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<
-    'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD' | 'DEMURRAGE'
+    'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD'
   >('ALL');
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(() => ({
     ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -2393,8 +2396,8 @@ export default function DrayageAssignmentPage() {
 
       // Sort descending by logged-in/live-telemetry status first, then 4-factor composite score
       scoredList.sort((a, b) => {
-        const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
-        const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+        const aActive = a.vehicle.isDriverLoggedIn || a.hasLiveGps ? 1 : 0;
+        const bActive = b.vehicle.isDriverLoggedIn || b.hasLiveGps ? 1 : 0;
         if (bActive !== aActive) return bActive - aActive;
         return b.totalScore - a.totalScore;
       });
@@ -2480,8 +2483,8 @@ export default function DrayageAssignmentPage() {
       return calculate4FactorScore(v, targetTerminalLoc, candidateDrv);
     });
     scored.sort((a, b) => {
-      const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
-      const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+      const aActive = a.vehicle.isDriverLoggedIn || a.hasLiveGps ? 1 : 0;
+      const bActive = b.vehicle.isDriverLoggedIn || b.hasLiveGps ? 1 : 0;
       if (bActive !== aActive) return bActive - aActive;
       return b.totalScore - a.totalScore;
     });
@@ -2507,14 +2510,18 @@ export default function DrayageAssignmentPage() {
         const drvName =
           s.vehicle.assignedDriverName ||
           drivers.find((d) => d.id === s.vehicle.assignedDriverId || d.assignedVehicleId === s.vehicle.id)?.fullName;
+        const isLoggedIn = Boolean(s.vehicle.isDriverLoggedIn || s.hasLiveGps);
         const proxLabel = s.hasLiveGps
           ? `${s.distanceKm}km (${s.proximityScore}pts)`
-          : `No Live GPS (${s.proximityScore}pts)`;
+          : `Switched Off (${s.proximityScore}pts)`;
+        const statusLabel = isLoggedIn
+          ? `⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts)`
+          : `⚫ Switched Off (${s.idlenessScore}pts)`;
         return {
           value: s.vehicle.id,
           label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model}${drvName ? ` (${drvName})` : ''} [${s.totalScore}% Match]`,
-          sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}📍 ${proxLabel} • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today`,
-          badge: drvName ? `👤 ${drvName}` : `${s.totalScore}% Match`,
+          sublabel: `${drvName ? `👤 ${isLoggedIn ? 'Logged-in Driver' : 'Assigned Driver (Switched Off)'}: ${drvName} • ` : ''}📍 ${proxLabel} • ${statusLabel} • ⚖️ ${s.tripsToday} Trip(s) Today`,
+          badge: drvName ? `${isLoggedIn ? '🟢' : '⚫'} ${drvName}` : `${s.totalScore}% Match`,
         };
       });
     }
@@ -2522,11 +2529,12 @@ export default function DrayageAssignmentPage() {
       const drvName =
         v.assignedDriverName ||
         drivers.find((d) => d.id === v.assignedDriverId || d.assignedVehicleId === v.id)?.fullName;
+      const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
       return {
         value: v.id,
         label: `${v.plateNumber} · ${v.make} ${v.model}${drvName ? ` (${drvName})` : ''}`,
-        sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
-        badge: drvName ? `👤 ${drvName}` : v.status,
+        sublabel: `${drvName ? `👤 ${isLoggedIn ? 'Logged-in Driver' : 'Assigned Driver (Switched Off)'}: ${drvName} • ` : ''}Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${isLoggedIn ? v.status : 'Switched Off'}`,
+        badge: drvName ? `${isLoggedIn ? '🟢' : '⚫'} ${drvName}` : v.status,
       };
     });
   }, [scoredPrimeMovers, primeMovers, drivers]);
@@ -3124,16 +3132,9 @@ export default function DrayageAssignmentPage() {
 
             <button
               type="button"
-              onClick={() => {
-                if (showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE') {
-                  setSmartAnalysisFilter('ALL');
-                } else {
-                  setShowSmartAnalysis(true);
-                  setSmartAnalysisFilter('DEMURRAGE');
-                }
-              }}
+              onClick={() => setShowUrgentDemurrageAlert((prev) => !prev)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
-                showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE'
+                showUrgentDemurrageAlert
                   ? 'bg-rose-600 text-white shadow-rose-500/20'
                   : 'bg-[var(--bg-surface)] border border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
               }`}
@@ -3158,9 +3159,9 @@ export default function DrayageAssignmentPage() {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Smart Analysis</span>
-              {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length > 0 && (
+              {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white text-blue-900 font-bold ml-0.5">
-                  {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length}
+                  {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length}
                 </span>
               )}
             </button>
@@ -3260,7 +3261,7 @@ export default function DrayageAssignmentPage() {
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
-                All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length + urgentDemurrageJobs.length})
+                All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length})
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BOGIE')}
@@ -3291,16 +3292,6 @@ export default function DrayageAssignmentPage() {
                 }`}
               >
                 Smart Backhaul Hold ({smartBackhaulHoldJobs.length})
-              </button>
-              <button
-                onClick={() => setSmartAnalysisFilter('DEMURRAGE')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                  smartAnalysisFilter === 'DEMURRAGE'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-rose-500 hover:text-rose-400'
-                }`}
-              >
-                Urgent Demurrage Alert ({urgentDemurrageJobs.length})
               </button>
             </div>
           </div>
@@ -3684,153 +3675,194 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View (Included in All Matches & Urgent Demurrage Alert tab) */}
-            {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'DEMURRAGE') &&
-              urgentDemurrageJobs.map((job) => {
-                const risk = getDemurrageRisk(job);
-                const radar = job.riskRadar;
-                const slotPred = job.portSlotPrediction;
-                return (
-                  <div
-                    key={`RISK-${job.id}`}
-                    className="rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 p-4 space-y-3 flex flex-col justify-between shadow-sm"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
-                          {radar?.within24hPenaltyWindow
-                            ? '🚨 CRITICAL <24H FREE-TIME RADAR'
-                            : slotPred?.willMissSlot
-                            ? `⏱️ PORT SLOT MISS (${Math.abs(slotPred.slotBufferMinutes)}M LATE)`
-                            : risk.badgeText}
-                        </span>
-                        <span className="font-mono text-xs font-bold text-rose-400">{job.jobCode}</span>
-                      </div>
-
-                      <div className="text-xs space-y-0.5">
-                        <div className="font-bold font-mono text-[var(--text-main)] text-sm flex items-center justify-between">
-                          <span>{job.containerNumber} ({job.containerSize} · {job.containerType})</span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-sans font-bold">
-                            PRIORITY: CRITICAL
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {job.customerName} · {job.terminalName} ➔ {job.warehouseName}
-                        </div>
-                      </div>
-
-                      {/* Demurrage & Free-Time Countdown Radar (3 Columns) */}
-                      {radar && (
-                        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">Port Demurrage</span>
-                            <strong className={`font-mono ${radar.portDemurrageHoursRemaining <= 24 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                              {radar.portDemurrageHoursRemaining <= 0
-                                ? `Overdue`
-                                : `${radar.portDemurrageHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              AED {radar.portDailyDemurrageAed}/d
-                            </span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">Line Detention</span>
-                            <strong className={`font-mono ${radar.lineDetentionHoursRemaining <= 24 ? 'text-rose-400' : 'text-amber-400'}`}>
-                              {radar.lineDetentionHoursRemaining <= 0
-                                ? `Overdue`
-                                : `${radar.lineDetentionHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              AED {radar.lineDailyDetentionAed}/d
-                            </span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">DO Expiry</span>
-                            <strong className={`font-mono ${radar.doHoursRemaining <= 24 ? 'text-rose-400' : 'text-blue-400'}`}>
-                              {radar.doHoursRemaining <= 0 ? 'Expired' : `${radar.doHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              {new Date(radar.doExpiryDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Port Appointment Window & Gate Queue Predictor */}
-                      {slotPred && (
-                        <div
-                          className={`p-2 rounded-lg border text-[10px] space-y-1 ${
-                            slotPred.willMissSlot
-                              ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                              : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between font-bold">
-                            <span>Gate Slot: {slotPred.slotWindowLabel}</span>
-                            <span className={slotPred.willMissSlot ? 'text-rose-400' : 'text-emerald-400'}>
-                              ETA: {slotPred.predictedGateArrivalLabel} ({slotPred.willMissSlot ? `${Math.abs(slotPred.slotBufferMinutes)}m Late` : `+${slotPred.slotBufferMinutes}m Buffer`})
-                            </span>
-                          </div>
-                          <div className="text-[9px] opacity-90">
-                            {slotPred.corridorName} · {slotPred.distanceToPortKm}km @ {slotPred.avgCorridorSpeedKmh}km/h + {slotPred.gateQueueWaitMinutes}m Gate Queue
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleRebookJobPcsSlot(job.id)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-bold hover:bg-amber-400 transition-colors shadow-sm"
-                          title="Auto-rebook DP World / AD Ports PCS token to next 2-hour window matching live E11/E311 ETA"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          Auto-Rebook Token
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSwapJobRescueTractor(job.id)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
-                          title="Swap to nearest available tractor via 4-Factor Telematics to rescue port slot"
-                        >
-                          <Truck className="w-3 h-3" />
-                          Swap Tractor (4-Factor)
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAssign(job)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 transition-colors shadow-sm"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        Prioritize & Custom Assign
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
             {/* Empty state when no matches found */}
-            {((smartAnalysisFilter === 'DEMURRAGE' && urgentDemurrageJobs.length === 0) ||
-              (smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
+            {((smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
               (smartAnalysisFilter === 'BOGIE' && bogieCombos.length === 0) ||
               (smartAnalysisFilter === 'STREET_TURN' && streetTurnPairs.length === 0) ||
               (smartAnalysisFilter === 'ALL' &&
                 bogieCombos.length === 0 &&
                 streetTurnPairs.length === 0 &&
-                smartBackhaulHoldJobs.length === 0 &&
-                urgentDemurrageJobs.length === 0)) && (
+                smartBackhaulHoldJobs.length === 0)) && (
               <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
                 <h4 className="text-xs font-bold text-[var(--text-main)]">Queue Optimized</h4>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {smartAnalysisFilter === 'DEMURRAGE'
-                    ? 'No urgent demurrage or port slot risk alerts in current queue.'
-                    : smartAnalysisFilter === 'BACKHAUL_HOLD'
-                      ? 'No non-urgent L2 empty return deadhead risks detected.'
-                      : 'No pending pairing conflicts found in current queue.'}
+                  {smartAnalysisFilter === 'BACKHAUL_HOLD'
+                    ? 'No non-urgent L2 empty return deadhead risks detected.'
+                    : 'No pending pairing conflicts found in current queue.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          URGENT DEMURRAGE ALERT PANEL (Shown ONLY when clicking Urgent Demurrage Alert button at top)
+          ========================================================================= */}
+      {showUrgentDemurrageAlert && (
+        <div className="rounded-2xl bg-gradient-to-br from-rose-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-rose-500/40 p-5 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-500/20 pb-4">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
+                    Urgent Demurrage &amp; Port Slot Risk Alerts
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white whitespace-nowrap shadow-sm">
+                    {urgentDemurrageJobs.length} Critical Container{urgentDemurrageJobs.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Containers approaching port free-time expiry, shipping line detention, DO expiry, or TAS slot miss risk.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUrgentDemurrageAlert(false)}
+              className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors self-end sm:self-auto"
+            >
+              Close Alerts
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {urgentDemurrageJobs.map((job) => {
+              const risk = getDemurrageRisk(job);
+              const radar = job.riskRadar;
+              const slotPred = job.portSlotPrediction;
+              return (
+                <div
+                  key={`RISK-${job.id}`}
+                  className="rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 p-4 space-y-3 flex flex-col justify-between shadow-sm"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+                        {radar?.within24hPenaltyWindow
+                          ? '🚨 CRITICAL <24H FREE-TIME RADAR'
+                          : slotPred?.willMissSlot
+                          ? `⏱️ PORT SLOT MISS (${Math.abs(slotPred.slotBufferMinutes)}M LATE)`
+                          : risk.badgeText}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-rose-400">{job.jobCode}</span>
+                    </div>
+
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-bold font-mono text-[var(--text-main)] text-sm flex items-center justify-between">
+                        <span>{job.containerNumber} ({job.containerSize} · {job.containerType})</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-sans font-bold">
+                          PRIORITY: CRITICAL
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        {job.customerName} · {job.terminalName} ➔ {job.warehouseName}
+                      </div>
+                    </div>
+
+                    {/* Demurrage & Free-Time Countdown Radar (3 Columns) */}
+                    {radar && (
+                      <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">Port Demurrage</span>
+                          <strong className={`font-mono ${radar.portDemurrageHoursRemaining <= 24 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {radar.portDemurrageHoursRemaining <= 0
+                              ? `Overdue`
+                              : `${radar.portDemurrageHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            AED {radar.portDailyDemurrageAed}/d
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">Line Detention</span>
+                          <strong className={`font-mono ${radar.lineDetentionHoursRemaining <= 24 ? 'text-rose-400' : 'text-amber-400'}`}>
+                            {radar.lineDetentionHoursRemaining <= 0
+                              ? `Overdue`
+                              : `${radar.lineDetentionHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            AED {radar.lineDailyDetentionAed}/d
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">DO Expiry</span>
+                          <strong className={`font-mono ${radar.doHoursRemaining <= 24 ? 'text-rose-400' : 'text-blue-400'}`}>
+                            {radar.doHoursRemaining <= 0 ? 'Expired' : `${radar.doHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            {new Date(radar.doExpiryDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Port Appointment Window & Gate Queue Predictor */}
+                    {slotPred && (
+                      <div
+                        className={`p-2 rounded-lg border text-[10px] space-y-1 ${
+                          slotPred.willMissSlot
+                            ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                            : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold">
+                          <span>Gate Slot: {slotPred.slotWindowLabel}</span>
+                          <span className={slotPred.willMissSlot ? 'text-rose-400' : 'text-emerald-400'}>
+                            ETA: {slotPred.predictedGateArrivalLabel} ({slotPred.willMissSlot ? `${Math.abs(slotPred.slotBufferMinutes)}m Late` : `+${slotPred.slotBufferMinutes}m Buffer`})
+                          </span>
+                        </div>
+                        <div className="text-[9px] opacity-90">
+                          {slotPred.corridorName} · {slotPred.distanceToPortKm}km @ {slotPred.avgCorridorSpeedKmh}km/h + {slotPred.gateQueueWaitMinutes}m Gate Queue
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRebookJobPcsSlot(job.id)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-bold hover:bg-amber-400 transition-colors shadow-sm"
+                        title="Auto-rebook DP World / AD Ports PCS token to next 2-hour window matching live E11/E311 ETA"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Auto-Rebook Token
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSwapJobRescueTractor(job.id)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                        title="Swap to nearest available tractor via 4-Factor Telematics to rescue port slot"
+                      >
+                        <Truck className="w-3 h-3" />
+                        Swap Tractor (4-Factor)
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAssign(job)}
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 transition-colors shadow-sm"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Prioritize &amp; Custom Assign
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {urgentDemurrageJobs.length === 0 && (
+              <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
+                <h4 className="text-xs font-bold text-[var(--text-main)]">No Urgent Demurrage Alerts</h4>
+                <p className="text-xs text-[var(--text-muted)]">
+                  No urgent demurrage or port slot risk alerts in current queue.
                 </p>
               </div>
             )}
@@ -4336,7 +4368,7 @@ export default function DrayageAssignmentPage() {
                           <span>Proximity ({automationConfig.weightProximityPct ?? 60}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
-                          {currentVehicleScore.hasLiveGps ? `${currentVehicleScore.distanceKm} km` : 'No Live GPS'}
+                          {currentVehicleScore.hasLiveGps ? `${currentVehicleScore.distanceKm} km` : 'Switched Off'}
                         </div>
                         <div className="text-[9px] text-emerald-400">Score: {currentVehicleScore.proximityScore}/100</div>
                       </div>
@@ -4344,10 +4376,12 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
-                          <span>Idleness ({automationConfig.weightIdlenessPct ?? 25}%)</span>
+                          <span>Status ({automationConfig.weightIdlenessPct ?? 25}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
-                          {currentVehicleScore.idleHours}h dwell
+                          {currentVehicleScore.vehicle.isDriverLoggedIn || currentVehicleScore.hasLiveGps
+                            ? `${currentVehicleScore.idleHours}h idle`
+                            : 'Switched Off'}
                         </div>
                         <div className="text-[9px] text-cyan-400">Score: {currentVehicleScore.idlenessScore}/100</div>
                       </div>

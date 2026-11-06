@@ -5322,13 +5322,13 @@ export async function postFreightSettlementToFinance(args: {
         preparedBy: args.actorUserId,
         notes:      `Carrier settlement ${settlement.settlement_no} for ${settlement.carrier_name ?? settlement.carrier_id}`,
         debit: {
-          code:        '5200-LOG',
-          name:        'Logistics Carrier Freight Cost',
+          code:        '5210',
+          name:        'Driver Salaries & Wages',
           description: `Freight cost for ${shipment.shipment_no}`,
         },
         credit: {
-          code:        '2200-LOG',
-          name:        'Carrier Payables',
+          code:        '2110',
+          name:        'Accounts Payable — Trade',
           description: `Carrier payable ${settlement.settlement_no}`,
         },
       });
@@ -5364,6 +5364,31 @@ export async function postFreightSettlementToFinance(args: {
         currency: settlement.currency ?? currency,
         metadata: { settlementNo: settlement.settlement_no, journalNumber: je.number, shipmentNo: shipment.shipment_no },
       });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.finance_payables
+           (payable_number, vendor_id, vendor_name, module,
+            source_type, source_id, description, line_items,
+            subtotal, vat_amount, total_amount, currency,
+            issue_date, cost_centre, profit_centre,
+            status, payment_status, journal_entry_id, prepared_by, tenant_id)
+         VALUES ($1,$2,$3,'LOGISTICS',
+                 'CARRIER_PAYABLE',$4,$5,$6::jsonb,
+                 $7,0,$7,$8,
+                 CURRENT_DATE,'PC-LOGISTICS','PC-LOGISTICS',
+                 'POSTED','UNPAID',$9,$10,$11)
+         ON CONFLICT (payable_number) DO NOTHING`,
+        `AP-${settlement.settlement_no ?? settlement.id}`,
+        settlement.carrier_id ?? null,
+        settlement.carrier_name ?? 'Carrier',
+        settlement.id,
+        `Carrier payable for ${shipment.shipment_no}`,
+        JSON.stringify([{ description: `Freight cost for ${shipment.shipment_no}`, qty: 1, unitPrice: amount, amount, sourceModule: 'LOGISTICS' }]),
+        amount,
+        settlement.currency ?? currency,
+        je.id,
+        args.actorUserId ?? 'system',
+        args.tenantId,
+      ).catch(() => {});
       results.push({ postingType: 'CARRIER_PAYABLE', mode: 'created', financeJournalEntryId: je.id, journalNumber: je.number, posting });
     }
   }
@@ -5390,13 +5415,13 @@ export async function postFreightSettlementToFinance(args: {
         preparedBy: args.actorUserId,
         notes:      `Driver payout ${driverPayout.payout_no}`,
         debit: {
-          code:        '5250-LOG',
-          name:        'Logistics Driver Payout Cost',
+          code:        '5210',
+          name:        'Driver Salaries & Wages',
           description: `Driver payout cost for ${shipment.shipment_no}`,
         },
         credit: {
-          code:        '2210-LOG',
-          name:        'Driver Payables',
+          code:        '2120',
+          name:        'Accrued Liabilities',
           description: `Driver payout payable ${driverPayout.payout_no}`,
         },
       });
@@ -5421,6 +5446,31 @@ export async function postFreightSettlementToFinance(args: {
         currency: driverPayout.currency ?? currency,
         metadata: { payoutNo: driverPayout.payout_no, journalNumber: je.number, shipmentNo: shipment.shipment_no },
       });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.finance_payables
+           (payable_number, vendor_id, vendor_name, module,
+            source_type, source_id, description, line_items,
+            subtotal, vat_amount, total_amount, currency,
+            issue_date, cost_centre, profit_centre,
+            status, payment_status, journal_entry_id, prepared_by, tenant_id)
+         VALUES ($1,$2,$3,'LOGISTICS',
+                 'DRIVER_PAYOUT',$4,$5,$6::jsonb,
+                 $7,0,$7,$8,
+                 CURRENT_DATE,'PC-LOGISTICS','PC-LOGISTICS',
+                 'POSTED','UNPAID',$9,$10,$11)
+         ON CONFLICT (payable_number) DO NOTHING`,
+        `AP-${driverPayout.payout_no ?? driverPayout.id}`,
+        driverPayout.driver_id ?? null,
+        (driverPayout as { driver_name?: string | null }).driver_name ?? 'Logistics Driver',
+        driverPayout.id,
+        `Driver payout for ${shipment.shipment_no}`,
+        JSON.stringify([{ description: `Driver payout cost for ${shipment.shipment_no}`, qty: 1, unitPrice: amount, amount, sourceModule: 'LOGISTICS' }]),
+        amount,
+        driverPayout.currency ?? currency,
+        je.id,
+        args.actorUserId ?? 'system',
+        args.tenantId,
+      ).catch(() => {});
       results.push({ postingType: 'DRIVER_PAYOUT', mode: 'created', financeJournalEntryId: je.id, journalNumber: je.number, posting });
     }
   }

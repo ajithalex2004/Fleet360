@@ -125,6 +125,9 @@ export interface DrayageCorridorVehicle {
   activeJobCode?: string | null;
   lat: number;
   lng: number;
+  hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' | string;
   fuelLevelPct?: number | null;
 }
 
@@ -435,31 +438,36 @@ function buildBreadcrumbWaypointSvg(
 }
 
 function buildLoggedInTractorMarkerSvg(v: DrayageCorridorVehicle): string {
-  const mainColor = '#10B981'; // Emerald for Online Tractor
-  const badgeColor = '#047857';
+  const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
+  const mainColor = isLoggedIn ? '#10B981' : '#64748B'; // Emerald when logged in, Slate when Switched Off
+  const badgeColor = isLoggedIn ? '#047857' : '#334155';
+  const badgeLabel = isLoggedIn ? 'ONLINE GPS' : 'SWITCHED OFF';
   const plate = (v.plateNumber || 'TRACTOR').slice(0, 10);
-  const driverLabel = (v.assignedDriverName || 'ONLINE').slice(0, 11);
+  const driverLabel = (v.assignedDriverName || (isLoggedIn ? 'ONLINE' : 'OFFLINE')).slice(0, 11);
+  const pulseSvg = isLoggedIn
+    ? `<circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
+        <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.85;0.25;0" dur="1.6s" repeatCount="indefinite"/>
+      </circle>`
+    : '';
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="88" viewBox="0 0 96 88">
-    <circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
-      <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0.85;0.25;0" dur="1.6s" repeatCount="indefinite"/>
-    </circle>
+    ${pulseSvg}
     <circle cx="48" cy="28" r="22" fill="${mainColor}" stroke="#FFFFFF" stroke-width="2.5"/>
     <path d="M36 29 L36 20 C36 18 38 17 40 17 L48 17 L52 23 L58 23 L58 30 L36 30 Z" fill="#FFFFFF"/>
     <circle cx="41" cy="31" r="2.8" fill="#1E293B"/>
     <circle cx="53" cy="31" r="2.8" fill="#1E293B"/>
     <g transform="translate(16, 2)">
       <rect x="0" y="0" width="64" height="14" rx="4" fill="${badgeColor}" stroke="#FFFFFF" stroke-width="1.2"/>
-      <text x="32" y="10" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">ONLINE GPS</text>
+      <text x="32" y="10" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">${badgeLabel}</text>
     </g>
     <g transform="translate(8, 54)">
       <rect x="0" y="0" width="80" height="20" rx="5" fill="#0F172A" stroke="${mainColor}" stroke-width="1.8"/>
       <text x="40" y="13.5" font-size="9" font-family="ui-monospace, monospace" font-weight="900" fill="#F8FAFC" text-anchor="middle" letter-spacing="0.5">${plate}</text>
     </g>
     <g transform="translate(14, 73)">
-      <rect x="0" y="0" width="68" height="12" rx="3" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
-      <text x="34" y="9" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="700" fill="#A7F3D0" text-anchor="middle">${driverLabel}</text>
+      <rect x="0" y="0" width="68" height="12" rx="3" fill="${isLoggedIn ? '#064E3B' : '#1E293B'}" stroke="${mainColor}" stroke-width="1"/>
+      <text x="34" y="9" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="700" fill="${isLoggedIn ? '#A7F3D0' : '#CBD5E1'}" text-anchor="middle">${driverLabel}</text>
     </g>
   </svg>`;
 
@@ -1042,10 +1050,11 @@ export default function DrayageCorridorLiveMap({
       const vLat = Number(v.lat);
       const vLng = Number(v.lng);
 
+      const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
       const vMarker = new ctors.Marker({
         position: { lat: vLat, lng: vLng },
         map,
-        title: `${v.plateNumber} · ${v.assignedDriverName} (Online GPS)`,
+        title: `${v.plateNumber} · ${v.assignedDriverName} (${isLoggedIn ? 'Online GPS' : 'Switched Off'})`,
         icon: {
           url: buildLoggedInTractorMarkerSvg(v),
           scaledSize: { width: 56, height: 52 },
@@ -1060,19 +1069,19 @@ export default function DrayageCorridorLiveMap({
           <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; min-width: 240px; max-width: 290px; padding: 4px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;">
               <strong style="font-size: 13px; font-family: monospace;">${v.plateNumber}</strong>
-              <span style="background: #10B981; color: #FFFFFF; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
-                ONLINE · 1-MIN GPS
+              <span style="background: ${isLoggedIn ? '#10B981' : '#64748B'}; color: #FFFFFF; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
+                ${isLoggedIn ? 'ONLINE · 1-MIN GPS' : 'SWITCHED OFF'}
               </span>
             </div>
             <div style="margin-bottom: 4px; font-size: 11px;">
               Driver: <strong>${v.assignedDriverName}</strong>
             </div>
             <div style="margin-bottom: 4px; font-size: 11px; color: #475569;">
-              Tractor: <strong>${v.make || ''} ${v.model || ''}</strong> (${v.status || 'AVAILABLE'})
+              Tractor: <strong>${v.make || ''} ${v.model || ''}</strong> (${isLoggedIn ? v.status || 'AVAILABLE' : 'SWITCHED OFF'})
             </div>
-            <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px; font-size: 10px; color: #065F46;">
-              📍 Live Coordinates: <strong>${vLat.toFixed(4)}, ${vLng.toFixed(4)}</strong>
-              <div style="margin-top: 2px;">🕒 Active 1-Min Telemetry Since Login</div>
+            <div style="background: ${isLoggedIn ? '#ECFDF5' : '#F1F5F9'}; border: 1px solid ${isLoggedIn ? '#A7F3D0' : '#CBD5E1'}; border-radius: 6px; padding: 6px; font-size: 10px; color: ${isLoggedIn ? '#065F46' : '#475569'};">
+              📍 ${isLoggedIn ? 'Live Coordinates' : 'Last Known Position'}: <strong>${vLat.toFixed(4)}, ${vLng.toFixed(4)}</strong>
+              <div style="margin-top: 2px;">${isLoggedIn ? '🕒 Active 1-Min Telemetry Since Login' : '⚫ Driver Not Logged In · Mobile GPS Off'}</div>
             </div>
           </div>
         `;

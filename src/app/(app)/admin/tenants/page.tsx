@@ -13,7 +13,8 @@ import {
   TenantAttachmentFields, attachmentDraftProblems, appendAttachmentDrafts,
   type AttachmentDrafts, type AttachmentTypeOption,
 } from '@/components/TenantAttachmentFields';
-import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import type { ExtractedCompanyProfileFields } from '@/lib/tenant-attachments-autofill';
+import { useFetchedData } from '@/hooks/useFetchedData';
 import { clearClientSession } from '@/lib/client-session';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,8 +30,6 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 // ── Modules (Tab 2) ───────────────────────────────────────────────────────────
-// Every registry module (src/lib/modules.ts) and the feature flags mapped to
-// it (src/lib/module-features.ts), shown by <ModuleFeaturePicker>.
 
 /** Modules a new tenant starts with: everything except enterprise-only add-ons. */
 const DEFAULT_NEW_TENANT_MODULES: readonly string[] = MODULES
@@ -42,11 +41,6 @@ const MODULE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
   MODULES.map((m) => [m.key, m.shortName ?? m.name]),
 );
 
-/**
- * The modules a tenant actually has: its stored switches (legacy snake_case
- * aliases resolved) under the module availability policies and its plan
- * (src/lib/module-policy-rules.ts).
- */
 function enabledSet(t: TenantRow, policies: ModulePolicies): Set<string> {
   const stored = (t.modules ?? []).filter((tm) => tm.isEnabled !== false).map((tm) => tm.module);
   return new Set(effectiveTenantModules(stored, t.plan, policies));
@@ -252,12 +246,12 @@ interface TenantRow {
   _count?: { userTenants: number; roles: number };
 }
 
-// bookingTypes stored as { serviceKey: string[] }
 type BookingTypes = Record<string, string[]>;
 
 const emptyForm = () => ({
   name: '', code: '', domain: '', contactEmail: '', contactPhone: '',
   address: '', plan: 'STANDARD', industry: '', contactName: '',
+  trn: '', tradeLicenseNo: '', tradeLicenseAuthority: '',
   supportedLanguages: ['en'] as string[],
   defaultLanguage: 'en',
   localizedName_en: '', localizedName_ar: '',
@@ -288,32 +282,21 @@ export default function TenantsPage() {
   const [editingTenant,   setEditingTenant]   = useState<TenantForEdit | null>(null);
   const [deletingTenant,  setDeletingTenant]  = useState<TenantRow | null>(null);
   const [form,      setForm]      = useState(emptyForm);
-  // Attachments step: the active types from the Attachment Type master and
-  // the file chosen for each.
   const [attachmentTypes, setAttachmentTypes]   = useState<AttachmentTypeOption[] | null>(null);
   const [attachmentTypesError, setAttachmentTypesError] = useState('');
   const [attachmentDrafts, setAttachmentDrafts] = useState<AttachmentDrafts>({});
   const [showAttachmentErrors, setShowAttachmentErrors] = useState(false);
-  // which service-type panels are expanded
   const [expanded,  setExpanded]  = useState<Record<string, boolean>>({
     mobility: true,
   });
 
   // ── data ──────────────────────────────────────────────────────────────────
-  // Session-scoped fetch cache — 1st visit hits the cached server endpoint
-  // (Data Cache + s-maxage), 2nd visit within the same tab is instant from
-  // the in-memory Map. `refresh` busts the session cache after writes.
   const { data: tenantsRaw, refresh: refreshTenants } =
     useFetchedData<TenantRow[]>('/api/admin/tenants');
-  // Module availability policies (Admin > Module Policies): which modules are
-  // default, per tenant or tier-gated.
   const { data: policyData } = useFetchedData<PolicyResponse>('/api/admin/module-policies');
   const policies = policyData?.policies ?? resolvePolicies(null);
   const planNames = Object.fromEntries((policyData?.plans ?? []).map((p) => [p.code, p.name]));
-  // A refresh drops the cached list, so data is briefly undefined again.
-  // Keep showing the last list meanwhile: swapping the page for the loader
-  // would unmount an open Create Tenant modal and lose its local state
-  // (e.g. which module feature-flag panels are expanded).
+
   const lastTenants = useRef<TenantRow[] | undefined>(undefined);
   if (tenantsRaw) lastTenants.current = tenantsRaw;
   const tenants = tenantsRaw ?? lastTenants.current ?? [];
@@ -325,6 +308,41 @@ export default function TenantsPage() {
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const set = (key: string, val: unknown) => setForm(p => ({ ...p, [key]: val }));
+
+  const applyExtractedCompanyProfile = useCallback((extracted: ExtractedCompanyProfileFields) => {
+    setForm(prev => {
+      const next = { ...prev };
+      if (extracted.companyName && !next.localizedName_en) {
+        next.localizedName_en = extracted.companyName;
+        next.name = extracted.companyName;
+      }
+      if (extracted.arabicName && !next.localizedName_ar) {
+        next.localizedName_ar = extracted.arabicName;
+        if (!next.supportedLanguages.includes('ar')) {
+          next.supportedLanguages = [...next.supportedLanguages, 'ar'];
+        }
+      }
+      if (extracted.address && !next.address) {
+        next.address = extracted.address;
+      }
+      if (extracted.contactPhone && !next.contactPhone) {
+        next.contactPhone = extracted.contactPhone;
+      }
+      if (extracted.contactEmail && !next.contactEmail) {
+        next.contactEmail = extracted.contactEmail;
+      }
+      if (extracted.trn && !next.trn) {
+        next.trn = extracted.trn;
+      }
+      if (extracted.tradeLicenseNo && !next.tradeLicenseNo) {
+        next.tradeLicenseNo = extracted.tradeLicenseNo;
+      }
+      if (extracted.tradeLicenseAuthority && !next.tradeLicenseAuthority) {
+        next.tradeLicenseAuthority = extracted.tradeLicenseAuthority;
+      }
+      return next;
+    });
+  }, []);
 
   const toggleLanguage = (lang: string) =>
     setForm(p => {
@@ -382,25 +400,26 @@ export default function TenantsPage() {
     setSaving(true); setError('');
     try {
       const payload = {
-        name:               resolvedName,
-        code:               form.code.trim()    || undefined,
-        domain:             form.domain.trim()  || undefined,
-        plan:               form.plan,
-        industry:           form.industry       || undefined,
-        contactName:        form.contactName    || undefined,
-        contactEmail:       form.contactEmail   || undefined,
-        contactPhone:       form.contactPhone   || undefined,
-        address:            form.address        || undefined,
-        defaultLanguage:    form.defaultLanguage,
-        supportedLanguages: form.supportedLanguages.join(','),
+        name:                  resolvedName,
+        code:                  form.code.trim()    || undefined,
+        domain:                form.domain.trim()  || undefined,
+        plan:                  form.plan,
+        industry:              form.industry       || undefined,
+        contactName:           form.contactName    || undefined,
+        contactEmail:          form.contactEmail   || undefined,
+        contactPhone:          form.contactPhone   || undefined,
+        address:               form.address        || undefined,
+        trn:                   form.trn.trim()     || undefined,
+        tradeLicenseNo:        form.tradeLicenseNo.trim() || undefined,
+        tradeLicenseAuthority: form.tradeLicenseAuthority.trim() || undefined,
+        defaultLanguage:       form.defaultLanguage,
+        supportedLanguages:    form.supportedLanguages.join(','),
         localizedName: JSON.stringify({ en: form.localizedName_en, ar: form.localizedName_ar }),
         localizedDesc: JSON.stringify({ en: form.localizedDesc_en, ar: form.localizedDesc_ar }),
         bookingTypes:  JSON.stringify(form.bookingTypes),
         enabledModules: form.enabledModules,
         featureFlags:   form.featureFlags,
       };
-      // Multipart: the tenant fields as JSON plus the attachment files, so the
-      // server creates the tenant and stores its documents together.
       const body = new FormData();
       body.append('payload', JSON.stringify(payload));
       appendAttachmentDrafts(body, attachmentDrafts);
@@ -494,13 +513,14 @@ export default function TenantsPage() {
   // ── tab nav ───────────────────────────────────────────────────────────────
   const tabIndex = TABS.findIndex(t => t.key === activeTab);
 
-  // Default and tier-gated modules follow their policy, whatever is switched on.
   const selectedModules = new Set(effectiveTenantModules(form.enabledModules, form.plan, policies));
   const selectedModuleCount = ALL_MODULE_KEYS.filter(k => selectedModules.has(k)).length;
   const activeFlagCount = activeFeatureKeys(selectedModules, form.featureFlags).length;
-
-  // total selected booking types across all service types
   const totalBookingSelected = Object.values(form.bookingTypes).reduce((s, a) => s + a.length, 0);
+
+  const keyOnboardingTypes = (attachmentTypes ?? []).filter(
+    t => t.code === 'TRADE_LICENSE' || t.code === 'VAT_CERTIFICATE' || t.code === 'COMMERCIAL_LICENSE',
+  );
 
   // ── render ────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -616,14 +636,12 @@ export default function TenantsPage() {
               </button>
               <button
                 onClick={async () => {
-                  // Fetch the full tenant record so the Edit modal has every field
                   const r = await fetch(`/api/admin/tenants/${t.id}`);
                   if (r.ok) setEditingTenant(await r.json() as TenantForEdit);
                 }}
                 className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
                 Edit
               </button>
-              {/* Hard delete — only for inactive tenants (server enforces this too) */}
               {!t.isActive && (
                 <button
                   onClick={() => setDeletingTenant(t)}
@@ -662,16 +680,9 @@ export default function TenantsPage() {
 
       {/* ══════════════════════════════════════════════════════════════════════
           CREATE TENANT MODAL
-          Fixed height: header + tab-bar (flex-shrink-0) + scrollable body
-          (flex-1 min-h-0 overflow-y-auto) + footer (flex-shrink-0)
-          This ensures the modal never exceeds the viewport.
       ══════════════════════════════════════════════════════════════════════ */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          {/*
-            Key fix: use h-[90vh] (not max-h) so flex children get a defined
-            height, enabling flex-1 + overflow-y-auto to scroll properly.
-          */}
           <div className="w-full max-w-3xl h-[90vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl
                           flex flex-col shadow-2xl overflow-hidden">
 
@@ -679,7 +690,7 @@ export default function TenantsPage() {
             <div className="flex items-start justify-between px-7 pt-5 pb-4 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div>
                 <h2 className="text-xl font-bold text-[var(--text-main)]">Create New Tenant</h2>
-                <p className="text-[var(--text-muted)] text-xs mt-0.5">Configure a new tenant with modules and settings</p>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">Configure a new tenant with modules, attachments &amp; AI autofill</p>
               </div>
               <button onClick={closeModal} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg leading-none mt-0.5">✕</button>
             </div>
@@ -707,8 +718,25 @@ export default function TenantsPage() {
               {/* ── TAB 1: Basic Information ──────────────────────────────── */}
               {activeTab === 'basic' && (
                 <div className="space-y-5">
+                  {keyOnboardingTypes.length > 0 && (
+                    <Section
+                      icon="✨"
+                      iconBg="bg-orange-500/20 text-orange-300"
+                      title="Attach Trade License & VAT Certificate (AI Autofill)"
+                      desc="Upload the company's Trade License and FTA VAT Certificate first to automatically populate English/Arabic legal names, TRN, License No & address"
+                    >
+                      <TenantAttachmentFields
+                        types={keyOnboardingTypes}
+                        drafts={attachmentDrafts}
+                        onChange={(update) => { setAttachmentDrafts(update); if (error) setError(''); }}
+                        showErrors={showAttachmentErrors}
+                        onExtractedCompanyProfile={applyExtractedCompanyProfile}
+                      />
+                    </Section>
+                  )}
+
                   <Section icon="🏢" iconBg="bg-blue-500/20" title="Company Information"
-                    desc="Core tenant identification, domain, and contact details">
+                    desc="Core tenant identification, domain, tax registration, and contact details">
                     <div className="grid grid-cols-3 gap-3">
                       <Field label="Tenant Code" placeholder="e.g. BT001, CABMAN_01"
                         hint="Uppercase, numbers, underscores"
@@ -719,7 +747,11 @@ export default function TenantsPage() {
                         value={form.contactEmail} onChange={v => set('contactEmail', v)} />
                       <Field label="Phone Number" placeholder="+971-4-1234567"
                         value={form.contactPhone} onChange={v => set('contactPhone', v)} />
-                      <Field label="Address" placeholder="Enter tenant address" className="col-span-2"
+                      <Field label="UAE VAT TRN (15 digits)" placeholder="100123456700003"
+                        value={form.trn} onChange={v => set('trn', v)} />
+                      <Field label="Trade License No" placeholder="CN-1234567"
+                        value={form.tradeLicenseNo} onChange={v => set('tradeLicenseNo', v)} />
+                      <Field label="Address" placeholder="Enter tenant address" className="col-span-3"
                         value={form.address} onChange={v => set('address', v)} />
                     </div>
                   </Section>
@@ -829,7 +861,6 @@ export default function TenantsPage() {
                       <div key={svc.key}
                         className={`rounded-xl border transition-all ${BORDER_BG[svc.color]}`}>
 
-                        {/* Service type header — always visible */}
                         <div className="flex items-center justify-between px-4 py-3">
                           <button onClick={() => toggleExpanded(svc.key)}
                             className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -859,7 +890,6 @@ export default function TenantsPage() {
                           </div>
                         </div>
 
-                        {/* Request types grid — shown when expanded */}
                         {isOpen && (
                           <div className="px-4 pb-4 border-t border-[var(--border-subtle)] pt-3">
                             <p className="text-xs text-[var(--text-faint)] mb-3">
@@ -909,6 +939,7 @@ export default function TenantsPage() {
                         drafts={attachmentDrafts}
                         onChange={(update) => { setAttachmentDrafts(update); if (error) setError(''); }}
                         showErrors={showAttachmentErrors}
+                        onExtractedCompanyProfile={applyExtractedCompanyProfile}
                       />
                     )}
                     <p className="text-[11px] text-[var(--text-faint)] mt-2">The logo is uploaded after creation, on the tenant&apos;s Branding page.</p>

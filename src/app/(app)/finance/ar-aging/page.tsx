@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { downloadXLSX, downloadCSV } from '@/lib/exportUtils';
+import { downloadXLSX } from '@/lib/exportUtils';
 
 interface Bucket { bucket: string; invoice_count: number; total_outstanding: number | null; customer_count: number; }
 interface CustomerRollup { client_name: string; invoice_count: number; total_outstanding: number | null; max_age_days: number; oldest_due: string | null; }
@@ -24,7 +24,15 @@ const BUCKET_COLOR: Record<string, { bar: string; text: string; badge: string }>
 };
 
 const BRANCHES = ['All Branches','Dubai','Abu Dhabi','Sharjah','Ajman','Fujairah','Ras Al Khaimah','Umm Al Quwain'];
-const MODULES  = ['All Modules','LEASE','RENTAL','GENERAL'];
+const MODULES = [
+  { value: 'All Modules',    label: 'All Modules' },
+  { value: 'LEASING',        label: 'Leasing' },
+  { value: 'RENTAL',         label: 'Rental (RAC)' },
+  { value: 'LOGISTICS',      label: 'Logistics' },
+  { value: 'BUS_OPERATIONS', label: 'Bus Operations' },
+  { value: 'MAINTENANCE',    label: 'Maintenance' },
+  { value: 'GENERAL',        label: 'General' },
+];
 
 export default function ARAgingPage() {
   const [buckets,      setBuckets]      = useState<Bucket[]>([]);
@@ -110,7 +118,7 @@ export default function ARAgingPage() {
           <label className="text-xs text-[var(--text-muted)] block mb-1">Module</label>
           <select value={module} onChange={e => setModule(e.target.value)}
             className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)]">
-            {MODULES.map(m => <option key={m}>{m}</option>)}
+            {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[200px]">

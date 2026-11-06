@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Domain Verification — PRE-REGISTRATION (Email OTP only)
+ * Domain Verification — PRE-REGISTRATION (Email OTP & AI Document Autofill)
  *
  * POST /api/tenants/pre-verify-domain
  *   Body: { domain: string }
@@ -17,6 +17,10 @@ export const dynamic = 'force-dynamic';
  *   Body: { id: string, otp: string }
  *   → Checks OTP, marks verified.
  *
+ * POST /api/tenants/pre-verify-domain?action=autofill-document
+ *   Body: { base64: string, mimeType?: string, fileName?: string, docType?: 'TRADE_LICENSE' | 'VAT_CERTIFICATE' | 'CORPORATE_TAX_CERTIFICATE' | 'AUTO' }
+ *   → Extracts UAE Company Trade License & FTA VAT Certificate fields via PDF text + AI Vision during company registration.
+ *
  * Public endpoint — no auth required (pre-registration).
  *
  * Records stored in domain_pre_verifications table (auto-created if missing).
@@ -29,6 +33,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { NO_TENANT, sendTemplatedEmail } from '@/lib/email-templates';
+import { autofillCompanyDocument } from '@/lib/tenant-attachments-autofill';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +46,45 @@ function genOtp(): string   { return String(crypto.randomInt(100000, 1000000)); 
 export async function POST(request: NextRequest) {
   const url    = request.nextUrl;
   const action = url.searchParams.get('action');
+
+  // ── autofill-document (Company Registration AI Extraction) ──────────────────
+  if (action === 'autofill-document') {
+    try {
+      const body = await request.json() as {
+        base64?: string;
+        mimeType?: string;
+        fileName?: string;
+        docType?: 'TRADE_LICENSE' | 'VAT_CERTIFICATE' | 'CORPORATE_TAX_CERTIFICATE' | 'AUTO';
+      };
+
+      const rawBase64 = typeof body.base64 === 'string' ? body.base64.trim() : '';
+      const base64 = rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
+      if (!base64) {
+        return NextResponse.json({ error: 'base64 document content is required' }, { status: 400 });
+      }
+
+      const buf = Buffer.from(base64, 'base64');
+      if (buf.byteLength === 0 || buf.byteLength > 10 * 1024 * 1024) {
+        return NextResponse.json({ error: 'Document must be between 1 byte and 10 MB' }, { status: 400 });
+      }
+
+      const mimeType = body.mimeType || (body.fileName?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+      const fileName = body.fileName || 'company-document.pdf';
+      const docType =
+        body.docType === 'TRADE_LICENSE' ||
+        body.docType === 'VAT_CERTIFICATE' ||
+        body.docType === 'CORPORATE_TAX_CERTIFICATE'
+          ? body.docType
+          : 'AUTO';
+
+      const result = await autofillCompanyDocument({ base64, mimeType, fileName }, docType);
+      return NextResponse.json(result);
+    } catch (err) {
+      console.error('[pre-verify-domain] autofill-document error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
 
   // ── send-otp ────────────────────────────────────────────────────────────────
   if (action === 'send-otp') {

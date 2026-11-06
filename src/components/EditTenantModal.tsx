@@ -5,7 +5,7 @@
  *
  * The full create modal has 4 tabs (basic / modules / booking / attachments).
  * This Edit modal is intentionally limited to the fields a platform admin
- * is most likely to need to change: identity, plan, contact, locale, status.
+ * is most likely to need to change: identity, plan, contact, UAE TRN, locale, status.
  * Module/booking/attachment edits are still done via the existing
  * /admin/tenants/[id] detail page.
  *
@@ -24,6 +24,8 @@ export interface TenantForEdit {
   plan: string;
   contactEmail: string | null;
   contactPhone: string | null;
+  trn?: string | null;
+  address?: string | null;
   country: string | null;
   industry: string | null;
   currency: string | null;
@@ -56,7 +58,7 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
     try {
       // Only send fields that differ from the original
       const changed: Record<string, unknown> = {};
-      for (const k of Object.keys(tenant) as Array<keyof TenantForEdit>) {
+      for (const k of Object.keys(form) as Array<keyof TenantForEdit>) {
         const before = tenant[k];
         const after  = form[k];
         if (JSON.stringify(before) !== JSON.stringify(after)) {
@@ -131,6 +133,18 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
                 onChange={e => set('plan', e.target.value)}>
                 {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
+            </label>
+            <label>
+              <span className={labelCls}>UAE FTA VAT TRN (15 digits)</span>
+              <input className={`${inputCls} font-mono`} value={form.trn ?? ''}
+                onChange={e => set('trn', e.target.value || null)}
+                placeholder="100123456700003" />
+            </label>
+            <label>
+              <span className={labelCls}>Registered Address</span>
+              <input className={inputCls} value={form.address ?? ''}
+                onChange={e => set('address', e.target.value || null)}
+                placeholder="Sheikh Zayed Road, Dubai" />
             </label>
             <label>
               <span className={labelCls}>Contact email</span>

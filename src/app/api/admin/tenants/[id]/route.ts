@@ -10,7 +10,30 @@ import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnersh
 import { withAuditedAction } from '@/lib/audited-action';
 import { readTenantFeatureFlags } from '@/lib/tenant-features';
 import { logAudit as logPlatformAudit } from '@/lib/platform-audit-log';
+import { normalizeTrn, parseLocalizedRecord } from '@/lib/finance/uae';
+
 const CACHE_TAG = 'tenants:list';
+
+const ALLOWED_TENANT_FIELDS = new Set([
+  'name',
+  'code',
+  'plan',
+  'industry',
+  'domain',
+  'allowedOrigins',
+  'address',
+  'contactName',
+  'contactEmail',
+  'contactPhone',
+  'trn',
+  'defaultLanguage',
+  'supportedLanguages',
+  'localizedName',
+  'localizedDesc',
+  'bookingTypes',
+  'isActive',
+  'dataResidency',
+]);
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -40,7 +63,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
       });
     });
-    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -57,30 +80,61 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
-    // featureFlags is read-only here (GET derives it); modules are saved via /modules.
-    const data = { ...body };
-    delete data.modules;
-    delete data.userTenants;
-    delete data.roles;
-    delete data.featureFlags;
-    const tenant = await withTenantRls(prisma, params.id, (tx) =>
-      tx.tenant.update({
+
+    const tenant = await withTenantRls(prisma, params.id, async (tx) => {
+      const existing = await tx.tenant.findUnique({
+        where: { id: params.id },
+        select: { localizedName: true },
+      });
+      if (!existing) throw new Error('Not found');
+
+      const data: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(body)) {
+        if (!ALLOWED_TENANT_FIELDS.has(k)) continue;
+        if (k === 'supportedLanguages' && Array.isArray(v)) {
+          data.supportedLanguages = v.join(',');
+        } else if (k === 'trn' && typeof v === 'string') {
+          data.trn = normalizeTrn(v) || null;
+        } else {
+          data[k] = v;
+        }
+      }
+
+      // Persist extra locale/tax metadata (country, currency, taxRate, corporateTaxTrn, tradeLicenseNo) inside localizedName JSON
+      const localized = parseLocalizedRecord(existing.localizedName);
+      let locChanged = false;
+      for (const extraKey of ['country', 'currency', 'taxRate', 'corporateTaxTrn', 'tradeLicenseNo', 'tradeLicenseAuthority', 'emirate', 'emirateCode'] as const) {
+        if (body[extraKey] !== undefined) {
+          if (body[extraKey] === null || body[extraKey] === '') {
+            delete localized[extraKey];
+          } else {
+            localized[extraKey] = String(body[extraKey]);
+          }
+          locChanged = true;
+        }
+      }
+      if (locChanged && data.localizedName === undefined) {
+        data.localizedName = Object.keys(localized).length ? JSON.stringify(localized) : null;
+      }
+
+      return tx.tenant.update({
         where: { id: params.id },
         data: { ...data, updatedAt: new Date() },
-      }),
-    );
+      });
+    });
+
     // Deactivated, or the plan (signed into sessions) changed: every session
     // in the tenant ends within 60 s.
-    if (data.isActive === false || data.plan !== undefined) {
+    if (body.isActive === false || body.plan !== undefined) {
       await revokeSessionsSafely({
         tenantId: params.id,
-        reason: data.isActive === false ? 'tenant-deactivated' : 'tenant-plan-changed',
+        reason: body.isActive === false ? 'tenant-deactivated' : 'tenant-plan-changed',
         revokedBy: authz.userId,
       });
     }
-    if (typeof data.isActive === 'boolean') {
+    if (typeof body.isActive === 'boolean') {
       await logPlatformAudit({
-        action: data.isActive ? 'tenant.reactivate' : 'tenant.suspend',
+        action: body.isActive ? 'tenant.reactivate' : 'tenant.suspend',
         targetType: 'tenant',
         targetId: params.id,
         targetName: tenant.name,
@@ -89,14 +143,14 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
           email: req.headers.get('x-user-email') ?? undefined,
         },
         dryRun: false,
-        metadata: { isActive: data.isActive, plan: tenant.plan },
+        metadata: { isActive: body.isActive, plan: tenant.plan },
       });
     }
     // Bust the list cache so the tenants page and the platform
     // dashboard's stat card see the change on the next render.
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(tenant);
-    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -128,7 +182,7 @@ async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: str
     });
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).

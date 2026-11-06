@@ -46,9 +46,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       const today  = new Date().toISOString().slice(0, 10);
 
       // Get current case for timeline append
-      const [current] = await tx.$queryRawUnsafe<{timeline: unknown}[]>(
-        `SELECT timeline FROM finance_collection_cases WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId
-      ).catch(() => [] as {timeline: unknown}[]);
+      const [current] = await tx.$queryRawUnsafe<{timeline: unknown; invoice_id?: string | null; invoice_no?: string | null}[]>(
+        `SELECT timeline, invoice_id::text as invoice_id, invoice_no FROM finance_collection_cases WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId
+      ).catch(() => [] as {timeline: unknown; invoice_id?: string | null; invoice_no?: string | null}[]);
 
       const timeline: {date: string; action: string; by: string; note: string}[] =
         Array.isArray(current?.timeline) ? current.timeline : [];
@@ -96,14 +96,45 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
-      // Each statement above targets `WHERE id::text=$1`: narrow it to the tenant.
-
       sqlParams.push(tenantId);
-
       sql = sql.replace('WHERE id::text=$1', () => `WHERE id::text=$1 AND tenant_id=$${sqlParams.length}`);
 
       const [row] = await tx.$queryRawUnsafe<CaseRow[]>(sql, ...sqlParams).catch(() => [] as CaseRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+
+      const linkedInvoiceId = current?.invoice_id ?? (row.invoice_id ? String(row.invoice_id) : null);
+      if (linkedInvoiceId && (action === 'settle' || action === 'write_off')) {
+        await tx.$executeRawUnsafe('SAVEPOINT collection_inv_sync').catch(() => {});
+        if (action === 'settle') {
+          await tx.$executeRawUnsafe(
+            `UPDATE finance_invoices
+                SET paid_amount = total_amount,
+                    payment_status = 'PAID',
+                    updated_at = NOW()
+              WHERE id::text = $1 AND tenant_id = $2`,
+            linkedInvoiceId,
+            tenantId,
+          ).then(
+            () => tx.$executeRawUnsafe('RELEASE SAVEPOINT collection_inv_sync').catch(() => {}),
+            () => tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT collection_inv_sync').catch(() => {}),
+          );
+        } else {
+          await tx.$executeRawUnsafe(
+            `UPDATE finance_invoices
+                SET payment_status = 'WRITTEN_OFF',
+                    notes = COALESCE(notes || E'\\n', '') || $3,
+                    updated_at = NOW()
+              WHERE id::text = $1 AND tenant_id = $2`,
+            linkedInvoiceId,
+            tenantId,
+            body.note ?? 'Written off via Collections',
+          ).then(
+            () => tx.$executeRawUnsafe('RELEASE SAVEPOINT collection_inv_sync').catch(() => {}),
+            () => tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT collection_inv_sync').catch(() => {}),
+          );
+        }
+      }
+
       return NextResponse.json(row);
   });
 }
@@ -125,4 +156,3 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ ok: true });
   });
 }
-

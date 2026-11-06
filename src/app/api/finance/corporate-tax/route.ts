@@ -6,45 +6,46 @@ export const dynamic = 'force-dynamic';
  * FTA return periods, exemptions, tax group registration
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
-// A request runs no DDL: the runtime role may not create tables, and the
-// failed statement aborted the request's transaction, so every query after
-// it failed too.
 
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 // Rental and logistics revenue is summed from their own tables below; their
 // mirrored finance_invoices rows would count it twice and overstate the tax.
-async function computeRevenue(from: string, to: string, tenantId: string): Promise<number> {
-  const [rev] = await prisma.$queryRawUnsafe<{t:string}[]>(
+async function computeRevenue(tx: TxClient, from: string, to: string, tenantId: string): Promise<number> {
+  const [rev] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices
      WHERE tenant_id = $3 AND deleted_at IS NULL AND issue_date BETWEEN $1::date AND $2::date
        AND payment_status NOT IN ('DRAFT','CANCELLED')${excludeMirrored(['RENTAL', 'LOGISTICS'])}`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
-  const [rac] = await prisma.$queryRawUnsafe<{t:string}[]>(
+  const [rac] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_amount),0)::text as t FROM rental_invoices
      WHERE tenant_id = $3 AND deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
-  const [lg] = await prisma.$queryRawUnsafe<{t:string}[]>(
+  const [lg] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(customer_rate_amount),0)::text as t FROM logistics_shipment_orders
      WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
   return toN(rev?.t) + toN(rac?.t) + toN(lg?.t);
 }
 
-async function computeDeductions(from: string, to: string, tenantId: string): Promise<number> {
-  const [fuel]  = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_cost),0)::text as t FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
-  const [maint] = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0)::text as t FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
+async function computeDeductions(tx: TxClient, from: string, to: string, tenantId: string): Promise<number> {
+  const [fuel]  = await tx.$queryRawUnsafe<{t:string}[]>(
+    `SELECT COALESCE(SUM(total_cost),0)::text as t FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`,
+    from, to, tenantId
+  ).catch(()=>[{t:'0'}]);
+  const [maint] = await tx.$queryRawUnsafe<{t:string}[]>(
+    `SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0)::text as t FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1::date AND $2::date`,
+    from, to, tenantId
+  ).catch(()=>[{t:'0'}]);
   // Depreciation from the fixed asset register, only where it is tenant-scoped
-  // (it used to sum every tenant's schedule).
-  const [dep]   = await fixedAssetsTenantScoped(prisma)
-    ? await prisma.$queryRawUnsafe<{t:string}[]>(
+  const [dep]   = await fixedAssetsTenantScoped(tx)
+    ? await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(ds.depreciation),0)::text as t
            FROM finance_depreciation_schedule ds
            JOIN finance_fixed_assets fa ON fa.id::text = ds.asset_id AND fa.tenant_id = ds.tenant_id
@@ -52,8 +53,15 @@ async function computeDeductions(from: string, to: string, tenantId: string): Pr
             AND ds.period_year || '-' || LPAD(ds.period_month::text,2,'0') || '-01' BETWEEN $1 AND $2`,
         from, to, tenantId).catch(()=>[{t:'0'}])
     : [{t:'0'}];
-  const [exp]   = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
-  return toN(fuel?.t) + toN(maint?.t) + toN(dep?.t) + toN(exp?.t);
+  const [exp]   = await tx.$queryRawUnsafe<{t:string}[]>(
+    `SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1::date AND $2::date`,
+    from, to, tenantId
+  ).catch(()=>[{t:'0'}]);
+  const [pay]   = await tx.$queryRawUnsafe<{t:string}[]>(
+    `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_payables WHERE tenant_id = $3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') AND issue_date BETWEEN $1::date AND $2::date`,
+    from, to, tenantId
+  ).catch(()=>[{t:'0'}]);
+  return toN(fuel?.t) + toN(maint?.t) + toN(dep?.t) + toN(exp?.t) + toN(pay?.t);
 }
 
 export async function GET(req: NextRequest) {
@@ -75,8 +83,8 @@ export async function GET(req: NextRequest) {
         const to   = `${year}-12-31`;
 
         const [revenue, deductions, returns] = await Promise.all([
-          computeRevenue(from, to, tenantId),
-          computeDeductions(from, to, tenantId),
+          computeRevenue(tx, from, to, tenantId),
+          computeDeductions(tx, from, to, tenantId),
           tx.$queryRawUnsafe<{adj_type:string; amount:string}[]>(
             `SELECT adj_type, SUM(amount)::text as amount FROM finance_ct_adjustments
               WHERE tenant_id=$2 AND return_id IN (
@@ -85,9 +93,9 @@ export async function GET(req: NextRequest) {
           ).catch(()=>[]),
         ]);
 
-        const addBacks   = returns.filter(r => r.adj_type === 'ADD_BACK').reduce((s,r) => s + toN(r.amount), 0);
+        const addBacks    = returns.filter(r => r.adj_type === 'ADD_BACK').reduce((s,r) => s + toN(r.amount), 0);
         const extraDeduct = returns.filter(r => r.adj_type === 'DEDUCTION').reduce((s,r) => s + toN(r.amount), 0);
-        const exempt     = returns.filter(r => r.adj_type === 'EXEMPT').reduce((s,r) => s + toN(r.amount), 0);
+        const exempt      = returns.filter(r => r.adj_type === 'EXEMPT').reduce((s,r) => s + toN(r.amount), 0);
 
         const isSBREligible  = revenue <= 3_000_000;
         const taxableIncome  = Math.max(0, revenue - deductions + addBacks - extraDeduct - exempt);
@@ -168,8 +176,8 @@ export async function POST(req: NextRequest) {
 
       // Create return
       const { taxYear, periodFrom, periodTo, notes } = body;
-      const revenue    = await computeRevenue(periodFrom, periodTo, tenantId);
-      const deductions = await computeDeductions(periodFrom, periodTo, tenantId);
+      const revenue    = await computeRevenue(tx, periodFrom, periodTo, tenantId);
+      const deductions = await computeDeductions(tx, periodFrom, periodTo, tenantId);
       const taxableIncome   = Math.max(0, revenue - deductions);
       const isSBR           = revenue <= 3_000_000;
       const aboveThreshold  = Math.max(0, taxableIncome - 375_000);
@@ -191,4 +199,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-

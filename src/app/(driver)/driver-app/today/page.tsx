@@ -768,10 +768,19 @@ export default function DriverTodayPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
+    const isDriverAuthenticated = localStorage.getItem('fleet360_driver_authenticated') === 'true';
+    const hasSessionToken = Boolean(
+      localStorage.getItem('fleet360_session_token') || localStorage.getItem('fleet360_driver_token'),
+    );
+    if (!isDriverAuthenticated || !hasSessionToken) {
+      return;
+    }
+
     let watchId: number | null = null;
 
     const pushImmediateLoginGpsFix = (lat: number, lng: number, speedKmh: number | null, heading: number | null) => {
       if (initialGpsLoginSyncSentRef.current || (lat === 0 && lng === 0)) return;
+      if (localStorage.getItem('fleet360_driver_authenticated') !== 'true') return;
       initialGpsLoginSyncSentRef.current = true;
       try {
         localStorage.setItem(
@@ -1605,6 +1614,13 @@ export default function DriverTodayPage() {
 
     const sendLocationPingForSessionAndJobs = async () => {
       if (cancelled) return;
+      if (typeof window !== 'undefined') {
+        const isDriverAuthenticated = localStorage.getItem('fleet360_driver_authenticated') === 'true';
+        const hasSessionToken = Boolean(
+          localStorage.getItem('fleet360_session_token') || localStorage.getItem('fleet360_driver_token'),
+        );
+        if (!isDriverAuthenticated || !hasSessionToken) return;
+      }
       const currentTrackedJobs = trackedJobsRef.current;
 
       if (currentTrackedJobs.length > 0) {
@@ -2235,13 +2251,33 @@ export default function DriverTodayPage() {
   };
 
   const handleLogout = async () => {
+    try {
+      await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          action: 'DRIVER_LOGOUT',
+          vehicleId: vehicleId || undefined,
+          vehiclePlate: vehiclePlate || undefined,
+          driverName: driverName || undefined,
+        }),
+      });
+    } catch {}
     if (typeof window !== 'undefined') {
       const w = window as unknown as {
         Fleet360Android?: { stopBackgroundService?: () => void };
       };
       w.Fleet360Android?.stopBackgroundService?.();
+      localStorage.setItem('fleet360_driver_tracking_active', 'false');
       localStorage.removeItem('fleet360_session_token');
+      localStorage.removeItem('fleet360_driver_token');
+      localStorage.removeItem('fleet360_tracked_vehicle_id');
       localStorage.removeItem('fleet360_active_vehicle');
+      localStorage.removeItem('fleet360_driver_vehicle_id');
+      localStorage.removeItem('fleet360_driver_vehicle_plate');
+      localStorage.removeItem('fleet360_driver_vehicle_code');
+      localStorage.removeItem('fleet360_last_known_coords');
       localStorage.removeItem('fleet360_driver_authenticated');
       window.dispatchEvent(new Event('fleet360_vehicle_changed'));
     }

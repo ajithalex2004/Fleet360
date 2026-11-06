@@ -61,10 +61,18 @@ export function DriverTrackingProvider({ children }: { children: React.ReactNode
   const lastCoordsRef = useRef<{ lat: number; lng: number; heading: number; accuracy: number } | null>(null);
   const isPingingRef = useRef(false);
 
-  // Resolves the vehicle to track immediately upon login
+  // Resolves the vehicle to track ONLY when the driver is actively logged in
   const getTrackableVehicle = useCallback(() => {
     if (typeof window === 'undefined') return null;
     try {
+      const isDriverAuthenticated = localStorage.getItem('fleet360_driver_authenticated') === 'true';
+      const hasSessionToken = Boolean(
+        localStorage.getItem('fleet360_session_token') || localStorage.getItem('fleet360_driver_token'),
+      );
+      if (!isDriverAuthenticated || !hasSessionToken) {
+        return null;
+      }
+
       const explicitlyDisabled = localStorage.getItem('fleet360_driver_tracking_active') === 'false';
       if (explicitlyDisabled) return null;
 

@@ -7,6 +7,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import {
   updateDrayageJobExecutionStatus,
   recordDrayageDriverLocationPing,
+  recordDrayageDriverLogout,
   submitJobPodEvidence,
   sendDispatchChatMessage,
   acknowledgeDrayageAlert,
@@ -143,7 +144,35 @@ export async function POST(
       });
     }
 
-    // 1c. Immediate Login GPS + 1-Minute Background Telemetry Ping (Login -> Logout)
+    // 1c. Driver Logout — immediately end active shift & clear recent mobile pings so status becomes Switched Off
+    if (action === 'DRIVER_LOGOUT') {
+      const sessionCtx = await requireDriverSession(req).catch(() => null);
+      const sessionDriverId =
+        sessionCtx && !(sessionCtx instanceof NextResponse) ? sessionCtx.userId : null;
+      const resolvedDriverId = sessionDriverId || (body.driverId ? String(body.driverId) : null);
+      const cookieVehicleId = req.cookies.get('xl-driver-vehicle-id')?.value || null;
+
+      const logoutRes = await withTenantRls(prisma, tenantId, async (tx) => {
+        return recordDrayageDriverLogout(tx, {
+          tenantId,
+          driverId: resolvedDriverId,
+          driverName: body.driverName ? String(body.driverName) : null,
+          vehicleId: body.vehicleId ? String(body.vehicleId) : cookieVehicleId,
+          vehiclePlate: body.vehiclePlate ? String(body.vehiclePlate) : null,
+        });
+      });
+      emitDrayageEvent(tenantId, {
+        type: 'telemetry_ping',
+        action: 'driver_logout',
+        jobId,
+      });
+      return NextResponse.json({
+        success: true,
+        ...logoutRes,
+      });
+    }
+
+    // 1d. Immediate Login GPS + 1-Minute Background Telemetry Ping (Login -> Logout)
     if (action === 'LOCATION_PING') {
       const lat = body.latitude != null ? Number(body.latitude) : NaN;
       const lng = body.longitude != null ? Number(body.longitude) : NaN;

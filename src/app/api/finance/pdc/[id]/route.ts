@@ -67,14 +67,48 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
-      // Each statement above targets `WHERE id::text=$1`: narrow it to the tenant.
-
       sqlParams.push(tenantId);
-
       sql = sql.replace('WHERE id::text=$1', () => `WHERE id::text=$1 AND tenant_id=$${sqlParams.length}`);
 
       const [row] = await tx.$queryRawUnsafe<PdcRow[]>(sql, ...sqlParams).catch(() => [] as PdcRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+
+      if (action === 'clear') {
+        const linkedInvoiceId = row.linked_invoice_id ?? row.invoice_id;
+        const chequeAmount = Number(row.amount ?? 0);
+        if (linkedInvoiceId && chequeAmount > 0) {
+          await tx.$executeRawUnsafe('SAVEPOINT pdc_clear_payment').catch(() => {});
+          try {
+            await tx.$executeRawUnsafe(
+              `INSERT INTO finance_payments
+                 (id, tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
+               VALUES (gen_random_uuid(), $1, $2::uuid, $3::numeric, CURRENT_DATE, 'CHEQUE', $4, $5)`,
+              tenantId,
+              String(linkedInvoiceId),
+              chequeAmount,
+              String(row.cheque_no ?? row.cheque_number ?? 'PDC'),
+              `PDC Cheque cleared (${row.cheque_no ?? row.cheque_number ?? params.id})`,
+            );
+            await tx.$executeRawUnsafe(
+              `UPDATE finance_invoices
+                  SET paid_amount = LEAST(total_amount, COALESCE(paid_amount, 0) + $1::numeric),
+                      payment_status = CASE
+                        WHEN COALESCE(paid_amount, 0) + $1::numeric >= total_amount THEN 'PAID'
+                        ELSE 'PARTIALLY_PAID'
+                      END,
+                      updated_at = NOW()
+                WHERE id::text = $2 AND tenant_id = $3`,
+              chequeAmount,
+              String(linkedInvoiceId),
+              tenantId,
+            );
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT pdc_clear_payment').catch(() => {});
+          } catch {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT pdc_clear_payment').catch(() => {});
+          }
+        }
+      }
+
       return NextResponse.json(row);
   });
 }
@@ -96,4 +130,3 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ ok: true });
   });
 }
-

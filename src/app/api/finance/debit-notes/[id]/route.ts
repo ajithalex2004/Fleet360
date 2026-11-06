@@ -64,7 +64,16 @@ export async function PATCH(
       const now    = new Date().toISOString();
 
       const [current] = await tx.$queryRawUnsafe<
-        (Row & { status: string; total_amount: string; applied_amount: string; tenant_id: string })[]
+        (Row & {
+          status: string;
+          total_amount: string;
+          subtotal: string;
+          vat_amount: string;
+          applied_amount: string;
+          original_payable_id?: string | null;
+          original_invoice_id?: string | null;
+          tenant_id: string;
+        })[]
       >(
         `SELECT * FROM finance_debit_notes WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
@@ -90,7 +99,7 @@ export async function PATCH(
         if (current.status !== 'ISSUED') {
           return NextResponse.json({ error: 'Only ISSUED debit notes can be applied' }, { status: 400 });
         }
-        const applyAmount = parseFloat(body.applyAmount ?? String(current.total_amount ?? 0));
+        const applyAmount = parseFloat(body.applyAmount ?? body.appliedAmount ?? String(current.total_amount ?? 0));
         const newApplied  = parseFloat(String(current.applied_amount ?? 0)) + applyAmount;
         const total       = parseFloat(String(current.total_amount ?? 0));
         const newStatus   = newApplied >= total ? 'APPLIED' : 'ISSUED';
@@ -100,6 +109,33 @@ export async function PATCH(
             WHERE id::text=$4 AND tenant_id=$5`,
           newApplied, newStatus, now, params.id, tenantId,
         );
+
+        const targetPayableId = body.appliedToPayableId ?? current.original_payable_id;
+        const targetInvoiceId = body.appliedToInvoiceId ?? current.original_invoice_id;
+
+        if (targetPayableId) {
+          await tx.$executeRawUnsafe(
+            `UPDATE finance_payables
+                SET paid_amount = LEAST(total_amount, COALESCE(paid_amount, 0) + $1::numeric),
+                    payment_status = CASE WHEN COALESCE(paid_amount, 0) + $1::numeric >= total_amount THEN 'PAID' ELSE 'PARTIAL' END,
+                    updated_at = NOW()
+              WHERE id::text = $2 AND tenant_id = $3`,
+            applyAmount, String(targetPayableId), tenantId,
+          ).catch(() => {});
+        } else if (targetInvoiceId) {
+          const ratio = total > 0 ? applyAmount / total : 1;
+          const addSubtotal = Math.round(parseFloat(String(current.subtotal ?? 0)) * ratio * 100) / 100;
+          const addVat = Math.round(parseFloat(String(current.vat_amount ?? 0)) * ratio * 100) / 100;
+          await tx.$executeRawUnsafe(
+            `UPDATE finance_invoices
+                SET total_amount = total_amount + $1::numeric,
+                    subtotal = subtotal + $2::numeric,
+                    vat_amount = vat_amount + $3::numeric,
+                    updated_at = NOW()
+              WHERE id::text = $4 AND tenant_id = $5`,
+            applyAmount, addSubtotal, addVat, String(targetInvoiceId), tenantId,
+          ).catch(() => {});
+        }
       } else if (action === 'void') {
         if (current.status === 'APPLIED') {
           return NextResponse.json({ error: 'Cannot void a fully-applied debit note' }, { status: 400 });
@@ -178,4 +214,3 @@ export async function DELETE(
       return NextResponse.json({ deleted: true });
   });
 }
-

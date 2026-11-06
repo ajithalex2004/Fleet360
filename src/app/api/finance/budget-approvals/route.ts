@@ -6,17 +6,63 @@ export const dynamic = 'force-dynamic';
  * Departments submit → Finance Manager reviews → CFO approves for large budgets
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
-// A request runs no DDL: the runtime role may not create tables, and the
-// failed statement aborted the request's transaction, so every query after
-// it failed too.
 
 function nextSubmissionNo(year: number, count: number): string {
   return `BUDG-${year}-${String(count + 1).padStart(3, '0')}`;
+}
+
+async function syncApprovedBudgetLines(
+  tx: TxClient,
+  tenantId: string,
+  row: Record<string, unknown>,
+) {
+  const fiscalYear = Number(row.fiscal_year ?? new Date().getFullYear());
+  const department = String(row.department ?? 'GENERAL').toUpperCase();
+  const lines = Array.isArray(row.line_items) ? (row.line_items as Array<Record<string, unknown>>) : [];
+
+  await tx.$executeRawUnsafe('SAVEPOINT sync_approved_budgets').catch(() => {});
+  try {
+    if (lines.length > 0) {
+      for (const item of lines) {
+        const category = String(item.category ?? item.accountCode ?? department).toUpperCase();
+        const amount = Number(item.amount ?? item.budgetAmount ?? 0);
+        if (!(amount > 0)) continue;
+        await tx.financeBudget.create({
+          data: {
+            tenantId,
+            category,
+            year: fiscalYear,
+            month: item.month ? Number(item.month) : null,
+            budgetAmount: amount,
+            actualAmount: 0,
+            notes: String(item.description ?? item.notes ?? `Approved submission ${row.submission_no ?? ''}`),
+          },
+        }).catch(() => {});
+      }
+    } else {
+      const totalApproved = Number(row.total_approved ?? row.total_requested ?? 0);
+      if (totalApproved > 0) {
+        await tx.financeBudget.create({
+          data: {
+            tenantId,
+            category: department,
+            year: fiscalYear,
+            month: null,
+            budgetAmount: totalApproved,
+            actualAmount: 0,
+            notes: `Approved budget submission ${row.submission_no ?? ''}`,
+          },
+        }).catch(() => {});
+      }
+    }
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT sync_approved_budgets').catch(() => {});
+  } catch {
+    await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sync_approved_budgets').catch(() => {});
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -82,7 +128,6 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
 
       if (body.action === 'submit') {
-        // Dept head submits draft for FM review
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
           `UPDATE finance_budget_submissions
            SET status='SUBMITTED', submitted_at=NOW(), updated_at=NOW()
@@ -98,8 +143,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(row ?? {});
       }
 
+      if (body.action === 'approve') {
+        const { submissionId, notes, approvedAmount, reviewedBy } = body;
+        const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `UPDATE finance_budget_submissions
+           SET status='APPROVED', fm_reviewed_at=NOW(), fm_reviewed_by=$2, fm_notes=$3,
+               total_approved=COALESCE($4,total_requested), updated_at=NOW()
+           WHERE id::text=$1 AND tenant_id=$5 RETURNING *`,
+          submissionId, reviewedBy ?? 'Finance Manager', notes ?? null, approvedAmount ?? null, tenantId
+        ).catch(()=>[]);
+        if (row) {
+          await syncApprovedBudgetLines(tx, tenantId, row);
+        }
+        return NextResponse.json(row ?? {});
+      }
+
       if (body.action === 'fm_review') {
-        // FM approves → CFO_REVIEW (if > 500k) or APPROVED; or rejects / requests revision
         const { submissionId, decision, notes, approvedAmount, reviewedBy } = body;
         let newStatus = 'CFO_REVIEW';
         const [current] = await tx.$queryRawUnsafe<{total_requested: string}[]>(
@@ -130,6 +189,9 @@ export async function POST(req: NextRequest) {
             notes ?? `FM ${decision}D budget`,
             `FM_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`, tenantId
           ).catch(()=>{});
+          if (newStatus === 'APPROVED') {
+            await syncApprovedBudgetLines(tx, tenantId, row);
+          }
         }
         return NextResponse.json(row ?? {});
       }
@@ -152,6 +214,9 @@ export async function POST(req: NextRequest) {
             notes ?? `CFO ${decision}D budget`,
             `CFO_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`, tenantId
           ).catch(()=>{});
+          if (newStatus === 'APPROVED') {
+            await syncApprovedBudgetLines(tx, tenantId, row);
+          }
         }
         return NextResponse.json(row ?? {});
       }
@@ -205,4 +270,3 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true });
   });
 }
-

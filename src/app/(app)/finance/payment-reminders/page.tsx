@@ -95,8 +95,10 @@ function ScheduleModal({
               <select value={form.module_filter ?? ''} onChange={e => set('module_filter', e.target.value || null)}
                 className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                 <option value="">All Modules</option>
-                <option value="LEASE">Lease</option>
+                <option value="LEASING">Leasing</option>
                 <option value="RENTAL">Rental</option>
+                <option value="LOGISTICS">Logistics</option>
+                <option value="BUS_OPERATIONS">Bus Operations</option>
                 <option value="GENERAL">General</option>
               </select>
             </div>
@@ -246,7 +248,6 @@ export default function PaymentRemindersPage() {
       ) : (
         <div className="space-y-3">
           {schedules.map(sch => {
-            const trigLabel = TRIGGER_LABEL[sch.trigger_type] ?? sch.trigger_type;
             const daysLabel = sch.trigger_type === 'ON_DUE' ? 'On due date' : `${sch.trigger_days} day(s) ${sch.trigger_type === 'BEFORE_DUE' ? 'before' : 'after'}`;
             return (
               <div key={sch.id} className={`bg-[var(--bg-surface)]/60 border rounded-2xl p-5 transition-all ${sch.is_active ? 'border-[var(--border-subtle)]' : 'border-[var(--border-subtle)] opacity-60'}`}>

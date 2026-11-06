@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Plus,
@@ -14,6 +15,7 @@ import {
   Edit2,
   Trash2,
   RotateCcw,
+  Wrench,
 } from 'lucide-react';
 
 export interface NuiReason {
@@ -70,22 +72,34 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function AdminNuiReasonMasterPage() {
+export function NuiReasonMasterView({ scope = 'ALL' }: { scope?: 'ALL' | 'MAINTENANCE' }) {
+  const isMaintenanceOnly = scope === 'MAINTENANCE';
+  const apiBase = isMaintenanceOnly ? '/api/fleet/nui-reasons' : '/api/admin/nui-reasons';
+
   const [reasons, setReasons] = useState<NuiReason[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState('ALL_TYPES');
+  const [selectedType, setSelectedType] = useState(isMaintenanceOnly ? 'MAINTENANCE' : 'ALL_TYPES');
   const [impactFilter, setImpactFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   // Modals
   const [showModal, setShowModal] = useState(false);
   const [editingReason, setEditingReason] = useState<NuiReason | null>(null);
-  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [formData, setFormData] = useState({
+    ...EMPTY_FORM,
+    reasonType: isMaintenanceOnly ? 'MAINTENANCE' : 'TRANSFER',
+  });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isMaintenanceOnly) {
+      setSelectedType('MAINTENANCE');
+    }
+  }, [isMaintenanceOnly]);
 
   const fetchReasons = useCallback(async () => {
     setLoading(true);
@@ -94,32 +108,39 @@ export default function AdminNuiReasonMasterPage() {
       const params = new URLSearchParams();
       params.set('activeOnly', 'false');
       if (search) params.set('search', search);
-      if (selectedType !== 'ALL_TYPES') params.set('type', selectedType);
+      const effectiveType = isMaintenanceOnly ? 'MAINTENANCE' : selectedType;
+      if (effectiveType !== 'ALL_TYPES') params.set('type', effectiveType);
       if (impactFilter) params.set('impact', impactFilter);
 
-      const res = await fetch(`/api/admin/nui-reasons?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed to load NUI reasons from Admin API');
+      const res = await fetch(`${apiBase}?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load NUI reasons');
       const json = await res.json();
-      setReasons(json.data || []);
+      const rawItems: NuiReason[] = Array.isArray(json.data) ? json.data : [];
+      setReasons(
+        isMaintenanceOnly
+          ? rawItems.filter((r) => r.reasonType === 'MAINTENANCE')
+          : rawItems,
+      );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  }, [search, selectedType, impactFilter]);
+  }, [apiBase, isMaintenanceOnly, search, selectedType, impactFilter]);
 
   useEffect(() => {
     fetchReasons();
   }, [fetchReasons]);
 
-  // Client filtering for active status
+  // Client filtering for active status (and strict maintenance scope when opened from Maintenance)
   const filteredReasons = useMemo(() => {
     return reasons.filter((r) => {
+      if (isMaintenanceOnly && r.reasonType !== 'MAINTENANCE') return false;
       if (statusFilter === 'ACTIVE' && !r.isActive) return false;
       if (statusFilter === 'INACTIVE' && r.isActive) return false;
       return true;
     });
-  }, [reasons, statusFilter]);
+  }, [reasons, statusFilter, isMaintenanceOnly]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -129,14 +150,19 @@ export default function AdminNuiReasonMasterPage() {
     const transfer = reasons.filter((r) => r.reasonType === 'TRANSFER' || r.reasonType === 'ALL').length;
     const maintenance = reasons.filter((r) => r.reasonType === 'MAINTENANCE').length;
     const allocation = reasons.filter((r) => r.reasonType === 'ALLOCATION').length;
-    return { total, active, billable, transfer, maintenance, allocation };
+    const criticalOrHigh = reasons.filter((r) => r.impactLevel === 'CRITICAL' || r.impactLevel === 'HIGH').length;
+    return { total, active, billable, transfer, maintenance, allocation, criticalOrHigh };
   }, [reasons]);
 
   const openCreate = () => {
     setEditingReason(null);
     setFormData({
       ...EMPTY_FORM,
-      reasonType: selectedType !== 'ALL_TYPES' ? selectedType : 'TRANSFER',
+      reasonType: isMaintenanceOnly
+        ? 'MAINTENANCE'
+        : selectedType !== 'ALL_TYPES'
+        ? selectedType
+        : 'TRANSFER',
     });
     setFormError('');
     setShowModal(true);
@@ -147,7 +173,7 @@ export default function AdminNuiReasonMasterPage() {
     setFormData({
       code: r.code,
       name: r.name,
-      reasonType: r.reasonType,
+      reasonType: isMaintenanceOnly ? 'MAINTENANCE' : r.reasonType,
       description: r.description || '',
       impactLevel: r.impactLevel || 'MEDIUM',
       isBillable: r.isBillable,
@@ -161,32 +187,38 @@ export default function AdminNuiReasonMasterPage() {
   const handleSave = async () => {
     setFormError('');
     if (!formData.code.trim()) {
-      setFormError('Reason code is required (e.g. TR-REBAL)');
+      setFormError(
+        isMaintenanceOnly
+          ? 'Reason code is required (e.g. MNT-PREV)'
+          : 'Reason code is required (e.g. TR-REBAL)',
+      );
       return;
     }
     if (!formData.name.trim()) {
       setFormError('Reason name is required');
       return;
     }
+    const payload = {
+      ...formData,
+      reasonType: isMaintenanceOnly ? 'MAINTENANCE' : formData.reasonType,
+    };
     setSaving(true);
     try {
       if (editingReason) {
-        // Update
-        const res = await fetch(`/api/admin/nui-reasons/${editingReason.id}`, {
+        const res = await fetch(`${apiBase}/${editingReason.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.message || 'Failed to update reason');
         }
       } else {
-        // Create
-        const res = await fetch('/api/admin/nui-reasons', {
+        const res = await fetch(apiBase, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -205,7 +237,7 @@ export default function AdminNuiReasonMasterPage() {
   const handleToggleActive = async (r: NuiReason) => {
     setActionLoading(r.id);
     try {
-      const res = await fetch(`/api/admin/nui-reasons/${r.id}`, {
+      const res = await fetch(`${apiBase}/${r.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !r.isActive }),
@@ -223,7 +255,7 @@ export default function AdminNuiReasonMasterPage() {
     if (!confirm(`Are you sure you want to delete reason "${r.code} - ${r.name}"?`)) return;
     setActionLoading(r.id);
     try {
-      const res = await fetch(`/api/admin/nui-reasons/${r.id}`, { method: 'DELETE' });
+      const res = await fetch(`${apiBase}/${r.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       fetchReasons();
     } catch (err) {
@@ -242,22 +274,45 @@ export default function AdminNuiReasonMasterPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-3 mb-1">
             <Link
-              href="/admin"
+              href={isMaintenanceOnly ? '/maintenance' : '/admin'}
               className="text-xs text-[var(--text-muted)] hover:text-orange-400 flex items-center gap-1 transition-colors"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Administration
+              <ArrowLeft className="w-3.5 h-3.5" />{' '}
+              {isMaintenanceOnly ? 'Back to Maintenance' : 'Back to Administration'}
             </Link>
+            {isMaintenanceOnly && (
+              <>
+                <span className="text-[var(--text-faint)] text-xs">•</span>
+                <Link
+                  href="/admin/nui-reasons"
+                  className="text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors"
+                >
+                  Open Global Admin NUI Master →
+                </Link>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400">
-              <Tag className="w-5 h-5" />
+              {isMaintenanceOnly ? <Wrench className="w-5 h-5" /> : <Tag className="w-5 h-5" />}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[var(--text-main)]">NUI Reason Master</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">
+                  {isMaintenanceOnly ? 'Maintenance NUI Reason Master' : 'NUI Reason Master'}
+                </h1>
+                {isMaintenanceOnly && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    Maintenance Only
+                  </span>
+                )}
+              </div>
               <p className="text-[var(--text-muted)] text-xs mt-0.5">
-                Centralized Non-Utilization & Operational reason master across Transfers, Maintenance, Allocations & Compliance
+                {isMaintenanceOnly
+                  ? 'Workshop, preventive service, mechanical breakdown & maintenance off-road NUI reason codes'
+                  : 'Centralized Non-Utilization & Operational reason master across Transfers, Maintenance, Allocations & Compliance'}
               </p>
             </div>
           </div>
@@ -267,71 +322,101 @@ export default function AdminNuiReasonMasterPage() {
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-orange-500/20"
           >
-            <Plus className="w-4 h-4" /> Add Reason
+            <Plus className="w-4 h-4" />{' '}
+            {isMaintenanceOnly ? 'Add Maintenance Reason' : 'Add Reason'}
           </button>
         </div>
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-[var(--text-muted)] font-medium">Total Reasons</span>
-          <span className="text-2xl font-bold text-[var(--text-main)] mt-1">{stats.total}</span>
+      {isMaintenanceOnly ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-[var(--text-muted)] font-medium">Maintenance Reasons</span>
+            <span className="text-2xl font-bold text-amber-400 mt-1">{stats.maintenance}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Active
+            </span>
+            <span className="text-2xl font-bold text-emerald-400 mt-1">{stats.active}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-rose-400 font-medium flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> High / Critical Impact
+            </span>
+            <span className="text-2xl font-bold text-rose-400 mt-1">{stats.criticalOrHigh}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-blue-400 font-medium flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5" /> Billable
+            </span>
+            <span className="text-2xl font-bold text-blue-400 mt-1">{stats.billable}</span>
+          </div>
         </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Active
-          </span>
-          <span className="text-2xl font-bold text-emerald-400 mt-1">{stats.active}</span>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-[var(--text-muted)] font-medium">Total Reasons</span>
+            <span className="text-2xl font-bold text-[var(--text-main)] mt-1">{stats.total}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Active
+            </span>
+            <span className="text-2xl font-bold text-emerald-400 mt-1">{stats.active}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-blue-400 font-medium flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5" /> Billable
+            </span>
+            <span className="text-2xl font-bold text-blue-400 mt-1">{stats.billable}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-indigo-400 font-medium">Transfer</span>
+            <span className="text-2xl font-bold text-indigo-400 mt-1">{stats.transfer}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-amber-400 font-medium">Maintenance</span>
+            <span className="text-2xl font-bold text-amber-400 mt-1">{stats.maintenance}</span>
+          </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+            <span className="text-xs text-purple-400 font-medium">Allocation</span>
+            <span className="text-2xl font-bold text-purple-400 mt-1">{stats.allocation}</span>
+          </div>
         </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-blue-400 font-medium flex items-center gap-1.5">
-            <DollarSign className="w-3.5 h-3.5" /> Billable
-          </span>
-          <span className="text-2xl font-bold text-blue-400 mt-1">{stats.billable}</span>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-indigo-400 font-medium">Transfer</span>
-          <span className="text-2xl font-bold text-indigo-400 mt-1">{stats.transfer}</span>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-amber-400 font-medium">Maintenance</span>
-          <span className="text-2xl font-bold text-amber-400 mt-1">{stats.maintenance}</span>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
-          <span className="text-xs text-purple-400 font-medium">Allocation</span>
-          <span className="text-2xl font-bold text-purple-400 mt-1">{stats.allocation}</span>
-        </div>
-      </div>
+      )}
 
-      {/* Category Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[var(--border-subtle)] scrollbar-none">
-        {REASON_TYPES.map((t) => {
-          const isSelected = selectedType === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setSelectedType(t.key)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                isSelected
-                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                  : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
-              }`}
-            >
-              <span>{t.label}</span>
-              {t.key !== 'ALL_TYPES' && (
-                <span
-                  className={`px-1.5 py-0.2 rounded-md text-[10px] ${
-                    isSelected ? 'bg-black/20 text-white' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
-                  }`}
-                >
-                  {reasons.filter((r) => r.reasonType === t.key).length}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Category Tabs (Only shown in Global Admin View) */}
+      {!isMaintenanceOnly && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[var(--border-subtle)] scrollbar-none">
+          {REASON_TYPES.map((t) => {
+            const isSelected = selectedType === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setSelectedType(t.key)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
+                    : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
+                }`}
+              >
+                <span>{t.label}</span>
+                {t.key !== 'ALL_TYPES' && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-md text-[10px] ${
+                      isSelected ? 'bg-black/20 text-white' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
+                    }`}
+                  >
+                    {reasons.filter((r) => r.reasonType === t.key).length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Search and Filters Bar */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 flex flex-wrap gap-3 items-center justify-between shadow-sm">
@@ -340,7 +425,11 @@ export default function AdminNuiReasonMasterPage() {
             <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search by code, title, or description..."
+              placeholder={
+                isMaintenanceOnly
+                  ? 'Search maintenance NUI reasons by code, title, or description...'
+                  : 'Search by code, title, or description...'
+              }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl pl-9 pr-4 py-2 text-sm text-[var(--text-main)] w-full focus:outline-none focus:border-orange-500/50"
@@ -521,7 +610,13 @@ export default function AdminNuiReasonMasterPage() {
                   <Tag className="w-4 h-4" />
                 </div>
                 <h2 className="text-base font-semibold text-[var(--text-main)]">
-                  {editingReason ? 'Edit NUI Reason' : 'New NUI Reason'}
+                  {editingReason
+                    ? isMaintenanceOnly
+                      ? 'Edit Maintenance NUI Reason'
+                      : 'Edit NUI Reason'
+                    : isMaintenanceOnly
+                    ? 'New Maintenance NUI Reason'
+                    : 'New NUI Reason'}
                 </h2>
               </div>
               <button
@@ -548,7 +643,7 @@ export default function AdminNuiReasonMasterPage() {
                     value={formData.code}
                     onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
                     className={inputCls}
-                    placeholder="e.g. TR-BAL-01"
+                    placeholder={isMaintenanceOnly ? 'e.g. MNT-PREV-01' : 'e.g. TR-BAL-01'}
                     disabled={!!editingReason}
                   />
                   <p className="text-[10px] text-[var(--text-faint)] mt-1">Unique uppercase identifier</p>
@@ -557,18 +652,25 @@ export default function AdminNuiReasonMasterPage() {
                 <div>
                   <label className={labelCls}>Reason Type *</label>
                   <select
-                    value={formData.reasonType}
+                    value={isMaintenanceOnly ? 'MAINTENANCE' : formData.reasonType}
                     onChange={(e) => setFormData((f) => ({ ...f, reasonType: e.target.value }))}
                     className={inputCls}
+                    disabled={isMaintenanceOnly}
                   >
-                    <option value="TRANSFER">TRANSFER (Vehicle Relocation)</option>
-                    <option value="MAINTENANCE">MAINTENANCE (Workshop & Repairs)</option>
-                    <option value="ALLOCATION">ALLOCATION (Department / Unit)</option>
-                    <option value="ACCIDENT">ACCIDENT (Damage & Collision)</option>
-                    <option value="LEGAL">LEGAL (RTA Renewal, Impound)</option>
-                    <option value="IDLE">IDLE (Surplus, Standby)</option>
-                    <option value="DECOMMISSION">DECOMMISSION (Salvage, Retirement)</option>
-                    <option value="ALL">ALL (Universal / Multi-purpose)</option>
+                    {isMaintenanceOnly ? (
+                      <option value="MAINTENANCE">MAINTENANCE (Workshop & Repairs)</option>
+                    ) : (
+                      <>
+                        <option value="TRANSFER">TRANSFER (Vehicle Relocation)</option>
+                        <option value="MAINTENANCE">MAINTENANCE (Workshop & Repairs)</option>
+                        <option value="ALLOCATION">ALLOCATION (Department / Unit)</option>
+                        <option value="ACCIDENT">ACCIDENT (Damage & Collision)</option>
+                        <option value="LEGAL">LEGAL (RTA Renewal, Impound)</option>
+                        <option value="IDLE">IDLE (Surplus, Standby)</option>
+                        <option value="DECOMMISSION">DECOMMISSION (Salvage, Retirement)</option>
+                        <option value="ALL">ALL (Universal / Multi-purpose)</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -580,7 +682,11 @@ export default function AdminNuiReasonMasterPage() {
                   value={formData.name}
                   onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
                   className={inputCls}
-                  placeholder="e.g. Branch Fleet Rebalancing"
+                  placeholder={
+                    isMaintenanceOnly
+                      ? 'e.g. Preventive Periodic Maintenance'
+                      : 'e.g. Branch Fleet Rebalancing'
+                  }
                 />
               </div>
 
@@ -673,5 +779,20 @@ export default function AdminNuiReasonMasterPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function AdminNuiReasonMasterContent() {
+  const searchParams = useSearchParams();
+  const scopeParam = (searchParams?.get('scope') || searchParams?.get('type') || '').toUpperCase();
+  const scope = scopeParam === 'MAINTENANCE' ? 'MAINTENANCE' : 'ALL';
+  return <NuiReasonMasterView scope={scope} />;
+}
+
+export default function AdminNuiReasonMasterPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-[var(--text-faint)]">Loading NUI Reason Master...</div>}>
+      <AdminNuiReasonMasterContent />
+    </Suspense>
   );
 }

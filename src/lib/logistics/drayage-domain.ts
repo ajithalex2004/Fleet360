@@ -104,6 +104,8 @@ export interface MappedFleetVehicle {
   lat: number | null;
   lng: number | null;
   hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF';
   updatedAt?: string | null;
   assignedTripsCount?: number;
 }
@@ -1905,13 +1907,21 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         LIMIT 10`,
       tenantId,
     ).catch(() => []),
-    db.$queryRawUnsafe<Array<{ vehicle_id: string; latitude: number; longitude: number }>>(
-      `SELECT DISTINCT ON (vehicle_id) vehicle_id, latitude, longitude
+    db.$queryRawUnsafe<Array<{ vehicle_id: string; latitude: number; longitude: number; speed_kmh: number | null; occurred_at: Date | string | null }>>(
+      `SELECT DISTINCT ON (vehicle_id) vehicle_id, latitude, longitude, speed_kmh, occurred_at
          FROM fleet.bus_gps_pings
-        WHERE latitude IS NOT NULL
+        WHERE tenant_id = $1
+          AND latitude IS NOT NULL
           AND longitude IS NOT NULL
           AND NOT (ABS(latitude - 25.2048) < 0.0005 AND ABS(longitude - 55.2708) < 0.0005)
+          AND NOT (
+            COALESCE(source, '') = 'DRIVER_APP'
+            AND COALESCE(speed_kmh, 0) = 0
+            AND COALESCE(heading_deg, 0) = 0
+            AND EXTRACT(SECOND FROM occurred_at) = 0
+          )
         ORDER BY vehicle_id, occurred_at DESC`,
+      tenantId,
     ).catch(() => []),
   ]);
 
@@ -2271,13 +2281,25 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     return true;
   };
 
-  const latestPingByVehicleId = new Map<string, { lat: number; lng: number }>();
+  const latestPingByVehicleId = new Map<
+    string,
+    { lat: number; lng: number; speedKmh: number; occurredAt: Date | null; isRecent: boolean }
+  >();
+  const fifteenMinsAgoMs = Date.now() - 15 * 60 * 1000;
   for (const p of latestPingRows) {
     const vId = String(p.vehicle_id || '');
     const pLat = Number(p.latitude);
     const pLng = Number(p.longitude);
+    const occDate = p.occurred_at ? new Date(p.occurred_at) : null;
+    const isRecent = Boolean(occDate && !isNaN(occDate.getTime()) && occDate.getTime() >= fifteenMinsAgoMs);
     if (vId && isRealGpsCoord(pLat, pLng)) {
-      latestPingByVehicleId.set(vId, { lat: pLat, lng: pLng });
+      latestPingByVehicleId.set(vId, {
+        lat: pLat,
+        lng: pLng,
+        speedKmh: p.speed_kmh != null ? Number(p.speed_kmh) : 0,
+        occurredAt: occDate,
+        isRecent,
+      });
     }
   }
 
@@ -2344,6 +2366,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (activeJob && isRealGpsCoord(activeJob.currentLat, activeJob.currentLng)
         ? { lat: activeJob.currentLat!, lng: activeJob.currentLng! }
         : null);
+    const latestVehiclePing = latestPingByVehicleId.get(id);
+    const isDriverLoggedIn = Boolean(latestVehiclePing?.isRecent);
+    const gpsStatus: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' = isDriverLoggedIn
+      ? (latestVehiclePing?.speedKmh ?? 0) >= 3.5
+        ? 'MOVING'
+        : 'IDLE'
+      : 'SWITCHED_OFF';
     return {
       id,
       plateNumber: String(v.plate_number),
@@ -2364,8 +2393,17 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       activeJobCode: activeJob?.jobCode ?? null,
       lat: resolvedCoords ? resolvedCoords.lat : null,
       lng: resolvedCoords ? resolvedCoords.lng : null,
-      hasLiveGps: Boolean(resolvedCoords),
-      updatedAt: v.updated_at instanceof Date ? v.updated_at.toISOString() : (typeof v.updated_at === 'string' ? v.updated_at : null),
+      hasLiveGps: Boolean(resolvedCoords && isDriverLoggedIn),
+      isDriverLoggedIn,
+      gpsStatus,
+      updatedAt:
+        latestVehiclePing?.occurredAt instanceof Date && !isNaN(latestVehiclePing.occurredAt.getTime())
+          ? latestVehiclePing.occurredAt.toISOString()
+          : v.updated_at instanceof Date
+            ? v.updated_at.toISOString()
+            : typeof v.updated_at === 'string'
+              ? v.updated_at
+              : null,
       assignedTripsCount: tripsCountByVehicle.get(id) || 0,
     };
   });
@@ -5492,6 +5530,104 @@ export async function recordDrayageDriverLocationPing(
     longitude: lng,
     location: primaryResolvedLoc,
     recordedAt: new Date().toISOString(),
+  };
+}
+
+export async function recordDrayageDriverLogout(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    driverId?: string | null;
+    driverName?: string | null;
+    vehicleId?: string | null;
+    vehiclePlate?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const cleanDriverId = args.driverId ? String(args.driverId).trim() : '';
+  const cleanVehicleId = args.vehicleId ? String(args.vehicleId).trim() : '';
+  const cleanVehiclePlate = args.vehiclePlate ? String(args.vehiclePlate).trim() : '';
+
+  const vehicleIdSet = new Set<string>();
+  if (cleanVehicleId) vehicleIdSet.add(cleanVehicleId);
+
+  if (cleanVehicleId || cleanVehiclePlate || cleanDriverId) {
+    const matchedVehicles = await db
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM vehicles
+          WHERE tenant_id::text = $1
+            AND deleted_at IS NULL
+            AND (
+              ($2 <> '' AND id::text = $2)
+              OR ($3 <> '' AND (
+                UPPER(COALESCE(license_plate, '')) = UPPER($3)
+                OR UPPER(COALESCE(plate_number, '')) = UPPER($3)
+                OR UPPER(COALESCE(vehicle_code, '')) = UPPER($3)
+                OR UPPER(COALESCE(registration_no, '')) = UPPER($3)
+              ))
+              OR ($4 <> '' AND assigned_driver_id::text = $4)
+            )
+          LIMIT 5`,
+        args.tenantId,
+        cleanVehicleId,
+        cleanVehiclePlate,
+        cleanDriverId,
+      )
+      .catch(() => []);
+    for (const v of matchedVehicles) {
+      if (v.id) vehicleIdSet.add(String(v.id));
+    }
+  }
+
+  for (const vId of vehicleIdSet) {
+    await db
+      .$executeRawUnsafe(
+        `DELETE FROM fleet.bus_gps_pings
+          WHERE tenant_id = $1
+            AND vehicle_id = $2
+            AND COALESCE(source, 'DRIVER_APP') = 'DRIVER_APP'
+            AND occurred_at >= NOW() - INTERVAL '2 hours'`,
+        args.tenantId,
+        vId,
+      )
+      .catch(() => {});
+
+    await db
+      .$executeRawUnsafe(
+        `UPDATE driver_shifts
+            SET status = 'COMPLETED',
+                ended_at = NOW(),
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND vehicle_id = $2
+            AND status = 'ACTIVE'`,
+        args.tenantId,
+        vId,
+      )
+      .catch(() => {});
+  }
+
+  if (cleanDriverId) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE driver_shifts
+            SET status = 'COMPLETED',
+                ended_at = NOW(),
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND driver_id = $2
+            AND status = 'ACTIVE'`,
+        args.tenantId,
+        cleanDriverId,
+      )
+      .catch(() => {});
+  }
+
+  return {
+    ok: true,
+    loggedOutVehiclesCount: vehicleIdSet.size,
+    loggedOutAt: new Date().toISOString(),
   };
 }
 

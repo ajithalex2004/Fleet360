@@ -339,13 +339,13 @@ export async function postRechargeJournalBatch(
       currency: 'AED',
       costCentre: dept.costCenterCode,
       debit: {
-        code: '5145',
-        name: 'Staff Transport Expense',
+        code: '5210',
+        name: 'Driver Salaries & Wages',
         description: `Bus Operations Expense - ${dept.departmentName}`,
       },
       credit: {
-        code: '4500',
-        name: 'Bus Ops Cost Recovery',
+        code: '4400',
+        name: 'Staff Transport Revenue',
         description: `Staff Transport Internal Recharge Recovery ${summary.period}`,
       },
     });

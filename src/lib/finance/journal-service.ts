@@ -54,6 +54,10 @@ type RawQueryDb = {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 };
 
+export type JournalTx = RawQueryDb & {
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
+};
+
 const SUFFIX_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /**
@@ -87,6 +91,255 @@ export async function nextJournalNumber(
   return `JE-${ym}-${seq}-${suffix}`;
 }
 
+/**
+ * Maps legacy / header / placeholder GL codes to valid leaf accounts in the
+ * standard transport Chart of Accounts.
+ */
+export function normalizeLeafGlAccount(code: string, fallbackName: string): { code: string; name: string } {
+  const trimmed = String(code ?? '').trim();
+  switch (trimmed) {
+    case '2100':
+    case '2200-LOG':
+      return { code: '2110', name: 'Accounts Payable — Trade' };
+    case '2210-LOG':
+      return { code: '2120', name: 'Accrued Liabilities' };
+    case '5100':
+      return { code: '5120', name: 'Vehicle Maintenance & Repairs' };
+    case '5145':
+    case '5200':
+    case '5200-LOG':
+    case '5250-LOG':
+      return { code: '5210', name: 'Driver Salaries & Wages' };
+    case '5300':
+    case '5900':
+      return { code: '5390', name: 'Miscellaneous Admin Expenses' };
+    case '4500':
+      return { code: '4400', name: 'Staff Transport Revenue' };
+    default:
+      return { code: trimmed || '5390', name: fallbackName };
+  }
+}
+
+/**
+ * Checks if the target accounting period is locked (LOCKED or YEAR_END).
+ * Throws an Error with statusCode = 422 if locked.
+ */
+export async function assertPeriodOpen(
+  tx: { $queryRawUnsafe: Function },
+  tenantId: string,
+  dateStr?: string | Date | null,
+): Promise<void> {
+  const d = dateStr
+    ? typeof dateStr === 'string'
+      ? dateStr.slice(0, 10)
+      : new Date(dateStr).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  let rows: Array<{ status?: string; period_name?: string }> = [];
+  try {
+    rows = await tx.$queryRawUnsafe(
+      `SELECT status, period_name
+         FROM finance_periods
+        WHERE tenant_id = $1
+          AND $2::date BETWEEN start_date AND end_date
+          AND status IN ('LOCKED', 'YEAR_END')
+        LIMIT 1`,
+      tenantId,
+      d,
+    );
+  } catch {
+    try {
+      rows = await tx.$queryRawUnsafe(
+        `SELECT status, period_name
+           FROM finance_periods
+          WHERE tenant_id = $1
+            AND $2::date BETWEEN period_from AND period_to
+            AND status IN ('LOCKED', 'YEAR_END')
+          LIMIT 1`,
+        tenantId,
+        d,
+      );
+    } catch {
+      rows = [];
+    }
+  }
+
+  const locked = rows?.[0];
+  if (locked && (locked.status === 'LOCKED' || locked.status === 'YEAR_END')) {
+    const err = new Error(
+      `Accounting period "${locked.period_name || d}" is ${locked.status} and cannot accept new postings.`,
+    ) as Error & { statusCode?: number };
+    err.statusCode = 422;
+    throw err;
+  }
+}
+
+/**
+ * Posts a balanced multi-line operational journal entry directly with status='POSTED'
+ * inside the caller's transaction (idempotent on (tenant_id, idempotency_key)).
+ * Best-effort: returns null rather than aborting if underlying tables are unavailable.
+ */
+export async function postOperationalJournalEntry(
+  tx: JournalTx,
+  params: {
+    tenantId: string;
+    entryDate?: string;
+    narration: string;
+    reference: string;
+    sourceType: string;
+    sourceId: string;
+    currency?: string;
+    costCentre?: string;
+    preparedBy?: string;
+    idempotencyKey?: string;
+    lines: Array<{ code: string; name: string; description: string; debit: number; credit: number }>;
+  },
+): Promise<{ id: string; number: string; created: boolean } | null> {
+  try {
+    const validLines = (params.lines ?? [])
+      .map((l) => {
+        const norm = normalizeLeafGlAccount(l.code, l.name);
+        return {
+          code: norm.code,
+          name: norm.name,
+          description: l.description,
+          debit: Number((Number(l.debit) || 0).toFixed(2)),
+          credit: Number((Number(l.credit) || 0).toFixed(2)),
+        };
+      })
+      .filter((l) => l.debit > 0 || l.credit > 0);
+
+    if (validLines.length === 0) return null;
+
+    const totalDebit = Number(validLines.reduce((s, l) => s + l.debit, 0).toFixed(2));
+    const totalCredit = Number(validLines.reduce((s, l) => s + l.credit, 0).toFixed(2));
+    if (totalDebit <= 0 || Math.abs(totalDebit - totalCredit) > 0.01) {
+      return null;
+    }
+
+    const idempotencyKey = params.idempotencyKey ?? `${params.sourceType}:${params.sourceId}`;
+    const existing = await findExisting(
+      tx,
+      {
+        tenantId: params.tenantId,
+        narration: params.narration,
+        reference: params.reference,
+        sourceType: params.sourceType,
+        sourceId: params.sourceId,
+        amount: totalDebit,
+        currency: params.currency ?? 'AED',
+        debit: { code: validLines[0].code, name: validLines[0].name, description: validLines[0].description },
+        credit: { code: validLines[0].code, name: validLines[0].name, description: validLines[0].description },
+      },
+      idempotencyKey,
+    );
+    if (existing) {
+      return { id: existing.id, number: existing.je_number, created: false };
+    }
+
+    const dt = params.entryDate ? new Date(params.entryDate) : new Date();
+    const entryDateIso = (Number.isNaN(dt.getTime()) ? new Date() : dt).toISOString().slice(0, 10);
+    const dtObj = new Date(entryDateIso);
+    const costCentre = params.costCentre ?? 'GENERAL';
+    const currency = params.currency ?? 'AED';
+    const jeNumber = await nextJournalNumber(tx, params.tenantId, dtObj);
+
+    const [je] = await tx.$queryRawUnsafe<Array<{ id: string; je_number: string }>>(
+      `INSERT INTO finance_journal_entries (
+         je_number, entry_date, period_year, period_month,
+         narration, reference, source_type, source_id,
+         status, total_debit, total_credit, is_balanced,
+         prepared_by, approved_by, posted_by, approved_at, posted_at,
+         currency, tenant_id, idempotency_key
+       ) VALUES (
+         $1,$2::date,$3,$4,
+         $5,$6,$7,$8,
+         'POSTED',$9,$10,true,
+         $11,$11,$11,NOW(),NOW(),
+         $12,$13,$14
+       )
+       ON CONFLICT (tenant_id, idempotency_key)
+         WHERE idempotency_key IS NOT NULL AND deleted_at IS NULL AND status <> 'REVERSED'
+         DO NOTHING
+       RETURNING id::text, je_number`,
+      jeNumber,
+      entryDateIso,
+      dtObj.getUTCFullYear(),
+      dtObj.getUTCMonth() + 1,
+      params.narration,
+      params.reference,
+      params.sourceType,
+      params.sourceId,
+      totalDebit,
+      totalCredit,
+      params.preparedBy ?? 'system',
+      currency,
+      params.tenantId,
+      idempotencyKey,
+    );
+
+    if (!je) {
+      const winner = await findExisting(
+        tx,
+        {
+          tenantId: params.tenantId,
+          narration: params.narration,
+          reference: params.reference,
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          amount: totalDebit,
+          currency,
+          debit: { code: validLines[0].code, name: validLines[0].name, description: validLines[0].description },
+          credit: { code: validLines[0].code, name: validLines[0].name, description: validLines[0].description },
+        },
+        idempotencyKey,
+      );
+      if (winner) return { id: winner.id, number: winner.je_number, created: false };
+      return null;
+    }
+
+    for (let i = 0; i < validLines.length; i++) {
+      const l = validLines[i];
+      const normalBalance = l.debit >= l.credit ? 'DEBIT' : 'CREDIT';
+      await tx.$executeRawUnsafe(
+        `INSERT INTO finance_journal_lines
+           (journal_entry_id, line_number, account_code, account_name, description,
+            debit_amount, credit_amount, normal_balance, cost_centre, currency)
+         VALUES
+           ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        je.id,
+        i + 1,
+        l.code,
+        l.name,
+        l.description,
+        l.debit,
+        l.credit,
+        normalBalance,
+        costCentre,
+        currency,
+      );
+    }
+
+    await tx.$executeRawUnsafe(
+      `UPDATE finance_journal_entries je
+          SET total_debit  = t.debit,
+              total_credit = t.credit,
+              is_balanced  = (t.debit = t.credit AND t.lines > 0)
+         FROM (SELECT COALESCE(SUM(debit_amount), 0)  AS debit,
+                      COALESCE(SUM(credit_amount), 0) AS credit,
+                      COUNT(*)                        AS lines
+                 FROM finance_journal_lines
+                WHERE journal_entry_id = $1::uuid) t
+        WHERE je.id = $1::uuid`,
+      je.id,
+    );
+
+    return { id: je.id, number: je.je_number, created: true };
+  } catch {
+    return null;
+  }
+}
+
 // ── Service function ───────────────────────────────────────────────────────────
 
 /**
@@ -113,14 +366,14 @@ export async function nextJournalNumber(
  */
 export async function createDraftJournalEntry(
   p: CreateDraftJournalEntryParams,
+  existingTx?: JournalTx,
 ): Promise<DraftJournalEntryResult> {
   const idempotencyKey = p.idempotencyKey ?? `${p.sourceType}:${p.sourceId}`;
+  if (existingTx) {
+    return createInTransaction(existingTx, p, idempotencyKey);
+  }
   return prisma.$transaction((tx) => createInTransaction(tx as unknown as JournalTx, p, idempotencyKey));
 }
-
-type JournalTx = RawQueryDb & {
-  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
-};
 
 async function findExisting(
   tx: JournalTx,
@@ -193,6 +446,9 @@ async function createInTransaction(
     throw new Error(`createDraftJournalEntry: INSERT failed for reference=${p.reference}`);
   }
 
+  const debitNorm  = normalizeLeafGlAccount(p.debit.code, p.debit.name);
+  const creditNorm = normalizeLeafGlAccount(p.credit.code, p.credit.name);
+
   await tx.$executeRawUnsafe(
     `INSERT INTO finance_journal_lines
        (journal_entry_id, line_number, account_code, account_name, description,
@@ -201,19 +457,19 @@ async function createInTransaction(
        ($1::uuid,1,$2,$3,$4,$5,0,'DEBIT',$6,$7),
        ($1::uuid,2,$8,$9,$10,0,$5,'CREDIT',$6,$7)`,
     je.id,
-    p.debit.code,  p.debit.name,  p.debit.description,
+    debitNorm.code,  debitNorm.name,  p.debit.description,
     p.amount,
     costCentre,
     p.currency,
-    p.credit.code, p.credit.name, p.credit.description,
+    creditNorm.code, creditNorm.name, p.credit.description,
   );
 
   // Totals and balance from what was actually written.
   await tx.$executeRawUnsafe(
     `UPDATE finance_journal_entries je
         SET total_debit  = t.debit,
-            total_credit = t.credit,
-            is_balanced  = (t.debit = t.credit AND t.lines > 0)
+             total_credit = t.credit,
+             is_balanced  = (t.debit = t.credit AND t.lines > 0)
        FROM (SELECT COALESCE(SUM(debit_amount), 0)  AS debit,
                     COALESCE(SUM(credit_amount), 0) AS credit,
                     COUNT(*)                        AS lines

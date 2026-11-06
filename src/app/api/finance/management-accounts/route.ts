@@ -14,23 +14,23 @@ export const dynamic = 'force-dynamic';
  *   modules             Comma-separated module filter (RAC,LEASING,LOGISTICS,SCHOOL_BUS)
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 // ── Core query helpers (param-based so they can run for two periods) ──────────
 
-async function queryGL(from: string, to: string, tenantId: string | null) {
+async function queryGL(tx: TxClient, from: string, to: string, tenantId: string | null) {
   const params: unknown[] = [from, to];
   const tenantFilter = tenantId ? ` AND je.tenant_id = $3` : '';
   if (tenantId) params.push(tenantId);
 
-  const [glCheck] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ count: string }[]>)(
+  const [glCheck] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{ count: string }[]>)(
     `SELECT COUNT(*)::text AS count FROM finance_journal_entries
      WHERE status='POSTED' AND entry_date BETWEEN $1::date AND $2::date${tenantId ? ` AND tenant_id = $3` : ''}`,
     ...(tenantId ? [from, to, tenantId] : [from, to])
@@ -39,7 +39,7 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
 
   if (!hasGlData) return { revenues: null, expenses: null };
 
-  const revRows = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{
+  const revRows = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{
     account_code: string; account_name: string; account_subtype: string; amount: string
   }[]>)(
     `SELECT jl.account_code, c.account_name, COALESCE(c.account_subtype,'REVENUE') AS account_subtype,
@@ -54,7 +54,7 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
     ...params
   ).catch(() => []);
 
-  const expRows = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{
+  const expRows = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{
     account_code: string; account_name: string; account_subtype: string; amount: string
   }[]>)(
     `SELECT jl.account_code, c.account_name, COALESCE(c.account_subtype,'OPEX') AS account_subtype,
@@ -76,13 +76,14 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
 }
 
 async function getRevenue(
+  tx: TxClient,
   from: string, to: string, tenantId: string | null,
   activeModules: string[], glRevenues: { label: string; code: string; amount: number }[] | null
 ) {
   if (glRevenues !== null) return glRevenues;
 
   const q = async (sql: string, ...p: unknown[]): Promise<number> => {
-    const [r] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
+    const [r] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
     return toN(r?.t);
   };
 
@@ -92,17 +93,17 @@ async function getRevenue(
 
   const [racAmt, lsAmt, lgAmt, fiAmt] = await Promise.all([
     enabled('RAC')
-      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND COALESCE(status, 'ISSUED') NOT IN ('VOID','CANCELLED','DRAFT','CREDIT_NOTE') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     enabled('LEASING')
-      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM lease_invoices WHERE COALESCE(status, 'ISSUED') NOT IN ('VOID','CANCELLED','DRAFT','CREDIT_NOTE') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     enabled('LOGISTICS')
       ? q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     // Mirrored invoices of the modules summed from their own tables above are
     // left out here, or that revenue counted twice.
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${excludeMirrored([
+    q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED','VOID','CREDIT_NOTE') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${excludeMirrored([
       ...(enabled('RAC') ? ['RENTAL' as const] : []),
       ...(enabled('LEASING') ? ['LEASING' as const] : []),
       ...(enabled('LOGISTICS') ? ['LOGISTICS' as const] : []),
@@ -118,13 +119,14 @@ async function getRevenue(
 }
 
 async function getExpenses(
+  tx: TxClient,
   from: string, to: string, tenantId: string | null,
   glExpenses: { label: string; code: string; amount: number; subtype: string }[] | null
 ): Promise<{ label: string; code: string; amount: number; subtype: string }[]> {
   if (glExpenses !== null) return glExpenses;
 
   const q = async (sql: string, ...p: unknown[]): Promise<number> => {
-    const [r] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
+    const [r] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
     return toN(r?.t);
   };
   const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
@@ -139,7 +141,7 @@ async function getExpenses(
   // Depreciation comes from the fixed asset register, which counts only
   // where it is tenant-scoped (see fixedAssetsTenantScoped).
   let depAmt = 0;
-  if (tenantId && await fixedAssetsTenantScoped(prisma)) {
+  if (tenantId && await fixedAssetsTenantScoped(tx)) {
     depAmt = await q(
       `SELECT COALESCE(SUM(ds.depreciation),0)::text AS t
        FROM finance_depreciation_schedule ds
@@ -209,12 +211,12 @@ function computeIncomeSummary(revenues: RevLine[], expenses: ExpLine[]) {
 }
 
 async function buildPeriod(
-  from: string, to: string, tenantId: string | null, activeModules: string[]
+  tx: TxClient, from: string, to: string, tenantId: string | null, activeModules: string[]
 ) {
-  const gl = await queryGL(from, to, tenantId);
+  const gl = await queryGL(tx, from, to, tenantId);
   const [revenues, expenses] = await Promise.all([
-    getRevenue(from, to, tenantId, activeModules, gl.revenues ?? null),
-    getExpenses(from, to, tenantId, gl.expenses ?? null),
+    getRevenue(tx, from, to, tenantId, activeModules, gl.revenues ?? null),
+    getExpenses(tx, from, to, tenantId, gl.expenses ?? null),
   ]);
   return { revenues, expenses, source: gl.revenues !== null ? 'GL' : 'MODULE_DATA' as const };
 }
@@ -253,11 +255,11 @@ export async function GET(req: NextRequest) {
         const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
         const [racAmt, lsAmt, lgAmt, fiAmt, schoolAmt] = await Promise.all([
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND COALESCE(status, 'ISSUED') NOT IN ('VOID','CANCELLED','DRAFT','CREDIT_NOTE') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM lease_invoices WHERE COALESCE(status, 'ISSUED') NOT IN ('VOID','CANCELLED','DRAFT','CREDIT_NOTE') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
           q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%'${excludeMirrored(['RENTAL', 'LEASING', 'LOGISTICS'])} AND COALESCE(module, '') <> 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED','VOID','CREDIT_NOTE') AND invoice_number NOT LIKE 'SUB-%'${excludeMirrored(['RENTAL', 'LEASING', 'LOGISTICS'])} AND COALESCE(module, '') <> 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(subtotal),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED','VOID','CREDIT_NOTE') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
         ]);
 
         const modules = [
@@ -282,12 +284,12 @@ export async function GET(req: NextRequest) {
 
       // ── Income Statement ───────────────────────────────────────────────────────
       if (type === 'income_statement') {
-        const current = await buildPeriod(from, to, tenantId, activeModules);
+        const current = await buildPeriod(tx, from, to, tenantId, activeModules);
         const currentResult = computeIncomeSummary(current.revenues, current.expenses);
 
         let comparisonResult = null;
         if (compFrom && compTo) {
-          const comp = await buildPeriod(compFrom, compTo, tenantId, activeModules);
+          const comp = await buildPeriod(tx, compFrom, compTo, tenantId, activeModules);
           comparisonResult = computeIncomeSummary(comp.revenues, comp.expenses);
         }
 
@@ -304,7 +306,7 @@ export async function GET(req: NextRequest) {
       }
 
       // ── Cash Flow Statement (Indirect Method) ─────────────────────────────────
-      const current = await buildPeriod(from, to, tenantId, activeModules);
+      const current = await buildPeriod(tx, from, to, tenantId, activeModules);
       const revenues = current.revenues;
       const expenses = current.expenses;
       const totalRevenue  = revenues.reduce((s, r) => s + r.amount, 0);
@@ -320,10 +322,11 @@ export async function GET(req: NextRequest) {
       const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
       const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
-      // Working capital
-      const [arChange, expPayable] = await Promise.all([
-        q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+      // Working capital & customer collections (including paid lease_invoices)
+      const [arChange, expPayable, customerCollections] = await Promise.all([
+        q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED','VOID') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
         q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE status='PAID' AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
       ]);
 
       // CapEx & disposals: from the fixed asset register, only where it is
@@ -337,15 +340,23 @@ export async function GET(req: NextRequest) {
         ]);
       }
 
-      // Financing — pull from leasing (loan drawdowns and repayments)
-      const [leasingDrawdowns, leasingRepayments] = await Promise.all([
-        q(`SELECT COALESCE(SUM(total_contract_value),0)::text AS t FROM lease_contracts_v2 WHERE deleted_at IS NULL AND start_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
-        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE status='PAID' AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+      // Financing — compute only from actual 3100/2210 debt/equity GL lines (never customer lease contracts!)
+      const [newBorrowings, loanRepayments] = await Promise.all([
+        q(`SELECT COALESCE(SUM(jl.credit_amount),0)::text AS t
+             FROM finance_journal_lines jl
+             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
+            WHERE je.status='POSTED' AND je.entry_date BETWEEN $1::date AND $2::date
+              AND jl.account_code IN ('2210','3100')${tenantId ? ` AND je.tenant_id = $3` : ''}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(jl.debit_amount),0)::text AS t
+             FROM finance_journal_lines jl
+             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
+            WHERE je.status='POSTED' AND je.entry_date BETWEEN $1::date AND $2::date
+              AND jl.account_code IN ('2210')${tenantId ? ` AND je.tenant_id = $3` : ''}`, ...tp([from, to])),
       ]);
 
       const operatingCashFlow  = netProfit + depreciation - arChange + expPayable;
       const investingCashFlow  = disposalAmount - capexAmount;
-      const financingCashFlow  = leasingDrawdowns - leasingRepayments;
+      const financingCashFlow  = newBorrowings - loanRepayments;
       const netCashFlow        = operatingCashFlow + investingCashFlow + financingCashFlow;
 
       return NextResponse.json({
@@ -357,6 +368,7 @@ export async function GET(req: NextRequest) {
         operating: {
           netProfit:            r2(netProfit),
           addDepreciation:      r2(depreciation),
+          customerCollections:  r2(customerCollections),
           changeInReceivables:  r2(-arChange),
           changeInPayables:     r2(expPayable),
           netOperatingCashFlow: r2(operatingCashFlow),
@@ -367,8 +379,8 @@ export async function GET(req: NextRequest) {
           netInvestingCashFlow: r2(investingCashFlow),
         },
         financing: {
-          newBorrowings:        r2(leasingDrawdowns),
-          loanRepayments:       r2(-leasingRepayments),
+          newBorrowings:        r2(newBorrowings),
+          loanRepayments:       r2(-loanRepayments),
           dividendsPaid:        0,
           netFinancingCashFlow: r2(financingCashFlow),
         },
@@ -376,4 +388,3 @@ export async function GET(req: NextRequest) {
       });
   });
 }
-

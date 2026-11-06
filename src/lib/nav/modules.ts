@@ -534,7 +534,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'CAN-bus diagnostics',   href: '/fleet/diagnostics',    icon: Cpu,             group: 'Telematics & Health' },
       { label: 'Work orders',           href: '/fleet/work-orders',    icon: Wrench,          group: 'Maintenance' },
       { label: 'Predictive maintenance', href: '/fleet/intelligence',  icon: Brain,           group: 'Maintenance' },
-      { label: 'NUI Reason Master',     href: '/admin/nui-reasons',    icon: BookOpen,        group: 'Maintenance', navKey: 'nui-reasons' },
+      { label: 'NUI Reason Master',     href: '/fleet/nui-reasons',    icon: BookOpen,        group: 'Maintenance', navKey: 'nui-reasons' },
       { label: 'Insurance',             href: '/fleet/insurance',      icon: Shield,          group: 'Compliance & Costs' },
       { label: 'Documents',             href: '/fleet/documents',      icon: FileText,        group: 'Compliance & Costs' },
       { label: 'Hours of service',      href: '/fleet/hos',            icon: Clock,           group: 'Compliance & Costs' },
@@ -564,7 +564,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Breakdowns',          href: '/maintenance/breakdown',          icon: AlertTriangle },
       { label: 'SLA',                 href: '/maintenance/sla',                icon: TrendingUp },
       { label: 'Risk scores',         href: '/maintenance/risk',               icon: Gauge },
-      { label: 'NUI Reason Master',   href: '/admin/nui-reasons',              icon: BookOpen, navKey: 'nui-reasons' },
+      { label: 'NUI Reason Master',   href: '/fleet/nui-reasons',              icon: BookOpen, navKey: 'nui-reasons' },
       { label: 'Service configuration', href: '/admin/service-config',         icon: Sliders,  navKey: 'service-config' },
     ],
   },
@@ -755,6 +755,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Region, Department & Section', href: '/admin/hierarchy',       icon: FolderTree,      group: 'Organization & Masters', navKey: 'hierarchy' },
       { label: 'Departments',             href: '/admin/departments',           icon: FolderTree,      group: 'Organization & Masters', navKey: 'departments' },
       { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2,       group: 'Organization & Masters', navKey: 'branches' },
+      { label: 'NUI Reason Master',       href: '/admin/nui-reasons',           icon: BookOpen,        group: 'Organization & Masters', navKey: 'nui-reasons' },
 
       // ── Identity & Access (Tenant Admin) ──
       { label: 'Users',                   href: '/admin/users',                 icon: Users,           group: 'Identity & Access' },

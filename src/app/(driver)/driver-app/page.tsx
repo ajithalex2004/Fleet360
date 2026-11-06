@@ -474,9 +474,18 @@ export default function DriverAppLauncher() {
   const [otaStatus, setOtaStatus] = useState<OtaSyncStatus | null>(null);
   const [telemetryMode, setTelemetryMode] = useState<'NATIVE_FOREGROUND_SERVICE' | 'WAKE_LOCK_WEB_WATCH' | null>(null);
 
-  // Immediately warm up GPS on Login Screen mount so coordinates are ready at Login
+  // Activate GPS ONLY after the driver has logged in (never on the unauthenticated login screen)
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const isDriverLoggedIn =
+      phase === 'vehicle-odometer' ||
+      Boolean(activeVehicle) ||
+      localStorage.getItem('fleet360_driver_authenticated') === 'true';
+    if (!isDriverLoggedIn) {
+      loginCoordsRef.current = null;
+      return;
+    }
+
     try {
       const w = window as unknown as {
         Fleet360Android?: { getLastKnownLocationJson?: () => string };
@@ -550,7 +559,7 @@ export default function DriverAppLauncher() {
         } catch {}
       }
     };
-  }, []);
+  }, [phase, activeVehicle]);
 
   const captureImmediateLoginCoords = useCallback(async () => {
     if (typeof window !== 'undefined') {
@@ -1279,21 +1288,58 @@ export default function DriverAppLauncher() {
   };
 
   const handleSignOutVehicle = async () => {
+    const logoutVehicleId =
+      activeVehicle?.id ||
+      (typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_id') || '' : '');
+    const logoutVehiclePlate =
+      activeVehicle?.licensePlate ||
+      activeVehicle?.vehicleCode ||
+      (typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_plate') || '' : '');
+    const logoutToken =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('fleet360_session_token') ||
+          localStorage.getItem('fleet360_driver_token') ||
+          ''
+        : '';
+
     stopMobileTracking();
+    loginCoordsRef.current = null;
     setActiveVehicle(null);
     setSelectedVehicle(null);
     setCustomVehicleQuery('');
     setOdometerInput('');
     setDriverInfo(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (logoutToken) headers.Authorization = `Bearer ${logoutToken}`;
+      await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          action: 'DRIVER_LOGOUT',
+          vehicleId: logoutVehicleId || undefined,
+          vehiclePlate: logoutVehiclePlate || undefined,
+          driverName: driverInfo?.name || undefined,
+        }),
+      });
+    } catch {}
+
     if (typeof window !== 'undefined') {
       const w = window as unknown as {
         Fleet360Android?: { stopBackgroundService?: () => void };
       };
       w.Fleet360Android?.stopBackgroundService?.();
+      localStorage.setItem('fleet360_driver_tracking_active', 'false');
       localStorage.removeItem('fleet360_session_token');
-      localStorage.removeItem('fleet360_driver_tracking_active');
+      localStorage.removeItem('fleet360_driver_token');
       localStorage.removeItem('fleet360_tracked_vehicle_id');
       localStorage.removeItem('fleet360_active_vehicle');
+      localStorage.removeItem('fleet360_driver_vehicle_id');
+      localStorage.removeItem('fleet360_driver_vehicle_plate');
+      localStorage.removeItem('fleet360_driver_vehicle_code');
+      localStorage.removeItem('fleet360_last_known_coords');
       localStorage.removeItem('fleet360_start_odometer');
       localStorage.removeItem('fleet360_driver_authenticated');
       window.dispatchEvent(new Event('fleet360_vehicle_changed'));

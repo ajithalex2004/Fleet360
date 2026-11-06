@@ -33,6 +33,189 @@ function toDateOnly(v: Date | string | null | undefined): string {
   return new Date(v).toISOString().split('T')[0];
 }
 
+// ── Schema Sync & Dunning Settlement Helpers ──────────────────────────────────
+
+/**
+ * Best-effort sync of rows written into `finance.finance_payables` and
+ * `finance.finance_expenses` (used by maintenance consumers and legacy bridges)
+ * into `public.finance_payables` and `public.finance_expenses` (used by Finance APIs).
+ */
+export async function syncSchemaPayablesToPublic(
+  tx: { $queryRawUnsafe: Function; $executeRawUnsafe: Function },
+  tenantId: string,
+): Promise<void> {
+  try {
+    const [pState] = await tx.$queryRawUnsafe(
+      `SELECT to_regclass('finance.finance_payables') IS NOT NULL AS has_fin,
+              to_regclass('public.finance_payables') IS NOT NULL AS has_pub`,
+    );
+    if (pState?.has_fin && pState?.has_pub) {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO public.finance_payables
+           (id, created_at, updated_at, deleted_at, payable_number,
+            vendor_id, vendor_name, vendor_email, vendor_phone,
+            module, source_type, source_id, description, line_items,
+            subtotal, vat_amount, total_amount, paid_amount, currency,
+            issue_date, due_date, payment_status, status,
+            cost_centre, profit_centre, journal_entry_id,
+            prepared_by, approved_by, posted_by, approved_at, posted_at,
+            notes, tenant_id)
+         SELECT fp.id, fp.created_at, fp.updated_at, fp.deleted_at, fp.payable_number,
+                fp.vendor_id, fp.vendor_name, fp.vendor_email, fp.vendor_phone,
+                fp.module, fp.source_type, fp.source_id, fp.description, fp.line_items,
+                fp.subtotal, fp.vat_amount, fp.total_amount, fp.paid_amount, fp.currency,
+                fp.issue_date, fp.due_date, fp.payment_status, fp.status,
+                fp.cost_centre, fp.profit_centre, fp.journal_entry_id,
+                fp.prepared_by, fp.approved_by, fp.posted_by, fp.approved_at, fp.posted_at,
+                fp.notes, fp.tenant_id
+           FROM finance.finance_payables fp
+          WHERE fp.tenant_id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM public.finance_payables pp
+               WHERE pp.payable_number = fp.payable_number
+                  OR pp.id = fp.id
+            )
+         ON CONFLICT (payable_number) DO NOTHING`,
+        tenantId,
+      ).catch(() => {});
+
+      await tx.$executeRawUnsafe(
+        `UPDATE public.finance_payables pp
+            SET status = fp.status,
+                payment_status = fp.payment_status,
+                deleted_at = COALESCE(pp.deleted_at, fp.deleted_at),
+                updated_at = GREATEST(pp.updated_at, fp.updated_at)
+           FROM finance.finance_payables fp
+          WHERE fp.tenant_id = $1
+            AND pp.tenant_id = $1
+            AND pp.payable_number = fp.payable_number
+            AND (fp.status = 'VOID' OR fp.deleted_at IS NOT NULL)
+            AND pp.status <> 'VOID'`,
+        tenantId,
+      ).catch(() => {});
+    }
+  } catch {
+    // Best-effort: never abort caller's transaction
+  }
+
+  try {
+    const [eState] = await tx.$queryRawUnsafe(
+      `SELECT to_regclass('finance.finance_expenses') IS NOT NULL AS has_fin,
+              to_regclass('public.finance_expenses') IS NOT NULL AS has_pub`,
+    );
+    if (eState?.has_fin && eState?.has_pub) {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO public.finance_expenses
+           (id, created_at, updated_at, deleted_at, expense_no,
+            category, sub_category, description, amount, currency,
+            vat_amount, total_amount, expense_date, payment_method, reference_no,
+            status, vehicle_id, driver_id, cost_centre, profit_centre,
+            receipt_url, submitted_by, submitted_at, approved_by, approved_at,
+            rejected_by, rejected_at, rejection_reason, paid_at, notes, tenant_id)
+         SELECT fe.id, fe.created_at, fe.updated_at, fe.deleted_at, fe.expense_no,
+                fe.category, fe.sub_category, fe.description, fe.amount, fe.currency,
+                fe.vat_amount, fe.total_amount, fe.expense_date, fe.payment_method, fe.reference_no,
+                fe.status, fe.vehicle_id, fe.driver_id, fe.cost_centre, fe.profit_centre,
+                fe.receipt_url, fe.submitted_by, fe.submitted_at, fe.approved_by, fe.approved_at,
+                fe.rejected_by, fe.rejected_at, fe.rejection_reason, fe.paid_at, fe.notes, fe.tenant_id
+           FROM finance.finance_expenses fe
+          WHERE fe.tenant_id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM public.finance_expenses pe
+               WHERE pe.expense_no = fe.expense_no
+                  OR pe.id = fe.id
+            )
+         ON CONFLICT (expense_no) DO NOTHING`,
+        tenantId,
+      ).catch(() => {});
+    }
+  } catch {
+    // Best-effort: never abort caller's transaction
+  }
+}
+
+/**
+ * Transitions a settled LeaseInvoice's dunning state to 'SETTLED', suppresses
+ * pending dunning notices in the active cycle, and resolves any open collection cases.
+ */
+export async function resetInvoiceDunningOnSettlement(
+  tx: any,
+  tenantId: string,
+  invoiceId: string,
+  actor = 'system',
+): Promise<void> {
+  const db = tx ?? prisma;
+  try {
+    if (db.leaseInvoice?.findFirst) {
+      const inv = await db.leaseInvoice.findFirst({
+        where: { id: invoiceId, tenantId },
+        select: { id: true, currentDunningStage: true, currentDunningCycleId: true },
+      });
+      if (inv && inv.currentDunningStage && inv.currentDunningStage !== 'SETTLED') {
+        const now = new Date();
+        if (db.leaseDunningStageTransition?.create && inv.currentDunningCycleId) {
+          await db.leaseDunningStageTransition.create({
+            data: {
+              tenantId,
+              invoiceId: inv.id,
+              dunningCycleId: inv.currentDunningCycleId,
+              previousStage: inv.currentDunningStage,
+              newStage: 'SETTLED',
+              reason: 'settled',
+              transitionedBy: actor,
+              transitionedAt: now,
+              effectiveDaysPastDue: 0,
+              effectiveBalanceMinor: BigInt(0),
+            },
+          }).catch(() => {});
+        }
+        await db.leaseInvoice.update({
+          where: { id: inv.id },
+          data: {
+            currentDunningStage: 'SETTLED',
+            dunningStageUpdatedAt: now,
+          },
+        }).catch(() => {});
+        if (db.leaseDunningNotice?.updateMany && inv.currentDunningCycleId) {
+          await db.leaseDunningNotice.updateMany({
+            where: {
+              tenantId,
+              invoiceId: inv.id,
+              dunningCycleId: inv.currentDunningCycleId,
+              dispatchStatus: { in: ['PENDING', 'FAILED'] },
+            },
+            data: {
+              dispatchStatus: 'SUPPRESSED',
+              suppressedReason: 'SETTLED',
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch {
+    // Best-effort
+  }
+
+  try {
+    if (typeof db.$executeRawUnsafe === 'function') {
+      await db.$executeRawUnsafe(
+        `UPDATE finance_collection_cases
+            SET status = 'RESOLVED',
+                stage = 'SETTLED',
+                resolved_at = NOW(),
+                updated_at = NOW()
+          WHERE invoice_id::text = $1
+            AND tenant_id = $2
+            AND status NOT IN ('RESOLVED', 'CLOSED')`,
+        invoiceId,
+        tenantId,
+      ).catch(() => {});
+    }
+  } catch {
+    // Best-effort
+  }
+}
+
 // ── Canonical upsert interface ─────────────────────────────────────────────────
 
 export type ModuleLedgerParams = {
@@ -288,11 +471,14 @@ export async function mirrorLeaseInvoiceToFinance(
 /**
  * Post a completed/closed maintenance work order to Finance.
  *
- * Creates two Finance entries — both idempotent, both best-effort:
- *   1. AP payable (finance.finance_payables) — garage is a vendor, this is
- *      an expense liability, NOT revenue. Source lineage: MAINTENANCE_REQUEST.
- *   2. DRAFT journal entry — debit GL5100 (Maintenance Expense) /
- *      credit GL2100 (Accounts Payable / Accrued), cost_centre = PC-MAINTENANCE.
+ * Creates two Finance entries — both idempotent:
+ *   1. AP payable (finance.finance_payables and public.finance_payables) — garage
+ *      is a vendor, this is an expense liability, NOT revenue. Source lineage:
+ *      MAINTENANCE_REQUEST. Also supersedes any earlier provisional
+ *      MAINTENANCE_ESTIMATE / QUOTATION_APPROVAL payables for this MR so they do
+ *      not stack in AP totals.
+ *   2. DRAFT journal entry — debit GL5120 (Vehicle Maintenance & Repairs) /
+ *      credit GL2110 (Accounts Payable — Trade), cost_centre = PC-MAINTENANCE.
  *
  * Returns the IDs of both entries so the caller can write them back to the MR row.
  */
@@ -317,19 +503,47 @@ export async function mirrorMaintenanceToFinance(
   const cost = Number(req.actualCost ?? req.estimatedCost ?? 0);
   if (cost <= 0) return { mirrored: false, reason: 'no_billable_cost' };
 
-  const vatAmount  = parseFloat((cost * 0.05).toFixed(2));
-  const total      = parseFloat((cost + vatAmount).toFixed(2));
-  const garageName = req.Garage?.name ?? 'Workshop';
-  const garageId   = req.Garage?.id   ?? null;
-  const vehicleRef = req.Vehicle?.registrationNo ?? req.vehicleId ?? 'N/A';
+  const vatAmount   = parseFloat((cost * 0.05).toFixed(2));
+  const total       = parseFloat((cost + vatAmount).toFixed(2));
+  const garageName  = req.Garage?.name ?? 'Workshop';
+  const garageId    = req.Garage?.id   ?? null;
+  const vehicleRef  = req.Vehicle?.registrationNo ?? req.vehicleId ?? 'N/A';
   const workOrderNo = req.workOrderNo ?? req.id;
   const description = `Maintenance: ${req.maintenanceType ?? 'SERVICE'} — ${vehicleRef}`;
   const issueDate   = new Date().toISOString().slice(0, 10);
 
-  // Every failure propagates: the payable insert and the journal entry used
-  // to be caught and logged, so the work-order event was marked processed
-  // with nothing written. The consumer runs this in one transaction (the
-  // payable and the entry commit together) and retries on failure.
+  // ── 0. Supersede / void prior provisional accruals (estimate / quotation) ──
+  await prisma.$executeRawUnsafe(
+    `UPDATE finance.finance_payables
+        SET status = 'VOID',
+            payment_status = 'VOID',
+            notes = COALESCE(notes, '') || ' [Superseded by final MR payable ' || $1 || ']',
+            updated_at = NOW()
+      WHERE tenant_id = $2
+        AND status NOT IN ('PAID', 'PARTIALLY_PAID', 'VOID')
+        AND (
+          (source_type = 'MAINTENANCE_ESTIMATE' AND source_id = $1)
+          OR (source_type = 'QUOTATION_APPROVAL' AND description ILIKE '%' || $1 || '%')
+        )`,
+    req.id,
+    tenantId,
+  ).catch(() => {});
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE public.finance_payables
+        SET status = 'VOID',
+            payment_status = 'VOID',
+            notes = COALESCE(notes, '') || ' [Superseded by final MR payable ' || $1 || ']',
+            updated_at = NOW()
+      WHERE tenant_id = $2
+        AND status NOT IN ('PAID', 'PARTIALLY_PAID', 'VOID')
+        AND (
+          (source_type = 'MAINTENANCE_ESTIMATE' AND source_id = $1)
+          OR (source_type = 'QUOTATION_APPROVAL' AND description ILIKE '%' || $1 || '%')
+        )`,
+    req.id,
+    tenantId,
+  ).catch(() => {});
 
   // ── 1. AP Payable ─────────────────────────────────────────────────────────
   // Idempotent: skip if a payable already exists for this source_id.
@@ -341,6 +555,11 @@ export async function mirrorMaintenanceToFinance(
 
   let financePayableId = existingAP?.id;
   let payableNumber    = existingAP?.payable_number;
+
+  const lineItemsJson = JSON.stringify([{
+    description, qty: 1, unitPrice: cost, amount: cost,
+    vehicleRef, workOrderNo, sourceModule: 'MAINTENANCE',
+  }]);
 
   if (!financePayableId) {
     const ym  = issueDate.slice(0, 7).replace('-', '');
@@ -364,10 +583,7 @@ export async function mirrorMaintenanceToFinance(
       garageName,
       req.id,
       description,
-      JSON.stringify([{
-        description, qty: 1, unitPrice: cost, amount: cost,
-        vehicleRef, workOrderNo, sourceModule: 'MAINTENANCE',
-      }]),
+      lineItemsJson,
       cost, vatAmount, total,
       issueDate,
       actor,
@@ -375,6 +591,34 @@ export async function mirrorMaintenanceToFinance(
     );
 
     financePayableId = apRow?.id;
+  }
+
+  // Also ensure the row is mirrored in public.finance_payables for Finance AP APIs
+  if (payableNumber) {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.finance_payables
+         (payable_number, vendor_id, vendor_name, module,
+          source_type, source_id, description, line_items,
+          subtotal, vat_amount, total_amount, currency,
+          issue_date, cost_centre, profit_centre,
+          status, payment_status, prepared_by, tenant_id)
+       VALUES ($1,$2,$3,'MAINTENANCE',
+               'MAINTENANCE_REQUEST',$4,$5,$6::jsonb,
+               $7,$8,$9,'AED',
+               $10::date,'PC-MAINTENANCE','PC-MAINTENANCE',
+               'DRAFT','UNPAID',$11,$12)
+       ON CONFLICT (payable_number) DO NOTHING`,
+      payableNumber,
+      garageId,
+      garageName,
+      req.id,
+      description,
+      lineItemsJson,
+      cost, vatAmount, total,
+      issueDate,
+      actor,
+      tenantId,
+    ).catch(() => {});
   }
 
   // ── 2. DRAFT Journal Entry ────────────────────────────────────────────────
@@ -400,8 +644,8 @@ export async function mirrorMaintenanceToFinance(
       preparedBy:  actor,
       costCentre:  'PC-MAINTENANCE',
       notes:       `Auto-generated on MR ${workOrderNo} completion. Vehicle: ${vehicleRef}`,
-      debit:  { code: '5100', name: 'Maintenance Expense',             description },
-      credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual: ${workOrderNo}` },
+      debit:  { code: '5120', name: 'Vehicle Maintenance & Repairs', description },
+      credit: { code: '2110', name: 'Accounts Payable — Trade',      description: `Accrual: ${workOrderNo}` },
     });
     journalEntryId = je.id;
     journalEntryNo = je.number;

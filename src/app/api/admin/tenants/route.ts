@@ -19,12 +19,6 @@ import {
   type AttachmentUpload,
 } from '@/lib/tenant-attachments';
 
-/**
- * Modules a tenant created here gets when the request names none. Pinned:
- * the permission module list (MODULES in @/lib/permissions) grew with the
- * authorization policy, and that must not change what new tenants get.
- * normalizeTenantModules adds the always-on modules and the system keys.
- */
 const DEFAULT_TENANT_MODULES = [
   'leasing', 'rental', 'bus-ops', 'fleet', 'maintenance', 'finance',
   'driver-mgmt', 'compliance', 'reports',
@@ -69,8 +63,6 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() ?? '';
     const limit  = Math.min(parseInt(searchParams.get('limit') ?? '200'), 200);
 
-    // Non-super-admins (e.g. finance branch P&L, tenant pickers) only see
-    // their own tenant.
     const tenants = (isSuperAdmin(req.headers) || Boolean(req.headers.get('x-impersonated-by')?.trim()))
       ? await getTenants(search, limit)
       : await withPlatformAdmin(prisma, (tx) => tx.tenant.findMany({
@@ -78,10 +70,11 @@ export async function GET(req: NextRequest) {
           include: { modules: true, _count: { select: { userTenants: true, roles: true } } },
         }));
     return NextResponse.json(tenants, {
-      // private: the list depends on the caller, so shared caches must not reuse it.
       headers: { 'Cache-Control': 'private, max-age=30' },
     });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }
 
 async function handlePOST(req: NextRequest) {
@@ -91,8 +84,6 @@ async function handlePOST(req: NextRequest) {
   }
   let stored: StoredFile[] = [];
   try {
-    // JSON, or multipart/form-data from the Create Tenant modal: a `payload`
-    // JSON field plus the attachment files (see uploadsFromFormData).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fields are checked below, as with req.json()
     let raw: any;
     let uploads: AttachmentUpload[] = [];
@@ -115,6 +106,7 @@ async function handlePOST(req: NextRequest) {
       supportedLanguages, defaultLanguage,
       domain, address, contactName, contactEmail, contactPhone,
       plan, industry, code, name,
+      trn, tradeLicenseNo, tradeLicenseAuthority,
     } = body;
 
     if (typeof name !== 'string' || !name.trim()) {
@@ -133,45 +125,65 @@ async function handlePOST(req: NextRequest) {
     const attachmentProblem = await attachmentUploadProblem(uploads, types, { requireMandatory: true });
     if (attachmentProblem) return NextResponse.json({ error: attachmentProblem }, { status: 400 });
 
-    // The id is chosen here so the files can be stored under the tenant's
-    // folder before the transaction; they are removed again if it fails.
     const newTenantId = randomUUID();
     stored = await storeAttachmentFiles(newTenantId, uploads);
 
     const created = await withPlatformAdmin(prisma, async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
-          id:                newTenantId,
-          name:              name.trim(),
-          code:              code   || undefined,
-          plan:              plan   || 'STANDARD',
-          industry:          industry || undefined,
-          domain:            domain   || undefined,
-          address:           address  || undefined,
-          contactName:       contactName  || undefined,
-          contactEmail:      contactEmail || undefined,
-          contactPhone:      contactPhone || undefined,
-          defaultLanguage:   defaultLanguage  || 'en',
+          id:                 newTenantId,
+          name:               name.trim(),
+          code:               code   || undefined,
+          plan:               plan   || 'STANDARD',
+          industry:           industry || undefined,
+          domain:             domain   || undefined,
+          address:            address  || undefined,
+          contactName:        contactName  || undefined,
+          contactEmail:       contactEmail || undefined,
+          contactPhone:       contactPhone || undefined,
+          defaultLanguage:    defaultLanguage  || 'en',
           supportedLanguages: supportedLanguages || 'en',
-          localizedName:     localizedName  || undefined,
-          localizedDesc:     localizedDesc  || undefined,
-          bookingTypes:      bookingTypes   || undefined,
+          localizedName:      localizedName  || undefined,
+          localizedDesc:      localizedDesc  || undefined,
+          bookingTypes:       bookingTypes   || undefined,
           modules: {
             create: modules.modules.map((m) => ({ module: m, isEnabled: true })),
           },
         },
         include: { modules: true },
       });
-      // Every catalog flag gets an explicit value: the requested ones, the
-      // defaults for the rest.
       await writeTenantFeatureFlags(tx, tenant.id, { ...defaultFeatureFlags(), ...flags.flags });
       await insertTenantAttachments(tx, tenant.id, uploads, stored, authz.userId ?? null);
       return tenant;
     });
-    // New tenant means the cached tenant list is now stale.
+
+    // Persist UAE VAT TRN & Trade License metadata if provided during tenant registration
+    if (trn || tradeLicenseNo || tradeLicenseAuthority) {
+      await withTenantRls(prisma, created.id, async (tx) => {
+        if (trn) {
+          await tx.$executeRawUnsafe(
+            `UPDATE tenants SET trn = $2 WHERE id = $1`,
+            created.id,
+            String(trn).replace(/[\s-]/g, ''),
+          ).catch(() => {});
+        }
+        await tx.$executeRawUnsafe(
+          `UPDATE tenants
+           SET trade_license_no = COALESCE($2, trade_license_no),
+               trade_license_authority = COALESCE($3, trade_license_authority),
+               peppol_endpoint_id = COALESCE($4, peppol_endpoint_id)
+           WHERE id = $1`,
+          created.id,
+          tradeLicenseNo ? String(tradeLicenseNo).trim() : null,
+          tradeLicenseAuthority ? String(tradeLicenseAuthority).trim() : null,
+          trn ? String(trn).replace(/[\s-]/g, '') : null,
+        ).catch(() => {});
+      }).catch(() => {});
+    }
+
     await revalidateCache(CACHE_TAG);
     return NextResponse.json(created, { status: 201 });
-    } catch (e) {
+  } catch (e) {
     await removeStoredFiles(stored);
     if (e instanceof AttachmentsNotMigratedError) {
       return NextResponse.json({ error: e.message }, { status: 503 });
@@ -187,5 +199,4 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-// Privileged writes are always audited (src/lib/audited-action.ts).
 export const POST = withAuditedAction(handlePOST);
