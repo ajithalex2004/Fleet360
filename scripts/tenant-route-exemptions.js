@@ -271,6 +271,16 @@ const RULE_EXEMPTIONS = [
     test: 'tests/service-tickets/track.test.ts',
   },
   {
+    file: 'src/app/api/driver-app/ota-manifest/route.ts',
+    method: 'GET',
+    type: 'missing_auth',
+    reason: 'Driver app update manifest, read by the app on launch before any sign-in. Returns static settings only (bundle and minimum APK versions from env, telemetry defaults, release notes); no database access and no tenant data.',
+    authMechanism: 'Public, no data access (zero auth)',
+    dataScope: 'None (static configuration)',
+    owner: 'Mobile App Team',
+    test: 'tests/unit/public-route-inventory.test.ts',
+  },
+  {
     file: 'src/app/api/mobile/download-apk/route.ts',
     method: 'GET',
     type: 'missing_auth',
