@@ -7855,98 +7855,8 @@ export interface CarrierAppDeviceRecord {
   revokedAt?: string | null;
 }
 
-let carrierAppAndBroadcastSchemaReady: Promise<void> | null = null;
-
-async function ensureCarrierAppAndBroadcastSchema(): Promise<void> {
-  if (carrierAppAndBroadcastSchemaReady) return carrierAppAndBroadcastSchemaReady;
-  carrierAppAndBroadcastSchemaReady = (async () => {
-    try {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS logistics_carrier_app_devices (
-          id TEXT PRIMARY KEY,
-          tenant_id TEXT NOT NULL,
-          carrier_id TEXT NOT NULL,
-          driver_id TEXT,
-          token_hash TEXT NOT NULL UNIQUE,
-          platform TEXT,
-          push_token TEXT,
-          expires_at TIMESTAMPTZ NOT NULL,
-          revoked_at TIMESTAMPTZ,
-          created_by TEXT,
-          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS logistics_carrier_presence (
-          tenant_id TEXT NOT NULL,
-          carrier_id TEXT NOT NULL,
-          driver_id TEXT,
-          vehicle_id TEXT,
-          vehicle_type TEXT,
-          availability TEXT NOT NULL DEFAULT 'IDLE',
-          latitude DOUBLE PRECISION NOT NULL,
-          longitude DOUBLE PRECISION NOT NULL,
-          accuracy_m DOUBLE PRECISION,
-          heading DOUBLE PRECISION,
-          speed_kph DOUBLE PRECISION,
-          battery_pct DOUBLE PRECISION,
-          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (tenant_id, carrier_id)
-        )
-      `);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS logistics_load_broadcasts (
-          id TEXT PRIMARY KEY,
-          tenant_id TEXT NOT NULL,
-          shipment_order_id TEXT NOT NULL,
-          rfq_id TEXT,
-          status TEXT NOT NULL DEFAULT 'BROADCASTING',
-          amount NUMERIC(14,2) NOT NULL,
-          currency TEXT NOT NULL DEFAULT 'AED',
-          pickup_lat DOUBLE PRECISION,
-          pickup_lng DOUBLE PRECISION,
-          radius_km DOUBLE PRECISION,
-          vehicle_type TEXT,
-          response_deadline_min INTEGER NOT NULL DEFAULT 10,
-          auto_assign BOOLEAN NOT NULL DEFAULT FALSE,
-          expires_at TIMESTAMPTZ NOT NULL,
-          assigned_offer_id TEXT,
-          assigned_carrier_id TEXT,
-          created_by TEXT,
-          notes TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS logistics_load_broadcast_offers (
-          id TEXT PRIMARY KEY,
-          tenant_id TEXT NOT NULL,
-          broadcast_id TEXT NOT NULL,
-          shipment_order_id TEXT NOT NULL,
-          rfq_id TEXT,
-          carrier_id TEXT NOT NULL,
-          token_hash TEXT NOT NULL UNIQUE,
-          status TEXT NOT NULL DEFAULT 'OFFERED',
-          amount NUMERIC(14,2) NOT NULL,
-          currency TEXT NOT NULL DEFAULT 'AED',
-          distance_km DOUBLE PRECISION,
-          expires_at TIMESTAMPTZ NOT NULL,
-          responded_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-    } catch {
-      carrierAppAndBroadcastSchemaReady = null;
-    }
-  })();
-  return carrierAppAndBroadcastSchemaReady;
-}
+// Carrier app / broadcast tables come from migration
+// 20261110090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
 
 function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -7972,7 +7882,6 @@ export async function issueCarrierAppDevice(input: {
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
 }): Promise<{ id: string; deviceId: string; token: string; expiresAt: string }> {
-  await ensureCarrierAppAndBroadcastSchema();
   const carrierRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id FROM logistics_carriers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
     input.carrierId,
@@ -8012,7 +7921,6 @@ export async function issueCarrierAppDevice(input: {
 export async function resolveCarrierAppDevice(token: string): Promise<CarrierAppDeviceRecord | null> {
   const clean = String(token ?? '').trim();
   if (!clean) return null;
-  await ensureCarrierAppAndBroadcastSchema();
   const tokenHash = createHash('sha256').update(clean).digest('hex');
 
   const rows = await withPlatformAdmin(prisma, (tx) =>
@@ -8072,7 +7980,6 @@ export interface CarrierPresenceInput {
 }
 
 export async function upsertCarrierPresence(input: CarrierPresenceInput): Promise<{ ok: true }> {
-  await ensureCarrierAppAndBroadcastSchema();
   const lat = Number(input.latitude ?? input.lat);
   const lng = Number(input.longitude ?? input.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
@@ -8182,7 +8089,6 @@ export async function findNearestIdleCarriers(args: {
   maxStaleSeconds?: number | null;
   enableComplianceFilter?: boolean;
 }): Promise<Array<{ carrierId: string; carrierName: string | null; distanceKm: number; effectiveDistanceKm: number; vehicleType: string | null }>> {
-  await ensureCarrierAppAndBroadcastSchema();
 
   let lat = args.lat != null ? Number(args.lat) : null;
   let lng = args.lng != null ? Number(args.lng) : null;
@@ -8293,7 +8199,6 @@ export async function createLoadBroadcast(input: LoadBroadcastInput): Promise<{
     offerUrl?: string;
   }>;
 }> {
-  await ensureCarrierAppAndBroadcastSchema();
   const carrierIds = Array.from(new Set((input.carrierIds ?? []).filter(Boolean)));
   if (carrierIds.length === 0) {
     throw new LogisticsValidationError(['At least one carrier must be selected for load broadcast']);
@@ -8442,7 +8347,6 @@ export async function getActiveLoadBroadcast(
     distanceKm: number | null;
   }>;
 } | null> {
-  await ensureCarrierAppAndBroadcastSchema();
 
   const bRows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -8515,7 +8419,6 @@ export interface BroadcastAssignInput {
 }
 
 export async function assignBroadcast(input: BroadcastAssignInput): Promise<{ assignmentId: string }> {
-  await ensureCarrierAppAndBroadcastSchema();
 
   const offerRows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -8658,7 +8561,6 @@ export async function assignBroadcast(input: BroadcastAssignInput): Promise<{ as
 export async function resolveBroadcastOffer(token: string): Promise<{ valid: boolean; offer?: JsonRecord } | null> {
   const clean = String(token ?? '').trim();
   if (!clean) return null;
-  await ensureCarrierAppAndBroadcastSchema();
   const tokenHash = createHash('sha256').update(clean).digest('hex');
 
   const rows = await withPlatformAdmin(prisma, (tx) =>
@@ -8739,7 +8641,6 @@ export async function respondToBroadcastOffer(
 ): Promise<{ ok: true; status?: string; offerId?: string; broadcastId?: string }> {
   const clean = String(token ?? '').trim();
   if (!clean) throw new Error('Offer token is required');
-  await ensureCarrierAppAndBroadcastSchema();
   const tokenHash = createHash('sha256').update(clean).digest('hex');
 
   const rows = await withPlatformAdmin(prisma, (tx) =>

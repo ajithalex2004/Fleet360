@@ -460,8 +460,8 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
         setPeppolReceipt(body);
         onRefresh();
       }
-    } catch (e: any) {
-      setPeppolReceipt({ error: e.message });
+    } catch (e: unknown) {
+      setPeppolReceipt({ error: e instanceof Error ? e.message : String(e) });
     } finally {
       setTransmitting(false);
     }

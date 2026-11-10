@@ -521,10 +521,6 @@ export default function DrayageAssignmentPage() {
       setSendingShareAlert(false);
     }
   };
-  const [autoL2DispatchEnabled, setAutoL2DispatchEnabled] = useState<boolean>(
-    cached?.automationConfig?.autoL2DispatchEnabled ?? true
-  );
-  const [togglingAutoL2, setTogglingAutoL2] = useState(false);
 
   // Auto-Pilot Batch Dispatch state
   const [showAutoPilotModal, setShowAutoPilotModal] = useState(false);
@@ -789,9 +785,6 @@ export default function DrayageAssignmentPage() {
           ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
           ...data.automationConfig,
         });
-        if (typeof data.automationConfig.autoL2DispatchEnabled === 'boolean') {
-          setAutoL2DispatchEnabled(data.automationConfig.autoL2DispatchEnabled);
-        }
       }
     } catch (err) {
       if (!getCachedDrayageData()?.jobs) {
@@ -801,35 +794,6 @@ export default function DrayageAssignmentPage() {
       setLoading(false);
     }
   }, []);
-
-  const handleToggleAutoL2Mode = async (enabled: boolean) => {
-    try {
-      setTogglingAutoL2(true);
-      setAutoL2DispatchEnabled(enabled);
-      const res = await fetch('/api/logistics/drayage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'toggle_auto_l2_mode',
-          enabled,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update L2 dispatch mode');
-      invalidateDrayageClientCache();
-      showToast(
-        'success',
-        enabled
-          ? '⚡ Switched to Auto-L2 Dispatch & 4-Factor Pre-Assignment (Triggers @ T-30m before Offload ETC)'
-          : '🛠️ Switched to Manual L2 Dispatch Mode (Dispatcher triggers L2 manually)',
-      );
-      await loadData(true);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error toggling L2 dispatch mode');
-    } finally {
-      setTogglingAutoL2(false);
-    }
-  };
 
   const handleRebookJobPcsSlot = async (jobId: string) => {
     try {

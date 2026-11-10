@@ -183,34 +183,25 @@ export async function GET(req: NextRequest) {
     const ctx = await requireDriverSession(req);
     if (ctx instanceof NextResponse) return ctx;
 
-    // Resolve driver identity (name / email prefix) so jobs matched by ID or name are returned accurately
-    let driverFullName = '';
-    let driverNameToken = '';
+    // The caller's own driver profile ids: the session id and any profile in
+    // this tenant linked to it. Jobs and vehicles are matched by these ids
+    // only; matching by driver name showed a driver every job assigned to
+    // anyone whose name equals or contains theirs.
+    let driverIds: string[] = [ctx.userId];
     try {
-      const userRows = await tx.$queryRawUnsafe<
-        Array<{ email: string | null; firstName: string | null; lastName: string | null }>
-      >(
-        `SELECT email, "firstName", "lastName" FROM "User" WHERE id = $1 LIMIT 1`,
+      const profileRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id FROM drivers
+          WHERE tenant_id::text = $1 AND deleted_at IS NULL
+            AND (id::text = $2 OR user_id = $2)`,
+        tenantId,
         ctx.userId,
       );
-      if (userRows[0]) {
-        const first = (userRows[0].firstName || '').trim();
-        const last = (userRows[0].lastName || '').trim();
-        driverFullName = `${first} ${last}`.trim();
-        const emailPrefix = (userRows[0].email || '').split('@')[0]?.trim() || '';
-        driverNameToken = first || emailPrefix;
-      }
-      if (!driverFullName) {
-        const drvRows = await tx.$queryRawUnsafe<Array<{ name: string | null; first_name: string | null }>>(
-          `SELECT name, first_name FROM drivers WHERE id = $1 LIMIT 1`,
-          ctx.userId,
-        );
-        if (drvRows[0]) {
-          driverFullName = (drvRows[0].name || drvRows[0].first_name || '').trim();
-          driverNameToken = (drvRows[0].first_name || driverFullName.split(' ')[0] || '').trim();
-        }
-      }
+      driverIds = [...new Set([ctx.userId, ...profileRows.map((r) => r.id)])];
+    } catch {
+      // keep the session id only
+    }
 
+    try {
       // Sync 1-minute telemetry heartbeat for the driver's logged-in vehicle on poll
       const qLat = Number(req.nextUrl.searchParams.get('lat'));
       const qLng = Number(req.nextUrl.searchParams.get('lng'));
@@ -245,15 +236,14 @@ export async function GET(req: NextRequest) {
             WHERE v.tenant_id = $1
               AND v.deleted_at IS NULL
               AND (
-                v.assigned_driver_id = $2
-                OR d.user_id = $2
-                OR ($3 <> '' AND LOWER(COALESCE(d.name, '')) = LOWER($3))
+                v.assigned_driver_id::text = ANY($2::text[])
+                OR d.user_id = $3
               )
             ORDER BY v.updated_at DESC
             LIMIT 1`,
           tenantId,
+          driverIds,
           ctx.userId,
-          driverFullName,
         )
         .catch(() => []);
 
@@ -400,9 +390,7 @@ export async function GET(req: NextRequest) {
             WHERE tenant_id = $1
               AND status NOT IN ('PENDING', 'CANCELLED')
               AND (
-                assigned_driver_id = $2
-                OR ($3 <> '' AND LOWER(COALESCE(assigned_driver_name, '')) = LOWER($3))
-                OR ($4 <> '' AND LOWER(COALESCE(assigned_driver_name, '')) LIKE '%' || LOWER($4) || '%')
+                assigned_driver_id::text = ANY($2::text[])
               )
             ORDER BY
               CASE
@@ -415,9 +403,7 @@ export async function GET(req: NextRequest) {
             LIMIT 50
           `,
           tenantId,
-          ctx.userId,
-          driverFullName,
-          driverNameToken,
+          driverIds,
         ),
         tx
           .$queryRawUnsafe<DrayageGeofenceRow[]>(

@@ -29,33 +29,8 @@ import {
 } from '@/lib/tenant-attachments';
 import type { StoredFile } from '@/lib/storage';
 
-let columnEnsured = false;
-
-async function ensureColumns() {
-  if (columnEnsured) return;
-  try {
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE "tenants"
-        ADD COLUMN IF NOT EXISTS "trn" TEXT,
-        ADD COLUMN IF NOT EXISTS "corporate_tax_trn" TEXT,
-        ADD COLUMN IF NOT EXISTS "trade_license_no" TEXT,
-        ADD COLUMN IF NOT EXISTS "trade_license_authority" TEXT,
-        ADD COLUMN IF NOT EXISTS "peppol_endpoint_id" TEXT,
-        ADD COLUMN IF NOT EXISTS "peppol_scheme_id" TEXT DEFAULT '0235',
-        ADD COLUMN IF NOT EXISTS "arabic_name" TEXT,
-        ADD COLUMN IF NOT EXISTS "street_name" TEXT,
-        ADD COLUMN IF NOT EXISTS "additional_street_name" TEXT,
-        ADD COLUMN IF NOT EXISTS "postal_zone" TEXT,
-        ADD COLUMN IF NOT EXISTS "emirate" TEXT,
-        ADD COLUMN IF NOT EXISTS "emirate_code" TEXT,
-        ADD COLUMN IF NOT EXISTS "country_code" TEXT DEFAULT 'AE',
-        ADD COLUMN IF NOT EXISTS "tax_scheme_id" TEXT DEFAULT 'VAT'
-    `);
-    columnEnsured = true;
-  } catch {
-    // Non-fatal if app user does not hold DDL rights
-  }
-}
+// The tenants e-invoicing columns come from migration
+// 20261110090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
 
 interface TenantCompanyRow {
   id: string;
@@ -89,8 +64,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { tenantId } = auth;
-
-  await ensureColumns();
 
   try {
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
@@ -171,8 +144,6 @@ async function handlePUT(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { tenantId } = auth;
-
-  await ensureColumns();
 
   try {
     const body = await request.json();

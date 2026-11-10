@@ -15,6 +15,12 @@ import { ensureLeaseContractTenantColumn } from '@/lib/leasing-governance';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { nextPayableNumber } from '@/lib/finance/payable-number';
 
+/** The raw-SQL part of a Prisma client or transaction. */
+type RawSqlDb = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
+};
+
 // ── Status mapping (Leasing → Finance) ────────────────────────────────────────
 
 const LEASING_STATUS_MAP: Record<string, string> = {
@@ -41,11 +47,11 @@ function toDateOnly(v: Date | string | null | undefined): string {
  * into `public.finance_payables` and `public.finance_expenses` (used by Finance APIs).
  */
 export async function syncSchemaPayablesToPublic(
-  tx: { $queryRawUnsafe: Function; $executeRawUnsafe: Function },
+  tx: RawSqlDb,
   tenantId: string,
 ): Promise<void> {
   try {
-    const [pState] = await tx.$queryRawUnsafe(
+    const [pState] = await tx.$queryRawUnsafe<Array<{ has_fin?: boolean; has_pub?: boolean }>>(
       `SELECT to_regclass('finance.finance_payables') IS NOT NULL AS has_fin,
               to_regclass('public.finance_payables') IS NOT NULL AS has_pub`,
     );
@@ -99,7 +105,7 @@ export async function syncSchemaPayablesToPublic(
   }
 
   try {
-    const [eState] = await tx.$queryRawUnsafe(
+    const [eState] = await tx.$queryRawUnsafe<Array<{ has_fin?: boolean; has_pub?: boolean }>>(
       `SELECT to_regclass('finance.finance_expenses') IS NOT NULL AS has_fin,
               to_regclass('public.finance_expenses') IS NOT NULL AS has_pub`,
     );

@@ -656,9 +656,9 @@ async function handlePOST(
             peppolStatus = 'TRANSMITTED';
             gatewayResponseNote = `Queued for AS4 retry on ${sellerInfo.meta.aspProvider} (HTTP ${aspRes.status})`;
           }
-        } catch (netErr: any) {
+        } catch (netErr: unknown) {
           peppolStatus = 'TRANSMITTED';
-          gatewayResponseNote = `Signed & queued in local outbox (${netErr?.message || 'ASP unreachable'})`;
+          gatewayResponseNote = `Signed & queued in local outbox (${(netErr instanceof Error && netErr.message) || 'ASP unreachable'})`;
         }
       }
 
