@@ -137,7 +137,9 @@ jobs:
       - run: npx vitest run tests/integration/bus-consolidation-evidence-postgres.test.ts --maxWorkers=1 --minWorkers=1
 
   dispatcher-ui:
-    runs-on: ubuntu-latest
+    # Playwright has no Chromium build for ubuntu26.04 yet (ubuntu-latest);
+    # pinned until it does, or the browser install fails before any test runs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       DISABLE_OUTBOUND_NOTIFICATIONS: 'true'
