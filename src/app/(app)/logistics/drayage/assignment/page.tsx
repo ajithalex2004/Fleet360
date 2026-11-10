@@ -3308,10 +3308,10 @@ export default function DrayageAssignmentPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
             {/* 1. Dual-20FT Bogie Combos */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BOGIE') &&
-              bogieCombos.map((combo) => (
+              bogieCombos.map((combo, idx) => (
                 <div
                   key={combo.id}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-blue-500/30 p-2.5 space-y-1.5 hover:border-blue-500/60 transition-all flex flex-col justify-between shadow-sm"
+                  className={`rounded-xl bg-[var(--bg-surface)] smart-widget-running-border smart-border-${idx % 6} p-2.5 space-y-1.5 transition-all flex flex-col justify-between`}
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-1.5">
@@ -3411,10 +3411,10 @@ export default function DrayageAssignmentPage() {
 
             {/* 2. Zone-Based Street Turn, Port Terminal Reload & 3-Leg Daisy-Chain Triangulation Matches */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'STREET_TURN') &&
-              streetTurnPairs.map((pair) => (
+              streetTurnPairs.map((pair, idx) => (
                 <div
                   key={pair.id}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-emerald-500/30 p-2.5 space-y-1.5 hover:border-emerald-500/60 transition-all flex flex-col justify-between shadow-sm"
+                  className={`rounded-xl bg-[var(--bg-surface)] smart-widget-running-border smart-border-${(bogieCombos.length + idx) % 6} p-2.5 space-y-1.5 transition-all flex flex-col justify-between`}
                 >
                   <div className="space-y-1.5 w-full">
                     <div className="flex items-center justify-between gap-1.5">
@@ -3559,10 +3559,10 @@ export default function DrayageAssignmentPage() {
 
             {/* 2B. Smart Backhaul Hold Advisor Cards (Non-Urgent L2 Empties to Deadhead Terminals like T2) */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BACKHAUL_HOLD') &&
-              smartBackhaulHoldJobs.map((item) => (
+              smartBackhaulHoldJobs.map((item, idx) => (
                 <div
                   key={`HOLD-${item.job.id}`}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-amber-500/40 p-2.5 space-y-1.5 hover:border-amber-500/70 transition-all flex flex-col justify-between shadow-sm"
+                  className={`rounded-xl bg-[var(--bg-surface)] smart-widget-running-border smart-border-${(bogieCombos.length + streetTurnPairs.length + idx) % 6} p-2.5 space-y-1.5 transition-all flex flex-col justify-between`}
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-1.5">
