@@ -43,12 +43,12 @@ export const DEFAULT_WEIGHTS: Record<string, Record<string, DispatchWeights>> = 
 /* ─────────────────────────────────────────────────────────────
    Schema bootstrap — singleton Promise stored on globalThis so
    it survives Next.js HMR hot-reloads in development.
-   All 23 DDL statements are collapsed into ONE PL/pgSQL block —
-   a single round-trip to Neon instead of 23 sequential awaits.
+   All DDL statements are collapsed into ONE PL/pgSQL block —
+   a single round-trip to Neon instead of sequential awaits.
 ───────────────────────────────────────────────────────────── */
-// Runs no DDL where these tables exist; see provisionSchemaOnce.
 /** Tables/columns this module needs; checked by the schema readiness report. */
-export const DISPATCH_SCHEMA: SchemaSpec = { tables: [
+export const DISPATCH_SCHEMA: SchemaSpec = {
+  tables: [
     'dispatch_jobs',
     'dispatch_attempts',
     'dispatch_weights',
@@ -57,20 +57,40 @@ export const DISPATCH_SCHEMA: SchemaSpec = { tables: [
     'ambulance_capabilities',
     'school_bus_routes',
     'dispatch_merge_suggestions',
-  ] };
+  ],
+  columns: [
+    ['dispatch_jobs', 'origin_lat'],
+    ['dispatch_jobs', 'origin_lng'],
+    ['dispatch_jobs', 'dest_lat'],
+    ['dispatch_jobs', 'dest_lng'],
+    ['dispatch_jobs', 'origin_address'],
+    ['dispatch_jobs', 'destination_address'],
+    ['dispatch_jobs', 'scheduled_pickup'],
+    ['dispatch_jobs', 'passenger_count'],
+    ['dispatch_jobs', 'driver_id'],
+    ['dispatch_jobs', 'vehicle_id'],
+    ['dispatch_jobs', 'meta'],
+    ['vehicle_locations', 'tenant_id'],
+    ['driver_availability', 'tenant_id'],
+    ['driver_availability', 'vehicle_id'],
+    ['driver_availability', 'service_types'],
+    ['driver_availability', 'shift_starts_at'],
+    ['driver_availability', 'shift_ends_at'],
+    ['driver_availability', 'updated_at'],
+    ['ambulance_capabilities', 'tenant_id'],
+  ],
+};
 
 export function ensureDispatchSchema(): Promise<void> {
   return provisionSchemaOnce('dispatch', DISPATCH_SCHEMA, _doInit);
 }
 
 async function _doInit(): Promise<void> {
-  // Single PL/pgSQL DO block = ONE network round-trip to Neon
-  // instead of 23 sequential $executeRawUnsafe calls (~500ms each on cold connection).
   await prisma.$executeRawUnsafe(`
     DO $DDL$
     BEGIN
 
-      -- dispatch_jobs
+      -- dispatch_jobs (unified schema supporting both pickup_*/dropoff_* and origin_*/dest_*)
       CREATE TABLE IF NOT EXISTS dispatch_jobs (
         id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id           TEXT        NOT NULL,
@@ -84,18 +104,41 @@ async function _doInit(): Promise<void> {
         pickup_lng          DECIMAL(11,8),
         dropoff_lat         DECIMAL(10,8),
         dropoff_lng         DECIMAL(11,8),
+        origin_lat          DECIMAL(10,8),
+        origin_lng          DECIMAL(11,8),
+        dest_lat            DECIMAL(10,8),
+        dest_lng            DECIMAL(11,8),
+        origin_address      TEXT,
+        destination_address TEXT,
+        scheduled_pickup    TIMESTAMPTZ,
+        passenger_count     INT         DEFAULT 1,
         zone_id             TEXT,
         sla_deadline        TIMESTAMPTZ,
         assigned_driver_id  TEXT,
         assigned_vehicle_id TEXT,
+        driver_id           TEXT,
+        vehicle_id          TEXT,
         preempted_from_job  UUID,
         dispatch_score      DECIMAL(6,4),
         metadata            JSONB,
+        meta                JSONB,
         escalated_at        TIMESTAMPTZ,
         completed_at        TIMESTAMPTZ,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS origin_lat          DECIMAL(10,8);
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS origin_lng          DECIMAL(11,8);
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS dest_lat            DECIMAL(10,8);
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS dest_lng            DECIMAL(11,8);
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS origin_address      TEXT;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS destination_address TEXT;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS scheduled_pickup    TIMESTAMPTZ;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS passenger_count     INT DEFAULT 1;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS driver_id           TEXT;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS vehicle_id          TEXT;
+      ALTER TABLE dispatch_jobs ADD COLUMN IF NOT EXISTS meta                JSONB;
 
       -- dispatch_attempts
       CREATE TABLE IF NOT EXISTS dispatch_attempts (
@@ -138,6 +181,7 @@ async function _doInit(): Promise<void> {
       -- vehicle_locations
       CREATE TABLE IF NOT EXISTS vehicle_locations (
         vehicle_id   TEXT        PRIMARY KEY,
+        tenant_id    TEXT,
         lat          DECIMAL(10,8) NOT NULL,
         lng          DECIMAL(11,8) NOT NULL,
         heading      DECIMAL(5,2),
@@ -147,21 +191,37 @@ async function _doInit(): Promise<void> {
         source       TEXT        DEFAULT 'GPS'
       );
 
+      ALTER TABLE vehicle_locations ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
       -- driver_availability
       CREATE TABLE IF NOT EXISTS driver_availability (
         driver_id          TEXT        PRIMARY KEY,
+        tenant_id          TEXT,
+        vehicle_id         TEXT,
         status             TEXT        NOT NULL DEFAULT 'OFFLINE',
+        service_types      JSONB       DEFAULT '["PASSENGER"]',
         shift_start        TIMESTAMPTZ,
         shift_end          TIMESTAMPTZ,
+        shift_starts_at    TIMESTAMPTZ,
+        shift_ends_at      TIMESTAMPTZ,
         current_job_id     UUID,
         last_ping          TIMESTAMPTZ,
         zone_id            TEXT,
-        hours_worked_today DECIMAL(5,2) DEFAULT 0
+        hours_worked_today DECIMAL(5,2) DEFAULT 0,
+        updated_at         TIMESTAMPTZ DEFAULT NOW()
       );
+
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS tenant_id       TEXT;
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS vehicle_id      TEXT;
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS service_types   JSONB DEFAULT '["PASSENGER"]';
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS shift_starts_at TIMESTAMPTZ;
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS shift_ends_at   TIMESTAMPTZ;
+      ALTER TABLE driver_availability ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ DEFAULT NOW();
 
       -- ambulance_capabilities
       CREATE TABLE IF NOT EXISTS ambulance_capabilities (
         vehicle_id          TEXT        PRIMARY KEY,
+        tenant_id           TEXT,
         level               TEXT        NOT NULL DEFAULT 'BLS',
         equipment           JSONB       NOT NULL DEFAULT '[]',
         paramedic_id        TEXT,
@@ -170,6 +230,20 @@ async function _doInit(): Promise<void> {
         expires_at          TIMESTAMPTZ,
         operational_status  TEXT        NOT NULL DEFAULT 'READY'
       );
+
+      ALTER TABLE ambulance_capabilities ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
+      -- Ensure optional dispatch scoring/eligibility columns exist on drivers and vehicles
+      ALTER TABLE IF EXISTS drivers  ADD COLUMN IF NOT EXISTS rating              DECIMAL(3,2) DEFAULT 4.5;
+      ALTER TABLE IF EXISTS drivers  ADD COLUMN IF NOT EXISTS skill_tags          JSONB DEFAULT '[]';
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS capacity            INT;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS payload_kg          DECIMAL(10,2) DEFAULT 0;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS volume_cbm          DECIMAL(10,2) DEFAULT 0;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS cost_per_km         DECIMAL(8,2) DEFAULT 1.5;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS has_wheelchair_ramp BOOLEAN DEFAULT FALSE;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS has_child_seat      BOOLEAN DEFAULT FALSE;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS has_reefer          BOOLEAN DEFAULT FALSE;
+      ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS hazmat_certified    BOOLEAN DEFAULT FALSE;
 
       -- school_bus_routes
       CREATE TABLE IF NOT EXISTS school_bus_routes (
@@ -205,6 +279,9 @@ async function _doInit(): Promise<void> {
       ALTER TABLE school_bus_routes ADD COLUMN IF NOT EXISTS is_active             BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE school_bus_routes ADD COLUMN IF NOT EXISTS reassignment_history  JSONB   DEFAULT '[]';
 
+      -- bookings column migration for dispatch sync
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS driver_id TEXT;
+
       -- dispatch_merge_suggestions
       CREATE TABLE IF NOT EXISTS dispatch_merge_suggestions (
         id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -236,6 +313,8 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_da_job     ON dispatch_attempts(dispatch_job_id);
       CREATE INDEX IF NOT EXISTS idx_da_token   ON dispatch_attempts(accept_token);
       CREATE INDEX IF NOT EXISTS idx_dw_tenant  ON dispatch_weights(tenant_id, service_type, priority);
+      CREATE INDEX IF NOT EXISTS idx_vl_tenant  ON vehicle_locations(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_da_tenant  ON driver_availability(tenant_id, status);
       CREATE INDEX IF NOT EXISTS idx_dms_tenant ON dispatch_merge_suggestions(tenant_id, status, expires_at);
       CREATE INDEX IF NOT EXISTS idx_dms_job_a  ON dispatch_merge_suggestions(job_a_id);
       CREATE INDEX IF NOT EXISTS idx_dms_job_b  ON dispatch_merge_suggestions(job_b_id);
@@ -279,6 +358,27 @@ export async function loadDispatchConfig(
     } catch {}
   }
 
+  let parsedPreemptible: DispatchPriority[] = [];
+  if (row?.preemptible_priorities) {
+    try {
+      const raw = typeof row.preemptible_priorities === 'string'
+        ? JSON.parse(row.preemptible_priorities)
+        : row.preemptible_priorities;
+      if (Array.isArray(raw)) {
+        parsedPreemptible = raw as DispatchPriority[];
+      }
+    } catch {}
+  }
+
+  const defaultPreemptible: DispatchPriority[] =
+    serviceType === 'AMBULANCE' && priority === 'P1'
+      ? ['P2', 'P3', 'NORMAL', 'SCHEDULED']
+      : serviceType === 'AMBULANCE' && priority === 'P2'
+        ? ['P3', 'SCHEDULED']
+        : [];
+
+  const isEmergencyAmbulance = serviceType === 'AMBULANCE' && (priority === 'P1' || priority === 'P2');
+
   return {
     weights,
     maxAttempts:             row ? Number(row.max_attempts ?? 3) : 3,
@@ -286,7 +386,7 @@ export async function loadDispatchConfig(
     dispatchRadiusKm:        row ? Number(row.dispatch_radius_km ?? 10) : 10,
     preferSameZone:          row ? row.prefer_same_zone !== false : true,
     crossZoneAllowed:        row ? row.cross_zone_allowed !== false : true,
-    allowPreemption:         row ? row.allow_preemption === true : false,
-    preemptiblePriorities:   [] as DispatchPriority[],
+    allowPreemption:         row ? row.allow_preemption === true : isEmergencyAmbulance,
+    preemptiblePriorities:   parsedPreemptible.length > 0 ? parsedPreemptible : defaultPreemptible,
   };
 }

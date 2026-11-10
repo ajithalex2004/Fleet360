@@ -54,24 +54,51 @@ const DAY_MAP: Record<DayOfWeek, number> = {
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
+ * Parse a YYYY-MM-DD (or ISO) date string at UTC noon so day-of-week and
+ * YYYY-MM-DD formatting never drift by 1 day across local timezones.
+ */
+function parseDateAtUtcNoon(raw?: string | null): Date {
+  if (!raw) {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0));
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  if (m) {
+    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+  }
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0));
+  }
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0));
+}
+
+function formatUtcDateLabel(d: Date): string {
+  return d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
  * Generates concrete ISO dates matching the recurrence rules
  */
 export function generateRecurringTripDates(
   config: RecurringScheduleConfig,
   maxGenerated: number = 30
 ): GeneratedScheduledTrip[] {
+  const start = parseDateAtUtcNoon(config.startDate);
+
   if (config.scheduleType === 'ONE_OFF') {
-    const start = new Date(config.startDate || new Date());
     return [
       {
         sequenceNo: 1,
         tripDateIso: start.toISOString().split('T')[0],
-        formattedDate: start.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        }),
-        dayOfWeek: DAY_NAMES[start.getDay()],
+        formattedDate: formatUtcDateLabel(start),
+        dayOfWeek: DAY_NAMES[start.getUTCDay()],
         timeSlot: config.timeSlot || '08:00',
         status: 'SCHEDULED',
       },
@@ -79,8 +106,7 @@ export function generateRecurringTripDates(
   }
 
   const generated: GeneratedScheduledTrip[] = [];
-  const start = new Date(config.startDate || new Date());
-  const endDate = config.endDate ? new Date(config.endDate) : null;
+  const endDate = config.endDate ? parseDateAtUtcNoon(config.endDate) : null;
   const targetOccurrences =
     config.endCondition === 'AFTER_OCCURRENCES'
       ? Math.min(config.occurrencesCount || 10, maxGenerated)
@@ -88,21 +114,21 @@ export function generateRecurringTripDates(
 
   const activeDayNumbers = (config.daysOfWeek || ['MON', 'WED', 'FRI']).map((d) => DAY_MAP[d]);
 
-  const current = new Date(start);
+  const current = new Date(start.getTime());
+  const startDayOfMonth = start.getUTCDate();
   let count = 0;
 
   // Search ahead up to 180 days
   for (let dayOffset = 0; dayOffset < 180 && count < targetOccurrences; dayOffset++) {
-    const dayOfWeek = current.getDay();
+    const dayOfWeek = current.getUTCDay();
 
-    if (endDate && current > endDate) {
+    if (endDate && current.getTime() > endDate.getTime()) {
       break;
     }
 
     let isMatch = false;
 
     if (config.frequency === 'DAILY') {
-      // Weekday daily or all daily
       isMatch = activeDayNumbers.includes(dayOfWeek);
     } else if (config.frequency === 'WEEKLY') {
       isMatch = activeDayNumbers.includes(dayOfWeek);
@@ -110,7 +136,7 @@ export function generateRecurringTripDates(
       const weekNumber = Math.floor(dayOffset / 7);
       isMatch = weekNumber % 2 === 0 && activeDayNumbers.includes(dayOfWeek);
     } else if (config.frequency === 'MONTHLY') {
-      isMatch = current.getDate() === start.getDate();
+      isMatch = current.getUTCDate() === startDayOfMonth;
     } else if (config.frequency === 'SCHOOL_TERM') {
       // Mon - Fri school days
       isMatch = dayOfWeek >= 1 && dayOfWeek <= 5;
@@ -121,18 +147,14 @@ export function generateRecurringTripDates(
       generated.push({
         sequenceNo: count,
         tripDateIso: current.toISOString().split('T')[0],
-        formattedDate: current.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        }),
+        formattedDate: formatUtcDateLabel(current),
         dayOfWeek: DAY_NAMES[dayOfWeek],
         timeSlot: config.timeSlot || '07:30',
         status: 'SCHEDULED',
       });
     }
 
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return generated;

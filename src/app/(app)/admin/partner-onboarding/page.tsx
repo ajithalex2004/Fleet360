@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, ExternalLink, ShieldCheck, XCircle } from 'lucide-react';
+import { CheckCircle2, ExternalLink, ShieldCheck, XCircle, Truck, Users, Award, Globe } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { COMPLIANCE_CATALOG, EMIRATE_LABELS, type Emirate } from '@/lib/exchange/partner-activation';
 
@@ -25,6 +25,10 @@ interface PartnerRow {
   onboardingLabel: string;
   onboardedByTenantName: string | null;
   memberCount: number;
+  vehicleCount?: number;
+  driverCount?: number;
+  scorecardTier?: string | null;
+  compositeScore?: number | null;
   required: number;
   approved: number;
   awaitingReview: number;
@@ -52,6 +56,41 @@ interface Doc {
   createdAt: string;
 }
 
+interface QualificationCategoryItem {
+  category: string;
+  label: string;
+  status: 'VERIFIED' | 'PENDING_REVIEW' | 'PARTIAL' | 'EXPIRED' | 'MISSING' | string;
+  detail: string;
+}
+
+interface FleetReadinessSummary {
+  totalVehicles: number;
+  dispatchReadyVehicles: number;
+  expiredVehicles: number;
+  totalDrivers: number;
+  dispatchReadyDrivers: number;
+  expiredDrivers: number;
+  vehicles: Array<{
+    id: string;
+    licensePlate: string;
+    plateEmirate: string;
+    vehicleType: string;
+    seatingCapacity: number;
+    mulkiyaExpiry: string | null;
+    dispatchReady: boolean;
+  }>;
+  drivers: Array<{
+    id: string;
+    fullName: string;
+    mobileNumber: string;
+    licenseNumber: string | null;
+    licenseExpiry: string | null;
+    permitType: string | null;
+    permitExpiry: string | null;
+    dispatchReady: boolean;
+  }>;
+}
+
 interface Detail {
   partner: {
     id: string;
@@ -61,6 +100,16 @@ interface Detail {
     city: string | null;
     emirate: Emirate | null;
     domains: string[];
+    serviceAreas?: Array<{ emirate: string; zones: string[] }>;
+    scorecard?: {
+      tier: string;
+      compositeScore: number;
+      onTimePerformance: number;
+      quoteResponseRate: number;
+      exceptionRate: number;
+      totalAwardedTrips: number;
+      completedTrips: number;
+    } | null;
     tradeLicenseNumber: string | null;
     taxRegistrationNumber: string | null;
     primaryContactName: string | null;
@@ -73,6 +122,8 @@ interface Detail {
   };
   documents: Doc[];
   checklist: { items: ChecklistItem[]; allApproved: boolean };
+  qualificationCategories?: QualificationCategoryItem[];
+  fleetReadiness?: FleetReadinessSummary;
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -90,6 +141,14 @@ const DOC_STATUS: Record<string, { label: string; style: string }> = {
   EXPIRING: { label: 'Expiring soon', style: 'bg-amber-500/15 text-amber-400' },
   EXPIRED: { label: 'Expired', style: 'bg-rose-500/15 text-rose-400' },
   REJECTED: { label: 'Rejected', style: 'bg-rose-500/15 text-rose-400' },
+};
+
+const QUAL_STATUS_STYLE: Record<string, { label: string; style: string }> = {
+  VERIFIED: { label: 'VERIFIED', style: 'bg-emerald-500/15 text-emerald-400' },
+  PENDING_REVIEW: { label: 'AWAITING REVIEW', style: 'bg-amber-500/15 text-amber-400' },
+  PARTIAL: { label: 'PARTIAL READY', style: 'bg-amber-500/15 text-amber-400' },
+  EXPIRED: { label: 'EXPIRED GATE', style: 'bg-rose-500/15 text-rose-400' },
+  MISSING: { label: 'NOT CONFIGURED', style: 'bg-slate-500/15 text-[var(--text-muted)]' },
 };
 
 const STAGE_STYLE: Record<string, string> = {
@@ -264,7 +323,7 @@ export default function PartnerOnboardingPage() {
     <div className="space-y-6 p-4 sm:p-6">
       <PageHeader
         title="Partner onboarding"
-        subtitle="Review transport partners' compliance documents and activate them for your network"
+        subtitle="Review transport partners' compliance documents, 6-category vertical readiness, and pre-dispatch fleet/driver gates"
         icon={ShieldCheck}
         accent="cyan"
       />
@@ -290,7 +349,15 @@ export default function PartnerOnboardingPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-semibold">{p.legalName}</span>
-                <Pill text={p.onboardingLabel} style={STAGE_STYLE[p.onboardingStatus] ?? 'bg-amber-500/15 text-amber-400'} />
+                <div className="flex items-center gap-1.5">
+                  {p.scorecardTier && (
+                    <Pill
+                      text={p.scorecardTier}
+                      style="bg-indigo-500/15 text-indigo-300"
+                    />
+                  )}
+                  <Pill text={p.onboardingLabel} style={STAGE_STYLE[p.onboardingStatus] ?? 'bg-amber-500/15 text-amber-400'} />
+                </div>
               </div>
               <div className="mt-1 text-xs text-[var(--text-muted)]">
                 {p.partnerCode}{p.emirate ? ` · ${EMIRATE_LABELS[p.emirate]}` : ''}
@@ -299,6 +366,9 @@ export default function PartnerOnboardingPage() {
               <div className="mt-1 text-xs text-[var(--text-muted)]">
                 Documents approved {p.approved}/{p.required}
                 {p.awaitingReview > 0 ? ` · ${p.awaitingReview} awaiting review` : ''}
+                {p.vehicleCount != null || p.driverCount != null
+                  ? ` · ${p.vehicleCount ?? 0} vehicles · ${p.driverCount ?? 0} drivers`
+                  : ''}
               </div>
             </button>
           ))}
@@ -320,7 +390,15 @@ export default function PartnerOnboardingPage() {
                       {detail.partner.emirate ? ` · ${EMIRATE_LABELS[detail.partner.emirate]}` : ' · emirate not set'}
                     </p>
                   </div>
-                  <Pill text={detail.partner.onboardingLabel} style={STAGE_STYLE[detail.partner.onboardingStatus] ?? 'bg-amber-500/15 text-amber-400'} />
+                  <div className="flex items-center gap-2">
+                    {detail.partner.scorecard && (
+                      <Pill
+                        text={`${detail.partner.scorecard.tier} (${Number(detail.partner.scorecard.compositeScore).toFixed(0)} pts)`}
+                        style="bg-indigo-500/15 text-indigo-300"
+                      />
+                    )}
+                    <Pill text={detail.partner.onboardingLabel} style={STAGE_STYLE[detail.partner.onboardingStatus] ?? 'bg-amber-500/15 text-amber-400'} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                   <div><span className="text-[var(--text-muted)]">Services: </span>{detail.partner.domains.map((d) => DOMAIN_LABELS[d] ?? d).join(', ') || 'not set'}</div>
@@ -328,6 +406,27 @@ export default function PartnerOnboardingPage() {
                   <div><span className="text-[var(--text-muted)]">Trade licence no.: </span>{detail.partner.tradeLicenseNumber ?? '—'}</div>
                   <div><span className="text-[var(--text-muted)]">TRN: </span>{detail.partner.taxRegistrationNumber ?? '—'}</div>
                 </div>
+
+                {/* Multi-Emirate & Freezone Coverage Summary */}
+                {detail.partner.serviceAreas && detail.partner.serviceAreas.length > 0 && (
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-xs space-y-1.5">
+                    <div className="font-semibold flex items-center gap-1.5 text-cyan-400">
+                      <Globe className="h-3.5 w-3.5" /> Multi-Emirate & Freezone Service Coverage
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {detail.partner.serviceAreas.map((sa) => (
+                        <span
+                          key={sa.emirate}
+                          className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200"
+                        >
+                          <strong>{sa.emirate}</strong>
+                          {sa.zones && sa.zones.length > 0 ? `: ${sa.zones.join(', ')}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {detail.partner.rejectionReason && !activated && (
                   <p className="text-xs text-rose-400">Last note to the partner: {detail.partner.rejectionReason}</p>
                 )}
@@ -360,6 +459,49 @@ export default function PartnerOnboardingPage() {
                   </div>
                 )}
               </div>
+
+              {/* Phase 11: 6-Category Vertical Qualification Matrix & Pre-Dispatch Fleet/Driver Readiness */}
+              {detail.qualificationCategories && detail.qualificationCategories.length > 0 && (
+                <div className="space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                      <Award className="h-4 w-4 text-cyan-400" />
+                      <span>6-Category Compliance & Pre-Dispatch Qualification Matrix</span>
+                    </h3>
+                    {detail.fleetReadiness && (
+                      <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                        <span className="inline-flex items-center gap-1">
+                          <Truck className="h-3.5 w-3.5 text-cyan-400" />
+                          {detail.fleetReadiness.dispatchReadyVehicles}/{detail.fleetReadiness.totalVehicles} Vehicles Ready
+                        </span>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5 text-emerald-400" />
+                          {detail.fleetReadiness.dispatchReadyDrivers}/{detail.fleetReadiness.totalDrivers} Drivers Ready
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {detail.qualificationCategories.map((cat) => {
+                      const st = QUAL_STATUS_STYLE[cat.status] ?? QUAL_STATUS_STYLE.MISSING;
+                      return (
+                        <div
+                          key={cat.category}
+                          className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-semibold text-[var(--text-main)]">{cat.label}</span>
+                            <Pill text={st.label} style={st.style} />
+                          </div>
+                          <div className="text-[11px] text-[var(--text-muted)]">{cat.detail}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Mandatory documents</h3>

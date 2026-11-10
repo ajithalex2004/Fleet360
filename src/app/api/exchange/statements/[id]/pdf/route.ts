@@ -20,9 +20,7 @@ const isoDate = (d: Date | null | undefined) => (d ? new Date(d).toISOString().s
  * Stream official UAE FTA Tax Invoice PDF for a settlement statement
  *
  * For the statement's partner (its members) and its buying tenant (that
- * tenant's staff) only. An unknown statement is a 404: this used to render a
- * complete tax invoice from made-up placeholder values for any id, for anyone
- * signed in.
+ * tenant's staff) only.
  */
 export async function GET(
   req: NextRequest,
@@ -35,14 +33,18 @@ export async function GET(
   try {
     const { id: statementId } = await params;
 
-    // The statement may belong to another tenant than the caller's (a partner
-    // user's): load it in platform context, then decide access below.
-    // PartnerSettlementStatement has no `tenant` relation (only a raw
-    // tenantId column), so the tenant name needs its own lookup.
     const loaded = await withPlatformAdmin(prisma, async (tx) => {
       const statement = await tx.partnerSettlementStatement.findUnique({
         where: { id: statementId },
-        include: { partner: true, invoices: true, deductions: true },
+        include: {
+          partner: true,
+          invoices: {
+            include: {
+              award: { include: { request: true } },
+            },
+          },
+          deductions: true,
+        },
       });
       const tenant = statement
         ? await tx.tenant.findUnique({ where: { id: statement.tenantId }, select: { name: true } })
@@ -55,6 +57,35 @@ export async function GET(
       return NextResponse.json({ error: 'Statement not found' }, { status: 404 });
     }
 
+    let agencyCount = 0;
+    let principalCount = 0;
+    let totalPlatformFeeAed = 0;
+
+    const items = statement.invoices.map((inv) => {
+      const snap = (inv.award?.commercialSnapshot || {}) as Record<string, unknown>;
+      const model = typeof snap.commercialModel === 'string' ? snap.commercialModel : 'AGENCY';
+      if (model === 'PRINCIPAL') principalCount += 1;
+      else agencyCount += 1;
+      if (typeof snap.platformFeeAmount === 'number') {
+        totalPlatformFeeAed += snap.platformFeeAmount;
+      }
+      const rateSnap = (snap.rateCardSnapshot || {}) as Record<string, unknown>;
+      const rateCardHash = typeof rateSnap.snapshotHash === 'string' ? rateSnap.snapshotHash : undefined;
+      const domain = inv.award?.request?.domain || 'PASSENGER_TRANSPORT';
+
+      return {
+        tripNumber: inv.invoiceNumber,
+        date: isoDate(inv.invoiceDate),
+        description: `${domain} Outsource Service (${inv.award?.request?.requestNumber || 'RFQ'})`,
+        amountAed: Number(inv.subtotalAmount),
+        vatAed: Number(inv.vatAmount),
+        totalAed: Number(inv.totalAmount),
+        verificationStatus: inv.verificationStatus || 'MATCHED',
+        commercialModel: model,
+        rateCardHash,
+      };
+    });
+
     const pdfBytes = PdfDocumentService.generateTaxInvoicePdf({
       statementNumber: statement.statementNumber,
       periodStart: isoDate(statement.periodStart),
@@ -64,14 +95,7 @@ export async function GET(
       tenantTrn: statement.tenantTrn ?? '',
       partnerName: statement.partner.legalName,
       partnerTrn: statement.partnerTrn ?? statement.partner.taxRegistrationNumber ?? '',
-      items: statement.invoices.map((inv) => ({
-        tripNumber: inv.invoiceNumber,
-        date: isoDate(inv.invoiceDate),
-        description: 'Passenger / Freight Outsource Transport Service',
-        amountAed: Number(inv.subtotalAmount),
-        vatAed: Number(inv.vatAmount),
-        totalAed: Number(inv.totalAmount),
-      })),
+      items,
       deductions: statement.deductions.map((d) => ({
         type: d.type,
         reason: d.description,
@@ -81,6 +105,11 @@ export async function GET(
       vatAmountAed: Number(statement.vatAmount),
       totalDeductionsAed: Number(statement.totalDeductions),
       netPayableAed: Number(statement.netPayable),
+      commercialModelSummary: {
+        agencyCount,
+        principalCount,
+        totalPlatformFeeAed: Math.round(totalPlatformFeeAed * 100) / 100,
+      },
     });
 
     return new NextResponse(Buffer.from(pdfBytes), {

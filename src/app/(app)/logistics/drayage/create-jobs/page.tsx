@@ -62,13 +62,14 @@ interface ContainerItem {
   containerNumber: string;
   size: '20FT' | '40FT' | '40HC' | '45HC';
   containerType: 'DRY' | 'REEFER' | 'OPEN_TOP' | 'FLAT_RACK';
+  warehouseId: string;
   dischargeDate: string;
   deliveryDate?: string;
   deliveryTime?: string;
   doExpiryDate: string;
   doExpiryTime?: string;
   sealNumber: string;
-  weightKg: number;
+  weightTonnes: number;
   customsInspection: boolean;
   municipalityInspection: boolean;
   cpipInspection: boolean;
@@ -88,19 +89,24 @@ interface ExtractionSummary {
   confidencePct?: number;
 }
 
-function createEmptyContainerRow(id: string, defaultType: ContainerItem['containerType'] = 'DRY'): ContainerItem {
+function createEmptyContainerRow(
+  id: string,
+  defaultType: ContainerItem['containerType'] = 'DRY',
+  defaultWarehouseId: string = '',
+): ContainerItem {
   return {
     id,
     containerNumber: '',
     size: '40HC',
     containerType: defaultType,
+    warehouseId: defaultWarehouseId,
     dischargeDate: '',
     deliveryDate: '',
     deliveryTime: '',
     doExpiryDate: '',
-    doExpiryTime: '',
+    doExpiryTime: '23:59',
     sealNumber: '',
-    weightKg: 0,
+    weightTonnes: 0,
     customsInspection: false,
     municipalityInspection: false,
     cpipInspection: false,
@@ -124,7 +130,7 @@ export default function DrayageCreateJobsPage() {
 
   // Form State (Starts empty — no random/dummy pre-fills; rates populate from Master on selection)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [shipmentType, setShipmentType] = useState<'IMPORT' | 'EXPORT'>('IMPORT');
   const [priority, setPriority] = useState<'STANDARD' | 'HIGH' | 'URGENT'>('STANDARD');
@@ -150,8 +156,21 @@ export default function DrayageCreateJobsPage() {
   const [newCustomerCity, setNewCustomerCity] = useState('Dubai');
   const [savingCustomer, setSavingCustomer] = useState(false);
 
-  // Consignee Destination Modal State
+  // Quick Client (Client Master) Creation Modal State
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientCode, setNewClientCode] = useState('');
+  const [newClientContact, setNewClientContact] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientAddress, setNewClientAddress] = useState('');
+  const [newClientCity, setNewClientCity] = useState('Dubai');
+  const [newClientTrn, setNewClientTrn] = useState('');
+  const [newClientLicense, setNewClientLicense] = useState('');
+  const [savingClient, setSavingClient] = useState(false);
+
+  // Consignee Destination Modal State (Per-Container Facility Selection & Creation)
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [activeWarehouseModalContainerId, setActiveWarehouseModalContainerId] = useState<string | null>(null);
 
   // Container rows (Starts with 1 completely blank row — no dummy values)
   const [containers, setContainers] = useState<ContainerItem[]>([
@@ -190,26 +209,71 @@ export default function DrayageCreateJobsPage() {
     loadMasters();
   }, [loadMasters]);
 
-  // Auto-populate Contract Rate and Driver Allowance from Warehouse Master or Client Master when selected
+  // Resolve facilities mapped strictly to the selected Client in Haulage Stakeholders & Port Route
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === selectedClientId) || null,
+    [clients, selectedClientId],
+  );
+
+  const clientWarehouses = useMemo<WarehouseOption[]>(() => {
+    if (!selectedClientId) return [];
+    const cli = clients.find((c) => c.id === selectedClientId);
+    const normClientName = (cli?.name || '').trim().toLowerCase();
+    const combined: WarehouseOption[] = [
+      ...((cli?.warehouses as WarehouseOption[] | undefined) || []),
+      ...warehouses,
+    ];
+    const seen = new Set<string>();
+    const filtered: WarehouseOption[] = [];
+    for (const w of combined) {
+      if (!w || !w.id) continue;
+      const matchId = Boolean(w.customerId && String(w.customerId) === String(selectedClientId));
+      const matchName = Boolean(
+        normClientName &&
+          w.customerName &&
+          String(w.customerName).trim().toLowerCase() === normClientName,
+      );
+      if (!matchId && !matchName) continue;
+      if (seen.has(w.id)) continue;
+      seen.add(w.id);
+      filtered.push(w);
+    }
+    return filtered;
+  }, [selectedClientId, clients, warehouses]);
+
+  // Auto-populate Contract Rate and Driver Allowance from Client Master (or its default facility) when Client is selected
   useEffect(() => {
-    const wh = warehouses.find((w) => w.id === selectedWarehouseId);
-    const cli = clients.find(
-      (c) =>
-        c.id === selectedWarehouseId ||
-        (wh?.customerId && c.id === wh.customerId) ||
-        (wh?.customerName && c.name.trim().toLowerCase() === wh.customerName.trim().toLowerCase()),
-    );
-    if (wh && Number(wh.tripAmountAed) > 0) {
-      setRateAmountAed(Number(wh.tripAmountAed));
-    } else if (cli && Number(cli.defaultTripAmountAed) > 0) {
+    if (!selectedClientId) return;
+    const cli = clients.find((c) => c.id === selectedClientId);
+    const primaryWh = clientWarehouses[0];
+    if (cli && Number(cli.defaultTripAmountAed) > 0) {
       setRateAmountAed(Number(cli.defaultTripAmountAed));
+    } else if (primaryWh && Number(primaryWh.tripAmountAed) > 0) {
+      setRateAmountAed(Number(primaryWh.tripAmountAed));
     }
-    if (wh && Number(wh.driverAllowanceAed) > 0) {
-      setDriverAllowanceAed(Number(wh.driverAllowanceAed));
-    } else if (cli && Number(cli.defaultDriverAllowanceAed) > 0) {
+    if (cli && Number(cli.defaultDriverAllowanceAed) > 0) {
       setDriverAllowanceAed(Number(cli.defaultDriverAllowanceAed));
+    } else if (primaryWh && Number(primaryWh.driverAllowanceAed) > 0) {
+      setDriverAllowanceAed(Number(primaryWh.driverAllowanceAed));
     }
-  }, [selectedWarehouseId, warehouses, clients]);
+  }, [selectedClientId, clients, clientWarehouses]);
+
+  // Ensure container warehouse selections strictly belong to the selected Client
+  useEffect(() => {
+    const validIds = new Set(clientWarehouses.map((w) => w.id));
+    const autoDefaultWhId = clientWarehouses.length === 1 ? clientWarehouses[0].id : '';
+    setContainers((prev) =>
+      prev.map((c) => {
+        if (!selectedClientId) {
+          return c.warehouseId ? { ...c, warehouseId: '' } : c;
+        }
+        if (c.warehouseId && validIds.has(c.warehouseId)) {
+          return c;
+        }
+        return { ...c, warehouseId: autoDefaultWhId };
+      }),
+    );
+  }, [selectedClientId, clientWarehouses]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,11 +323,76 @@ export default function DrayageCreateJobsPage() {
     }
   };
 
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClientName.trim()) {
+      showToast('error', 'Please enter Client name');
+      return;
+    }
+    const generatedCode =
+      newClientCode.trim().toUpperCase() || newClientName.trim().slice(0, 3).toUpperCase();
+    try {
+      setSavingClient(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_client',
+          name: newClientName.trim(),
+          code: generatedCode,
+          contactPerson: newClientContact.trim() || undefined,
+          contactNo: newClientPhone.trim() || undefined,
+          streetAddress: newClientAddress.trim() || undefined,
+          city: newClientCity.trim() || 'Dubai',
+          trn: newClientTrn.trim() || undefined,
+          tradeLicense: newClientLicense.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create client');
+
+      const createdClient: DrayageClientOption = data.client || {
+        id: data.clientId || `client-${Date.now()}`,
+        name: newClientName.trim(),
+        code: generatedCode,
+        contactPerson: newClientContact.trim() || null,
+        contactNo: newClientPhone.trim() || null,
+        streetAddress: newClientAddress.trim() || null,
+        city: newClientCity.trim() || 'Dubai',
+        trn: newClientTrn.trim() || null,
+        tradeLicense: newClientLicense.trim() || null,
+      };
+      setClients((prev) => [createdClient, ...prev]);
+      setSelectedClientId(createdClient.id);
+      setShowClientModal(false);
+      setNewClientName('');
+      setNewClientCode('');
+      setNewClientContact('');
+      setNewClientPhone('');
+      setNewClientAddress('');
+      setNewClientTrn('');
+      setNewClientLicense('');
+      invalidateDrayageClientCache();
+      showToast('success', `Client "${createdClient.name}" created in Client Master and selected!`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error creating client');
+    } finally {
+      setSavingClient(false);
+    }
+  };
+
   const handleAddContainerRow = () => {
-    const isReefer = containers[containers.length - 1]?.containerType === 'REEFER';
+    const lastRow = containers[containers.length - 1];
+    const isReefer = lastRow?.containerType === 'REEFER';
+    const defaultWhId =
+      lastRow?.warehouseId || (clientWarehouses.length === 1 ? clientWarehouses[0].id : '');
     setContainers((prev) => [
       ...prev,
-      createEmptyContainerRow(`c-${Date.now()}-${Math.random()}`, isReefer ? 'REEFER' : 'DRY'),
+      createEmptyContainerRow(
+        `c-${Date.now()}-${Math.random()}`,
+        isReefer ? 'REEFER' : 'DRY',
+        defaultWhId,
+      ),
     ]);
   };
 
@@ -287,11 +416,11 @@ export default function DrayageCreateJobsPage() {
         'Size',
         'Cargo Type',
         'Seal Number',
-        'Gross Weight (KG)',
+        'Gross Weight (Tonnes)',
         'Delivery Date (YYYY-MM-DD)',
         'Delivery Time (HH:MM)',
         'DO Expiry Date (YYYY-MM-DD)',
-        'DO Cutoff Time (HH:MM)',
+        'DO Cutoff Time (11:59 PM Default)',
         'Dubai Customs',
         'Municipality DM',
         'CPIP',
@@ -369,39 +498,6 @@ export default function DrayageCreateJobsPage() {
         }>;
       };
 
-      const extractedRows: ContainerItem[] = (manifest.containers || []).map((c, idx) => ({
-        id: `c-ocr-${Date.now()}-${idx}`,
-        containerNumber: c.containerNumber || '',
-        size: c.size || '40HC',
-        containerType: c.containerType || 'DRY',
-        sealNumber: c.sealNumber || '',
-        weightKg: Number(c.weightKg) || 0,
-        dischargeDate: c.dischargeDate || c.deliveryDate || '',
-        deliveryDate: c.deliveryDate || c.dischargeDate || '',
-        deliveryTime: c.deliveryTime || '',
-        doExpiryDate: c.doExpiryDate || '',
-        doExpiryTime: c.doExpiryTime || '',
-        customsInspection: Boolean(c.customsInspection),
-        municipalityInspection: Boolean(c.municipalityInspection),
-        cpipInspection: Boolean(c.cpipInspection),
-        mercInspection: Boolean(c.mercInspection),
-        boxcareInspection: Boolean(c.boxcareInspection),
-      }));
-
-      if (extractedRows.length === 0) {
-        throw new Error('No container records were detected in the uploaded document.');
-      }
-
-      setContainers((prev) =>
-        prev.length === 1 && !prev[0].containerNumber.trim()
-          ? extractedRows
-          : [...prev, ...extractedRows],
-      );
-
-      if (manifest.shipmentType === 'IMPORT' || manifest.shipmentType === 'EXPORT') {
-        setShipmentType(manifest.shipmentType);
-      }
-
       // Token-based Master matching (prevents generic words like "LLC" or "Dubai" from false-matching)
       const STOPWORDS = new Set([
         'llc', 'fze', 'fzco', 'ltd', 'co', 'company', 'trading', 'logistics',
@@ -470,10 +566,69 @@ export default function DrayageCreateJobsPage() {
       }
 
       let matchedWhLabel: string | undefined;
+      let resolvedDefaultWhId = clientWarehouses[0]?.id || '';
+      const foundCli = findBestMasterMatch(manifest.warehouseName, clients, (c) => c.name);
       const foundWh = findBestMasterMatch(manifest.warehouseName, warehouses, (w) => w.name);
-      if (foundWh) {
-        setSelectedWarehouseId(foundWh.id);
+      if (foundCli) {
+        setSelectedClientId(foundCli.id);
+        matchedWhLabel = foundCli.name;
+        const cliWhs = warehouses.filter(
+          (w) =>
+            w.customerId === foundCli.id ||
+            (w.customerName && w.customerName.trim().toLowerCase() === foundCli.name.trim().toLowerCase()),
+        );
+        if (cliWhs[0]?.id) {
+          resolvedDefaultWhId = cliWhs[0].id;
+        }
+      } else if (foundWh) {
         matchedWhLabel = foundWh.name;
+        resolvedDefaultWhId = foundWh.id;
+        const parentCli = clients.find(
+          (c) =>
+            c.id === foundWh.customerId ||
+            (foundWh.customerName && c.name.trim().toLowerCase() === foundWh.customerName.trim().toLowerCase()),
+        );
+        if (parentCli) {
+          setSelectedClientId(parentCli.id);
+        }
+      }
+
+      const extractedRows: ContainerItem[] = (manifest.containers || []).map((c, idx) => {
+        const rawW = Number(c.weightKg) || 0;
+        const weightTonnes = rawW > 100 ? Math.round((rawW / 1000) * 100) / 100 : rawW;
+        return {
+          id: `c-ocr-${Date.now()}-${idx}`,
+          containerNumber: c.containerNumber || '',
+          size: c.size || '40HC',
+          containerType: c.containerType || 'DRY',
+          warehouseId: resolvedDefaultWhId,
+          sealNumber: c.sealNumber || '',
+          weightTonnes,
+          dischargeDate: c.dischargeDate || c.deliveryDate || '',
+          deliveryDate: c.deliveryDate || c.dischargeDate || '',
+          deliveryTime: c.deliveryTime || '',
+          doExpiryDate: c.doExpiryDate ? c.doExpiryDate.slice(0, 10) : '',
+          doExpiryTime: '23:59',
+          customsInspection: Boolean(c.customsInspection),
+          municipalityInspection: Boolean(c.municipalityInspection),
+          cpipInspection: Boolean(c.cpipInspection),
+          mercInspection: Boolean(c.mercInspection),
+          boxcareInspection: Boolean(c.boxcareInspection),
+        };
+      });
+
+      if (extractedRows.length === 0) {
+        throw new Error('No container records were detected in the uploaded document.');
+      }
+
+      setContainers((prev) =>
+        prev.length === 1 && !prev[0].containerNumber.trim()
+          ? extractedRows
+          : [...prev, ...extractedRows],
+      );
+
+      if (manifest.shipmentType === 'IMPORT' || manifest.shipmentType === 'EXPORT') {
+        setShipmentType(manifest.shipmentType);
       }
 
       if (manifest.notes || manifest.blOrDoNumber || manifest.shippingLine) {
@@ -525,9 +680,7 @@ export default function DrayageCreateJobsPage() {
 
     const custObj = customers.find((c) => c.id === selectedCustomerId);
     const termObj = terminals.find((t) => t.id === selectedTerminalId);
-    const whObj =
-      warehouses.find((w) => w.id === selectedWarehouseId) ||
-      clients.find((c) => c.id === selectedWarehouseId);
+    const cliObj = clients.find((c) => c.id === selectedClientId);
 
     if (!custObj?.name?.trim()) {
       showToast('error', 'Please select a Customer (Consignor/Shipper) before creating jobs');
@@ -537,8 +690,20 @@ export default function DrayageCreateJobsPage() {
       showToast('error', 'Please select a Port Terminal before creating jobs');
       return;
     }
-    if (!whObj?.name?.trim()) {
-      showToast('error', 'Please select a Consignee (Client/End User) before creating jobs');
+    if (!cliObj?.name?.trim()) {
+      showToast('error', 'Please select a Client from Client Master in Haulage Stakeholders & Port Route');
+      return;
+    }
+
+    const missingFacilityIndex = containers.findIndex((c) => {
+      const wh = clientWarehouses.find((w) => w.id === c.warehouseId);
+      return !wh;
+    });
+    if (missingFacilityIndex !== -1) {
+      showToast(
+        'error',
+        `Please select or create a Consignee Destination / Facility for Container #${missingFacilityIndex + 1} (under Client "${cliObj.name}")`,
+      );
       return;
     }
 
@@ -547,6 +712,8 @@ export default function DrayageCreateJobsPage() {
       Number.isFinite(Number(driverAllowanceAed)) && Number(driverAllowanceAed) >= 0
         ? Number(driverAllowanceAed)
         : 150;
+
+    const firstContainerWh = clientWarehouses.find((w) => w.id === containers[0]?.warehouseId);
 
     try {
       setSubmitting(true);
@@ -561,28 +728,47 @@ export default function DrayageCreateJobsPage() {
           customerName: custObj.name.trim(),
           terminalId: selectedTerminalId || null,
           terminalName: termObj.name.trim(),
-          warehouseId: selectedWarehouseId || null,
-          warehouseName: whObj.name.trim(),
+          warehouseId: firstContainerWh?.id || selectedClientId || null,
+          warehouseName: firstContainerWh?.name?.trim() || cliObj.name.trim(),
           rateAmountAed: safeRateAed,
           driverAllowanceAed: safeDriverAllowanceAed,
           notes,
-          containers: containers.map((c) => ({
-            containerNumber: c.containerNumber.trim().toUpperCase(),
-            size: c.size || '40HC',
-            containerType: c.containerType || 'DRY',
-            dischargeDate: c.deliveryDate || c.dischargeDate || '',
-            deliveryDate: c.deliveryDate || c.dischargeDate || '',
-            deliveryTime: c.deliveryTime || '',
-            doExpiryDate: c.doExpiryDate || '',
-            doExpiryTime: c.doExpiryTime || '',
-            sealNumber: c.sealNumber || '',
-            weightKg: Number.isFinite(Number(c.weightKg)) && Number(c.weightKg) > 0 ? Number(c.weightKg) : 22000,
-            customsInspection: Boolean(c.customsInspection),
-            municipalityInspection: Boolean(c.municipalityInspection),
-            cpipInspection: Boolean(c.cpipInspection),
-            mercInspection: Boolean(c.mercInspection),
-            boxcareInspection: Boolean(c.boxcareInspection),
-          })),
+          containers: containers.map((c) => {
+            const cntWh = clientWarehouses.find((w) => w.id === c.warehouseId);
+            const cntWeightKg =
+              Number.isFinite(Number(c.weightTonnes)) && Number(c.weightTonnes) > 0
+                ? Math.round(Number(c.weightTonnes) * 1000)
+                : 22000;
+            const doDateOnly = c.doExpiryDate ? c.doExpiryDate.slice(0, 10) : '';
+            const doExpiryWith1159Pm = doDateOnly ? `${doDateOnly}T23:59:00` : '';
+            return {
+              containerNumber: c.containerNumber.trim().toUpperCase(),
+              size: c.size || '40HC',
+              containerType: c.containerType || 'DRY',
+              warehouseId: cntWh?.id || null,
+              warehouseName: cntWh?.name?.trim() || cliObj.name.trim(),
+              rateAmountAed:
+                cntWh?.tripAmountAed && Number(cntWh.tripAmountAed) > 0
+                  ? Number(cntWh.tripAmountAed)
+                  : safeRateAed,
+              driverAllowanceAed:
+                cntWh?.driverAllowanceAed && Number(cntWh.driverAllowanceAed) > 0
+                  ? Number(cntWh.driverAllowanceAed)
+                  : safeDriverAllowanceAed,
+              dischargeDate: c.deliveryDate || c.dischargeDate || '',
+              deliveryDate: c.deliveryDate || c.dischargeDate || '',
+              deliveryTime: c.deliveryTime || '',
+              doExpiryDate: doExpiryWith1159Pm,
+              doExpiryTime: '23:59',
+              sealNumber: c.sealNumber || '',
+              weightKg: cntWeightKg,
+              customsInspection: Boolean(c.customsInspection),
+              municipalityInspection: Boolean(c.municipalityInspection),
+              cpipInspection: Boolean(c.cpipInspection),
+              mercInspection: Boolean(c.mercInspection),
+              boxcareInspection: Boolean(c.boxcareInspection),
+            };
+          }),
         }),
       });
 
@@ -618,48 +804,36 @@ export default function DrayageCreateJobsPage() {
     }));
   }, [terminals]);
 
-  const warehouseOptions = useMemo<SearchableSelectOption[]>(() => {
-    const whItems: SearchableSelectOption[] = warehouses.map((w) => {
-      const hasClientName =
-        w.customerName &&
-        w.customerName !== 'Enterprise Shipper' &&
-        w.customerName !== 'General / Shared Hub';
+  // Strictly Client Master options for Haulage Stakeholders & Port Route
+  const clientMasterOptions = useMemo<SearchableSelectOption[]>(() => {
+    return clients.map((cli) => {
+      const whCount = warehouses.filter(
+        (w) =>
+          w.customerId === cli.id ||
+          (w.customerName && w.customerName.trim().toLowerCase() === cli.name.trim().toLowerCase()),
+      ).length;
       return {
-        value: w.id,
-        label: hasClientName ? `${w.customerName} — ${w.name} (${w.zone})` : `${w.name} (${w.zone})`,
-        group: 'Consignee Facilities & Client Warehouses',
-        sublabel: hasClientName ? `Client: ${w.customerName} • Facility: ${w.name}` : w.zone,
-        badge: w.zone,
+        value: cli.id,
+        label: `${cli.name}${cli.code ? ` (${cli.code})` : ''}`,
+        sublabel: cli.streetAddress
+          ? `${cli.city || 'Dubai'} • ${cli.streetAddress} • ${whCount} Facility(s)`
+          : `Client Master • ${cli.city || 'Dubai'} • ${whCount} Mapped Facility(s)`,
+        badge: `${whCount} Dest.`,
       };
     });
+  }, [clients, warehouses]);
 
-    const clientIdsWithWarehouse = new Set(
-      warehouses.map((w) => w.customerId).filter(Boolean),
-    );
-    const clientNamesWithWarehouse = new Set(
-      warehouses
-        .map((w) => (w.customerName || '').trim().toLowerCase())
-        .filter(Boolean),
-    );
-
-    for (const cli of clients) {
-      if (!cli?.id || !cli?.name) continue;
-      const normName = cli.name.trim().toLowerCase();
-      if (!clientIdsWithWarehouse.has(cli.id) && !clientNamesWithWarehouse.has(normName)) {
-        whItems.push({
-          value: cli.id,
-          label: `${cli.name}${cli.city ? ` (${cli.city})` : ''}`,
-          group: 'Registered Clients (Client Master)',
-          sublabel: cli.streetAddress
-            ? `Client Master • ${cli.streetAddress}`
-            : `Client Master • Code: ${cli.code || 'CLIENT'}`,
-          badge: cli.city || 'Dubai',
-        });
-      }
-    }
-
-    return whItems;
-  }, [warehouses, clients]);
+  // Consignee Destination / Facility options strictly filtered by the selected Client
+  const clientFacilityOptions = useMemo<SearchableSelectOption[]>(() => {
+    return clientWarehouses.map((w) => ({
+      value: w.id,
+      label: `${w.name} (${w.zone})`,
+      sublabel: `${selectedClient?.name || w.customerName} • Zone: ${w.zone}${
+        w.tripAmountAed ? ` • Rate: AED ${w.tripAmountAed}` : ''
+      }`,
+      badge: w.zone,
+    }));
+  }, [clientWarehouses, selectedClient]);
 
   return (
     <div className="space-y-6">
@@ -913,39 +1087,38 @@ export default function DrayageCreateJobsPage() {
                   <p className="text-[10px] text-[var(--text-muted)]">Primary container yard gate-in & discharge facility</p>
                 </div>
 
-                {/* 3. Consignee (Client/End User) */}
+                {/* 3. Client (Client Master) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-[var(--text-main)] block">
-                      Consignee <span className="font-normal text-[var(--text-muted)]">(Client/End User)</span>
+                      Client <span className="font-normal text-[var(--text-muted)]">(Client Master)</span>
                     </label>
-                    <Link
-                      href="/logistics/drayage/terminal-map"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
-                      title="Open Terminal & Consignee Map directly"
-                    >
-                      <MapPin className="w-3 h-3" />
-                      Plot on Map Page
-                    </Link>
+                    {selectedClient ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {clientWarehouses.length} Facility{clientWarehouses.length === 1 ? '' : 'ies'} Linked
+                      </span>
+                    ) : null}
                   </div>
                   <SearchableSelect
-                    value={selectedWarehouseId}
-                    onChange={(newWhId) => setSelectedWarehouseId(newWhId)}
-                    options={warehouseOptions}
-                    placeholder="Search consignee client or facility..."
-                    searchPlaceholder="Type client name, warehouse, JAFZA, DIC..."
+                    value={selectedClientId}
+                    onChange={(newCliId) => setSelectedClientId(newCliId)}
+                    options={clientMasterOptions}
+                    placeholder="Select client from Client Master..."
+                    searchPlaceholder="Type client name, code, city, contact..."
                     accent="emerald"
                     addonAction={{
                       label: 'New',
                       icon: Plus,
-                      title: 'Add Consignee (Client/End User)',
+                      title: 'Add New Client to Client Master',
                       variant: 'emerald',
                       onClick: () => {
-                        setShowWarehouseModal(true);
+                        setShowClientModal(true);
                       },
                     }}
                   />
-                  <p className="text-[10px] text-[var(--text-muted)]">Consignee client facility, offload ramp & electronic POD delivery point</p>
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Select Client from Client Master — filters Consignee Destination facilities per container below
+                  </p>
                 </div>
               </div>
             </div>
@@ -1027,19 +1200,21 @@ export default function DrayageCreateJobsPage() {
         {/* Multi-Container Manifest Builder */}
         <Panel
           title={`Container Manifest (${containers.length} Units)`}
-          subtitle="Configure container specifications, discharge timestamps, DO expiry dates, and regulatory inspection requirements"
+          subtitle="Configure container specifications, consignee destination/facility (filtered by selected Client), discharge timestamps, DO expiry dates, and regulatory inspection requirements"
           icon={Package}
           accent="blue"
         >
           <div className="space-y-4">
-            {containers.map((c, index) => (
+            {containers.map((c, index) => {
+              const containerWarehouse = warehouses.find((w) => w.id === c.warehouseId);
+              return (
               <div
                 key={c.id}
                 className="p-4 sm:p-5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-4 shadow-sm"
               >
                 {/* Header: Container Unit & Quick Actions */}
                 <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="w-6 h-6 rounded-lg bg-blue-600/15 text-blue-400 font-bold flex items-center justify-center text-xs">
                       {index + 1}
                     </span>
@@ -1049,6 +1224,12 @@ export default function DrayageCreateJobsPage() {
                     {c.containerNumber ? (
                       <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-blue-400 font-bold tracking-wide">
                         {c.containerNumber}
+                      </span>
+                    ) : null}
+                    {containerWarehouse ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                        <MapPin className="w-3 h-3" />
+                        {containerWarehouse.name} ({containerWarehouse.zone})
                       </span>
                     ) : null}
                   </div>
@@ -1061,6 +1242,92 @@ export default function DrayageCreateJobsPage() {
                       <Trash2 className="w-3.5 h-3.5" /> Remove Unit
                     </button>
                   )}
+                </div>
+
+                {/* ── Tier 0: Consignee Destination / Facility (Per-Container, Filtered by Selected Client) ── */}
+                <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border border-emerald-500/20 space-y-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-[11px] font-bold text-[var(--text-main)] flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Consignee Destination / Facility *</span>
+                      {selectedClient ? (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Client: {selectedClient.name}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          Select Client in Stakeholders section above
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedClientId) {
+                            showToast('error', 'Please select a Client in Haulage Stakeholders & Port Route first.');
+                            return;
+                          }
+                          setActiveWarehouseModalContainerId(c.id);
+                          setShowWarehouseModal(true);
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                        title="Create & plot a new Consignee Destination / Facility for the selected Client"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add / Plot New Facility for Client
+                      </button>
+                      <Link
+                        href="/logistics/drayage/terminal-map"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-emerald-300 transition-colors"
+                        title="Open Terminal & Consignee Map directly"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Map Page
+                      </Link>
+                    </div>
+                  </div>
+                  <SearchableSelect
+                    value={c.warehouseId}
+                    onChange={(newWhId) => {
+                      updateContainer(c.id, { warehouseId: newWhId });
+                      const wh = warehouses.find((w) => w.id === newWhId);
+                      if (wh) {
+                        if (wh.tripAmountAed && wh.tripAmountAed > 0) setRateAmountAed(wh.tripAmountAed);
+                        if (wh.driverAllowanceAed && wh.driverAllowanceAed > 0) setDriverAllowanceAed(wh.driverAllowanceAed);
+                      }
+                    }}
+                    options={clientFacilityOptions}
+                    placeholder={
+                      selectedClient
+                        ? clientFacilityOptions.length > 0
+                          ? `Select destination facility for ${selectedClient.name}...`
+                          : `No facilities found for ${selectedClient.name} — click "+ New" to add one`
+                        : 'Select a Client in Haulage Stakeholders & Port Route first...'
+                    }
+                    searchPlaceholder="Type facility name, warehouse, JAFZA, DIC, city..."
+                    accent="emerald"
+                    addonAction={{
+                      label: 'New',
+                      icon: Plus,
+                      title: 'Add Consignee Destination / Facility for Selected Client',
+                      variant: 'emerald',
+                      onClick: () => {
+                        if (!selectedClientId) {
+                          showToast('error', 'Please select a Client in Haulage Stakeholders & Port Route first.');
+                          return;
+                        }
+                        setActiveWarehouseModalContainerId(c.id);
+                        setShowWarehouseModal(true);
+                      },
+                    }}
+                  />
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Showing only Consignee Destination / Warehouse facilities belonging to{' '}
+                    <span className="font-semibold text-[var(--text-main)]">
+                      {selectedClient ? selectedClient.name : 'the selected Client'}
+                    </span>
+                  </p>
                 </div>
 
                 {/* ── Tier 1: Container Physical Specifications (5 Columns) ── */}
@@ -1125,20 +1392,26 @@ export default function DrayageCreateJobsPage() {
                     />
                   </div>
 
-                  {/* Gross Weight (KG) */}
+                  {/* Gross Weight (Tonnes) */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between">
                       <span>Gross Weight</span>
-                      <span className="text-[10px] text-[var(--text-muted)] font-mono">KG</span>
+                      <span className="text-[10px] text-blue-400 font-mono font-bold">TONNES</span>
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={c.weightKg || ''}
-                      onChange={(e) => updateContainer(c.id, { weightKg: Number(e.target.value) || 0 })}
-                      placeholder="0"
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 text-xs"
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={c.weightTonnes || ''}
+                        onChange={(e) => updateContainer(c.id, { weightTonnes: Number(e.target.value) || 0 })}
+                        placeholder="0.00"
+                        className="w-full pl-3 pr-14 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-blue-500 text-xs"
+                      />
+                      <span className="absolute right-2.5 top-2 text-[10px] text-[var(--text-muted)] font-mono font-bold select-none">
+                        TONNES
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1198,7 +1471,7 @@ export default function DrayageCreateJobsPage() {
                           <Clock className="w-3.5 h-3.5" />
                         </div>
                         <div>
-                          <span className="font-semibold text-xs text-[var(--text-main)]">Delivery Order (DO) Expiry</span>
+                          <span className="font-semibold text-xs text-[var(--text-main)]">Delivery Order (DO) Validity</span>
                           <p className="text-[10px] text-[var(--text-muted)]">Port free time cutoff before demurrage/detention</p>
                         </div>
                       </div>
@@ -1211,12 +1484,12 @@ export default function DrayageCreateJobsPage() {
                       <div className="sm:col-span-7 space-y-1">
                         <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-amber-400" />
-                          <span>DO Expiry Date *</span>
+                          <span>DO Validity Date *</span>
                         </label>
                         <input
                           type="date"
                           value={c.doExpiryDate}
-                          onChange={(e) => updateContainer(c.id, { doExpiryDate: e.target.value })}
+                          onChange={(e) => updateContainer(c.id, { doExpiryDate: e.target.value, doExpiryTime: '23:59' })}
                           className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium cursor-pointer"
                         />
                       </div>
@@ -1224,14 +1497,17 @@ export default function DrayageCreateJobsPage() {
                       <div className="sm:col-span-5 space-y-1">
                         <label className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3 text-amber-400" />
-                          <span>Cutoff Time</span>
+                          <span>DO Cutoff Time (Fixed)</span>
                         </label>
-                        <input
-                          type="time"
-                          value={c.doExpiryTime || ''}
-                          onChange={(e) => updateContainer(c.id, { doExpiryTime: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 text-xs font-medium font-mono cursor-pointer"
-                        />
+                        <div
+                          title="DO Validity cutoff time is fixed to 11:59 PM by default; only DO Date is editable"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)]/70 border border-[var(--border-subtle)] text-amber-400 text-xs font-bold font-mono flex items-center justify-between select-none cursor-not-allowed"
+                        >
+                          <span>11:59 PM</span>
+                          <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                            Default
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1292,7 +1568,8 @@ export default function DrayageCreateJobsPage() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
@@ -1459,20 +1736,178 @@ export default function DrayageCreateJobsPage() {
         </div>
       )}
 
+      {/* Quick Create Client (Client Master) Modal */}
+      {showClientModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-emerald-400" />
+                Create New Client (Client Master)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowClientModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateClient} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">
+                  Client Company Name (Consignee / End User) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="Enter client company name"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Client Code (Optional)</label>
+                  <input
+                    type="text"
+                    value={newClientCode}
+                    onChange={(e) => setNewClientCode(e.target.value.toUpperCase())}
+                    placeholder="Auto-generated if blank"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Emirate / City</label>
+                  <select
+                    value={newClientCity}
+                    onChange={(e) => setNewClientCity(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  >
+                    <option value="Dubai">Dubai</option>
+                    <option value="Abu Dhabi">Abu Dhabi</option>
+                    <option value="Sharjah">Sharjah</option>
+                    <option value="Ajman">Ajman</option>
+                    <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                    <option value="Fujairah">Fujairah</option>
+                    <option value="Umm Al Quwain">Umm Al Quwain</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Contact Person</label>
+                  <input
+                    type="text"
+                    value={newClientContact}
+                    onChange={(e) => setNewClientContact(e.target.value)}
+                    placeholder="Enter contact person"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Phone / Mobile</label>
+                  <input
+                    type="tel"
+                    value={newClientPhone}
+                    onChange={(e) => setNewClientPhone(e.target.value)}
+                    placeholder="+971 50 000 0000"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-muted)]">Primary Address / Industrial Zone</label>
+                <input
+                  type="text"
+                  value={newClientAddress}
+                  onChange={(e) => setNewClientAddress(e.target.value)}
+                  placeholder="Enter client office or primary zone address"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">UAE TRN (Tax No.)</label>
+                  <input
+                    type="text"
+                    value={newClientTrn}
+                    onChange={(e) => setNewClientTrn(e.target.value)}
+                    placeholder="100XXXXXXXXX003"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-[var(--text-muted)]">Trade License</label>
+                  <input
+                    type="text"
+                    value={newClientLicense}
+                    onChange={(e) => setNewClientLicense(e.target.value)}
+                    placeholder="Enter trade license"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setShowClientModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingClient}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                >
+                  {savingClient ? 'Creating Client...' : 'Save & Select Client'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Unified Consignee Destination (Client Facility / Warehouse) Modal */}
       <ConsigneeDestinationModal
         isOpen={showWarehouseModal}
-        onClose={() => setShowWarehouseModal(false)}
+        onClose={() => {
+          setShowWarehouseModal(false);
+          setActiveWarehouseModalContainerId(null);
+        }}
         clients={clients}
-        defaultClientId={null}
+        warehouses={warehouses}
+        defaultClientId={selectedClientId || null}
+        forceNewFacility={true}
         onClientCreated={(newCli) => {
           setClients((prev) => [newCli, ...prev]);
+          if (newCli.id) {
+            setSelectedClientId(newCli.id);
+          }
         }}
         onSaved={async (savedWh) => {
           invalidateDrayageClientCache();
           await loadMasters(true);
-          if (savedWh.id) {
-            setSelectedWarehouseId(savedWh.id);
+          if (savedWh.customerId) {
+            setSelectedClientId(savedWh.customerId);
+          }
+          const createdWhId = savedWh.id;
+          if (createdWhId) {
+            if (activeWarehouseModalContainerId) {
+              updateContainer(activeWarehouseModalContainerId, { warehouseId: createdWhId });
+            } else {
+              setContainers((prev) =>
+                prev.map((row) => (!row.warehouseId ? { ...row, warehouseId: createdWhId } : row))
+              );
+            }
           }
           if (savedWh.tripAmountAed) {
             setRateAmountAed(savedWh.tripAmountAed);
@@ -1481,7 +1916,8 @@ export default function DrayageCreateJobsPage() {
             setDriverAllowanceAed(savedWh.driverAllowanceAed);
           }
           setShowWarehouseModal(false);
-          showToast('success', `Consignee destination "${savedWh.name}" added and mapped!`);
+          setActiveWarehouseModalContainerId(null);
+          showToast('success', `Consignee destination "${savedWh.name}" added and assigned to container!`);
         }}
       />
     </div>

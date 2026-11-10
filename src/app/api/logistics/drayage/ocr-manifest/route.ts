@@ -49,7 +49,7 @@ const ISO_6346_CHAR_VALUES: Record<string, number> = {
   U: 32, V: 34, W: 35, X: 36, Y: 37, Z: 38,
 };
 
-export function computeIso6346CheckDigit(prefix10: string): number | null {
+function computeIso6346CheckDigit(prefix10: string): number | null {
   if (!/^[A-Z]{4}\d{6}$/.test(prefix10)) return null;
   let sum = 0;
   for (let i = 0; i < 10; i++) {
@@ -67,7 +67,7 @@ export function computeIso6346CheckDigit(prefix10: string): number | null {
  * (e.g. '0' vs 'O', '1' vs 'I', '5' vs 'S', '8' vs 'B', '2' vs 'Z', '6' vs 'G')
  * between the 4-letter owner/equipment prefix and the 7-digit serial + check digit.
  */
-export function cleanContainerNumber(raw: unknown): { containerNumber: string; isoValid: boolean } {
+function cleanContainerNumber(raw: unknown): { containerNumber: string; isoValid: boolean } {
   const s = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!s) return { containerNumber: '', isoValid: false };
 
@@ -604,9 +604,11 @@ const GEMINI_MANIFEST_SCHEMA = {
   ],
 };
 
-export async function POST(req: NextRequest) {
-  const tenantAuth = await requireAuthorizedTenant(req);
-  if ('response' in tenantAuth) return tenantAuth.response;
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
 
   try {
     const contentType = req.headers.get('content-type') || '';

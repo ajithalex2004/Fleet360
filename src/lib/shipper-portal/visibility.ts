@@ -25,6 +25,7 @@
 
 import 'server-only';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   TRACKING_LEVELS,
   type TrackingLevel,
@@ -52,12 +53,14 @@ export async function resolveTrackingLevel(
   // 1. Shipment override
   if (shipmentId) {
     try {
-      const s = await prisma.$queryRawUnsafe<Array<{ level: string | null }>>(
-        `SELECT portal_tracking_level AS level
-           FROM logistics_shipment_orders
-          WHERE id = $1 AND tenant_id = $2
-          LIMIT 1`,
-        shipmentId, tenantId,
+      const s = await withTenantRls(prisma, tenantId, (tx) =>
+        tx.$queryRawUnsafe<Array<{ level: string | null }>>(
+          `SELECT portal_tracking_level AS level
+             FROM logistics_shipment_orders
+            WHERE id = $1 AND tenant_id = $2
+            LIMIT 1`,
+          shipmentId, tenantId,
+        )
       );
       const v = s[0]?.level;
       if (isTrackingLevel(v)) return v;
@@ -67,12 +70,14 @@ export async function resolveTrackingLevel(
   // 2. Customer default
   if (customerId) {
     try {
-      const c = await prisma.$queryRawUnsafe<Array<{ level: string | null }>>(
-        `SELECT portal_tracking_level AS level
-           FROM customers
-          WHERE id = $1 AND tenant_id = $2
-          LIMIT 1`,
-        customerId, tenantId,
+      const c = await withTenantRls(prisma, tenantId, (tx) =>
+        tx.$queryRawUnsafe<Array<{ level: string | null }>>(
+          `SELECT portal_tracking_level AS level
+             FROM customers
+            WHERE id = $1 AND tenant_id = $2
+            LIMIT 1`,
+          customerId, tenantId,
+        )
       );
       const v = c[0]?.level;
       if (isTrackingLevel(v)) return v;
@@ -81,12 +86,14 @@ export async function resolveTrackingLevel(
 
   // 3. Tenant default
   try {
-    const t = await prisma.$queryRawUnsafe<Array<{ level: string | null }>>(
-      `SELECT default_portal_tracking_level AS level
-         FROM tenant_settings
-        WHERE tenant_id = $1
-        LIMIT 1`,
-      tenantId,
+    const t = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$queryRawUnsafe<Array<{ level: string | null }>>(
+        `SELECT default_portal_tracking_level AS level
+           FROM tenant_settings
+          WHERE tenant_id = $1
+          LIMIT 1`,
+        tenantId,
+      )
     );
     const v = t[0]?.level;
     if (isTrackingLevel(v)) return v;
@@ -242,13 +249,15 @@ export async function setShipmentTrackingOverride(args: {
   level: TrackingLevel | null;       // null clears the override → revert to customer default
   reason: string | null;
 }): Promise<boolean> {
-  const result = await prisma.$executeRawUnsafe(
-    `UPDATE logistics_shipment_orders
-        SET portal_tracking_level = $1,
-            portal_tracking_override_reason = $2,
-            updated_at = NOW()
-      WHERE id = $3 AND tenant_id = $4`,
-    args.level, args.reason, args.shipmentId, args.tenantId,
+  const result = await withTenantRls(prisma, args.tenantId, (tx) =>
+    tx.$executeRawUnsafe(
+      `UPDATE logistics_shipment_orders
+          SET portal_tracking_level = $1,
+              portal_tracking_override_reason = $2,
+              updated_at = NOW()
+        WHERE id = $3 AND tenant_id = $4`,
+      args.level, args.reason, args.shipmentId, args.tenantId,
+    )
   );
   return Number(result) > 0;
 }
@@ -259,11 +268,13 @@ export async function setCustomerTrackingDefault(args: {
   customerId: string;
   level: TrackingLevel;
 }): Promise<boolean> {
-  const result = await prisma.$executeRawUnsafe(
-    `UPDATE customers
-        SET portal_tracking_level = $1, updated_at = NOW()
-      WHERE id = $2 AND tenant_id = $3`,
-    args.level, args.customerId, args.tenantId,
+  const result = await withTenantRls(prisma, args.tenantId, (tx) =>
+    tx.$executeRawUnsafe(
+      `UPDATE customers
+          SET portal_tracking_level = $1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3`,
+      args.level, args.customerId, args.tenantId,
+    )
   );
   return Number(result) > 0;
 }
@@ -273,12 +284,14 @@ export async function setTenantTrackingDefault(args: {
   tenantId: string;
   level: TrackingLevel;
 }): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO tenant_settings (tenant_id, default_portal_tracking_level, updated_at)
-     VALUES ($1, $2, NOW())
-     ON CONFLICT (tenant_id) DO UPDATE
-       SET default_portal_tracking_level = EXCLUDED.default_portal_tracking_level,
-           updated_at = NOW()`,
-    args.tenantId, args.level,
+  await withTenantRls(prisma, args.tenantId, (tx) =>
+    tx.$executeRawUnsafe(
+      `INSERT INTO tenant_settings (tenant_id, default_portal_tracking_level, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (tenant_id) DO UPDATE
+         SET default_portal_tracking_level = EXCLUDED.default_portal_tracking_level,
+             updated_at = NOW()`,
+      args.tenantId, args.level,
+    )
   );
 }

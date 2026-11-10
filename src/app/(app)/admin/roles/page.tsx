@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFetchedData, fetchOnce, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import { useFetchedData, fetchOnce, invalidate } from '@/hooks/useFetchedData';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { MODULES as PERMISSION_MODULES, SYSTEM_ROLES } from '@/lib/permissions';
 import { MODULE_BY_KEY } from '@/lib/modules';
@@ -164,7 +164,10 @@ export default function RolesPage() {
       const res = await fetch('/api/admin/roles/override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceRoleId: overridePrompt.role.id }),
+        body: JSON.stringify({
+          sourceRoleId: overridePrompt.role.id,
+          ...(myTenantId ? { tenantId: myTenantId } : {}),
+        }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -271,7 +274,11 @@ export default function RolesPage() {
   const createRole = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
-      const res = await fetch('/api/admin/roles', {
+      // Tenant admins create custom tenant-scoped roles via `/api/admin/roles/override`
+      // (`'admin'` policy level); Super Admins create platform roles via `/api/admin/roles`
+      // (`'platform'` policy level) or tenant roles when `myTenantId` is set.
+      const endpoint = isSuperAdmin ? '/api/admin/roles' : '/api/admin/roles/override';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRole),
@@ -499,7 +506,7 @@ export default function RolesPage() {
 
                 {/* Action buttons - available for ALL roles */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {selectedRole.isSystem && isSuperAdmin && (
+                  {selectedRole.isSystem && selectedRole.tenantId != null && isSuperAdmin && (
                     <button
                       onClick={() => removeSystemFlag(selectedRole)}
                       disabled={removingFlag}

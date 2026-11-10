@@ -143,7 +143,7 @@ describe('POST /api/rental/agreements/[id]/generate-invoice', () => {
     expect(res.status).toBeLessThan(300);
     expect(st.rateRequests[0].pickupDate).toEqual(START);
 
-    const [subtotal, disc, taxable, , tax, total] = invoiceArgs().slice(12, 18) as number[];
+    const [subtotal, disc, taxable, , tax, total] = invoiceArgs().slice(13, 19) as number[];
     expect(subtotal).toBe(900);
     expect(disc).toBe(100);
     expect(taxable).toBe(900);

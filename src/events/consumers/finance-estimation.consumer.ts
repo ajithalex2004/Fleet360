@@ -122,8 +122,8 @@ export class FinanceEstimationConsumer extends BaseEventConsumer<EstimationAppro
         preparedBy: actor,
         costCentre: 'PC-MAINTENANCE',
         notes:      `Accrual provision on estimation approval for MR ${requestId}.`,
-        debit:  { code: '5100', name: 'Maintenance Expense',             description },
-        credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual est. ${requestId}` },
+        debit:  { code: '5120', name: 'Vehicle Maintenance & Repairs',   description },
+        credit: { code: '2120', name: 'Accrued Liabilities',             description: `Accrual est. ${requestId}` },
       });
     }
 

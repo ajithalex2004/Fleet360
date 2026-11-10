@@ -9,11 +9,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantReminderSchedules } from '@/lib/finance/reminder-schedules';
+import { sendEmail } from '@/lib/email';
+import { sendSms } from '@/lib/sms';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// finance_reminder_schedules and finance_reminder_log come from migrations and
-// hold each tenant's own rows (20261005090000_finance_tenant_tables); a tenant
-// gets a copy of the default schedules on first use.
 
 export async function GET(req: NextRequest) {
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const bRaw = await req.json();
-  const b = stripTenantOwnershipFields(bRaw);
+    const b = stripTenantOwnershipFields(bRaw);
 
       if (b.action === 'run') {
         // ── Process all active schedules against overdue/upcoming invoices ─────
@@ -91,27 +91,32 @@ export async function POST(req: NextRequest) {
         const results: { schedule: string; fired: number; invoices: string[] }[] = [];
 
         for (const sch of schedules) {
-          const schId      = sch.id instanceof Buffer ? sch.id.toString('hex') : String(sch.id);
-          const days       = Number(sch.trigger_days);
-          const trigType   = String(sch.trigger_type);
+          const schId    = sch.id instanceof Buffer ? sch.id.toString('hex') : String(sch.id);
+          const days     = Number(sch.trigger_days);
+          const trigType = String(sch.trigger_type);
 
           let dateCond = '';
-          if      (trigType === 'BEFORE_DUE') dateCond = `AND due_date = CURRENT_DATE + INTERVAL '${days} days'`;
-          else if (trigType === 'ON_DUE')     dateCond = `AND due_date = CURRENT_DATE`;
-          else /* AFTER_DUE */                dateCond = `AND due_date = CURRENT_DATE - INTERVAL '${days} days'`;
+          if      (trigType === 'BEFORE_DUE') dateCond = `AND fi.due_date <= CURRENT_DATE + INTERVAL '${days} days' AND fi.due_date >= CURRENT_DATE`;
+          else if (trigType === 'ON_DUE')     dateCond = `AND fi.due_date <= CURRENT_DATE`;
+          else /* AFTER_DUE */                dateCond = `AND (CURRENT_DATE - fi.due_date::date) >= ${days}`;
 
           let moduleWhere = '';
-          if (sch.module_filter) moduleWhere += ` AND module = '${String(sch.module_filter).replace(/'/g,"''")}'`;
-          if (sch.branch_filter) moduleWhere += ` AND branch = '${String(sch.branch_filter).replace(/'/g,"''")}'`;
+          if (sch.module_filter) moduleWhere += ` AND fi.module = '${String(sch.module_filter).replace(/'/g,"''")}'`;
+          if (sch.branch_filter) moduleWhere += ` AND fi.branch = '${String(sch.branch_filter).replace(/'/g,"''")}'`;
 
           const due_invoices = await tx.$queryRawUnsafe(`
-            SELECT id, invoice_number, client_name, client_email, total_amount, paid_amount, due_date
-            FROM finance_invoices
-            WHERE tenant_id = $1 AND deleted_at IS NULL
-              AND payment_status NOT IN ('PAID','CANCELLED')
+            SELECT fi.id, fi.invoice_number, fi.client_name, fi.client_email, fi.client_phone,
+                   fi.total_amount, fi.paid_amount, fi.due_date
+            FROM finance_invoices fi
+            WHERE fi.tenant_id = $1 AND fi.deleted_at IS NULL
+              AND fi.payment_status NOT IN ('PAID','CANCELLED','VOID')
+              AND NOT EXISTS (
+                SELECT 1 FROM finance.finance_reminder_log rl
+                 WHERE rl.invoice_id = fi.id::text AND rl.schedule_id = $2::uuid
+              )
               ${dateCond}
               ${moduleWhere}
-          `, tenantId).catch(() => []) as Record<string, unknown>[];
+          `, tenantId, schId).catch(() => []) as Record<string, unknown>[];
 
           const firedInvoices: string[] = [];
 
@@ -121,10 +126,9 @@ export async function POST(req: NextRequest) {
             const amount = (Number(inv.total_amount) - Number(inv.paid_amount)).toLocaleString('en-AE', { minimumFractionDigits: 2 });
             const dueD   = inv.due_date ? new Date(String(inv.due_date)).toLocaleDateString('en-GB') : '—';
 
-            // De-dup: skip if already sent for same schedule + invoice today
             const already = await tx.$queryRawUnsafe(`
               SELECT 1 FROM finance_reminder_log
-              WHERE tenant_id = $3 AND schedule_id = $1::uuid AND invoice_id = $2 AND sent_at::date = CURRENT_DATE
+              WHERE tenant_id = $3 AND schedule_id = $1::uuid AND invoice_id = $2
               LIMIT 1
             `, schId, invId, tenantId).catch(() => []) as unknown[];
 
@@ -140,8 +144,22 @@ export async function POST(req: NextRequest) {
               .replace(/\{invoice_no\}/g, invNo)
               .replace(/\{client_name\}/g, String(inv.client_name));
 
-            // In production: send email/SMS/WhatsApp here.
-            // For now: log as SENT (simulated delivery)
+            // Best-effort multi-channel reminder dispatch
+            const channelUpper = String(sch.channel ?? 'EMAIL').toUpperCase();
+            if ((channelUpper === 'SMS' || channelUpper === 'MULTI' || channelUpper === 'ALL') && inv.client_phone) {
+              await sendSms({ to: String(inv.client_phone), body }).catch(() => {});
+            }
+            if ((channelUpper === 'WHATSAPP' || channelUpper === 'MULTI' || channelUpper === 'ALL') && inv.client_phone) {
+              await sendWhatsApp({ to: String(inv.client_phone), body }).catch(() => {});
+            }
+            if ((channelUpper === 'EMAIL' || channelUpper === 'MULTI' || channelUpper === 'ALL' || !inv.client_phone) && inv.client_email) {
+              await sendEmail({
+                to: String(inv.client_email),
+                subject,
+                text: body,
+              }).catch(() => {});
+            }
+
             await tx.$executeRawUnsafe(`
               INSERT INTO finance_reminder_log
                 (schedule_id, invoice_id, invoice_no, client_name, client_email, channel, subject, body, status, tenant_id)
@@ -191,7 +209,7 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const bRaw = await req.json();
-  const b = stripTenantOwnershipFields(bRaw);
+    const b = stripTenantOwnershipFields(bRaw);
       const { id } = b;
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
@@ -242,4 +260,3 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true });
   });
 }
-

@@ -29,6 +29,8 @@
         "test:unit": "vitest run tests/unit",
         "test:integration": "vitest run tests/integration",
         "test:e2e": "playwright test",
+        "test:e2e:exchange": "playwright test tests/e2e/exchange-workflow.spec.ts tests/e2e/exchange-4vertical-stress-regression.spec.ts",
+        "test:e2e:exchange-stress": "playwright test tests/e2e/exchange-4vertical-stress-regression.spec.ts",
         "test:e2e:finance": "playwright test tests/e2e/finance-workflow.spec.ts",
         "test:e2e:fleet": "playwright test tests/e2e/fleet-workflow.spec.ts",
         "test:e2e:rac": "playwright test tests/e2e/rac-workflow.spec.ts",

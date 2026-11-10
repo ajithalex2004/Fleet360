@@ -181,8 +181,6 @@ function estimateSavingKm(
   pickupDistKm: number,
   dropoffDistKm: number | undefined,
 ): number {
-  // Heuristic: merging two separate trips saves roughly:
-  //   (pickup detour) + 0.5 × (dropoff detour, if routes overlap)
   return parseFloat(
     (pickupDistKm * 0.8 + (dropoffDistKm ?? 0) * 0.4).toFixed(1)
   );
@@ -203,8 +201,8 @@ export async function evaluatePair(
   }
 
   /* ── Coordinates available? ── */
-  const hasOriginA = target.origin_lat    && target.origin_lng;
-  const hasOriginB = candidate.origin_lat && candidate.origin_lng;
+  const hasOriginA = target.origin_lat != null    && target.origin_lng != null;
+  const hasOriginB = candidate.origin_lat != null && candidate.origin_lng != null;
   if (!hasOriginA || !hasOriginB) {
     failReasons.push('Missing GPS coordinates for pickup distance check');
   }
@@ -216,7 +214,6 @@ export async function evaluatePair(
       { lat: target.origin_lat!,    lng: target.origin_lng! },
       { lat: candidate.origin_lat!, lng: candidate.origin_lng! },
     );
-    // Reject if Haversine already > 2× the configured distance (can't possibly pass road check)
     if (pickupHaversine > config.pickupDistanceKm * 2) {
       failReasons.push(`Pickup too far: ${pickupHaversine.toFixed(1)} km Haversine (limit × 2 = ${(config.pickupDistanceKm * 2).toFixed(1)} km)`);
     }
@@ -267,8 +264,8 @@ export async function evaluatePair(
   /* ── Dropoff check (if required) ── */
   let dropoffRoadKm: number | undefined;
   let dropoffTimeDiff: number | undefined;
-  const hasDropoffA = target.dest_lat    && target.dest_lng;
-  const hasDropoffB = candidate.dest_lat && candidate.dest_lng;
+  const hasDropoffA = target.dest_lat != null    && target.dest_lng != null;
+  const hasDropoffB = candidate.dest_lat != null && candidate.dest_lng != null;
 
   if (config.requireDropoffMatch) {
     if (hasDropoffA && hasDropoffB) {
@@ -316,7 +313,7 @@ export async function evaluatePair(
     const timeScore  = Math.max(0, 1 - pickupTimeDiff / config.pickupTimeWindowMin) * 30;
     const dropScore  = config.requireDropoffMatch && dropoffRoadKm !== undefined
       ? Math.max(0, 1 - dropoffRoadKm / config.dropoffDistanceKm) * 20
-      : 20; // full score if no dropoff match required
+      : 20;
     const capScore   = Math.max(0, 1 - combinedPax / config.maxPassengers) * 10;
     score = Math.round(proxScore + timeScore + dropScore + capScore);
   }
@@ -346,10 +343,13 @@ export async function getMergeCandidates(
 ): Promise<{ candidates: MergeCandidate[]; config: MergeConfig; targetJob: MergeJob }> {
   type Row = Record<string, unknown>;
 
-  /* Load target job */
+  /* Load target job (supporting both origin/dest and pickup/dropoff) */
   const [targetRow] = await prisma.$queryRawUnsafe<Row[]>(`
     SELECT id, service_type, priority, status,
-           origin_lat, origin_lng, dest_lat, dest_lng,
+           COALESCE(origin_lat, pickup_lat)   AS origin_lat,
+           COALESCE(origin_lng, pickup_lng)   AS origin_lng,
+           COALESCE(dest_lat,   dropoff_lat)  AS dest_lat,
+           COALESCE(dest_lng,   dropoff_lng)  AS dest_lng,
            origin_address, destination_address,
            scheduled_pickup, passenger_count, created_at
     FROM dispatch_jobs
@@ -370,7 +370,10 @@ export async function getMergeCandidates(
   /* Load candidate jobs — same tenant, same service type, PENDING/SEARCHING, created last 6h */
   const rows = await prisma.$queryRawUnsafe<Row[]>(`
     SELECT id, service_type, priority, status,
-           origin_lat, origin_lng, dest_lat, dest_lng,
+           COALESCE(origin_lat, pickup_lat)   AS origin_lat,
+           COALESCE(origin_lng, pickup_lng)   AS origin_lng,
+           COALESCE(dest_lat,   dropoff_lat)  AS dest_lat,
+           COALESCE(dest_lng,   dropoff_lng)  AS dest_lng,
            origin_address, destination_address,
            scheduled_pickup, passenger_count, created_at
     FROM dispatch_jobs
@@ -408,7 +411,6 @@ export const loadMergeConfigPublic = loadMergeConfig;
 async function loadMergeConfig(tenantId: string): Promise<MergeConfig & { tripMergingEnabled: boolean }> {
   type Row = Record<string, unknown>;
 
-  // Try tenant settings API (platform_settings table or tenant metadata)
   const rows = await prisma.$queryRawUnsafe<Row[]>(`
     SELECT settings FROM tenant_settings
     WHERE tenant_id = $1
@@ -420,7 +422,6 @@ async function loadMergeConfig(tenantId: string): Promise<MergeConfig & { tripMe
     s = rows[0].settings as Record<string, unknown>;
   }
 
-  // Also check platform_settings for routing engine config
   const pRows = await prisma.$queryRawUnsafe<Row[]>(`
     SELECT value FROM platform_settings WHERE key = 'routing_config' LIMIT 1
   `).catch(() => [] as Row[]);

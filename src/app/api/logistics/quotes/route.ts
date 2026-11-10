@@ -111,8 +111,10 @@ export async function GET(req: NextRequest) {
                   distance_km, weight_tonnes, shipment_type, total_aed, status,
                   valid_days, booking_id, created_at
            FROM logistics_quotes
+           WHERE tenant_id = $1
            ORDER BY created_at DESC
-           LIMIT 100`
+           LIMIT 100`,
+          tenantId
         ).catch(() => [] as Array<Record<string, unknown>>);
 
         return NextResponse.json(quotes.map(q => ({
@@ -208,4 +210,3 @@ export async function POST(req: NextRequest) {
       }
   });
 }
-

@@ -66,6 +66,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, ...res });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to assign vehicle/driver' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to assign vehicle/driver';
+    const isComplianceGate = /expired|inactive|not in ACTIVE|unauthorized/i.test(message);
+    return NextResponse.json({ error: message }, { status: isComplianceGate ? 422 : 500 });
   }
 }

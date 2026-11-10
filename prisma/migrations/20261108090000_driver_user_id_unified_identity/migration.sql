@@ -1,9 +1,39 @@
 -- =============================================================================
 -- Pillar 3: Unified Identity Link (User.id <-> Driver.id Foreign Key)
 -- =============================================================================
--- 1. Add explicit user_id column on public.drivers referencing public."User"(id)
+-- 1. Ensure untracked Driver Hub extension columns exist on fresh database replay,
+--    and add explicit user_id column on public.drivers referencing public."User"(id)
 ALTER TABLE public.drivers
+  ADD COLUMN IF NOT EXISTS license_type TEXT,
+  ADD COLUMN IF NOT EXISTS emirates_id_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS passport_number TEXT,
+  ADD COLUMN IF NOT EXISTS passport_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS visa_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS garage_id TEXT,
+  ADD COLUMN IF NOT EXISTS employee_id TEXT,
+  ADD COLUMN IF NOT EXISTS driver_category TEXT,
+  ADD COLUMN IF NOT EXISTS issuing_authority TEXT,
+  ADD COLUMN IF NOT EXISTS additional_documents JSONB,
   ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES public."User"(id) ON DELETE SET NULL;
+
+-- 1b. Ensure untracked Drayage / Telematics extension columns exist on public.vehicles
+ALTER TABLE public.vehicles
+  ADD COLUMN IF NOT EXISTS fuel_level_pct INTEGER,
+  ADD COLUMN IF NOT EXISTS current_lat DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS current_lng DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS next_service_km INTEGER;
+
+-- 1c. Ensure untracked Bus Ops routing / scheduling columns exist on fresh database replay
+ALTER TABLE public.bus_routes
+  ADD COLUMN IF NOT EXISTS code TEXT,
+  ADD COLUMN IF NOT EXISTS required_vehicle_group TEXT,
+  ADD COLUMN IF NOT EXISTS required_license_type TEXT;
+
+ALTER TABLE public.trip_schedules
+  ADD COLUMN IF NOT EXISTS template_id TEXT,
+  ADD COLUMN IF NOT EXISTS latest_arrival_time TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS merged_into_trip_id TEXT,
+  ADD COLUMN IF NOT EXISTS route_variant_version_id TEXT;
 
 -- 2. Partial unique index ensuring 1-to-1 identity mapping for active drivers
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_user_id_unique
@@ -28,8 +58,15 @@ WHERE d.user_id IS NULL
     WHERE d2.user_id = u.id AND d2.deleted_at IS NULL
   );
 
--- 5. Backfill Step B: Deterministic tenant-scoped identity matching
---    (email -> employeeId -> username -> exact full name)
+-- 5. Backfill Step B: tenant-scoped identity matching, driver logins only
+--    (email -> employeeId).
+--    Login and vehicle login treat drivers.user_id as authoritative for any
+--    account type, so only an account that is plainly this tenant's driver
+--    login may be linked here: a DRIVER-type user whose every membership is in
+--    the driver's tenant with a driver role (src/lib/drivers/driver-login-user.ts).
+--    Matching any member by email, employee id, username or full name would
+--    have given admins and staff a driver session as whichever driver shared
+--    their name.
 WITH candidate_matches AS (
   SELECT DISTINCT ON (d.id)
     d.id AS driver_id,
@@ -41,15 +78,20 @@ WITH candidate_matches AS (
     ON u.id = ut.user_id
   WHERE d.user_id IS NULL
     AND d.deleted_at IS NULL
+    AND UPPER(COALESCE(u."userType", '')) = 'DRIVER'
+    AND NOT EXISTS (
+      SELECT 1
+        FROM public.user_tenants ut3
+        LEFT JOIN public.roles r3 ON r3.id = ut3.role_id
+       WHERE ut3.user_id = u.id
+         AND (
+           ut3.tenant_id::text <> d.tenant_id::text
+           OR NOT (r3.id IS NULL OR UPPER(COALESCE(r3.code, '')) = 'DRIVER' OR LOWER(COALESCE(r3.name, '')) LIKE '%driver%')
+         )
+    )
     AND (
       (NULLIF(TRIM(d.email), '') IS NOT NULL AND LOWER(TRIM(u.email)) = LOWER(TRIM(d.email)))
       OR (NULLIF(TRIM(d.employee_id), '') IS NOT NULL AND LOWER(TRIM(COALESCE(u."employeeId", ''))) = LOWER(TRIM(d.employee_id)))
-      OR (NULLIF(TRIM(d.employee_id), '') IS NOT NULL AND LOWER(TRIM(COALESCE(u.username, ''))) = LOWER(TRIM(d.employee_id)))
-      OR (
-        NULLIF(TRIM(d.name), '') IS NOT NULL
-        AND LOWER(REGEXP_REPLACE(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", ''))), '\s+', ' ', 'g'))
-          = LOWER(REGEXP_REPLACE(TRIM(d.name), '\s+', ' ', 'g'))
-      )
     )
     AND NOT EXISTS (
       SELECT 1 FROM public.drivers d2
@@ -59,9 +101,7 @@ WITH candidate_matches AS (
     d.id,
     CASE
       WHEN NULLIF(TRIM(d.email), '') IS NOT NULL AND LOWER(TRIM(u.email)) = LOWER(TRIM(d.email)) THEN 1
-      WHEN NULLIF(TRIM(d.employee_id), '') IS NOT NULL AND LOWER(TRIM(COALESCE(u."employeeId", ''))) = LOWER(TRIM(d.employee_id)) THEN 2
-      WHEN NULLIF(TRIM(d.employee_id), '') IS NOT NULL AND LOWER(TRIM(COALESCE(u.username, ''))) = LOWER(TRIM(d.employee_id)) THEN 3
-      ELSE 4
+      ELSE 2
     END ASC,
     u."createdAt" ASC
 ),

@@ -22,7 +22,9 @@ type Row = Record<string, unknown>;
 
 async function nextPayableNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
   const [row] = await tx.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text AS count FROM finance_payables WHERE tenant_id = $1`,
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(payable_number, '-', 3) AS INTEGER)), 0)::text AS count
+       FROM finance_payables
+      WHERE tenant_id = $1 AND payable_number ~ '^AP-[0-9]{6}-[0-9]+$'`,
     tenantId,
   ).catch(() => [{ count: '0' }]);
   const ym  = new Date().toISOString().slice(0, 7).replace('-', '');
@@ -41,6 +43,28 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+      // Best-effort sync any rows from finance.finance_payables into public.finance_payables
+      await tx.$executeRawUnsafe('SAVEPOINT sync_schema_payables').catch(() => {});
+      await tx.$executeRawUnsafe(
+        `INSERT INTO public.finance_payables
+           (id, payable_number, vendor_id, vendor_name, vendor_trn, vendor_email,
+            module, source_type, source_id, description, line_items,
+            subtotal, discount_amount, vat_rate, vat_amount, total_amount, paid_amount,
+            currency, issue_date, due_date, cost_centre, profit_centre, branch,
+            status, payment_status, journal_entry_id, notes, prepared_by, tenant_id, created_at, updated_at)
+         SELECT id, payable_number, vendor_id, vendor_name, vendor_trn, vendor_email,
+                module, source_type, source_id, description, line_items,
+                subtotal, COALESCE(discount_amount, 0), COALESCE(vat_rate, 5), vat_amount, total_amount, COALESCE(paid_amount, 0),
+                currency, issue_date, due_date, cost_centre, profit_centre, branch,
+                status, payment_status, journal_entry_id, notes, prepared_by, tenant_id, created_at, updated_at
+           FROM finance.finance_payables fp
+          WHERE fp.tenant_id = $1
+         ON CONFLICT (payable_number) DO NOTHING`,
+        tenantId,
+      ).then(
+        () => tx.$executeRawUnsafe('RELEASE SAVEPOINT sync_schema_payables').catch(() => {}),
+        () => tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sync_schema_payables').catch(() => {}),
+      );
 
       const sp     = req.nextUrl.searchParams;
       const status  = sp.get('status');
@@ -172,4 +196,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-

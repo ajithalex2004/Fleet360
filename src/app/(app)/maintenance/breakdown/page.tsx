@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
     AlertTriangle, Plus, Truck, CheckCircle2, Clock,
-    MapPin, Wrench, X, ChevronRight, Radio,
+    MapPin, Wrench, X, ChevronRight, Radio, Globe,
 } from 'lucide-react';
 import type { BreakdownReport, BreakdownType, BreakdownStatus, BreakdownSeverity } from '@/types/maintenance';
 
@@ -16,7 +16,7 @@ async function send(url: string, method: string, body: unknown) {
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
-    return json as BreakdownReport;
+    return json as BreakdownReport & { exchangeRequest?: { id: string; requestNumber: string; opportunityId: string } };
 }
 
 async function loadOptions(url: string, label: (row: Record<string, unknown>) => string): Promise<Option[]> {
@@ -72,6 +72,7 @@ export default function BreakdownPage() {
     const [loading, setLoading]         = useState(true);
     const [saving, setSaving]           = useState(false);
     const [error, setError]             = useState<string | null>(null);
+    const [exchangeNotice, setExchangeNotice] = useState<string | null>(null);
     const [formError, setFormError]     = useState<string | null>(null);
     const [selected, setSelected]       = useState<BreakdownReport | null>(null);
     const [showCreate, setShowCreate]   = useState(false);
@@ -97,8 +98,6 @@ export default function BreakdownPage() {
     const dispatched = reports.filter(r => r.status === 'RECOVERY_DISPATCHED').length;
     const atWorkshop = reports.filter(r => r.status === 'AT_WORKSHOP').length;
     const resolved   = reports.filter(r => r.status === 'RESOLVED').length;
-
-    // ─── handlers ──────────────────────────────────────────────────────────────
 
     // ─── load ──────────────────────────────────────────────────────────────────
 
@@ -159,7 +158,7 @@ export default function BreakdownPage() {
         }
     };
 
-    const handleStatusAdvance = async (report: BreakdownReport) => {
+    const handleStatusAdvance = async (report: BreakdownReport, outsourceToExchange = false) => {
         const NEXT: Record<BreakdownStatus, BreakdownStatus | null> = {
             REPORTED:            'RECOVERY_DISPATCHED',
             RECOVERY_DISPATCHED: 'RECOVERY_COMPLETED',
@@ -171,11 +170,17 @@ export default function BreakdownPage() {
         if (!next) return;
         setSaving(true);
         setError(null);
+        setExchangeNotice(null);
         try {
             const updated = report.status === 'REPORTED'
-                ? await send(`/api/maintenance/breakdown-reports/${report.id}/dispatch-recovery`, 'POST', {})
+                ? await send(`/api/maintenance/breakdown-reports/${report.id}/dispatch-recovery`, 'POST', {
+                    outsourceToExchange,
+                  })
                 : await send(`/api/maintenance/breakdown-reports/${report.id}`, 'PATCH', { status: next });
             replace(updated);
+            if (updated.exchangeRequest?.requestNumber) {
+                setExchangeNotice(`Published to Recovery Exchange Network: ${updated.exchangeRequest.requestNumber}`);
+            }
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Could not update the report');
         } finally {
@@ -196,7 +201,7 @@ export default function BreakdownPage() {
                         Breakdown Management
                     </h1>
                     <p className="text-[var(--text-faint)] text-sm mt-1">
-                        Driver-reported breakdowns — from roadside incident to workshop resolution
+                        Driver-reported breakdowns — from roadside incident to internal or Private Partner Exchange recovery
                     </p>
                 </div>
                 <button
@@ -207,6 +212,13 @@ export default function BreakdownPage() {
                     Report Breakdown
                 </button>
             </div>
+
+            {exchangeNotice && (
+                <div className="rounded-xl border border-cyan-500/40 bg-cyan-500/15 px-4 py-3 text-sm text-cyan-200 font-semibold flex items-center justify-between">
+                    <span>🌐 {exchangeNotice}</span>
+                    <button onClick={() => setExchangeNotice(null)} className="text-xs text-cyan-300 hover:text-white">✕</button>
+                </div>
+            )}
 
             {/* KPI strip */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -389,10 +401,10 @@ export default function BreakdownPage() {
                             )}
                         </dl>
 
-                        {/* Action button */}
+                        {/* Action buttons */}
                         {selected.status !== 'RESOLVED' && (() => {
                             const LABELS: Record<BreakdownStatus, string> = {
-                                REPORTED:            'Dispatch Recovery',
+                                REPORTED:            'Dispatch Internal Recovery',
                                 RECOVERY_DISPATCHED: 'Mark Recovery Completed',
                                 RECOVERY_COMPLETED:  'Mark At Workshop',
                                 AT_WORKSHOP:         'Mark Resolved',
@@ -407,14 +419,26 @@ export default function BreakdownPage() {
                             };
                             const Icon = ICONS[selected.status];
                             return (
-                                <button
-                                    onClick={() => void handleStatusAdvance(selected)}
-                                    disabled={saving}
-                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    <Icon className="h-4 w-4" />
-                                    {LABELS[selected.status]}
-                                </button>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={() => void handleStatusAdvance(selected, false)}
+                                        disabled={saving}
+                                        className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        <Icon className="h-4 w-4" />
+                                        {LABELS[selected.status]}
+                                    </button>
+                                    {selected.status === 'REPORTED' && (
+                                        <button
+                                            onClick={() => void handleStatusAdvance(selected, true)}
+                                            disabled={saving}
+                                            className="w-full flex items-center justify-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-4 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-50"
+                                        >
+                                            <Globe className="h-4 w-4 text-cyan-300" />
+                                            Outsource to Recovery Exchange
+                                        </button>
+                                    )}
+                                </div>
                             );
                         })()}
                     </div>

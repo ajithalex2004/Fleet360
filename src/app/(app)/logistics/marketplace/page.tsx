@@ -4,18 +4,33 @@
  * The operator-facing half of the marketplace: browse the tenant's open freight
  * RFQs (loads posted to carriers), compare the carrier bids on a load, and award
  * the winner. The shipper side (posting loads) lives in the shipper portal; the
- * RFQ/bid data + the governed award transaction live in src/lib/logistics/domain.ts.
+ * RFQ/bid data + the governed award transaction live in src/lib/logistics/domain.ts
+ * and bridge into the canonical Private Partner Exchange Network (FreightRfqCanonicalBridge).
  *
  * Reads /api/logistics/rfqs and /api/logistics/rfqs/[id]/bids; awards via
  * POST /api/logistics/rfqs/[id]/award (which enforces carrier compliance — a
  * blocked award returns the structured blockers, surfaced inline here).
- *
- * Fixes the dangling "Freight marketplace" deep-link on the logistics dashboard.
  */
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Gavel, RefreshCw, Truck, Clock, CheckCircle2, Trophy, Plus, Link2, X, Copy, Radio, MapPin } from 'lucide-react';
+import {
+  Gavel,
+  RefreshCw,
+  Truck,
+  Clock,
+  CheckCircle2,
+  Trophy,
+  Plus,
+  Link2,
+  X,
+  Copy,
+  Radio,
+  MapPin,
+  ShieldCheck,
+  Zap,
+  FileText,
+} from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { LogisticsMessage, readLogisticsApiError } from '@/components/logistics/master-data-fields';
 import CargoClassificationPanel, { type CargoClassificationMeta } from '@/components/logistics/CargoClassificationPanel';
@@ -31,14 +46,12 @@ interface Rfq {
   negotiationRound: number;
   awardedBidId: string | null;
   bidCount: number;
+  metadata?: Record<string, any> | null;
   shipment: {
     origin: string | null;
     destination: string | null;
     customerName: string | null;
     vehicleType: string | null;
-    // Shipper-declared cargo classification. Rendered in the RFQ detail panel
-    // so bidders know the shipment is cross-border / hazmat / customs-cleared
-    // before they price.
     metadata: CargoClassificationMeta | null;
   } | null;
 }
@@ -87,9 +100,25 @@ export default function MarketplacePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loadingBids, setLoadingBids] = useState(false);
+  const [liveSyncEnabled, setLiveSyncEnabled] = useState(true);
+  const [lastLiveSyncAt, setLastLiveSyncAt] = useState<string | null>(null);
+
+  const emitExchangeEvent = useCallback((type: string) => {
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('fleet360-exchange-live');
+        bc.postMessage({ type, source: 'logistics-marketplace', timestamp: Date.now() });
+        bc.close();
+      }
+    } catch {
+      // Ignore if BroadcastChannel is unavailable
+    }
+  }, []);
 
   const [confirmBidId, setConfirmBidId] = useState<string | null>(null);
+  const [commercialModel, setCommercialModel] = useState<'AGENCY' | 'PRINCIPAL'>('AGENCY');
   const [awarding, setAwarding] = useState(false);
+  const [failingOver, setFailingOver] = useState(false);
   const [awardError, setAwardError] = useState<string | null>(null);
   const [blockers, setBlockers] = useState<ComplianceBlocker[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
@@ -115,10 +144,6 @@ export default function MarketplacePage() {
   const [candidateNote, setCandidateNote] = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
 
-  // Geocode the load's origin text into lat/lng on its PICKUP stop, so the
-  // candidate finder can rank drivers by distance. Called from the amber
-  // "no pickup GPS" banner when a shipper-portal submission arrived without
-  // map coordinates.
   const geocodePickup = async () => {
     if (!selected || geocoding) return;
     setGeocoding(true);
@@ -181,6 +206,35 @@ export default function MarketplacePage() {
     finally { setLoadingBids(false); }
   }, []);
 
+  // ARCH-5: Cross-Portal Live Sync (BroadcastChannel + 10s Live Bid & RFQ Stream)
+  useEffect(() => {
+    if (!liveSyncEnabled) return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('fleet360-exchange-live');
+        bc.onmessage = () => {
+          setLastLiveSyncAt(new Date().toLocaleTimeString('en-AE'));
+          void loadRfqs();
+          if (selectedId) void loadBids(selectedId);
+        };
+      }
+    } catch {
+      // Fallback if BroadcastChannel is unavailable
+    }
+
+    const timer = setInterval(() => {
+      setLastLiveSyncAt(new Date().toLocaleTimeString('en-AE'));
+      void loadRfqs();
+      if (selectedId) void loadBids(selectedId);
+    }, 10_000);
+
+    return () => {
+      clearInterval(timer);
+      if (bc) bc.close();
+    };
+  }, [liveSyncEnabled, loadRfqs, loadBids, selectedId]);
+
   const select = (rfq: Rfq) => {
     setSelectedId(rfq.id);
     setConfirmBidId(null);
@@ -195,7 +249,6 @@ export default function MarketplacePage() {
     void loadBids(rfq.id);
   };
 
-  // Lazily load carriers + postable shipments the first time the form opens.
   const ensureFormData = useCallback(async () => {
     if (carriers.length > 0 || shipments.length > 0) return;
     try {
@@ -218,10 +271,6 @@ export default function MarketplacePage() {
     }
     setPosting(true);
     try {
-      // datetime-local inputs emit `YYYY-MM-DDTHH:mm` (no seconds, no tz).
-      // Go's RFC3339 parser rejects that — convert to a full UTC ISO string
-      // so the backend can persist it as timestamptz. new Date(local) treats
-      // the input as the user's local time, which is what the picker meant.
       let bidDeadlineAt: string | null = null;
       if (postDeadline) {
         const d = new Date(postDeadline);
@@ -238,8 +287,6 @@ export default function MarketplacePage() {
         }),
       });
       if (!res.ok) {
-        // Surface the server's actual reason (JSON { error | message } first,
-        // raw text body next, status code last).
         const text = await res.text().catch(() => '');
         let parsed: { error?: string; message?: string } = {};
         try { parsed = text ? JSON.parse(text) : {}; } catch {}
@@ -250,6 +297,7 @@ export default function MarketplacePage() {
       setPostShipmentId(''); setPostCarrierIds(new Set()); setPostDeadline('');
       setStatusFilter('OPEN');
       await loadRfqs();
+      emitExchangeEvent('RFQ_POSTED');
     } catch (e) {
       setPostError(e instanceof Error ? e.message : 'Failed to post the load');
     } finally {
@@ -276,7 +324,7 @@ export default function MarketplacePage() {
       if (!res.ok) throw new Error(body.error || 'Could not find nearby drivers');
       const list = Array.isArray(body.data) ? body.data : [];
       setCandidates(list);
-      setBcSelected(new Set(list.map((c: { carrierId: string }) => c.carrierId))); // pre-select the nearest
+      setBcSelected(new Set(list.map((c: { carrierId: string }) => c.carrierId)));
       if (body.note) setCandidateNote(body.note);
     } catch (e) {
       setBcError(e instanceof Error ? e.message : 'Could not find nearby drivers');
@@ -338,7 +386,6 @@ export default function MarketplacePage() {
     }
   };
 
-  // Poll the active broadcast while it's live so accepts surface for the operator.
   useEffect(() => {
     if (!selectedId || !activeBroadcast || !['BROADCASTING', 'CONFIRMING'].includes(activeBroadcast.status)) return;
     const t = setInterval(() => void loadBroadcast(selectedId), 5000);
@@ -376,7 +423,7 @@ export default function MarketplacePage() {
       const res = await fetch(`/api/logistics/rfqs/${rfqId}/award`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bidId }),
+        body: JSON.stringify({ bidId, commercialModel }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -386,10 +433,13 @@ export default function MarketplacePage() {
         }
         throw new Error(body.error || `Award failed (${res.status})`);
       }
-      setSuccess('Bid awarded — carrier assigned and the load is off the board.');
+      setSuccess(
+        `Bid awarded (${commercialModel} mode) — bridged to Canonical Exchange with frozen SHA-256 RateCardSnapshot.`
+      );
       setConfirmBidId(null);
       await loadRfqs();
       await loadBids(rfqId);
+      emitExchangeEvent('RFQ_AWARDED');
     } catch (e) {
       setAwardError(e instanceof Error ? e.message : 'Award failed');
     } finally {
@@ -397,18 +447,166 @@ export default function MarketplacePage() {
     }
   };
 
+  const triggerFreightFailover = async () => {
+    if (!selected) return;
+    setFailingOver(true);
+    setAwardError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch('/api/exchange/scorecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'TRIGGER_FAILOVER',
+          awardId: selected.awardedBidId || selected.id,
+          requestId: selected.id,
+          description: `Freight operator triggered governed failover re-sourcing for ${selected.rfqNo}.`,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failover re-sourcing failed');
+      }
+      const outcome = data.failover?.outcome;
+      const penalty = data.failover?.defaultingPartnerPenaltyAmount ?? 0;
+      setSuccess(
+        outcome === 'PROMOTED_STANDBY_RUNNER_UP'
+          ? `Failover complete: Promoted compliant standby carrier bid & revoked old driver token (SLA Penalty: AED ${Number(penalty).toFixed(2)}).`
+          : `Failover complete: Revoked old driver token & re-opened emergency 15-min broadcast (SLA Penalty: AED ${Number(penalty).toFixed(2)}).`
+      );
+      await loadRfqs();
+      await loadBids(selected.id);
+    } catch (e) {
+      setAwardError(e instanceof Error ? e.message : 'Failover re-sourcing failed');
+    } finally {
+      setFailingOver(false);
+    }
+  };
+
   const canAward = selected ? !TERMINAL_RFQ.includes(selected.status) : false;
-  const cheapestId = bids.length > 0 ? bids[0].id : null; // API returns cheapest-first
+  const cheapestId = bids.length > 0 ? bids[0].id : null;
+
+  // Phase 9: Logistics Marketplace 3-Way Match & Settlements Console state
+  const [showSettlementsModal, setShowSettlementsModal] = useState(false);
+  const [statements, setStatements] = useState<any[]>([]);
+  const [stmtPartnerId, setStmtPartnerId] = useState('');
+  const [stmtPeriodStart, setStmtPeriodStart] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [stmtPeriodEnd, setStmtPeriodEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [settlementActing, setSettlementActing] = useState(false);
+
+  const loadStatements = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bus-ops/outsource/settlements', { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.statements)) {
+        setStatements(data.statements);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  const handleGenerateStatement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stmtPartnerId) return;
+    setSettlementActing(true);
+    setAwardError(null);
+    try {
+      const res = await fetch('/api/bus-ops/outsource/settlements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'GENERATE_STATEMENT',
+          partnerId: stmtPartnerId,
+          periodStart: stmtPeriodStart,
+          periodEnd: stmtPeriodEnd,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAwardError(data.error || 'Failed to generate settlement statement.');
+        return;
+      }
+      setSuccess(
+        `Generated Freight Settlement Statement ${data.statement?.statementNumber ?? ''} (Held Disputed Invoices: ${
+          data.heldDisputedInvoiceCount ?? 0
+        }).`
+      );
+      await loadStatements();
+    } finally {
+      setSettlementActing(false);
+    }
+  };
+
+  const handleApproveStatement = async (statementId: string) => {
+    setSettlementActing(true);
+    setAwardError(null);
+    try {
+      const res = await fetch('/api/bus-ops/outsource/settlements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'APPROVE_STATEMENT',
+          statementId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAwardError(data.error || 'Failed to approve settlement statement.');
+        return;
+      }
+      setSuccess('Settlement statement approved and posted to Finance AP Ledger.');
+      await loadStatements();
+    } finally {
+      setSettlementActing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Freight marketplace"
-        subtitle="Browse open loads, compare carrier bids, and award — the carrier-facing load board."
+        subtitle="Browse open loads, compare carrier bids, and award — bridged to the Canonical Private Partner Exchange Network."
         icon={Gavel}
         accent="amber"
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => setLiveSyncEnabled(v => !v)}
+              title={
+                liveSyncEnabled
+                  ? `Live Bid & Telemetry Stream Active${lastLiveSyncAt ? ` (Last sync: ${lastLiveSyncAt})` : ''}`
+                  : 'Click to resume Live Bid & Telemetry Stream'
+              }
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                liveSyncEnabled
+                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)]'
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  liveSyncEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              <span>{liveSyncEnabled ? 'LIVE 10s' : 'PAUSED'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void ensureFormData();
+                void loadStatements();
+                setShowSettlementsModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/15 text-cyan-200 px-3 py-2 text-sm hover:bg-cyan-500/25"
+            >
+              <FileText className="w-4 h-4" /> Settlements & 3-Way Audit
+            </button>
             <button
               type="button"
               onClick={() => void loadRfqs()}
@@ -569,7 +767,14 @@ export default function MarketplacePage() {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-[var(--text-main)] truncate">{r.rfqNo}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-medium text-[var(--text-main)] truncate">{r.rfqNo}</span>
+                      {r.metadata?.exchangeRequestNumber && (
+                        <span className="rounded bg-cyan-500/15 border border-cyan-500/30 px-1.5 py-0.5 text-[10px] font-mono text-cyan-300 shrink-0">
+                          {String(r.metadata.exchangeRequestNumber)}
+                        </span>
+                      )}
+                    </div>
                     <StatusPill status={r.status} />
                   </div>
                   <div className="text-xs text-[var(--text-muted)] truncate mt-0.5">{lane}</div>
@@ -598,9 +803,6 @@ export default function MarketplacePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Cargo classification — shown above the bid rows so operators
-                  see cross-border / hazmat context before they read prices.
-                  Renders nothing on legacy loads that carry no metadata. */}
               <CargoClassificationPanel metadata={selected.shipment?.metadata ?? null} />
               {success && <LogisticsMessage type="success" message={success} />}
               {awardError && <LogisticsMessage type="error" message={awardError} />}
@@ -612,6 +814,56 @@ export default function MarketplacePage() {
                   </ul>
                 </div>
               )}
+
+              {/* Canonical Exchange Unification & Commercial Model Bar */}
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-cyan-200 flex-wrap">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>
+                    <strong>Canonical Exchange Bridge Active:</strong> Stage-2 Service-Date Compliance, Frozen SHA-256 Rate-Card Snapshot & 3-Way Match
+                  </span>
+                  {selected.metadata?.exchangeRequestNumber && (
+                    <span className="rounded bg-cyan-500/20 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-cyan-200">
+                      {String(selected.metadata.exchangeRequestNumber)}
+                    </span>
+                  )}
+                  {selected.metadata?.commercialModel && (
+                    <span className="rounded bg-indigo-500/20 border border-indigo-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-indigo-200">
+                      {String(selected.metadata.commercialModel)}
+                    </span>
+                  )}
+                </div>
+                {canAward ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-cyan-300/80">Commercial Mode:</span>
+                    {(['AGENCY', 'PRINCIPAL'] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setCommercialModel(m)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition ${
+                          commercialModel === m
+                            ? 'bg-cyan-500 text-white border-cyan-400'
+                            : 'bg-slate-900/50 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/20'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                ) : selected.status === 'AWARDED' ? (
+                  <button
+                    type="button"
+                    disabled={failingOver}
+                    onClick={() => void triggerFreightFailover()}
+                    className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25 disabled:opacity-50"
+                    title="Revoke defaulting carrier token, apply SLA penalty from frozen RateCardSnapshot, and promote standby bid or re-broadcast"
+                  >
+                    <Zap className="w-3 h-3" />
+                    {failingOver ? 'Re-sourcing…' : 'Failover Re-Source'}
+                  </button>
+                ) : null}
+              </div>
 
               {/* Invite a carrier (generate a magic link) */}
               {canAward && (
@@ -730,7 +982,6 @@ export default function MarketplacePage() {
                     </div>
                   )}
 
-                  {/* Live offer responses (Phase 2 adds the Assign action) */}
                   {activeBroadcast && activeBroadcast.offers.length > 0 && (
                     <div className="mt-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
                       <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-faint)] border-b border-[var(--border-subtle)]">
@@ -836,13 +1087,166 @@ export default function MarketplacePage() {
 
               {!canAward && bids.length > 0 && (
                 <p className="text-[11px] text-[var(--text-faint)]">
-                  This RFQ is {selected.status.toLowerCase()} — bids can no longer be awarded.
+                  This RFQ is {selected.status.toLowerCase()} — bids can no longer be awarded. Use Failover Re-Source above if the awarded carrier defaults.
                 </p>
               )}
             </div>
           )}
         </Panel>
       </div>
+
+      {/* Phase 9: Logistics Settlements, 3-Way Audit & UAE FTA Tax Invoice Modal */}
+      {showSettlementsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-4xl rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-xl space-y-5 max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-main)]">
+                  Freight Partner Settlement Statements & UAE FTA Tax Invoices
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Consolidate 3-way matched freight invoices (seal verification, weight tolerance, and frozen SHA-256 rate-card snapshot) into periodic statements and export FTA-compliant Tax Invoice PDFs.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSettlementsModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleGenerateStatement}
+              className="grid grid-cols-1 gap-3 sm:grid-cols-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3.5"
+            >
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
+                  Freight Carrier / Partner
+                </label>
+                <select
+                  required
+                  value={stmtPartnerId}
+                  onChange={(e) => setStmtPartnerId(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-main)]"
+                >
+                  <option value="">Select carrier…</option>
+                  {carriers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.id.slice(0, 8)} {c.carrierCode ? `(${c.carrierCode})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
+                  Period Start
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={stmtPeriodStart}
+                  onChange={(e) => setStmtPeriodStart(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-main)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">
+                  Period End
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={stmtPeriodEnd}
+                  onChange={(e) => setStmtPeriodEnd(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-main)]"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={!stmtPartnerId || settlementActing}
+                  className="w-full rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50"
+                >
+                  Generate Statement
+                </button>
+              </div>
+            </form>
+
+            <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-[var(--border-subtle)] bg-[var(--bg-base)] text-[var(--text-muted)]">
+                  <tr>
+                    <th className="py-2.5 px-3">Statement #</th>
+                    <th className="py-2.5 px-3">Carrier / Partner</th>
+                    <th className="py-2.5 px-3">Period</th>
+                    <th className="py-2.5 px-3">Gross + 5% VAT</th>
+                    <th className="py-2.5 px-3">Deductions</th>
+                    <th className="py-2.5 px-3">Net Payable</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions & Tax PDF</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {statements.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-[var(--text-muted)]">
+                        No consolidated settlement statements generated yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    statements.map((st) => (
+                      <tr key={st.id}>
+                        <td className="py-2.5 px-3 font-mono font-bold text-[var(--text-main)]">
+                          {st.statementNumber}
+                        </td>
+                        <td className="py-2.5 px-3">{st.partner?.legalName || st.partnerId}</td>
+                        <td className="py-2.5 px-3 text-[var(--text-muted)]">
+                          {fmtDate(st.periodStart)} – {fmtDate(st.periodEnd)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono">
+                          {money(Number(st.grossAmount || 0) + Number(st.vatAmount || 0), 'AED')}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-rose-400">
+                          {Number(st.totalDeductions || 0) > 0
+                            ? `-${money(Number(st.totalDeductions), 'AED')}`
+                            : 'AED 0.00'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
+                          {money(Number(st.netPayable || 0), 'AED')}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <StatusPill status={st.status} />
+                        </td>
+                        <td className="py-2.5 px-3 text-right space-x-1.5">
+                          {st.status !== 'APPROVED' && (
+                            <button
+                              type="button"
+                              disabled={settlementActing}
+                              onClick={() => void handleApproveStatement(st.id)}
+                              className="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                            >
+                              Approve → AP
+                            </button>
+                          )}
+                          <a
+                            href={`/api/exchange/statements/${st.id}/pdf`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block rounded border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/25"
+                          >
+                            UAE FTA Tax PDF
+                          </a>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

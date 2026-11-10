@@ -97,6 +97,9 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // Carrier portal — token-authed (invite link), no operator session.
   '/carrier-portal/',
   '/api/carrier-portal/',
+  // External partner driver trip link (/track/partner-trip/[token]) —
+  // capability-token authed via SHA-256 hash lookup + withPartnerTokenTenant().
+  '/api/public/partner-driver/',
   // Driver mobile app — device-token authed.
   '/api/mobile/',
   '/api/driver-app/',

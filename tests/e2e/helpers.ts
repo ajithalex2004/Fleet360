@@ -12,6 +12,7 @@
 
 import { type Page, type Browser, type BrowserContext, type TestInfo, expect } from '@playwright/test';
 import { hashPassword } from '../test-utils';
+import { MODULES } from '../../src/lib/modules';
 
 // ── Auth state type (matches Playwright storageState shape) ────────────────────
 export interface StorageState {
@@ -84,6 +85,19 @@ export async function createE2ETenant(
       data: { id: tenantId, name: `E2E ${label} ${uid}`, code, plan, isActive: true },
     });
 
+    const modulesToEnable = plan === 'TRIAL'
+      ? MODULES.filter((m) => m.subscription !== 'enterprise-only')
+      : MODULES;
+    await prisma.tenantModule.createMany({
+      data: modulesToEnable.map((m) => ({
+        id: crypto.randomUUID(),
+        tenantId,
+        module: m.key,
+        isEnabled: true,
+      })),
+      skipDuplicates: true,
+    });
+
     await prisma.user.create({
       data: {
         id: userId, email, username: `e2e-${uid.toLowerCase()}`,
@@ -96,10 +110,16 @@ export async function createE2ETenant(
       hashPassword(password), userId,
     );
 
-    const roleId = crypto.randomUUID();
-    await prisma.role.create({ data: { id: roleId, tenantId, name: 'Tenant Admin', code: 'TENANT_ADMIN' } });
+    let platformRole = await prisma.role.findFirst({
+      where: { tenantId: null, code: 'TENANT_ADMIN' },
+    });
+    if (!platformRole) {
+      platformRole = await prisma.role.create({
+        data: { id: crypto.randomUUID(), tenantId: null, name: 'Tenant Admin', code: 'TENANT_ADMIN', isSystem: true },
+      });
+    }
     await prisma.userTenant.create({
-      data: { id: crypto.randomUUID(), userId, tenantId, roleId, isActive: true },
+      data: { id: crypto.randomUUID(), userId, tenantId, roleId: platformRole.id, isActive: true },
     });
 
     return { tenantId, tenantCode: code, userId, email, password };
@@ -118,7 +138,8 @@ export async function cleanupE2ETenant(ctx: E2EContext | null): Promise<void> {
     await prisma.$executeRawUnsafe(`DELETE FROM finance_invoices WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM finance_expenses WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
 
-    // Auth rows
+    // Auth & module rows
+    await prisma.tenantModule.deleteMany({ where: { tenantId: ctx.tenantId } }).catch(() => {});
     await prisma.userTenant.deleteMany({ where: { tenantId: ctx.tenantId } });
     await prisma.role.deleteMany({ where: { tenantId: ctx.tenantId } });
     await prisma.user.delete({ where: { id: ctx.userId } }).catch(() => {});
@@ -199,6 +220,18 @@ export async function loginWithStoredState(
   // so cast through `unknown` to bridge.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.context().addCookies(state.cookies as unknown as any);
+  const originItems = state.origins?.[0]?.localStorage ?? [];
+  if (originItems.length > 0) {
+    await page.context().addInitScript((items: Array<{ name: string; value: string }>) => {
+      try {
+        for (const item of items) {
+          window.localStorage.setItem(item.name, item.value);
+        }
+      } catch {
+        // ignore storage restrictions
+      }
+    }, originItems);
+  }
   // Navigate straight to the authenticated area
   await page.goto('/platform', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('load', { timeout: 15_000 }).catch(() => {});

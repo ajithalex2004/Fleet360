@@ -7,6 +7,7 @@ import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 import type { Prisma } from '@prisma/client';
+import { mirrorLeaseInvoiceToFinance } from '@/lib/finance/module-ledger';
 
 /**
  * Lease invoice list (GET) + issue (POST).
@@ -180,6 +181,9 @@ export const POST = withAudit(
         });
       });
 
+      await mirrorLeaseInvoiceToFinance(invoice.id, tenantId, 'leasing-api').catch((err) =>
+        console.warn('[leasing/invoices] mirror failed:', err),
+      );
       return NextResponse.json(invoice, { status: 201 });
     } catch (e: any) {
       console.error('POST /api/leasing/invoices error:', e);

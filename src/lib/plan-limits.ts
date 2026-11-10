@@ -37,14 +37,22 @@ export function getLimits(plan: string): PlanLimits {
 // ── Route-level gating ──────────────────────────────────────────────────────
 
 /**
- * Returns null when the caller's plan meets `minimumPlan`, otherwise a
+ * Returns null when the caller's plan meets `minimumPlan` (or the caller is a
+ * platform `SUPER_ADMIN` without an explicit `targetTenantPlan`), otherwise a
  * 402 NextResponse the route handler should return immediately.
  *
  *   const gate = requirePlan(req, 'PROFESSIONAL');
  *   if (gate) return gate;
  */
-export function requirePlan(req: NextRequest, minimumPlan: string): NextResponse | null {
-  const plan = (req.headers.get('x-tenant-plan') ?? 'TRIAL');
+export function requirePlan(
+  req: NextRequest,
+  minimumPlan: string,
+  targetTenantPlan?: string | null,
+): NextResponse | null {
+  const isSuperAdmin = req.headers.get('x-user-role') === 'SUPER_ADMIN';
+  if (isSuperAdmin && !targetTenantPlan) return null;
+
+  const plan = targetTenantPlan || req.headers.get('x-tenant-plan') || 'TRIAL';
   if (planAtLeast(plan, minimumPlan)) return null;
 
   return NextResponse.json(

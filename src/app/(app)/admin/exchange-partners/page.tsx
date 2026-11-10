@@ -1,7 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Building2, ExternalLink, Mail, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Building2,
+  ExternalLink,
+  Mail,
+  Plus,
+  Search,
+  ShieldAlert,
+  Trash2,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { COMPLIANCE_CATALOG, EMIRATE_LABELS, EMIRATES, onboardingStatusLabel } from '@/lib/exchange/partner-activation';
 
@@ -10,12 +21,9 @@ import { COMPLIANCE_CATALOG, EMIRATE_LABELS, EMIRATES, onboardingStatusLabel } f
  *
  * Creates the Exchange's transport partners, records the tenant that
  * onboarded each one, approves the service areas they may be offered work in
- * (partner_capabilities) and gives them users (partner_users), which is what
- * lets a user into the partner portal and marketplace. A new user is invited
- * by email into the onboarding tenant's User Master and linked to the partner
- * when they accept; an existing Fleet360 user is linked directly. Platform
- * administrators only: the /api/admin/exchange/* routes return 403 for anyone
- * else.
+ * (partner_capabilities), manages platform-level operational status
+ * (ACTIVE | SUSPENDED | BLOCKED), controls the Platform Emergency Kill Switch,
+ * and gives partners users (partner_users).
  */
 
 const ROLES = [
@@ -48,6 +56,19 @@ interface Partner {
   pendingDocuments: number;
   onboardedByTenantId: string | null;
   onboardedByTenantName: string | null;
+  vehicleCount?: number;
+  dispatchReadyVehicles?: number;
+  driverCount?: number;
+  dispatchReadyDrivers?: number;
+  scorecard?: {
+    tier: string;
+    compositeScore: number;
+    onTimePerformance: number;
+    quoteResponseRate: number;
+    exceptionRate: number;
+    totalAwardedTrips: number;
+  } | null;
+  serviceAreas?: Array<{ emirate: string; zones: string[] }>;
 }
 
 interface TenantOption { id: string; name: string; isActive?: boolean | null }
@@ -62,7 +83,6 @@ interface Invitation {
   expiresAt: string;
   createdAt: string;
 }
-
 
 const INVITE_STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-400',
@@ -94,11 +114,6 @@ const DOC_STATUS_STYLES: Record<string, string> = {
   REJECTED: 'bg-rose-500/15 text-rose-400',
 };
 
-/**
- * Where a document's file opens: files uploaded through the partner portal are
- * served by the onboarding review route after its access check; older
- * documents may carry an external http(s) link. Never javascript: or data:.
- */
 function docHref(partnerId: string, doc: { id: string; fileUrl: string }): string | null {
   if (doc.fileUrl.startsWith('/uploads/exchange/partner-compliance/')) {
     return `/api/admin/exchange/onboarding/${partnerId}/documents/${doc.id}/file`;
@@ -116,6 +131,13 @@ interface Member {
   role: string;
   createdAt: string;
   user: { id: string; email: string; username: string | null; isActive: boolean };
+}
+
+interface KillSwitchState {
+  active: boolean;
+  reason?: string;
+  activatedBy?: string;
+  activatedAt?: string;
 }
 
 const EMPTY_PARTNER = {
@@ -145,6 +167,10 @@ function StatusPill({ label, ok }: { label: string; ok: boolean }) {
 
 export default function ExchangePartnersAdminPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [killSwitch, setKillSwitch] = useState<KillSwitchState>({ active: false });
+  const [killSwitchBusy, setKillSwitchBusy] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -182,11 +208,14 @@ export default function ExchangePartnersAdminPage() {
   const loadPartners = useCallback(async () => {
     setLoading(true); setPageError(null);
     try {
-      const r = await fetch('/api/admin/exchange/partners');
+      const r = await fetch('/api/admin/exchange/partners?includeKillSwitch=1');
       const d = await readJson(r);
       if (!r.ok) { setPageError(errorOf(d, r.status)); return; }
       const list = (d.partners ?? []) as Partner[];
       setPartners(list);
+      if (d.killSwitch && typeof d.killSwitch === 'object') {
+        setKillSwitch(d.killSwitch as KillSwitchState);
+      }
       setSelectedId((cur) => (cur && list.some((p) => p.id === cur) ? cur : list[0]?.id ?? null));
     } catch (e) {
       setPageError(e instanceof Error ? e.message : 'Network error');
@@ -194,6 +223,64 @@ export default function ExchangePartnersAdminPage() {
       setLoading(false);
     }
   }, []);
+
+  const togglePlatformKillSwitch = async () => {
+    const targetActive = !killSwitch.active;
+    let reason: string | undefined;
+    if (targetActive) {
+      const inputReason = window.prompt(
+        'Enter emergency reason for activating the Platform Exchange Kill Switch (freezes all cross-tenant marketplace discovery & bidding):',
+        'Regulatory compliance audit hold'
+      );
+      if (inputReason === null) return;
+      reason = inputReason.trim() || 'Emergency platform hold';
+    }
+    setKillSwitchBusy(true);
+    setPageError(null);
+    try {
+      const r = await fetch('/api/admin/exchange/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SET_KILL_SWITCH',
+          active: targetActive,
+          reason,
+        }),
+      });
+      const d = await readJson(r);
+      if (!r.ok) { setPageError(errorOf(d, r.status)); return; }
+      if (d.killSwitch) setKillSwitch(d.killSwitch as KillSwitchState);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setKillSwitchBusy(false);
+    }
+  };
+
+  const setPartnerOperationalStatus = async (partnerId: string, operationalStatus: 'ACTIVE' | 'SUSPENDED' | 'BLACKLISTED') => {
+    setStatusBusy(true);
+    setPageError(null);
+    try {
+      const r = await fetch('/api/admin/exchange/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SET_PARTNER_OPERATIONAL_STATUS',
+          partnerId,
+          operationalStatus,
+        }),
+      });
+      const d = await readJson(r);
+      if (!r.ok) { setPageError(errorOf(d, r.status)); return; }
+      setPartners((list) =>
+        list.map((p) => (p.id === partnerId ? { ...p, operationalStatus } : p))
+      );
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   const loadMembers = useCallback(async (partnerId: string) => {
     setMembersLoading(true); setMemberError(null);
@@ -323,10 +410,9 @@ export default function ExchangePartnersAdminPage() {
     }
   };
 
-  // Refreshes the member list and the partner's member count.
   const afterMembershipChange = async (partnerId: string) => {
     await loadMembers(partnerId);
-    const r = await fetch('/api/admin/exchange/partners');
+    const r = await fetch('/api/admin/exchange/partners?includeKillSwitch=1');
     if (r.ok) setPartners(((await readJson(r)).partners ?? []) as Partner[]);
   };
 
@@ -400,7 +486,6 @@ export default function ExchangePartnersAdminPage() {
     }
   };
 
-  // Linking an already-linked user updates their role (the API upserts).
   const saveMembership = async (email: string, role: string) => {
     if (!selected) return false;
     setBusy(true); setMemberError(null);
@@ -448,15 +533,47 @@ export default function ExchangePartnersAdminPage() {
     <div className="space-y-6">
       <PageHeader
         title="Exchange partners"
-        subtitle="Transport partners of the Fleet360 Exchange, their approved services and the users who act for them"
+        subtitle="Transport partners of the Fleet360 Exchange, their approved services, operational status, and platform emergency controls"
         icon={ArrowLeftRight}
         accent="cyan"
         actions={
-          <button type="button" className={primaryBtn} onClick={() => { setShowAdd(true); setPartnerError(null); }}>
-            <Plus className="h-4 w-4" /> Add partner
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={killSwitchBusy}
+              onClick={() => void togglePlatformKillSwitch()}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold border transition ${
+                killSwitch.active
+                  ? 'bg-rose-600 text-white border-rose-500 hover:bg-rose-500'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+              }`}
+            >
+              <ShieldAlert className="h-4 w-4" />
+              {killSwitch.active ? 'Kill Switch ACTIVE (Click to Resume)' : 'Emergency Kill Switch'}
+            </button>
+            <button type="button" className={primaryBtn} onClick={() => { setShowAdd(true); setPartnerError(null); }}>
+              <Plus className="h-4 w-4" /> Add partner
+            </button>
+          </div>
         }
       />
+
+      {killSwitch.active && (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-950/50 px-4 py-3 text-xs text-rose-200 flex items-center justify-between">
+          <div>
+            <strong className="font-bold">🚨 Platform Exchange Emergency Kill Switch is ACTIVE:</strong>{' '}
+            All cross-tenant marketplace discovery, bidding, and awards are currently suspended ({killSwitch.reason || 'Emergency hold'}).
+          </div>
+          <button
+            type="button"
+            disabled={killSwitchBusy}
+            onClick={() => void togglePlatformKillSwitch()}
+            className="rounded-lg bg-rose-600 px-3 py-1 font-bold text-white hover:bg-rose-500"
+          >
+            Resume Exchange
+          </button>
+        </div>
+      )}
 
       {pageError && (
         <div className="rounded-xl border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">{pageError}</div>
@@ -577,15 +694,29 @@ export default function ExchangePartnersAdminPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate font-medium">{p.legalName}</span>
-                        <span className="shrink-0 text-xs text-[var(--text-muted)]">
-                          {p.memberCount} {p.memberCount === 1 ? 'user' : 'users'}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {p.scorecard?.tier && (
+                            <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                              {p.scorecard.tier}
+                            </span>
+                          )}
+                          <span className="text-xs text-[var(--text-muted)]">
+                            {p.memberCount} {p.memberCount === 1 ? 'user' : 'users'}
+                          </span>
+                        </div>
                       </div>
                       <div className="mt-0.5 text-xs text-[var(--text-muted)]">
                         {p.partnerCode}{p.city ? ` · ${p.city}` : ''}
                         {p.approvedDomains.length === 0 && <span className="text-amber-400"> · no approved services</span>}
                         {p.pendingDocuments > 0 && (
                           <span className="text-amber-400"> · {p.pendingDocuments} {p.pendingDocuments === 1 ? 'document' : 'documents'} to review</span>
+                        )}
+                        {(p.vehicleCount != null || p.driverCount != null) && (
+                          <span>
+                            {' · '}
+                            {p.dispatchReadyVehicles ?? p.vehicleCount ?? 0}/{p.vehicleCount ?? 0} vehicles ·{' '}
+                            {p.dispatchReadyDrivers ?? p.driverCount ?? 0}/{p.driverCount ?? 0} drivers
+                          </span>
                         )}
                       </div>
                     </button>
@@ -602,17 +733,68 @@ export default function ExchangePartnersAdminPage() {
             <p className="py-10 text-center text-sm text-[var(--text-muted)]">Select a partner to manage its users.</p>
           ) : (
             <div className="space-y-5">
-              <div>
-                <h2 className="text-lg font-semibold">{selected.legalName}</h2>
-                <p className="text-xs text-[var(--text-muted)]">
-                  {selected.partnerCode}
-                  {selected.tradeName ? ` · trading as ${selected.tradeName}` : ''}
-                  {selected.primaryContactEmail ? ` · ${selected.primaryContactEmail}` : ''}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <StatusPill label={`Marketplace: ${selected.marketplaceStatus}`} ok={selected.marketplaceStatus === 'APPROVED'} />
-                  <StatusPill label={`Operations: ${selected.operationalStatus}`} ok={selected.operationalStatus === 'ACTIVE'} />
-                  <StatusPill label={`Onboarding: ${onboardingStatusLabel(selected.onboardingStatus)}`} ok={selected.onboardingStatus === 'APPROVED'} />
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">{selected.legalName}</h2>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {selected.partnerCode}
+                    {selected.tradeName ? ` · trading as ${selected.tradeName}` : ''}
+                    {selected.primaryContactEmail ? ` · ${selected.primaryContactEmail}` : ''}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <StatusPill label={`Marketplace: ${selected.marketplaceStatus}`} ok={selected.marketplaceStatus === 'APPROVED'} />
+                    <StatusPill label={`Operations: ${selected.operationalStatus}`} ok={selected.operationalStatus === 'ACTIVE'} />
+                    <StatusPill label={`Onboarding: ${onboardingStatusLabel(selected.onboardingStatus)}`} ok={selected.onboardingStatus === 'APPROVED'} />
+                    {selected.scorecard && (
+                      <StatusPill
+                        label={`Scorecard: ${selected.scorecard.tier} (${Number(selected.scorecard.compositeScore).toFixed(0)} pts · ${Number(selected.scorecard.onTimePerformance).toFixed(0)}% OTP)`}
+                        ok={selected.scorecard.tier !== 'PROBATION'}
+                      />
+                    )}
+                    {selected.vehicleCount != null && (
+                      <StatusPill
+                        label={`Fleet Gate: ${selected.dispatchReadyVehicles ?? selected.vehicleCount}/${selected.vehicleCount} Ready`}
+                        ok={(selected.dispatchReadyVehicles ?? 0) === selected.vehicleCount && selected.vehicleCount > 0}
+                      />
+                    )}
+                    {selected.driverCount != null && (
+                      <StatusPill
+                        label={`Driver Gate: ${selected.dispatchReadyDrivers ?? selected.driverCount}/${selected.driverCount} Ready`}
+                        ok={(selected.dispatchReadyDrivers ?? 0) === selected.driverCount && selected.driverCount > 0}
+                      />
+                    )}
+                  </div>
+                  {selected.serviceAreas && selected.serviceAreas.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-cyan-300">
+                      {selected.serviceAreas.map((sa) => (
+                        <span key={sa.emirate} className="rounded border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5">
+                          {sa.emirate}
+                          {sa.zones?.length ? ` (${sa.zones.join(', ')})` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Platform Operational Status Controls */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  {(['ACTIVE', 'SUSPENDED', 'BLACKLISTED'] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      disabled={statusBusy || selected.operationalStatus === st}
+                      onClick={() => void setPartnerOperationalStatus(selected.id, st)}
+                      className={`px-2.5 py-1 rounded-lg font-semibold border transition ${
+                        selected.operationalStatus === st
+                          ? st === 'ACTIVE'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                          : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
                 </div>
               </div>
 

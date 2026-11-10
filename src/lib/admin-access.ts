@@ -49,7 +49,7 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'billing/portal':                              { POST: 'admin' },
   'change-password':                             { POST: 'member' },  // caller's own password
   // Caller's own company identity (TRN, address) — read by invoice screens.
-  'company-profile':                             { GET: 'member', PATCH: 'admin' },
+  'company-profile':                             { GET: 'member', PATCH: 'admin', PUT: 'admin', POST: 'admin' },
   // Department master; any member reads it (department pickers), admins edit.
   'departments':                                 { GET: 'member', POST: 'admin' },
   'departments/[id]':                            { PATCH: 'admin', DELETE: 'admin' },
@@ -170,7 +170,7 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'workflows/[id]/duplicate':                    { POST: 'admin' },
   'workflows/[id]/steps':                        { GET: 'admin', POST: 'admin' },
   'workflows/[id]/steps/[id]':                   { PUT: 'admin', DELETE: 'admin' },
-  'workflows/stats':                             { GET: 'platform' },  // counts across all tenants
+  'workflows/stats':                             { GET: 'admin' },     // scoped to tenant for non-super-admins
 };
 
 const ADMIN_PREFIX = '/api/admin/';

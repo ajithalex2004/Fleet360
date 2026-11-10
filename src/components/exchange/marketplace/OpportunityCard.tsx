@@ -1,8 +1,10 @@
 /**
  * src/components/exchange/marketplace/OpportunityCard.tsx
  *
- * Phase 3.4: Multi-Domain Marketplace Opportunity Card Component.
- * Features common shell with typed domain requirements renderers and staged disclosure presentation.
+ * Phase 3.4 & Phase 14: Multi-Domain Marketplace Opportunity Card Component.
+ * Features common shell with typed domain requirements renderers, staged disclosure,
+ * Multi-Emirate Zone Match badges, Preferred Exclusive Window priority indicators,
+ * and Quote Revision (Rev N+1) support.
  */
 
 'use client';
@@ -11,13 +13,10 @@ import React from 'react';
 import {
   Clock,
   MapPin,
-  Truck,
   ShieldCheck,
   Send,
   Thermometer,
-  Wrench,
   Sparkles,
-  Package,
 } from 'lucide-react';
 
 interface OpportunityCardProps {
@@ -30,20 +29,58 @@ export function OpportunityCard({ opportunity, onQuoteClick }: OpportunityCardPr
   const domain = opportunity.domain;
   const quotes = opportunity.request?.quotes || [];
   const hasQuoted = quotes.length > 0;
+  const latestQuote = hasQuoted ? quotes[0] : null;
+  const isPreferredWindowActive = Boolean(opportunity.preferredWindow?.exclusiveWindowActive);
+  const emirateMatch = opportunity.emirateMatch !== false;
+  const matchedZoneLabel = opportunity.matchedZoneLabel;
 
   return (
     <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 transition shadow-sm space-y-4 font-sans text-xs">
       {/* Shell Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-cyan-400 font-bold">{opportunity.request?.requestNumber || opportunity.id.slice(0, 8)}</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-cyan-400 font-bold">
+            {opportunity.request?.requestNumber || opportunity.id.slice(0, 8)}
+          </span>
           <DomainBadge domain={domain} />
         </div>
 
-        <div className="flex items-center gap-1.5 text-slate-400">
+        <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
           <Clock className="w-3.5 h-3.5 text-amber-400" />
-          <span>Closes {new Date(opportunity.closesAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span>
+            Closes {new Date(opportunity.closesAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
+      </div>
+
+      {/* Phase 14: Multi-Emirate Zone Match & Preferred Exclusive Window Priority Badges */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {emirateMatch ? (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span>Zone Match{matchedZoneLabel ? `: ${matchedZoneLabel}` : ''}</span>
+          </span>
+        ) : (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+            Out-of-Zone Emirate
+          </span>
+        )}
+
+        {isPreferredWindowActive ? (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>
+              Preferred Exclusive Window
+              {opportunity.preferredWindow?.exclusiveWindowEndsAt
+                ? ` (until ${new Date(opportunity.preferredWindow.exclusiveWindowEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+                : ''}
+            </span>
+          </span>
+        ) : opportunity.visibility === 'TENANT_NETWORK' ? (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+            Private Network RFQ
+          </span>
+        ) : null}
       </div>
 
       {/* Locations */}
@@ -65,9 +102,9 @@ export function OpportunityCard({ opportunity, onQuoteClick }: OpportunityCardPr
 
       {/* Footer & Quote CTA */}
       <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-        {hasQuoted ? (
+        {hasQuoted && latestQuote ? (
           <span className="text-emerald-400 font-semibold flex items-center gap-1">
-            ✓ Quote Submitted (AED {Number(quotes[0].totalAmount).toFixed(2)})
+            ✓ Quoted Rev {latestQuote.revisionNo || 1} (AED {Number(latestQuote.totalAmount).toFixed(2)})
           </span>
         ) : (
           <span className="text-slate-400 text-[11px]">Blind bidding active • Zero competitor leak</span>
@@ -78,7 +115,7 @@ export function OpportunityCard({ opportunity, onQuoteClick }: OpportunityCardPr
           className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition flex items-center gap-1.5 active:scale-95"
         >
           <Send className="w-3 h-3" />
-          <span>{hasQuoted ? 'Revise Quote' : 'Submit Quote'}</span>
+          <span>{hasQuoted ? `Revise Quote (Rev ${(latestQuote?.revisionNo || 1) + 1})` : 'Submit Quote'}</span>
         </button>
       </div>
     </div>

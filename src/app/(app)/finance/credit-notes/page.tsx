@@ -11,6 +11,17 @@ interface CreditNote {
   issued_by: string | null; notes: string | null; created_at: string;
 }
 
+interface InvoiceOption {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  client_email?: string | null;
+  module?: string | null;
+  total_amount: string | number;
+  paid_amount?: string | number;
+  payment_status: string;
+}
+
 const fmtAED  = (n: string | number) => `AED ${Number(n).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`;
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-AE') : '—';
 const STATUSES = ['ALL', 'DRAFT', 'ISSUED', 'APPLIED', 'REFUNDED', 'VOIDED'];
@@ -25,7 +36,15 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 /* ── Create Modal ── */
-function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CreateModal({
+  invoices,
+  onClose,
+  onSaved,
+}: {
+  invoices: InvoiceOption[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [form, setForm] = useState({
     clientName: '', clientEmail: '', module: 'GENERAL', reasonCode: 'BILLING_ERROR',
     reasonDetail: '', originalInvoiceNo: '', originalInvoiceId: '',
@@ -37,12 +56,36 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     setForm(f => ({ ...f, [k]: e.target.value }));
   const total = (parseFloat(form.subtotal || '0') + parseFloat(form.vatAmount || '0')).toFixed(2);
 
+  const handleInvoiceSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const invId = e.target.value;
+    if (!invId) {
+      setForm(f => ({ ...f, originalInvoiceId: '' }));
+      return;
+    }
+    const inv = invoices.find(i => i.id === invId);
+    if (inv) {
+      setForm(f => ({
+        ...f,
+        originalInvoiceId: inv.id,
+        originalInvoiceNo: inv.invoice_number,
+        clientName: inv.client_name || f.clientName,
+        clientEmail: inv.client_email || f.clientEmail,
+        module: inv.module || f.module,
+      }));
+    }
+  };
+
   const save = async () => {
     if (!form.clientName || !form.reasonCode || !form.subtotal) return;
     setSaving(true);
     const res = await fetch('/api/finance/credit-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, subtotal: parseFloat(form.subtotal), vatAmount: parseFloat(form.vatAmount || '0') }),
+      body: JSON.stringify({
+        ...form,
+        originalInvoiceId: form.originalInvoiceId || null,
+        subtotal: parseFloat(form.subtotal),
+        vatAmount: parseFloat(form.vatAmount || '0'),
+      }),
     });
     setSaving(false);
     if (res.ok) { onSaved(); onClose(); } else alert('Failed to create credit note');
@@ -57,6 +100,17 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Select Original Invoice (Optional)</label>
+            <select value={form.originalInvoiceId} onChange={handleInvoiceSelect} className={inp}>
+              <option value="">— Select an invoice or enter manually below —</option>
+              {invoices.map(inv => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.invoice_number} · {inv.client_name} ({fmtAED(inv.total_amount)}) [{inv.payment_status}]
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Client Name *</label>
@@ -72,7 +126,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Original Invoice No.</label>
-              <input value={form.originalInvoiceNo} onChange={s('originalInvoiceNo')} placeholder="INV-202401-0001" className={inp} />
+              <input value={form.originalInvoiceNo} onChange={s('originalInvoiceNo')} placeholder="INV-202601-0001" className={inp} />
             </div>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Issue Date</label>
@@ -129,21 +183,126 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   );
 }
 
+/* ── Apply Modal ── */
+function ApplyModal({
+  cn,
+  invoices,
+  onClose,
+  onSaved,
+}: {
+  cn: CreditNote;
+  invoices: InvoiceOption[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const openInvoices = invoices.filter(i =>
+    ['OPEN', 'SENT', 'PARTIAL', 'OVERDUE', 'DRAFT'].includes(i.payment_status)
+  );
+  const [invoiceId, setInvoiceId]         = useState(cn.original_invoice_id ?? '');
+  const [manualInvoiceId, setManualId]    = useState('');
+  const [appliedAmount, setAppliedAmount] = useState(String(cn.total_amount ?? '0'));
+  const [notes, setNotes]                 = useState('');
+  const [saving, setSaving]               = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const targetInvoiceId = invoiceId || manualInvoiceId || undefined;
+    const res = await fetch(`/api/finance/credit-notes/${cn.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'apply',
+        invoiceId: targetInvoiceId,
+        appliedAmount: parseFloat(appliedAmount || String(cn.total_amount)),
+        notes: notes || undefined,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) { onSaved(); onClose(); } else alert('Failed to apply credit note');
+  };
+
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-emerald-500';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Apply Credit Note {cn.cn_number}</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3 border border-[var(--border-subtle)]">
+            <p className="text-xs text-[var(--text-muted)]">Client: <span className="text-[var(--text-main)] font-semibold">{cn.client_name}</span></p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">Credit Note Value: <span className="text-blue-400 font-bold">{fmtAED(cn.total_amount)}</span></p>
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Select Invoice to Apply Credit Note To</label>
+            <select value={invoiceId} onChange={e => setInvoiceId(e.target.value)} className={inp}>
+              <option value="">— Select open invoice —</option>
+              {openInvoices.map(inv => {
+                const bal = Math.max(0, Number(inv.total_amount ?? 0) - Number(inv.paid_amount ?? 0));
+                return (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.invoice_number} · {inv.client_name} (Bal: {fmtAED(bal)}) [{inv.payment_status}]
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          {!invoiceId && (
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Or Enter Invoice ID / Reference (Optional)</label>
+              <input value={manualInvoiceId} onChange={e => setManualId(e.target.value)} placeholder="Invoice UUID or reference" className={inp} />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Amount to Apply (AED)</label>
+            <input type="number" value={appliedAmount} onChange={e => setAppliedAmount(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes (optional)</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Application notes…" className={inp} />
+          </div>
+        </div>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+          <button onClick={submit} disabled={saving}
+            className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm disabled:opacity-50">
+            {saving ? 'Applying…' : '✓ Apply Credit Note'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Page ── */
 export default function CreditNotesPage() {
-  const [cns, setCns]           = useState<CreditNote[]>([]);
-  const [counts, setCounts]     = useState<{status: string; count: string; total: string}[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [tab, setTab]           = useState('ALL');
-  const [showCreate, setCreate] = useState(false);
-  const [actioning, setAct]     = useState<string | null>(null);
+  const [cns, setCns]               = useState<CreditNote[]>([]);
+  const [invoices, setInvoices]     = useState<InvoiceOption[]>([]);
+  const [counts, setCounts]         = useState<{status: string; count: string; total: string}[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [tab, setTab]               = useState('ALL');
+  const [showCreate, setCreate]     = useState(false);
+  const [applyingCn, setApplyingCn] = useState<CreditNote | null>(null);
+  const [actioning, setAct]         = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (tab !== 'ALL') params.set('status', tab);
-    const res = await fetch(`/api/finance/credit-notes?${params}`, { cache: 'no-store' });
-    if (res.ok) { const d = await res.json(); setCns(d.data ?? []); setCounts(d.counts ?? []); }
+    const [res, invRes] = await Promise.all([
+      fetch(`/api/finance/credit-notes?${params}`, { cache: 'no-store' }),
+      fetch('/api/finance/invoices?limit=100', { cache: 'no-store' }),
+    ]);
+    if (res.ok) {
+      const d = await res.json();
+      setCns(d.data ?? []);
+      setCounts(d.counts ?? []);
+    }
+    if (invRes.ok) {
+      const invData = await invRes.json();
+      setInvoices(invData.data ?? invData.invoices ?? []);
+    }
     setLoading(false);
   }, [tab]);
 
@@ -159,8 +318,7 @@ export default function CreditNotesPage() {
   };
 
   const countOf = (s: string) => counts.find(c => c.status === s);
-  const totalDraft   = parseFloat(countOf('DRAFT')?.total   ?? '0');
-  const totalIssued  = parseFloat(countOf('ISSUED')?.total  ?? '0');
+  const totalDraft = parseFloat(countOf('DRAFT')?.total ?? '0');
 
   return (
     <div className="space-y-6">
@@ -261,7 +419,7 @@ export default function CreditNotesPage() {
                       )}
                       {cn.status === 'ISSUED' && (
                         <>
-                          <button onClick={() => doAction(cn.id, 'apply', { appliedAmount: cn.total_amount })}
+                          <button onClick={() => setApplyingCn(cn)}
                             disabled={actioning === cn.id}
                             className="text-xs px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50">
                             Apply
@@ -286,7 +444,8 @@ export default function CreditNotesPage() {
           </table>
         </div>
       )}
-      {showCreate && <CreateModal onClose={() => setCreate(false)} onSaved={load} />}
+      {showCreate && <CreateModal invoices={invoices} onClose={() => setCreate(false)} onSaved={load} />}
+      {applyingCn && <ApplyModal cn={applyingCn} invoices={invoices} onClose={() => setApplyingCn(null)} onSaved={load} />}
     </div>
   );
 }

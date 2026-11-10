@@ -9,6 +9,8 @@ import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { checkGrantableRole } from '@/lib/admin-scope';
+import { isSuperAdmin } from '@/lib/admin-access';
+import { requireUnderQuota } from '@/lib/plan-limits';
 import { withAuditedAction } from '@/lib/audited-action';
 import { reportingLineValue, userScopeDenied } from '@/lib/admin/user-scope';
 import { validatePasswordPolicy } from '@/lib/password-policy';
@@ -115,6 +117,37 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
 
+    if (body.action === 'reset-mfa') {
+      const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : '';
+      if (!targetUserId) {
+        return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+      }
+      const mfaResult = await withPlatformAdmin(prisma, async (tx) => {
+        const denied = await userScopeDenied(tx, req.headers, params.id, targetUserId, 'account');
+        if (denied) return { denied };
+        await tx.$executeRawUnsafe(
+          `UPDATE "User"
+              SET mfa_enabled = FALSE,
+                  mfa_secret = NULL,
+                  pending_mfa_secret = NULL,
+                  mfa_recovery_codes = NULL,
+                  mfa_enrolled_at = NULL,
+                  "updatedAt" = NOW()
+            WHERE id = $1`,
+          targetUserId,
+        );
+        return { ok: true as const };
+      });
+      if ('denied' in mfaResult && mfaResult.denied) return mfaResult.denied;
+      await revokeSessionsSafely({
+        userId: targetUserId,
+        reason: 'mfa-reset-by-admin',
+        revokedBy: authz.userId,
+      });
+      revalidateCache([CACHE_TAG]);
+      return NextResponse.json({ ok: true, message: 'MFA has been reset and active sessions were signed out.' });
+    }
+
     if (body.action === 'update-member') {
       const {
         userId, username, email, firstName, lastName,
@@ -169,8 +202,14 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
       if (employeeId   !== undefined) data.employeeId   = employeeId;
       if (isActive     !== undefined) data.isActive     = isActive;
 
-      const lines: { managerUserId?: string | null; departmentHeadUserId?: string | null } = {};
-      const accountChange = [username, email, isActive, userType, passwordHash].some((v) => v !== undefined && v !== null);
+      const lines: { managerUserId?: string | null; departmentHeadUserId?: string | null; isActive?: boolean } = {};
+      if (isActive !== undefined) {
+        lines.isActive = isActive;
+      }
+      // Note: Toggling `isActive` within a tenant updates the user's `UserTenant.isActive`
+      // membership in this company; global account fields (`username`, `email`, `userType`,
+      // `passwordHash`) still require single-tenant ownership or `SUPER_ADMIN` via `userScopeDenied`.
+      const globalAccountChange = [username, email, userType, passwordHash].some((v) => v !== undefined && v !== null);
 
       const result = await withPlatformAdmin(prisma, async (tx) => {
         const denied = await userScopeDenied(
@@ -178,9 +217,21 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
           req.headers,
           params.id,
           userId,
-          accountChange ? 'account' : 'member',
+          globalAccountChange ? 'account' : 'member',
         );
         if (denied) return { denied };
+
+        // Only update global `User.isActive` when the caller is a Super Admin or
+        // the user belongs exclusively to this tenant. Multi-company users have
+        // only their `UserTenant.isActive` updated for `params.id`.
+        if (isActive !== undefined && !isSuperAdmin(req.headers)) {
+          const otherMemberships = await tx.userTenant.count({
+            where: { userId, tenantId: { not: params.id } },
+          });
+          if (otherMemberships > 0) {
+            delete data.isActive;
+          }
+        }
 
         for (const [key, value, label] of [
           ['managerUserId', managerUserId, 'Manager'],
@@ -211,6 +262,7 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
       if (isActive === false || passwordHash) {
         await revokeSessionsSafely({
           userId,
+          ...(isActive === false && !isSuperAdmin(req.headers) ? { tenantId: params.id } : {}),
           reason: isActive === false ? 'user-deactivated' : 'password-set-by-admin',
           revokedBy: authz.userId,
         });
@@ -235,13 +287,46 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
       if (!tenant) return { error: `Tenant not found: ${params.id}`, status: 404 as const };
       const role   = await tx.role.findUnique({ where: { id: roleId } });
       if (!role)   return { error: `Role not found: ${roleId}`, status: 404 as const };
-      return { ok: true as const, role };
+      const existing = await tx.userTenant.findUnique({
+        where: { userId_tenantId: { userId, tenantId: params.id } },
+      });
+      const activeMemberCount =
+        typeof tx.userTenant.count === 'function'
+          ? await tx.userTenant.count({
+              where: { tenantId: params.id, isActive: true },
+            })
+          : 0;
+      return { ok: true as const, role, tenant, existing, activeMemberCount };
     });
     if ('error' in validations) {
       return NextResponse.json({ error: validations.error }, { status: validations.status });
     }
     const roleDenied = checkGrantableRole(req.headers, params.id, validations.role);
     if (roleDenied) return roleDenied;
+
+    // Cross-tenant hijack & quota protection:
+    // If the user is NOT already a member of `params.id`, only a platform SUPER_ADMIN
+    // may attach an existing account directly without an invitation, and adding a new
+    // active member must respect the tenant's `maxUsers` plan quota.
+    if (!validations.existing && !isSuperAdmin(req.headers)) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: 'Existing accounts from outside your organization must be invited via the Invitations workflow.',
+        },
+        { status: 403 },
+      );
+    }
+
+    if (!validations.existing || !validations.existing.isActive) {
+      const targetPlan = (validations.tenant.plan as string | undefined) ?? req.headers.get('x-tenant-plan') ?? 'TRIAL';
+      const gate = requireUnderQuota({
+        plan: targetPlan,
+        resource: 'maxUsers',
+        current: validations.activeMemberCount,
+      });
+      if (gate) return gate;
+    }
 
     // Upsert membership inside the tenant-scoped transaction.
     const { ut, roleChanged } = await withTenantRls(prisma, params.id, async (tx) => {
@@ -263,6 +348,7 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
     if (roleChanged) {
       await revokeSessionsSafely({ userId, tenantId: params.id, reason: 'role-changed', revokedBy: authz.userId });
     }
+    revalidateCache([CACHE_TAG]);
     return NextResponse.json(ut, { status: 201 });
   } catch (e) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
@@ -296,8 +382,9 @@ async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: str
       tx.userTenant.deleteMany({ where: { tenantId: params.id, userId } })
     );
     await revokeSessionsSafely({ userId, tenantId: params.id, reason: 'membership-removed', revokedBy: authz.userId });
+    revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-    } catch (e) {
+  } catch (e) {
     console.error('DELETE /api/admin/tenants/[id]/users error:', e);
     return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
   }

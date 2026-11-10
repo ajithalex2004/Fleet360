@@ -56,6 +56,12 @@ export class DisclosurePolicyService {
           requiredTempCelsius: requirementsPayload.requiredTempCelsius,
           hazmat: !!requirementsPayload.hazmat,
           tailLiftRequired: !!requirementsPayload.tailLiftRequired,
+          ...(requirementsPayload.freightRfqId !== undefined
+            ? { freightRfqId: requirementsPayload.freightRfqId }
+            : {}),
+          ...(requirementsPayload.freightRfqNo !== undefined
+            ? { freightRfqNo: requirementsPayload.freightRfqNo }
+            : {}),
         };
 
       case PartnerServiceDomain.RECOVERY:

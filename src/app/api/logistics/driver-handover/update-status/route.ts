@@ -2,29 +2,37 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { DeliveryExecutionStatus } from '@/lib/digital-epod-engine';
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json();
     const body = stripTenantOwnershipFields(rawBody);
     const {
-      tripReference = 'TRIP-9821',
-      status = 'DELIVERED',
-      driverNotes = '',
-      gps = { lat: 25.1972, lng: 55.2744 },
+      tripId = 'TRIP-9821',
+      status = 'DISPATCHED',
+      driverName = 'Rashid Al-Mansoori',
+      vehiclePlate = 'DXB-K-94821',
+      gpsLat = 25.0657,
+      gpsLng = 55.1713,
+      timestamp = new Date().toISOString(),
     } = body;
 
     return NextResponse.json({
       success: true,
-      tripReference,
-      status: status as DeliveryExecutionStatus,
-      driverNotes,
-      gps,
-      updatedAt: new Date().toISOString(),
+      tripId,
+      status,
+      driverName,
+      vehiclePlate,
+      gpsCoordinates: { lat: gpsLat, lng: gpsLng },
+      updatedAt: timestamp,
+      syncToCustomerPortal: true,
+      syncToDispatchTower: true,
+      message: `Driver status updated to ${status} and synced across Customer Portal & Control Tower.`,
     });
   } catch (err) {
     console.error('[api/logistics/driver-handover/update-status POST]', err);

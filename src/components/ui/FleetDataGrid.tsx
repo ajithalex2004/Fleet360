@@ -13,11 +13,11 @@
  * state — no server round-trips, no external grid library. Styled with the
  * app's CSS custom properties so it follows the Light/Dark toggle.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
-  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown,
+  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronLeft,
 } from 'lucide-react';
 
 export type SortDir = 'asc' | 'desc';
@@ -147,6 +147,13 @@ interface DataGridProps<T> {
    * Not a fit for pages needing multiple rows open at once.
    */
   expandable?: (row: T) => React.ReactNode | null | undefined | false;
+  /**
+   * Show a synchronized horizontal scrollbar docked at the bottom of the screen
+   * so users can easily scroll wide tables right and left even when the list is long.
+   */
+  stickyBottomScrollbar?: boolean;
+  /** Optional minimum width for the table (e.g. '1420px') to guarantee comfortable column spacing & horizontal scrolling. */
+  tableMinWidth?: string;
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
@@ -173,7 +180,7 @@ export default function FleetDataGrid<T>({
   rows, columns, getRowId, onRowClick, selectedId, loading, emptyMessage = 'No rows',
   initialSort, toolbar = {}, kpis, filterChips, className = '', gridName = 'FleetDataGrid',
   numbered = false, numberRender, selectable = false, selectedIds, onSelectionChange, rowClassName,
-  expandable,
+  expandable, stickyBottomScrollbar = true, tableMinWidth,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
 
@@ -188,6 +195,27 @@ export default function FleetDataGrid<T>({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Multi-value chip state: chip.key -> set of active option values. */
   const [chipValues, setChipValues] = useState<Record<string, Set<string>>>({});
+
+  // Horizontal scroll synchronization refs & state (for bottom-of-screen horizontal scrollbar)
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomScrollRef = useRef<HTMLDivElement | null>(null);
+  const fixedBottomScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef<'table' | 'bottom' | 'fixed' | null>(null);
+  const [scrollMetrics, setScrollMetrics] = useState<{
+    scrollLeft: number;
+    scrollWidth: number;
+    clientWidth: number;
+    dockLeft: number;
+    dockWidth: number;
+    showFixedBottomDock: boolean;
+  }>({
+    scrollLeft: 0,
+    scrollWidth: 1400,
+    clientWidth: 1000,
+    dockLeft: 0,
+    dockWidth: 0,
+    showFixedBottomDock: false,
+  });
 
   const visibleColumns = useMemo(() => columns.filter(c => !hidden.has(c.key)), [columns, hidden]);
   const sortableColumns = useMemo(() => columns.filter(c => (c.sortable ?? !!c.accessor) && c.accessor), [columns]);
@@ -257,6 +285,106 @@ export default function FleetDataGrid<T>({
     return out;
   }, [rows, columns, globalSearch, colFilters, chipValues, filterChips, sort]);
 
+  const updateScrollMeasurement = useCallback(() => {
+    const el = tableScrollRef.current;
+    if (!el || typeof window === 'undefined') return;
+    const rect = el.getBoundingClientRect();
+    const sw = Math.max(el.scrollWidth, el.clientWidth);
+    const cw = el.clientWidth;
+    const sl = el.scrollLeft;
+    // Show the fixed bottom-of-screen horizontal scrollbar whenever the grid is visible on screen
+    // and its bottom edge is near or below the viewport bottom (so users don't have to scroll down past all rows).
+    const isGridInViewport = rect.top < window.innerHeight - 70 && rect.bottom > 120;
+    const isBottomBelowFold = rect.bottom > window.innerHeight - 36;
+    setScrollMetrics({
+      scrollLeft: sl,
+      scrollWidth: sw,
+      clientWidth: cw,
+      dockLeft: Math.max(0, rect.left),
+      dockWidth: Math.max(240, rect.width),
+      showFixedBottomDock: Boolean(stickyBottomScrollbar && isGridInViewport && isBottomBelowFold),
+    });
+    if (bottomScrollRef.current && syncingRef.current !== 'bottom') {
+      bottomScrollRef.current.scrollLeft = sl;
+    }
+    if (fixedBottomScrollRef.current && syncingRef.current !== 'fixed') {
+      fixedBottomScrollRef.current.scrollLeft = sl;
+    }
+  }, [stickyBottomScrollbar]);
+
+  useEffect(() => {
+    updateScrollMeasurement();
+    const el = tableScrollRef.current;
+    if (!el || typeof window === 'undefined') return;
+
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => updateScrollMeasurement()) : null;
+    if (ro) {
+      ro.observe(el);
+      const tbl = el.querySelector('table');
+      if (tbl) ro.observe(tbl);
+    }
+
+    const onWindowScrollOrResize = () => updateScrollMeasurement();
+    window.addEventListener('resize', onWindowScrollOrResize, { passive: true });
+    window.addEventListener('scroll', onWindowScrollOrResize, true);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', onWindowScrollOrResize);
+      window.removeEventListener('scroll', onWindowScrollOrResize, true);
+    };
+  }, [updateScrollMeasurement, processed.length, visibleColumns.length, dense]);
+
+  const handleTableHorizontalScroll = () => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    if (syncingRef.current === 'bottom' || syncingRef.current === 'fixed') return;
+    syncingRef.current = 'table';
+    const sl = el.scrollLeft;
+    if (bottomScrollRef.current) bottomScrollRef.current.scrollLeft = sl;
+    if (fixedBottomScrollRef.current) fixedBottomScrollRef.current.scrollLeft = sl;
+    setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
+    requestAnimationFrame(() => {
+      syncingRef.current = null;
+    });
+  };
+
+  const handleBottomBarScroll = () => {
+    const bar = bottomScrollRef.current;
+    const el = tableScrollRef.current;
+    if (!bar || !el) return;
+    if (syncingRef.current === 'table' || syncingRef.current === 'fixed') return;
+    syncingRef.current = 'bottom';
+    const sl = bar.scrollLeft;
+    el.scrollLeft = sl;
+    if (fixedBottomScrollRef.current) fixedBottomScrollRef.current.scrollLeft = sl;
+    setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
+    requestAnimationFrame(() => {
+      syncingRef.current = null;
+    });
+  };
+
+  const handleFixedBottomBarScroll = () => {
+    const bar = fixedBottomScrollRef.current;
+    const el = tableScrollRef.current;
+    if (!bar || !el) return;
+    if (syncingRef.current === 'table' || syncingRef.current === 'bottom') return;
+    syncingRef.current = 'fixed';
+    const sl = bar.scrollLeft;
+    el.scrollLeft = sl;
+    if (bottomScrollRef.current) bottomScrollRef.current.scrollLeft = sl;
+    setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
+    requestAnimationFrame(() => {
+      syncingRef.current = null;
+    });
+  };
+
+  const scrollHorizontallyBy = (deltaPx: number) => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const next = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + deltaPx));
+    el.scrollTo({ left: next, behavior: 'smooth' });
+  };
+
   const activeFilterCount =
     Object.values(colFilters).filter(v => v.trim() !== '').length +
     (globalSearch.trim() ? 1 : 0) +
@@ -286,23 +414,12 @@ export default function FleetDataGrid<T>({
 
   const clearAll = () => { setColFilters({}); setGlobalSearch(''); setChipValues({}); };
 
-  // Selection is fully controlled by the caller (same contract as a
-  // controlled <input>) — this component never holds its own copy of
-  // selectedIds, so a parent can't get out of sync with what it's
-  // rendering. `?? new Set()` covers a caller that hasn't set an initial
-  // value yet rather than crashing on undefined.
   const selection = selectedIds ?? new Set<string>();
-  // Propagation is stopped by the wrapping <td>'s own onClick below, not
-  // here — this only computes the next selection state.
   const toggleRow = (id: string) => {
     const next = new Set(selection);
     if (next.has(id)) next.delete(id); else next.add(id);
     onSelectionChange?.(next);
   };
-  // "Select all" acts on `processed` (the current filtered/sorted view),
-  // not the full `rows` — selecting everything that matches an active
-  // filter, not everything that exists. See the prop doc for the
-  // Gmail-style rationale.
   const visibleIds = useMemo(() => processed.map(getRowId), [processed, getRowId]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selection.has(id));
   const someVisibleSelected = !allVisibleSelected && visibleIds.some(id => selection.has(id));
@@ -315,8 +432,6 @@ export default function FleetDataGrid<T>({
     }
     onSelectionChange?.(next);
   };
-  // Native <input> has no `indeterminate` HTML attribute — it's a DOM
-  // property only settable imperatively, hence the ref instead of a prop.
   const headerCheckboxRef = (el: HTMLInputElement | null) => {
     if (el) el.indeterminate = someVisibleSelected;
   };
@@ -325,9 +440,6 @@ export default function FleetDataGrid<T>({
     setExpandedId(prev => (prev === id ? null : id));
   };
 
-  // All extra columns are prepended before the caller's own columns, so
-  // colSpan for the loading-skeleton and empty-state rows (which each
-  // render one <td> spanning every column) needs to account for them.
   const leadingColCount = (expandable ? 1 : 0) + (numbered ? 1 : 0) + (selectable ? 1 : 0);
   const totalColCount = visibleColumns.length + leadingColCount;
 
@@ -352,6 +464,8 @@ export default function FleetDataGrid<T>({
   const title = tb.title ?? gridName;
 
   const hasHeader = (kpis && kpis.length > 0) || (filterChips && filterChips.length > 0);
+  const effectiveMinWidth = tableMinWidth ?? (visibleColumns.length >= 7 ? '1380px' : undefined);
+  const scrollableRangePx = Math.max(1, scrollMetrics.scrollWidth - scrollMetrics.clientWidth);
 
   return (
     <div data-grid-name={gridName} className={hasHeader ? `space-y-4 ${className}` : className}>
@@ -404,7 +518,7 @@ export default function FleetDataGrid<T>({
         </div>
       )}
 
-      <div className={`rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 overflow-hidden`}>
+      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
         {title && <span className="text-sm font-semibold text-[var(--text-main)] mr-1">{title}</span>}
@@ -522,8 +636,18 @@ export default function FleetDataGrid<T>({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
+      <div
+        ref={tableScrollRef}
+        onScroll={handleTableHorizontalScroll}
+        className="overflow-x-auto fleet-grid-hscroll"
+      >
+        <table
+          className="w-full text-sm"
+          style={{
+            tableLayout: 'auto',
+            minWidth: effectiveMinWidth,
+          }}
+        >
           <thead>
             <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider bg-[var(--bg-surface)]/40">
               {expandable && (
@@ -608,11 +732,18 @@ export default function FleetDataGrid<T>({
               const rowClickHandler = onRowClick
                 ? () => onRowClick(row)
                 : isExpandableRow ? () => toggleExpanded(id) : undefined;
+              const customRowCls = rowClassName?.(row);
               return (
                 <React.Fragment key={id}>
                   <tr onClick={rowClickHandler}
                     className={`${rowClickHandler ? 'cursor-pointer' : ''} transition-colors ${
-                      rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
+                      customRowCls
+                        ? customRowCls
+                        : selectedId === id
+                          ? 'bg-violet-500/10'
+                          : isSelected
+                            ? 'bg-violet-500/5'
+                            : 'hover:bg-white/[0.03]'
                     }`}>
                     {expandable && (
                       <td className={`px-3 ${pad} text-[var(--text-faint)]`} onClick={isExpandableRow ? e => { e.stopPropagation(); toggleExpanded(id); } : undefined}>
@@ -650,7 +781,93 @@ export default function FleetDataGrid<T>({
           </tbody>
         </table>
       </div>
+
+      {/* Inline Horizontal Scroll Bar at Bottom of Table */}
+      {stickyBottomScrollbar && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/80">
+          <button
+            type="button"
+            onClick={() => scrollHorizontallyBy(-280)}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] shrink-0 transition-colors"
+            title="Scroll table left"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Left</span>
+          </button>
+          <div
+            ref={bottomScrollRef}
+            onScroll={handleBottomBarScroll}
+            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-3.5"
+          >
+            <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 240)}px`, height: '1px' }} />
+          </div>
+          <button
+            type="button"
+            onClick={() => scrollHorizontallyBy(280)}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] shrink-0 transition-colors"
+            title="Scroll table right"
+          >
+            <span>Right</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       </div>
+
+      {/* Fixed Bottom-of-Screen Horizontal Scrollbar Dock when the table list is taller than the screen */}
+      {scrollMetrics.showFixedBottomDock && (
+        <div
+          style={{
+            left: `${scrollMetrics.dockLeft}px`,
+            width: `${scrollMetrics.dockWidth}px`,
+          }}
+          className="fixed bottom-0 z-30 flex items-center gap-2.5 px-3 py-1.5 rounded-t-xl border border-b-0 border-blue-500/40 bg-[var(--bg-surface)]/95 backdrop-blur-md shadow-2xl"
+        >
+          <button
+            type="button"
+            onClick={() => scrollHorizontallyBy(-300)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-bold text-blue-400 hover:bg-blue-600/25 shrink-0 transition-colors"
+            title="Scroll table left"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Left</span>
+          </button>
+
+          <div className="flex-1 flex flex-col gap-1 min-w-0">
+            <div
+              ref={fixedBottomScrollRef}
+              onScroll={handleFixedBottomBarScroll}
+              className="w-full overflow-x-scroll fleet-grid-hscroll h-3.5"
+            >
+              <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 260)}px`, height: '1px' }} />
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={scrollableRangePx}
+              value={Math.min(scrollableRangePx, scrollMetrics.scrollLeft)}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (tableScrollRef.current) {
+                  tableScrollRef.current.scrollLeft = next;
+                }
+              }}
+              aria-label="Horizontal table scroll position"
+              className="w-full h-1.5 accent-blue-500 cursor-pointer"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => scrollHorizontallyBy(300)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-bold text-blue-400 hover:bg-blue-600/25 shrink-0 transition-colors"
+            title="Scroll table right"
+          >
+            <span>Right</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

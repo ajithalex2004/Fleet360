@@ -36,7 +36,13 @@ interface VATData {
   };
 }
 
-const QUARTERS = ['Q1-2026', 'Q4-2025', 'Q3-2025', 'Q2-2025', 'Q1-2025'];
+const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_Q = Math.floor(new Date().getMonth() / 3) + 1;
+const DEFAULT_QUARTER = `Q${CURRENT_Q}-${CURRENT_YEAR}`;
+const QUARTERS = [CURRENT_YEAR, CURRENT_YEAR - 1].flatMap(yr =>
+  ['Q4', 'Q3', 'Q2', 'Q1'].map(q => `${q}-${yr}`)
+);
+
 const EMIRATE_FLAGS: Record<string, string> = {
   ABU_DHABI: '🏛️', DUBAI: '🏙️', SHARJAH: '🕌',
   AJMAN: '⛵', UMM_AL_QUWAIN: '🌿', RAS_AL_KHAIMAH: '⛰️', FUJAIRAH: '🌊',
@@ -53,8 +59,7 @@ function fmt(n: number) {
 export default function VATBranchPage() {
   const [data,     setData]     = useState<VATData | null>(null);
   const [loading,  setLoading]  = useState(true);
-  const [quarter,  setQuarter]  = useState(QUARTERS[0]);
-
+  const [quarter,  setQuarter]  = useState(DEFAULT_QUARTER);
 
   const load = useCallback(async () => {
     setLoading(true);

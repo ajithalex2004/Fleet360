@@ -52,6 +52,10 @@ export interface DispatchJob {
   pickupLng?:       number;
   dropoffLat?:      number;
   dropoffLng?:      number;
+  originAddress?:   string;
+  destinationAddress?: string;
+  scheduledPickup?: Date;
+  passengerCount?:  number;
   zoneId?:          string;
   slaDeadline?:     Date;
   assignedDriverId?:  string;
@@ -167,6 +171,7 @@ export interface DispatchConfig {
 export interface Candidate {
   driverId:          string;
   vehicleId:         string;
+  driverPhone?:      string;
   distanceKm:        number;
   etaMinutes:        number;
   driverRating:      number;   // 0-5

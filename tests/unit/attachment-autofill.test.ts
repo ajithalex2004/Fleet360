@@ -13,7 +13,14 @@ vi.mock('next/server', async () => await import('next/server.js'));
 
 import { aiGateway } from '@/lib/agents/gateway';
 import { processDocumentWithRouter } from '@/lib/agents/document-intelligence/pipeline/router';
-import { autofillAttachment, autofillPrompt, normalizeDate, parseAutofillReply } from '@/lib/tenant-attachments-autofill';
+import {
+  autofillAttachment,
+  autofillCompanyDocument,
+  autofillPrompt,
+  normalizeDate,
+  parseAutofillReply,
+  parseUaeCompanyDocumentText,
+} from '@/lib/tenant-attachments-autofill';
 
 const TRADE = { code: 'TRADE_LICENSE', name: 'Trade License', requiresExpiry: true };
 const VAT = { code: 'VAT_CERTIFICATE', name: 'VAT Certificate', requiresExpiry: false };
@@ -69,6 +76,103 @@ describe('parseAutofillReply', () => {
     expect(autofillPrompt(VAT)).toContain('Tax Registration Number (TRN)');
     expect(autofillPrompt(TRADE)).toContain('trade license number');
     expect(autofillPrompt({ code: 'INSURANCE', name: 'Insurance', requiresExpiry: true })).toContain('main reference / document number');
+  });
+
+  it('includes extractedFields when company profile fields are returned by the model', () => {
+    const reply = parseAutofillReply(
+      JSON.stringify({
+        documentNumber: 'CN-7654321',
+        expiryDate: '2027-11-30',
+        confidence: 0.94,
+        matchesExpectedType: true,
+        companyName: 'EXL Solutions Transport L.L.C',
+        arabicName: 'إي إكس إل سوليوشنز للنقل ذ.م.م',
+        tradeLicenseAuthority: 'DED Dubai (DET)',
+        emirate: 'Dubai',
+        address: 'Sheikh Zayed Road, Business Bay, Dubai',
+      }),
+      TRADE,
+      TODAY,
+    );
+    expect(reply.status).toBe('ok');
+    if (reply.status === 'ok') {
+      expect(reply.extractedFields).toMatchObject({
+        companyName: 'EXL Solutions Transport L.L.C',
+        arabicName: 'إي إكس إل سوليوشنز للنقل ذ.م.م',
+        tradeLicenseNo: 'CN-7654321',
+        tradeLicenseAuthority: 'DED Dubai (DET)',
+        emirate: 'Dubai',
+        emirateCode: 'AE-DU',
+        address: 'Sheikh Zayed Road, Business Bay, Dubai',
+      });
+    }
+  });
+});
+
+describe('parseUaeCompanyDocumentText & autofillCompanyDocument', () => {
+  it('parses UAE Trade License text deterministically', () => {
+    const parsed = parseUaeCompanyDocumentText(
+      [
+        'GOVERNMENT OF DUBAI - DEPARTMENT OF ECONOMY AND TOURISM',
+        'COMMERCIAL LICENSE',
+        'License No: 984512',
+        'Trade Name: EXL SOLUTIONS TRANSPORT L.L.C',
+        'الاسم التجاري: إي إكس إل سوليوشنز للنقل ذ.م.م',
+        'Issue Date: 15/05/2025',
+        'Expiry Date: 14/05/2027',
+        'Address: Office 1402, Business Bay Tower, Dubai',
+        'P.O. Box: 54321',
+        'Phone: +971 4 321 9876',
+        'Email: finance@exlsolutions.ae',
+      ].join('\n'),
+      'TRADE_LICENSE',
+    );
+    expect(parsed).toMatchObject({
+      docType: 'TRADE_LICENSE',
+      tradeLicenseNo: '984512',
+      tradeLicenseAuthority: 'DED Dubai (DET)',
+      companyName: 'EXL SOLUTIONS TRANSPORT L.L.C',
+      arabicName: 'إي إكس إل سوليوشنز للنقل ذ.م.م',
+      issueDate: '2025-05-15',
+      expiryDate: '2027-05-14',
+      emirate: 'Dubai',
+      emirateCode: 'AE-DU',
+      postalZone: '54321',
+      contactPhone: '+971 4 321 9876',
+      contactEmail: 'finance@exlsolutions.ae',
+    });
+  });
+
+  it('parses UAE FTA VAT Certificate and extracts 15-digit TRN via AI Vision', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'k');
+    vi.spyOn(aiGateway, 'vision').mockResolvedValue(
+      gatewayReply(
+        JSON.stringify({
+          docType: 'VAT_CERTIFICATE',
+          documentNumber: '100-4567-8901-0003',
+          trn: '100-4567-8901-0003',
+          companyName: 'EXL Solutions Transport L.L.C',
+          arabicName: 'إي إكس إل سوليوشنز للنقل ذ.م.م',
+          emirate: 'Abu Dhabi',
+          address: 'Al Maryah Island, Abu Dhabi',
+          confidence: 0.96,
+        }),
+      ),
+    );
+    const res = await autofillCompanyDocument(
+      { base64: 'iVBORw0KGgo=', mimeType: 'image/png', fileName: 'vat-cert.png' },
+      'VAT_CERTIFICATE',
+    );
+    expect(res).toMatchObject({
+      status: 'ok',
+      docType: 'VAT_CERTIFICATE',
+      trn: '100456789010003',
+      peppolEndpointId: '100456789010003',
+      companyName: 'EXL Solutions Transport L.L.C',
+      arabicName: 'إي إكس إل سوليوشنز للنقل ذ.م.م',
+      emirate: 'Abu Dhabi',
+      emirateCode: 'AE-AZ',
+    });
   });
 });
 

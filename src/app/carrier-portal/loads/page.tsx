@@ -2,16 +2,22 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, RefreshCw, Send, Truck } from 'lucide-react';
+import { ArrowRight, RefreshCw, Send, ShieldCheck, Truck } from 'lucide-react';
 
 interface LoadRow {
   id: string;
   rfqNo: string;
   status: string;
   shipmentOrderId: string;
+  exchangeBridge?: {
+    exchangeRequestId: string | null;
+    exchangeRequestNumber: string | null;
+    disclosureStage: string;
+  } | null;
   shipment: {
     id: string;
     shipmentNo: string | null;
+    cargoOwnerName?: string | null;
     originName: string | null;
     destinationName: string | null;
     pickupWindowFrom: string | null;
@@ -104,7 +110,7 @@ export default function CarrierAppPage() {
       setMessage(body.error || 'Failed to submit bid');
       return;
     }
-    setMessage('Bid submitted.');
+    setMessage('Bid submitted and synced to Fleet360 Exchange.');
     await load();
   };
 
@@ -113,7 +119,7 @@ export default function CarrierAppPage() {
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-emerald-300/70">Fleet360 carrier app</p>
+            <p className="text-[11px] uppercase tracking-wide text-emerald-300/70">Fleet360 carrier app · Private Exchange Network</p>
             <h1 className="text-2xl font-bold">Carrier loads</h1>
           </div>
           <Truck className="h-7 w-7 text-emerald-300" />
@@ -165,9 +171,27 @@ export default function CarrierAppPage() {
             <div key={loadRow.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-mono text-xs text-emerald-300">{loadRow.rfqNo}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-xs text-emerald-300">{loadRow.rfqNo}</p>
+                    {loadRow.exchangeBridge?.exchangeRequestNumber && (
+                      <span className="font-mono text-[11px] text-cyan-300">
+                        · {loadRow.exchangeBridge.exchangeRequestNumber}
+                      </span>
+                    )}
+                    {loadRow.exchangeBridge && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+                        <ShieldCheck className="h-3 w-3" />
+                        {loadRow.exchangeBridge.disclosureStage === 'STAGE_3_AWARDED_PARTNER'
+                          ? 'Stage 3 Disclosure'
+                          : 'Stage 2 Blind Bid'}
+                      </span>
+                    )}
+                  </div>
                   <h2 className="mt-1 text-lg font-semibold">{loadRow.shipment?.originName ?? '-'} to {loadRow.shipment?.destinationName ?? '-'}</h2>
-                  <p className="mt-1 text-sm text-slate-400">{loadRow.shipment?.requestedVehicleType ?? 'Any vehicle'} · pickup {dt(loadRow.shipment?.pickupWindowFrom)} · {loadRow.shipment?.totalWeightKg ?? 0} kg</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {loadRow.shipment?.requestedVehicleType ?? 'Any vehicle'} · pickup {dt(loadRow.shipment?.pickupWindowFrom)} · {loadRow.shipment?.totalWeightKg ?? 0} kg
+                    {loadRow.shipment?.cargoOwnerName ? ` · ${loadRow.shipment.cargoOwnerName}` : ''}
+                  </p>
                 </div>
                 <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200">{loadRow.status}</span>
               </div>

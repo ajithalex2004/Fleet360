@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
  *   - stops: pickup/delivery coordinates + geofence radius (drawn as zones)
  *   - latest: the most recent GPS position (the truck marker)
  *   - trail:  the recent GPS path (a breadcrumb line)
- *   - eta:    the latest persisted ETA from the telematics layer
+ *   - eta:    the latest persisted ETA from the telematics/tracking layer
  *
  * Auth: tenant operator session (x-tenant-id). Read-only.
  */
@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function num(v: string | number | null | undefined): number | null {
@@ -32,9 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
-
     return NextResponse.json({ error: authz.error }, { status: authz.status });
-
   }
 
   const { tenantId } = authz;
@@ -43,81 +41,95 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // queries already pass tenantId explicitly; the wrapper is what keeps that
   // true once the connection role no longer holds BYPASSRLS.
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
+    try {
+      const shipRows = await tx.$queryRawUnsafe<Array<{
+        shipment_no: string | null;
+        status: string | null;
+        destination_name: string | null;
+        delivery_window_to: Date | null;
+        metadata: Record<string, unknown> | null;
+      }>>(
+        `SELECT shipment_no, status, destination_name, delivery_window_to, metadata
+           FROM logistics_shipment_orders
+          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
+        id, tenantId,
+      );
+      if (!shipRows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const { id } = await params;
-  try {
-    const shipRows = await tx.$queryRawUnsafe<Array<{ shipment_no: string | null; status: string | null; destination_name: string | null }>>(
-      `SELECT shipment_no, status, destination_name
-         FROM logistics_shipment_orders
-        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
-      id, tenantId,
-    ).catch(() => []);
-    if (!shipRows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      const stopRows = await tx.$queryRawUnsafe<Array<{
+        id: string; stop_type: string; sequence_no: number;
+        latitude: string | number | null; longitude: string | number | null;
+        location_name: string | null; geofence_radius_m: number | null;
+      }>>(
+        `SELECT id, stop_type, sequence_no, latitude::text, longitude::text, location_name, geofence_radius_m
+           FROM logistics_shipment_stops
+          WHERE shipment_order_id = $1 AND tenant_id = $2
+            AND latitude IS NOT NULL AND longitude IS NOT NULL
+          ORDER BY sequence_no ASC`,
+        id, tenantId,
+      );
 
-    const stopRows = await tx.$queryRawUnsafe<Array<{
-      id: string; stop_type: string; sequence_no: number;
-      latitude: string | number | null; longitude: string | number | null;
-      location_name: string | null; geofence_radius_m: number | null;
-    }>>(
-      `SELECT id, stop_type, sequence_no, latitude::text, longitude::text, location_name, geofence_radius_m
-         FROM logistics_shipment_stops
-        WHERE shipment_order_id = $1 AND tenant_id = $2
-          AND latitude IS NOT NULL AND longitude IS NOT NULL
-        ORDER BY sequence_no ASC`,
-      id, tenantId,
-    ).catch(() => []);
+      const trailRows = await tx.$queryRawUnsafe<Array<{
+        latitude: string | number; longitude: string | number; occurred_at: string;
+      }>>(
+        `SELECT latitude::text, longitude::text, occurred_at::text
+           FROM logistics_tracking_events
+          WHERE shipment_order_id = $1 AND tenant_id = $2
+            AND latitude IS NOT NULL AND longitude IS NOT NULL
+          ORDER BY occurred_at DESC
+          LIMIT ${TRAIL_LIMIT}`,
+        id, tenantId,
+      );
 
-    const trailRows = await tx.$queryRawUnsafe<Array<{
-      latitude: string | number; longitude: string | number; occurred_at: string;
-    }>>(
-      `SELECT latitude::text, longitude::text, occurred_at::text
-         FROM logistics_tracking_events
-        WHERE shipment_order_id = $1 AND tenant_id = $2
-          AND latitude IS NOT NULL AND longitude IS NOT NULL
-        ORDER BY occurred_at DESC
-        LIMIT ${TRAIL_LIMIT}`,
-      id, tenantId,
-    ).catch(() => []);
+      // Latest persisted ETA from tracking event metadata (recording telematics positions
+      // always mirrors etaAt into logistics_tracking_events.metadata->>'etaAt', avoiding
+      // querying the optional logistics_telematics_events table inside a pinned transaction).
+      const etaRows = await tx.$queryRawUnsafe<Array<{ eta_at: string | null }>>(
+        `SELECT (metadata->>'etaAt')::text AS eta_at
+           FROM logistics_tracking_events
+          WHERE shipment_order_id = $1 AND tenant_id = $2
+            AND metadata IS NOT NULL AND metadata->>'etaAt' IS NOT NULL
+          ORDER BY occurred_at DESC LIMIT 1`,
+        id, tenantId,
+      );
 
-    // Latest persisted ETA from the telematics layer (what customer-tracking shows).
-    const etaRows = await tx.$queryRawUnsafe<Array<{ eta_at: string | null }>>(
-      `SELECT eta_at::text
-         FROM logistics_telematics_events
-        WHERE shipment_order_id = $1 AND tenant_id = $2 AND eta_at IS NOT NULL
-        ORDER BY event_time DESC LIMIT 1`,
-      id, tenantId,
-    ).catch(() => []);
+      const stops = stopRows.map(s => ({
+        id: s.id,
+        type: s.stop_type.toUpperCase(),
+        sequence: s.sequence_no,
+        latitude: num(s.latitude)!,
+        longitude: num(s.longitude)!,
+        label: s.location_name,
+        radiusM: s.geofence_radius_m ?? DEFAULT_RADIUS_M,
+      }));
 
-    const stops = stopRows.map(s => ({
-      id: s.id,
-      type: s.stop_type.toUpperCase(),
-      sequence: s.sequence_no,
-      latitude: num(s.latitude)!,
-      longitude: num(s.longitude)!,
-      label: s.location_name,
-      radiusM: s.geofence_radius_m ?? DEFAULT_RADIUS_M,
-    }));
+      // trailRows is newest-first; reverse to chronological for a drawn line.
+      const trail = trailRows
+        .map(t => ({ latitude: num(t.latitude)!, longitude: num(t.longitude)!, at: t.occurred_at }))
+        .reverse();
+      const latest = trail.length ? trail[trail.length - 1] : null;
+      const fallbackEta =
+        typeof shipRows[0].metadata?.lastNotifiedEtaAt === 'string'
+          ? shipRows[0].metadata.lastNotifiedEtaAt
+          : shipRows[0].delivery_window_to
+            ? shipRows[0].delivery_window_to.toISOString()
+            : null;
 
-    // trailRows is newest-first; reverse to chronological for a drawn line.
-    const trail = trailRows
-      .map(t => ({ latitude: num(t.latitude)!, longitude: num(t.longitude)!, at: t.occurred_at }))
-      .reverse();
-    const latest = trail.length ? trail[trail.length - 1] : null;
-
-    return NextResponse.json({
-      shipmentNo: shipRows[0].shipment_no,
-      status: shipRows[0].status,
-      destinationName: shipRows[0].destination_name,
-      stops,
-      trail,
-      latest,
-      etaAt: etaRows[0]?.eta_at ?? null,
-    }, {
-      headers: { 'Cache-Control': 'private, max-age=15' },
-    });
+      return NextResponse.json({
+        shipmentNo: shipRows[0].shipment_no,
+        status: shipRows[0].status,
+        destinationName: shipRows[0].destination_name,
+        stops,
+        trail,
+        latest,
+        etaAt: etaRows[0]?.eta_at ?? fallbackEta,
+      }, {
+        headers: { 'Cache-Control': 'private, max-age=15' },
+      });
     } catch (e) {
-    console.error('[tracking-map]', e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
-  }
+      console.error('[tracking-map]', e);
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
+    }
   });
 }

@@ -1,24 +1,49 @@
 export const dynamic = 'force-dynamic';
 
-/**
- * Planner /optimize endpoint — STUB for type-check pass.
- *
- * Tests under tests/integration/planner-*.test.ts import the handler from here.
- * The original implementation was relocated to the Go backend (Layer 4 work)
- * and these Next.js routes will be re-implemented in a follow-up sprint.
- */
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { runOptimization, type OptimizeRequest } from '@/lib/logistics/route-optimizer-service';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // A stub, but still tenant-scoped: it answers only an authorized tenant.
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
-  return NextResponse.json(
-    {
-      error: 'Planner optimize endpoint has been migrated to the Go backend. Use POST /api/v1/go/planner/optimize in the meantime.',
-      code: 'ENDPOINT_MIGRATED',
-    },
-    { status: 503 },
-  );
+
+  let rawBody: Record<string, unknown>;
+  try {
+    rawBody = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const body = stripTenantOwnershipFields(rawBody);
+  const vehicleIds = Array.isArray(body.vehicleIds) ? body.vehicleIds.map(String).filter(Boolean) : [];
+  const shipmentIds = Array.isArray(body.shipmentIds) ? body.shipmentIds.map(String).filter(Boolean) : [];
+
+  if (vehicleIds.length === 0 || shipmentIds.length === 0) {
+    return NextResponse.json(
+      { error: 'vehicleIds and shipmentIds arrays are required and must be non-empty' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const response = await withTenantRls(prisma, authz.tenantId, () =>
+      runOptimization({
+        tenantId: authz.tenantId,
+        vehicleIds,
+        shipmentIds,
+        createdBy: authz.userId ?? req.headers.get('x-user-id') ?? null,
+        config: (body.config && typeof body.config === 'object' ? body.config : undefined) as OptimizeRequest['config'],
+      }),
+    );
+    return NextResponse.json(response, { status: 201 });
+  } catch (err) {
+    console.error('[api/logistics/planner/optimize POST]', err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Route optimization failed' },
+      { status: 400 },
+    );
+  }
 }

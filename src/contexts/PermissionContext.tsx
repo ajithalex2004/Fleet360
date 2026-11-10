@@ -93,6 +93,7 @@ function clearCache() { _cache = null; }
 // every API call, so a briefly-stale client snapshot is safe.
 const SESSION_KEY = 'xl_mobility_session';
 const SNAPSHOT_KEY = 'xl_mobility_session_snapshot_v2';
+const LEGACY_SNAPSHOT_KEY = 'xl_mobility_session_snapshot';
 
 function hasStoredSession(): boolean {
   try {
@@ -105,16 +106,25 @@ function hasStoredSession(): boolean {
 function getPersistedSnapshot(): SessionCache | null {
   try {
     if (typeof window === 'undefined' || !hasStoredSession()) return null;
-    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    const raw = localStorage.getItem(SNAPSHOT_KEY) || localStorage.getItem(LEGACY_SNAPSHOT_KEY);
     if (!raw) return null;
     const snap = JSON.parse(raw) as SessionCache;
     return snap?.user && snap?.tenant ? snap : null;
   } catch { return null; }
 }
 function setPersistedSnapshot(user: UserInfo, tenant: TenantInfo, permissions: string[], impersonatedBy: string | null = null) {
-  try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ user, tenant, permissions, impersonatedBy, ts: Date.now() })); } catch { /* ignore */ }
+  try {
+    const serialized = JSON.stringify({ user, tenant, permissions, impersonatedBy, ts: Date.now() });
+    localStorage.setItem(SNAPSHOT_KEY, serialized);
+    localStorage.setItem(LEGACY_SNAPSHOT_KEY, serialized);
+  } catch { /* ignore */ }
 }
-function clearPersistedSnapshot() { try { localStorage.removeItem(SNAPSHOT_KEY); } catch { /* ignore */ } }
+function clearPersistedSnapshot() {
+  try {
+    localStorage.removeItem(SNAPSHOT_KEY);
+    localStorage.removeItem(LEGACY_SNAPSHOT_KEY);
+  } catch { /* ignore */ }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PermissionContext = createContext<PermissionContextType | null>(null);

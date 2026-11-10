@@ -358,7 +358,15 @@ export default function OrganizationHierarchyMasterPage() {
         </div>
 
         {/* Quick Create Buttons */}
+        {/* Quick Create Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/admin/departments"
+            className="flex items-center gap-1.5 px-3 py-2 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-xl text-xs font-semibold text-violet-300 transition-all shadow-sm"
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>User RBAC Departments →</span>
+          </Link>
           <button
             onClick={() => openCreateModal('REGION')}
             className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl text-xs font-semibold text-[var(--text-main)] transition-all shadow-sm"

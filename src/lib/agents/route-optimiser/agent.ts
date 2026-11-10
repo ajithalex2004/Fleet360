@@ -9,8 +9,9 @@
  * Capabilities:
  *   1. Evaluates multi-route consolidation (e.g. 5 staff routes -> 3 buses)
  *   2. Enforces vehicle seating capacity, passenger counts, shift proximity & detour limits
- *   3. Re-sequences stops with Nearest-Neighbour + 2-opt TSP
- *   4. Computes daily km saved, vehicles released, and monthly dollarized savings (AED/mo)
+ *   3. Re-sequences stops with Nearest-Neighbour + 2-opt TSP (preserving origin & final destination)
+ *   4. Optimises multi-stop commercial logistics shipments (logistics_shipment_orders + logistics_shipment_stops)
+ *   5. Computes daily km saved, vehicles released, and monthly dollarized savings (AED/mo)
  */
 
 import { prisma } from '@/lib/prisma';
@@ -52,11 +53,28 @@ interface RawStopRow {
   gps_lng: number | null;
 }
 
+interface RawLogisticsShipmentRow {
+  id: string;
+  shipment_no: string | null;
+  origin_name: string | null;
+  destination_name: string | null;
+}
+
+interface RawLogisticsStopRow {
+  id: string;
+  shipment_order_id: string;
+  location_name: string | null;
+  address: string | null;
+  sequence_no: number;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
   const tenantId = event.tenant_id || 'default';
 
-  // ── 1. Unified Route Fetching (Bus-Ops + School Bus) ─────────────────────────
+  // ── 1. Unified Route Fetching (Bus-Ops + School Bus + Commercial Logistics) ──
   // First query standard bus_routes (Staff transport & Bus-Ops)
   const busRoutes = await prisma.$queryRawUnsafe<RawRouteRow[]>(
     `SELECT id::text, name, code, origin, destination, route_type,
@@ -88,6 +106,44 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
         sequence: s.sequence,
       });
       stopsByRoute.set(s.route_id, list);
+    }
+  }
+
+  // Also fetch active multi-stop commercial logistics shipments
+  const logisticsShipments = await prisma.$queryRawUnsafe<RawLogisticsShipmentRow[]>(
+    `SELECT id::text, shipment_no, origin_name, destination_name
+       FROM logistics_shipment_orders
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND status IN ('DRAFT', 'PENDING', 'SUBMITTED', 'APPROVED', 'ASSIGNED', 'DISPATCHED')
+      ORDER BY created_at DESC
+      LIMIT 100`,
+    tenantId,
+  ).catch(() => []);
+
+  const logisticsStops = await prisma.$queryRawUnsafe<RawLogisticsStopRow[]>(
+    `SELECT id::text, shipment_order_id::text, location_name, address,
+            sequence_no::int, latitude::float8, longitude::float8
+       FROM logistics_shipment_stops
+      WHERE tenant_id = $1
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+      ORDER BY shipment_order_id, sequence_no ASC`,
+    tenantId,
+  ).catch(() => []);
+
+  const stopsByShipment = new Map<string, GeoStop[]>();
+  for (const s of logisticsStops) {
+    if (s.latitude !== null && s.longitude !== null) {
+      const list = stopsByShipment.get(s.shipment_order_id) ?? [];
+      list.push({
+        id: s.id,
+        name: s.location_name || s.address || `Stop ${s.sequence_no}`,
+        lat: s.latitude,
+        lng: s.longitude,
+        sequence: s.sequence_no,
+      });
+      stopsByShipment.set(s.shipment_order_id, list);
     }
   }
 
@@ -172,6 +228,43 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
     });
   }
 
+  // Also optimise multi-stop commercial logistics shipments
+  for (const s of logisticsShipments) {
+    const stops = stopsByShipment.get(s.id) ?? [];
+    if (stops.length < 3) continue;
+
+    const result = optimiseRoute(stops);
+    const status = result.distanceSavedPct >= AUTO_APPLY_THRESHOLD_PCT ? 'AUTO_APPLIED' : 'SUGGESTED';
+    const routeName = `${s.origin_name ?? 'Origin'} → ${s.destination_name ?? 'Destination'}`;
+    const routeNumber = s.shipment_no ?? s.id.slice(0, 8);
+
+    if (status === 'AUTO_APPLIED') {
+      for (const stop of result.optimisedSequence) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE logistics_shipment_stops
+              SET sequence_no = $3, updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2`,
+          stop.id,
+          tenantId,
+          stop.sequence,
+        ).catch(() => {});
+      }
+      singleRouteAutoApplied++;
+    } else {
+      singleRouteSuggested++;
+    }
+
+    singleRouteSavedKm += result.distanceSavedKm;
+    singleRouteResults.push({
+      routeId: s.id,
+      routeName,
+      routeNumber,
+      distanceSavedKm: result.distanceSavedKm,
+      distanceSavedPct: result.distanceSavedPct,
+      status,
+    });
+  }
+
   // ── 3. Multi-Route Consolidation Analysis (Bus-Ops Staff & Commercial) ────────
   let consolidationRecommendations: ConsolidationRecommendationItem[] = [];
   let consolidatedVehiclesSaved = 0;
@@ -240,8 +333,9 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
     console.warn('[route-optimiser] Multi-route consolidation analysis skipped:', err);
   }
 
-  const currentRoutesCount = busRoutes.length;
-  const currentVehiclesCount = busRoutes.length;
+  const totalEvaluatedRoutes = busRoutes.length + logisticsShipments.filter(s => (stopsByShipment.get(s.id)?.length ?? 0) >= 3).length;
+  const currentRoutesCount = totalEvaluatedRoutes;
+  const currentVehiclesCount = totalEvaluatedRoutes;
   const recommendedVehiclesCount = Math.max(currentVehiclesCount - consolidatedVehiclesSaved, 1);
   const recommendedRoutesCount = Math.max(currentRoutesCount - consolidatedVehiclesSaved, 1);
 
@@ -277,7 +371,7 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
     entityId:       event.entity_id,
     status:         'COMPLETED',
     durationMs,
-    itemsProcessed: busRoutes.length,
+    itemsProcessed: totalEvaluatedRoutes,
     actionsCreated,
     output,
   };

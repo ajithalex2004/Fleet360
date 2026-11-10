@@ -285,7 +285,11 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
 
   describe('Capability 4: HITL Review Rejection & Apply Action API', () => {
     it.skipIf(NO_TEST_DB)('POST with action="REJECT" updates extraction status and dispatches DOCUMENT_REJECTED webhook', async () => {
-      vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValueOnce([]); // reject update query
+      // The route acts on the stored extraction, locked FOR UPDATE.
+      vi.spyOn(prisma, '$queryRawUnsafe').mockResolvedValueOnce([
+        { id: 'doc-reject-123', file_name: 'chassis.pdf', doc_category: 'TAX_INVOICE', extracted_data: {}, auto_populate_status: 'PENDING_REVIEW' },
+      ]);
+      const writes = vi.spyOn(prisma, '$executeRawUnsafe').mockResolvedValue(1);
 
       const req = new NextRequest('http://localhost:3000/api/documents/intelligence/apply', {
         method: 'POST',
@@ -306,7 +310,10 @@ describe('Document Intelligence Priority 3: Production Hardening Suite', () => {
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.status).toBe('REJECTED');
-      expect(data.message).toContain('rejected successfully');
+      expect(data.message).toContain('rejected');
+      // Only the status update (plus the audit row); no record is written.
+      expect(writes.mock.calls.some(([sql]) => /UPDATE document_intelligence_extractions SET auto_populate_status = 'REJECTED'/.test(String(sql)))).toBe(true);
+      expect(writes.mock.calls.some(([sql]) => /finance_payables|fleet_work_orders|logistics_drayage_jobs/.test(String(sql)))).toBe(false);
     });
   });
 });

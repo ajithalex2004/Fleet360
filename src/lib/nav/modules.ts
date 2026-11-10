@@ -252,8 +252,9 @@ export const MODULES: ModuleDef[] = [
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
 
       // Operations — day-of-service execution.
-      { label: 'Trip Monitor',        href: '/bus-ops/dispatch',            icon: Radio,           group: 'Operations' },
-      { label: 'Outsource Management', href: '/exchange/jobs',              icon: ArrowLeftRight,  group: 'Operations' },
+      { label: 'Trip Monitor',           href: '/bus-ops/dispatch',            icon: Radio,           group: 'Operations' },
+      { label: 'Bus & Limo Marketplace', href: '/bus-ops/marketplace',         icon: Gavel,           group: 'Operations' },
+      { label: 'Outsource Management',   href: '/exchange/jobs',               icon: ArrowLeftRight,  group: 'Operations' },
       { label: 'SLA Monitor & Alerts', href: '/bus-ops/sla-monitor',        icon: Clock,           group: 'Operations' },
       { label: 'Optimisation Status', href: '/bus-ops/optimisation',        icon: Sparkles,        group: 'Operations' },
       { label: 'Demand forecast',     href: '/bus-ops/demand-forecast',     icon: TrendingUp,      group: 'Operations' },
@@ -341,6 +342,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Freight marketplace', href: '/logistics/marketplace',       icon: Gavel },
       { label: 'Carrier network',     href: '/logistics/carriers',          icon: Building2 },
       { label: 'Shippers',            href: '/logistics/shippers',          icon: Users },
+      { label: 'Shipper portal config', href: '/admin/shipper-portal-config', icon: Sliders,       navKey: 'shipper-portal-config' },
       { label: 'Shipping requests',   href: '/logistics/shipping-requests', icon: ClipboardList },
       { label: 'Route optimizer',     href: '/logistics/planner',           icon: Route },
       { label: 'Shipment orders',     href: '/logistics/trips',             icon: Truck },
@@ -367,6 +369,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Quotations',          href: '/leasing/quotations',          icon: FileText,        group: 'Sales' },
       { label: 'Credit assessments',  href: '/leasing/credit-assessments',  icon: ShieldCheck,     group: 'Sales' },
       { label: 'Lease agreements',    href: '/leasing/contracts-v2',        icon: FileText,        group: 'Contracts' },
+      { label: 'E-signing console',   href: '/admin/esign',                 icon: Eye,             group: 'Contracts', navKey: 'esign' },
       { label: 'Amendments',          href: '/leasing/amendments',          icon: RefreshCw,       group: 'Contracts' },
       { label: 'Renewals',            href: '/leasing/renewals',            icon: RefreshCw,       group: 'Contracts' },
       { label: 'Early terminations',  href: '/leasing/early-terminations',  icon: AlertTriangle,   group: 'Contracts' },
@@ -399,6 +402,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Quotations',    href: '/rental/quotations',    icon: FileText },
       { label: 'Bookings',      href: '/rental/bookings',      icon: Calendar },
       { label: 'Agreements',    href: '/rental/agreements',    icon: FileText },
+      { label: 'E-signing console', href: '/admin/esign',      icon: Eye, navKey: 'esign' },
       { label: 'Handover',      href: '/rental/handover',      icon: Send },
       { label: 'Renewals',      href: '/rental/renewals',      icon: RefreshCw },
       { label: 'Damage claims', href: '/rental/damage-claims', icon: AlertTriangle },
@@ -427,13 +431,14 @@ export const MODULES: ModuleDef[] = [
     href: '/dispatch',
     icon: Radio,
     subPages: [
-      { label: 'Dashboard',  href: '/dispatch',            icon: LayoutDashboard },
-      { label: 'Command',    href: '/dispatch/command',    icon: Radio },
-      { label: 'Jobs',       href: '/dispatch/jobs',       icon: ClipboardList },
-      { label: 'Ambulance',  href: '/dispatch/ambulance',  icon: Send },
-      { label: 'School bus', href: '/dispatch/school-bus', icon: School },
-      { label: 'Merge',      href: '/dispatch/merge',      icon: Network },
-      { label: 'Analytics',  href: '/dispatch/analytics',  icon: BarChart3 },
+      { label: 'Dashboard',              href: '/dispatch',             icon: LayoutDashboard },
+      { label: 'Command',                href: '/dispatch/command',     icon: Radio },
+      { label: 'Jobs',                   href: '/dispatch/jobs',        icon: ClipboardList },
+      { label: 'Bus & Limo Marketplace', href: '/dispatch/marketplace', icon: Gavel },
+      { label: 'Ambulance',              href: '/dispatch/ambulance',   icon: Send },
+      { label: 'School bus',             href: '/dispatch/school-bus',  icon: School },
+      { label: 'Merge',                  href: '/dispatch/merge',       icon: Network },
+      { label: 'Analytics',              href: '/dispatch/analytics',   icon: BarChart3 },
     ],
   },
   {
@@ -479,6 +484,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
       { label: 'CSAT Analytics', href: '/service-tickets/csat', icon: Star },
       { label: 'Triage Simulator', href: '/service-tickets/simulator', icon: Sparkles },
+      { label: 'WhatsApp console', href: '/admin/whatsapp', icon: MessageCircle, navKey: 'whatsapp' },
     ],
   },
   {
@@ -488,10 +494,11 @@ export const MODULES: ModuleDef[] = [
     href: '/booking-portal',
     icon: Smartphone,
     subPages: [
-      { label: 'Dashboard',   href: '/booking-portal',             icon: LayoutDashboard },
-      { label: 'New booking', href: '/booking-portal/new',         icon: Send },
-      { label: 'My bookings', href: '/booking-portal/my-bookings', icon: BookOpen },
-      { label: 'Approvals',   href: '/booking-portal/approvals',   icon: CheckCircle2 },
+      { label: 'Dashboard',              href: '/booking-portal',             icon: LayoutDashboard },
+      { label: 'New booking',            href: '/booking-portal/new',         icon: Send },
+      { label: 'My bookings',            href: '/booking-portal/my-bookings', icon: BookOpen },
+      { label: 'Approvals',              href: '/booking-portal/approvals',   icon: CheckCircle2 },
+      { label: 'Limo & Bus Marketplace', href: '/booking-portal/marketplace', icon: Gavel },
     ],
   },
   {
@@ -522,8 +529,6 @@ export const MODULES: ModuleDef[] = [
     icon: CarFront,
     subPages: [
       { label: 'Dashboard',             href: '/fleet',                icon: LayoutDashboard, group: 'Fleet Operations' },
-
-
       { label: 'Vehicle master',        href: '/fleet/vehicles',       icon: Car,             group: 'Fleet Operations' },
       { label: 'Allocations',           href: '/fleet/allocations',    icon: Pin,             group: 'Fleet Operations' },
       { label: 'Transfers',             href: '/fleet/transfers',      icon: ArrowLeftRight,  group: 'Fleet Operations' },
@@ -532,15 +537,13 @@ export const MODULES: ModuleDef[] = [
       { label: 'CAN-bus diagnostics',   href: '/fleet/diagnostics',    icon: Cpu,             group: 'Telematics & Health' },
       { label: 'Work orders',           href: '/fleet/work-orders',    icon: Wrench,          group: 'Maintenance' },
       { label: 'Predictive maintenance', href: '/fleet/intelligence',  icon: Brain,           group: 'Maintenance' },
-
-
+      { label: 'NUI Reason Master',     href: '/fleet/nui-reasons',    icon: BookOpen,        group: 'Maintenance', navKey: 'nui-reasons' },
       { label: 'Insurance',             href: '/fleet/insurance',      icon: Shield,          group: 'Compliance & Costs' },
       { label: 'Documents',             href: '/fleet/documents',      icon: FileText,        group: 'Compliance & Costs' },
       { label: 'Hours of service',      href: '/fleet/hos',            icon: Clock,           group: 'Compliance & Costs' },
       { label: 'Fuel logs',             href: '/fleet/fuel',           icon: Fuel,            group: 'Compliance & Costs' },
       { label: 'Traffic fines',         href: '/fleet/fines',          icon: AlertTriangle,   group: 'Compliance & Costs' },
       { label: 'TCO analysis',          href: '/fleet/tco',            icon: PieChart,        group: 'Compliance & Costs' },
-
     ],
   },
   {
@@ -564,6 +567,8 @@ export const MODULES: ModuleDef[] = [
       { label: 'Breakdowns',          href: '/maintenance/breakdown',          icon: AlertTriangle },
       { label: 'SLA',                 href: '/maintenance/sla',                icon: TrendingUp },
       { label: 'Risk scores',         href: '/maintenance/risk',               icon: Gauge },
+      { label: 'NUI Reason Master',   href: '/fleet/nui-reasons',              icon: BookOpen, navKey: 'nui-reasons' },
+      { label: 'Service configuration', href: '/admin/service-config',         icon: Sliders,  navKey: 'service-config' },
     ],
   },
   {
@@ -673,6 +678,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Outsource Management',  href: '/exchange/jobs',        icon: ArrowLeftRight, group: 'Transport Outsourcing' },
       { label: 'Partner Marketplace',   href: '/exchange/marketplace', icon: Globe,          group: 'Transport Outsourcing' },
       { label: 'Partner Scorecards',    href: '/exchange/scorecard',   icon: Trophy,         group: 'Transport Outsourcing' },
+      { label: 'Partner onboarding',    href: '/admin/partner-onboarding', icon: ShieldCheck, group: 'Transport Outsourcing', navKey: 'partner-onboarding' },
       { label: 'Settlements & Tax Invoices', href: '/exchange/statements', icon: Receipt,    group: 'Transport Outsourcing' },
       { label: 'Garage management',     href: '/vendors/garages',      icon: Building2,      group: 'Maintenance & Garages' },
       { label: 'Garage portal',         href: '/vendors/garage-portal', icon: Send,          group: 'Maintenance & Garages' },
@@ -744,12 +750,13 @@ export const MODULES: ModuleDef[] = [
       { label: 'Platform settings',       href: '/admin/settings',              icon: Settings,       group: 'Platform (Super Admin)', superOnly: true },
       { label: 'Attachment types',        href: '/admin/attachment-types',      icon: Paperclip,      group: 'Platform (Super Admin)', superOnly: true },
       { label: 'Exchange partners',       href: '/admin/exchange-partners',     icon: ArrowLeftRight, group: 'Platform (Super Admin)', superOnly: true },
-      { label: 'Brand preview',           href: '/admin/brand-preview',         icon: Eye,            group: 'Platform (Super Admin)', superOnly: true },
+      { label: 'Platform billing (SaaS)', href: '/admin/billing',               icon: CreditCard,      group: 'Platform (Super Admin)', superOnly: true },
 
       // ── Organization & Masters (Tenant Admin) ──
       { label: 'Overview',                href: '/admin',                       icon: LayoutDashboard, group: 'Organization & Masters' },
       { label: 'Company profile',         href: '/admin/company-profile',       icon: Building2,       group: 'Organization & Masters', navKey: 'company-profile' },
       { label: 'Region, Department & Section', href: '/admin/hierarchy',       icon: FolderTree,      group: 'Organization & Masters', navKey: 'hierarchy' },
+      { label: 'Departments',             href: '/admin/departments',           icon: FolderTree,      group: 'Organization & Masters', navKey: 'departments' },
       { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2,       group: 'Organization & Masters', navKey: 'branches' },
       { label: 'NUI Reason Master',       href: '/admin/nui-reasons',           icon: BookOpen,        group: 'Organization & Masters', navKey: 'nui-reasons' },
 
@@ -759,21 +766,14 @@ export const MODULES: ModuleDef[] = [
       { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch,      group: 'Identity & Access', navKey: 'audit-logs' },
 
       // ── Operations & Workflows (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
-      { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders,         group: 'Operations & Workflows', navKey: 'service-config', defaultHiddenForTenantAdmin: true },
       { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow,        group: 'Operations & Workflows', navKey: 'workflows', defaultHiddenForTenantAdmin: true },
-      { label: 'Dispatch monitor',        href: '/admin/dispatch',              icon: Radio,           group: 'Operations & Workflows', navKey: 'dispatch', defaultHiddenForTenantAdmin: true },
-      { label: 'Shipper portal config',   href: '/admin/shipper-portal-config', icon: Sliders,         group: 'Operations & Workflows', navKey: 'shipper-portal-config', defaultHiddenForTenantAdmin: true },
-      { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck,     group: 'Operations & Workflows', navKey: 'partner-onboarding', defaultHiddenForTenantAdmin: true },
 
       // ── Communications & Alerts (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
       { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell,         group: 'Communications & Alerts', navKey: 'notifications', defaultHiddenForTenantAdmin: true },
       { label: 'Email templates',         href: '/admin/email-templates',       icon: Mail,            group: 'Communications & Alerts', navKey: 'email-templates', defaultHiddenForTenantAdmin: true },
-      { label: 'WhatsApp console',        href: '/admin/whatsapp',              icon: MessageCircle,   group: 'Communications & Alerts', navKey: 'whatsapp', defaultHiddenForTenantAdmin: true },
-      { label: 'E-signing console',       href: '/admin/esign',                 icon: Eye,             group: 'Communications & Alerts', navKey: 'esign', defaultHiddenForTenantAdmin: true },
-      { label: 'Alert engine',            href: '/admin/alerts',                icon: Bell,            group: 'Communications & Alerts', navKey: 'alerts', defaultHiddenForTenantAdmin: true },
 
       // ── Subscription & Integrations (Hidden from Tenant Admin by default; Super Admin grants via Admin Access) ──
-      { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard,      group: 'Subscription & Integrations', navKey: 'billing', defaultHiddenForTenantAdmin: true },
+      { label: 'Subscription & plan',     href: '/admin/subscription',          icon: CreditCard,      group: 'Subscription & Integrations', navKey: 'billing' },
       { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders,         group: 'Subscription & Integrations', navKey: 'integrations', defaultHiddenForTenantAdmin: true },
     ],
   },

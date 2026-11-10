@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+vi.mock('@/lib/upstash', () => ({ getRedis: () => null }));
 import { RateLimiter } from '@/lib/rate-limiter';
 
 describe('RateLimiter.check()', () => {

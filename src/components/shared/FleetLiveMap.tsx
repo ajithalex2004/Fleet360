@@ -203,8 +203,15 @@ function buildClusterMarkerSvg(count: number): string {
  * Formats WhatsApp & SMS Location Share message.
  */
 function generateShareUrls(p: VehiclePosition) {
-  const statusStr = (p.operationalStatus || p.status || 'STOP').toUpperCase();
-  const statusLabel = statusStr === 'MOVING' ? '🟢 Moving' : statusStr === 'IDLE' ? '🟡 Idle' : '🔴 Stop';
+  const statusStr = (p.operationalStatus || p.status || 'SWITCHED_OFF').toUpperCase();
+  const statusLabel =
+    statusStr === 'MOVING'
+      ? '🟢 Moving'
+      : statusStr === 'IDLE'
+      ? '🟡 Idle'
+      : statusStr === 'SWITCHED_OFF' || statusStr === 'OFFLINE'
+      ? '⚫ Switched Off'
+      : '🔴 Stop';
   const speedText = `${p.speed_kmh.toFixed(0)} km/h`;
   const locationText = p.locationName || `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
   const driverText = p.driverName ? `Driver: ${p.driverName} (${p.driverPhone || 'No phone'})` : 'Driver: Unassigned';
@@ -236,11 +243,13 @@ function generateShareUrls(p: VehiclePosition) {
  * Generates InfoWindow HTML for hovering/clicking a vehicle pin.
  */
 function buildInfoWindowHtml(p: VehiclePosition): string {
-  const status = (p.operationalStatus || p.status || 'STOP').toUpperCase();
+  const status = (p.operationalStatus || p.status || 'SWITCHED_OFF').toUpperCase();
   const statusBadge = status === 'MOVING'
     ? `<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid #10b981;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">🟢 Moving (${p.speed_kmh.toFixed(0)} km/h)</span>`
     : status === 'IDLE'
-    ? `<span style="background:rgba(202,138,4,0.15);color:#ca8a04;border:1px solid #ca8a04;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">🟡 Idle (Ignition ON)</span>`
+    ? `<span style="background:rgba(202,138,4,0.15);color:#ca8a04;border:1px solid #ca8a04;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">🟡 Idle (Logged In)</span>`
+    : status === 'SWITCHED_OFF' || status === 'OFFLINE'
+    ? `<span style="background:rgba(100,116,139,0.15);color:#64748b;border:1px solid #64748b;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">⚫ Switched Off</span>`
     : `<span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef4444;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;">🔴 Stop (Parked)</span>`;
 
   const tripBadge = p.isOnTrip || p.jobTitle

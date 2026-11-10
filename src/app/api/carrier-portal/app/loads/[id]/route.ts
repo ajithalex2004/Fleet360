@@ -29,14 +29,18 @@ interface EventBody {
 async function requireDevice(req: NextRequest) {
   const token = req.headers.get('x-carrier-app-token') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
-  return resolveCarrierAppDevice(token);
+  try {
+    return await resolveCarrierAppDevice(token);
+  } catch {
+    return null;
+  }
 }
 
 async function requireAssignedShipment(req: NextRequest, shipmentOrderId: string) {
   const device = await requireDevice(req);
   if (!device) return { error: NextResponse.json({ error: 'Invalid carrier app token' }, { status: 401 }) };
 
-  const shipment = await fetchShipmentById(shipmentOrderId, device.tenantId);
+  const shipment = await withTenantRls(prisma, device.tenantId, () => fetchShipmentById(shipmentOrderId, device.tenantId));
   if (!shipment) return { error: NextResponse.json({ error: 'Load not found' }, { status: 404 }) };
   if (shipment.assigned_carrier_id !== device.carrierId) {
     return { error: NextResponse.json({ error: 'Load is not assigned to this carrier' }, { status: 403 }) };
@@ -105,27 +109,29 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   try {
-    const result = await recordLogisticsFieldOpsEvent({
-      tenantId: auth.device.tenantId,
-      shipmentOrderId: params.id,
-      eventType,
-      occurredAt: body.occurredAt ?? new Date().toISOString(),
-      latitude: numberOrNull(body.latitude),
-      longitude: numberOrNull(body.longitude),
-      etaAt: body.etaAt ?? null,
-      recipientName: body.recipientName ?? null,
-      signatureUrl: body.signatureUrl ?? null,
-      photoUrls: body.photoUrls ?? [],
-      documentUrls: body.documentUrls ?? [],
-      remarks: body.remarks ?? null,
-      exceptionSeverity: body.exceptionSeverity ?? null,
-      actorUserId: `carrier:${auth.device.carrierId}`,
-      metadata: {
-        source: 'carrier-app',
-        carrierId: auth.device.carrierId,
-        deviceId: auth.device.deviceId,
-      },
-    });
+    const result = await withTenantRls(prisma, auth.device.tenantId, () =>
+      recordLogisticsFieldOpsEvent({
+        tenantId: auth.device.tenantId,
+        shipmentOrderId: params.id,
+        eventType,
+        occurredAt: body.occurredAt ?? new Date().toISOString(),
+        latitude: numberOrNull(body.latitude),
+        longitude: numberOrNull(body.longitude),
+        etaAt: body.etaAt ?? null,
+        recipientName: body.recipientName ?? null,
+        signatureUrl: body.signatureUrl ?? null,
+        photoUrls: body.photoUrls ?? [],
+        documentUrls: body.documentUrls ?? [],
+        remarks: body.remarks ?? null,
+        exceptionSeverity: body.exceptionSeverity ?? null,
+        actorUserId: `carrier:${auth.device.carrierId}`,
+        metadata: {
+          source: 'carrier-app',
+          carrierId: auth.device.carrierId,
+          deviceId: auth.device.deviceId,
+        },
+      })
+    );
 
     return NextResponse.json({ success: true, data: result }, { status: 201 });
     } catch (e) {

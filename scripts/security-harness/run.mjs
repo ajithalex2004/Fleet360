@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+// Fleet360 security harness
 /**
  * Fleet360 security harness: live evidence of tenant isolation and
  * role-based access on a deployment. See docs/security/SECURITY_HARNESS.md.

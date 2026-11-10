@@ -57,6 +57,7 @@ interface StatusLogItem {
   notes: string;
   actor: string;
   timestamp: string;
+  location?: string;
 }
 
 interface PortalPayload {
@@ -1297,14 +1298,23 @@ export default function CustomerDrayageTrackingPortalPage() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-mono font-bold text-white text-[11px]">{log.status}</span>
                         <span className="text-[10px] text-slate-400 font-mono">
+                          {new Date(log.timestamp).toLocaleDateString('en-GB', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                          ,{' '}
                           {new Date(log.timestamp).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
+                            hour12: false,
                           })}{' '}
                           · {log.actor}
                         </span>
                       </div>
-                      <p className="text-slate-300 text-[11px] leading-relaxed">{log.notes}</p>
+                      {log.location ? (
+                        <p className="text-slate-300 text-[11px] truncate">📍 {log.location}</p>
+                      ) : null}
                     </div>
                   </div>
                 ))

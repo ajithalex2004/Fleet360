@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { cacheRead, revalidateCache } from '@/lib/server-cache';
 import { ensurePermissionCatalogSynced } from '@/lib/authz/permission-catalog-sync';
 
@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -63,7 +62,7 @@ export async function GET(req: NextRequest) {
       // private: the list depends on the caller, so shared caches must not reuse it.
       headers: { 'Cache-Control': 'private, max-age=30' },
     });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 async function handlePOST(req: NextRequest) {
@@ -71,27 +70,47 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
     const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
+    const requestedTenantId =
+      typeof bodyRaw?.tenantId === 'string' && bodyRaw.tenantId.trim()
+        ? bodyRaw.tenantId.trim()
+        : null;
+    const body = stripTenantOwnershipFields(bodyRaw);
     const { permissionIds = [], ...roleData } = body;
+
+    // Enforce the DB invariant `chk_roles_system_template`: `(tenant_id IS NULL) = is_system`.
+    // Platform-wide roles (`tenantId === null`) are always system templates (`isSystem: true`);
+    // tenant-scoped roles (`tenantId !== null`) are always custom (`isSystem: false`).
+    const resolvedTenantId = isSuperAdmin(req.headers) ? requestedTenantId : (authz.tenantId || null);
+    if (resolvedTenantId !== null && roleData.code === 'SUPER_ADMIN') {
+      return NextResponse.json(
+        { error: 'A tenant role cannot use the SUPER_ADMIN code.' },
+        { status: 400 },
+      );
+    }
+
     const role = await withPlatformAdmin(prisma, (tx) =>
       tx.role.create({
         data: {
           ...roleData,
+          tenantId: resolvedTenantId,
+          isSystem: resolvedTenantId === null,
           permissions: permissionIds.length
             ? { create: permissionIds.map((pid: string) => ({ permissionId: pid })) }
             : undefined,
         } as Prisma.RoleUncheckedCreateInput,
-        include: { _count: { select: { permissions: true } } },
+        include: { _count: { select: { permissions: true, userTenants: true } } },
       })
     );
     // New role means the cached role list is now stale.
     await revalidateCache(CACHE_TAG);
     return NextResponse.json(role, { status: 201 });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    console.error('[POST /api/admin/roles]', e);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).

@@ -68,22 +68,27 @@ test.beforeAll(async () => {
       testUserId,
     );
 
-    const roleId = crypto.randomUUID();
-    await prisma.role.create({
-      data: {
-        id:       roleId,
-        tenantId: testTenantId,
-        name:     'Tenant Admin',
-        code:     'TENANT_ADMIN',
-      },
+    let platformRole = await prisma.role.findFirst({
+      where: { tenantId: null, code: 'TENANT_ADMIN' },
     });
+    if (!platformRole) {
+      platformRole = await prisma.role.create({
+        data: {
+          id:       crypto.randomUUID(),
+          tenantId: null,
+          name:     'Tenant Admin',
+          code:     'TENANT_ADMIN',
+          isSystem: true,
+        },
+      });
+    }
 
     await prisma.userTenant.create({
       data: {
         id:       crypto.randomUUID(),
         userId:   testUserId,
         tenantId: testTenantId,
-        roleId:   roleId,
+        roleId:   platformRole.id,
         isActive: true,
       },
     });
@@ -127,8 +132,8 @@ async function loginAndGoToPlatform(page: Page) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-test('unauthenticated visit to /platform redirects to /login', async ({ page }) => {
-  await page.goto('/platform');
+test('unauthenticated visit to protected module (/fleet) redirects to /login', async ({ page }) => {
+  await page.goto('/fleet');
   await page.waitForURL('**/login**', { timeout: 10_000 });
   expect(page.url()).toContain('/login');
 });

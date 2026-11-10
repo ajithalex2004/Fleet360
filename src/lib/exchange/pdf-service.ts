@@ -2,7 +2,7 @@
  * src/lib/exchange/pdf-service.ts
  *
  * Headless Vector PDF Document Generation Service for Fleet360 Exchange.
- * Produces official UAE FTA Tax Invoices and Proof of Delivery (POD) Receipts.
+ * Produces official UAE FTA Tax Invoices and Multi-Vertical Proof of Delivery (POD) Receipts.
  */
 
 export interface TaxInvoicePdfData {
@@ -21,6 +21,9 @@ export interface TaxInvoicePdfData {
     amountAed: number;
     vatAed: number;
     totalAed: number;
+    verificationStatus?: string;
+    commercialModel?: string;
+    rateCardHash?: string;
   }>;
   deductions?: Array<{
     type: string;
@@ -31,6 +34,11 @@ export interface TaxInvoicePdfData {
   vatAmountAed: number;
   totalDeductionsAed: number;
   netPayableAed: number;
+  commercialModelSummary?: {
+    agencyCount: number;
+    principalCount: number;
+    totalPlatformFeeAed: number;
+  };
 }
 
 export interface PodReceiptPdfData {
@@ -47,6 +55,7 @@ export interface PodReceiptPdfData {
   notes?: string;
   hasSignature: boolean;
   signatureChecksum?: string;
+  podMetadata?: Record<string, unknown>;
 }
 
 export class PdfDocumentService {
@@ -123,8 +132,11 @@ export class PdfDocumentService {
     ];
 
     data.items.forEach((item, idx) => {
+      const matchBadge = item.verificationStatus ? ` [${item.verificationStatus}]` : '';
+      const modelBadge = item.commercialModel ? ` [${item.commercialModel}]` : '';
+      const hashBadge = item.rateCardHash ? ` (RateHash: #${item.rateCardHash.slice(0, 8)})` : '';
       lines.push(
-        ` ${idx + 1}. [${item.tripNumber}] ${item.date} | ${item.description}`
+        ` ${idx + 1}. [${item.tripNumber}] ${item.date} | ${item.description}${matchBadge}${modelBadge}${hashBadge}`
       );
       lines.push(
         `    Gross: AED ${item.amountAed.toFixed(2)} | VAT (5%): AED ${item.vatAed.toFixed(2)} | Total: AED ${item.totalAed.toFixed(2)}`
@@ -141,11 +153,21 @@ export class PdfDocumentService {
 
     lines.push('');
     lines.push('------------------------------------------------------------------------');
-    lines.push('FINANCIAL SUMMARY:');
+    lines.push('FINANCIAL & COMMERCIAL LEDGER SUMMARY:');
     lines.push(` Gross Services Subtotal:    AED ${data.grossAmountAed.toFixed(2)}`);
     lines.push(` Total VAT (5%):             AED ${data.vatAmountAed.toFixed(2)}`);
     if (data.totalDeductionsAed > 0) {
       lines.push(` Total SLA Deductions:      -AED ${data.totalDeductionsAed.toFixed(2)}`);
+    }
+    if (data.commercialModelSummary) {
+      lines.push(
+        ` Commercial Mix:             ${data.commercialModelSummary.agencyCount} Agency / ${data.commercialModelSummary.principalCount} Principal`
+      );
+      if (data.commercialModelSummary.totalPlatformFeeAed > 0) {
+        lines.push(
+          ` Platform Exchange Fee:      AED ${data.commercialModelSummary.totalPlatformFeeAed.toFixed(2)}`
+        );
+      }
     }
     lines.push(` NET PAYABLE SETTLEMENT:     AED ${data.netPayableAed.toFixed(2)}`);
     lines.push('------------------------------------------------------------------------');
@@ -161,6 +183,23 @@ export class PdfDocumentService {
    * Generate Proof of Delivery (POD) / Completion Certificate PDF
    */
   static generatePodReceiptPdf(data: PodReceiptPdfData): Uint8Array {
+    let displayNotes = data.notes || 'None recorded';
+    let parsedMeta: Record<string, unknown> = data.podMetadata ? { ...data.podMetadata } : {};
+
+    if (data.notes && data.notes.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(data.notes) as Record<string, unknown>;
+        if (typeof parsed.notes === 'string') {
+          displayNotes = parsed.notes || 'None recorded';
+        }
+        if (parsed.podMetadata && typeof parsed.podMetadata === 'object') {
+          parsedMeta = { ...(parsed.podMetadata as Record<string, unknown>), ...parsedMeta };
+        }
+      } catch {
+        // Keep raw notes string
+      }
+    }
+
     const lines: string[] = [
       '========================================================================',
       '               PROOF OF DELIVERY & COMPLETION CERTIFICATE               ',
@@ -186,14 +225,45 @@ export class PdfDocumentService {
       'RECEIVER & HANDOVER VERIFICATION:',
       `Recipient / Signatory:  ${data.recipientName}`,
       `Headcount / Pallet Qty: ${data.passengerOrPackageCount}`,
-      `Operational Notes:      ${data.notes || 'None recorded'}`,
+      `Operational Notes:      ${displayNotes}`,
       `Digital Signature:      ${data.hasSignature ? 'VERIFIED (Digital Biometric)' : 'Manual Check'}`,
       `Signature Hash Checksum: ${data.signatureChecksum || 'SHA256:VERIFIED_OK'}`,
-      '------------------------------------------------------------------------',
-      '',
-      'VERIFICATION AUDIT: Generated automatically by Fleet360 Exchange.',
-      '========================================================================',
     ];
+
+    if (Object.keys(parsedMeta).length > 0) {
+      lines.push('');
+      lines.push('DOMAIN-SPECIFIC 3-WAY MATCH EVIDENCE:');
+      if (data.domain === 'FREIGHT') {
+        lines.push(`Cargo Seal Number:       ${parsedMeta.sealNumber || 'N/A'}`);
+        lines.push(
+          `Container Seal Status:   ${parsedMeta.sealIntact === false ? 'BROKEN / TAMPERED' : 'INTACT & VERIFIED'}`
+        );
+        if (parsedMeta.deliveredWeightKg != null) {
+          lines.push(`Delivered Cargo Weight:  ${parsedMeta.deliveredWeightKg} kg`);
+        }
+        if (parsedMeta.packagesDelivered != null) {
+          lines.push(`Packages Delivered:      ${parsedMeta.packagesDelivered}`);
+        }
+      } else if (data.domain === 'LIMOUSINE') {
+        lines.push(
+          `VIP Guest Sign-Off:      ${parsedMeta.vipGuestConfirmed === false ? 'UNCONFIRMED' : 'CONFIRMED'}`
+        );
+        if (parsedMeta.waitingMinutes != null) {
+          lines.push(`Waiting Time Recorded:   ${parsedMeta.waitingMinutes} mins`);
+        }
+      } else if (data.domain === 'RECOVERY') {
+        lines.push(`Receiving Workshop Bay:  ${parsedMeta.workshopBayNumber || 'Standard Bay'}`);
+        lines.push(`Tow Vehicle Condition:   ${parsedMeta.vehicleConditionOnDropoff || 'ROLLING'}`);
+        lines.push(
+          `4-Corner Hookup Photo:   ${parsedMeta.hookupPhotoVerified === false ? 'MISSING' : 'VERIFIED'}`
+        );
+      }
+    }
+
+    lines.push('------------------------------------------------------------------------');
+    lines.push('');
+    lines.push('VERIFICATION AUDIT: Generated automatically by Fleet360 Exchange.');
+    lines.push('========================================================================');
 
     return PdfDocumentService.buildSimplePdf(lines);
   }

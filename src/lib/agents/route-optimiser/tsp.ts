@@ -5,12 +5,14 @@
  *
  * Algorithm:
  *   Phase 1 — Nearest Neighbour heuristic
- *     Greedy construction: always move to the closest unvisited stop.
+ *     Greedy construction: always move to the closest unvisited intermediate stop,
+ *     preserving stop[0] as the origin and stop[n-1] as the final destination.
  *     Gives a valid route in O(n²). Typically 20–25% above optimal.
  *
  *   Phase 2 — 2-opt improvement
- *     Iteratively reverses segments between two edges if it reduces
- *     total distance. Runs until no improving swap exists.
+ *     Iteratively reverses intermediate segments between two edges if it reduces
+ *     total distance, keeping stop[0] (origin) and stop[n-1] (final destination) pinned.
+ *     Runs until no improving swap exists.
  *     Brings result within ~5–10% of optimal for typical fleet sizes.
  *
  * For school bus routes (10–40 stops) this runs in < 5ms.
@@ -62,17 +64,19 @@ export function totalDistance(stops: GeoStop[]): number {
   return d;
 }
 
-// ── Phase 1: Nearest Neighbour ─────────────────────────────────────────────────
+// ── Phase 1: Nearest Neighbour (preserving origin stop[0] and terminal stop[n-1]) ──
 function nearestNeighbour(stops: GeoStop[]): GeoStop[] {
-  if (stops.length <= 1) return [...stops];
+  if (stops.length <= 2) return [...stops];
 
-  const unvisited = new Set(stops.map((_, i) => i));
-  const route: GeoStop[] = [];
+  const lastIdx = stops.length - 1;
+  // Only intermediate stops [1 .. lastIdx - 1] are reordered; stop[0] is origin and stop[lastIdx] is final destination.
+  const unvisited = new Set<number>();
+  for (let i = 1; i < lastIdx; i++) {
+    unvisited.add(i);
+  }
 
-  // Start from stop[0] (first in original sequence = usually closest to school)
+  const route: GeoStop[] = [stops[0]];
   let current = 0;
-  unvisited.delete(0);
-  route.push(stops[0]);
 
   while (unvisited.size > 0) {
     let nearest = -1;
@@ -91,10 +95,11 @@ function nearestNeighbour(stops: GeoStop[]): GeoStop[] {
     current = nearest;
   }
 
+  route.push(stops[lastIdx]);
   return route;
 }
 
-// ── Phase 2: 2-opt Improvement ────────────────────────────────────────────────
+// ── Phase 2: 2-opt Improvement (keeping route[0] and route[n-1] pinned) ────────
 function twoOpt(route: GeoStop[]): { route: GeoStop[]; iterations: number } {
   const n = route.length;
   let improved = true;
@@ -106,9 +111,10 @@ function twoOpt(route: GeoStop[]): { route: GeoStop[]; iterations: number } {
     improved = false;
     iterations++;
 
-    for (let i = 0; i < n - 1; i++) {
-      for (let k = i + 1; k < n; k++) {
-        // Reverse segment [i+1 .. k]
+    // Keep index 0 (origin) and index n - 1 (final destination) fixed
+    for (let i = 0; i < n - 2; i++) {
+      for (let k = i + 1; k < n - 1; k++) {
+        // Reverse intermediate segment [i+1 .. k]
         const newRoute = [
           ...best.slice(0, i + 1),
           ...best.slice(i + 1, k + 1).reverse(),
@@ -155,17 +161,22 @@ export function optimiseRoute(stops: GeoStop[]): OptimisationResult {
   const { route: optimised, iterations } = twoOpt(nnRoute);
   const optimisedDist = totalDistance(optimised);
 
-  const saved    = Math.max(originalDist - optimisedDist, 0);
+  // Never return a route worse than the original sequence
+  const useOptimised = optimisedDist <= originalDist;
+  const finalRoute = useOptimised ? optimised : [...stops];
+  const finalDist = useOptimised ? optimisedDist : originalDist;
+
+  const saved    = Math.max(originalDist - finalDist, 0);
   const savedPct = originalDist > 0 ? (saved / originalDist) * 100 : 0;
 
   // Re-number sequences in the optimised route
-  const reSequenced = optimised.map((s, i) => ({ ...s, sequence: i + 1 }));
+  const reSequenced = finalRoute.map((s, i) => ({ ...s, sequence: i + 1 }));
 
   return {
     originalSequence:    stops,
     optimisedSequence:   reSequenced,
     originalDistanceKm:  parseFloat(originalDist.toFixed(3)),
-    optimisedDistanceKm: parseFloat(optimisedDist.toFixed(3)),
+    optimisedDistanceKm: parseFloat(finalDist.toFixed(3)),
     distanceSavedKm:     parseFloat(saved.toFixed(3)),
     distanceSavedPct:    parseFloat(savedPct.toFixed(2)),
     iterations2opt:      iterations,
@@ -174,7 +185,7 @@ export function optimiseRoute(stops: GeoStop[]): OptimisationResult {
 }
 
 // ── Estimated Duration ─────────────────────────────────────────────────────────
-// Urban school bus: avg 25 km/h including stops
+// Urban school bus / commercial delivery: avg 25 km/h including stops
 export function estimateDurationMin(distanceKm: number, stopCount: number): number {
   const driveMin = (distanceKm / 25) * 60;
   const stopMin  = stopCount * 1.5; // 1.5 min average dwell per stop

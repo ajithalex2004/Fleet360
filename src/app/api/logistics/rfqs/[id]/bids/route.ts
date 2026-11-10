@@ -4,17 +4,17 @@ export const dynamic = 'force-dynamic';
  * GET /api/logistics/rfqs/[id]/bids
  *
  * Lists the carrier bids on one RFQ, cheapest first (the comparison view the
- * marketplace page renders before awarding). Thin wrapper over
- * domain.listCarrierBids scoped to the RFQ.
+ * marketplace page renders before awarding). Merges canonical Exchange
+ * `PartnerQuote` rows via `FreightRfqCanonicalBridge.mergeCanonicalQuotesIntoFreightBids` (ARCH-4).
  *
  * Auth: tenant operator session; tenantId from the x-tenant-id header.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { listCarrierBids } from '@/lib/logistics/domain';
+import { FreightRfqCanonicalBridge } from '@/lib/exchange/freight-rfq-bridge';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -22,17 +22,20 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
-
     return NextResponse.json({ error: authz.error }, { status: authz.status });
-
   }
 
   const { tenantId } = authz;
 
   try {
-    const data = await listCarrierBids({ tenantId, rfqId: params.id, limit: 200 });
+    const legacyBids = await listCarrierBids({ tenantId, rfqId: params.id, limit: 200 });
+    const data = await FreightRfqCanonicalBridge.mergeCanonicalQuotesIntoFreightBids({
+      tenantId,
+      rfqId: params.id,
+      legacyBids: Array.isArray(legacyBids) ? (legacyBids as Record<string, unknown>[]) : [],
+    });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=10' } });
-    } catch (e) {
+  } catch (e) {
     console.error('[logistics/rfqs/:id/bids GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list bids' },

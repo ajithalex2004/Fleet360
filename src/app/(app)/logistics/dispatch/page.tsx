@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, RefreshCw, Truck, UserRound, X } from 'lucide-react';
 
 type StageKey =
+  | 'SUBMITTED'
   | 'PENDING'
   | 'APPROVED'
   | 'ASSIGNED'
@@ -12,6 +13,7 @@ type StageKey =
   | 'DISPATCHED'
   | 'ENROUTE_PICKUP'
   | 'LOADED'
+  | 'IN_TRANSIT'
   | 'ENROUTE_DELIVERY'
   | 'DELIVERED'
   | 'POD_SUBMITTED'
@@ -65,12 +67,14 @@ const STAGES: Array<{
   action?: string;
   tone: string;
 }> = [
+  { status: 'SUBMITTED', label: 'Submitted', phase: 'pre', next: 'APPROVED', action: 'Approve', tone: 'border-indigo-500/25 bg-indigo-500/5' },
   { status: 'PENDING', label: 'Created', phase: 'pre', next: 'APPROVED', action: 'Approve', tone: 'border-amber-500/25 bg-amber-500/5' },
   { status: 'APPROVED', label: 'Approved', phase: 'pre', next: 'ASSIGNED', action: 'Assign', tone: 'border-sky-500/25 bg-sky-500/5' },
   { status: 'ASSIGNED', label: 'Assigned', phase: 'pre', next: 'DISPATCHED', action: 'Dispatch', tone: 'border-violet-500/25 bg-violet-500/5' },
   { status: 'DISPATCHED', label: 'Dispatched', phase: 'transit', next: 'ENROUTE_PICKUP', action: 'En-route pickup', tone: 'border-orange-500/25 bg-orange-500/5' },
   { status: 'ENROUTE_PICKUP', label: 'En-route pickup', phase: 'transit', next: 'LOADED', action: 'Loaded', tone: 'border-cyan-500/25 bg-cyan-500/5' },
-  { status: 'LOADED', label: 'Loaded', phase: 'transit', next: 'ENROUTE_DELIVERY', action: 'Depart', tone: 'border-yellow-500/25 bg-yellow-500/5' },
+  { status: 'LOADED', label: 'Loaded', phase: 'transit', next: 'IN_TRANSIT', action: 'Depart', tone: 'border-yellow-500/25 bg-yellow-500/5' },
+  { status: 'IN_TRANSIT', label: 'In transit', phase: 'transit', next: 'ENROUTE_DELIVERY', action: 'Final leg', tone: 'border-blue-500/25 bg-blue-500/5' },
   { status: 'ENROUTE_DELIVERY', label: 'En-route delivery', phase: 'transit', next: 'DELIVERED', action: 'Delivered', tone: 'border-emerald-500/25 bg-emerald-500/5' },
   { status: 'DELIVERED', label: 'Delivered', phase: 'done', next: 'POD_SUBMITTED', action: 'POD submitted', tone: 'border-teal-500/25 bg-teal-500/5' },
   { status: 'POD_SUBMITTED', label: 'POD submitted', phase: 'done', next: 'CLOSED', action: 'Close', tone: 'border-green-500/25 bg-green-500/5' },
@@ -78,11 +82,12 @@ const STAGES: Array<{
   { status: 'CANCELLED', label: 'Cancelled', phase: 'terminal', tone: 'border-rose-500/25 bg-rose-500/5' },
 ];
 
-const STAGE_MAP = new Map(STAGES.map(stage => [stage.status, stage]));
 const ACTIVE_STAGES = STAGES.filter(stage => stage.phase !== 'terminal' && stage.status !== 'CLOSED');
 
 function normalizeDispatchStatus(status?: string | null): StageKey | string {
   switch ((status ?? 'PENDING').toUpperCase()) {
+    case 'DRAFT':
+      return 'PENDING';
     case 'CONFIRMED':
       return 'APPROVED';
     case 'ACTIVE':
@@ -171,8 +176,8 @@ export default function LogisticsDispatchPage() {
 
   const phaseCounts = useMemo(() => ({
     ALL: shipments.length,
-    PRE: shipments.filter(s => ['PENDING', 'APPROVED', 'ASSIGNED'].includes(s.status)).length,
-    TRANSIT: shipments.filter(s => ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'ENROUTE_DELIVERY'].includes(s.status)).length,
+    PRE: shipments.filter(s => ['SUBMITTED', 'PENDING', 'APPROVED', 'ASSIGNED'].includes(s.status)).length,
+    TRANSIT: shipments.filter(s => ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'IN_TRANSIT', 'ENROUTE_DELIVERY'].includes(s.status)).length,
     DONE: shipments.filter(s => ['DELIVERED', 'POD_SUBMITTED', 'CLOSED'].includes(s.status)).length,
   }), [shipments]);
 
@@ -340,8 +345,8 @@ function AssignModal({ shipment, onClose, onDone }: { shipment: Shipment; onClos
       fetch('/api/drivers?status=ACTIVE', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
     ]).then(([vehicleBody, driverBody]: [unknown, unknown]) => {
       if (cancelled) return;
-      setVehicles(Array.isArray(vehicleBody) ? vehicleBody : Array.isArray((vehicleBody as any)?.data) ? (vehicleBody as any).data : []);
-      setDrivers(Array.isArray(driverBody) ? driverBody : Array.isArray((driverBody as any)?.data) ? (driverBody as any).data : []);
+      setVehicles(Array.isArray(vehicleBody) ? vehicleBody : Array.isArray((vehicleBody as Record<string, unknown>)?.data) ? ((vehicleBody as Record<string, unknown>).data as Vehicle[]) : []);
+      setDrivers(Array.isArray(driverBody) ? driverBody : Array.isArray((driverBody as Record<string, unknown>)?.data) ? ((driverBody as Record<string, unknown>).data as Driver[]) : []);
     }).catch(() => {
       if (!cancelled) {
         setVehicles([]);

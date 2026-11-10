@@ -9,23 +9,20 @@ export const dynamic = 'force-dynamic';
  * `dvirEnabled` is exposed; the today page uses it to gate the
  * Pre-trip / Post-trip DVIR buttons.
  *
- * Source of truth (for now): the `DRIVER_DVIR_ENABLED_TENANTS` env
- * var, a comma-separated list of tenant UUIDs that have opted in.
- * Default = disabled for every tenant.
- *
- * The list is loaded once per process (it's a small in-memory
- * Set), and the response is cached for 5 minutes per driver
- * (private, since the value is tenant-scoped). When the admin UI
- * is built, this endpoint can swap to read from a `tenant_settings`
- * table without changing the contract.
+ * Source of truth:
+ *   1. `tenant_feature_overrides` (`driver-mgmt.dvir`), managed via
+ *      Admin -> Tenants -> [Tenant] -> Modules & Feature Flags.
+ *   2. Legacy fallback: the `DRIVER_DVIR_ENABLED_TENANTS` env var
+ *      (comma-separated tenant UUIDs).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 let cachedTenants: { raw: string; ids: Set<string> } | null = null;
 
 function getEnabledTenants(): Set<string> {
@@ -46,13 +43,25 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 
-  const enabled = getEnabledTenants();
-  const dvirEnabled = enabled.has(ctx.tenantId);
+  const envEnabled = getEnabledTenants().has(ctx.tenantId);
+  const dbOverride = await withTenantRls(prisma, ctx.tenantId, async (tx) => {
+    const row = await tx.tenantFeatureOverride.findUnique({
+      where: {
+        tenantId_featureKey: {
+          tenantId: ctx.tenantId,
+          featureKey: 'driver-mgmt.dvir',
+        },
+      },
+      select: { isEnabled: true },
+    });
+    return row?.isEnabled ?? null;
+  }).catch(() => null);
+
+  const dvirEnabled = dbOverride !== null ? dbOverride : envEnabled;
 
   return NextResponse.json(
     { dvirEnabled },

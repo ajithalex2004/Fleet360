@@ -464,8 +464,174 @@ export default function DriverAppLauncher() {
   const watchIdRef = useRef<number | null>(null);
   const watcherHandleRef = useRef<TelemetryWatcherHandle | null>(null);
   const lastSentRef = useRef<number>(0);
+  const loginCoordsRef = useRef<{
+    lat: number;
+    lng: number;
+    speedKmh: number | null;
+    heading: number | null;
+    updatedAt: number;
+  } | null>(null);
   const [otaStatus, setOtaStatus] = useState<OtaSyncStatus | null>(null);
   const [telemetryMode, setTelemetryMode] = useState<'NATIVE_FOREGROUND_SERVICE' | 'WAKE_LOCK_WEB_WATCH' | null>(null);
+
+  // Activate GPS ONLY after the driver has logged in (never on the unauthenticated login screen)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isDriverLoggedIn =
+      phase === 'vehicle-odometer' ||
+      Boolean(activeVehicle) ||
+      localStorage.getItem('fleet360_driver_authenticated') === 'true';
+    if (!isDriverLoggedIn) {
+      loginCoordsRef.current = null;
+      return;
+    }
+
+    try {
+      const w = window as unknown as {
+        Fleet360Android?: { getLastKnownLocationJson?: () => string };
+      };
+      const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+      if (nativeJson) {
+        const parsed = JSON.parse(nativeJson) as {
+          lat?: number;
+          lng?: number;
+          speedKmh?: number;
+          heading?: number;
+          updatedAt?: number;
+        };
+        if (
+          parsed &&
+          typeof parsed.lat === 'number' &&
+          typeof parsed.lng === 'number' &&
+          (parsed.lat !== 0 || parsed.lng !== 0)
+        ) {
+          loginCoordsRef.current = {
+            lat: parsed.lat,
+            lng: parsed.lng,
+            speedKmh: typeof parsed.speedKmh === 'number' ? parsed.speedKmh : null,
+            heading: typeof parsed.heading === 'number' ? parsed.heading : null,
+            updatedAt: parsed.updatedAt || Date.now(),
+          };
+        }
+      }
+    } catch {}
+
+    if (!('geolocation' in navigator)) return;
+    let geoWatchId: number | null = null;
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          loginCoordsRef.current = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
+          };
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 4000, maximumAge: 30000 },
+      );
+      geoWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          loginCoordsRef.current = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            speedKmh:
+              pos.coords.speed != null && pos.coords.speed >= 0
+                ? Math.round(pos.coords.speed * 3.6)
+                : null,
+            heading: pos.coords.heading ?? null,
+            updatedAt: Date.now(),
+          };
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 15000 },
+      );
+    } catch {}
+    return () => {
+      if (geoWatchId !== null && 'geolocation' in navigator) {
+        try {
+          navigator.geolocation.clearWatch(geoWatchId);
+        } catch {}
+      }
+    };
+  }, [phase, activeVehicle]);
+
+  const captureImmediateLoginCoords = useCallback(async () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const w = window as unknown as {
+          Fleet360Android?: { getLastKnownLocationJson?: () => string };
+        };
+        const nativeJson = w.Fleet360Android?.getLastKnownLocationJson?.();
+        if (nativeJson) {
+          const parsed = JSON.parse(nativeJson) as {
+            lat?: number;
+            lng?: number;
+            speedKmh?: number;
+            heading?: number;
+            updatedAt?: number;
+          };
+          if (
+            parsed &&
+            typeof parsed.lat === 'number' &&
+            typeof parsed.lng === 'number' &&
+            (parsed.lat !== 0 || parsed.lng !== 0)
+          ) {
+            loginCoordsRef.current = {
+              lat: parsed.lat,
+              lng: parsed.lng,
+              speedKmh: typeof parsed.speedKmh === 'number' ? parsed.speedKmh : null,
+              heading: typeof parsed.heading === 'number' ? parsed.heading : null,
+              updatedAt: parsed.updatedAt || Date.now(),
+            };
+          }
+        }
+      } catch {}
+    }
+
+    if (
+      !loginCoordsRef.current &&
+      typeof window !== 'undefined' &&
+      'geolocation' in navigator
+    ) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => resolve(), 1800);
+        try {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              clearTimeout(timer);
+              loginCoordsRef.current = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                speedKmh:
+                  pos.coords.speed != null && pos.coords.speed >= 0
+                    ? Math.round(pos.coords.speed * 3.6)
+                    : null,
+                heading: pos.coords.heading ?? null,
+                updatedAt: Date.now(),
+              };
+              resolve();
+            },
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { enableHighAccuracy: true, timeout: 1600, maximumAge: 30000 },
+          );
+        } catch {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    }
+
+    return loginCoordsRef.current;
+  }, []);
 
   // Check for OTA Live Updates on mount
   useEffect(() => {
@@ -556,35 +722,46 @@ export default function DriverAppLauncher() {
         if (now - lastSentRef.current >= 4000) {
           lastSentRef.current = now;
           try {
+            const token =
+              localStorage.getItem('fleet360_session_token') ||
+              localStorage.getItem('fleet360_driver_token') ||
+              '';
+            const pingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) {
+              pingHeaders.Authorization = `Bearer ${token}`;
+            }
+
             // Drain any offline-buffered samples first if connectivity just returned
             const queuedSamples = drainOfflineGpsSamples();
             for (const q of queuedSamples.slice(-5)) {
-              await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
+              await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: pingHeaders,
                 credentials: 'include',
                 body: JSON.stringify({
+                  action: 'LOCATION_PING',
                   vehicleId: vehicle.id,
-                  lat: q.latitude,
-                  lng: q.longitude,
+                  vehiclePlate: vehicle.licensePlate || undefined,
+                  latitude: q.latitude,
+                  longitude: q.longitude,
                   speedKmh: q.speedKmh,
                   heading: q.heading || 0,
-                  accuracy: Math.round(q.accuracyMeters ?? 15),
                 }),
               }).catch(() => {});
             }
 
-            const pingRes = await fetch(getApiEndpoint('/api/driver-app/telematics/live-location'), {
+            const pingRes = await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: pingHeaders,
               credentials: 'include',
               body: JSON.stringify({
+                action: 'LOCATION_PING',
                 vehicleId: vehicle.id,
-                lat: latitude,
-                lng: longitude,
+                vehiclePlate: vehicle.licensePlate || undefined,
+                latitude,
+                longitude,
                 speedKmh,
                 heading: heading || 0,
-                accuracy: Math.round(accuracyMeters ?? 10),
               }),
             });
 
@@ -631,6 +808,16 @@ export default function DriverAppLauncher() {
       if (!isAuthed || !token) {
         return;
       }
+      if (typeof window !== 'undefined') {
+        const w = window as unknown as {
+          Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+        };
+        w.Fleet360Android?.syncAuthSession?.(
+          token,
+          localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+          localStorage.getItem('fleet360_driver_name') || 'Driver',
+        );
+      }
       const res = await fetch(getApiEndpoint('/api/driver-app/auth/vehicle-login'), {
         credentials: 'include',
         headers: { Authorization: `Bearer ${token}` },
@@ -643,6 +830,28 @@ export default function DriverAppLauncher() {
           if (!explicitlyDisabled && data.vehicle.canActivateMobileTracking) {
             startMobileTracking(data.vehicle);
           }
+          // Immediately transmit login GPS coordinate to the server on session boot
+          void captureImmediateLoginCoords().then((coords) => {
+            if (!coords) return;
+            void fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                action: 'LOCATION_PING',
+                latitude: coords.lat,
+                longitude: coords.lng,
+                speedKmh: coords.speedKmh,
+                heading: coords.heading,
+                driverName: data.driver?.name || localStorage.getItem('fleet360_driver_name') || 'Driver',
+                vehicleId: data.vehicle?.id || null,
+                vehiclePlate: data.vehicle?.licensePlate || data.vehicle?.vehicleCode || null,
+              }),
+            }).catch(() => {});
+          });
           // Immediately route to the simplest LogiXL-Connect My Jobs view
           router.replace('/driver-app/today');
         }
@@ -653,7 +862,7 @@ export default function DriverAppLauncher() {
     } catch {
       // ignore
     }
-  }, [startMobileTracking, router]);
+  }, [startMobileTracking, captureImmediateLoginCoords, router]);
 
   const loadBoot = useCallback(async () => {
     setPhase('booting');
@@ -892,12 +1101,44 @@ export default function DriverAppLauncher() {
         const activeSessionToken = data?.driverSessionToken || data?.sessionToken;
         if (activeSessionToken) {
           localStorage.setItem('fleet360_session_token', activeSessionToken);
+          const w = window as unknown as {
+            Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+          };
+          w.Fleet360Android?.syncAuthSession?.(
+            activeSessionToken,
+            localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+            displayName,
+          );
         }
         localStorage.setItem('fleet360_driver_authenticated', 'true');
         localStorage.setItem('fleet360_driver_email', resolvedDriverEmail);
         localStorage.setItem('fleet360_driver_name', displayName);
         window.dispatchEvent(new Event('fleet360_vehicle_changed'));
       }
+
+      // Immediately send login GPS coordinates to the server upon password login
+      void captureImmediateLoginCoords().then((coords) => {
+        if (!coords) return;
+        const activeToken =
+          data?.driverSessionToken ||
+          data?.sessionToken ||
+          (typeof window !== 'undefined' ? localStorage.getItem('fleet360_session_token') : null);
+        const pingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (activeToken) pingHeaders['Authorization'] = `Bearer ${activeToken}`;
+        void fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: pingHeaders,
+          body: JSON.stringify({
+            action: 'LOCATION_PING',
+            latitude: coords.lat,
+            longitude: coords.lng,
+            speedKmh: coords.speedKmh,
+            heading: coords.heading,
+            driverName: displayName,
+          }),
+        }).catch(() => {});
+      });
 
       // Immediately transition to Vehicle ID & Odometer step
       await proceedToVehicleOdometer(displayName, resolvedDriverEmail);
@@ -945,8 +1186,9 @@ export default function DriverAppLauncher() {
     setErrorMsg(null);
     try {
       let boundVehicle: FleetVehicle | null = selectedVehicle || matchedVehicleFromInput;
+      const loginCoords = await captureImmediateLoginCoords();
 
-      // 1. Bind vehicle session and update vehicle odometer on backend
+      // 1. Bind vehicle session, update vehicle odometer, and record immediate login GPS coordinates on backend
       const savedToken = typeof window !== 'undefined' ? localStorage.getItem('fleet360_session_token') : null;
       const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (savedToken) reqHeaders['Authorization'] = `Bearer ${savedToken}`;
@@ -959,6 +1201,14 @@ export default function DriverAppLauncher() {
           vehicleIdentifier: ident,
           odometerReading: odoValue,
           driverEmail: username || undefined,
+          ...(loginCoords
+            ? {
+                latitude: loginCoords.lat,
+                longitude: loginCoords.lng,
+                speedKmh: loginCoords.speedKmh,
+                heading: loginCoords.heading,
+              }
+            : {}),
         }),
       });
       const vehData = await parseJsonSafely(vehRes);
@@ -1004,10 +1254,22 @@ export default function DriverAppLauncher() {
 
       // 3. Persist locally for APK / standalone mode
       if (typeof window !== 'undefined') {
+        const finalToken = vehData?.sessionToken || savedToken || localStorage.getItem('fleet360_session_token');
+        const finalDriverName = driverInfo?.name || username || 'Driver';
         localStorage.setItem('fleet360_active_vehicle', JSON.stringify(boundVehicle));
         localStorage.setItem('fleet360_start_odometer', String(odoValue));
         localStorage.setItem('fleet360_driver_authenticated', 'true');
-        localStorage.setItem('fleet360_driver_name', driverInfo?.name || username || 'Driver');
+        localStorage.setItem('fleet360_driver_name', finalDriverName);
+        if (finalToken) {
+          const w = window as unknown as {
+            Fleet360Android?: { syncAuthSession?: (t: string, h: string, n: string) => void };
+          };
+          w.Fleet360Android?.syncAuthSession?.(
+            finalToken,
+            localStorage.getItem('fleet360_api_host') || 'https://fleet360-app-production.up.railway.app',
+            finalDriverName,
+          );
+        }
       }
 
       // 4. Notify tracking provider to start real device GPS tracking
@@ -1026,17 +1288,58 @@ export default function DriverAppLauncher() {
   };
 
   const handleSignOutVehicle = async () => {
+    const logoutVehicleId =
+      activeVehicle?.id ||
+      (typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_id') || '' : '');
+    const logoutVehiclePlate =
+      activeVehicle?.licensePlate ||
+      activeVehicle?.vehicleCode ||
+      (typeof window !== 'undefined' ? localStorage.getItem('fleet360_driver_vehicle_plate') || '' : '');
+    const logoutToken =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('fleet360_session_token') ||
+          localStorage.getItem('fleet360_driver_token') ||
+          ''
+        : '';
+
     stopMobileTracking();
+    loginCoordsRef.current = null;
     setActiveVehicle(null);
     setSelectedVehicle(null);
     setCustomVehicleQuery('');
     setOdometerInput('');
     setDriverInfo(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (logoutToken) headers.Authorization = `Bearer ${logoutToken}`;
+      await fetch(getApiEndpoint('/api/driver/jobs/DRIVER_TELEMETRY/status'), {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          action: 'DRIVER_LOGOUT',
+          vehicleId: logoutVehicleId || undefined,
+          vehiclePlate: logoutVehiclePlate || undefined,
+          driverName: driverInfo?.name || undefined,
+        }),
+      });
+    } catch {}
+
     if (typeof window !== 'undefined') {
+      const w = window as unknown as {
+        Fleet360Android?: { stopBackgroundService?: () => void };
+      };
+      w.Fleet360Android?.stopBackgroundService?.();
+      localStorage.setItem('fleet360_driver_tracking_active', 'false');
       localStorage.removeItem('fleet360_session_token');
-      localStorage.removeItem('fleet360_driver_tracking_active');
+      localStorage.removeItem('fleet360_driver_token');
       localStorage.removeItem('fleet360_tracked_vehicle_id');
       localStorage.removeItem('fleet360_active_vehicle');
+      localStorage.removeItem('fleet360_driver_vehicle_id');
+      localStorage.removeItem('fleet360_driver_vehicle_plate');
+      localStorage.removeItem('fleet360_driver_vehicle_code');
+      localStorage.removeItem('fleet360_last_known_coords');
       localStorage.removeItem('fleet360_start_odometer');
       localStorage.removeItem('fleet360_driver_authenticated');
       window.dispatchEvent(new Event('fleet360_vehicle_changed'));

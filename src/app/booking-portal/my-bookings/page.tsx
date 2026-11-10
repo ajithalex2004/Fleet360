@@ -10,9 +10,53 @@ interface UserBooking {
   vehicleCategory: string;
   startDate: string;
   endDate: string;
-  status: string;
+  status: 'Pending' | 'Approved' | 'Completed' | 'Rejected';
+  rawStatus: string;
   createdDate: string;
   notes: string;
+}
+
+function normalizeStatus(raw: string): UserBooking['status'] {
+  const upper = (raw || '').toUpperCase();
+  if (['APPROVED', 'CONFIRMED', 'ACTIVE', 'IN_PROGRESS', 'DISPATCHED'].includes(upper)) {
+    return 'Approved';
+  }
+  if (upper === 'COMPLETED') {
+    return 'Completed';
+  }
+  if (['REJECTED', 'CANCELLED', 'FAILED'].includes(upper)) {
+    return 'Rejected';
+  }
+  return 'Pending';
+}
+
+function formatBookingNotes(rawNotes: unknown): string {
+  if (!rawNotes) return '';
+  if (typeof rawNotes !== 'string') return '';
+  const trimmed = rawNotes.trim();
+  if (!trimmed.startsWith('{')) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const parts: string[] = [];
+    if (parsed.pickupLocation || parsed.origin) {
+      parts.push(`From: ${String(parsed.pickupLocation ?? parsed.origin)}`);
+    }
+    if (parsed.dropoffLocation || parsed.destination) {
+      parts.push(`To: ${String(parsed.dropoffLocation ?? parsed.destination)}`);
+    }
+    if (parsed.totalFareAed) {
+      parts.push(`Fare: AED ${Number(parsed.totalFareAed).toFixed(2)}`);
+    }
+    if (parsed.costCenter) {
+      parts.push(`Cost Center: ${String(parsed.costCenter)}`);
+    }
+    if (parsed.specialInstructions || parsed.rawNotes) {
+      parts.push(String(parsed.specialInstructions ?? parsed.rawNotes));
+    }
+    return parts.join(' · ');
+  } catch {
+    return trimmed;
+  }
 }
 
 export default function MyBookings() {
@@ -26,10 +70,33 @@ export default function MyBookings() {
       try {
         setLoading(true);
         setError('');
-        const res = await fetch('/api/bookings/my-bookings');
+        const res = await fetch('/api/bookings');
         if (!res.ok) throw new Error('Failed to fetch bookings');
         const data = await res.json();
-        setBookings(data);
+        const rows: Record<string, unknown>[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.bookings)
+            ? data.bookings
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+
+        const normalized: UserBooking[] = rows.map((r) => {
+          const rawStatus = String(r.status ?? 'PENDING');
+          return {
+            id: String(r.id ?? ''),
+            bookingRef: String(r.bookingRef ?? r.booking_ref ?? r.id ?? '—'),
+            serviceType: String(r.serviceType ?? r.service_type ?? 'RENTAL'),
+            vehicleCategory: String(r.vehicleCategory ?? r.vehicle_category ?? 'Standard'),
+            startDate: String(r.startDate ?? r.start_date ?? new Date().toISOString()),
+            endDate: String(r.endDate ?? r.end_date ?? r.startDate ?? new Date().toISOString()),
+            status: normalizeStatus(rawStatus),
+            rawStatus,
+            createdDate: String(r.createdDate ?? r.createdAt ?? r.created_at ?? new Date().toISOString()),
+            notes: formatBookingNotes(r.notes),
+          };
+        });
+        setBookings(normalized);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load bookings');
       } finally {
@@ -183,7 +250,7 @@ export default function MyBookings() {
                       <div>
                         <p className="text-sm text-slate-400 mb-1">Duration</p>
                         <p className="text-white font-medium">
-                          {Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24))} days
+                          {Math.max(1, Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24)))} days
                         </p>
                       </div>
                     </div>

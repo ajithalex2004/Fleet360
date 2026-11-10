@@ -36,6 +36,8 @@ function mockMapboxOk(lat: number, lng: number, relevance = 0.95) {
 beforeEach(() => {
   prismaStub.$queryRawUnsafe.mockReset().mockResolvedValue([]);
   prismaStub.$executeRawUnsafe.mockReset().mockResolvedValue(0);
+  delete process.env.GOOGLE_MAPS_API_KEY;
+  delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   process.env.MAPBOX_TOKEN = 'test-token-xyz';
 });
 

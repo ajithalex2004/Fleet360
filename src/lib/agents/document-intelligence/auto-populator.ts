@@ -8,9 +8,12 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { DocumentExtractionResult } from '../types';
+import { stagedRecordKind } from './review-fields';
 
 export interface AutoPopulateResult {
   success: boolean;
+  /** Waiting in the review queue: nothing was written (review-fields.ts). */
+  staged?: boolean;
   linkedEntityType: 'VEHICLE' | 'DRIVER' | 'INVOICE' | 'WORK_ORDER' | 'SHIPMENT' | 'NONE';
   linkedEntityId?: string;
   fieldsUpdated: string[];
@@ -21,8 +24,26 @@ export async function autoPopulateFleet360Record(
   tenantId: string,
   extraction: DocumentExtractionResult
 ): Promise<AutoPopulateResult> {
-  const { docCategory, vehicle, driver, expiryDate, referenceNumber, financials } = extraction;
+  const { docCategory, vehicle, driver, expiryDate, referenceNumber } = extraction;
   const fieldsUpdated: string[] = [];
+
+  // 0. Invoices, quotations, job cards and proofs of delivery create
+  //    financial or operational records, so they always wait for a person
+  //    to check the extracted fields and approve (staged-records.ts writes
+  //    the record then). They used to return success with an invented id
+  //    (INV- / WO- / POD- + timestamp) and write nothing. Checked first: an
+  //    invoice that mentions a plate used to fall into the vehicle branch.
+  const kind = stagedRecordKind(docCategory);
+  if (kind) {
+    const what = { PAYABLE: 'a Finance payable', WORK_ORDER: 'a maintenance work order', POD: 'a proof of delivery on the drayage job', QUOTATION: 'no record (quotations are reviewed only)' }[kind];
+    return {
+      success: false,
+      staged: true,
+      linkedEntityType: 'NONE',
+      fieldsUpdated: [],
+      message: `Waiting for review: check the extracted fields (${referenceNumber || 'no reference'}) and approve to create ${what}.`,
+    };
+  }
 
   // 1. Handle Vehicle Updates (Mulkiya, Registration, Insurance, Inspection)
   if (
@@ -134,42 +155,6 @@ export async function autoPopulateFleet360Record(
         message: `Driver not found in Fleet360 database (License: ${driver?.licenseNumber || 'N/A'}). Staged in vault for review.`,
       };
     }
-  }
-
-  // 3. Handle Invoices & Billing
-  if (docCategory === 'INVOICE' || docCategory === 'TAX_INVOICE' || docCategory === 'QUOTATION') {
-    fieldsUpdated.push('invoiceNumber', 'totalAmountAed', 'taxRegistrationNumber');
-    return {
-      success: true,
-      linkedEntityType: 'INVOICE',
-      linkedEntityId: referenceNumber || `INV-${Date.now()}`,
-      fieldsUpdated,
-      message: `Extracted Tax Invoice / Quote (${referenceNumber || 'N/A'}) for AED ${financials?.totalAmount || financials?.totalAmountAed || 0} ready for reconciliation.`,
-    };
-  }
-
-  // 4. Handle Maintenance & Job Cards
-  if (docCategory === 'MAINTENANCE_REPORT') {
-    fieldsUpdated.push('jobCardNumber', 'estimatedCostAed', 'repairDate');
-    return {
-      success: true,
-      linkedEntityType: 'WORK_ORDER',
-      linkedEntityId: referenceNumber || `WO-${Date.now()}`,
-      fieldsUpdated,
-      message: `Extracted Workshop Job Card (${referenceNumber || 'N/A'}) linked to Maintenance Log.`,
-    };
-  }
-
-  // 5. Handle Proof of Delivery (POD)
-  if (docCategory === 'PROOF_OF_DELIVERY') {
-    fieldsUpdated.push('deliveryStatus', 'podAttachment');
-    return {
-      success: true,
-      linkedEntityType: 'SHIPMENT',
-      linkedEntityId: referenceNumber || `POD-${Date.now()}`,
-      fieldsUpdated,
-      message: `Extracted Proof of Delivery for Waybill ${referenceNumber || 'N/A'}.`,
-    };
   }
 
   return {

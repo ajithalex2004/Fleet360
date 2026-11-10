@@ -38,6 +38,7 @@ import {
 } from '@/lib/leasing/return-workflow';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 import { applyDepositToInvoice, reverseDepositApplication, SecurityDepositError } from '@/lib/finance/security-deposit';
+import { mirrorLeaseInvoiceToFinance } from '@/lib/finance/module-ledger';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -164,6 +165,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                   chargeApprovedBy: actor,
                 },
               });
+
+              await mirrorLeaseInvoiceToFinance(invoice.id, tenantId, 'leasing-return').catch((err) =>
+                console.warn('[leasing/returns] mirror failed:', err),
+              );
               break;
             }
             case 'resolve_mileage_review': {

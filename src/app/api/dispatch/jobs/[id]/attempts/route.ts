@@ -10,7 +10,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -39,30 +39,30 @@ export async function GET(
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
-        const { id } = params;
+      const { id } = params;
 
-        const rows = await tx.$queryRawUnsafe<Row[]>(`
-          SELECT
-            da.*,
-            d.first_name || ' ' || d.last_name AS driver_name,
-            d.phone                             AS driver_phone,
-            d.rating                            AS driver_rating,
-            v.registration_number               AS vehicle_reg,
-            v.type                              AS vehicle_type
-          FROM dispatch_attempts da
-          LEFT JOIN drivers  d ON d.id::text = da.driver_id  AND d.deleted_at IS NULL
-          LEFT JOIN vehicles v ON v.id::text = da.vehicle_id AND v.deleted_at IS NULL
-          WHERE da.dispatch_job_id::text = $1
-          ORDER BY da.offered_at ASC
-        `, id);
+      const rows = await tx.$queryRawUnsafe<Row[]>(`
+        SELECT
+          da.*,
+          COALESCE(NULLIF(TRIM(COALESCE(d.first_name, '') || ' ' || COALESCE(d.last_name, '')), ''), d.name) AS driver_name,
+          d.contact_number                                                    AS driver_phone,
+          COALESCE(d.rating, 4.5)                                             AS driver_rating,
+          COALESCE(v.registration_no, v.license_plate, v.plate_number)        AS vehicle_reg,
+          v.type                                                              AS vehicle_type
+        FROM dispatch_attempts da
+        JOIN dispatch_jobs dj ON dj.id = da.dispatch_job_id AND dj.tenant_id = $2
+        LEFT JOIN drivers  d  ON d.id::text = da.driver_id  AND d.deleted_at IS NULL
+        LEFT JOIN vehicles v  ON v.id::text = da.vehicle_id AND v.deleted_at IS NULL
+        WHERE da.dispatch_job_id::text = $1
+        ORDER BY da.offered_at ASC, da.attempt_number ASC
+      `, id, tenantId);
 
-        return NextResponse.json({ data: serialize(rows), total: rows.length });
-        } catch (err) {
-        console.error('[dispatch/jobs/[id]/attempts GET]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
-      }
+      return NextResponse.json({ data: serialize(rows), total: rows.length });
+    } catch (err) {
+      console.error('[dispatch/jobs/[id]/attempts GET]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-

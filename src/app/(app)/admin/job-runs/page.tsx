@@ -1,5 +1,5 @@
-import SystemHealthDashboardView from '@/components/admin/system-health-dashboard';
+import { redirect } from 'next/navigation';
 
 export default function JobRunsPage() {
-  return <SystemHealthDashboardView isPublic={false} initialTab="job-runs" />;
+  redirect('/admin/health?tab=job-runs');
 }

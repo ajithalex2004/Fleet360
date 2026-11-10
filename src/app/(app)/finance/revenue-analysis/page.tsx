@@ -25,14 +25,13 @@ interface BranchRow {
 interface Totals { gross_revenue: number; collected: number; outstanding: number; maint_cost: number; depreciation: number; net_margin: number; }
 
 const fmt  = (n: number) => `AED ${n.toLocaleString('en-AE', { minimumFractionDigits: 2 })}`;
-const fmtD = (s: string | null) => s ? new Date(s).toLocaleDateString('en-GB') : '—';
 const pct  = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 const MARGIN_COLOR = (m: number) =>
   m >= 50 ? 'text-emerald-400' : m >= 20 ? 'text-teal-400' : m >= 0 ? 'text-amber-400' : 'text-red-400';
 
 const BRANCHES = ['','Dubai','Abu Dhabi','Sharjah','Ajman','Fujairah','Ras Al Khaimah','Umm Al Quwain'];
-const MODULES  = ['','LEASE','RENTAL','GENERAL'];
+const MODULES  = ['', 'LEASING', 'RENTAL', 'LOGISTICS', 'BUS_OPERATIONS', 'GENERAL'];
 
 /* ── Main Page ───────────────────────────────────────────────────────────── */
 export default function RevenueAnalysisPage() {
@@ -100,6 +99,17 @@ export default function RevenueAnalysisPage() {
       'Modules Used':   c.module_list, 'Vehicles Used': c.vehicles_rented,
     })));
   }
+  function exportBranches() {
+    downloadXLSX('Revenue-by-Branch.xls', branches.map(b => ({
+      'Branch':        b.branch,
+      'Module':        b.module,
+      'Invoice Count': b.invoice_count,
+      'Revenue':       b.gross_revenue,
+      'VAT':           b.vat_amount,
+      'Collected':     b.collected,
+      'Outstanding':   Math.max(0, b.gross_revenue - b.collected),
+    })));
+  }
 
   const sortedVehicles  = sort(vehicles,  sortKey as keyof Vehicle);
   const sortedCustomers = sort(customers, sortKey as keyof Customer);
@@ -112,7 +122,7 @@ export default function RevenueAnalysisPage() {
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Revenue Analysis</h1>
           <p className="text-[var(--text-muted)] text-xs mt-1">Vehicle profitability · Customer lifetime value · Branch breakdown</p>
         </div>
-        <button onClick={view === 'vehicle' ? exportVehicles : exportCustomers}
+        <button onClick={view === 'vehicle' ? exportVehicles : view === 'branch' ? exportBranches : exportCustomers}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700/40 hover:bg-emerald-700/60 border border-emerald-500/30 text-emerald-300 text-sm font-medium">
           ⬇ Export XLSX
         </button>

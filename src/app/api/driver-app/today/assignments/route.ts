@@ -154,11 +154,22 @@ type DrayageTerminalRow = {
 type DrayageWarehouseRow = {
   id: string;
   name: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  zone: string | null;
+  address: string | null;
   lat: number | null;
   lng: number | null;
   geofence_type: string | null;
   geofence_radius_meters: number | null;
   geofence_coordinates_json: string | null;
+};
+
+type DrayageClientRow = {
+  id: string;
+  name: string | null;
+  street_address: string | null;
+  city: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -197,6 +208,102 @@ export async function GET(req: NextRequest) {
         if (drvRows[0]) {
           driverFullName = (drvRows[0].name || drvRows[0].first_name || '').trim();
           driverNameToken = (drvRows[0].first_name || driverFullName.split(' ')[0] || '').trim();
+        }
+      }
+
+      // Sync 1-minute telemetry heartbeat for the driver's logged-in vehicle on poll
+      const qLat = Number(req.nextUrl.searchParams.get('lat'));
+      const qLng = Number(req.nextUrl.searchParams.get('lng'));
+      const qSpeed = Number(req.nextUrl.searchParams.get('speedKmh') || 0);
+      const qHeading = Number(req.nextUrl.searchParams.get('heading') || 0);
+      const hasValidQueryCoords =
+        !Number.isNaN(qLat) &&
+        !Number.isNaN(qLng) &&
+        (qLat !== 0 || qLng !== 0) &&
+        !(Math.abs(qLat - 25.2048) < 0.0005 && Math.abs(qLng - 55.2708) < 0.0005);
+
+      const loggedInVehicles = await tx
+        .$queryRawUnsafe<
+          Array<{
+            id: string;
+            current_lat: number | null;
+            current_lng: number | null;
+            last_ping_at: Date | null;
+          }>
+        >(
+          `SELECT
+              v.id::text AS id,
+              v.current_lat,
+              v.current_lng,
+              (
+                SELECT MAX(p.occurred_at)
+                  FROM fleet.bus_gps_pings p
+                 WHERE p.vehicle_id = v.id::text
+              ) AS last_ping_at
+             FROM vehicles v
+             LEFT JOIN drivers d ON d.id = v.assigned_driver_id AND d.tenant_id = v.tenant_id
+            WHERE v.tenant_id = $1
+              AND v.deleted_at IS NULL
+              AND (
+                v.assigned_driver_id = $2
+                OR d.user_id = $2
+                OR ($3 <> '' AND LOWER(COALESCE(d.name, '')) = LOWER($3))
+              )
+            ORDER BY v.updated_at DESC
+            LIMIT 1`,
+          tenantId,
+          ctx.userId,
+          driverFullName,
+        )
+        .catch(() => []);
+
+      const activeVeh = loggedInVehicles[0];
+      if (activeVeh) {
+        const effLat = hasValidQueryCoords ? qLat : activeVeh.current_lat;
+        const effLng = hasValidQueryCoords ? qLng : activeVeh.current_lng;
+        const lastPingMs = activeVeh.last_ping_at ? new Date(activeVeh.last_ping_at).getTime() : 0;
+        const movedSignificantly =
+          hasValidQueryCoords &&
+          activeVeh.current_lat != null &&
+          activeVeh.current_lng != null &&
+          (Math.abs(qLat - Number(activeVeh.current_lat)) > 0.0002 ||
+            Math.abs(qLng - Number(activeVeh.current_lng)) > 0.0002);
+
+        if (
+          effLat != null &&
+          effLng != null &&
+          (Date.now() - lastPingMs >= 60_000 || movedSignificantly)
+        ) {
+          await tx.busGpsPing
+            .create({
+              data: {
+                tenantId,
+                vehicleId: activeVeh.id,
+                latitude: Number(effLat),
+                longitude: Number(effLng),
+                speedKmh: hasValidQueryCoords && !Number.isNaN(qSpeed) && qSpeed >= 0 ? qSpeed : 0,
+                headingDeg: hasValidQueryCoords && !Number.isNaN(qHeading) ? qHeading : 0,
+                accuracyM: 5,
+                occurredAt: new Date(),
+                source: 'DRIVER_APP',
+              },
+            })
+            .catch(() => {});
+
+          await tx
+            .$executeRawUnsafe(
+              `UPDATE vehicles
+                  SET current_lat = $1,
+                      current_lng = $2,
+                      updated_at = NOW()
+                WHERE id = $3
+                  AND tenant_id = $4`,
+              Number(effLat),
+              Number(effLng),
+              activeVeh.id,
+              tenantId,
+            )
+            .catch(() => {});
         }
       }
     } catch {
@@ -241,7 +348,15 @@ export async function GET(req: NextRequest) {
     let drayageJobs: Array<Record<string, unknown>> = [];
     let broadcastMessages: Array<Record<string, unknown>> = [];
     try {
-      const [drayageRows, gfRows, termRows, whRows, msgRows] = await Promise.all([
+      // Automatically erase any messages older than 12 hours
+      await tx
+        .$executeRawUnsafe(
+          `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+          tenantId,
+        )
+        .catch(() => {});
+
+      const [drayageRows, gfRows, termRows, whRows, clientRows, msgRows, broadcastAckRows] = await Promise.all([
         tx.$queryRawUnsafe<DrayageJobRow[]>(
           `
             SELECT
@@ -292,7 +407,7 @@ export async function GET(req: NextRequest) {
             ORDER BY
               CASE
                 WHEN job_phase = 'L2' AND status NOT IN ('COMPLETED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED') THEN 0
-                WHEN status IN ('RE-ASSIGNED', 'FCL_REASSIGN', 'MT_REASSIGN', 'TRAILER_ATTACHED', 'REASSIGN_PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_YARD') THEN 1
+                WHEN status IN ('RE-ASSIGNED', 'TRAILER_ATTACHED', 'REASSIGN_PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_YARD') THEN 1
                 WHEN status IN ('ASSIGNED', 'ACCEPTED', 'CONTAINER_PICKED', 'AT_PORT', 'UNDER_INSPECTION', 'LOADED', 'IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'ARRIVED_AT_PORT', 'PLACED_AT_RAMP', 'PLACED_AT_YARD') THEN 2
                 ELSE 3
               END,
@@ -327,8 +442,18 @@ export async function GET(req: NextRequest) {
         tx
           .$queryRawUnsafe<DrayageWarehouseRow[]>(
             `
-            SELECT id, name, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
+            SELECT id, name, customer_id, customer_name, zone, address, lat, lng, geofence_type, geofence_radius_meters, geofence_coordinates_json
             FROM logistics_drayage_warehouses
+            WHERE tenant_id = $1
+          `,
+            tenantId,
+          )
+          .catch(() => []),
+        tx
+          .$queryRawUnsafe<DrayageClientRow[]>(
+            `
+            SELECT id, name, street_address, city
+            FROM logistics_drayage_clients
             WHERE tenant_id = $1
           `,
             tenantId,
@@ -340,12 +465,35 @@ export async function GET(req: NextRequest) {
             SELECT id, job_id, sender_role, sender_name, message, is_urgent, created_at
             FROM logistics_drayage_messages
             WHERE tenant_id = $1
+              AND created_at >= NOW() - INTERVAL '12 hours'
             ORDER BY created_at ASC
           `,
             tenantId,
           )
           .catch(() => []),
+        tx
+          .$queryRawUnsafe<Array<{ alert_key: string }>>(
+            `
+            SELECT alert_key
+            FROM logistics_drayage_alerts
+            WHERE tenant_id = $1
+              AND acknowledged = TRUE
+              AND alert_key LIKE 'BROADCAST_ACK:%'
+          `,
+            tenantId,
+          )
+          .catch(() => []),
       ]);
+
+      const ackedBroadcastIds = new Set<string>();
+      for (const row of broadcastAckRows) {
+        const key = String(row.alert_key || '');
+        if (key.startsWith(`BROADCAST_ACK:${ctx.userId}:`)) {
+          ackedBroadcastIds.add(key.slice(`BROADCAST_ACK:${ctx.userId}:`.length));
+        } else if (key.startsWith('BROADCAST_ACK:msg-')) {
+          ackedBroadcastIds.add(key.slice('BROADCAST_ACK:'.length));
+        }
+      }
 
       const parseGeofenceCoords = (raw?: string | null): Array<{ lat: number; lng: number }> => {
         if (!raw) return [];
@@ -393,6 +541,27 @@ export async function GET(req: NextRequest) {
             (w.name && j.warehouseName && w.name.toLowerCase().includes(j.warehouseName.toLowerCase().slice(0, 10))),
         );
 
+        const matchedClient = clientRows.find(
+          (c) =>
+            (matchedWh?.customer_id && c.id === matchedWh.customer_id) ||
+            (matchedWh?.customer_name &&
+              c.name &&
+              c.name.trim().toLowerCase() === matchedWh.customer_name.trim().toLowerCase()),
+        );
+
+        const clientName =
+          matchedClient?.name?.trim() ||
+          matchedWh?.customer_name?.trim() ||
+          j.warehouseName ||
+          'N/A';
+
+        const clientDestination =
+          j.warehouseName ||
+          matchedWh?.name?.trim() ||
+          matchedWh?.address?.trim() ||
+          matchedClient?.street_address?.trim() ||
+          'N/A';
+
         const warehouseGeofence = {
           name: matchedWhGf?.name || matchedWh?.name || j.warehouseName,
           type: (matchedWhGf?.type || matchedWh?.geofence_type || 'POLYGON') as 'CIRCLE' | 'POLYGON',
@@ -403,7 +572,11 @@ export async function GET(req: NextRequest) {
         };
 
         const jobMessages = msgRows
-          .filter((m) => m.job_id === j.id || m.job_id === 'BROADCAST')
+          .filter(
+            (m) =>
+              m.job_id === j.id ||
+              (m.job_id === 'BROADCAST' && !ackedBroadcastIds.has(m.id)),
+          )
           .map((m) => ({
             id: m.id,
             senderRole: m.sender_role,
@@ -414,8 +587,71 @@ export async function GET(req: NextRequest) {
             createdAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
           }));
 
+        const rawStatusUpper = (j.status || 'ASSIGNED').toUpperCase();
+        const normalizedStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
+          ? 'COMPLETED'
+          : j.status;
+
+        const resolvedToken = (j.tokenNumber || j.pcsTokenNumber || '').trim() || null;
+        let resolvedSlotStartIso =
+          j.pcsSlotStart && !Number.isNaN(new Date(j.pcsSlotStart).getTime())
+            ? new Date(j.pcsSlotStart).toISOString()
+            : null;
+        let resolvedSlotEndIso =
+          j.pcsSlotEnd && !Number.isNaN(new Date(j.pcsSlotEnd).getTime())
+            ? new Date(j.pcsSlotEnd).toISOString()
+            : null;
+
+        if (resolvedToken && !resolvedSlotStartIso) {
+          const refBase = j.updatedAt ? new Date(j.updatedAt) : new Date();
+          const uaeRef = new Date(
+            (Number.isNaN(refBase.getTime()) ? Date.now() : refBase.getTime()) + 4 * 60 * 60 * 1000,
+          );
+          const uaeHr = uaeRef.getUTCHours();
+          const fallbackStart = new Date(
+            Date.UTC(
+              uaeRef.getUTCFullYear(),
+              uaeRef.getUTCMonth(),
+              uaeRef.getUTCDate(),
+              uaeHr - 4,
+              0,
+              0,
+              0,
+            ),
+          );
+          const fallbackEnd = new Date(fallbackStart.getTime() + 2 * 60 * 60 * 1000);
+          resolvedSlotStartIso = fallbackStart.toISOString();
+          resolvedSlotEndIso = fallbackEnd.toISOString();
+        } else if (resolvedSlotStartIso && !resolvedSlotEndIso) {
+          resolvedSlotEndIso = new Date(
+            new Date(resolvedSlotStartIso).getTime() + 2 * 60 * 60 * 1000,
+          ).toISOString();
+        }
+
+        const formatUaeSlotTime = (iso: string): string => {
+          const dt = new Date(iso);
+          const uaeTotalHours = (dt.getUTCHours() + 4) % 24;
+          const mins = dt.getUTCMinutes();
+          const ampm = uaeTotalHours >= 12 ? 'PM' : 'AM';
+          const hr12 = uaeTotalHours % 12 === 0 ? 12 : uaeTotalHours % 12;
+          return `${String(hr12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
+        };
+
+        const tokenTimeSlot =
+          resolvedSlotStartIso && resolvedSlotEndIso
+            ? `${formatUaeSlotTime(resolvedSlotStartIso)} – ${formatUaeSlotTime(resolvedSlotEndIso)}`
+            : null;
+
         return {
           ...j,
+          status: normalizedStatus,
+          tokenNumber: resolvedToken,
+          pcsTokenNumber: resolvedToken,
+          pcsSlotStart: resolvedSlotStartIso,
+          pcsSlotEnd: resolvedSlotEndIso,
+          tokenTimeSlot,
+          clientName,
+          clientDestination,
           rateAmountAed: Number(j.rateAmountAed || 0),
           driverAllowanceAed: Number(j.driverAllowanceAed || 0),
           etcTime: j.etcTime ? new Date(j.etcTime).toISOString() : null,
@@ -428,7 +664,7 @@ export async function GET(req: NextRequest) {
       });
 
       broadcastMessages = msgRows
-        .filter((m) => m.job_id === 'BROADCAST')
+        .filter((m) => m.job_id === 'BROADCAST' && !ackedBroadcastIds.has(m.id))
         .map((m) => ({
           id: m.id,
           senderRole: m.sender_role,

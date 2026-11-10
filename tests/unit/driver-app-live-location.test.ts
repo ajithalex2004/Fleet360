@@ -25,6 +25,7 @@ vi.mock('@/lib/driver-session', () => ({
 }));
 
 import { OPTIONS, POST } from '@/app/api/driver-app/telematics/live-location/route';
+import { GET as getOtaManifest } from '@/app/api/driver-app/ota-manifest/route';
 
 const URL_ = 'http://localhost/api/driver-app/telematics/live-location';
 const ping = { lat: 25.1, lng: 55.1, vehicleId: 'veh-a' };
@@ -67,6 +68,22 @@ describe('live-location POST', () => {
     const res = await post({ 'x-tenant-id': 'tenant-a', 'x-user-id': 'drv-1', origin: 'https://localhost2' });
     expect(res.status).toBe(401);
     expect(res.headers.get('access-control-allow-origin')).toBe('https://localhost2');
+    expect(db.pings).toHaveLength(0);
+  });
+});
+
+
+describe('driver-app OTA manifest GET', () => {
+  it('returns public bundle version and foreground telemetry config with zero DB access', async () => {
+    const res = await getOtaManifest(
+      new NextRequest('http://localhost/api/driver-app/ota-manifest?version=2026.01.01&platform=android'),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toContain('no-store');
+    const body = await res.json();
+    expect(body.appId).toBe('com.fleet360.driver');
+    expect(body.currentBundleVersion).toMatch(/^20\d{2}\./);
+    expect(body.updateAvailable).toBe(true);
     expect(db.pings).toHaveLength(0);
   });
 });

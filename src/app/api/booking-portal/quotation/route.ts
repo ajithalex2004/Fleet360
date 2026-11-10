@@ -5,13 +5,13 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { calculateInstantQuotation, type QuotationRequest } from '@/lib/pricing/instant-quotation';
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
 
   try {
     const rawBody = await req.json();
-    // Body is user-supplied; calculateInstantQuotation already defends
-    // against missing fields internally (e.g. `params.serviceType || 'RENTAL'`).
     const body = stripTenantOwnershipFields(rawBody) as QuotationRequest;
     const quotation = calculateInstantQuotation(body);
     return NextResponse.json(quotation);

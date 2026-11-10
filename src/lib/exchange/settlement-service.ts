@@ -1,14 +1,19 @@
 /**
  * src/lib/exchange/settlement-service.ts
  *
- * Periodic Partner Settlement Statement Service for Fleet360 Exchange.
- * Groups approved PartnerInvoices into consolidated periodic statements (Bi-weekly / Monthly)
+ * Periodic Partner Settlement Statement Service for Fleet360 Exchange (Phase 2 P0).
+ * Groups approved PartnerInvoices into consolidated periodic statements (Bi-weekly / Monthly),
+ * applies SLA & variance deductions plus optional Agency Net-Remit Platform Commission + UAE 5% VAT,
  * and generates UAE FTA-compliant Tax Invoice metadata.
  */
 
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { DeductionType, SettlementStatementStatus } from '@prisma/client';
+import type {
+  CommercialModel,
+  AgencySettlementMode,
+} from './commercial-ledger-service';
 
 export interface GenerateSettlementInput {
   tenantId: string;
@@ -21,6 +26,10 @@ export interface GenerateSettlementInput {
     description: string;
     amount: number;
   }>;
+  commercialModel?: CommercialModel;
+  agencySettlementMode?: AgencySettlementMode;
+  platformFeePct?: number;
+  deductPlatformCommission?: boolean;
   createdByUserId: string;
 }
 
@@ -70,15 +79,49 @@ export class SettlementService {
       vatAmount += Number(inv.vatAmount);
     }
 
-    let totalDeductions = 0;
-    if (input.appliedDeductions && input.appliedDeductions.length > 0) {
-      totalDeductions = input.appliedDeductions.reduce((sum, d) => sum + d.amount, 0);
+    const allDeductions: Array<{
+      invoiceId?: string;
+      type: DeductionType;
+      description: string;
+      amount: number;
+    }> = [...(input.appliedDeductions || [])];
+
+    // 4. Optional Agency Net-Remit Platform Commission + 5% VAT Deduction
+    let platformCommission = 0;
+    let platformCommissionVat = 0;
+    const commercialModel = input.commercialModel || 'AGENCY';
+    const agencySettlementMode = input.agencySettlementMode || 'PLATFORM_COLLECT_AND_NET_REMIT';
+    const shouldDeductCommission =
+      commercialModel === 'AGENCY' &&
+      agencySettlementMode === 'PLATFORM_COLLECT_AND_NET_REMIT' &&
+      (input.deductPlatformCommission === true || input.platformFeePct != null);
+
+    if (shouldDeductCommission) {
+      const feePct = input.platformFeePct != null ? Number(input.platformFeePct) : 3;
+      platformCommission = Math.round(grossAmount * (feePct / 100) * 100) / 100;
+      platformCommissionVat = Math.round(platformCommission * 0.05 * 100) / 100;
+      const totalCommissionWithVat = Math.round((platformCommission + platformCommissionVat) * 100) / 100;
+
+      if (totalCommissionWithVat > 0) {
+        allDeductions.push({
+          type: DeductionType.OTHER,
+          description: `Fleet360 Platform Exchange Commission (${feePct}% = AED ${platformCommission.toFixed(2)} + 5% UAE VAT AED ${platformCommissionVat.toFixed(2)})`,
+          amount: totalCommissionWithVat,
+        });
+      }
     }
 
-    const netPayable = Math.max(0, grossAmount + vatAmount - totalDeductions);
+    const totalDeductions = Math.round(
+      allDeductions.reduce((sum, d) => sum + Number(d.amount), 0) * 100
+    ) / 100;
+
+    const netPayable = Math.max(
+      0,
+      Math.round((grossAmount + vatAmount - totalDeductions) * 100) / 100
+    );
     const statementNumber = `STM-${partner.partnerCode}-${Date.now().toString().slice(-6)}`;
 
-    // 4. Create Settlement Statement & Deductions
+    // 5. Create Settlement Statement & Deductions
     const statement = await prisma.partnerSettlementStatement.create({
       data: {
         tenantId: input.tenantId,
@@ -94,9 +137,9 @@ export class SettlementService {
         status: SettlementStatementStatus.ISSUED,
         tenantTrn: tenant?.trn || '100000000000003',
         partnerTrn: partner.taxRegistrationNumber || '100999999900003',
-        deductions: input.appliedDeductions?.length
+        deductions: allDeductions.length
           ? {
-              create: input.appliedDeductions.map((d) => ({
+              create: allDeductions.map((d) => ({
                 invoiceId: d.invoiceId,
                 type: d.type,
                 description: d.description,
@@ -111,7 +154,7 @@ export class SettlementService {
       },
     });
 
-    // 5. Link Invoices to Statement
+    // 6. Link Invoices to Statement
     await prisma.partnerInvoice.updateMany({
       where: { id: { in: approvedInvoices.map((inv) => inv.id) } },
       data: { settlementStatementId: statement.id },
@@ -122,7 +165,7 @@ export class SettlementService {
       entityType: 'PartnerSettlementStatement',
       entityId: statement.id,
       action: 'CREATE',
-      details: `Generated settlement statement ${statementNumber} for AED ${netPayable.toFixed(2)} (${approvedInvoices.length} invoices)`,
+      details: `Generated settlement statement ${statementNumber} for AED ${netPayable.toFixed(2)} (${approvedInvoices.length} invoices, commission AED ${platformCommission.toFixed(2)})`,
       userId: input.createdByUserId,
     }).catch(() => {});
 
@@ -131,6 +174,8 @@ export class SettlementService {
       invoicesCount: approvedInvoices.length,
       grossAmount,
       vatAmount,
+      platformCommission,
+      platformCommissionVat,
       totalDeductions,
       netPayable,
     };
