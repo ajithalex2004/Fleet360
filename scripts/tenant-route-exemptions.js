@@ -64,13 +64,6 @@ const RULE_EXEMPTIONS = [
     test: 'tests/unit/public-endpoint-auth.test.ts',
   },
   {
-    file: 'src/app/api/driver-app/ota-manifest/route.ts', method: 'GET', type: 'missing_auth',
-    reason: 'Capacitor Driver App cold-launch Over-The-Air (OTA) bundle manifest and foreground telemetry service configuration check before driver login. Performs zero database reads or writes and exposes no tenant or user data.',
-    authMechanism: 'None — public pre-login client version manifest (declared under PUBLIC_PREFIXES /api/driver-app/)',
-    dataScope: 'Static/env app bundle version and Android foreground service notification metadata only', owner: 'Mobile App Team',
-    test: 'tests/unit/driver-app-live-location.test.ts',
-  },
-  {
     file: 'src/app/api/driver-app/telematics/live-location/route.ts', method: 'OPTIONS', type: 'missing_auth',
     reason: 'CORS preflight from the driver app WebView. Browsers send preflights without credentials, so there is no session to check; it reads and writes nothing and returns CORS headers only to allowlisted origins (the app WebView and NEXT_PUBLIC_APP_URL).',
     authMechanism: 'None needed (no data access); the POST it precedes requires requireAuthorizedTenant',
@@ -276,6 +269,16 @@ const RULE_EXEMPTIONS = [
     dataScope: 'Single service ticket matching tracking token; confidential internal fields stripped',
     owner: 'Customer Experience Team',
     test: 'tests/service-tickets/track.test.ts',
+  },
+  {
+    file: 'src/app/api/driver-app/ota-manifest/route.ts',
+    method: 'GET',
+    type: 'missing_auth',
+    reason: 'Driver app update manifest, read by the app on launch before any sign-in. Returns static settings only (bundle and minimum APK versions from env, telemetry defaults, release notes); no database access and no tenant data.',
+    authMechanism: 'Public, no data access (zero auth)',
+    dataScope: 'None (static configuration)',
+    owner: 'Mobile App Team',
+    test: 'tests/unit/public-route-inventory.test.ts',
   },
   {
     file: 'src/app/api/mobile/download-apk/route.ts',
