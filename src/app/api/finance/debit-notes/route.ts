@@ -12,20 +12,23 @@ export const dynamic = 'force-dynamic';
  * All queries are tenant-scoped via x-tenant-id header.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 
-async function nextDnNumber(tenantId: string): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text AS count FROM finance_debit_notes WHERE tenant_id = $1`,
+async function nextDnNumber(tx: TxClient, tenantId: string): Promise<string> {
+  const ym = new Date().toISOString().slice(0, 7).replace('-', '');
+  const [row] = await tx.$queryRawUnsafe<{ cnt: number | string }[]>(
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(dn_number, '-', 3) AS INTEGER)), 0) as cnt
+       FROM finance_debit_notes
+      WHERE tenant_id = $1 AND dn_number ~ ('^DN-' || $2 || '-[0-9]+$')`,
     tenantId,
-  ).catch(() => [{ count: '0' }]);
-  const ym  = new Date().toISOString().slice(0, 7).replace('-', '');
-  const seq = (parseInt(row?.count ?? '0') + 1).toString().padStart(4, '0');
+    ym,
+  ).catch(() => [{ cnt: 0 }]);
+  const seq = (Number(row?.cnt ?? 0) + 1).toString().padStart(4, '0');
   return `DN-${ym}-${seq}`;
 }
 
@@ -97,7 +100,7 @@ export async function POST(req: NextRequest) {
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      const dnNumber = await nextDnNumber(tenantId);
+      const dnNumber = await nextDnNumber(tx, tenantId);
 
       // Require exactly one source reference
       if (!body.originalPayableId && !body.originalInvoiceId) {
@@ -146,4 +149,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-

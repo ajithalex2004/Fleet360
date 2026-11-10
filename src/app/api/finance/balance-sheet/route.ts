@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 interface BSLine { code: string; label: string; amount: number; subtype?: string | null; }
@@ -26,172 +26,228 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await ensureTenantChartOfAccounts(tx, tenantId);
-    const sp  = req.nextUrl.searchParams;
-      const asOf = sp.get('asOf') ?? new Date().toISOString().slice(0, 10);
+    const sp   = req.nextUrl.searchParams;
+    const asOf = sp.get('asOf') ?? new Date().toISOString().slice(0, 10);
 
-      // ── Check GL availability ────────────────────────────────────────────────
-      const [glCheck] = await tx.$queryRawUnsafe<{ count: string }[]>(
-        `SELECT COUNT(*)::text as count FROM finance_journal_entries WHERE tenant_id = $2 AND status='POSTED' AND entry_date <= $1::date`, asOf, tenantId
-      ).catch(() => [{ count: '0' }]);
-      const hasGl = parseInt(glCheck?.count ?? '0') > 0;
+    // ── Check GL availability ────────────────────────────────────────────────
+    const [glCheck] = await tx.$queryRawUnsafe<{ count: string }[]>(
+      `SELECT COUNT(*)::text as count FROM finance_journal_entries WHERE tenant_id = $2 AND status='POSTED' AND entry_date <= $1::date`, asOf, tenantId
+    ).catch(() => [{ count: '0' }]);
+    const hasGl = parseInt(glCheck?.count ?? '0') > 0;
 
-      // ── Helper: balance for an account range from GL ─────────────────────────
-      async function glBalance(like: string, normalBalance: 'DEBIT' | 'CREDIT'): Promise<BSLine[]> {
-        const rows = await tx.$queryRawUnsafe<{ account_code: string; account_name: string; account_subtype: string | null; balance: string }[]>(
-          `SELECT jl.account_code, c.account_name, c.account_subtype,
-             COALESCE(SUM(jl.debit_amount - jl.credit_amount),0)::text as balance
+    // ── Helper: balance for an account range from GL ─────────────────────────
+    async function glBalance(like: string, normalBalance: 'DEBIT' | 'CREDIT'): Promise<BSLine[]> {
+      const rows = await tx.$queryRawUnsafe<{ account_code: string; account_name: string; account_subtype: string | null; balance: string }[]>(
+        `SELECT jl.account_code, c.account_name, c.account_subtype,
+           COALESCE(SUM(jl.debit_amount - jl.credit_amount),0)::text as balance
+         FROM finance_journal_lines jl
+         JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
+         JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
+         WHERE je.tenant_id = $3 AND je.status='POSTED' AND je.entry_date <= $1::date
+           AND jl.account_code LIKE $2
+           AND c.is_header = FALSE
+         GROUP BY jl.account_code, c.account_name, c.account_subtype
+         HAVING COALESCE(SUM(jl.debit_amount - jl.credit_amount),0) != 0
+         ORDER BY jl.account_code`, asOf, like, tenantId
+      ).catch(() => []);
+
+      return rows.map(r => {
+        const raw = toN(r.balance);
+        const amount = normalBalance === 'CREDIT' ? -raw : raw;
+        return { code: r.account_code, label: r.account_name, amount, subtype: r.account_subtype };
+      }).filter(r => r.amount !== 0);
+    }
+
+    // ── Asset sections from GL or module fallback ────────────────────────────
+    async function getAssets(): Promise<{ current: BSLine[]; fixed: BSLine[]; other: BSLine[] }> {
+      if (hasGl) {
+        const rows = await glBalance('1%', 'DEBIT');
+        return {
+          current: rows.filter(r => r.subtype === 'CURRENT' || r.code.startsWith('11')),
+          fixed:   rows.filter(r => r.subtype === 'FIXED'   || r.code.startsWith('12')),
+          other:   rows.filter(r => !['CURRENT','FIXED'].includes(r.subtype ?? '') && !r.code.startsWith('11') && !r.code.startsWith('12')),
+        };
+      }
+      // Module fallback
+      const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND payment_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT','VOID')`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction IN ('INWARD', 'INCOMING') AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const faScoped  = await fixedAssetsTenantScoped(tx);
+      const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
+      const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
+      return {
+        current: [
+          { code: '1110', label: 'Cash & Cash Equivalents',   amount: toN(cash?.t)  },
+          { code: '1131', label: 'Trade Receivables (AR)',     amount: toN(ar?.t)    },
+          { code: '1160', label: 'PDC Cheques Receivable',     amount: toN(pdc?.t)   },
+        ].filter(r => r.amount > 0),
+        fixed: [
+          { code: '1210', label: 'Fleet & Vehicles (at cost)', amount: toN(nbv?.t) + toN(accDep?.t) },
+          { code: '1290', label: 'Less: Accumulated Depreciation', amount: -toN(accDep?.t) },
+        ].filter(r => r.amount !== 0),
+        other: [],
+      };
+    }
+
+    // ── Liability sections ───────────────────────────────────────────────────
+    async function getLiabilities(): Promise<{ current: BSLine[]; nonCurrent: BSLine[] }> {
+      if (hasGl) {
+        const rows = await glBalance('2%', 'CREDIT');
+        return {
+          current:    rows.filter(r => r.subtype === 'CURRENT' || r.code.startsWith('21')),
+          nonCurrent: rows.filter(r => r.subtype !== 'CURRENT' && !r.code.startsWith('21')),
+        };
+      }
+      const [apPay]   = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)),0)::text as t
+           FROM finance_payables
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND status NOT IN ('DRAFT','VOID') AND payment_status != 'PAID'
+            AND issue_date <= $2::date`,
+        tenantId, asOf
+      ).catch(()=>[{t:'0'}]);
+      const [outVat]  = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(vat_amount),0)::text as t
+           FROM finance_invoices
+          WHERE tenant_id = $2 AND deleted_at IS NULL
+            AND issue_date <= $1::date
+            AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')`,
+        asOf, tenantId
+      ).catch(()=>[{t:'0'}]);
+      const [inVatExp] = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(vat_amount),0)::text as t
+           FROM finance_expenses
+          WHERE tenant_id = $2 AND deleted_at IS NULL
+            AND status IN ('APPROVED','PAID')
+            AND expense_date <= $1::date`,
+        asOf, tenantId
+      ).catch(()=>[{t:'0'}]);
+      const [inVatPay] = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(vat_amount),0)::text as t
+           FROM finance_payables
+          WHERE tenant_id = $2 AND deleted_at IS NULL
+            AND status NOT IN ('DRAFT','VOID')
+            AND issue_date <= $1::date`,
+        asOf, tenantId
+      ).catch(()=>[{t:'0'}]);
+      const [expPay]  = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(total_amount),0)::text as t
+           FROM finance_expenses
+          WHERE tenant_id = $2 AND deleted_at IS NULL AND status='APPROVED'
+            AND expense_date <= $1::date`,
+        asOf, tenantId
+      ).catch(()=>[{t:'0'}]);
+      const [secDep]  = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(amount - COALESCE(refunded_amount, 0) - COALESCE(forfeited_amount, 0)),0)::text as t
+           FROM finance_security_deposits
+          WHERE tenant_id = $1 AND status IN ('HELD','PARTIALLY_REFUNDED')`,
+        tenantId
+      ).catch(()=>[{t:'0'}]);
+      const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(
+        `SELECT COALESCE(SUM(amount),0)::text as t
+           FROM finance_pdc_cheques
+          WHERE tenant_id = $2 AND deleted_at IS NULL
+            AND direction IN ('OUTWARD', 'OUTGOING')
+            AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`,
+        asOf, tenantId
+      ).catch(()=>[{t:'0'}]);
+
+      const netVatPayable = toN(outVat?.t) - (toN(inVatExp?.t) + toN(inVatPay?.t));
+
+      return {
+        current: [
+          { code: '2110', label: 'Accounts Payable (AP)',      amount: toN(apPay?.t)   },
+          { code: '2120', label: 'Accrued Expenses Payable',   amount: toN(expPay?.t)  },
+          { code: '2130', label: 'VAT Payable (FTA)',          amount: netVatPayable   },
+          { code: '2150', label: 'Customer Security Deposits', amount: toN(secDep?.t)  },
+          { code: '2160', label: 'PDC Cheques Payable',        amount: toN(pdcOut?.t)  },
+        ].filter(r => r.amount !== 0),
+        nonCurrent: [],
+      };
+    }
+
+    // ── Equity sections ──────────────────────────────────────────────────────
+    async function getEquity(): Promise<BSLine[]> {
+      if (hasGl) {
+        const rows = await glBalance('3%', 'CREDIT');
+        const [pl] = await tx.$queryRawUnsafe<{net:string}[]>(
+          `SELECT COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)::text as net
            FROM finance_journal_lines jl
            JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
            JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-           WHERE je.tenant_id = $3 AND je.status='POSTED' AND je.entry_date <= $1::date
-             AND jl.account_code LIKE $2
-             AND c.is_header = FALSE
-           GROUP BY jl.account_code, c.account_name, c.account_subtype
-           HAVING COALESCE(SUM(jl.debit_amount - jl.credit_amount),0) != 0
-           ORDER BY jl.account_code`, asOf, like, tenantId
-        ).catch(() => []);
-
-        return rows.map(r => {
-          const raw = toN(r.balance);
-          // For CREDIT normal (liabilities, equity, income): flip sign so amounts are positive
-          const amount = normalBalance === 'CREDIT' ? -raw : raw;
-          return { code: r.account_code, label: r.account_name, amount, subtype: r.account_subtype };
-        }).filter(r => r.amount !== 0);
-      }
-
-      // ── Asset sections from GL or module fallback ────────────────────────────
-      async function getAssets(): Promise<{ current: BSLine[]; fixed: BSLine[]; other: BSLine[] }> {
-        if (hasGl) {
-          const rows = await glBalance('1%', 'DEBIT');
-          return {
-            current: rows.filter(r => r.subtype === 'CURRENT' || r.code.startsWith('11')),
-            fixed:   rows.filter(r => r.subtype === 'FIXED'   || r.code.startsWith('12')),
-            other:   rows.filter(r => !['CURRENT','FIXED'].includes(r.subtype ?? '') && !r.code.startsWith('11') && !r.code.startsWith('12')),
+           WHERE je.tenant_id = $2 AND je.status='POSTED' AND je.entry_date <= $1::date
+             AND c.account_type IN ('INCOME','EXPENSE')`, asOf, tenantId
+        ).catch(() => [{ net: '0' }]);
+        const retainedEarnings = toN((Array.isArray(pl) ? pl[0]?.net : pl?.net) ?? '0');
+        const existingIdx = rows.findIndex(r => r.code === '3200');
+        if (existingIdx >= 0) {
+          rows[existingIdx] = {
+            ...rows[existingIdx],
+            amount: rows[existingIdx].amount + retainedEarnings,
           };
+          return rows;
         }
-        // Module fallback
-        const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND payment_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='INWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        // Fixed assets count only where the register is tenant-scoped.
-        const faScoped  = await fixedAssetsTenantScoped(tx);
-        const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
-        const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
-        return {
-          current: [
-            { code: '1110', label: 'Cash & Cash Equivalents',   amount: toN(cash?.t)  },
-            { code: '1131', label: 'Trade Receivables (AR)',     amount: toN(ar?.t)    },
-            { code: '1160', label: 'PDC Cheques Receivable',     amount: toN(pdc?.t)   },
-          ].filter(r => r.amount > 0),
-          fixed: [
-            { code: '1210', label: 'Fleet & Vehicles (at cost)', amount: toN(nbv?.t) + toN(accDep?.t) },
-            { code: '1290', label: 'Less: Accumulated Depreciation', amount: -toN(accDep?.t) },
-          ].filter(r => r.amount !== 0),
-          other: [],
-        };
-      }
-
-      // ── Liability sections ───────────────────────────────────────────────────
-      async function getLiabilities(): Promise<{ current: BSLine[]; nonCurrent: BSLine[] }> {
-        if (hasGl) {
-          const rows = await glBalance('2%', 'CREDIT');
-          return {
-            current:    rows.filter(r => r.subtype === 'CURRENT' || r.code.startsWith('21')),
-            nonCurrent: rows.filter(r => r.subtype !== 'CURRENT' && !r.code.startsWith('21')),
-          };
-        }
-        const [vat]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(vat_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [expPay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status='APPROVED' AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='OUTWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        return {
-          current: [
-            { code: '2120', label: 'VAT Payable (FTA)',          amount: toN(vat?.t)    },
-            { code: '2130', label: 'Accrued Expenses Payable',   amount: toN(expPay?.t) },
-            { code: '2160', label: 'PDC Cheques Payable',        amount: toN(pdcOut?.t) },
-          ].filter(r => r.amount > 0),
-          nonCurrent: [],
-        };
-      }
-
-      // ── Equity sections ──────────────────────────────────────────────────────
-      async function getEquity(): Promise<BSLine[]> {
-        if (hasGl) {
-          const [eq]  = await glBalance('3%', 'CREDIT');
-          const rows  = await glBalance('3%', 'CREDIT');
-          // Retained earnings = all income - all expense posted to date, i.e.
-          // credits less debits across both: income is credit-normal (positive)
-          // and expense debit-normal (negative). This took debit - credit for
-          // expenses, which is positive too, so it ADDED expenses to income and
-          // the balance sheet was out by twice total expenses.
-          const [pl] = await tx.$queryRawUnsafe<{net:string}[]>(
-            `SELECT COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)::text as net
-             FROM finance_journal_lines jl
-             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
-             JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-             WHERE je.tenant_id = $2 AND je.status='POSTED' AND je.entry_date <= $1::date
-               AND c.account_type IN ('INCOME','EXPENSE')`, asOf, tenantId
-          ).catch(() => [{ net: '0' }]);
-          const retainedEarnings = toN((Array.isArray(pl) ? pl[0]?.net : pl?.net) ?? '0');
-          return [
-            ...rows,
-            { code: '3200', label: 'Retained Earnings (Current Year P&L)', amount: retainedEarnings },
-          ];
-        }
-        // Module fallback: estimate retained earnings from revenue - expenses
-        const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('DRAFT','CANCELLED')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
         return [
-          { code: '3100', label: 'Share Capital',                       amount: 0 },
-          { code: '3200', label: 'Retained Earnings (Estimated P&L)',   amount: Math.max(0, toN(rev?.t) - toN(exp?.t)) },
-        ].filter(r => r.amount !== 0);
+          ...rows,
+          { code: '3200', label: 'Retained Earnings (Current Year P&L)', amount: retainedEarnings },
+        ];
       }
+      // Module fallback: estimate retained earnings from revenue - expenses (do NOT clamp negative net income!)
+      const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [pay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_payables WHERE tenant_id = $2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') AND issue_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const netIncome = toN(rev?.t) - toN(exp?.t) - toN(pay?.t);
+      return [
+        { code: '3100', label: 'Share Capital',                       amount: 0 },
+        { code: '3200', label: 'Retained Earnings (Estimated P&L)',   amount: netIncome },
+      ].filter(r => r.amount !== 0);
+    }
 
-      const [{ current: currentAssets, fixed: fixedAssets, other: otherAssets }, { current: currentLiabilities, nonCurrent: ncLiabilities }, equityLines] =
-        await Promise.all([getAssets(), getLiabilities(), getEquity()]);
+    const [{ current: currentAssets, fixed: fixedAssets, other: otherAssets }, { current: currentLiabilities, nonCurrent: ncLiabilities }, equityLines] =
+      await Promise.all([getAssets(), getLiabilities(), getEquity()]);
 
-      const totalCurrentAssets  = currentAssets.reduce((s, r) => s + r.amount, 0);
-      const totalFixedAssets    = fixedAssets.reduce((s, r) => s + r.amount, 0);
-      const totalOtherAssets    = otherAssets.reduce((s, r) => s + r.amount, 0);
-      const totalAssets         = totalCurrentAssets + totalFixedAssets + totalOtherAssets;
+    const totalCurrentAssets  = currentAssets.reduce((s, r) => s + r.amount, 0);
+    const totalFixedAssets    = fixedAssets.reduce((s, r) => s + r.amount, 0);
+    const totalOtherAssets    = otherAssets.reduce((s, r) => s + r.amount, 0);
+    const totalAssets         = totalCurrentAssets + totalFixedAssets + totalOtherAssets;
 
-      const totalCurrentLiab   = currentLiabilities.reduce((s, r) => s + r.amount, 0);
-      const totalNCLiab        = ncLiabilities.reduce((s, r) => s + r.amount, 0);
-      const totalLiabilities   = totalCurrentLiab + totalNCLiab;
+    const totalCurrentLiab   = currentLiabilities.reduce((s, r) => s + r.amount, 0);
+    const totalNCLiab        = ncLiabilities.reduce((s, r) => s + r.amount, 0);
+    const totalLiabilities   = totalCurrentLiab + totalNCLiab;
 
-      const totalEquity        = equityLines.reduce((s, r) => s + r.amount, 0);
-      const totalLiabEquity    = totalLiabilities + totalEquity;
-      const isBalanced         = Math.abs(totalAssets - totalLiabEquity) < 1;
+    const totalEquity        = equityLines.reduce((s, r) => s + r.amount, 0);
+    const totalLiabEquity    = totalLiabilities + totalEquity;
+    const isBalanced         = Math.abs(totalAssets - totalLiabEquity) < 1;
 
-      return NextResponse.json({
-        asOf,
-        source: hasGl ? 'GL' : 'MODULE_DATA',
-        assets: {
-          current:     currentAssets,
-          fixed:       fixedAssets,
-          other:       otherAssets,
-          totalCurrent: Math.round(totalCurrentAssets  * 100) / 100,
-          totalFixed:   Math.round(totalFixedAssets    * 100) / 100,
-          totalOther:   Math.round(totalOtherAssets    * 100) / 100,
-          totalAssets:  Math.round(totalAssets         * 100) / 100,
-        },
-        liabilities: {
-          current:       currentLiabilities,
-          nonCurrent:    ncLiabilities,
-          totalCurrent:  Math.round(totalCurrentLiab * 100) / 100,
-          totalNC:       Math.round(totalNCLiab       * 100) / 100,
-          totalLiabilities: Math.round(totalLiabilities * 100) / 100,
-        },
-        equity: {
-          lines:         equityLines,
-          totalEquity:   Math.round(totalEquity * 100) / 100,
-        },
-        summary: {
-          totalAssets:      Math.round(totalAssets       * 100) / 100,
-          totalLiabEquity:  Math.round(totalLiabEquity   * 100) / 100,
-          isBalanced,
-          difference:       Math.round(Math.abs(totalAssets - totalLiabEquity) * 100) / 100,
-        },
-      });
+    return NextResponse.json({
+      asOf,
+      source: hasGl ? 'GL' : 'MODULE_DATA',
+      assets: {
+        current:     currentAssets,
+        fixed:       fixedAssets,
+        other:       otherAssets,
+        totalCurrent: Math.round(totalCurrentAssets  * 100) / 100,
+        totalFixed:   Math.round(totalFixedAssets    * 100) / 100,
+        totalOther:   Math.round(totalOtherAssets    * 100) / 100,
+        totalAssets:  Math.round(totalAssets         * 100) / 100,
+      },
+      liabilities: {
+        current:       currentLiabilities,
+        nonCurrent:    ncLiabilities,
+        totalCurrent:  Math.round(totalCurrentLiab * 100) / 100,
+        totalNC:       Math.round(totalNCLiab       * 100) / 100,
+        totalLiabilities: Math.round(totalLiabilities * 100) / 100,
+      },
+      equity: {
+        lines:         equityLines,
+        totalEquity:   Math.round(totalEquity * 100) / 100,
+      },
+      summary: {
+        totalAssets:      Math.round(totalAssets       * 100) / 100,
+        totalLiabEquity:  Math.round(totalLiabEquity   * 100) / 100,
+        isBalanced,
+        difference:       Math.round(Math.abs(totalAssets - totalLiabEquity) * 100) / 100,
+      },
+    });
   });
 }
-

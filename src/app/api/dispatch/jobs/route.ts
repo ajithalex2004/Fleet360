@@ -28,7 +28,6 @@ function serialize(rows: Row[]): Row[] {
 }
 
 export async function GET(req: NextRequest) {
-
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -37,67 +36,76 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
-        const sp          = new URL(req.url).searchParams;
-        const status      = sp.get('status')      ?? '';
-        const serviceType = sp.get('serviceType') ?? '';
-        const priority    = sp.get('priority')    ?? '';
-        const dateFrom    = sp.get('dateFrom')    ?? '';
-        const dateTo      = sp.get('dateTo')      ?? '';
-        const page        = Math.max(1, parseInt(sp.get('page')  ?? '1'));
-        const limit       = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-        const offset      = (page - 1) * limit;
+      const sp          = new URL(req.url).searchParams;
+      const status      = sp.get('status')      ?? '';
+      const serviceType = sp.get('serviceType') ?? '';
+      const priority    = sp.get('priority')    ?? '';
+      const dateFrom    = sp.get('dateFrom')    ?? '';
+      const dateTo      = sp.get('dateTo')      ?? '';
+      const page        = Math.max(1, parseInt(sp.get('page')  ?? '1'));
+      const limit       = Math.min(100, parseInt(sp.get('limit') ?? '50'));
+      const offset      = (page - 1) * limit;
 
-        const conditions: string[] = [];
-        const values: unknown[]    = [];
+      const conditions: string[] = [];
+      const values: unknown[]    = [];
 
-        const add = (cond: string, val: unknown) => { values.push(val); conditions.push(`${cond} = $${values.length}`); };
-        const addRaw = (cond: string, val: unknown) => { values.push(val); conditions.push(cond.replace('?', `$${values.length}`)); };
+      const add = (cond: string, val: unknown) => { values.push(val); conditions.push(`${cond} = $${values.length}`); };
+      const addRaw = (cond: string, val: unknown) => { values.push(val); conditions.push(cond.replace('?', `$${values.length}`)); };
 
-        if (tenantId)    add('dj.tenant_id',    tenantId);
-        if (status)      add('dj.status',       status);
-        if (serviceType) add('dj.service_type', serviceType);
-        if (priority)    add('dj.priority',     priority);
-        if (dateFrom)    addRaw('dj.created_at >= ?::date', dateFrom);
-        if (dateTo)      addRaw(`dj.created_at < (?::date + interval '1 day')`, dateTo);
+      add('dj.tenant_id', tenantId);
+      if (status)      add('dj.status',       status);
+      if (serviceType) add('dj.service_type', serviceType);
+      if (priority)    add('dj.priority',     priority);
+      if (dateFrom)    addRaw('dj.created_at >= ?::date', dateFrom);
+      if (dateTo)      addRaw(`dj.created_at < (?::date + interval '1 day')`, dateTo);
 
-        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        const [rows, countRows] = await Promise.all([
-          tx.$queryRawUnsafe<Row[]>(`
-            SELECT
-              dj.*,
-              (SELECT COUNT(*) FROM dispatch_attempts da WHERE da.dispatch_job_id = dj.id)::int AS attempt_count
-            FROM dispatch_jobs dj
-            ${where}
-            ORDER BY dj.created_at DESC
-            LIMIT $${values.length + 1} OFFSET $${values.length + 2}
-          `, ...values, limit, offset),
-          tx.$queryRawUnsafe<{ count: bigint }[]>(
-            `SELECT COUNT(*) AS count FROM dispatch_jobs dj ${where}`,
-            ...values
-          ),
-        ]);
+      const [rows, countRows] = await Promise.all([
+        tx.$queryRawUnsafe<Row[]>(`
+          SELECT
+            dj.*,
+            COALESCE(dj.pickup_lat,  dj.origin_lat)  AS pickup_lat,
+            COALESCE(dj.pickup_lng,  dj.origin_lng)  AS pickup_lng,
+            COALESCE(dj.dropoff_lat, dj.dest_lat)    AS dropoff_lat,
+            COALESCE(dj.dropoff_lng, dj.dest_lng)    AS dropoff_lng,
+            COALESCE(dj.origin_lat,  dj.pickup_lat)  AS origin_lat,
+            COALESCE(dj.origin_lng,  dj.pickup_lng)  AS origin_lng,
+            COALESCE(dj.dest_lat,    dj.dropoff_lat) AS dest_lat,
+            COALESCE(dj.dest_lng,    dj.dropoff_lng) AS dest_lng,
+            COALESCE(dj.assigned_driver_id,  dj.driver_id)  AS assigned_driver_id,
+            COALESCE(dj.assigned_vehicle_id, dj.vehicle_id) AS assigned_vehicle_id,
+            (SELECT COUNT(*) FROM dispatch_attempts da WHERE da.dispatch_job_id = dj.id)::int AS attempt_count
+          FROM dispatch_jobs dj
+          ${where}
+          ORDER BY dj.created_at DESC
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+        `, ...values, limit, offset),
+        tx.$queryRawUnsafe<{ count: bigint }[]>(
+          `SELECT COUNT(*) AS count FROM dispatch_jobs dj ${where}`,
+          ...values
+        ),
+      ]);
 
-        const total = Number(countRows[0]?.count ?? 0);
+      const total = Number(countRows[0]?.count ?? 0);
 
-        return NextResponse.json({
-          data:  serialize(rows),
-          total,
-          page,
-          limit,
-          pages: Math.ceil(total / limit),
-        });
-        } catch (err) {
-        console.error('[dispatch/jobs GET]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
-      }
+      return NextResponse.json({
+        data:  serialize(rows),
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      });
+    } catch (err) {
+      console.error('[dispatch/jobs GET]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
 
-
-/** POST — manual admin override assignment */
+/** POST — manual admin override assignment (tenant-scoped) */
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -105,16 +113,22 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureDispatchSchema();
-    const { jobId, driverId, vehicleId, adminId } = await req.json();
-    if (!jobId || !driverId || !vehicleId) {
-      return NextResponse.json({ error: 'jobId, driverId, vehicleId are required' }, { status: 400 });
-    }
-    await manualOverride(jobId, driverId, vehicleId, adminId);
-    return NextResponse.json({ ok: true });
+  return withTenantRls(prisma, tenantId, async () => {
+    try {
+      await ensureDispatchSchema();
+      const bodyRaw = await req.json();
+      const { jobId, driverId, vehicleId, adminId } = stripTenantOwnershipFields(bodyRaw);
+      if (!jobId || !driverId || !vehicleId) {
+        return NextResponse.json({ error: 'jobId, driverId, vehicleId are required' }, { status: 400 });
+      }
+      const overridden = await manualOverride(String(jobId), String(driverId), String(vehicleId), adminId ? String(adminId) : undefined, tenantId);
+      if (!overridden) {
+        return NextResponse.json({ error: 'Dispatch job not found for this tenant' }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true });
     } catch (err) {
-    console.error('[dispatch/jobs POST]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+      console.error('[dispatch/jobs POST]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
+  });
 }

@@ -21,14 +21,18 @@ interface DocumentBody {
 async function requireDevice(req: NextRequest) {
   const token = req.headers.get('x-carrier-app-token') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
-  return resolveCarrierAppDevice(token);
+  try {
+    return await resolveCarrierAppDevice(token);
+  } catch {
+    return null;
+  }
 }
 
 async function requireAssignedShipment(req: NextRequest, shipmentOrderId: string) {
   const device = await requireDevice(req);
   if (!device) return { error: NextResponse.json({ error: 'Invalid carrier app token' }, { status: 401 }) };
 
-  const shipment = await fetchShipmentById(shipmentOrderId, device.tenantId);
+  const shipment = await withTenantRls(prisma, device.tenantId, () => fetchShipmentById(shipmentOrderId, device.tenantId));
   if (!shipment) return { error: NextResponse.json({ error: 'Load not found' }, { status: 404 }) };
   if (shipment.assigned_carrier_id !== device.carrierId) {
     return { error: NextResponse.json({ error: 'Load is not assigned to this carrier' }, { status: 403 }) };

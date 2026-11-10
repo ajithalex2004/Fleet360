@@ -28,6 +28,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { createPaymentIntent, confirmPaymentIntent } from '@/lib/leasing/payment-intents-store';
 import { recomputeSettlementStatus } from '@/lib/leasing/return-workflow';
+import { mirrorLeaseInvoiceToFinance, resetInvoiceDunningOnSettlement } from '@/lib/finance/module-ledger';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -188,6 +189,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (linkedReturn) {
         await recomputeSettlementStatus(tx, tenantId, linkedReturn.id);
       }
+
+      if (isFullyPaid) {
+        await resetInvoiceDunningOnSettlement(tx, tenantId, invoice.id, 'leasing-payment').catch((err) =>
+          console.warn('[leasing/record-payment] dunning reset failed:', err),
+        );
+      }
+      await mirrorLeaseInvoiceToFinance(invoice.id, tenantId, 'leasing-payment').catch((err) =>
+        console.warn('[leasing/record-payment] mirror failed:', err),
+      );
 
       return NextResponse.json({
         ok: true,

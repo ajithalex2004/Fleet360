@@ -7,6 +7,15 @@ interface VATReturn {
   submissionDate?: string | null; paymentDate?: string | null; notes?: string | null;
   createdAt: string;
 }
+
+interface Vat201EmirateBox {
+  box: string;
+  emirate: string;
+  amountAed: number;
+  vatAmountAed: number;
+  adjustmentAed: number;
+}
+
 interface VATSummary {
   period: string; periodStart: string; periodEnd: string;
   totalRevenue: number; totalVatCollected: number; inputVat: number;
@@ -16,6 +25,17 @@ interface VATSummary {
     rac:       { revenue: number; vat: number };
     leasing:   { revenue: number; vat: number };
     invoices:  { revenue: number; vat: number };
+  };
+  vat201Boxes?: {
+    box1StandardRatedByEmirate: Vat201EmirateBox[];
+    box3ReverseChargeSupplies: { amountAed: number; vatAmountAed: number };
+    box6ZeroRatedSupplies: { amountAed: number };
+    box7ExemptSupplies: { amountAed: number };
+    box8TotalSuppliesAndOutputVat: { amountAed: number; vatAmountAed: number };
+    box9StandardRatedExpenses: { amountAed: number; recoverableVatAed: number };
+    box12TotalDueTax: number;
+    box13RecoverableTax: number;
+    box14NetVatPayableOrRefundable: number;
   };
 }
 
@@ -32,7 +52,7 @@ const STATUS_STYLE: Record<string, string> = {
 function SubmitReturnModal({ summary, onClose, onSaved }: { summary: VATSummary; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
     periodStart: summary.periodStart, periodEnd: summary.periodEnd,
-    totalSales: summary.totalRevenue, totalPurchases: 0,
+    totalSales: summary.totalRevenue, totalPurchases: summary.vat201Boxes?.box9StandardRatedExpenses.amountAed ?? 0,
     outputTax: summary.totalVatCollected, inputTax: summary.inputVat,
     netTax: summary.netVatPayable, notes: '',
   });
@@ -54,21 +74,21 @@ function SubmitReturnModal({ summary, onClose, onSaved }: { summary: VATSummary;
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg">
         <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
-          <h2 className="text-lg font-bold text-[var(--text-main)]">Submit VAT Return — {summary.period}</h2>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Submit UAE Form VAT 201 — {summary.period}</h2>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-4">
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm space-y-2">
-            <div className="flex justify-between text-[var(--text-muted)]"><span>Total Sales (excl. VAT)</span><span className="font-medium">{fmtAED(form.totalSales)}</span></div>
-            <div className="flex justify-between text-[var(--text-muted)]"><span>Output VAT (5%)</span><span className="font-medium">{fmtAED(form.outputTax)}</span></div>
-            <div className="flex justify-between text-[var(--text-muted)]"><span>Input VAT (recoverable)</span><span className="font-medium">−{fmtAED(form.inputTax)}</span></div>
+            <div className="flex justify-between text-[var(--text-muted)]"><span>Box 8: Total Supplies (excl. VAT)</span><span className="font-medium">{fmtAED(form.totalSales)}</span></div>
+            <div className="flex justify-between text-[var(--text-muted)]"><span>Box 12: Total Due Output Tax (5%)</span><span className="font-medium">{fmtAED(form.outputTax)}</span></div>
+            <div className="flex justify-between text-[var(--text-muted)]"><span>Box 13: Recoverable Input Tax</span><span className="font-medium">−{fmtAED(form.inputTax)}</span></div>
             <div className="flex justify-between font-bold text-base border-t border-[var(--border-subtle)] pt-2">
-              <span className="text-[var(--text-main)]">Net VAT Payable</span>
+              <span className="text-[var(--text-main)]">Box 14: Net VAT Payable</span>
               <span className="text-amber-400">{fmtAED(form.netTax)}</span>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">FTA EmaraTax Submission Notes / Reference</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={3} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none" />
           </div>
@@ -77,7 +97,7 @@ function SubmitReturnModal({ summary, onClose, onSaved }: { summary: VATSummary;
           <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm disabled:opacity-50">
-            {saving ? 'Submitting…' : '📤 Submit Return'}
+            {saving ? 'Submitting…' : '📤 Submit VAT 201 Return'}
           </button>
         </div>
       </div>
@@ -134,10 +154,10 @@ export default function VATPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-main)]">VAT Returns</h1>
-          <p className="text-[var(--text-muted)] text-xs mt-0.5">UAE 5% VAT — auto-calculated from all revenue modules</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">UAE VAT Returns & FTA Audit File (FAF)</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">UAE Form VAT 201 (Box 1a–1g Emirate Breakdown) & FTA Audit File v1.0.0 — auto-calculated from all revenue modules</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={quarter} onChange={e => setQuarter(Number(e.target.value))}
@@ -148,6 +168,11 @@ export default function VATPage() {
             className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)]">
             {YEARS.map(y => <option key={y}>{y}</option>)}
           </select>
+          <a
+            href={`/api/finance/vat?year=${year}&quarter=${quarter}&format=faf`}
+            className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm font-medium">
+            ⬇ Download FTA Audit File (FAF)
+          </a>
           <button onClick={autoCalc} disabled={calcing}
             className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm disabled:opacity-50">
             {calcing ? '⟳ Calculating…' : '⟳ Auto-Calculate'}
@@ -159,7 +184,7 @@ export default function VATPage() {
       {loading ? (
         <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />
       ) : summary && (
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-[var(--text-main)]">{summary.period}</h2>
@@ -167,17 +192,17 @@ export default function VATPage() {
             </div>
             <button onClick={() => setShowSubmit(true)}
               className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl text-sm">
-              📤 File VAT Return
+              📤 File Form VAT 201 Return
             </button>
           </div>
 
           {/* Main VAT figures */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Total Revenue', value: fmtAED(summary.totalRevenue), color: 'text-[var(--text-main)]', icon: '💰' },
-              { label: 'Output VAT', value: fmtAED(summary.totalVatCollected), color: 'text-amber-400', icon: '📤' },
-              { label: 'Input VAT (Recoverable)', value: fmtAED(summary.inputVat), color: 'text-blue-400', icon: '📥' },
-              { label: summary.netVatPayable > 0 ? 'Net VAT Payable' : 'VAT Refundable',
+              { label: 'Total Revenue (Excl. VAT)', value: fmtAED(summary.totalRevenue), color: 'text-[var(--text-main)]', icon: '💰' },
+              { label: 'Output VAT (Box 12)', value: fmtAED(summary.totalVatCollected), color: 'text-amber-400', icon: '📤' },
+              { label: 'Input VAT Recoverable (Box 13)', value: fmtAED(summary.inputVat), color: 'text-blue-400', icon: '📥' },
+              { label: summary.netVatPayable > 0 ? 'Net VAT Payable (Box 14)' : 'VAT Refundable (Box 14)',
                 value: fmtAED(summary.netVatPayable > 0 ? summary.netVatPayable : summary.vatRefundable),
                 color: summary.netVatPayable > 0 ? 'text-red-400' : 'text-emerald-400', icon: summary.netVatPayable > 0 ? '⚠️' : '✅' },
             ].map(k => (
@@ -187,6 +212,85 @@ export default function VATPage() {
               </div>
             ))}
           </div>
+
+          {/* UAE Form VAT 201 Box 1a-1g Emirate Breakdown */}
+          {summary.vat201Boxes && (
+            <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)]">UAE FTA Form VAT 201 — Box 1a–1g Standard Rated Supplies by Emirate</h3>
+                  <p className="text-xs text-[var(--text-faint)]">Required by Federal Tax Authority EmaraTax portal for quarterly/monthly VAT returns</p>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
+                  Form VAT 201
+                </span>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] uppercase">
+                    <th className="text-left px-4 py-2.5">Box</th>
+                    <th className="text-left px-4 py-2.5">Description / Emirate</th>
+                    <th className="text-right px-4 py-2.5">Amount (AED)</th>
+                    <th className="text-right px-4 py-2.5">VAT Amount (AED)</th>
+                    <th className="text-right px-4 py-2.5">Adjustment (AED)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.vat201Boxes.box1StandardRatedByEmirate.map(row => (
+                    <tr key={row.box} className="border-b border-[var(--border-subtle)]/60 hover:bg-[var(--bg-surface)]/40">
+                      <td className="px-4 py-2 font-mono font-bold text-amber-400">Box {row.box}</td>
+                      <td className="px-4 py-2 text-[var(--text-main)]">Standard rated supplies in {row.emirate}</td>
+                      <td className="px-4 py-2 text-right font-mono text-[var(--text-main)]">{fmtAED(row.amountAed)}</td>
+                      <td className="px-4 py-2 text-right font-mono text-amber-400">{fmtAED(row.vatAmountAed)}</td>
+                      <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">{fmtAED(row.adjustmentAed)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-[var(--border-subtle)]/60">
+                    <td className="px-4 py-2 font-mono font-bold text-[var(--text-muted)]">Box 3</td>
+                    <td className="px-4 py-2 text-[var(--text-muted)]">Supplies subject to reverse charge provisions</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">{fmtAED(summary.vat201Boxes.box3ReverseChargeSupplies.amountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">{fmtAED(summary.vat201Boxes.box3ReverseChargeSupplies.vatAmountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-faint)]">—</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border-subtle)]/60">
+                    <td className="px-4 py-2 font-mono font-bold text-[var(--text-muted)]">Box 6</td>
+                    <td className="px-4 py-2 text-[var(--text-muted)]">Zero-rated supplies</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">{fmtAED(summary.vat201Boxes.box6ZeroRatedSupplies.amountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-faint)]">AED 0.00</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-faint)]">—</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border-subtle)]/60">
+                    <td className="px-4 py-2 font-mono font-bold text-[var(--text-muted)]">Box 7</td>
+                    <td className="px-4 py-2 text-[var(--text-muted)]">Exempt supplies</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">{fmtAED(summary.vat201Boxes.box7ExemptSupplies.amountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-faint)]">AED 0.00</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-faint)]">—</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border-subtle)]/60 bg-amber-500/5 font-semibold">
+                    <td className="px-4 py-2 font-mono text-amber-400">Box 8</td>
+                    <td className="px-4 py-2 text-[var(--text-main)]">Total value of all supplies and Output VAT due</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-main)]">{fmtAED(summary.vat201Boxes.box8TotalSuppliesAndOutputVat.amountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-amber-400">{fmtAED(summary.vat201Boxes.box8TotalSuppliesAndOutputVat.vatAmountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">AED 0.00</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border-subtle)]/60">
+                    <td className="px-4 py-2 font-mono font-bold text-blue-400">Box 9</td>
+                    <td className="px-4 py-2 text-[var(--text-main)]">Standard rated expenses (Recoverable Input VAT)</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-main)]">{fmtAED(summary.vat201Boxes.box9StandardRatedExpenses.amountAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-blue-400">{fmtAED(summary.vat201Boxes.box9StandardRatedExpenses.recoverableVatAed)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[var(--text-muted)]">AED 0.00</td>
+                  </tr>
+                  <tr className="bg-[var(--bg-surface)] font-bold">
+                    <td className="px-4 py-2.5 font-mono text-emerald-400">Box 14</td>
+                    <td className="px-4 py-2.5 text-[var(--text-main)]">Net VAT payable (or reclaimable) for the period</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-[var(--text-faint)]">—</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-emerald-400">{fmtAED(summary.vat201Boxes.box14NetVatPayableOrRefundable)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-[var(--text-faint)]">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Breakdown by module */}
           <div>

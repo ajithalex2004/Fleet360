@@ -79,23 +79,28 @@ test.beforeAll(async () => {
       testUserId,
     );
 
-    // Create role + link user to tenant
-    const roleId = crypto.randomUUID();
-    await prisma.role.create({
-      data: {
-        id:       roleId,
-        tenantId: testTenantId,
-        name:     'Tenant Admin',
-        code:     'TENANT_ADMIN',
-      },
+    // Bind user to platform TENANT_ADMIN system role so RBAC permissions populate
+    let platformRole = await prisma.role.findFirst({
+      where: { tenantId: null, code: 'TENANT_ADMIN' },
     });
+    if (!platformRole) {
+      platformRole = await prisma.role.create({
+        data: {
+          id:       crypto.randomUUID(),
+          tenantId: null,
+          name:     'Tenant Admin',
+          code:     'TENANT_ADMIN',
+          isSystem: true,
+        },
+      });
+    }
 
     await prisma.userTenant.create({
       data: {
         id:       crypto.randomUUID(),
         userId:   testUserId,
         tenantId: testTenantId,
-        roleId:   roleId,
+        roleId:   platformRole.id,
         isActive: true,
       },
     });
@@ -156,10 +161,10 @@ test('submitting wrong credentials shows an error message', async ({ page }) => 
   // Wait for error feedback — can be inline error, toast, or alert
   await expect(
     page.locator(
-      '[role="alert"], .error, .alert, [data-testid="error"], ' +
+      '.error, .alert, [data-testid="error"], ' +
       'p:has-text("Invalid"), p:has-text("incorrect"), p:has-text("wrong"), ' +
       'span:has-text("Invalid"), div:has-text("Invalid email")',
-    ),
+    ).first(),
   ).toBeVisible({ timeout: 10_000 });
 
   // Should still be on /login
@@ -185,7 +190,7 @@ test('after login, /platform page renders content (not a redirect loop)', async 
   // Platform page should render some navigational content
   // Look for any meaningful content indicating a dashboard loaded
   await expect(
-    page.locator('nav, [role="navigation"], main, h1, h2, [data-testid="platform"]'),
+    page.locator('nav, [role="navigation"], main, h1, h2, [data-testid="platform"]').first(),
   ).toBeVisible({ timeout: 10_000 });
 });
 
@@ -209,16 +214,16 @@ test('after login, visiting /platform shows welcome or dashboard content', async
   expect(hasContent).toBe(true);
 });
 
-test('unauthenticated visit to /platform redirects to /login', async ({ page }) => {
-  // Navigate to /platform without logging in
-  await page.goto('/platform');
+test('unauthenticated visit to protected module (/fleet) redirects to /login', async ({ page }) => {
+  // Navigate to a protected app route without logging in (/platform is the public hub)
+  await page.goto('/fleet');
 
   // Should be redirected to /login
   await page.waitForURL('**/login**', { timeout: 10_000 });
   expect(page.url()).toContain('/login');
 });
 
-test('logout clears session and redirects to /login', async ({ page }) => {
+test('logout clears session and redirects protected routes to /login', async ({ page }) => {
   // First, log in
   await page.goto('/login');
   await performLogin(page, TEST_EMAIL, TEST_PASSWORD);
@@ -237,12 +242,11 @@ test('logout clears session and redirects to /login', async ({ page }) => {
   if (await logoutButton.count() > 0) {
     await logoutButton.first().click();
 
-    // Should redirect to /login
-    await page.waitForURL('**/login**', { timeout: 10_000 });
-    expect(page.url()).toContain('/login');
+    // Should redirect to /login or public /platform
+    await page.waitForLoadState('domcontentloaded');
 
-    // Visiting /platform again should redirect back to /login
-    await page.goto('/platform');
+    // Visiting a protected route (/fleet) should now redirect back to /login
+    await page.goto('/fleet');
     await page.waitForURL('**/login**', { timeout: 10_000 });
     expect(page.url()).toContain('/login');
   } else {
@@ -250,8 +254,8 @@ test('logout clears session and redirects to /login', async ({ page }) => {
     const res = await page.request.post('/api/auth/logout');
     expect([200, 204]).toContain(res.status());
 
-    // Navigating to /platform should now redirect to /login
-    await page.goto('/platform');
+    // Navigating to protected /fleet should now redirect to /login
+    await page.goto('/fleet');
     await page.waitForURL('**/login**', { timeout: 10_000 });
     expect(page.url()).toContain('/login');
   }

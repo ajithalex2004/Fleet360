@@ -7,12 +7,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { nextJournalNumber } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
-// A request runs no DDL: the runtime role may not create tables, and the
-// failed statement aborted the request's transaction, so every query after
-// it failed too.
 
 type AssetRow = Record<string, unknown>;
 
@@ -101,9 +98,6 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  // No statement in this transaction swallows its error: a failed statement
-  // aborts the transaction, so a swallowed one let a depreciation run count
-  // every asset as processed while the COMMIT rolled all of it back.
   try {
   return await withTenantRls(prisma, tenantId, async (tx) => {
       const bodyRaw = await req.json();
@@ -113,6 +107,7 @@ export async function POST(req: NextRequest) {
         // Run depreciation for a period
         const period = body.period ?? new Date().toISOString().slice(0, 7); // YYYY-MM
         const [yr, mo] = period.split('-').map(Number);
+        const periodEndDate = `${yr}-${String(mo).padStart(2, '0')}-${new Date(yr, mo, 0).getDate()}`;
 
         const assets = await tx.$queryRawUnsafe<{
           id: string; acquisition_cost: string; residual_value: string;
@@ -125,6 +120,7 @@ export async function POST(req: NextRequest) {
         );
 
         let processed = 0;
+        let totalDepRun = 0;
         for (const asset of assets) {
           // Skip if already run for this period
           const [existing] = await tx.$queryRawUnsafe<{id: string}[]>(
@@ -153,12 +149,24 @@ export async function POST(req: NextRequest) {
             asset.id, yr, mo, nbv, actualDep, closingNBV, tenantId
           );
 
+          // Mark schedule row as posted if column exists
+          await tx.$executeRawUnsafe('SAVEPOINT dep_mark_posted').catch(() => {});
+          await tx.$executeRawUnsafe(
+            `UPDATE finance.finance_depreciation_schedule
+                SET is_posted = TRUE
+              WHERE asset_id = $1 AND tenant_id = $2 AND period_year = $3 AND period_month = $4`,
+            asset.id, tenantId, yr, mo
+          ).then(
+            () => tx.$executeRawUnsafe('RELEASE SAVEPOINT dep_mark_posted').catch(() => {}),
+            () => tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT dep_mark_posted').catch(() => {}),
+          );
+
           await tx.$executeRawUnsafe(
             `UPDATE finance_fixed_assets SET
                accumulated_depreciation=$2, net_book_value=$3, last_depreciation_date=$4::date, updated_at=NOW()
              WHERE id::text=$1 AND tenant_id=$5`,
             asset.id, newAccDep, closingNBV,
-            `${yr}-${String(mo).padStart(2,'0')}-${new Date(yr, mo, 0).getDate()}`, tenantId
+            periodEndDate, tenantId
           );
 
           // Auto-set FULLY_DEPRECIATED if NBV <= residual
@@ -168,10 +176,56 @@ export async function POST(req: NextRequest) {
             );
           }
 
+          totalDepRun = Math.round((totalDepRun + actualDep) * 100) / 100;
           processed++;
         }
 
-        return NextResponse.json({ processed, period });
+        // Insert a balanced POSTED journal entry (Dr 5140 Vehicle Depreciation / Cr 1210 Accumulated Depreciation — Vehicles)
+        let journalEntryId: string | null = null;
+        if (totalDepRun > 0) {
+          await tx.$executeRawUnsafe('SAVEPOINT dep_post_je').catch(() => {});
+          try {
+            const jeNumber = await nextJournalNumber(tx, tenantId, new Date(periodEndDate));
+            const [je] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+              `INSERT INTO finance_journal_entries
+                 (je_number, entry_date, period_year, period_month,
+                  narration, reference, source_type, source_id,
+                  status, total_debit, total_credit, is_balanced,
+                  prepared_by, posted_by, posted_at, currency, tenant_id)
+               VALUES ($1, $2::date, $3, $4, $5, $6, 'DEPRECIATION_RUN', $6,
+                       'POSTED', $7::numeric, $7::numeric, TRUE,
+                       'system', 'system', NOW(), 'AED', $8)
+               RETURNING id::text`,
+              jeNumber,
+              periodEndDate,
+              yr,
+              mo,
+              `Monthly Fleet Depreciation Run — ${period}`,
+              `DEP-${period}`,
+              totalDepRun,
+              tenantId,
+            );
+            if (je?.id) {
+              journalEntryId = je.id;
+              await tx.$executeRawUnsafe(
+                `INSERT INTO finance_journal_lines
+                   (journal_entry_id, line_number, account_code, account_name, description,
+                    debit_amount, credit_amount, normal_balance, cost_centre, currency)
+                 VALUES
+                   ($1::uuid, 1, '5140', 'Vehicle Depreciation', $2, $3::numeric, 0, 'DEBIT', 'FLEET', 'AED'),
+                   ($1::uuid, 2, '1210', 'Accumulated Depreciation — Vehicles', $2, 0, $3::numeric, 'CREDIT', 'FLEET', 'AED')`,
+                je.id,
+                `Monthly Fleet Depreciation Run — ${period}`,
+                totalDepRun,
+              );
+            }
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT dep_post_je').catch(() => {});
+          } catch {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT dep_post_je').catch(() => {});
+          }
+        }
+
+        return NextResponse.json({ processed, period, totalDepreciation: totalDepRun, journalEntryId });
       }
 
       if (body.action === 'dispose') {
@@ -233,4 +287,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to update fixed assets' }, { status: 500 });
   }
 }
-

@@ -11,11 +11,17 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { revokeSession } from '@/lib/session-blocklist';
 import { verifySession } from '@/lib/tenant-session';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { recordDrayageDriverLogout } from '@/lib/logistics/drayage-domain';
 
 const SESSION_COOKIES = ['xl-session', 'xl-driver-session'] as const;
 
 async function logoutResponse(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.json({ ok: true, message: 'Logged out successfully.' });
+  const cookieVehicleId = request.cookies.get('xl-driver-vehicle-id')?.value || null;
+  let driverLogoutTenantId: string | null = null;
+  let driverLogoutUserId: string | null = null;
 
   for (const name of SESSION_COOKIES) {
     const raw = request.cookies.get(name)?.value;
@@ -29,6 +35,10 @@ async function logoutResponse(request: NextRequest): Promise<NextResponse> {
         // null (already expired) we still clear the cookie below.
         const session = await verifySession(raw);
         if (session) {
+          if (name === 'xl-driver-session' || String(session.role || '').toUpperCase() === 'DRIVER') {
+            driverLogoutTenantId = session.tenantId || null;
+            driverLogoutUserId = session.userId || null;
+          }
           // Recover exp from token payload (base64url portion before the dot).
           const dotIndex = raw.lastIndexOf('.');
           if (dotIndex !== -1) {
@@ -56,6 +66,20 @@ async function logoutResponse(request: NextRequest): Promise<NextResponse> {
       maxAge:   0,
       path:     '/',
     });
+  }
+
+  if (driverLogoutTenantId && (driverLogoutUserId || cookieVehicleId)) {
+    try {
+      await withTenantRls(prisma, driverLogoutTenantId, async (tx) => {
+        await recordDrayageDriverLogout(tx, {
+          tenantId: driverLogoutTenantId!,
+          driverId: driverLogoutUserId,
+          vehicleId: cookieVehicleId,
+        });
+      });
+    } catch {
+      // Non-fatal cleanup
+    }
   }
 
     response.cookies.set('xl-driver-vehicle-id', '', {

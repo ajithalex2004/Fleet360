@@ -146,8 +146,8 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
   return (
     <section className={`rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden ${className}`}>
       {(translatedTitle || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
-          <div className="flex items-start gap-3 min-w-0">
+        <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
+          <div className={`flex ${translatedSubtitle ? 'items-start' : 'items-center'} gap-3 min-w-0 flex-1`}>
             {Icon && (
               <div className={`shrink-0 w-8 h-8 rounded-lg ${a.bg} flex items-center justify-center`}>
                 <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
@@ -158,7 +158,7 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
               {translatedSubtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{translatedSubtitle}</p>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
         </header>
       )}
       <div className="p-5">{children}</div>
@@ -182,6 +182,13 @@ const PILLS: Record<string, string> = {
   warning:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
   danger:    'bg-rose-500/20 text-rose-300 border-rose-500/40',
   info:      'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+  fcl_reassign: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  mt_reassign: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  mt_reassign_to_yard: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  fcl_reassign_to_yard: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  fcl_reassign_to_ramp: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+  mt_reassign_to_ramp: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+  re_assigned: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
 };
 
 export function StatusPill({ status, label }: { status?: string; label?: string }) {
@@ -189,7 +196,8 @@ export function StatusPill({ status, label }: { status?: string; label?: string 
   const rawStatus = status ?? '—';
   const key = rawStatus.toLowerCase().replace(/[\s-]/g, '_');
   const cls = PILLS[key] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
-  const displayLabel = label ? tLabel(label) : tLabel(rawStatus.toUpperCase());
+  const isMixedCaseReassign = /reassign\s+to\s+(?:yard|ramp)/i.test(rawStatus);
+  const displayLabel = label ? tLabel(label) : isMixedCaseReassign ? rawStatus : tLabel(rawStatus.toUpperCase());
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cls}`}>
       {displayLabel}

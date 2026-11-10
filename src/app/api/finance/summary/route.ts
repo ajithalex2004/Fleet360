@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  *   from  — ISO date string (optional)
  *   to    — ISO date string (optional)
  *
- * Performance: 10 parallel raw SQL queries + JS aggregation. The whole
+ * Performance: parallel raw SQL queries + JS aggregation. The whole
  * pipeline is wrapped in cacheRead so the finance dashboard doesn't
  * re-pay that cost on every page load. 60s server cache, 300s browser
  * stale-while-revalidate. The (tenantId, fromIso, toIso) cache key
@@ -28,7 +28,7 @@ import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 const SUMMARY_NOT_MIRRORED = excludeMirrored(['RENTAL', 'LEASING']);
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'finance:summary';
 
 function toNum(val: unknown): number {
@@ -38,26 +38,12 @@ function toNum(val: unknown): number {
   return parseFloat(String(val)) || 0;
 }
 
-type AggRow  = { total: unknown; count: unknown };
+type AggRow   = { total: unknown; count: unknown };
 type MonthRow = { month: string; total: unknown; count: unknown };
 
-const zeroAgg  = () => Promise.resolve([{ total: 0, count: 0 }] as AggRow[]);
+const zeroAgg   = () => Promise.resolve([{ total: 0, count: 0 }] as AggRow[]);
 const zeroMonth = () => Promise.resolve([] as MonthRow[]);
 
-// Runs inside unstable_cache (via cacheRead), which strips Next.js request
-// context - next/headers() is unavailable there, so the plain prisma client's
-// header-based auto-scoping middleware never engages. None of the queries
-// below have their own tenant_id filter — they rely entirely on RLS, which
-// is force-applied to the runtime role regardless. With no scope ever set,
-// every query returned zero rows for every tenant, and each .catch(zeroAgg
-// / zeroMonth) masked it as an empty/zero result rather than a visible
-// error — the whole finance dashboard silently rendered as all-zero.
-// withTenantRls sets app.tenant_id explicitly and gives every query below
-// the same pinned, scoped connection. All queries share ONE connection (the
-// tx), so they must run sequentially, not via Promise.all - concurrent
-// queries on a single Prisma transaction client are unsupported and can
-// interleave in ways that break RLS scoping. See runSequential in
-// src/lib/rls.ts.
 const getFinanceSummary = cacheRead(
   async (tenantId: string, fromIso: string | null, toIso: string | null) => {
     const from = fromIso ? new Date(fromIso) : null;
@@ -67,6 +53,7 @@ const getFinanceSummary = cacheRead(
 
     const [
       maintenanceCosts,
+      apPayables,
       rentalRevenue,
       leaseRevenue,
       generalInvoices,
@@ -80,84 +67,105 @@ const getFinanceSummary = cacheRead(
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
-          WHERE status = 'APPROVED' AND deleted_at IS NULL
-            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
-        fromTs, toTs,
+          WHERE tenant_id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
-           FROM rental_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
-        fromTs, toTs,
+           FROM finance_payables
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND status != 'VOID'
+            AND issue_date BETWEEN $2::date AND $3::date`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
-           FROM lease_invoices WHERE created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
-        fromTs, toTs,
+           FROM rental_invoices
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        tenantId, fromTs, toTs,
+      ).catch(zeroAgg),
+
+      tx.$queryRawUnsafe<AggRow[]>(
+        `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
+           FROM lease_invoices
+          WHERE tenant_id = $1
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
-           FROM invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
-        fromTs, toTs,
+           FROM invoices
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM finance_invoices
-          WHERE deleted_at IS NULL
+          WHERE tenant_id = $1 AND deleted_at IS NULL
             AND payment_status NOT IN ('DRAFT','CANCELLED')
-            AND issue_date BETWEEN $1::date AND $2::date${SUMMARY_NOT_MIRRORED}`,
-        fromTs, toTs,
+            AND issue_date BETWEEN $2::date AND $3::date${SUMMARY_NOT_MIRRORED}`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
-        `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
-           FROM payment_transactions
-          WHERE deleted_at IS NULL AND status = 'COMPLETED'
-            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
-        fromTs, toTs,
+        `SELECT COALESCE(SUM(pt.amount),0) as total, COUNT(*) as count
+           FROM payment_transactions pt
+           JOIN invoices i ON i.id = pt.invoice_id
+          WHERE i.tenant_id = $1
+            AND pt.deleted_at IS NULL AND pt.status = 'COMPLETED'
+            AND pt.created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
            FROM finance_payments
-          WHERE payment_date BETWEEN $1::date AND $2::date`,
-        fromTs, toTs,
+          WHERE tenant_id = $1
+            AND payment_date BETWEEN $2::date AND $3::date`,
+        tenantId, fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
-          WHERE status = 'APPROVED' AND deleted_at IS NULL
-            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz
+          WHERE tenant_id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
-        fromTs, toTs,
+        tenantId, fromTs, toTs,
       ).catch(zeroMonth),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
-           FROM rental_invoices WHERE deleted_at IS NULL
-            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz
+           FROM rental_invoices
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
-        fromTs, toTs,
+        tenantId, fromTs, toTs,
       ).catch(zeroMonth),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', issue_date), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM finance_invoices
-          WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-            AND issue_date BETWEEN $1::date AND $2::date${SUMMARY_NOT_MIRRORED}
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+            AND issue_date BETWEEN $2::date AND $3::date${SUMMARY_NOT_MIRRORED}
           GROUP BY DATE_TRUNC('month', issue_date) ORDER BY month`,
-        fromTs, toTs,
+        tenantId, fromTs, toTs,
       ).catch(zeroMonth),
     ]));
 
-    const mc  = { total: toNum(maintenanceCosts[0]?.total),      count: toNum(maintenanceCosts[0]?.count) };
+    const mc  = {
+      total: toNum(maintenanceCosts[0]?.total) + toNum(apPayables[0]?.total),
+      count: toNum(maintenanceCosts[0]?.count) + toNum(apPayables[0]?.count),
+    };
     const rr  = { total: toNum(rentalRevenue[0]?.total),         count: toNum(rentalRevenue[0]?.count) };
     const lr  = { total: toNum(leaseRevenue[0]?.total),          count: toNum(leaseRevenue[0]?.count) };
     const gi  = { total: toNum(generalInvoices[0]?.total),       count: toNum(generalInvoices[0]?.count) };
@@ -213,7 +221,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
-    } catch (err) {
+  } catch (err) {
     console.error('[finance/summary]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

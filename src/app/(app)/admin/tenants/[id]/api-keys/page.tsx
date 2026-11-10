@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { KeyRound, Plus, Trash2, Copy, Check, AlertCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
 
@@ -33,6 +34,8 @@ const SUGGESTED_SCOPES = [
 ];
 
 export default function TenantApiKeysPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const params = useParams<{ id: string }>();
   const tenantId = params?.id ?? '';
 
@@ -138,9 +141,9 @@ export default function TenantApiKeysPage() {
             <span className="ml-2 text-[var(--text-faint)]">· server-to-server integrations and ERP connectors</span>
           </p>
         </div>
-        <Link href="/admin/tenants"
+        <Link href={isSuperAdmin ? '/admin/tenants' : '/admin/company-profile'}
           className={`${BACK_BUTTON} shrink-0`}>
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
+          <ArrowLeft className="w-3.5 h-3.5" /> {isSuperAdmin ? 'Back to Tenants' : 'Back to Company Profile'}
         </Link>
       </div>
 

@@ -1,6 +1,7 @@
 'use client';
 /* eslint-disable react/jsx-key */
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface AuditLog {
@@ -24,6 +25,7 @@ interface AuditLog {
   login_time?: string;
   logout_time?: string;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface PageMeta { total: number; page: number; pages: number; limit: number; }
@@ -113,6 +115,7 @@ function DetailDrawer({ log, onClose }: { log: AuditLog; onClose: () => void }) 
     ['Login Time',       fmtDate(log.login_time)],
     ['Logout Time',      fmtDate(log.logout_time)],
     ['Session Duration', dur ? <span className="text-emerald-400 font-medium">{dur}</span> : '—'],
+    ...(log.metadata ? [['Structured Metadata', <pre className="text-[11px] font-mono bg-[var(--bg-surface-hover)]/50 p-3 rounded-xl overflow-x-auto">{JSON.stringify(log.metadata, null, 2)}</pre>] as [string, React.ReactNode]] : []),
   ];
 
   return (
@@ -145,43 +148,68 @@ function DetailDrawer({ log, onClose }: { log: AuditLog; onClose: () => void }) 
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AuditLogsPage() {
+  const { user, tenant: sessionTenant, impersonatedBy } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN' && !impersonatedBy;
+  const defaultTenantId = !isSuperAdmin ? (sessionTenant?.id ?? '') : '';
+
   const [logs,     setLogs]     = useState<AuditLog[]>([]);
   const [meta,     setMeta]     = useState<PageMeta>({ total:0, page:1, pages:1, limit:50 });
   const [loading,  setLoading]  = useState(true);
   const [selected, setSelected] = useState<AuditLog | null>(null);
   const [page,     setPage]     = useState(1);
+  const [auditScope, setAuditScope] = useState<'tenant' | 'platform'>('tenant');
 
   const [filter, setFilter] = useState({
-    tenantId:'', branchId:'', entityType:'', userId:'',
+    tenantId: defaultTenantId, branchId:'', entityType:'', userId:'',
     action:'', search:'', dateFrom:'', dateTo:'',
   });
 
   const [tenants,  setTenants]  = useState<Tenant[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
 
+  // Auto-populate tenantId for non-super-admins once session loads so the Branch filter is enabled
+  useEffect(() => {
+    if (!isSuperAdmin && sessionTenant?.id) {
+      setFilter(f => (f.tenantId ? f : { ...f, tenantId: sessionTenant.id }));
+    }
+  }, [isSuperAdmin, sessionTenant?.id]);
+
   // Load tenants once
   useEffect(() => {
     fetch('/api/admin/tenants?limit=200', { cache:'no-store' })
       .then(r => r.json())
-      .then(d => setTenants((Array.isArray(d) ? d : d.data ?? []).map((t: Tenant) => ({ id:t.id, name:t.name }))))
-      .catch(() => {});
-  }, []);
+      .then(d => {
+        const list = (Array.isArray(d) ? d : d.data ?? []).map((t: Tenant) => ({ id:t.id, name:t.name }));
+        if (list.length > 0) {
+          setTenants(list);
+        } else if (sessionTenant?.id) {
+          setTenants([{ id: sessionTenant.id, name: sessionTenant.name }]);
+        }
+      })
+      .catch(() => {
+        if (sessionTenant?.id) {
+          setTenants([{ id: sessionTenant.id, name: sessionTenant.name }]);
+        }
+      });
+  }, [sessionTenant?.id, sessionTenant?.name]);
 
   // Load branches whenever tenant changes
+  const effectiveTenantId = filter.tenantId || defaultTenantId;
   useEffect(() => {
     setBranches([]);
     setFilter(f => ({ ...f, branchId:'' }));
-    if (!filter.tenantId) return;
-    fetch(`/api/tenant-branches?tenantId=${filter.tenantId}&includeInactive=true`, { cache:'no-store' })
+    if (!effectiveTenantId) return;
+    fetch(`/api/tenant-branches?tenantId=${effectiveTenantId}&includeInactive=true`, { cache:'no-store' })
       .then(r => r.json())
       .then(d => setBranches((d.data ?? []).map((b: Branch) => ({ id:b.id, branch_name:b.branch_name, emirate:b.emirate }))))
       .catch(() => {});
-  }, [filter.tenantId]);  
+  }, [effectiveTenantId]);
 
   const load = useCallback(async (pg = 1) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (auditScope === 'platform' && isSuperAdmin) params.set('scope', 'platform');
       if (filter.tenantId)   params.set('tenantId',   filter.tenantId);
       if (filter.branchId)   params.set('branchId',   filter.branchId);
       if (filter.entityType) params.set('entityType', filter.entityType);
@@ -204,10 +232,10 @@ export default function AuditLogsPage() {
       });
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [filter]);
+  }, [filter, auditScope, isSuperAdmin]);
 
   // Reset to page 1 whenever filter changes
-  useEffect(() => { setPage(1); load(1); }, [filter]); // eslint-disable-line
+  useEffect(() => { setPage(1); load(1); }, [filter, auditScope]); // eslint-disable-line
   useEffect(() => { load(page); }, [page]);             // eslint-disable-line
 
   // CSV export
@@ -229,7 +257,7 @@ export default function AuditLogsPage() {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const hasFilter = Object.values(filter).some(Boolean);
+  const hasFilter = Object.entries(filter).some(([k, v]) => (k === 'tenantId' && !isSuperAdmin ? false : Boolean(v)));
 
   const actionCounts = logs.reduce<Record<string,number>>((acc,l) => {
     acc[l.action] = (acc[l.action] ?? 0) + 1; return acc;
@@ -237,7 +265,7 @@ export default function AuditLogsPage() {
 
   // Selected branch label for breadcrumb
   const selectedBranch = branches.find(b => b.id === filter.branchId);
-  const selectedTenant = tenants.find(t => t.id === filter.tenantId);
+  const selectedTenant = tenants.find(t => t.id === effectiveTenantId);
 
   return (
     <div className="space-y-6">
@@ -275,6 +303,34 @@ export default function AuditLogsPage() {
         </button>
       </div>
 
+      {/* Scope toggle for Super Admin: Tenant & User Audit vs Platform Destructive Audit */}
+      {isSuperAdmin && (
+        <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3">
+          <button
+            type="button"
+            onClick={() => { setAuditScope('tenant'); setFilter(f => ({ ...f, action: '', entityType: '' })); }}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              auditScope === 'tenant'
+                ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'
+            }`}
+          >
+            📋 Tenant &amp; User Activity (audit_logs)
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuditScope('platform'); setFilter(f => ({ ...f, action: '', entityType: '' })); }}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              auditScope === 'platform'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'
+            }`}
+          >
+            🛡️ Platform Destructive &amp; Security Audit (platform_audit_log)
+          </button>
+        </div>
+      )}
+
       {/* Action chips */}
       {Object.keys(actionCounts).length > 0 && (
         <div className="flex gap-2 flex-wrap">
@@ -311,25 +367,26 @@ export default function AuditLogsPage() {
           {/* Tenant */}
           <div>
             <label className="block text-[var(--text-faint)] text-xs mb-1">Tenant</label>
-            <select value={filter.tenantId}
+            <select value={effectiveTenantId}
               onChange={e => setFilter(f => ({ ...f, tenantId: e.target.value, branchId: '' }))}
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
+              disabled={!isSuperAdmin}
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40 disabled:opacity-60"
             >
-              <option value="">All Tenants</option>
+              {isSuperAdmin && <option value="">All Tenants</option>}
               {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
 
-          {/* Branch — only enabled when a tenant is selected */}
+          {/* Branch — enabled when a tenant is selected (auto-selected for tenant admins) */}
           <div>
             <label className="block text-xs mb-1 flex items-center gap-1.5">
-              <span className={filter.tenantId ? 'text-[var(--text-muted)]' : 'text-[var(--text-faint)]'}>Branch</span>
-              {!filter.tenantId && <span className="text-[var(--text-faint)] text-[10px]">(select a tenant first)</span>}
-              {filter.tenantId && branches.length === 0 && <span className="text-[var(--text-faint)] text-[10px]">(no branches found)</span>}
+              <span className={effectiveTenantId ? 'text-[var(--text-muted)]' : 'text-[var(--text-faint)]'}>Branch</span>
+              {!effectiveTenantId && <span className="text-[var(--text-faint)] text-[10px]">(select a tenant first)</span>}
+              {effectiveTenantId && branches.length === 0 && <span className="text-[var(--text-faint)] text-[10px]">(no branches found)</span>}
             </label>
             <select value={filter.branchId}
               onChange={e => setFilter(f => ({ ...f, branchId: e.target.value }))}
-              disabled={!filter.tenantId || branches.length === 0}
+              disabled={!effectiveTenantId || branches.length === 0}
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">All Branches</option>
@@ -396,7 +453,7 @@ export default function AuditLogsPage() {
           {hasFilter && (
             <div className="flex items-end">
               <button
-                onClick={() => setFilter({ tenantId:'', branchId:'', entityType:'', userId:'', action:'', search:'', dateFrom:'', dateTo:'' })}
+                onClick={() => setFilter({ tenantId: defaultTenantId, branchId:'', entityType:'', userId:'', action:'', search:'', dateFrom:'', dateTo:'' })}
                 className="w-full py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm transition-colors"
               >
                 ✕ Clear all filters
@@ -446,7 +503,7 @@ export default function AuditLogsPage() {
             </p>
             {hasFilter && (
               <button
-                onClick={() => setFilter({ tenantId:'', branchId:'', entityType:'', userId:'', action:'', search:'', dateFrom:'', dateTo:'' })}
+                onClick={() => setFilter({ tenantId: defaultTenantId, branchId:'', entityType:'', userId:'', action:'', search:'', dateFrom:'', dateTo:'' })}
                 className="mt-4 text-red-400 text-sm hover:text-red-300 transition-colors">
                 ✕ Clear filters
               </button>

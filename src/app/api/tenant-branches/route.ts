@@ -65,15 +65,15 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
-      const tenantId        = searchParams.get('tenantId') ?? '';
+      const filterTenantId  = searchParams.get('tenantId') || tenantId;
       const emirate         = searchParams.get('emirate') ?? '';
       const includeInactive = searchParams.get('includeInactive') === 'true';
 
       const conditions: string[] = ['b.deleted_at IS NULL'];
       const values: unknown[] = [];
 
-      if (tenantId) {
-        values.push(tenantId);
+      if (filterTenantId) {
+        values.push(filterTenantId);
         conditions.push(`b.tenant_id = $${values.length}`);
       }
       if (emirate) {
@@ -158,74 +158,81 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 async function handlePOST(req: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const { tenantId: authTenantId } = authz;
+  const isSuperAdmin = req.headers.get('x-user-role') === 'SUPER_ADMIN';
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return withTenantRls(prisma, authTenantId, async (tx) => {
     try {
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
+      const requestedTenantId = isSuperAdmin && typeof bodyRaw?.tenantId === 'string' && bodyRaw.tenantId.trim()
+        ? bodyRaw.tenantId.trim()
+        : authTenantId;
       const body = stripTenantOwnershipFields(bodyRaw);
-        const {
-          tenantId, branchName, emirate = 'DUBAI',
-          tradeLicenseNo,    tradeLicenseAuthority, tradeLicenseExpiry,
-          billingAddress,    billingCity,           billingPoBox,
-          contactName,       contactEmail,          contactPhone,
-          costCenterCode,    isDefault = false,     notes,
-        } = body;
+      const {
+        branchName, emirate = 'DUBAI',
+        tradeLicenseNo,    tradeLicenseAuthority, tradeLicenseExpiry,
+        billingAddress,    billingCity,           billingPoBox,
+        contactName,       contactEmail,          contactPhone,
+        costCenterCode,    isDefault = false,     notes,
+      } = body;
 
-        // Normalise: treat empty strings as NULL so Postgres date/text casts don't blow up
-        const nullify = (v: unknown) => (v === '' || v === undefined ? null : v);
+      // Normalise: treat empty strings as NULL so Postgres date/text casts don't blow up
+      const nullify = (v: unknown) => (v === '' || v === undefined ? null : v);
 
-        if (!tenantId)   return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-        if (!branchName) return NextResponse.json({ error: 'branchName is required' }, { status: 400 });
+      if (!requestedTenantId) return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
+      if (!branchName)        return NextResponse.json({ error: 'branchName is required' }, { status: 400 });
 
-        // If marking as default, clear existing default for this tenant
-        if (isDefault) {
-          await tx.$executeRawUnsafe(
-            `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND deleted_at IS NULL`,
-            tenantId
-          ).catch(() => {});
-        }
-
-        // Use CASE to avoid casting NULL/empty-string as ::date
-        type InsRow = { id: string };
-        const [row] = await tx.$queryRawUnsafe<InsRow[]>(
-          `INSERT INTO tenant_branches
-             (tenant_id, branch_name, emirate, trade_license_no, trade_license_authority,
-              trade_license_expiry, billing_address, billing_city, billing_po_box,
-              contact_name, contact_email, contact_phone,
-              cost_center_code, is_default, notes)
-           VALUES ($1,$2,$3,$4,$5,
-                   CASE WHEN $6::text IS NULL OR $6::text = '' THEN NULL ELSE $6::date END,
-                   $7,$8,$9,
-                   $10,$11,$12,
-                   $13,$14,$15)
-           RETURNING id`,
-          tenantId, branchName, nullify(emirate) ?? 'DUBAI',
-          nullify(tradeLicenseNo), nullify(tradeLicenseAuthority),
-          nullify(tradeLicenseExpiry),
-          nullify(billingAddress), nullify(billingCity), nullify(billingPoBox),
-          nullify(contactName), nullify(contactEmail), nullify(contactPhone),
-          nullify(costCenterCode), isDefault, nullify(notes)
-        );
-
-        // Audit log
-        logAudit({
-          tenantId: tenantId, entityType: 'Branch',
-          entityId: row.id, entityName: branchName,
-          action: 'CREATE',
-          details: `Branch "${branchName}" created in ${nullify(emirate) ?? 'DUBAI'}`,
-          ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
-        });
-
-        return NextResponse.json({ success: true, id: row.id }, { status: 201 });
-        } catch (err) {
-        console.error('[tenant-branches POST]', err);
-        return NextResponse.json({ error: 'Failed to create branch', detail: String(err) }, { status: 500 });
+      // If marking as default, clear existing default for this tenant
+      if (isDefault) {
+        await tx.$executeRawUnsafe(
+          `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND deleted_at IS NULL`,
+          requestedTenantId
+        ).catch(() => {});
       }
+
+      // Use CASE to avoid casting NULL/empty-string as ::date
+      type InsRow = { id: string };
+      const [row] = await tx.$queryRawUnsafe<InsRow[]>(
+        `INSERT INTO tenant_branches
+           (tenant_id, branch_name, emirate, trade_license_no, trade_license_authority,
+            trade_license_expiry, billing_address, billing_city, billing_po_box,
+            contact_name, contact_email, contact_phone,
+            cost_center_code, is_default, notes)
+         VALUES ($1,$2,$3,$4,$5,
+                 CASE WHEN $6::text IS NULL OR $6::text = '' THEN NULL ELSE $6::date END,
+                 $7,$8,$9,
+                 $10,$11,$12,
+                 $13,$14,$15)
+         RETURNING id`,
+        requestedTenantId, branchName, nullify(emirate) ?? 'DUBAI',
+        nullify(tradeLicenseNo), nullify(tradeLicenseAuthority),
+        nullify(tradeLicenseExpiry),
+        nullify(billingAddress), nullify(billingCity), nullify(billingPoBox),
+        nullify(contactName), nullify(contactEmail), nullify(contactPhone),
+        nullify(costCenterCode), isDefault, nullify(notes)
+      );
+
+      // Audit log
+      logAudit({
+        tenantId: requestedTenantId, entityType: 'Branch',
+        entityId: row.id, entityName: branchName as string,
+        action: 'CREATE',
+        details: `Branch "${branchName}" created in ${nullify(emirate) ?? 'DUBAI'}`,
+        ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
+      });
+
+      return NextResponse.json({ success: true, id: row.id }, { status: 201 });
+    } catch (err) {
+      console.error('[tenant-branches POST]', err);
+      return NextResponse.json({ error: 'Failed to create branch', detail: String(err) }, { status: 500 });
+    }
   });
 }
 
@@ -236,80 +243,93 @@ async function handlePOST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 async function handlePATCH(req: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const { tenantId: authTenantId } = authz;
+  const isSuperAdmin = req.headers.get('x-user-role') === 'SUPER_ADMIN';
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return withTenantRls(prisma, authTenantId, async (tx) => {
     try {
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
+      const targetTenantId = isSuperAdmin && typeof bodyRaw?.tenantId === 'string' && bodyRaw.tenantId.trim()
+        ? bodyRaw.tenantId.trim()
+        : authTenantId;
       const body = stripTenantOwnershipFields(bodyRaw);
-        const { id, tenantId, ...fields } = body;
+      const { id, ...fields } = body;
 
-        if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+      if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-        const fieldMap: Record<string, string> = {
-          branchName:            'branch_name',
-          emirate:               'emirate',
-          tradeLicenseNo:        'trade_license_no',
-          tradeLicenseAuthority: 'trade_license_authority',
-          tradeLicenseExpiry:    'trade_license_expiry',
-          billingAddress:        'billing_address',
-          billingCity:           'billing_city',
-          billingPoBox:          'billing_po_box',
-          contactName:           'contact_name',
-          contactEmail:          'contact_email',
-          contactPhone:          'contact_phone',
-          costCenterCode:        'cost_center_code',
-          isDefault:             'is_default',
-          isActive:              'is_active',
-          notes:                 'notes',
-        };
+      const fieldMap: Record<string, string> = {
+        branchName:            'branch_name',
+        emirate:               'emirate',
+        tradeLicenseNo:        'trade_license_no',
+        tradeLicenseAuthority: 'trade_license_authority',
+        tradeLicenseExpiry:    'trade_license_expiry',
+        billingAddress:        'billing_address',
+        billingCity:           'billing_city',
+        billingPoBox:          'billing_po_box',
+        contactName:           'contact_name',
+        contactEmail:          'contact_email',
+        contactPhone:          'contact_phone',
+        costCenterCode:        'cost_center_code',
+        isDefault:             'is_default',
+        isActive:              'is_active',
+        notes:                 'notes',
+      };
 
-        const setClauses: string[] = ['updated_at = NOW()'];
-        const values: unknown[] = [];
+      const setClauses: string[] = ['updated_at = NOW()'];
+      const values: unknown[] = [];
 
-        const nullify = (v: unknown) => (v === '' || v === undefined ? null : v);
+      const nullify = (v: unknown) => (v === '' || v === undefined ? null : v);
 
-        for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
-          if (fields[jsKey] !== undefined) {
-            const val = nullify(fields[jsKey]);
-            values.push(val);
-            if (dbCol === 'trade_license_expiry') {
-              setClauses.push(`${dbCol} = CASE WHEN $${values.length}::text IS NULL THEN NULL ELSE $${values.length}::date END`);
-            } else {
-              setClauses.push(`${dbCol} = $${values.length}`);
-            }
+      for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
+        if (fields[jsKey] !== undefined) {
+          const val = nullify(fields[jsKey]);
+          values.push(val);
+          if (dbCol === 'trade_license_expiry') {
+            setClauses.push(`${dbCol} = CASE WHEN $${values.length}::text IS NULL THEN NULL ELSE $${values.length}::date END`);
+          } else {
+            setClauses.push(`${dbCol} = $${values.length}`);
           }
         }
-
-        if (setClauses.length === 1) {
-          return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 });
-        }
-
-        // If marking as default, clear others for this tenant
-        if (fields.isDefault === true && tenantId) {
-          await tx.$executeRawUnsafe(
-            `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND id != $2 AND deleted_at IS NULL`,
-            tenantId, id
-          ).catch(() => {});
-        }
-
-        values.push(id);
-        const [updated] = await tx.$queryRawUnsafe<{ id: string }[]>(
-          `UPDATE tenant_branches SET ${setClauses.join(', ')} WHERE id = $${values.length} AND deleted_at IS NULL RETURNING id`,
-          ...values
-        );
-
-        if (!updated) return NextResponse.json({ error: 'Branch not found' }, { status: 404 });
-
-        return NextResponse.json({ success: true, id: updated.id });
-        } catch (err) {
-        console.error('[tenant-branches PATCH]', err);
-        return NextResponse.json({ error: 'Failed to update branch', detail: String(err) }, { status: 500 });
       }
+
+      if (setClauses.length === 1) {
+        return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 });
+      }
+
+      // If marking as default, clear others for this tenant
+      if (fields.isDefault === true && targetTenantId) {
+        await tx.$executeRawUnsafe(
+          `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND id != $2 AND deleted_at IS NULL`,
+          targetTenantId, id
+        ).catch(() => {});
+      }
+
+      values.push(id);
+      values.push(targetTenantId);
+      const [updated] = await tx.$queryRawUnsafe<{ id: string }[]>(
+        `UPDATE tenant_branches
+            SET ${setClauses.join(', ')}
+          WHERE id = $${values.length - 1}
+            AND tenant_id = $${values.length}
+            AND deleted_at IS NULL
+          RETURNING id`,
+        ...values
+      );
+
+      if (!updated) return NextResponse.json({ error: 'Branch not found' }, { status: 404 });
+
+      return NextResponse.json({ success: true, id: updated.id });
+    } catch (err) {
+      console.error('[tenant-branches PATCH]', err);
+      return NextResponse.json({ error: 'Failed to update branch', detail: String(err) }, { status: 500 });
+    }
   });
 }
 
@@ -320,7 +340,10 @@ async function handlePATCH(req: NextRequest) {
 // ---------------------------------------------------------------------------
 async function handleDELETE(req: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -328,35 +351,37 @@ async function handleDELETE(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const { id } = await req.json();
-        if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+      const { id } = await req.json();
+      if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-        // Use RETURNING to confirm the row was actually found and updated
-        const deleted = await tx.$queryRawUnsafe<{ id: string }[]>(
-          `UPDATE tenant_branches
-           SET deleted_at = NOW(), updated_at = NOW(), is_active = FALSE
-           WHERE id = $1::uuid AND deleted_at IS NULL
-           RETURNING id`,
-          id
-        );
+      // Scope soft-delete by both id AND tenant_id for defence-in-depth
+      const deleted = await tx.$queryRawUnsafe<{ id: string }[]>(
+        `UPDATE tenant_branches
+         SET deleted_at = NOW(), updated_at = NOW(), is_active = FALSE
+         WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+         RETURNING id`,
+        id,
+        tenantId
+      );
 
-        if (!deleted || deleted.length === 0) {
-          return NextResponse.json({ error: 'Branch not found or already deleted' }, { status: 404 });
-        }
-
-        // Audit log
-        logAudit({
-          entityType: 'Branch', entityId: id,
-          action: 'DELETE',
-          details: `Branch ${id} permanently deleted`,
-          ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
-        });
-
-        return NextResponse.json({ success: true, id });
-        } catch (err) {
-        console.error('[tenant-branches DELETE]', err);
-        return NextResponse.json({ error: 'Failed to delete branch', detail: String(err) }, { status: 500 });
+      if (!deleted || deleted.length === 0) {
+        return NextResponse.json({ error: 'Branch not found or already deleted' }, { status: 404 });
       }
+
+      // Audit log
+      logAudit({
+        tenantId,
+        entityType: 'Branch', entityId: id,
+        action: 'DELETE',
+        details: `Branch ${id} permanently deleted`,
+        ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
+      });
+
+      return NextResponse.json({ success: true, id });
+    } catch (err) {
+      console.error('[tenant-branches DELETE]', err);
+      return NextResponse.json({ error: 'Failed to delete branch', detail: String(err) }, { status: 500 });
+    }
   });
 }
 

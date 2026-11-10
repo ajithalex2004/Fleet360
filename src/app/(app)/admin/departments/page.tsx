@@ -5,7 +5,9 @@
  * Access).
  */
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { FolderTree, ArrowRight } from 'lucide-react';
 
 interface Department { id: string; name: string; code: string | null; isActive: boolean; memberCount: number }
 
@@ -67,9 +69,21 @@ function DepartmentsMaster() {
 
   return (
     <div className="p-6 max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-main)]">Departments</h1>
-        <p className="text-xs text-[var(--text-muted)] mt-1">This company&apos;s departments. A user&apos;s department is chosen from this list in Users › Module Access.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Departments (User RBAC Master)</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            This company&apos;s user departments. A user&apos;s department is chosen from this list in Users › Module Access.
+          </p>
+        </div>
+        <Link
+          href="/admin/hierarchy"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10 text-orange-300 text-xs font-semibold hover:bg-orange-500/20 transition-colors"
+        >
+          <FolderTree className="w-3.5 h-3.5" />
+          <span>3-Tier Cost-Centre Hierarchy (Region › Dept › Section)</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>}

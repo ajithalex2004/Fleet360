@@ -7,16 +7,14 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { excludeMirrored } from '@/lib/finance/mirrored-revenue';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// finance_tax_categories and finance_vat_audit_logs are created + seeded by
-// migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
+
+const TAX_NOT_MIRRORED = excludeMirrored(['RENTAL', 'LOGISTICS']);
 
 type TaxRow = Record<string, unknown>;
 
-// The categories a tenant sees: its own and the shared UAE VAT categories
-// (tenant_id NULL), its own version replacing a shared one with the same code.
-// $1 is the tenant.
 const VISIBLE_CATEGORIES = `
   SELECT DISTINCT ON (code) * FROM finance_tax_categories
    WHERE tenant_id = $1 OR tenant_id IS NULL
@@ -53,12 +51,12 @@ export async function GET(req: NextRequest) {
         const endDateObj = new Date(y, endMonth, 0);
         const endDate    = endDateObj.toISOString().slice(0, 10);
 
-        // Output VAT (from finance_invoices)
+        // Output VAT (from finance_invoices, excluding mirrored RENTAL and LOGISTICS)
         const [outputRow] = await tx.$queryRawUnsafe<{ total: string; count: string }[]>(
           `SELECT COALESCE(SUM(vat_amount),0)::text as total, COUNT(*)::text as count
              FROM finance_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
-               AND payment_status NOT IN ('DRAFT','CANCELLED')
-               AND issue_date BETWEEN $1::date AND $2::date`,
+               AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')
+               AND issue_date BETWEEN $1::date AND $2::date${TAX_NOT_MIRRORED}`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0', count: '0' }]);
 
@@ -95,11 +93,31 @@ export async function GET(req: NextRequest) {
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
+        // Input VAT from AP payables
+        const [payRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
+          `SELECT COALESCE(SUM(vat_amount),0)::text as total
+             FROM finance_payables WHERE tenant_id = $3 AND deleted_at IS NULL
+               AND status IN ('APPROVED','POSTED')
+               AND issue_date BETWEEN $1::date AND $2::date`,
+          startDate, endDate, tenantId
+        ).catch(() => [{ total: '0' }]);
+
+        // Input VAT from approved expenses
+        const [expRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
+          `SELECT COALESCE(SUM(vat_amount),0)::text as total
+             FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL
+               AND status IN ('APPROVED','PAID')
+               AND expense_date BETWEEN $1::date AND $2::date`,
+          startDate, endDate, tenantId
+        ).catch(() => [{ total: '0' }]);
+
         const outputVat = parseFloat(outputRow?.total ?? '0')
                         + parseFloat(logRow?.total   ?? '0')
                         + parseFloat(racRow?.total   ?? '0');
         const inputVat  = parseFloat(fuelRow?.total ?? '0')
-                        + parseFloat(mainRow?.total ?? '0');
+                        + parseFloat(mainRow?.total ?? '0')
+                        + parseFloat(payRow?.total  ?? '0')
+                        + parseFloat(expRow?.total  ?? '0');
         const netVat    = outputVat - inputVat;
 
         // Category breakdown
@@ -118,8 +136,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Default: return categories — the tenant's own and the shared UAE ones
-      // (tenant_id NULL), the tenant's version winning where both have a code.
+      // Default: return categories
       const categories = await tx.$queryRawUnsafe<TaxRow[]>(
         `SELECT * FROM (${VISIBLE_CATEGORIES}) c ORDER BY rate DESC, code`,
         tenantId,
@@ -161,10 +178,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Rate must be between 0 and 100' }, { status: 400 });
       }
 
-      // Create or update the tenant's own tax category. Codes are unique per
-      // tenant (finance_tax_categories_tenant_code_key), so a tenant may keep
-      // its own version of a shared UAE code; the shared rows (tenant_id NULL)
-      // change only in platform context and are never touched from here.
       let row: TaxRow | undefined;
       try {
         [row] = await tx.$queryRawUnsafe<TaxRow[]>(
@@ -183,4 +196,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-

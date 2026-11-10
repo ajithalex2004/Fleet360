@@ -1282,7 +1282,9 @@
    "template": "company-profile",
    "methods": {
     "GET": "member",
-    "PATCH": "admin"
+    "PATCH": "admin",
+    "PUT": "admin",
+    "POST": "admin"
    }
   },
   {
@@ -1895,7 +1897,7 @@
   {
    "template": "workflows/stats",
    "methods": {
-    "GET": "platform"
+    "GET": "admin"
    }
   }
  ]

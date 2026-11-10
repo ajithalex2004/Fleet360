@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { OutsourceEngine, hashDriverToken } from '@/lib/exchange/outsource-engine';
-import { BusOpsOutsourcingAdapter } from '@/lib/exchange/bus-ops-adapter';
+import { AdapterRegistry } from '@/lib/exchange/adapters/adapter-registry';
 import { withPartnerTokenTenant } from '@/lib/exchange/partner-token-tenant';
 
 export const runtime = 'nodejs';
@@ -56,11 +56,13 @@ async function handleGET(
   return NextResponse.json({
     trip: {
       requestNumber: request.requestNumber,
+      domain: request.domain,
       serviceDate: request.serviceDate,
       pickupTime: request.pickupTime,
       pickupLocation: request.pickupLocation,
       dropoffLocation: request.dropoffLocation,
       requiredCapacity: request.requiredCapacity,
+      vehicleTypeRequired: request.vehicleTypeRequired,
       specialInstructions: request.specialInstructions,
       partnerName: partner.legalName,
       vehiclePlate: assignment.vehiclePlate,
@@ -78,6 +80,7 @@ async function handleGET(
  * POST /api/public/partner-driver/[token]
  *
  * Milestone action: REACHED | STARTED | COMPLETED + POD submission
+ * Synchronizes execution across all 4 vertical domains via AdapterRegistry.
  */
 async function handlePOST(
   req: NextRequest,
@@ -90,28 +93,44 @@ async function handlePOST(
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action, passengerCount, signedByName, signatureUrl, photoUrl, completionNotes } = body;
+    const {
+      action,
+      passengerCount,
+      signedByName,
+      signatureUrl,
+      photoUrl,
+      completionNotes,
+      podMetadata,
+    } = body;
 
     if (!action || !['REACHED', 'STARTED', 'COMPLETED'].includes(action)) {
       return NextResponse.json({ error: "action must be 'REACHED', 'STARTED', or 'COMPLETED'" }, { status: 400 });
     }
 
+    const structuredNotes =
+      podMetadata && typeof podMetadata === 'object'
+        ? JSON.stringify({
+            notes: completionNotes || '',
+            podMetadata,
+          })
+        : completionNotes;
+
     const updated = await OutsourceEngine.updateDriverMilestone(token, action, {
-      passengerCount: passengerCount ? Number(passengerCount) : undefined,
+      passengerCount: passengerCount != null ? Number(passengerCount) : undefined,
       signedByName,
       signatureUrl,
       photoUrl,
-      completionNotes,
+      completionNotes: structuredNotes,
     });
 
-    // Synchronize native TripSchedule if applicable
+    // Synchronize native domain entity (TripSchedule, Shipment, Limo Booking, or Recovery Incident)
     const assignment = await prisma.partnerAssignment.findUnique({
       where: { id: updated.id },
       include: { award: { include: { request: true } } },
     });
 
-    if (assignment && assignment.award.request.sourceReferenceType === 'TRIP_SCHEDULE') {
-      const adapter = new BusOpsOutsourcingAdapter();
+    if (assignment?.award?.request) {
+      const adapter = AdapterRegistry.getAdapter(assignment.award.request.domain);
       await adapter.syncExecutionStatus({
         sourceReferenceId: assignment.award.request.sourceReferenceId,
         eventType: action,

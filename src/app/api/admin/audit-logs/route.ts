@@ -43,6 +43,78 @@ export async function GET(req: NextRequest) {
       const page      = Math.max(1, parseInt(sp.get('page')  ?? '1'));
       const limit     = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset    = (page - 1) * limit;
+      const scope     = sp.get('scope') ?? 'tenant';
+
+      if (scope === 'platform') {
+        if (!isSuperAdmin(req.headers)) {
+          return NextResponse.json({ error: 'Forbidden — platform audit log requires SUPER_ADMIN' }, { status: 403 });
+        }
+        const pConds: string[] = [];
+        const pParams: unknown[] = [];
+        let pIdx = 1;
+        if (action)     { pConds.push(`action = $${pIdx++}`);              pParams.push(action); }
+        if (entityType) { pConds.push(`target_type ILIKE $${pIdx++}`);     pParams.push(entityType); }
+        if (userId)     { pConds.push(`performed_by_user_id = $${pIdx++}`); pParams.push(userId); }
+        if (dateFrom)   { pConds.push(`created_at >= $${pIdx++}`);         pParams.push(new Date(dateFrom)); }
+        if (dateTo)     { pConds.push(`created_at <= $${pIdx++}`);         pParams.push(new Date(dateTo + 'T23:59:59Z')); }
+        if (search) {
+          pConds.push(
+          `(performed_by_email ILIKE $${pIdx} OR target_name ILIKE $${pIdx} OR target_id ILIKE $${pIdx} OR action ILIKE $${pIdx} OR CAST(metadata AS TEXT) ILIKE $${pIdx})`,
+          );
+          pParams.push(`%${search}%`);
+          pIdx++;
+        }
+        const pWhere = pConds.length ? `WHERE ${pConds.join(' AND ')}` : '';
+        const countRows = await tx.$queryRawUnsafe<{ total: bigint }[]>(
+          `SELECT COUNT(*) AS total FROM platform_audit_log ${pWhere}`,
+          ...pParams,
+        ).catch(() => [{ total: BigInt(0) }]);
+        const total = Number(countRows[0]?.total ?? 0);
+        const rows = await tx.$queryRawUnsafe<Array<{
+          id: string;
+          action: string;
+          performed_by_user_id: string | null;
+          performed_by_email: string | null;
+          dry_run: boolean;
+          target_type: string;
+          target_id: string | null;
+          target_name: string | null;
+          metadata: unknown;
+          created_at: Date;
+        }>>(
+          `SELECT id, action, performed_by_user_id, performed_by_email, dry_run, target_type, target_id, target_name, metadata, created_at
+             FROM platform_audit_log
+             ${pWhere}
+             ORDER BY created_at DESC
+             LIMIT $${pIdx} OFFSET $${pIdx + 1}`,
+          ...pParams,
+          limit,
+          offset,
+        ).catch(() => []);
+        const mapped = rows.map((r) => ({
+          id: r.id,
+          tenant_id: r.target_type === 'tenant' ? r.target_id : null,
+          tenant_name: r.target_type === 'tenant' ? r.target_name : 'Platform (Global)',
+          branch_id: null,
+          branch_name: null,
+          entity_type: r.target_type,
+          entity_id: r.target_id,
+          entity_name: r.target_name,
+          user_id: r.performed_by_user_id,
+          user_name: r.performed_by_email ?? r.performed_by_user_id ?? 'Platform Operator',
+          user_email: r.performed_by_email,
+          user_role: 'SUPER_ADMIN',
+          action: r.action,
+          details: r.metadata ? JSON.stringify(r.metadata) : null,
+          ip_address: null,
+          created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          metadata: r.metadata,
+        }));
+        return NextResponse.json(
+          { data: mapped, total, page, limit, pages: Math.ceil(total / limit) || 1 },
+          { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } },
+        );
+      }
 
       const conditions: string[] = [];
       const values: unknown[]    = [];

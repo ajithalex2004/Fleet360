@@ -63,23 +63,18 @@ export async function matchDriverProfileForUser(
   tenantId: string,
   user: { id: string; userType?: string | null; email?: string | null; employeeId?: string | null },
 ): Promise<string | null> {
-  const isDriverUserType = (user.userType ?? '').toUpperCase() === 'DRIVER';
+  if ((user.userType ?? '').toUpperCase() !== 'DRIVER') return null;
 
-  const rows = await db.$queryRawUnsafe<Array<{ id: string; user_id: string | null }>>(
+  const rows = await db.$queryRawUnsafe<Array<{ id: string; user_id?: string | null }>>(
     `SELECT id::text AS id, user_id
        FROM drivers
       WHERE tenant_id = $1
         AND deleted_at IS NULL
         AND (
           user_id = $2
-          OR (
-            $5::boolean = TRUE
-            AND (
-              id::text = $2
-              OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
-              OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
-            )
-          )
+          OR id::text = $2
+          OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+          OR ($4::text IS NOT NULL AND employee_id IS NOT NULL AND LOWER(employee_id) = LOWER($4))
         )
       ORDER BY
         (user_id = $2) DESC,
@@ -90,7 +85,6 @@ export async function matchDriverProfileForUser(
     user.id,
     user.email?.trim() || null,
     user.employeeId?.trim() || null,
-    isDriverUserType,
   );
   if (rows.length === 0) return null;
 

@@ -101,8 +101,11 @@ export interface MappedFleetVehicle {
   assignedDriverId: string | null;
   assignedDriverName: string | null;
   activeJobCode: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
+  hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF';
   updatedAt?: string | null;
   assignedTripsCount?: number;
 }
@@ -160,6 +163,8 @@ export interface DrayageContainer {
   customerName: string;
   terminalId: string | null;
   terminalName: string;
+  returnTerminalId?: string | null;
+  returnTerminalName?: string | null;
   warehouseId: string | null;
   warehouseName: string;
   doExpiryDate: string | null;
@@ -186,6 +191,15 @@ export interface DrayageContainer {
   doRevalidatedAt?: string | null;
 }
 
+export interface DrayageRoutePoint {
+  lat: number;
+  lng: number;
+  timestamp: string;
+  location?: string;
+  status?: string;
+  speedKmh?: number;
+}
+
 export interface DrayageJob {
   id: string;
   tenantId: string;
@@ -201,6 +215,10 @@ export interface DrayageJob {
   warehouseName: string;
   terminalId: string | null;
   terminalName: string;
+  returnTerminalId?: string | null;
+  returnTerminalName?: string | null;
+  originTerminalId?: string | null;
+  originTerminalName?: string | null;
   containerId: string | null;
   containerNumber: string;
   containerSize: string;
@@ -231,6 +249,8 @@ export interface DrayageJob {
   createdAt: string;
   updatedAt: string;
   cargoWeightKg?: number;
+  sealNumber?: string | null;
+  dischargeDate?: string | null;
   shippingLine?: string;
   bogieJobId?: string | null;
   streetTurnJobId?: string | null;
@@ -246,6 +266,7 @@ export interface DrayageJob {
   riskRadar?: DrayageRiskRadarInfo;
   portSlotPrediction?: DrayagePortSlotPrediction;
   customerPortal?: DrayageCustomerPortalLink;
+  routePath?: DrayageRoutePoint[];
 }
 
 export type DrayageTrackingPortalRole = 'CUSTOMER' | 'CLIENT' | 'RAMP';
@@ -336,8 +357,8 @@ export interface DrayageAutomationConfig {
 }
 
 export const DEFAULT_DRAYAGE_AUTOMATION_CONFIG: DrayageAutomationConfig = {
-  autoL2DispatchEnabled: true,
-  thresholdMinutes: 30,
+  autoL2DispatchEnabled: false,
+  thresholdMinutes: 15,
   weightProximityPct: 60,
   weightIdlenessPct: 25,
   weightWorkloadPct: 10,
@@ -447,6 +468,615 @@ export interface DrayageStatusLog {
   notes: string;
   actor: string;
   timestamp: string;
+  location?: string;
+}
+
+export type DirectionalReassignLabel =
+  | 'MT_Reassign to Yard'
+  | 'FCL_Reassign to Yard'
+  | 'FCL_Reassign to Ramp'
+  | 'MT_Reassign to Ramp';
+
+export const DIRECTIONAL_REASSIGN_STATUS_UPPER_SET = new Set([
+  'FCL_REASSIGN',
+  'MT_REASSIGN',
+  'MT_REASSIGN TO YARD',
+  'FCL_REASSIGN TO YARD',
+  'FCL_REASSIGN TO RAMP',
+  'MT_REASSIGN TO RAMP',
+  'MT_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_RAMP',
+  'MT_REASSIGN_TO_RAMP',
+]);
+
+export function isDrayageReassignStatus(status?: string | null): boolean {
+  const s = String(status || '').trim().toUpperCase();
+  return DIRECTIONAL_REASSIGN_STATUS_UPPER_SET.has(s);
+}
+
+/**
+ * Resolves the directional Reassign status label based on origin placement (Ramp vs Yard)
+ * and shipmentType (IMPORT vs EXPORT):
+ * - Origin = RAMP (Placed at Ramp / Reassign Placed at Ramp):
+ *     - IMPORT -> 'MT_Reassign to Yard' (destuffed empty at ramp -> move to yard)
+ *     - EXPORT -> 'FCL_Reassign to Yard' (stuffed full at ramp -> move to yard)
+ * - Origin = YARD (Placed at Yard):
+ *     - IMPORT -> 'FCL_Reassign to Ramp' (staged full at yard -> move to ramp for destuffing)
+ *     - EXPORT -> 'MT_Reassign to Ramp' (staged empty at yard -> move to ramp for stuffing)
+ */
+export function resolveDirectionalReassignStatus(args: {
+  originLocation: 'RAMP' | 'YARD' | string | null | undefined;
+  shipmentType: 'IMPORT' | 'EXPORT' | string | null | undefined;
+}): DirectionalReassignLabel {
+  const loc = String(args.originLocation || 'RAMP').trim().toUpperCase();
+  const ship = String(args.shipmentType || 'IMPORT').trim().toUpperCase();
+  if (loc === 'YARD') {
+    return ship === 'EXPORT' ? 'MT_Reassign to Ramp' : 'FCL_Reassign to Ramp';
+  }
+  return ship === 'EXPORT' ? 'FCL_Reassign to Yard' : 'MT_Reassign to Yard';
+}
+
+export interface DispatcherJobReassignEvaluation {
+  canReassign: boolean;
+  isWaitingForFirstRampAlert: boolean;
+  reassignLabel: DirectionalReassignLabel | null;
+  displayStatus: string;
+  originLocation: 'RAMP' | 'YARD' | null;
+  firstAlertReached: boolean;
+  minsLeft: number | null;
+}
+
+export function evaluateDispatcherJobReassignState(
+  job: {
+    status?: string | null;
+    shipmentType?: 'IMPORT' | 'EXPORT' | string | null;
+    placementLocation?: 'RAMP' | 'YARD' | string | null;
+    trailerDetached?: boolean;
+    etcTime?: string | null;
+    etcAlertStatus?: string | null;
+  },
+  nowMs: number = Date.now(),
+): DispatcherJobReassignEvaluation {
+  const rawStatus = String(job.status || '').trim();
+  const s = rawStatus.toUpperCase();
+  const ship = String(job.shipmentType || 'IMPORT').trim().toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  const locUpper = String(job.placementLocation || '').trim().toUpperCase();
+
+  let minsLeft: number | null = null;
+  if (job.etcTime) {
+    const etcMs = new Date(job.etcTime).getTime();
+    if (!isNaN(etcMs)) {
+      minsLeft = Math.ceil((etcMs - nowMs) / 60000);
+    }
+  }
+  const alertUpper = String(job.etcAlertStatus || '').trim().toUpperCase();
+  const firstAlertReached =
+    alertUpper === 'T15_WARNING' ||
+    alertUpper === 'EXPIRED' ||
+    (minsLeft !== null && minsLeft <= 15);
+
+  if (s === 'MT_REASSIGN TO YARD' || s === 'MT_REASSIGN_TO_YARD') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'MT_Reassign to Yard',
+      displayStatus: 'MT_Reassign to Yard',
+      originLocation: 'RAMP',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN TO YARD' || s === 'FCL_REASSIGN_TO_YARD') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'FCL_Reassign to Yard',
+      displayStatus: 'FCL_Reassign to Yard',
+      originLocation: 'RAMP',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN TO RAMP' || s === 'FCL_REASSIGN_TO_RAMP') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'FCL_Reassign to Ramp',
+      displayStatus: 'FCL_Reassign to Ramp',
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'MT_REASSIGN TO RAMP' || s === 'MT_REASSIGN_TO_RAMP') {
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: 'MT_Reassign to Ramp',
+      displayStatus: 'MT_Reassign to Ramp',
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+  if (s === 'FCL_REASSIGN' || s === 'MT_REASSIGN') {
+    const origin: 'RAMP' | 'YARD' = locUpper === 'YARD' ? 'YARD' : 'RAMP';
+    const label = resolveDirectionalReassignStatus({ originLocation: origin, shipmentType: ship });
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: label,
+      displayStatus: label,
+      originLocation: origin,
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+
+  // Origin = Yard (PLACED_AT_YARD or detached at YARD):
+  // Immediately eligible for FCL_Reassign to Ramp (Import) or MT_Reassign to Ramp (Export)
+  const isAtInitialYard =
+    s === 'PLACED_AT_YARD' ||
+    ((s === 'TRAILER_DETACHED' || s === 'CONTAINER_DETACHED') && locUpper === 'YARD');
+  if (isAtInitialYard) {
+    const label = resolveDirectionalReassignStatus({ originLocation: 'YARD', shipmentType: ship });
+    return {
+      canReassign: true,
+      isWaitingForFirstRampAlert: false,
+      reassignLabel: label,
+      displayStatus: label,
+      originLocation: 'YARD',
+      firstAlertReached: true,
+      minsLeft,
+    };
+  }
+
+  // Origin = Ramp (PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP or detached at RAMP):
+  // Disabled before first alert; enabled and shown as MT_Reassign to Yard (Import) / FCL_Reassign to Yard (Export) upon first alert
+  const isAtRamp =
+    s === 'PLACED_AT_RAMP' ||
+    s === 'REASSIGN_PLACED_AT_RAMP' ||
+    ((s === 'TRAILER_DETACHED' || s === 'CONTAINER_DETACHED' || s === 'REASSIGN_TRAILER_DETACHED') &&
+      locUpper !== 'YARD');
+  if (isAtRamp) {
+    const label = resolveDirectionalReassignStatus({ originLocation: 'RAMP', shipmentType: ship });
+    if (firstAlertReached) {
+      return {
+        canReassign: true,
+        isWaitingForFirstRampAlert: false,
+        reassignLabel: label,
+        displayStatus: label,
+        originLocation: 'RAMP',
+        firstAlertReached: true,
+        minsLeft,
+      };
+    }
+    return {
+      canReassign: false,
+      isWaitingForFirstRampAlert: true,
+      reassignLabel: label,
+      displayStatus: rawStatus,
+      originLocation: 'RAMP',
+      firstAlertReached: false,
+      minsLeft,
+    };
+  }
+
+  return {
+    canReassign: false,
+    isWaitingForFirstRampAlert: false,
+    reassignLabel: null,
+    displayStatus: rawStatus,
+    originLocation: locUpper === 'YARD' ? 'YARD' : locUpper === 'RAMP' ? 'RAMP' : null,
+    firstAlertReached,
+    minsLeft,
+  };
+}
+
+/**
+ * Determines whether "Change Return Terminal" is unlocked for a job:
+ * - Unlocked starting from EN_ROUTE_WAREHOUSE (as soon as the container exits the port on L1),
+ *   through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP,
+ *   and L2 - PENDING (before L2 Vehicle Assignment).
+ * - Locked before EN_ROUTE_WAREHOUSE on L1, and locked after L2 - PENDING (once L2 is ASSIGNED or later).
+ */
+export function canChangeDrayageReturnTerminal(job: {
+  jobPhase?: 'L1' | 'L2' | string | null;
+  jobCode?: string | null;
+  status?: string | null;
+  l2Activated?: boolean;
+  assignedVehicleId?: string | null;
+  assignedVehiclePlate?: string | null;
+}): boolean {
+  const phase =
+    String(job.jobPhase || '').trim().toUpperCase() === 'L2' ||
+    String(job.jobCode || '').toUpperCase().includes('-L2')
+      ? 'L2'
+      : 'L1';
+  const st = String(job.status || '').trim().toUpperCase();
+
+  if (phase === 'L2') {
+    return (
+      (st === 'PENDING' || st === 'WAITING_MT_RETURN') &&
+      !job.assignedVehicleId &&
+      !job.assignedVehiclePlate
+    );
+  }
+
+  if (job.l2Activated || ['COMPLETED', 'CANCELLED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED'].includes(st)) {
+    return false;
+  }
+
+  if (isDrayageReassignStatus(st)) {
+    return true;
+  }
+
+  const allowedL1Statuses = new Set([
+    'EN_ROUTE_WAREHOUSE',
+    'IN_TRANSIT',
+    'PLACED_AT_RAMP',
+    'REASSIGN_PLACED_AT_RAMP',
+    'PLACED_AT_YARD',
+    'REASSIGN_PLACED_AT_YARD',
+    'CONTAINER_DETACHED',
+    'TRAILER_DETACHED',
+    'REASSIGN_TRAILER_DETACHED',
+    'RE-ASSIGNED',
+    'READY_FOR_PICKUP',
+    'CONTAINER_OFFLOADED',
+    'WAITING_MT_RETURN',
+  ]);
+
+  return allowedL1Statuses.has(st);
+}
+
+export function parseReturnTerminalTag(notes?: string | null): {
+  returnTerminalId: string | null;
+  returnTerminalName: string;
+  originTerminalName?: string;
+} | null {
+  if (!notes) return null;
+  const m = String(notes).match(/\[RETURN_TERM:([^|]*)\|([^|\]]+)(?:\|FROM:([^\]]+))?\]/i);
+  if (!m) return null;
+  const returnTerminalId = m[1]?.trim() ? m[1].trim() : null;
+  const returnTerminalName = (m[2] || '').trim();
+  const originTerminalName = m[3]?.trim() ? m[3].trim() : undefined;
+  if (!returnTerminalName) return null;
+  return {
+    returnTerminalId,
+    returnTerminalName,
+    originTerminalName,
+  };
+}
+
+const MAJOR_OPERATIONAL_MILESTONE_STATUSES = new Set([
+  'ACCEPTED',
+  'ARRIVED_AT_PORT',
+  'AT_PORT',
+  'EMPTY_AT_PORT',
+  'CONTAINER_PICKED',
+  'LOADED',
+  'TRAILER_ATTACHED',
+  'UNDER_INSPECTION',
+  'INSPECTION_CLEARED',
+  'INSPECTION_REPORTED',
+  'INSPECTION_SKIPPED',
+  'PHOTO_UPLOADED',
+  'EN_ROUTE_WAREHOUSE',
+  'EN_ROUTE_TERMINAL',
+  'IN_TRANSIT',
+  'PLACED_AT_RAMP',
+  'PLACED_AT_YARD',
+  'REASSIGN_PLACED_AT_RAMP',
+  'REASSIGN_PLACED_AT_YARD',
+  'EPOD_SIGNED',
+  'TRAILER_DETACHED',
+  'CONTAINER_DETACHED',
+  'REASSIGN_TRAILER_DETACHED',
+  'FCL_REASSIGN',
+  'MT_REASSIGN',
+  'MT_REASSIGN TO YARD',
+  'FCL_REASSIGN TO YARD',
+  'FCL_REASSIGN TO RAMP',
+  'MT_REASSIGN TO RAMP',
+  'MT_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_YARD',
+  'FCL_REASSIGN_TO_RAMP',
+  'MT_REASSIGN_TO_RAMP',
+  'READY_FOR_PICKUP',
+  'CONTAINER_OFFLOADED',
+  'RETURN_TERMINAL_CHANGED',
+  'CONTAINER_DROPPED',
+  'EMPTY_DEPOSITED',
+  'CONTAINER_DELIVERED',
+  'COMPLETED',
+]);
+
+const UAE_GEOGRAPHIC_REFERENCE_POINTS: Array<{
+  name: string;
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}> = [
+  // Abu Dhabi Island & Metropolitan
+  { name: 'Al Nahyan, Abu Dhabi', lat: 24.4594, lng: 54.3818, radiusKm: 2.5 },
+  { name: 'Al Mushrif, Abu Dhabi', lat: 24.4425, lng: 54.3965, radiusKm: 3.0 },
+  { name: 'Al Bateen, Abu Dhabi', lat: 24.4535, lng: 54.3425, radiusKm: 3.0 },
+  { name: 'Al Danah / Central Abu Dhabi', lat: 24.4882, lng: 54.3665, radiusKm: 3.0 },
+  { name: 'Al Zahiyah / Mina Zayed, Abu Dhabi', lat: 24.5135, lng: 54.3775, radiusKm: 3.5 },
+  { name: 'Al Reem Island, Abu Dhabi', lat: 24.4960, lng: 54.4060, radiusKm: 3.5 },
+  { name: 'Al Maqta / Rabdan, Abu Dhabi', lat: 24.4160, lng: 54.4820, radiusKm: 4.0 },
+  { name: 'Mussafah Industrial, Abu Dhabi', lat: 24.3540, lng: 54.5020, radiusKm: 6.5 },
+  { name: 'ICAD Industrial City, Abu Dhabi', lat: 24.3120, lng: 54.4780, radiusKm: 6.5 },
+  { name: 'Khalifa City, Abu Dhabi', lat: 24.4210, lng: 54.5750, radiusKm: 6.0 },
+  { name: 'Mohammed Bin Zayed City, Abu Dhabi', lat: 24.3510, lng: 54.5580, radiusKm: 6.0 },
+  { name: 'Yas Island / Shahama Corridor, Abu Dhabi', lat: 24.4950, lng: 54.6080, radiusKm: 7.0 },
+  { name: 'KEZAD / Khalifa Port, Abu Dhabi', lat: 24.7920, lng: 54.6820, radiusKm: 8.5 },
+  { name: 'Al Samha / Ghantoot (E11 Corridor)', lat: 24.8550, lng: 54.8450, radiusKm: 10.0 },
+  { name: 'Al Ain Logistics Corridor', lat: 24.2075, lng: 55.7447, radiusKm: 18.0 },
+  // Dubai & Jebel Ali Logistics Corridor
+  { name: 'Jebel Ali Port (T1/T2/T3), Dubai', lat: 25.0112, lng: 55.0612, radiusKm: 2.8 },
+  { name: 'JAFZA North Free Zone, Dubai', lat: 24.9910, lng: 55.0750, radiusKm: 3.0 },
+  { name: 'JAFZA South Logistics Zone, Dubai', lat: 24.9642, lng: 55.0915, radiusKm: 3.5 },
+  { name: 'National Industries Park (NIP), Dubai', lat: 24.9220, lng: 55.0680, radiusKm: 4.5 },
+  { name: 'Dubai South (DWC Logistics District)', lat: 24.8960, lng: 55.1450, radiusKm: 6.0 },
+  { name: 'Dubai Investments Park (DIP)', lat: 24.9850, lng: 55.1680, radiusKm: 5.5 },
+  { name: 'Al Yalayis / E311 Freight Corridor, Dubai', lat: 25.0020, lng: 55.1350, radiusKm: 5.0 },
+  { name: 'Al Marina / JLT, Dubai', lat: 25.0750, lng: 55.1420, radiusKm: 4.0 },
+  { name: 'Al Quoz Industrial Area, Dubai', lat: 25.1360, lng: 55.2280, radiusKm: 5.5 },
+  { name: 'Business Bay / Downtown, Dubai', lat: 25.1880, lng: 55.2680, radiusKm: 4.5 },
+  { name: 'Ras Al Khor Industrial, Dubai', lat: 25.1780, lng: 55.3520, radiusKm: 5.5 },
+  { name: 'Dubai Creek / Al Jaddaf, Dubai', lat: 25.2150, lng: 55.3280, radiusKm: 4.5 },
+  { name: 'Port Rashid / Al Mina, Dubai', lat: 25.2620, lng: 55.2780, radiusKm: 4.5 },
+  { name: 'Deira / Al Qusais Industrial, Dubai', lat: 25.2810, lng: 55.3880, radiusKm: 6.0 },
+  // Northern Emirates
+  { name: 'Sharjah Industrial Area', lat: 25.3180, lng: 55.4120, radiusKm: 8.5 },
+  { name: 'Ajman Industrial Zone', lat: 25.3890, lng: 55.4790, radiusKm: 8.0 },
+  { name: 'Saqr Port / Ras Al Khaimah', lat: 25.7890, lng: 55.9430, radiusKm: 18.0 },
+  { name: 'Fujairah Port Corridor', lat: 25.1288, lng: 56.3265, radiusKm: 18.0 },
+];
+
+function calcDistanceKmFast(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function resolveUaePlaceNameFromCoords(
+  lat: number,
+  lng: number,
+  options?: {
+    terminalName?: string | null;
+    termLat?: number | null;
+    termLng?: number | null;
+    warehouseName?: string | null;
+    whLat?: number | null;
+    whLng?: number | null;
+  },
+): string {
+  if (
+    options?.terminalName &&
+    options.termLat != null &&
+    options.termLng != null &&
+    calcDistanceKmFast(lat, lng, Number(options.termLat), Number(options.termLng)) <= 2.2
+  ) {
+    return String(options.terminalName).trim();
+  }
+  if (
+    options?.warehouseName &&
+    options.whLat != null &&
+    options.whLng != null &&
+    calcDistanceKmFast(lat, lng, Number(options.whLat), Number(options.whLng)) <= 2.0
+  ) {
+    return String(options.warehouseName).trim();
+  }
+
+  let bestName = '';
+  let bestDistKm = Infinity;
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = calcDistanceKmFast(lat, lng, ref.lat, ref.lng);
+    if (d <= ref.radiusKm && d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName) return bestName;
+
+  for (const ref of UAE_GEOGRAPHIC_REFERENCE_POINTS) {
+    const d = calcDistanceKmFast(lat, lng, ref.lat, ref.lng);
+    if (d < bestDistKm) {
+      bestDistKm = d;
+      bestName = ref.name;
+    }
+  }
+  if (bestName && bestDistKm <= 25) {
+    return bestName;
+  }
+  if (lat >= 24.15 && lat <= 24.75 && lng >= 54.15 && lng <= 54.85) {
+    return 'Abu Dhabi Mobile GPS';
+  }
+  if (lat >= 24.80 && lat <= 25.32 && lng >= 54.90 && lng <= 55.55) {
+    return 'Dubai Mobile GPS';
+  }
+  return 'Driver Mobile GPS';
+}
+
+export function extractCoordsFromLocationText(text?: string | null): { lat: number; lng: number; prefix: string } | null {
+  if (!text) return null;
+  const m = String(text).match(/^(.*?)\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*$/);
+  if (!m) return null;
+  const lat = Number(m[2]);
+  const lng = Number(m[3]);
+  if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return null;
+  return {
+    prefix: m[1].trim(),
+    lat,
+    lng,
+  };
+}
+
+export function resolveOperationalMilestoneLocation(args: {
+  status: string;
+  rawNotes?: string | null;
+  explicitLocation?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  jobPhase?: string | null;
+  jobCode?: string | null;
+  terminalName?: string | null;
+  warehouseName?: string | null;
+  termLat?: number | null;
+  termLng?: number | null;
+  whLat?: number | null;
+  whLng?: number | null;
+}): string | undefined {
+  const cleanStatus = String(args.status || '')
+    .replace(/^MILESTONE_ALERT_/i, '')
+    .trim()
+    .toUpperCase();
+
+  if (!MAJOR_OPERATIONAL_MILESTONE_STATUSES.has(cleanStatus)) {
+    return undefined;
+  }
+
+  const terminalName = String(args.terminalName || 'DPW-Jebel Ali-T1').trim();
+  const warehouseName = String(args.warehouseName || 'Consignee Warehouse').trim();
+  const tLat = args.termLat != null && Number(args.termLat) !== 0 ? Number(args.termLat) : 25.0112;
+  const tLng = args.termLng != null && Number(args.termLng) !== 0 ? Number(args.termLng) : 55.0612;
+  const wLat = args.whLat != null && Number(args.whLat) !== 0 ? Number(args.whLat) : 24.9642;
+  const wLng = args.whLng != null && Number(args.whLng) !== 0 ? Number(args.whLng) : 55.0915;
+
+  const isHardcodedFacilityPrefix = (prefix: string, lat: number, lng: number): boolean => {
+    const p = prefix.trim().toLowerCase();
+    if (!p) return true;
+    const termLower = terminalName.toLowerCase();
+    const whLower = warehouseName.toLowerCase();
+    if (
+      p === termLower ||
+      p === 'dpw-jebel ali-t1' ||
+      p === 'port terminal' ||
+      p.startsWith('e11 corridor') ||
+      p.includes(`→ ${termLower}`)
+    ) {
+      return calcDistanceKmFast(lat, lng, tLat, tLng) > 2.5;
+    }
+    if (
+      p === whLower ||
+      p === 'consignee warehouse' ||
+      p.includes(`→ ${whLower}`)
+    ) {
+      return calcDistanceKmFast(lat, lng, wLat, wLng) > 2.2;
+    }
+    return false;
+  };
+
+  const normalizeTaggedLocation = (rawLoc: string): string => {
+    const parsed = extractCoordsFromLocationText(rawLoc);
+    if (!parsed) return rawLoc.trim();
+    const { prefix, lat, lng } = parsed;
+    if (isHardcodedFacilityPrefix(prefix, lat, lng)) {
+      const truePlace = resolveUaePlaceNameFromCoords(lat, lng, {
+        terminalName,
+        termLat: tLat,
+        termLng: tLng,
+        warehouseName,
+        whLat: wLat,
+        whLng: wLng,
+      });
+      return `${truePlace} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    }
+    return `${prefix} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+  };
+
+  const notesStr = String(args.rawNotes || '');
+  const locTagMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
+  if (locTagMatch && locTagMatch[1]?.trim()) {
+    return normalizeTaggedLocation(locTagMatch[1].trim());
+  }
+
+  if (args.explicitLocation && String(args.explicitLocation).trim()) {
+    return normalizeTaggedLocation(String(args.explicitLocation).trim());
+  }
+
+  const hasLiveCoords =
+    args.lat != null &&
+    args.lng != null &&
+    !isNaN(Number(args.lat)) &&
+    !isNaN(Number(args.lng)) &&
+    (Number(args.lat) !== 0 || Number(args.lng) !== 0);
+
+  if (hasLiveCoords) {
+    const finalLat = Number(args.lat);
+    const finalLng = Number(args.lng);
+    const placeName = resolveUaePlaceNameFromCoords(finalLat, finalLng, {
+      terminalName,
+      termLat: tLat,
+      termLng: tLng,
+      warehouseName,
+      whLat: wLat,
+      whLng: wLng,
+    });
+    return `${placeName} (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
+  }
+
+  const isL2 =
+    String(args.jobPhase || '').toUpperCase() === 'L2' ||
+    String(args.jobCode || '').toUpperCase().includes('-L2');
+  const cLat = Number(((tLat + wLat) / 2).toFixed(4));
+  const cLng = Number(((tLng + wLng) / 2).toFixed(4));
+
+  let stageFacility = terminalName;
+  let stageLat = tLat;
+  let stageLng = tLng;
+
+  if (isL2) {
+    if (['ACCEPTED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(cleanStatus)) {
+      stageFacility = warehouseName;
+      stageLat = wLat;
+      stageLng = wLng;
+    } else if (['EN_ROUTE_TERMINAL', 'IN_TRANSIT'].includes(cleanStatus)) {
+      stageFacility = `E11 Corridor → ${terminalName}`;
+      stageLat = cLat;
+      stageLng = cLng;
+    } else {
+      stageFacility = terminalName;
+      stageLat = tLat;
+      stageLng = tLng;
+    }
+  } else {
+    if (
+      [
+        'ACCEPTED',
+        'ARRIVED_AT_PORT',
+        'AT_PORT',
+        'CONTAINER_PICKED',
+        'LOADED',
+        'UNDER_INSPECTION',
+      ].includes(cleanStatus)
+    ) {
+      stageFacility = terminalName;
+      stageLat = tLat;
+      stageLng = tLng;
+    } else if (['EN_ROUTE_WAREHOUSE', 'IN_TRANSIT'].includes(cleanStatus)) {
+      stageFacility = `E11 Corridor → ${warehouseName}`;
+      stageLat = cLat;
+      stageLng = cLng;
+    } else {
+      stageFacility = warehouseName;
+      stageLat = wLat;
+      stageLng = wLng;
+    }
+  }
+
+  return `${stageFacility} (${stageLat.toFixed(4)}, ${stageLng.toFixed(4)})`;
 }
 
 export interface DrayageDispatchMessage {
@@ -471,7 +1101,9 @@ export interface DrayageAlertItem {
     | 'DETENTION_CRITICAL'
     | 'PORT_SLOT_MISS_RISK'
     | 'DETACHED_TRAILER'
-    | 'PORT_TOKEN_PENDING';
+    | 'PORT_TOKEN_PENDING'
+    | 'REASSIGN_ETC_T15'
+    | 'REASSIGN_ETC_EXPIRED';
   severity: 'URGENT' | 'CRITICAL' | 'WARNING';
   title: string;
   message: string;
@@ -769,7 +1401,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   if (Number(cliCountRows[0]?.cnt ?? 0) === 0) {
     const defaultClients = [
       {
-        id: `cli-al-futtaim-${tenantId.slice(0, 8)}`,
+        id: `cli-al-futtaim-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Al-Futtaim Logistics LLC',
         code: 'ALF-LOG',
         contactPerson: 'Tariq Al-Mansoori',
@@ -783,7 +1415,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'Priority FCL client. Direct gate delivery to JAFZA South Gate 5 ramp.',
       },
       {
-        id: `cli-landmark-${tenantId.slice(0, 8)}`,
+        id: `cli-landmark-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Landmark Retail Distribution',
         code: 'LMK-RET',
         contactPerson: 'Saeed Al-Hashemi',
@@ -797,7 +1429,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'High volume import accounts. Rapid turn-around required.',
       },
       {
-        id: `cli-chalhoub-${tenantId.slice(0, 8)}`,
+        id: `cli-chalhoub-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'Chalhoub Luxury Supply Chain',
         code: 'CHB-LUX',
         contactPerson: 'Nadia Haddad',
@@ -811,7 +1443,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         notes: 'Bonded transit clearance and temperature-controlled reefer cargo.',
       },
       {
-        id: `cli-adnoc-${tenantId.slice(0, 8)}`,
+        id: `cli-adnoc-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         name: 'ADNOC Industrial Polymers',
         code: 'ADN-POL',
         contactPerson: 'Rashid Al-Nuaimi',
@@ -852,7 +1484,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
 
     const defaultWarehouses = [
       {
-        id: `wh-jafza-${tenantId.slice(0, 8)}`,
+        id: `wh-jafza-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[0]?.id ?? null,
         customerName: existingCustomers[0]?.name_en ?? 'Al-Futtaim Logistics LLC',
         name: 'JAFZA South Bonded Fulfillment Hub (Gate 5)',
@@ -865,7 +1497,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 50 482 9910',
       },
       {
-        id: `wh-nip-${tenantId.slice(0, 8)}`,
+        id: `wh-nip-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[1]?.id ?? null,
         customerName: existingCustomers[1]?.name_en ?? 'Landmark Retail Distribution',
         name: 'National Industries Park (NIP) Mega Automated DC',
@@ -878,7 +1510,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 52 819 3320',
       },
       {
-        id: `wh-dwc-${tenantId.slice(0, 8)}`,
+        id: `wh-dwc-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[2]?.id ?? null,
         customerName: existingCustomers[2]?.name_en ?? 'Chalhoub Luxury Supply Chain',
         name: 'Dubai South Aviation & Cold-Chain Hub',
@@ -891,7 +1523,7 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
         phone: '+971 55 301 7741',
       },
       {
-        id: `wh-kizad-${tenantId.slice(0, 8)}`,
+        id: `wh-kizad-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`,
         customerId: existingCustomers[3]?.id ?? null,
         customerName: existingCustomers[3]?.name_en ?? 'ADNOC Industrial Polymers',
         name: 'KEZAD Integrated Polymer & Cold Depot',
@@ -915,7 +1547,8 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
            SET geofence_configured = true,
                geofence_radius_meters = 800,
                trip_amount_aed = 1550,
-               driver_allowance_aed = 150`,
+               driver_allowance_aed = 150
+         WHERE logistics_drayage_warehouses.tenant_id = EXCLUDED.tenant_id`,
         w.id, tenantId, w.customerId, w.customerName, w.name, w.zone, w.address, w.lat, w.lng, w.ramps, w.contact, w.phone,
       );
     }
@@ -927,11 +1560,11 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
   );
   if (Number(trCountRows[0]?.cnt ?? 0) === 0) {
     const defaultTrailers = [
-      { id: `tr-9901-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 24.9850, lng: 55.0760 },
-      { id: `tr-9902-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'JAFZA South Yard', lat: 24.9642, lng: 55.0915 },
-      { id: `tr-9903-${tenantId.slice(0, 8)}`, plate: 'DXB-TR-9903', type: '45FT_REEFER_CHASSIS', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 25.0080, lng: 55.0640 },
-      { id: `tr-8801-${tenantId.slice(0, 8)}`, plate: 'AUH-TR-8801', type: '20FT_SKELETAL', tons: 34, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Khalifa Port Marshalling Yard', lat: 24.8055, lng: 54.6462 },
-      { id: `tr-7704-${tenantId.slice(0, 8)}`, plate: 'SHJ-TR-7704', type: '40FT_LOWBED', tons: 60, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'National Industries Park Yard', lat: 24.9310, lng: 55.0750 },
+      { id: `tr-9901-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9901', type: '40FT_SKELETAL', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 24.9850, lng: 55.0760 },
+      { id: `tr-9902-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9902', type: '40FT_FLATBED', tons: 48, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'JAFZA South Yard', lat: 24.9642, lng: 55.0915 },
+      { id: `tr-9903-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'DXB-TR-9903', type: '45FT_REEFER_CHASSIS', tons: 45, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Jebel Ali Main Yard', lat: 25.0080, lng: 55.0640 },
+      { id: `tr-8801-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'AUH-TR-8801', type: '20FT_SKELETAL', tons: 34, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'Khalifa Port Marshalling Yard', lat: 24.8055, lng: 54.6462 },
+      { id: `tr-7704-${crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 12)}`, plate: 'SHJ-TR-7704', type: '40FT_LOWBED', tons: 60, mStatus: 'AVAILABLE', opStatus: 'EMPTY', cnt: null, loc: 'National Industries Park Yard', lat: 24.9310, lng: 55.0750 },
     ];
     for (const tr of defaultTrailers) {
       await db.$executeRawUnsafe(
@@ -945,45 +1578,8 @@ export async function seedTenantDrayageDefaultsIfNeeded(db: DrayageDbClient, ten
     }
   }
 
-  // Ensure dedicated Heavy Prime Movers / Tractors exist for Drayage logistics
-  const primeMoverCountRows = await db.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-    `SELECT COUNT(*) AS cnt
-       FROM vehicles
-      WHERE tenant_id = $1
-        AND deleted_at IS NULL
-        AND (
-          vehicle_usage = 'LOGISTICS'
-          OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR')
-          OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
-        )`,
-    tenantId,
-  ).catch(() => [{ cnt: 0 }]);
-
-  if (Number(primeMoverCountRows[0]?.cnt ?? 0) === 0) {
-    const tag = tenantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'TRX';
-    const defaultPrimeMovers = [
-      { id: `pm-actros-1-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4011`, make: 'Mercedes-Benz', model: 'Actros 2645 LS Prime Mover (6x4)', year: 2024, lat: 25.0112, lng: 55.0612, fuel: 88, mileage: 42000, nextService: 50000, idleHours: 4.5 },
-      { id: `pm-volvo-2-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4012`, make: 'Volvo', model: 'FH16 540 Globetrotter Tractor (6x4)', year: 2024, lat: 24.9850, lng: 55.0760, fuel: 94, mileage: 38000, nextService: 45000, idleHours: 2.5 },
-      { id: `pm-man-3-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4013`, make: 'MAN', model: 'TGX 33.540 BBS Heavy Hauler (6x4)', year: 2023, lat: 24.9642, lng: 55.0915, fuel: 75, mileage: 65000, nextService: 70000, idleHours: 5.8 },
-      { id: `pm-scania-4-${tenantId.slice(0, 8)}`, plate: `DXB-${tag}-4014`, make: 'Scania', model: 'R500 V8 Heavy Tractor (6x4)', year: 2024, lat: 24.9310, lng: 55.0750, fuel: 68, mileage: 51000, nextService: 60000, idleHours: 1.2 },
-      { id: `pm-actros-5-${tenantId.slice(0, 8)}`, plate: `AUH-${tag}-3021`, make: 'Mercedes-Benz', model: 'Actros 3340 Heavy Prime Mover (6x4)', year: 2023, lat: 24.8055, lng: 54.6462, fuel: 82, mileage: 78000, nextService: 85000, idleHours: 3.0 },
-    ];
-    for (const pm of defaultPrimeMovers) {
-      await db.$executeRawUnsafe(
-        `INSERT INTO vehicles (
-          id, tenant_id, plate_number, license_plate, registration_no,
-          make, model, year, type, vehicle_group, vehicle_usage, status, fuel_type, is_active,
-          current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km,
-          created_at, updated_at
-        )
-        SELECT $1,$2,$3,$3,$3,$4,$5,$6,'PRIME_MOVER','TRUCK','LOGISTICS','AVAILABLE','DIESEL',true,$7,$8,$9,$9,$10,$11,NOW(),NOW() - ($12 || ' hours')::interval
-        WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $2)
-        ON CONFLICT DO NOTHING`,
-        pm.id, tenantId, pm.plate, pm.make, pm.model, pm.year,
-        pm.lat, pm.lng, pm.fuel, pm.mileage, pm.nextService, String(pm.idleHours),
-      ).catch(() => {});
-    }
-  }
+  // Automatic seeding of prime mover vehicles into the shared vehicles table on GET is disabled
+  // to avoid polluting tenant fleet registries or colliding across tenants.
 
   // Automatic seeding of sample drivers (Salim Al Harthi, Rashid Al-Marri, etc.) is disabled.
 
@@ -1136,6 +1732,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     });
   }
 
+  // Automatically erase any chat/broadcast messages older than 12 hours
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+    tenantId,
+  ).catch(() => {});
+
   const cachedMaster = getCachedDrayageMasterData(tenantId);
 
   // Parallelize operational SQL queries (and master queries only when master cache misses)
@@ -1155,6 +1757,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     messageRows,
     ackRows,
     automationConfig,
+    dispatcherUserRows,
+    latestPingRows,
   ] = await Promise.all([
     cachedMaster
       ? Promise.resolve(cachedMaster.terminalRows)
@@ -1198,8 +1802,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               vehicle_group,
               fuel_type,
               COALESCE(fuel_level_pct, fuel_level::int, 85) AS fuel_level_pct,
-              COALESCE(current_lat, 25.0112) AS current_lat,
-              COALESCE(current_lng, 55.0612) AS current_lng,
+              current_lat,
+              current_lng,
               COALESCE(current_mileage, 45000) AS current_mileage,
               COALESCE(next_service_km, 55000) AS next_service_km,
               registration_expiry,
@@ -1208,36 +1812,46 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
               COALESCE(updated_at, NOW() - INTERVAL '3.5 hours') AS updated_at
          FROM vehicles
         WHERE deleted_at IS NULL
+          AND tenant_id = $1
           AND (
             vehicle_usage = 'LOGISTICS'
-            OR (
-              tenant_id = $1
-              AND (
-                type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
-                OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
-              )
-            )
+            OR type IN ('PRIME_MOVER', 'HEAVY_TRUCK', 'TRACTOR', 'TRUCK')
+            OR vehicle_group IN ('TRUCK', 'HEAVY_VEHICLE', 'PRIME_MOVER')
           )
         ORDER BY CASE WHEN status = 'AVAILABLE' THEN 0 ELSE 1 END, plate_number ASC
         LIMIT 60`,
       tenantId,
     ).catch(() => []),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT id,
-              employee_id,
-              first_name,
-              last_name,
-              name,
-              contact_number AS phone,
-              license_number,
-              license_expiry,
-              COALESCE(status, 'ACTIVE') AS status,
-              COALESCE(driver_type, 'LOGISTICS') AS assignment_type,
-              assigned_vehicle_id
-         FROM drivers
-        WHERE deleted_at IS NULL
-          AND (tenant_id = $1 OR driver_type = 'LOGISTICS')
-        ORDER BY CASE WHEN driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, first_name ASC NULLS LAST
+      `SELECT d.id,
+              COALESCE(
+                NULLIF(TRIM(d.employee_id), ''),
+                (
+                  SELECT NULLIF(TRIM(u."employeeId"), '')
+                    FROM "User" u
+                   WHERE u.id = d.id::text
+                      OR u.id = d.user_id
+                      OR (u.email IS NOT NULL AND d.email IS NOT NULL AND LOWER(u.email) = LOWER(d.email))
+                      OR LOWER(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", '')))) =
+                         LOWER(TRIM(COALESCE(NULLIF(TRIM(CONCAT(COALESCE(d.first_name, ''), ' ', COALESCE(d.last_name, ''))), ''), d.name, '')))
+                   LIMIT 1
+                ),
+                NULLIF(TRIM(d.dallas_id), ''),
+                NULLIF(TRIM(d.license_number), '')
+              ) AS employee_id,
+              d.first_name,
+              d.last_name,
+              d.name,
+              d.contact_number AS phone,
+              d.license_number,
+              d.license_expiry,
+              COALESCE(d.status, 'ACTIVE') AS status,
+              COALESCE(d.driver_type, 'LOGISTICS') AS assignment_type,
+              d.assigned_vehicle_id
+         FROM drivers d
+        WHERE d.deleted_at IS NULL
+          AND d.tenant_id = $1
+        ORDER BY CASE WHEN d.driver_type = 'LOGISTICS' THEN 0 ELSE 1 END, d.first_name ASC NULLS LAST
         LIMIT 60`,
       tenantId,
     ).catch(() => []),
@@ -1264,11 +1878,11 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
           tenantId,
         ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_status_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 200`,
+      `SELECT * FROM logistics_drayage_status_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 600`,
       tenantId,
     ),
     db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT * FROM logistics_drayage_messages WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 200`,
+      `SELECT * FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '12 hours' ORDER BY created_at ASC LIMIT 200`,
       tenantId,
     ),
     db.$queryRawUnsafe<Array<{ alert_key: string; acknowledged: boolean }>>(
@@ -1278,6 +1892,37 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     cachedMaster
       ? Promise.resolve(cachedMaster.automationConfig)
       : getTenantAutomationConfig(db, tenantId),
+    db.$queryRawUnsafe<Array<{ username: string | null; email: string | null }>>(
+      `SELECT u.username, u.email
+         FROM "User" u
+         JOIN user_tenants ut ON ut.user_id = u.id AND ut.tenant_id = $1
+         LEFT JOIN roles r ON r.id = ut.role_id
+        WHERE u.is_active = TRUE
+          AND UPPER(COALESCE(u."userType", '')) != 'DRIVER'
+          AND UPPER(COALESCE(r.code, '')) != 'DRIVER'
+        ORDER BY CASE
+          WHEN UPPER(COALESCE(r.code, '')) LIKE '%DISPATCH%' OR LOWER(COALESCE(u.username, '')) LIKE '%dispatch%' THEN 0
+          ELSE 1
+        END, u.username ASC
+        LIMIT 10`,
+      tenantId,
+    ).catch(() => []),
+    db.$queryRawUnsafe<Array<{ vehicle_id: string; latitude: number; longitude: number; speed_kmh: number | null; occurred_at: Date | string | null }>>(
+      `SELECT DISTINCT ON (vehicle_id) vehicle_id, latitude, longitude, speed_kmh, occurred_at
+         FROM fleet.bus_gps_pings
+        WHERE tenant_id = $1
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND NOT (ABS(latitude - 25.2048) < 0.0005 AND ABS(longitude - 55.2708) < 0.0005)
+          AND NOT (
+            COALESCE(source, '') = 'DRIVER_APP'
+            AND COALESCE(speed_kmh, 0) = 0
+            AND COALESCE(heading_deg, 0) = 0
+            AND EXTRACT(SECOND FROM occurred_at) = 0
+          )
+        ORDER BY vehicle_id, occurred_at DESC`,
+      tenantId,
+    ).catch(() => []),
   ]);
 
   if (!cachedMaster) {
@@ -1378,14 +2023,46 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   // 4. Jobs
-  const jobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => ({
+  const mappedJobs: DrayageJob[] = jobRows.map((r: Record<string, unknown>) => {
+    const rawStatusStr = String(r.status ?? 'PENDING').trim();
+    const rawStatusUpper = rawStatusStr.toUpperCase();
+    const rawPlacement = r.placement_location ? (String(r.placement_location) as 'RAMP' | 'YARD') : null;
+    const rawShipmentType = String(r.shipment_type) === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+    let normalizedJobStatus = ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(rawStatusUpper)
+      ? 'COMPLETED'
+      : rawStatusStr;
+    if (rawStatusUpper === 'FCL_REASSIGN' || rawStatusUpper === 'MT_REASSIGN') {
+      normalizedJobStatus = resolveDirectionalReassignStatus({
+        originLocation: rawPlacement === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: rawShipmentType,
+      });
+    } else if (rawStatusUpper === 'MT_REASSIGN TO YARD' || rawStatusUpper === 'MT_REASSIGN_TO_YARD') {
+      normalizedJobStatus = 'MT_Reassign to Yard';
+    } else if (rawStatusUpper === 'FCL_REASSIGN TO YARD' || rawStatusUpper === 'FCL_REASSIGN_TO_YARD') {
+      normalizedJobStatus = 'FCL_Reassign to Yard';
+    } else if (rawStatusUpper === 'FCL_REASSIGN TO RAMP' || rawStatusUpper === 'FCL_REASSIGN_TO_RAMP') {
+      normalizedJobStatus = 'FCL_Reassign to Ramp';
+    } else if (rawStatusUpper === 'MT_REASSIGN TO RAMP' || rawStatusUpper === 'MT_REASSIGN_TO_RAMP') {
+      normalizedJobStatus = 'MT_Reassign to Ramp';
+    }
+    if (normalizedJobStatus !== rawStatusStr) {
+      pendingSyncWrites.push(
+        db.$executeRawUnsafe(
+          `UPDATE logistics_drayage_jobs SET status = $3, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          String(r.id),
+          String(r.tenant_id),
+          normalizedJobStatus,
+        ).catch(() => {}),
+      );
+    }
+    return {
     id: String(r.id),
     tenantId: String(r.tenant_id),
     jobCode: String(r.job_code),
     jobPhase: (String(r.job_phase) === 'L2' ? 'L2' : 'L1'),
     parentJobId: r.parent_job_id ? String(r.parent_job_id) : null,
     shipmentType: (String(r.shipment_type) === 'EXPORT' ? 'EXPORT' : 'IMPORT'),
-    status: String(r.status),
+    status: normalizedJobStatus,
     priority: (['STANDARD', 'HIGH', 'URGENT'].includes(String(r.priority)) ? String(r.priority) : 'STANDARD') as DrayageJob['priority'],
     customerId: r.customer_id ? String(r.customer_id) : null,
     customerName: String(r.customer_name),
@@ -1393,6 +2070,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     warehouseName: String(r.warehouse_name),
     terminalId: r.terminal_id ? String(r.terminal_id) : null,
     terminalName: String(r.terminal_name),
+    returnTerminalId: r.return_terminal_id ? String(r.return_terminal_id) : (r.terminal_id ? String(r.terminal_id) : null),
+    returnTerminalName: r.return_terminal_name ? String(r.return_terminal_name) : String(r.terminal_name),
+    originTerminalId: r.terminal_id ? String(r.terminal_id) : null,
+    originTerminalName: String(r.terminal_name),
     containerId: r.container_id ? String(r.container_id) : null,
     containerNumber: String(r.container_number),
     containerSize: String(r.container_size ?? '40HC'),
@@ -1435,7 +2116,42 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : (r.token_number ? 'BOOKED' : 'PENDING'),
     inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
     doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
-  }));
+    };
+  });
+
+  // Deduplicate any race-condition duplicate jobs sharing the same (jobPhase, jobCode)
+  const jobsByPhaseCode = new Map<string, DrayageJob>();
+  const duplicateJobIdsToDelete: string[] = [];
+  const scoreJobProgress = (j: DrayageJob): number => {
+    const stage = getDrayageOperationalStageIndex(j.status, j.trailerDetached);
+    const hasDriverOrVehicle = Boolean(j.assignedDriverId || j.assignedVehicleId);
+    const nonPending = j.status.toUpperCase() !== 'PENDING';
+    return stage * 100 + (nonPending ? 20 : 0) + (hasDriverOrVehicle ? 10 : 0);
+  };
+  for (const job of mappedJobs) {
+    const key = `${job.jobPhase}:${job.jobCode.trim().toUpperCase()}`;
+    const existing = jobsByPhaseCode.get(key);
+    if (!existing) {
+      jobsByPhaseCode.set(key, job);
+      continue;
+    }
+    if (scoreJobProgress(job) > scoreJobProgress(existing)) {
+      duplicateJobIdsToDelete.push(existing.id);
+      jobsByPhaseCode.set(key, job);
+    } else {
+      duplicateJobIdsToDelete.push(job.id);
+    }
+  }
+  for (const dupId of duplicateJobIdsToDelete) {
+    pendingSyncWrites.push(
+      db.$executeRawUnsafe(
+        `DELETE FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2`,
+        dupId,
+        tenantId,
+      ).catch(() => {}),
+    );
+  }
+  const jobs: DrayageJob[] = Array.from(jobsByPhaseCode.values());
 
   // 5. Containers + Demurrage Calculation
   const terminalMap = new Map(terminals.map(t => [t.id, t]));
@@ -1465,6 +2181,8 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       customerName: String(r.customer_name),
       terminalId: r.terminal_id ? String(r.terminal_id) : null,
       terminalName: String(r.terminal_name),
+      returnTerminalId: r.return_terminal_id ? String(r.return_terminal_id) : (r.terminal_id ? String(r.terminal_id) : null),
+      returnTerminalName: r.return_terminal_name ? String(r.return_terminal_name) : String(r.terminal_name),
       warehouseId: r.warehouse_id ? String(r.warehouse_id) : null,
       warehouseName: String(r.warehouse_name),
       doExpiryDate: r.do_expiry_date ? new Date(String(r.do_expiry_date)).toISOString() : null,
@@ -1505,12 +2223,23 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     'CONTAINER_DETACHED',
     'REASSIGN_TRAILER_DETACHED',
     'READY_FOR_PICKUP',
+    'CONTAINER_OFFLOADED',
+    'FCL_REASSIGN',
+    'MT_REASSIGN',
+    'MT_REASSIGN TO YARD',
+    'FCL_REASSIGN TO YARD',
+    'FCL_REASSIGN TO RAMP',
+    'MT_REASSIGN TO RAMP',
     'CONTAINER_DROPPED',
+    'CONTAINER_DELIVERED',
     'PENDING',
     'CANCELLED',
   ]);
   for (const j of jobs) {
-    const isDriverLegActive = !finishedDriverLegStatuses.has(j.status) && !j.trailerDetached;
+    const isDriverLegActive =
+      !finishedDriverLegStatuses.has((j.status || '').toUpperCase()) &&
+      !isDrayageReassignStatus(j.status) &&
+      !j.trailerDetached;
     if (j.assignedVehicleId) {
       tripsCountByVehicle.set(j.assignedVehicleId, (tripsCountByVehicle.get(j.assignedVehicleId) || 0) + 1);
       if (isDriverLegActive) {
@@ -1542,12 +2271,84 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       driverIdByVehicleId.set(vId, dId);
     }
   }
+  const isRealGpsCoord = (lat: number | null | undefined, lng: number | null | undefined): lat is number => {
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return false;
+    if (lat === 0 && lng === 0) return false;
+    if (Math.abs(lat - 25.0112) < 0.0004 && (Math.abs(lng - 55.0612) < 0.0004 || Math.abs(lng - 55.0617) < 0.0004)) return false;
+    if (Math.abs(lat - 25.2048) < 0.0004 && Math.abs(lng - 55.2708) < 0.0004) return false;
+    if (Math.abs(lat - 24.9642) < 0.0004 && Math.abs(lng - 55.0915) < 0.0004) return false;
+    if (Math.abs(lat - 24.9850) < 0.0004 && Math.abs(lng - 55.0760) < 0.0004) return false;
+    return true;
+  };
+
+  const latestPingByVehicleId = new Map<
+    string,
+    { lat: number; lng: number; speedKmh: number; occurredAt: Date | null; isRecent: boolean }
+  >();
+  const fifteenMinsAgoMs = Date.now() - 15 * 60 * 1000;
+  for (const p of latestPingRows) {
+    const vId = String(p.vehicle_id || '');
+    const pLat = Number(p.latitude);
+    const pLng = Number(p.longitude);
+    const occDate = p.occurred_at ? new Date(p.occurred_at) : null;
+    const isRecent = Boolean(occDate && !isNaN(occDate.getTime()) && occDate.getTime() >= fifteenMinsAgoMs);
+    if (vId && isRealGpsCoord(pLat, pLng)) {
+      latestPingByVehicleId.set(vId, {
+        lat: pLat,
+        lng: pLng,
+        speedKmh: p.speed_kmh != null ? Number(p.speed_kmh) : 0,
+        occurredAt: occDate,
+        isRecent,
+      });
+    }
+  }
+
+  const liveVehicleCoordsById = new Map<string, { lat: number; lng: number }>();
   for (const v of rawVehicles) {
     const vId = String(v.id);
     if (v.assigned_driver_id) {
       const dId = String(v.assigned_driver_id);
       driverIdByVehicleId.set(vId, dId);
       vehicleIdByDriverId.set(dId, vId);
+    }
+    const vLat = v.current_lat != null ? Number(v.current_lat) : NaN;
+    const vLng = v.current_lng != null ? Number(v.current_lng) : NaN;
+    if (isRealGpsCoord(vLat, vLng)) {
+      liveVehicleCoordsById.set(vId, { lat: vLat, lng: vLng });
+    } else {
+      const pingCoords = latestPingByVehicleId.get(vId);
+      if (pingCoords) {
+        liveVehicleCoordsById.set(vId, pingCoords);
+      } else {
+        const loggedInDrvId = driverIdByVehicleId.get(vId);
+        const recentJobWithCoords = jobs.find(
+          (j) =>
+            (j.assignedVehicleId === vId || (loggedInDrvId && j.assignedDriverId === loggedInDrvId)) &&
+            isRealGpsCoord(j.currentLat, j.currentLng),
+        );
+        if (recentJobWithCoords && recentJobWithCoords.currentLat != null && recentJobWithCoords.currentLng != null) {
+          liveVehicleCoordsById.set(vId, {
+            lat: recentJobWithCoords.currentLat,
+            lng: recentJobWithCoords.currentLng,
+          });
+        }
+      }
+    }
+  }
+
+  // Ensure any active/assigned job whose vehicle has live login/1-min GPS telemetry inherits the live coordinates
+  for (const j of jobs) {
+    const isDriverLegActive =
+      !finishedDriverLegStatuses.has((j.status || '').toUpperCase()) &&
+      !isDrayageReassignStatus(j.status) &&
+      !j.trailerDetached;
+    if (!isDriverLegActive) continue;
+    const vehId = j.assignedVehicleId || (j.assignedDriverId ? vehicleIdByDriverId.get(j.assignedDriverId) : undefined);
+    const vehCoords = vehId ? liveVehicleCoordsById.get(vehId) : undefined;
+    if (!vehCoords) continue;
+    if (!isRealGpsCoord(j.currentLat, j.currentLng)) {
+      j.currentLat = vehCoords.lat;
+      j.currentLng = vehCoords.lng;
     }
   }
 
@@ -1560,6 +2361,18 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (loggedInDriverId ? driverNameById.get(loggedInDriverId) ?? null : null) ??
       activeJob?.assignedDriverName ??
       null;
+    const resolvedCoords =
+      liveVehicleCoordsById.get(id) ??
+      (activeJob && isRealGpsCoord(activeJob.currentLat, activeJob.currentLng)
+        ? { lat: activeJob.currentLat!, lng: activeJob.currentLng! }
+        : null);
+    const latestVehiclePing = latestPingByVehicleId.get(id);
+    const isDriverLoggedIn = Boolean(latestVehiclePing?.isRecent);
+    const gpsStatus: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' = isDriverLoggedIn
+      ? (latestVehiclePing?.speedKmh ?? 0) >= 3.5
+        ? 'MOVING'
+        : 'IDLE'
+      : 'SWITCHED_OFF';
     return {
       id,
       plateNumber: String(v.plate_number),
@@ -1578,9 +2391,19 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       assignedDriverId: resolvedDriverId,
       assignedDriverName: resolvedDriverName,
       activeJobCode: activeJob?.jobCode ?? null,
-      lat: activeJob?.currentLat ?? (v.current_lat != null ? Number(v.current_lat) : (25.0080 + (idx % 5) * 0.008)),
-      lng: activeJob?.currentLng ?? (v.current_lng != null ? Number(v.current_lng) : (55.0640 + (idx % 5) * 0.009)),
-      updatedAt: v.updated_at instanceof Date ? v.updated_at.toISOString() : (typeof v.updated_at === 'string' ? v.updated_at : null),
+      lat: resolvedCoords ? resolvedCoords.lat : null,
+      lng: resolvedCoords ? resolvedCoords.lng : null,
+      hasLiveGps: Boolean(resolvedCoords && isDriverLoggedIn),
+      isDriverLoggedIn,
+      gpsStatus,
+      updatedAt:
+        latestVehiclePing?.occurredAt instanceof Date && !isNaN(latestVehiclePing.occurredAt.getTime())
+          ? latestVehiclePing.occurredAt.toISOString()
+          : v.updated_at instanceof Date
+            ? v.updated_at.toISOString()
+            : typeof v.updated_at === 'string'
+              ? v.updated_at
+              : null,
       assignedTripsCount: tripsCountByVehicle.get(id) || 0,
     };
   });
@@ -1720,18 +2543,393 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
   }
 
-  const statusLogs: DrayageStatusLog[] = statusLogRows
-    .filter((l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG')
-    .map((l: Record<string, unknown>) => ({
-      id: String(l.id),
-      tenantId: String(l.tenant_id),
-      jobId: String(l.job_id),
-      jobCode: String(l.job_code),
-      status: String(l.status),
-      notes: String(l.notes ?? ''),
-      actor: String(l.actor ?? 'Dispatch Console'),
-      timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
-    }));
+  const defaultDispatcherUsername =
+    dispatcherUserRows.find((u) => u.username && String(u.username).trim())?.username?.trim() ||
+    dispatcherUserRows.find((u) => u.email && String(u.email).trim())?.email?.split('@')[0]?.trim() ||
+    'dispatcher';
+
+  const jobByIdOrCode = new Map<string, DrayageJob>();
+  for (const j of jobs) {
+    jobByIdOrCode.set(j.id, j);
+    if (j.jobCode) jobByIdOrCode.set(j.jobCode, j);
+  }
+  const driverById = new Map<string, MappedFleetDriver>();
+  const driverByLowerName = new Map<string, MappedFleetDriver>();
+  for (const d of drivers) {
+    driverById.set(d.id, d);
+    if (d.fullName) driverByLowerName.set(d.fullName.trim().toLowerCase(), d);
+  }
+
+  const DRIVER_STAGE_STATUSES = new Set([
+    'ACCEPTED',
+    'CONTAINER_PICKED',
+    'TRAILER_ATTACHED',
+    'UNDER_INSPECTION',
+    'EN_ROUTE_WAREHOUSE',
+    'EN_ROUTE_TERMINAL',
+    'IN_TRANSIT',
+    'PLACED_AT_RAMP',
+    'PLACED_AT_YARD',
+    'TRAILER_DETACHED',
+    'CONTAINER_DETACHED',
+    'CONTAINER_DROPPED',
+    'EMPTY_DEPOSITED',
+    'COMPLETED',
+    'EPOD_SIGNED',
+    'POD_SIGNED',
+    'EPOD_CAPTURED',
+    'POD_SIGNED / EPOD_CAPTURED',
+    'DRIVER_EXPENSE_RECEIPT',
+  ]);
+  const DISPATCHER_STAGE_STATUSES = new Set([
+    'ASSIGNED',
+    'RE-ASSIGNED',
+    'L2_ACTIVATED',
+    'ETC_EXTENDED',
+    'BOGIE_DISPATCH_CREATED',
+    'STREET_TURN_EXECUTED',
+    'PCS_TOKEN_BOOKED',
+    'PCS_SLOT_AUTO_REBOOKED',
+    'TRACTOR_SWAPPED_SLOT_RESCUE',
+    'DO_REVALIDATED',
+    'JOB_EDITED',
+    'RETURN_TERMINAL_CHANGED',
+  ]);
+  const SYSTEM_DISPATCHER_ACTORS = new Set([
+    'customer alert engine (whatsapp + email)',
+    'dispatch console',
+    'dispatcher console',
+    'port operations desk',
+    'auto-l2 dispatch engine (t-30m)',
+    'pcs integration gateway',
+    'port slot risk intelligence',
+    'shipping line edo interface',
+    'super admin',
+  ]);
+
+  const nonMilestoneLogRows = statusLogRows.filter(
+    (l: Record<string, unknown>) => String(l.job_id) !== 'SYSTEM_CONFIG',
+  );
+
+  // Extract chronological GPS route path points (from 1-minute GPS_BREADCRUMB pings + tagged milestone logs)
+  // and track the most recent mobile GPS coordinate per job so any untagged milestone log can inherit it.
+  // Also extract any RETURN_TERMINAL_CHANGED overrides so L1 and L2 jobs and Smart Analysis always reflect the redirected return terminal.
+  const routePathByJobKey = new Map<string, DrayageRoutePoint[]>();
+  const latestDriverCoordByJobKey = new Map<string, { lat: number; lng: number }>();
+  const returnTerminalOverrideByJobKey = new Map<
+    string,
+    { returnTerminalId: string | null; returnTerminalName: string; originTerminalName?: string }
+  >();
+
+  const chronologicalRows = [...nonMilestoneLogRows].reverse();
+  for (const l of chronologicalRows) {
+    const jId = String(l.job_id || '');
+    const jCode = String(l.job_code || '');
+    const st = String(l.status || '').trim().toUpperCase();
+    const notesStr = String(l.notes || '');
+    const tsIso = l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString();
+
+    if (st === 'RETURN_TERMINAL_CHANGED') {
+      const parsedReturn = parseReturnTerminalTag(notesStr);
+      if (parsedReturn) {
+        if (jId) returnTerminalOverrideByJobKey.set(jId, parsedReturn);
+        if (jCode) {
+          returnTerminalOverrideByJobKey.set(jCode, parsedReturn);
+          returnTerminalOverrideByJobKey.set(jCode.toUpperCase(), parsedReturn);
+          if (jCode.toUpperCase().includes('-L1-')) {
+            returnTerminalOverrideByJobKey.set(jCode.toUpperCase().replace('-L1-', '-L2-'), parsedReturn);
+          } else if (jCode.toUpperCase().includes('-L2-')) {
+            returnTerminalOverrideByJobKey.set(jCode.toUpperCase().replace('-L2-', '-L1-'), parsedReturn);
+          }
+        }
+      }
+    }
+
+    let ptLat: number | null = null;
+    let ptLng: number | null = null;
+    let ptLoc: string | undefined;
+    let ptSpeed: number | undefined;
+
+    const latMatch = notesStr.match(/\[LAT:(-?\d+(?:\.\d+)?)\]/i);
+    const lngMatch = notesStr.match(/\[LNG:(-?\d+(?:\.\d+)?)\]/i);
+    const spdMatch = notesStr.match(/\[SPD:(-?\d+(?:\.\d+)?)\]/i);
+    const locMatch = notesStr.match(/\[LOC:([^\]]+)\]/i);
+
+    if (latMatch && lngMatch) {
+      ptLat = Number(latMatch[1]);
+      ptLng = Number(lngMatch[1]);
+    }
+    if (spdMatch) {
+      ptSpeed = Number(spdMatch[1]);
+    }
+    if (locMatch && locMatch[1]?.trim()) {
+      ptLoc = locMatch[1].trim();
+      if (ptLat == null || ptLng == null) {
+        const parsed = extractCoordsFromLocationText(ptLoc);
+        if (parsed) {
+          ptLat = parsed.lat;
+          ptLng = parsed.lng;
+        }
+      }
+    }
+
+    if (ptLat != null && ptLng != null && !isNaN(ptLat) && !isNaN(ptLng) && (ptLat !== 0 || ptLng !== 0)) {
+      const isStaticFallback =
+        (Math.abs(ptLat - 25.0112) < 0.0002 && Math.abs(ptLng - 55.0612) < 0.0002) ||
+        (Math.abs(ptLat - 24.9642) < 0.0002 && Math.abs(ptLng - 55.0915) < 0.0002) ||
+        (Math.abs(ptLat - 24.9850) < 0.0002 && Math.abs(ptLng - 55.0760) < 0.0002);
+      if (!isStaticFallback) {
+        if (jId) latestDriverCoordByJobKey.set(jId, { lat: ptLat, lng: ptLng });
+        if (jCode) latestDriverCoordByJobKey.set(jCode, { lat: ptLat, lng: ptLng });
+      }
+
+      const routePt: DrayageRoutePoint = {
+        lat: ptLat,
+        lng: ptLng,
+        timestamp: tsIso,
+        location: ptLoc,
+        status: st === 'GPS_BREADCRUMB' ? 'IN_TRANSIT_PING' : st,
+        ...(ptSpeed !== undefined ? { speedKmh: ptSpeed } : {}),
+      };
+      for (const key of [jId, jCode]) {
+        if (!key) continue;
+        const arr = routePathByJobKey.get(key) || [];
+        const prev = arr[arr.length - 1];
+        if (!prev || Math.abs(prev.lat - ptLat) > 0.00002 || Math.abs(prev.lng - ptLng) > 0.00002) {
+          arr.push(routePt);
+          routePathByJobKey.set(key, arr);
+        }
+      }
+    }
+  }
+
+  for (const j of jobs) {
+    const parentL1 =
+      j.jobPhase === 'L2'
+        ? jobs.find(
+            (cand) =>
+              cand.jobPhase === 'L1' &&
+              (cand.id === j.parentJobId ||
+                cand.jobCode.toUpperCase() === j.jobCode.toUpperCase().replace('-L2-', '-L1-')),
+          )
+        : undefined;
+
+    const rtOverride =
+      returnTerminalOverrideByJobKey.get(j.id) ||
+      returnTerminalOverrideByJobKey.get(j.jobCode) ||
+      returnTerminalOverrideByJobKey.get(j.jobCode.toUpperCase()) ||
+      (j.parentJobId ? returnTerminalOverrideByJobKey.get(j.parentJobId) : undefined);
+
+    if (j.jobPhase === 'L1') {
+      j.originTerminalId = j.terminalId;
+      j.originTerminalName = j.terminalName;
+      if (rtOverride) {
+        j.returnTerminalId = rtOverride.returnTerminalId ?? j.returnTerminalId ?? j.terminalId;
+        j.returnTerminalName = rtOverride.returnTerminalName || j.returnTerminalName || j.terminalName;
+      } else {
+        j.returnTerminalId = j.returnTerminalId || j.terminalId;
+        j.returnTerminalName = j.returnTerminalName || j.terminalName;
+      }
+    } else {
+      j.originTerminalId = parentL1?.terminalId ?? j.originTerminalId ?? j.terminalId;
+      j.originTerminalName =
+        rtOverride?.originTerminalName || parentL1?.terminalName || j.originTerminalName || j.terminalName;
+      const effectiveL2TermId =
+        rtOverride?.returnTerminalId ??
+        parentL1?.returnTerminalId ??
+        j.returnTerminalId ??
+        j.terminalId;
+      const effectiveL2TermName =
+        rtOverride?.returnTerminalName ||
+        parentL1?.returnTerminalName ||
+        j.returnTerminalName ||
+        j.terminalName;
+      j.returnTerminalId = effectiveL2TermId;
+      j.returnTerminalName = effectiveL2TermName;
+      if (effectiveL2TermName && effectiveL2TermName !== j.terminalName) {
+        j.terminalId = effectiveL2TermId;
+        j.terminalName = effectiveL2TermName;
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET terminal_id = $3,
+                    terminal_name = $4,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            effectiveL2TermId,
+            effectiveL2TermName,
+          ).catch(() => {}),
+        );
+      }
+    }
+
+    const path = routePathByJobKey.get(j.id) || routePathByJobKey.get(j.jobCode) || [];
+    if (
+      j.currentLat != null &&
+      j.currentLng != null &&
+      (path.length === 0 ||
+        Math.abs(path[path.length - 1].lat - j.currentLat) > 0.00005 ||
+        Math.abs(path[path.length - 1].lng - j.currentLng) > 0.00005)
+    ) {
+      path.push({
+        lat: j.currentLat,
+        lng: j.currentLng,
+        timestamp: j.updatedAt,
+        location: `${resolveUaePlaceNameFromCoords(j.currentLat, j.currentLng)} (${j.currentLat.toFixed(4)}, ${j.currentLng.toFixed(4)})`,
+        status: j.status,
+      });
+    }
+    j.routePath = path;
+  }
+
+  const directJobStageKeys = new Set<string>();
+  for (const l of nonMilestoneLogRows) {
+    const st = String(l.status ?? '').trim();
+    if (st.toUpperCase() === 'GPS_BREADCRUMB') continue;
+    if (!/^MILESTONE_ALERT_/i.test(st)) {
+      directJobStageKeys.add(`${String(l.job_id)}::${st.toUpperCase()}`);
+      directJobStageKeys.add(`${String(l.job_code)}::${st.toUpperCase()}`);
+    }
+  }
+  const seenMilestoneFallbackKeys = new Set<string>();
+
+  const statusLogs: DrayageStatusLog[] = nonMilestoneLogRows
+    .filter((l: Record<string, unknown>) => {
+      const rawStatus = String(l.status ?? '').trim();
+      if (rawStatus.toUpperCase() === 'GPS_BREADCRUMB') return false;
+      if (!/^MILESTONE_ALERT_/i.test(rawStatus)) return true;
+      const cleanSt = rawStatus.replace(/^MILESTONE_ALERT_/i, '').toUpperCase();
+      const jobKeyId = `${String(l.job_id)}::${cleanSt}`;
+      const jobKeyCode = `${String(l.job_code)}::${cleanSt}`;
+      if (directJobStageKeys.has(jobKeyId) || directJobStageKeys.has(jobKeyCode)) {
+        return false;
+      }
+      if (seenMilestoneFallbackKeys.has(jobKeyId)) {
+        return false;
+      }
+      seenMilestoneFallbackKeys.add(jobKeyId);
+      return true;
+    })
+    .map((l: Record<string, unknown>) => {
+      const jobId = String(l.job_id);
+      const jobCode = String(l.job_code);
+      const rawStatus = String(l.status ?? '').trim();
+      const normalizedStatus = rawStatus.replace(/^MILESTONE_ALERT_/i, '');
+      const rawNotes = String(l.notes ?? '');
+      const cleanedNotes = rawNotes
+        .replace(/\[(?:CUSTOMER|CLIENT|RAMP)\s+Alert[^\]]*\](\s*\+\s*\[Email[^\]]*\])?/gi, '')
+        .replace(/·?\s*Milestone\s+"[^"]*"/gi, '')
+        .replace(/·?\s*ETC\s+[^·]+(?=\s*·|$)/gi, '')
+        .replace(/·?\s*(?:Customer|Client|Ramp)\s+Link[^·]*/gi, '')
+        .replace(/^Execution stage updated to [A-Z0-9_-]+(?:\s*\((?:RAMP|YARD)\))?/i, '')
+        .replace(/^\s*[·\-|]+\s*/, '')
+        .replace(/\s*[·\-|]+\s*$/, '')
+        .trim();
+
+      const rawActor = String(l.actor ?? '').trim();
+      const baseActorName = rawActor.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      const matchedJob = jobByIdOrCode.get(jobId) || jobByIdOrCode.get(jobCode);
+      const matchedTerminal = matchedJob
+        ? terminals.find(
+            (t) =>
+              t.id === matchedJob.terminalId ||
+              t.name.trim().toLowerCase() === matchedJob.terminalName.trim().toLowerCase(),
+          )
+        : undefined;
+      const matchedWarehouse = matchedJob
+        ? warehouses.find(
+            (w) =>
+              w.id === matchedJob.warehouseId ||
+              w.name.trim().toLowerCase() === matchedJob.warehouseName.trim().toLowerCase(),
+          )
+        : undefined;
+
+      const knownDriverCoord =
+        latestDriverCoordByJobKey.get(jobId) ||
+        latestDriverCoordByJobKey.get(jobCode) ||
+        (matchedJob?.currentLat != null && matchedJob?.currentLng != null
+          ? { lat: matchedJob.currentLat, lng: matchedJob.currentLng }
+          : undefined);
+
+      const resolvedLocation = resolveOperationalMilestoneLocation({
+        status: normalizedStatus,
+        rawNotes,
+        lat: knownDriverCoord?.lat,
+        lng: knownDriverCoord?.lng,
+        jobPhase: matchedJob?.jobPhase,
+        jobCode: matchedJob?.jobCode || jobCode,
+        terminalName: matchedJob?.terminalName,
+        warehouseName: matchedJob?.warehouseName,
+        termLat: matchedTerminal?.lat,
+        termLng: matchedTerminal?.lng,
+        whLat: matchedWarehouse?.lat,
+        whLng: matchedWarehouse?.lng,
+      });
+
+      const finalCleanedNotes = cleanedNotes
+        .replace(/\s*·?\s*\[LOC:[^\]]+\]/gi, '')
+        .replace(/\s*·?\s*\[(?:LAT|LNG|SPD):[^\]]+\]/gi, '')
+        .replace(/\s*·?\s*\[RETURN_TERM:[^\]]+\]/gi, '')
+        .replace(/^\s*[·\-|]+\s*/, '')
+        .replace(/\s*[·\-|]+\s*$/, '')
+        .trim();
+
+      const matchedDriver =
+        driverByLowerName.get(baseActorName.toLowerCase()) ||
+        (matchedJob?.assignedDriverId ? driverById.get(matchedJob.assignedDriverId) : undefined) ||
+        (matchedJob?.assignedDriverName
+          ? driverByLowerName.get(matchedJob.assignedDriverName.trim().toLowerCase())
+          : undefined);
+
+      const isDriverAction =
+        !DISPATCHER_STAGE_STATUSES.has(normalizedStatus.toUpperCase()) &&
+        (DRIVER_STAGE_STATUSES.has(normalizedStatus.toUpperCase()) ||
+          driverByLowerName.has(baseActorName.toLowerCase()) ||
+          baseActorName.toLowerCase() === 'driver mobile app' ||
+          Boolean(
+            matchedJob?.assignedDriverName &&
+              baseActorName.toLowerCase() === matchedJob.assignedDriverName.trim().toLowerCase(),
+          ));
+
+      let formattedActor: string;
+      if (isDriverAction) {
+        const driverDisplayName =
+          driverByLowerName.get(baseActorName.toLowerCase())?.fullName ||
+          (baseActorName &&
+          baseActorName.toLowerCase() !== 'driver mobile app' &&
+          !SYSTEM_DISPATCHER_ACTORS.has(baseActorName.toLowerCase())
+            ? baseActorName
+            : matchedDriver?.fullName || matchedJob?.assignedDriverName || 'Assigned Driver');
+        const existingParenMatch = rawActor.match(/\(([^)]+)\)\s*$/);
+        const effectiveEmpId =
+          matchedDriver?.employeeId ||
+          (existingParenMatch && !/portal|desk|whatsapp|email/i.test(existingParenMatch[1])
+            ? existingParenMatch[1].trim()
+            : null) ||
+          matchedDriver?.licenseNumber ||
+          null;
+        formattedActor = effectiveEmpId ? `${driverDisplayName} (${effectiveEmpId})` : driverDisplayName;
+      } else {
+        formattedActor =
+          rawActor && !SYSTEM_DISPATCHER_ACTORS.has(rawActor.toLowerCase())
+            ? rawActor
+            : defaultDispatcherUsername;
+      }
+
+      return {
+        id: String(l.id),
+        tenantId: String(l.tenant_id),
+        jobId,
+        jobCode,
+        status: normalizedStatus,
+        notes: finalCleanedNotes,
+        actor: formattedActor,
+        timestamp: l.created_at ? new Date(String(l.created_at)).toISOString() : new Date().toISOString(),
+        ...(resolvedLocation ? { location: resolvedLocation } : {}),
+      };
+    });
 
   const messages: DrayageDispatchMessage[] = messageRows.map((m: Record<string, unknown>) => ({
     id: String(m.id),
@@ -1746,28 +2944,213 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }));
 
   const ackSet = new Set(ackRows.filter((r: Record<string, unknown>) => r.acknowledged).map((r: Record<string, unknown>) => String(r.alert_key)));
-  const autoL2DispatchEnabled = automationConfig.autoL2DispatchEnabled;
-  const thresholdMins = automationConfig.thresholdMinutes;
 
-  // If tenant has Auto-L2 enabled, check if any L1 job Placed at Ramp is within configured thresholdMinutes of ETC
-  if (autoL2DispatchEnabled) {
+  // Check L1 ETC timers & Yard Placement directional Reassign state:
+  // 1) Based on PLACED_AT_YARD (or detached at YARD): immediately eligible for FCL_Reassign to Ramp (Import) / MT_Reassign to Ramp (Export).
+  // 2) Based on PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP (or detached at RAMP): upon the FIRST alert (<= 15m / T15_WARNING or EXPIRED),
+  //    enabled and shown as MT_Reassign to Yard (Import) / FCL_Reassign to Yard (Export).
+  // 3) Only jobs that have reached READY_FOR_PICKUP (after Reassign to Yard) or CONTAINER_OFFLOADED auto-activate PENDING L2 Empty Return jobs.
+  {
     const nowMs = Date.now();
-    const tThresholdMs = nowMs + thresholdMins * 60 * 1000;
-    const dueT30Jobs = jobs.filter((j) => {
-      if (j.jobPhase !== 'L1' || j.l2Activated || !j.etcTime) return false;
-      const stage = getDrayageOperationalStageIndex(j.status, j.trailerDetached);
-      if (stage < 4 || (j.placementLocation || '').toUpperCase() === 'YARD') return false;
+    for (const j of jobs) {
+      if (j.jobPhase !== 'L1' || j.l2Activated) continue;
+      const st = (j.status || '').toUpperCase();
+      const locUpper = String(j.placementLocation || '').toUpperCase();
+
+      // If detached at initial Yard and not yet in directional status, normalize to FCL_Reassign to Ramp / MT_Reassign to Ramp
+      if (
+        (st === 'PLACED_AT_YARD' && j.trailerDetached) ||
+        ((st === 'TRAILER_DETACHED' || st === 'CONTAINER_DETACHED') && locUpper === 'YARD')
+      ) {
+        const yardReassignStatus = resolveDirectionalReassignStatus({
+          originLocation: 'YARD',
+          shipmentType: j.shipmentType,
+        });
+        j.status = yardReassignStatus;
+        j.placementLocation = 'YARD';
+        j.assignedVehicleId = null;
+        j.assignedVehiclePlate = null;
+        j.assignedDriverId = null;
+        j.assignedDriverName = null;
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $3,
+                    placement_location = 'YARD',
+                    assigned_vehicle_id = NULL,
+                    assigned_vehicle_plate = NULL,
+                    assigned_driver_id = NULL,
+                    assigned_driver_name = NULL,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            yardReassignStatus,
+          ).catch(() => {}),
+        );
+        continue;
+      }
+
+      if (!j.etcTime) continue;
       const etcMs = new Date(j.etcTime).getTime();
-      return !isNaN(etcMs) && etcMs <= tThresholdMs;
+      if (isNaN(etcMs)) continue;
+      const minsLeft = Math.ceil((etcMs - nowMs) / 60000);
+
+      const isRampStatusEligibleForReassign = [
+        'PLACED_AT_RAMP',
+        'REASSIGN_PLACED_AT_RAMP',
+        'TRAILER_DETACHED',
+        'CONTAINER_DETACHED',
+        'REASSIGN_TRAILER_DETACHED',
+      ].includes(st) && locUpper !== 'YARD';
+
+      const isDetachedAtRamp =
+        isRampStatusEligibleForReassign &&
+        (j.trailerDetached || ['TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
+
+      const rampReassignStatus = resolveDirectionalReassignStatus({
+        originLocation: 'RAMP',
+        shipmentType: j.shipmentType,
+      });
+
+      if (minsLeft <= 0 && isRampStatusEligibleForReassign) {
+        j.status = rampReassignStatus;
+        j.placementLocation = 'RAMP';
+        j.etcAlertStatus = 'EXPIRED';
+        j.assignedVehicleId = null;
+        j.assignedVehiclePlate = null;
+        j.assignedDriverId = null;
+        j.assignedDriverName = null;
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $3,
+                    placement_location = 'RAMP',
+                    etc_alert_status = 'EXPIRED',
+                    assigned_vehicle_id = NULL,
+                    assigned_vehicle_plate = NULL,
+                    assigned_driver_id = NULL,
+                    assigned_driver_name = NULL,
+                    updated_at = NOW()
+              WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+            rampReassignStatus,
+          ).catch(() => {}),
+        );
+      } else if (minsLeft > 0 && minsLeft <= 15 && isRampStatusEligibleForReassign) {
+        j.etcAlertStatus = 'T15_WARNING';
+        if (isDetachedAtRamp) {
+          j.status = rampReassignStatus;
+          j.placementLocation = 'RAMP';
+          j.assignedVehicleId = null;
+          j.assignedVehiclePlate = null;
+          j.assignedDriverId = null;
+          j.assignedDriverName = null;
+          pendingSyncWrites.push(
+            db.$executeRawUnsafe(
+              `UPDATE logistics_drayage_jobs
+                  SET status = $3,
+                      placement_location = 'RAMP',
+                      etc_alert_status = 'T15_WARNING',
+                      assigned_vehicle_id = NULL,
+                      assigned_vehicle_plate = NULL,
+                      assigned_driver_id = NULL,
+                      assigned_driver_name = NULL,
+                      updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2`,
+              j.id,
+              tenantId,
+              rampReassignStatus,
+            ).catch(() => {}),
+          );
+        } else {
+          pendingSyncWrites.push(
+            db.$executeRawUnsafe(
+              `UPDATE logistics_drayage_jobs SET etc_alert_status = 'T15_WARNING', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+              j.id,
+              tenantId,
+            ).catch(() => {}),
+          );
+        }
+      } else if (minsLeft <= 0 && j.etcAlertStatus !== 'EXPIRED' && j.etcAlertStatus !== 'ACTIVATED') {
+        j.etcAlertStatus = 'EXPIRED';
+      } else if (minsLeft > 0 && minsLeft <= 15 && j.etcAlertStatus === 'NEW') {
+        j.etcAlertStatus = 'T15_WARNING';
+        pendingSyncWrites.push(
+          db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs SET etc_alert_status = 'T15_WARNING', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+            j.id,
+            tenantId,
+          ).catch(() => {}),
+        );
+      }
+    }
+
+    const dueL1Jobs = jobs.filter((j) => {
+      if (j.jobPhase !== 'L1' || j.l2Activated) return false;
+      const st = (j.status || '').toUpperCase();
+      return st === 'READY_FOR_PICKUP' || st === 'CONTAINER_OFFLOADED';
     });
 
-    if (dueT30Jobs.length > 0) {
-      await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
-        thresholdMinutes: thresholdMins,
-        preAssignTractor: true,
+    if (dueL1Jobs.length > 0) {
+      const actRes = await checkAndAutoActivateExpiredEtcJobs(db, tenantId, {
+        thresholdMinutes: 0,
+        preAssignTractor: false,
       }).catch((err) => {
-        console.error('[getDrayageWorkspaceData] Auto-L2 threshold trigger error:', err);
+        console.error('[getDrayageWorkspaceData] L2 activation trigger error:', err);
+        return { checked: 0, activated: [] };
       });
+      if (actRes && actRes.activated.length > 0) {
+        for (const act of actRes.activated) {
+          const l1InMem = jobs.find((j) => j.jobCode === act.l1JobCode);
+          if (l1InMem) {
+            l1InMem.l2Activated = true;
+            l1InMem.status = 'COMPLETED';
+            l1InMem.etcAlertStatus = 'ACTIVATED';
+            const alreadyInJobs = jobs.some(
+              (j) =>
+                j.id === act.l2JobId ||
+                (j.jobPhase === 'L2' && j.jobCode.toUpperCase() === act.l2JobCode.toUpperCase()),
+            );
+            if (!alreadyInJobs) {
+              const targetReturnTermId = l1InMem.returnTerminalId || l1InMem.terminalId;
+              const targetReturnTermName = l1InMem.returnTerminalName || l1InMem.terminalName;
+              jobs.unshift({
+                ...l1InMem,
+                id: act.l2JobId,
+                jobCode: act.l2JobCode,
+                jobPhase: 'L2',
+                parentJobId: l1InMem.id,
+                status: 'PENDING',
+                priority: 'HIGH',
+                terminalId: targetReturnTermId,
+                terminalName: targetReturnTermName,
+                returnTerminalId: targetReturnTermId,
+                returnTerminalName: targetReturnTermName,
+                originTerminalId: l1InMem.originTerminalId || l1InMem.terminalId,
+                originTerminalName: l1InMem.originTerminalName || l1InMem.terminalName,
+                assignedVehicleId: null,
+                assignedVehiclePlate: null,
+                assignedDriverId: null,
+                assignedDriverName: null,
+                assignedTrailerId: l1InMem.assignedTrailerId,
+                assignedTrailerPlate: l1InMem.assignedTrailerPlate,
+                placementLocation: null,
+                trailerDetached: false,
+                l2Activated: false,
+                etcTime: null,
+                etcAlertStatus: 'NEW',
+                rateAmountAed: 950,
+                driverAllowanceAed: 120,
+                notes: `Auto-generated L2 Empty Container Return from ${l1InMem.jobCode}`,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1790,6 +3173,13 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const linkedCnt =
       (j.containerId ? containerById.get(j.containerId) : undefined) ||
       containerByNumber.get(j.containerNumber.toUpperCase());
+    if (linkedCnt) {
+      j.sealNumber = linkedCnt.sealNumber ?? null;
+      j.dischargeDate = linkedCnt.dischargeDate ?? null;
+      if (linkedCnt.weightKg && linkedCnt.weightKg > 0) {
+        j.cargoWeightKg = linkedCnt.weightKg;
+      }
+    }
     const term =
       (j.terminalId ? terminalMap.get(j.terminalId) : undefined) ||
       terminals.find(t => t.name.toLowerCase() === j.terminalName.toLowerCase());
@@ -1803,7 +3193,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const portFreeDaysAllowed = isReefer ? (term?.freeDaysReefer ?? 3) : (term?.freeDaysDry ?? 5);
     const dischargeMs = linkedCnt?.dischargeDate
       ? new Date(linkedCnt.dischargeDate).getTime()
-      : new Date(j.createdAt || Date.now()).getTime() - (idx % 3 === 0 ? 4.3 : 2.5) * 24 * 60 * 60 * 1000;
+      : new Date(j.createdAt || Date.now()).getTime();
     const portFreeTimeExpiryMs = dischargeMs + portFreeDaysAllowed * 24 * 60 * 60 * 1000;
     const portFreeTimeExpiry = new Date(portFreeTimeExpiryMs).toISOString();
     const portDemurrageHoursRemaining = Math.round(((portFreeTimeExpiryMs - Date.now()) / (1000 * 60 * 60)) * 10) / 10;
@@ -1812,16 +3202,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     // 2. Shipping Line Container Free Days (Detention) Deadline
     const carrier = (j.shippingLine || detectShippingLine(j.containerNumber)).toUpperCase();
     const lineFreeDaysAllowed = isReefer ? 4 : carrier.includes('HAPAG') ? 8 : 7;
-    // If container is detached/at ramp or L2, line detention clock is tighter
-    const isAtCustomerRampOrDetached =
-      j.jobPhase === 'L2' ||
-      j.trailerDetached ||
-      j.placementLocation === 'RAMP' ||
-      ['PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'WAITING_MT_RETURN'].includes((j.status || '').toUpperCase());
-    const lineDetentionExpiryMs = isAtCustomerRampOrDetached
-      ? Math.min(
+    const lineDetentionExpiryMs = j.doExpiryDate
+      ? Math.max(
+          new Date(j.doExpiryDate).getTime(),
           dischargeMs + lineFreeDaysAllowed * 24 * 60 * 60 * 1000,
-          Date.now() + (idx % 2 === 0 ? 16.5 : 22.0) * 60 * 60 * 1000,
         )
       : dischargeMs + lineFreeDaysAllowed * 24 * 60 * 60 * 1000;
     const lineDetentionExpiry = new Date(lineDetentionExpiryMs).toISOString();
@@ -1838,11 +3222,10 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
     const doHoursRemaining = Math.round(((doExpiryMs - Date.now()) / (1000 * 60 * 60)) * 10) / 10;
 
-    const minHoursRemaining = Math.min(
-      portDemurrageHoursRemaining,
-      lineDetentionHoursRemaining,
-      doHoursRemaining,
-    );
+    const minHoursRemaining =
+      j.jobPhase === 'L2'
+        ? Math.min(lineDetentionHoursRemaining, doHoursRemaining)
+        : Math.min(portDemurrageHoursRemaining, lineDetentionHoursRemaining, doHoursRemaining);
 
     let primaryRiskFactor: DrayageRiskRadarInfo['primaryRiskFactor'] = 'SAFE';
     if (minHoursRemaining <= 48) {
@@ -1912,6 +3295,16 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
         acknowledged: ackSet.has(alertKey),
         createdAt: j.updatedAt,
       });
+    } else if (j.priority === 'URGENT' && minHoursRemaining > criticalWindowHrs) {
+      // Restore STANDARD priority if previously auto-escalated when free time / DO expiry still has > 24h remaining
+      j.priority = 'STANDARD';
+      pendingSyncWrites.push(
+        db.$executeRawUnsafe(
+          `UPDATE logistics_drayage_jobs SET priority = 'STANDARD', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          j.id,
+          tenantId,
+        ).catch(() => {}),
+      );
     }
 
     j.riskRadar = {
@@ -1966,7 +3359,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       (j.notes || '').includes('E11/E311 Traffic Delay') ||
       (j.pcsSlotEnd && new Date(j.pcsSlotEnd).getTime() - Date.now() < 35 * 60 * 1000);
     const trafficCondition: DrayagePortSlotPrediction['trafficCondition'] =
-      hasSimulatedCongestion || (idx % 3 === 1 && !isCompleted)
+      hasSimulatedCongestion
         ? 'HEAVY_CONGESTION'
         : distanceToPortKm > 15
         ? 'MODERATE_FLOW'
@@ -2012,12 +3405,12 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     const slotEndIso = new Date(slotEndMs).toISOString();
     const fmtSlot = (ms: number) =>
       new Date(ms).toLocaleTimeString('en-US', {
-        hour: '2-digit',
+        hour: 'numeric',
         minute: '2-digit',
-        hour12: false,
+        hour12: true,
         timeZone: 'Asia/Dubai',
       });
-    const slotWindowLabel = `${fmtSlot(slotStartMs)} - ${fmtSlot(slotEndMs)}`;
+    const slotWindowLabel = `${fmtSlot(slotStartMs)} – ${fmtSlot(slotEndMs)}`;
     const slotBufferMinutes = Math.round((slotEndMs - predictedGateArrivalMs) / 60000);
     const willMissSlot = !isCompleted && Boolean(j.tokenNumber || j.pcsTokenNumber) && slotBufferMinutes < 0;
     const slotRiskStatus: DrayagePortSlotPrediction['slotRiskStatus'] = isCompleted
@@ -2079,19 +3472,19 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     }
 
     // (C) Role-Scoped Tracking Links (Customer, Client, Ramp) & Automated Milestone Alert Config
-    const customerToken = generateDrayageCustomerTrackingToken({
+    const customerToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
       role: 'CUSTOMER',
     });
-    const clientToken = generateDrayageCustomerTrackingToken({
+    const clientToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
       role: 'CLIENT',
     });
-    const rampToken = generateDrayageCustomerTrackingToken({
+    const rampToken = generateDrayageShortTrackingToken({
       tenantId,
       jobCode: j.jobCode,
       containerNumber: j.containerNumber,
@@ -2224,33 +3617,108 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   }
 
   for (const j of jobs) {
-    if (j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP') && !j.l2Activated) {
-      const key = `det-l2-${j.id}`;
-      const hasEtc = Boolean(j.etcTime);
-      const isExpired = hasEtc && new Date(j.etcTime as string).getTime() <= Date.now();
-      alerts.push({
-        id: key,
-        tenantId,
-        type: 'DETACHED_TRAILER',
-        severity: isExpired ? 'URGENT' : 'CRITICAL',
-        title: isExpired
-          ? `Offload ETC Expired: Ready for L2 Empty Return — ${j.containerNumber}`
-          : hasEtc
-          ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
-          : `Detached Chassis Awaiting L2 Empty Return — ${j.containerNumber}`,
-        message: hasEtc
-          ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Offloading completion estimated at ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}. Background worker will trigger Leg 2.`
-          : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Activate L2 Empty Return once destuffing finishes.`,
-        terminalName: j.terminalName,
-        containerId: j.containerId,
-        containerNumber: j.containerNumber,
-        jobId: j.id,
-        jobCode: j.jobCode,
-        driverName: j.assignedDriverName,
-        driverPhone: '+971 55 301 7741',
-        acknowledged: ackSet.has(key),
-        createdAt: j.updatedAt,
+    const st = (j.status || '').toUpperCase();
+    const reassignEval = evaluateDispatcherJobReassignState(j);
+    const hasEtc = Boolean(j.etcTime);
+    const etcMs = hasEtc ? new Date(j.etcTime as string).getTime() : null;
+    const minsRemaining = etcMs !== null && !isNaN(etcMs) ? Math.ceil((etcMs - Date.now()) / 60000) : null;
+    const isExpired =
+      (minsRemaining !== null && minsRemaining <= 0) ||
+      String(j.etcAlertStatus || '').toUpperCase() === 'EXPIRED';
+    const isT15Warning =
+      !isExpired &&
+      ((minsRemaining !== null && minsRemaining > 0 && minsRemaining <= 15) ||
+        String(j.etcAlertStatus || '').toUpperCase() === 'T15_WARNING');
+
+    if (j.jobPhase === 'L1' && !j.l2Activated && st !== 'COMPLETED') {
+      const actionLabel = reassignEval.reassignLabel || resolveDirectionalReassignStatus({
+        originLocation: j.placementLocation === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: j.shipmentType,
       });
+      if (isExpired) {
+        const expKey = `etc-exp-${j.id}`;
+        alerts.push({
+          id: expKey,
+          tenantId,
+          type: 'REASSIGN_ETC_EXPIRED',
+          severity: 'URGENT',
+          title: `🚨 ETC Expired — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Offloading timer expired for ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Dispatcher status enabled as ${actionLabel}.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(expKey),
+          createdAt: j.updatedAt,
+        });
+      } else if (isT15Warning) {
+        const t15Key = `etc-t15-${j.id}`;
+        alerts.push({
+          id: t15Key,
+          tenantId,
+          type: 'REASSIGN_ETC_T15',
+          severity: 'CRITICAL',
+          title: `⏳ First ETC Alert (${minsRemaining ?? 15}m left) — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Container ${j.containerNumber} at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}) reached first alert (${minsRemaining ?? 15}m left). Dispatcher Reassign unlocked as ${actionLabel}.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(t15Key),
+          createdAt: j.updatedAt,
+        });
+      } else if (
+        reassignEval.originLocation === 'YARD' &&
+        reassignEval.canReassign
+      ) {
+        const key = `det-l2-${j.id}`;
+        alerts.push({
+          id: key,
+          tenantId,
+          type: 'DETACHED_TRAILER',
+          severity: 'WARNING',
+          title: `Yard Staged — ${actionLabel}: ${j.jobCode} (${j.containerNumber})`,
+          message: `Container ${j.containerNumber} placed at ${j.warehouseName} (YARD). Ready for Dispatcher ${actionLabel}.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(key),
+          createdAt: j.updatedAt,
+        });
+      } else if (j.trailerDetached || st === 'CONTAINER_DETACHED' || st === 'PLACED_AT_RAMP' || st === 'REASSIGN_PLACED_AT_RAMP') {
+        const key = `det-l2-${j.id}`;
+        alerts.push({
+          id: key,
+          tenantId,
+          type: 'DETACHED_TRAILER',
+          severity: 'WARNING',
+          title: hasEtc
+            ? `Offload In Progress (ETC: ${new Date(j.etcTime as string).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}) — ${j.containerNumber}`
+            : `Detached Chassis at ${j.placementLocation ?? 'RAMP'} — ${j.containerNumber}`,
+          message: hasEtc
+            ? `Container ${j.containerNumber} placed at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). ${actionLabel} will unlock upon first alert (T-15m).`
+            : `Chassis ${j.assignedTrailerPlate ?? 'Skeletal'} is detached at ${j.warehouseName} (${j.placementLocation ?? 'RAMP'}). Set ETC timer or Reassign once ready.`,
+          terminalName: j.terminalName,
+          containerId: j.containerId,
+          containerNumber: j.containerNumber,
+          jobId: j.id,
+          jobCode: j.jobCode,
+          driverName: j.assignedDriverName,
+          driverPhone: '+971 55 301 7741',
+          acknowledged: ackSet.has(key),
+          createdAt: j.updatedAt,
+        });
+      }
     }
   }
 
@@ -2266,22 +3734,46 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const warningContainers = containers.filter(c => c.demurrage.status === 'WARNING');
   const totalDemurrageExposureAed = containers.reduce((sum, c) => sum + c.demurrage.accruedPenaltyAed, 0);
   const totalRevenueAed = jobs.reduce((sum, j) => sum + j.rateAmountAed, 0);
+  const totalAllowancesAed = allowances.reduce((sum, a) => sum + a.totalAmountAed, 0);
   const activeJobsCount = jobs.filter(j => j.status !== 'COMPLETED' && j.status !== 'PENDING').length;
   const pendingDispatchCount = jobs.filter(j => j.status === 'PENDING').length;
   const detachedWaitingL2Count = jobs.filter(j => j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP' || j.status === 'PLACED_AT_YARD') && !j.l2Activated).length;
+
+  const rateCards = [
+    ...clients.map(c => ({
+      id: `rc-client-${c.id}`,
+      scope: 'CLIENT' as const,
+      name: c.name,
+      code: c.code,
+      tripAmountAed: c.defaultTripAmountAed,
+      driverAllowanceAed: c.defaultDriverAllowanceAed,
+    })),
+    ...terminals.map(t => ({
+      id: `rc-terminal-${t.id}`,
+      scope: 'TERMINAL' as const,
+      name: t.name,
+      code: t.code,
+      freeDaysDry: t.freeDaysDry,
+      freeDaysReefer: t.freeDaysReefer,
+    })),
+  ];
 
   return {
     summary: {
       totalJobs: jobs.length,
       activeJobsCount,
+      activeTrips: activeJobsCount,
       pendingDispatchCount,
       detachedWaitingL2Count,
       totalContainers: containers.length,
       overdueContainersCount: overdueContainers.length,
+      etcOverdueContainers: overdueContainers.length,
       warningContainersCount: warningContainers.length,
       safeContainersCount: containers.filter(c => c.demurrage.status === 'SAFE').length,
       totalDemurrageExposureAed,
+      totalDemurrageAed: totalDemurrageExposureAed,
       totalRevenueAed,
+      totalAllowancesAed,
       mappedVehiclesCount: vehicles.length,
       mappedDriversCount: drivers.length,
       availableTrailersCount: trailers.filter(t => t.masterStatus === 'AVAILABLE').length,
@@ -2291,6 +3783,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     automationConfig,
     terminals,
     warehouses,
+    rateCards,
     trailers,
     containers,
     jobs,
@@ -2323,6 +3816,10 @@ export interface CreateDrayageJobBatchInput {
     containerNumber: string;
     size: string;
     containerType: string;
+    warehouseId?: string | null;
+    warehouseName?: string | null;
+    rateAmountAed?: number;
+    driverAllowanceAed?: number;
     doExpiryDate?: string | null;
     dischargeDate?: string | null;
     sealNumber?: string | null;
@@ -2361,7 +3858,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
 
   const safeCustomerName = String(input.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper';
   const safeTerminalName = String(input.terminalName || 'Jebel Ali Port - Terminal 1').trim() || 'Jebel Ali Port - Terminal 1';
-  const safeWarehouseName = String(input.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub';
+  const defaultWarehouseName = String(input.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub';
   const safeShipmentType = input.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT';
   const safePriority = String(input.priority || 'STANDARD').trim() || 'STANDARD';
 
@@ -2383,8 +3880,17 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
     const safeSize = String(item.size || '40HC').trim() || '40HC';
     const safeCntType = String(item.containerType || 'DRY').trim() || 'DRY';
     const safeWeightKg = safeFinite(item.weightKg, 22000) > 0 ? safeFinite(item.weightKg, 22000) : 22000;
-    const safeRateAed = safeFinite(input.rateAmountAed, safeCntType === 'REEFER' ? 2100 : 1550);
-    const safeDriverAllowAed = safeFinite(input.driverAllowanceAed, 150);
+    const itemWarehouseId = item.warehouseId || input.warehouseId || null;
+    const itemWarehouseName =
+      String(item.warehouseName || defaultWarehouseName).trim() || defaultWarehouseName;
+    const safeRateAed = safeFinite(
+      item.rateAmountAed ?? input.rateAmountAed,
+      safeCntType === 'REEFER' ? 2100 : 1550,
+    );
+    const safeDriverAllowAed = safeFinite(
+      item.driverAllowanceAed ?? input.driverAllowanceAed,
+      150,
+    );
 
     if (existingCnt[0]?.id) {
       await db.$executeRawUnsafe(
@@ -2418,8 +3924,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         safeCustomerName,
         input.terminalId ?? null,
         safeTerminalName,
-        input.warehouseId ?? null,
-        safeWarehouseName,
+        itemWarehouseId,
+        itemWarehouseName,
         doExpiryIso,
         dischargeIso,
         item.sealNumber ? String(item.sealNumber).trim() : null,
@@ -2451,8 +3957,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         safeCustomerName,
         input.terminalId ?? null,
         safeTerminalName,
-        input.warehouseId ?? null,
-        safeWarehouseName,
+        itemWarehouseId,
+        itemWarehouseName,
         doExpiryIso,
         dischargeIso,
         item.sealNumber && String(item.sealNumber).trim()
@@ -2486,8 +3992,8 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
       safePriority,
       input.customerId ?? null,
       safeCustomerName,
-      input.warehouseId ?? null,
-      safeWarehouseName,
+      itemWarehouseId,
+      itemWarehouseName,
       input.terminalId ?? null,
       safeTerminalName,
       containerId,
@@ -2513,6 +4019,397 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
   return { createdCount: createdJobs.length, jobCodes: createdJobs };
 }
 
+export interface UpdateDrayageJobInput {
+  tenantId: string;
+  jobId: string;
+  containerNumber?: string;
+  containerSize?: string;
+  containerType?: string;
+  sealNumber?: string | null;
+  weightKg?: number | null;
+  shipmentType?: 'IMPORT' | 'EXPORT';
+  priority?: 'STANDARD' | 'HIGH' | 'URGENT';
+  customerId?: string | null;
+  customerName?: string;
+  terminalId?: string | null;
+  terminalName?: string;
+  warehouseId?: string | null;
+  warehouseName?: string;
+  doExpiryDate?: string | null;
+  dischargeDate?: string | null;
+  tokenNumber?: string | null;
+  rateAmountAed?: number;
+  driverAllowanceAed?: number;
+  customsInspection?: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
+  notes?: string | null;
+  actor?: string;
+}
+
+export async function updateDrayageJobDetails(
+  db: DrayageDbClient,
+  input: UpdateDrayageJobInput,
+) {
+  await ensureDrayageSchema(db);
+
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    input.jobId,
+    input.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const safeIsoOrNull = (val: unknown): string | null => {
+    if (!val || typeof val !== 'string' || !val.trim()) return null;
+    const d = new Date(val.trim());
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
+  const oldContainerNumber = String(job.container_number ?? '').trim().toUpperCase();
+  const nextContainerNumber =
+    input.containerNumber && String(input.containerNumber).trim()
+      ? String(input.containerNumber).trim().toUpperCase()
+      : oldContainerNumber;
+  const nextContainerSize =
+    input.containerSize && String(input.containerSize).trim()
+      ? String(input.containerSize).trim().toUpperCase()
+      : String(job.container_size ?? '40HC');
+  const nextContainerType =
+    input.containerType && String(input.containerType).trim()
+      ? String(input.containerType).trim().toUpperCase()
+      : String(job.container_type ?? 'DRY');
+  const nextShipmentType =
+    input.shipmentType === 'EXPORT' || input.shipmentType === 'IMPORT'
+      ? input.shipmentType
+      : String(job.shipment_type) === 'EXPORT'
+      ? 'EXPORT'
+      : 'IMPORT';
+  const nextPriority =
+    input.priority && ['STANDARD', 'HIGH', 'URGENT'].includes(String(input.priority).toUpperCase())
+      ? (String(input.priority).toUpperCase() as 'STANDARD' | 'HIGH' | 'URGENT')
+      : (String(job.priority ?? 'STANDARD') as 'STANDARD' | 'HIGH' | 'URGENT');
+
+  const nextCustomerId =
+    input.customerId !== undefined ? (input.customerId || null) : (job.customer_id ? String(job.customer_id) : null);
+  const nextCustomerName =
+    input.customerName && String(input.customerName).trim()
+      ? String(input.customerName).trim()
+      : String(job.customer_name ?? 'Enterprise Shipper');
+
+  const nextTerminalId =
+    input.terminalId !== undefined ? (input.terminalId || null) : (job.terminal_id ? String(job.terminal_id) : null);
+  const nextTerminalName =
+    input.terminalName && String(input.terminalName).trim()
+      ? String(input.terminalName).trim()
+      : String(job.terminal_name ?? 'DPW-Jebel Ali-T1');
+
+  const nextWarehouseId =
+    input.warehouseId !== undefined ? (input.warehouseId || null) : (job.warehouse_id ? String(job.warehouse_id) : null);
+  const nextWarehouseName =
+    input.warehouseName && String(input.warehouseName).trim()
+      ? String(input.warehouseName).trim()
+      : String(job.warehouse_name ?? 'Consignee Warehouse');
+
+  const nextDoExpiryIso =
+    input.doExpiryDate !== undefined
+      ? safeIsoOrNull(input.doExpiryDate)
+      : job.do_expiry_date
+      ? new Date(String(job.do_expiry_date)).toISOString()
+      : null;
+
+  const nextDischargeIso =
+    input.dischargeDate !== undefined ? safeIsoOrNull(input.dischargeDate) : null;
+
+  const nextTokenNumber =
+    input.tokenNumber !== undefined
+      ? (input.tokenNumber && String(input.tokenNumber).trim()
+          ? String(input.tokenNumber).trim().toUpperCase()
+          : null)
+      : job.token_number
+      ? String(job.token_number)
+      : null;
+
+  const nextRateAed =
+    input.rateAmountAed !== undefined && Number.isFinite(Number(input.rateAmountAed)) && Number(input.rateAmountAed) >= 0
+      ? Number(input.rateAmountAed)
+      : Number(job.rate_amount_aed ?? 1550);
+
+  const nextDriverAllowanceAed =
+    input.driverAllowanceAed !== undefined &&
+    Number.isFinite(Number(input.driverAllowanceAed)) &&
+    Number(input.driverAllowanceAed) >= 0
+      ? Number(input.driverAllowanceAed)
+      : Number(job.driver_allowance_aed ?? 150);
+
+  const nextWeightKg =
+    input.weightKg !== undefined && Number.isFinite(Number(input.weightKg)) && Number(input.weightKg) > 0
+      ? Number(input.weightKg)
+      : Number(job.cargo_weight_kg ?? 22000);
+
+  const nextSealNumber =
+    input.sealNumber !== undefined
+      ? (input.sealNumber && String(input.sealNumber).trim() ? String(input.sealNumber).trim() : null)
+      : undefined;
+
+  const nextCustomsInspection =
+    input.customsInspection !== undefined ? Boolean(input.customsInspection) : Boolean(job.customs_inspection);
+  const nextMunicipalityInspection =
+    input.municipalityInspection !== undefined
+      ? Boolean(input.municipalityInspection)
+      : Boolean(job.municipality_inspection);
+  const nextCpipInspection =
+    input.cpipInspection !== undefined ? Boolean(input.cpipInspection) : Boolean(job.cpip_inspection);
+  const nextMercInspection =
+    input.mercInspection !== undefined ? Boolean(input.mercInspection) : Boolean(job.merc_inspection);
+  const nextBoxcareInspection =
+    input.boxcareInspection !== undefined ? Boolean(input.boxcareInspection) : Boolean(job.boxcare_inspection);
+
+  const nextNotes =
+    input.notes !== undefined
+      ? (input.notes && String(input.notes).trim() ? String(input.notes).trim() : null)
+      : job.notes
+      ? String(job.notes)
+      : null;
+
+  const nextShippingLine = detectShippingLine(nextContainerNumber);
+
+  // Build concise summary of changes for audit log
+  const changes: string[] = [];
+  if (nextContainerNumber !== oldContainerNumber) {
+    changes.push(`Container: ${oldContainerNumber} → ${nextContainerNumber}`);
+  }
+  if (nextContainerSize !== String(job.container_size ?? '') || nextContainerType !== String(job.container_type ?? '')) {
+    changes.push(`Spec: ${nextContainerSize} ${nextContainerType}`);
+  }
+  if (nextCustomerName !== String(job.customer_name ?? '')) {
+    changes.push(`Customer: ${nextCustomerName}`);
+  }
+  if (nextTerminalName !== String(job.terminal_name ?? '')) {
+    changes.push(`Terminal: ${nextTerminalName}`);
+  }
+  if (nextWarehouseName !== String(job.warehouse_name ?? '')) {
+    changes.push(`Consignee: ${nextWarehouseName}`);
+  }
+  if (nextRateAed !== Number(job.rate_amount_aed ?? 0)) {
+    changes.push(`Rate: AED ${nextRateAed}`);
+  }
+  if (nextDriverAllowanceAed !== Number(job.driver_allowance_aed ?? 0)) {
+    changes.push(`Allowance: AED ${nextDriverAllowanceAed}`);
+  }
+  if (nextPriority !== String(job.priority ?? '')) {
+    changes.push(`Priority: ${nextPriority}`);
+  }
+
+  // 1. Update main job row
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET container_number = $3,
+            container_size = $4,
+            container_type = $5,
+            shipment_type = $6,
+            priority = $7,
+            customer_id = $8,
+            customer_name = $9,
+            terminal_id = $10,
+            terminal_name = $11,
+            warehouse_id = $12,
+            warehouse_name = $13,
+            do_expiry_date = $14::timestamptz,
+            token_number = $15,
+            pcs_token_number = COALESCE($15, pcs_token_number),
+            rate_amount_aed = $16,
+            driver_allowance_aed = $17,
+            cargo_weight_kg = $18,
+            shipping_line = $19,
+            customs_inspection = $20,
+            municipality_inspection = $21,
+            cpip_inspection = $22,
+            merc_inspection = $23,
+            boxcare_inspection = $24,
+            notes = $25,
+            updated_at = NOW()
+      WHERE id = $1 AND tenant_id = $2`,
+    input.jobId,
+    input.tenantId,
+    nextContainerNumber,
+    nextContainerSize,
+    nextContainerType,
+    nextShipmentType,
+    nextPriority,
+    nextCustomerId,
+    nextCustomerName,
+    nextTerminalId,
+    nextTerminalName,
+    nextWarehouseId,
+    nextWarehouseName,
+    nextDoExpiryIso,
+    nextTokenNumber,
+    nextRateAed,
+    nextDriverAllowanceAed,
+    nextWeightKg,
+    nextShippingLine,
+    nextCustomsInspection,
+    nextMunicipalityInspection,
+    nextCpipInspection,
+    nextMercInspection,
+    nextBoxcareInspection,
+    nextNotes,
+  );
+
+  // 2. Sync container / route metadata to any linked L1/L2 paired job
+  const parentJobId = job.parent_job_id ? String(job.parent_job_id) : null;
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_jobs
+        SET container_number = $3,
+            container_size = $4,
+            container_type = $5,
+            customer_id = $6,
+            customer_name = $7,
+            terminal_id = $8,
+            terminal_name = $9,
+            warehouse_id = $10,
+            warehouse_name = $11,
+            do_expiry_date = COALESCE($12::timestamptz, do_expiry_date),
+            shipping_line = $13,
+            updated_at = NOW()
+      WHERE tenant_id = $1
+        AND id <> $2
+        AND (parent_job_id = $2 OR ($14::text IS NOT NULL AND id = $14::text))`,
+    input.tenantId,
+    input.jobId,
+    nextContainerNumber,
+    nextContainerSize,
+    nextContainerType,
+    nextCustomerId,
+    nextCustomerName,
+    nextTerminalId,
+    nextTerminalName,
+    nextWarehouseId,
+    nextWarehouseName,
+    nextDoExpiryIso,
+    nextShippingLine,
+    parentJobId,
+  ).catch(() => {});
+
+  // 3. Update linked Container record in `logistics_drayage_containers`
+  const containerId = job.container_id ? String(job.container_id) : null;
+  if (containerId || oldContainerNumber) {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_containers
+          SET container_number = $4,
+              size = $5,
+              container_type = $6,
+              shipment_type = $7,
+              customer_id = $8,
+              customer_name = $9,
+              terminal_id = $10,
+              terminal_name = $11,
+              warehouse_id = $12,
+              warehouse_name = $13,
+              do_expiry_date = COALESCE($14::timestamptz, do_expiry_date),
+              discharge_date = COALESCE($15::timestamptz, discharge_date),
+              seal_number = CASE WHEN $16::boolean THEN $17 ELSE seal_number END,
+              weight_kg = $18,
+              customs_inspection = $19,
+              municipality_inspection = $20,
+              cpip_inspection = $21,
+              merc_inspection = $22,
+              boxcare_inspection = $23,
+              updated_at = NOW()
+        WHERE tenant_id = $1
+          AND ((id = $2 AND $2 IS NOT NULL) OR UPPER(container_number) = UPPER($3))`,
+      input.tenantId,
+      containerId,
+      oldContainerNumber,
+      nextContainerNumber,
+      nextContainerSize,
+      nextContainerType,
+      nextShipmentType,
+      nextCustomerId,
+      nextCustomerName,
+      nextTerminalId,
+      nextTerminalName,
+      nextWarehouseId,
+      nextWarehouseName,
+      nextDoExpiryIso,
+      nextDischargeIso,
+      nextSealNumber !== undefined,
+      nextSealNumber ?? null,
+      nextWeightKg,
+      nextCustomsInspection,
+      nextMunicipalityInspection,
+      nextCpipInspection,
+      nextMercInspection,
+      nextBoxcareInspection,
+    ).catch(() => {});
+  }
+
+  // 4. Sync trailer linked_container_number if container number changed
+  if (nextContainerNumber !== oldContainerNumber) {
+    const trailerId = job.assigned_trailer_id ? String(job.assigned_trailer_id) : null;
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_trailers
+          SET linked_container_number = $4,
+              updated_at = NOW()
+        WHERE tenant_id = $1
+          AND ((id = $2 AND $2 IS NOT NULL) OR UPPER(linked_container_number) = UPPER($3))`,
+      input.tenantId,
+      trailerId,
+      oldContainerNumber,
+      nextContainerNumber,
+    ).catch(() => {});
+  }
+
+  // 5. Sync pending driver allowance if allowance or container number changed
+  await db.$executeRawUnsafe(
+    `UPDATE logistics_drayage_allowances
+        SET container_number = $3,
+            route_summary = $4,
+            allowance_amount_aed = CASE WHEN status = 'PENDING' THEN $5 ELSE allowance_amount_aed END,
+            total_amount_aed = CASE
+              WHEN status = 'PENDING' THEN
+                $5 + COALESCE(port_gate_fee_aed, 0) + COALESCE(overnight_halt_aed, 0) +
+                COALESCE(bogie_bonus_aed, 0) + COALESCE(street_turn_bonus_aed, 0) + COALESCE(inspection_bonus_aed, 0)
+              ELSE total_amount_aed
+            END
+      WHERE tenant_id = $1 AND job_id = $2`,
+    input.tenantId,
+    input.jobId,
+    nextContainerNumber,
+    `${nextTerminalName} → ${nextWarehouseName}`,
+    nextDriverAllowanceAed,
+  ).catch(() => {});
+
+  // 6. Record audit log entry
+  const logSummary =
+    changes.length > 0
+      ? `Job details edited (${changes.join(' · ')})`
+      : `Job details updated for ${nextContainerNumber}`;
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'JOB_EDITED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    input.tenantId,
+    input.jobId,
+    String(job.job_code),
+    logSummary,
+    input.actor || 'dispatcher',
+  ).catch(() => {});
+
+  return {
+    ok: true,
+    jobId: input.jobId,
+    jobCode: String(job.job_code),
+    containerNumber: nextContainerNumber,
+    changes,
+  };
+}
+
 export async function assignDrayageJob(
   db: DrayageDbClient,
   args: {
@@ -2525,6 +4422,9 @@ export async function assignDrayageJob(
     trailerId: string;
     trailerPlate: string;
     tokenNumber: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
+    actor?: string;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -2538,9 +4438,55 @@ export async function assignDrayageJob(
   if (!job) throw new Error('Drayage job not found');
 
   const token = args.tokenNumber?.trim() || `DPW-TKN-${Math.floor(1000 + Math.random() * 9000)}`;
-  const prevStatus = String(job.status || '').toUpperCase();
+  let resolvedSlotStart: string | null = null;
+  let resolvedSlotEnd: string | null = null;
+  if (args.pcsSlotStart && String(args.pcsSlotStart).trim()) {
+    const startDt = new Date(String(args.pcsSlotStart).trim());
+    if (!Number.isNaN(startDt.getTime())) {
+      resolvedSlotStart = startDt.toISOString();
+      const endDt =
+        args.pcsSlotEnd && String(args.pcsSlotEnd).trim()
+          ? new Date(String(args.pcsSlotEnd).trim())
+          : new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+      resolvedSlotEnd = !Number.isNaN(endDt.getTime())
+        ? endDt.toISOString()
+        : new Date(startDt.getTime() + 2 * 60 * 60 * 1000).toISOString();
+    }
+  } else if (job.pcs_slot_start) {
+    const existingStart = new Date(String(job.pcs_slot_start));
+    if (!Number.isNaN(existingStart.getTime())) {
+      resolvedSlotStart = existingStart.toISOString();
+      const existingEnd = job.pcs_slot_end
+        ? new Date(String(job.pcs_slot_end))
+        : new Date(existingStart.getTime() + 2 * 60 * 60 * 1000);
+      resolvedSlotEnd = !Number.isNaN(existingEnd.getTime())
+        ? existingEnd.toISOString()
+        : new Date(existingStart.getTime() + 2 * 60 * 60 * 1000).toISOString();
+    }
+  } else {
+    // Default 2-hour UAE (UTC+4) gate slot window when assigning a token without an explicit slot
+    const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    const uaeHour = uaeNow.getUTCHours();
+    const defaultStartDt = new Date(
+      Date.UTC(
+        uaeNow.getUTCFullYear(),
+        uaeNow.getUTCMonth(),
+        uaeNow.getUTCDate(),
+        uaeHour - 4,
+        0,
+        0,
+        0,
+      ),
+    );
+    const defaultEndDt = new Date(defaultStartDt.getTime() + 2 * 60 * 60 * 1000);
+    resolvedSlotStart = defaultStartDt.toISOString();
+    resolvedSlotEnd = defaultEndDt.toISOString();
+  }
+  const prevStatusRaw = String(job.status || '').trim();
+  const prevStatus = prevStatusRaw.toUpperCase();
   const isReassignment =
     Boolean(job.trailer_detached) ||
+    isDrayageReassignStatus(prevStatusRaw) ||
     [
       'PLACED_AT_YARD',
       'PLACED_AT_RAMP',
@@ -2556,9 +4502,53 @@ export async function assignDrayageJob(
     ].includes(prevStatus);
   const nextAssignStatus = isReassignment ? 'RE-ASSIGNED' : 'ASSIGNED';
 
+  let resolvedPlacementLocation = job.placement_location ? String(job.placement_location).toUpperCase() : null;
+  if (isReassignment) {
+    if (
+      prevStatus === 'PLACED_AT_YARD' ||
+      prevStatus.includes('TO RAMP') ||
+      prevStatus.includes('TO_RAMP') ||
+      resolvedPlacementLocation === 'YARD'
+    ) {
+      resolvedPlacementLocation = 'YARD';
+    } else if (
+      prevStatus === 'PLACED_AT_RAMP' ||
+      prevStatus === 'REASSIGN_PLACED_AT_RAMP' ||
+      prevStatus.includes('TO YARD') ||
+      prevStatus.includes('TO_YARD') ||
+      resolvedPlacementLocation === 'RAMP'
+    ) {
+      resolvedPlacementLocation = 'RAMP';
+    }
+  }
+
+  // If the assigned vehicle already has live GPS coordinates from a logged-in driver,
+  // copy those coordinates onto the job immediately upon assignment.
+  let liveVehLat: number | null = null;
+  let liveVehLng: number | null = null;
+  if (args.vehicleId) {
+    const vehCoordRows = await db
+      .$queryRawUnsafe<Array<{ current_lat: number | null; current_lng: number | null }>>(
+        `SELECT current_lat, current_lng
+           FROM vehicles
+          WHERE id::text = $1 AND tenant_id::text = $2
+          LIMIT 1`,
+        args.vehicleId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    const candLat = vehCoordRows[0]?.current_lat != null ? Number(vehCoordRows[0].current_lat) : NaN;
+    const candLng = vehCoordRows[0]?.current_lng != null ? Number(vehCoordRows[0].current_lng) : NaN;
+    if (!isNaN(candLat) && !isNaN(candLng) && (candLat !== 0 || candLng !== 0)) {
+      liveVehLat = candLat;
+      liveVehLng = candLng;
+    }
+  }
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET status = $10,
+            placement_location = COALESCE($11, placement_location),
             trailer_detached = FALSE,
             assigned_vehicle_id = $3,
             assigned_vehicle_plate = $4,
@@ -2567,6 +4557,12 @@ export async function assignDrayageJob(
             assigned_trailer_id = $7,
             assigned_trailer_plate = $8,
             token_number = $9,
+            pcs_token_number = $9,
+            pcs_slot_start = COALESCE($12::timestamptz, pcs_slot_start),
+            pcs_slot_end = COALESCE($13::timestamptz, pcs_slot_end),
+            pcs_token_status = 'BOOKED',
+            current_lat = COALESCE($14::double precision, current_lat),
+            current_lng = COALESCE($15::double precision, current_lng),
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
@@ -2579,13 +4575,18 @@ export async function assignDrayageJob(
     args.trailerPlate,
     token,
     nextAssignStatus,
+    resolvedPlacementLocation,
+    resolvedSlotStart,
+    resolvedSlotEnd,
+    liveVehLat,
+    liveVehLng,
   );
 
   // Update trailer operational status
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_trailers
         SET master_status = 'IN_USE',
-            operational_status = $3,
+             operational_status = $3,
             linked_container_number = $4,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
@@ -2595,18 +4596,25 @@ export async function assignDrayageJob(
     String(job.container_number),
   );
 
-  // Update container linked trailer
+  // Update container linked trailer & PCS token window
   if (job.container_id) {
     await db.$executeRawUnsafe(
       `UPDATE logistics_drayage_containers
           SET linked_trailer_plate = $3,
               status = $4,
+              pcs_token_number = $5,
+              pcs_slot_start = COALESCE($6::timestamptz, pcs_slot_start),
+              pcs_slot_end = COALESCE($7::timestamptz, pcs_slot_end),
+              pcs_token_status = 'BOOKED',
               updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
       args.trailerPlate,
       String(job.job_phase) === 'L2' ? 'EMPTY_RETURN_ASSIGNED' : 'TOKEN_ASSIGNED',
+      token,
+      resolvedSlotStart,
+      resolvedSlotEnd,
     );
   }
 
@@ -2674,6 +4682,18 @@ export async function assignDrayageJob(
     );
   }
 
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    nextAssignStatus,
+    '',
+    args.actor || 'dispatcher',
+  );
+
   // Automatically dispatch Customer & Client tracking links upon Vehicle & Driver Assignment (ASSIGNED status)
   await dispatchDrayageCustomerMilestoneAlert(db, {
     tenantId: args.tenantId,
@@ -2684,29 +4704,71 @@ export async function assignDrayageJob(
     console.warn('[assignDrayageJob] milestone alert warning:', err);
   });
 
-  return { ok: true, tokenNumber: token };
+  return {
+    ok: true,
+    tokenNumber: token,
+    pcsSlotStart: resolvedSlotStart,
+    pcsSlotEnd: resolvedSlotEnd,
+  };
 }
 
-function getDrayageOperationalStageIndex(status: string, trailerDetached?: boolean): number {
+export function getDrayageOperationalStageIndex(
+  status: string,
+  trailerDetached?: boolean,
+  isL2?: boolean,
+): number {
   const s = (status || '').toUpperCase();
-  if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
-    return 6;
+  if (isL2) {
+    if (['EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED', 'COMPLETED', 'STREET_TURNED'].includes(s)) {
+      return 5;
+    }
+    if (s === 'UNDER_INSPECTION') {
+      return 4;
+    }
+    if (['AT_PORT', 'ARRIVED_AT_PORT', 'EMPTY_AT_PORT'].includes(s)) {
+      return 3;
+    }
+    if (['IN_TRANSIT', 'EN_ROUTE_TERMINAL', 'EN_ROUTE_WAREHOUSE'].includes(s)) {
+      return 2;
+    }
+    if (['LOADED', 'CONTAINER_PICKED', 'TRAILER_ATTACHED'].includes(s)) {
+      return 1;
+    }
+    return 0;
   }
   if (
-    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP', 'WAITING_MT_RETURN'].includes(s)
+    isDrayageReassignStatus(s) ||
+    [
+      'EMPTY_DEPOSITED',
+      'CONTAINER_DROPPED',
+      'CONTAINER_DELIVERED',
+      'COMPLETED',
+      'STREET_TURNED',
+      'CONTAINER_DETACHED',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'READY_FOR_PICKUP',
+      'CONTAINER_OFFLOADED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'WAITING_MT_RETURN',
+    ].includes(s)
   ) {
-    return 5;
+    return 6;
   }
   if (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(s)) {
-    return trailerDetached ? 5 : 4;
+    return trailerDetached ? 6 : 5;
   }
   if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL', 'EMPTY_AT_PORT'].includes(s)) {
+    return 4;
+  }
+  if (s === 'UNDER_INSPECTION') {
     return 3;
   }
-  if (['LOADED', 'CONTAINER_PICKED', 'UNDER_INSPECTION', 'TRAILER_ATTACHED'].includes(s)) {
+  if (['LOADED', 'CONTAINER_PICKED', 'AT_PORT', 'ARRIVED_AT_PORT', 'TRAILER_ATTACHED'].includes(s)) {
     return 2;
   }
-  if (['AT_PORT', 'ARRIVED_AT_PORT'].includes(s)) {
+  if (s === 'ACCEPTED') {
     return 1;
   }
   return 0;
@@ -2723,6 +4785,9 @@ export async function updateDrayageJobExecutionStatus(
     etcTime?: string | null;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -2735,12 +4800,60 @@ export async function updateDrayageJobExecutionStatus(
   if (!job) throw new Error('Drayage job not found');
 
   const currentStatus = String(job.status || '');
-  const placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
-  const detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
+  const currentStatusUpper = currentStatus.toUpperCase();
+  const requestedStatusUpper = String(args.status || '').toUpperCase();
+  let placement = args.placementLocation ?? (job.placement_location ? String(job.placement_location) : null);
+  let detached = args.detachTrailer !== undefined ? args.detachTrailer : Boolean(job.trailer_detached);
 
-  if (args.status !== currentStatus) {
-    const currentStage = getDrayageOperationalStageIndex(currentStatus, Boolean(job.trailer_detached));
-    const targetStage = getDrayageOperationalStageIndex(args.status, detached);
+  // Determine previous origin placement status from status logs (LogiXL-Connect status_helper.go pattern)
+  const prevOriginRows = await db
+    .$queryRawUnsafe<Array<{ status: string }>>(
+      `SELECT status
+         FROM logistics_drayage_status_logs
+        WHERE job_id = $1 AND tenant_id = $2
+          AND status NOT IN (
+            'CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED',
+            'READY_FOR_PICKUP', 'PHOTO_UPLOADED', 'INSPECTION_SKIPPED',
+            'INSPECTION_REPORTED', 'TRAILER_ATTACHED', 'ACCEPTED',
+            'RE-ASSIGNED', 'ASSIGNED', 'L2_ACTIVATED', 'ETC_EXTENDED',
+            'GPS_BREADCRUMB', 'EPOD_SIGNED', 'POD_SIGNED', 'EPOD_CAPTURED',
+            'POD_SIGNED / EPOD_CAPTURED', 'RETURN_TERMINAL_CHANGED', 'JOB_EDITED',
+            'DRIVER_EXPENSE_RECEIPT'
+          )
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      args.jobId,
+      args.tenantId,
+    )
+    .catch(() => []);
+  const prevOriginStatus = String(prevOriginRows[0]?.status || currentStatusUpper).toUpperCase();
+
+  const isReassignTransition =
+    isDrayageReassignStatus(currentStatusUpper) ||
+    isDrayageReassignStatus(requestedStatusUpper) ||
+    [
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'RE-ASSIGNED',
+      'TRAILER_DETACHED',
+      'CONTAINER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+    ].includes(currentStatusUpper) ||
+    requestedStatusUpper.startsWith('REASSIGN_') ||
+    requestedStatusUpper === 'TRAILER_ATTACHED' ||
+    requestedStatusUpper === 'ACCEPTED';
+
+  const isL2Job =
+    String(job.job_phase || '').toUpperCase() === 'L2' ||
+    String(job.job_code || '').toUpperCase().includes('-L2');
+
+  if (args.status !== currentStatus && !isReassignTransition) {
+    const currentStage = getDrayageOperationalStageIndex(
+      currentStatus,
+      Boolean(job.trailer_detached),
+      isL2Job,
+    );
+    const targetStage = getDrayageOperationalStageIndex(args.status, detached, isL2Job);
     if (currentStage >= 1 && targetStage >= 1) {
       if (targetStage < currentStage) {
         throw new Error(
@@ -2755,11 +4868,67 @@ export async function updateDrayageJobExecutionStatus(
       }
     }
   }
+
+  // Directional Reassign & Terminal Completion State Machine:
+  // 1. L1 PLACED_AT_YARD + Detach -> FCL_Reassign to Ramp (IMPORT) / MT_Reassign to Ramp (EXPORT)
+  // 2. L1 PLACED_AT_RAMP / REASSIGN_PLACED_AT_RAMP + First ETC Alert (<= 15m) -> MT_Reassign to Yard (IMPORT) / FCL_Reassign to Yard (EXPORT)
+  // 3. REASSIGN_PLACED_AT_YARD + Detach -> READY_FOR_PICKUP (immediately eligible for L2)
+  // 4. CONTAINER_DROPPED / EMPTY_DEPOSITED / CONTAINER_DELIVERED -> COMPLETED
+  const jobShipmentType = String(job.shipment_type || 'IMPORT').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  let effectiveStatus: string = requestedStatusUpper;
+  if (['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED', 'COMPLETED'].includes(requestedStatusUpper)) {
+    effectiveStatus = 'COMPLETED';
+  } else if (isDrayageReassignStatus(requestedStatusUpper)) {
+    if (requestedStatusUpper.includes('TO RAMP') || requestedStatusUpper.includes('TO_RAMP')) {
+      effectiveStatus = resolveDirectionalReassignStatus({ originLocation: 'YARD', shipmentType: jobShipmentType });
+      placement = 'YARD';
+    } else if (requestedStatusUpper.includes('TO YARD') || requestedStatusUpper.includes('TO_YARD')) {
+      effectiveStatus = resolveDirectionalReassignStatus({ originLocation: 'RAMP', shipmentType: jobShipmentType });
+      placement = 'RAMP';
+    } else {
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: String(placement || 'RAMP').toUpperCase() === 'YARD' ? 'YARD' : 'RAMP',
+        shipmentType: jobShipmentType,
+      });
+    }
+  }
+  const isDetachSignal =
+    ['CONTAINER_DETACHED', 'TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(requestedStatusUpper) ||
+    (detached && ['PLACED_AT_YARD', 'REASSIGN_PLACED_AT_YARD'].includes(requestedStatusUpper));
+
+  if (isDetachSignal) {
+    detached = true;
+    const isReassignYardDrop =
+      requestedStatusUpper === 'REASSIGN_PLACED_AT_YARD' ||
+      prevOriginStatus === 'REASSIGN_PLACED_AT_YARD' ||
+      currentStatusUpper === 'REASSIGN_PLACED_AT_YARD' ||
+      (requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED' &&
+        (String(placement || '').toUpperCase() === 'YARD' || prevOriginStatus === 'REASSIGN_PLACED_AT_YARD'));
+    const isInitialYardDrop =
+      !isReassignYardDrop &&
+      (requestedStatusUpper === 'PLACED_AT_YARD' ||
+        prevOriginStatus === 'PLACED_AT_YARD' ||
+        currentStatusUpper === 'PLACED_AT_YARD');
+
+    if (isReassignYardDrop) {
+      effectiveStatus = 'READY_FOR_PICKUP';
+      if (!placement) placement = 'YARD';
+    } else if (String(job.job_phase || 'L1') === 'L1' && isInitialYardDrop) {
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: 'YARD',
+        shipmentType: jobShipmentType,
+      });
+      placement = 'YARD';
+    } else if (requestedStatusUpper === 'REASSIGN_TRAILER_DETACHED') {
+      placement = 'RAMP';
+    }
+  }
+
   const isRampPlacement =
-    args.status === 'PLACED_AT_RAMP' ||
-    args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+    effectiveStatus === 'PLACED_AT_RAMP' ||
+    effectiveStatus === 'REASSIGN_PLACED_AT_RAMP' ||
     (detached && placement === 'RAMP') ||
-    args.status === 'CONTAINER_DETACHED';
+    effectiveStatus === 'CONTAINER_DETACHED';
 
   // Handle ETC (Estimated Time of Completion for container offloading / destuffing)
   let effectiveEtcTime: string | null = null;
@@ -2776,28 +4945,84 @@ export async function updateDrayageJobExecutionStatus(
     effectiveEtcTime = new Date(String(job.etc_time)).toISOString();
   }
 
-  // Interpolate GPS coordinates depending on stage
-  let lat = job.current_lat != null ? Number(job.current_lat) : 25.0112;
-  let lng = job.current_lng != null ? Number(job.current_lng) : 55.0612;
+  let effectiveEtcAlertStatus: string | null = null;
+  if (effectiveEtcTime) {
+    const minsLeft = Math.ceil((new Date(effectiveEtcTime).getTime() - Date.now()) / 60000);
+    if (minsLeft <= 0) {
+      effectiveEtcAlertStatus = 'EXPIRED';
+    } else if (minsLeft <= 15) {
+      effectiveEtcAlertStatus = 'T15_WARNING';
+    } else {
+      effectiveEtcAlertStatus = 'NEW';
+    }
+    if (
+      String(job.job_phase || 'L1') === 'L1' &&
+      isRampPlacement &&
+      minsLeft <= 15 &&
+      (detached || minsLeft <= 0)
+    ) {
+      effectiveStatus = resolveDirectionalReassignStatus({
+        originLocation: 'RAMP',
+        shipmentType: jobShipmentType,
+      });
+      placement = 'RAMP';
+    }
+  }
 
-  if (args.status === 'IN_TRANSIT') {
+  // Interpolate GPS coordinates depending on stage (or use live driver GPS coordinates if supplied)
+  const existingLat = job.current_lat != null ? Number(job.current_lat) : null;
+  const existingLng = job.current_lng != null ? Number(job.current_lng) : null;
+  const hasExistingRealCoords =
+    existingLat != null &&
+    existingLng != null &&
+    !isNaN(existingLat) &&
+    !isNaN(existingLng) &&
+    (existingLat !== 0 || existingLng !== 0) &&
+    !(Math.abs(existingLat - 25.0112) < 0.0002 && Math.abs(existingLng - 55.0612) < 0.0002) &&
+    !(Math.abs(existingLat - 24.9642) < 0.0002 && Math.abs(existingLng - 55.0915) < 0.0002) &&
+    !(Math.abs(existingLat - 24.9850) < 0.0002 && Math.abs(existingLng - 55.0760) < 0.0002);
+
+  const hasLiveCoords =
+    args.latitude != null &&
+    args.longitude != null &&
+    !isNaN(Number(args.latitude)) &&
+    !isNaN(Number(args.longitude)) &&
+    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0);
+
+  let lat = existingLat ?? 25.0112;
+  let lng = existingLng ?? 55.0612;
+
+  if (hasLiveCoords) {
+    lat = Number(args.latitude);
+    lng = Number(args.longitude);
+  } else if (hasExistingRealCoords) {
+    lat = existingLat!;
+    lng = existingLng!;
+  } else if (['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'EN_ROUTE_TERMINAL'].includes(effectiveStatus)) {
     lat = 24.9850;
     lng = 55.0760;
   } else if (
+    isDrayageReassignStatus(effectiveStatus) ||
     [
       'PLACED_AT_RAMP',
       'REASSIGN_PLACED_AT_RAMP',
       'PLACED_AT_YARD',
       'REASSIGN_PLACED_AT_YARD',
       'CONTAINER_DETACHED',
+      'TRAILER_DETACHED',
+      'REASSIGN_TRAILER_DETACHED',
+      'FCL_REASSIGN',
+      'MT_REASSIGN',
+      'READY_FOR_PICKUP',
+      'CONTAINER_OFFLOADED',
       'WAITING_MT_RETURN',
-    ].includes(args.status)
+    ].includes(effectiveStatus)
   ) {
     lat = 24.9642;
     lng = 55.0915;
-  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'COMPLETED'].includes(args.status)) {
-    lat = 25.0112;
-    lng = 55.0612;
+  } else if (['EMPTY_AT_PORT', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'COMPLETED'].includes(effectiveStatus)) {
+    lat = isL2Job ? 25.0112 : 24.9642;
+    lng = isL2Job ? 55.0612 : 55.0915;
   }
 
   await db.$executeRawUnsafe(
@@ -2808,34 +5033,99 @@ export async function updateDrayageJobExecutionStatus(
             current_lat = $6,
             current_lng = $7,
             etc_time = $8::timestamptz,
-            etc_alert_status = CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END,
+            etc_alert_status = COALESCE($10, CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END),
             notes = CASE WHEN $9::text IS NOT NULL AND $9::text != '' THEN $9::text ELSE notes END,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
     args.tenantId,
-    args.status,
+    effectiveStatus,
     placement,
     detached,
     lat,
     lng,
     effectiveEtcTime,
     args.notes ? String(args.notes) : null,
+    effectiveEtcAlertStatus,
   );
 
-  // Sync container status: When placed at ramp or detached, container transitions to WAITING_MT_RETURN
+  if (hasLiveCoords && job.assigned_vehicle_id) {
+    const vId = String(job.assigned_vehicle_id);
+    await db
+      .$executeRawUnsafe(
+        `UPDATE vehicles
+            SET current_lat = $3,
+                current_lng = $4,
+                updated_at = NOW()
+          WHERE id::text = $1 AND tenant_id::text = $2`,
+        vId,
+        args.tenantId,
+        lat,
+        lng,
+      )
+      .catch(() => {});
+
+    const isDummyDubai = Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005;
+    if (!isDummyDubai) {
+      await db
+        .$executeRawUnsafe(
+          `DELETE FROM fleet.bus_gps_pings
+            WHERE vehicle_id = $1
+              AND tenant_id = $2
+              AND ABS(latitude - 25.2048) < 0.0005
+              AND ABS(longitude - 55.2708) < 0.0005`,
+          vId,
+          args.tenantId,
+        )
+        .catch(() => {});
+      await db
+        .$executeRawUnsafe(
+          `INSERT INTO fleet.bus_gps_pings (
+             id, created_at, tenant_id, vehicle_id, latitude, longitude,
+             speed_kmh, heading_deg, accuracy_m, occurred_at, source
+           ) VALUES ($1, NOW(), $2, $3, $4, $5, 0, 0, 5, NOW(), 'DRIVER_APP')`,
+          crypto.randomUUID(),
+          args.tenantId,
+          vId,
+          lat,
+          lng,
+        )
+        .catch(() => {});
+    }
+  }
+
+  // Sync container status & related parent jobs:
+  // When L2 is completed (or CONTAINER_DROPPED / EMPTY_DEPOSITED), mark any related jobs for the same container as COMPLETED
+  const isCompletedL2 =
+    (String(job.job_phase) === 'L2' || String(job.job_code || '').includes('-L2')) &&
+    (effectiveStatus === 'COMPLETED' || effectiveStatus === 'EMPTY_DEPOSITED' || requestedStatusUpper === 'CONTAINER_DROPPED');
+
   if (job.container_id) {
-    const isCompletedL2 = String(job.job_phase) === 'L2' && (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED');
-    let cntStatus = args.status;
-    if (isRampPlacement || args.status === 'WAITING_MT_RETURN') {
+    if (isCompletedL2) {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET status = 'COMPLETED',
+                updated_at = NOW()
+          WHERE container_id = $1 AND tenant_id = $2 AND status != 'COMPLETED'`,
+        String(job.container_id),
+        args.tenantId,
+      ).catch(() => {});
+    }
+    let cntStatus = effectiveStatus;
+    if (
+      isRampPlacement ||
+      effectiveStatus === 'WAITING_MT_RETURN' ||
+      effectiveStatus === 'READY_FOR_PICKUP' ||
+      effectiveStatus === 'CONTAINER_OFFLOADED'
+    ) {
       cntStatus = 'WAITING_MT_RETURN';
     }
     await db.$executeRawUnsafe(
       `UPDATE logistics_drayage_containers
           SET status = $3,
-              empty_return_date = CASE WHEN $4::boolean THEN NOW() ELSE empty_return_date END,
-              linked_trailer_plate = CASE WHEN $4::boolean THEN NULL ELSE linked_trailer_plate END,
-              updated_at = NOW()
+               empty_return_date = CASE WHEN $4::boolean THEN NOW() ELSE empty_return_date END,
+               linked_trailer_plate = CASE WHEN $4::boolean THEN NULL ELSE linked_trailer_plate END,
+               updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
@@ -2849,18 +5139,20 @@ export async function updateDrayageJobExecutionStatus(
     let trMaster = 'IN_USE';
     let trOp = 'LOADED_FCL';
     if (
-      args.status === 'PLACED_AT_RAMP' ||
-      args.status === 'REASSIGN_PLACED_AT_RAMP' ||
+      effectiveStatus === 'PLACED_AT_RAMP' ||
+      effectiveStatus === 'REASSIGN_PLACED_AT_RAMP' ||
       (detached && placement === 'RAMP')
     ) {
       trOp = 'DETACHED_AT_RAMP';
     } else if (
-      args.status === 'PLACED_AT_YARD' ||
-      args.status === 'REASSIGN_PLACED_AT_YARD' ||
+      effectiveStatus === 'PLACED_AT_YARD' ||
+      effectiveStatus === 'REASSIGN_PLACED_AT_YARD' ||
+      effectiveStatus === 'FCL_REASSIGN' ||
+      effectiveStatus === 'MT_REASSIGN' ||
       (detached && placement === 'YARD')
     ) {
       trOp = 'DETACHED_AT_YARD';
-    } else if (args.status === 'COMPLETED' || args.status === 'EMPTY_DEPOSITED') {
+    } else if (isCompletedL2 || effectiveStatus === 'COMPLETED') {
       trMaster = 'AVAILABLE';
       trOp = 'EMPTY';
     }
@@ -2879,8 +5171,37 @@ export async function updateDrayageJobExecutionStatus(
   }
 
   const logActor = args.actor || 'Dispatch Console';
-  const etcNote = effectiveEtcTime ? ` | Offloading ETC: ${new Date(effectiveEtcTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}` : '';
-  const customNotes = args.notes ? ` - ${args.notes}` : '';
+  const capturedLocation = resolveOperationalMilestoneLocation({
+    status: effectiveStatus,
+    explicitLocation: args.location ?? null,
+    lat: hasLiveCoords ? Number(args.latitude) : hasExistingRealCoords ? existingLat : null,
+    lng: hasLiveCoords ? Number(args.longitude) : hasExistingRealCoords ? existingLng : null,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    terminalName: job.terminal_name ? String(job.terminal_name) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+  });
+
+  const stageDetails = [
+    capturedLocation ? `[LOC:${capturedLocation}]` : '',
+    args.notes ? String(args.notes).trim() : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  if (requestedStatusUpper !== effectiveStatus && ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(requestedStatusUpper)) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `log-${crypto.randomUUID().slice(0, 12)}`,
+      args.tenantId,
+      args.jobId,
+      String(job.job_code),
+      requestedStatusUpper,
+      stageDetails,
+      logActor,
+    );
+  }
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -2889,17 +5210,56 @@ export async function updateDrayageJobExecutionStatus(
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    args.status,
-    `Execution stage updated to ${args.status}${placement ? ` (${placement})` : ''}${detached ? ' [Chassis Detached]' : ''}${etcNote}${customNotes}`,
+    effectiveStatus,
+    stageDetails,
     logActor,
   );
 
+  // LogiXL-Connect Automatic L2 Activation upon READY_FOR_PICKUP / CONTAINER_OFFLOADED / L1 Completion:
+  // If READY_FOR_PICKUP comes from PLACED_AT_RAMP or REASSIGN_PLACED_AT_RAMP and etc_time is still in the future,
+  // wait until etc_time expires (handled by checkAndAutoActivateExpiredEtcJobs). Otherwise activate L2 immediately!
+  let l2ActivationResult: { l2JobId?: string; l2JobCode?: string } | null = null;
+  if (
+    String(job.job_phase || 'L1') === 'L1' &&
+    !job.l2_activated &&
+    ['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'COMPLETED', 'CONTAINER_DELIVERED', 'CONTAINER_DROPPED'].includes(
+      effectiveStatus,
+    )
+  ) {
+    const isFromRamp =
+      prevOriginStatus === 'PLACED_AT_RAMP' ||
+      prevOriginStatus === 'REASSIGN_PLACED_AT_RAMP' ||
+      (placement === 'RAMP' &&
+        !['REASSIGN_PLACED_AT_YARD', 'REASSIGN_TRAILER_DETACHED'].includes(requestedStatusUpper));
+    const shouldWaitForEtc =
+      effectiveStatus === 'READY_FOR_PICKUP' &&
+      isFromRamp &&
+      Boolean(effectiveEtcTime) &&
+      new Date(effectiveEtcTime!).getTime() > Date.now();
+
+    if (!shouldWaitForEtc) {
+      try {
+        const autoPreAssign = await getTenantAutoL2DispatchEnabled(db, args.tenantId);
+        const actRes = await activateL2EmptyReturnJob(db, {
+          tenantId: args.tenantId,
+          l1JobId: args.jobId,
+          preAssignTractor: autoPreAssign,
+          triggerSource: 'MANUAL',
+        });
+        l2ActivationResult = { l2JobId: actRes.l2JobId, l2JobCode: actRes.l2JobCode };
+        effectiveStatus = 'COMPLETED';
+      } catch (l2Err) {
+        console.warn('[updateDrayageJobExecutionStatus] Auto L2 activation warning:', l2Err);
+      }
+    }
+  }
+
   // Automatically trigger WhatsApp & Email Customer Milestone Alert when stage advances
-  if (args.status !== currentStatus) {
+  if (effectiveStatus !== currentStatus) {
     await dispatchDrayageCustomerMilestoneAlert(db, {
       tenantId: args.tenantId,
       jobId: args.jobId,
-      milestoneStatus: args.status,
+      milestoneStatus: effectiveStatus,
       etcTime: effectiveEtcTime,
       triggerSource: 'AUTO_STAGE_TRANSITION',
     }).catch((err) => {
@@ -2907,7 +5267,393 @@ export async function updateDrayageJobExecutionStatus(
     });
   }
 
-  return { ok: true, status: args.status, etcTime: effectiveEtcTime };
+  return {
+    ok: true,
+    status: effectiveStatus,
+    etcTime: effectiveEtcTime,
+    ...(l2ActivationResult ?? {}),
+  };
+}
+
+/**
+ * Records an immediate Login GPS coordinate and continuous 1-minute background GPS
+ * breadcrumb pings from the Driver Mobile App starting from Driver Login (including
+ * idle logged-in tractors, ASSIGNED / RE-ASSIGNED jobs, and ACCEPTED -> COMPLETED jobs),
+ * updating live coordinates on both the assigned tractor vehicle (`vehicles`) and any
+ * active/assigned drayage jobs (`logistics_drayage_jobs`), and storing breadcrumb points
+ * for the Corridor Telematics Radar Map route path.
+ */
+export async function recordDrayageDriverLocationPing(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    latitude: number;
+    longitude: number;
+    speedKmh?: number | null;
+    heading?: number | null;
+    location?: string | null;
+    actor?: string;
+    driverId?: string | null;
+    driverName?: string | null;
+    vehicleId?: string | null;
+    vehiclePlate?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const lat = Number(args.latitude);
+  const lng = Number(args.longitude);
+  if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+    return { ok: false, skipped: true };
+  }
+
+  const isSessionLevelPing =
+    !args.jobId ||
+    args.jobId === 'DRIVER_TELEMETRY' ||
+    args.jobId === 'LOGIN_PING' ||
+    args.jobId === 'BROADCAST';
+
+  const cleanDriverId = args.driverId ? String(args.driverId).trim() : '';
+  const cleanDriverName = (args.driverName || args.actor || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  const cleanVehicleId = args.vehicleId ? String(args.vehicleId).trim() : '';
+  const cleanVehiclePlate = args.vehiclePlate ? String(args.vehiclePlate).trim() : '';
+
+  // 1. Update live GPS coordinates on the logged-in driver's vehicle in `vehicles` right from Login
+  const vehicleIdSet = new Set<string>();
+  if (cleanVehicleId) vehicleIdSet.add(cleanVehicleId);
+
+  if (cleanVehicleId || cleanVehiclePlate || cleanDriverId) {
+    const matchedVehicles = await db
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM vehicles
+          WHERE tenant_id::text = $1
+            AND deleted_at IS NULL
+            AND (
+              ($2 <> '' AND id::text = $2)
+              OR ($3 <> '' AND (
+                UPPER(COALESCE(license_plate, '')) = UPPER($3)
+                OR UPPER(COALESCE(plate_number, '')) = UPPER($3)
+                OR UPPER(COALESCE(vehicle_code, '')) = UPPER($3)
+                OR UPPER(COALESCE(registration_no, '')) = UPPER($3)
+              ))
+              OR ($4 <> '' AND assigned_driver_id::text = $4)
+            )
+          LIMIT 5`,
+        args.tenantId,
+        cleanVehicleId,
+        cleanVehiclePlate,
+        cleanDriverId,
+      )
+      .catch(() => []);
+    for (const v of matchedVehicles) {
+      if (v.id) vehicleIdSet.add(String(v.id));
+    }
+  }
+
+  // 2. Find target active/assigned drayage jobs (including ASSIGNED & RE-ASSIGNED right after Login)
+  const targetJobs: Array<Record<string, unknown>> = [];
+  const seenJobIds = new Set<string>();
+
+  if (!isSessionLevelPing) {
+    const directRows = await db
+      .$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
+           FROM logistics_drayage_jobs
+          WHERE id = $1 AND tenant_id = $2
+          LIMIT 1`,
+        args.jobId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (directRows[0]) {
+      targetJobs.push(directRows[0]);
+      seenJobIds.add(String(directRows[0].id));
+      if (directRows[0].assigned_vehicle_id) {
+        vehicleIdSet.add(String(directRows[0].assigned_vehicle_id));
+      }
+    }
+  }
+
+  if (isSessionLevelPing || targetJobs.length === 0) {
+    if (cleanDriverId || cleanDriverName || cleanVehicleId || cleanVehiclePlate) {
+      const driverJobRows = await db
+        .$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT id, job_code, status, job_phase, terminal_name, warehouse_name, assigned_vehicle_id, assigned_vehicle_plate
+             FROM logistics_drayage_jobs
+            WHERE tenant_id = $1
+              AND COALESCE(trailer_detached, FALSE) = FALSE
+              AND UPPER(COALESCE(status, '')) NOT IN (
+                'PENDING', 'UNASSIGNED', 'CANCELLED', 'COMPLETED',
+                'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CONTAINER_DELIVERED',
+                'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED',
+                'READY_FOR_PICKUP', 'FCL_REASSIGN', 'MT_REASSIGN',
+                'MT_REASSIGN TO YARD', 'FCL_REASSIGN TO YARD',
+                'FCL_REASSIGN TO RAMP', 'MT_REASSIGN TO RAMP'
+              )
+              AND (
+                ($2 <> '' AND assigned_driver_id = $2)
+                OR ($3 <> '' AND LOWER(TRIM(COALESCE(assigned_driver_name, ''))) = LOWER($3))
+                OR ($4 <> '' AND assigned_vehicle_id = $4)
+                OR ($5 <> '' AND UPPER(TRIM(COALESCE(assigned_vehicle_plate, ''))) = UPPER($5))
+              )
+            ORDER BY updated_at DESC
+            LIMIT 10`,
+          args.tenantId,
+          cleanDriverId,
+          cleanDriverName,
+          cleanVehicleId,
+          cleanVehiclePlate,
+        )
+        .catch(() => []);
+      for (const r of driverJobRows) {
+        const jId = String(r.id);
+        if (!seenJobIds.has(jId)) {
+          seenJobIds.add(jId);
+          targetJobs.push(r);
+        }
+        if (r.assigned_vehicle_id) {
+          vehicleIdSet.add(String(r.assigned_vehicle_id));
+        }
+      }
+    }
+  }
+
+  const speedVal =
+    args.speedKmh != null && !isNaN(Number(args.speedKmh)) && Number(args.speedKmh) >= 0
+      ? Math.round(Number(args.speedKmh))
+      : null;
+  const headingVal =
+    args.heading != null && !isNaN(Number(args.heading)) ? Math.round(Number(args.heading)) : 0;
+  const isDummyDubai = Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005;
+
+  for (const vId of vehicleIdSet) {
+    if (!isDummyDubai) {
+      await db
+        .$executeRawUnsafe(
+          `UPDATE vehicles
+              SET current_lat = $3,
+                  current_lng = $4,
+                  updated_at = NOW()
+            WHERE id::text = $1 AND tenant_id::text = $2`,
+          vId,
+          args.tenantId,
+          lat,
+          lng,
+        )
+        .catch(() => {});
+
+      await db
+        .$executeRawUnsafe(
+          `DELETE FROM fleet.bus_gps_pings
+            WHERE vehicle_id = $1
+              AND tenant_id = $2
+              AND ABS(latitude - 25.2048) < 0.0005
+              AND ABS(longitude - 55.2708) < 0.0005`,
+          vId,
+          args.tenantId,
+        )
+        .catch(() => {});
+
+      await db
+        .$executeRawUnsafe(
+          `INSERT INTO fleet.bus_gps_pings (
+             id, created_at, tenant_id, vehicle_id, latitude, longitude,
+             speed_kmh, heading_deg, accuracy_m, occurred_at, source
+           ) VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, 5, NOW(), 'DRIVER_APP')`,
+          crypto.randomUUID(),
+          args.tenantId,
+          vId,
+          lat,
+          lng,
+          speedVal ?? 0,
+          headingVal,
+        )
+        .catch(() => {});
+    }
+  }
+
+  let primaryResolvedLoc =
+    args.location && String(args.location).trim()
+      ? String(args.location).trim()
+      : `${resolveUaePlaceNameFromCoords(lat, lng)} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+  for (const job of targetJobs) {
+    const jId = String(job.id);
+    const jCode = String(job.job_code);
+
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET current_lat = $3,
+              current_lng = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      jId,
+      args.tenantId,
+      lat,
+      lng,
+    );
+
+    const resolvedLoc = resolveOperationalMilestoneLocation({
+      status: String(job.status || 'IN_TRANSIT'),
+      explicitLocation: args.location ?? null,
+      lat,
+      lng,
+      jobPhase: job.job_phase ? String(job.job_phase) : null,
+      jobCode: jCode,
+      terminalName: job.terminal_name ? String(job.terminal_name) : null,
+      warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+    });
+    if (resolvedLoc) {
+      primaryResolvedLoc = resolvedLoc;
+    }
+
+    const noteParts = [
+      resolvedLoc ? `[LOC:${resolvedLoc}]` : '',
+      speedVal !== null ? `[SPD:${speedVal}]` : '',
+    ].filter(Boolean);
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+       VALUES ($1, $2, $3, $4, 'GPS_BREADCRUMB', $5, $6)`,
+      `log-${crypto.randomUUID().slice(0, 12)}`,
+      args.tenantId,
+      jId,
+      jCode,
+      noteParts.join(' · '),
+      args.actor || 'Driver Mobile GPS',
+    );
+
+    // Keep only the latest 180 GPS_BREADCRUMB pings per job (3 hours at 1-minute interval)
+    await db
+      .$executeRawUnsafe(
+        `DELETE FROM logistics_drayage_status_logs
+          WHERE tenant_id = $1
+            AND job_id = $2
+            AND status = 'GPS_BREADCRUMB'
+            AND id NOT IN (
+              SELECT id FROM logistics_drayage_status_logs
+               WHERE tenant_id = $1 AND job_id = $2 AND status = 'GPS_BREADCRUMB'
+               ORDER BY created_at DESC
+               LIMIT 180
+            )`,
+        args.tenantId,
+        jId,
+      )
+      .catch(() => {});
+  }
+
+  return {
+    ok: true,
+    jobId: targetJobs[0] ? String(targetJobs[0].id) : args.jobId,
+    jobCode: targetJobs[0] ? String(targetJobs[0].job_code) : 'DRIVER_TELEMETRY',
+    updatedJobsCount: targetJobs.length,
+    updatedVehiclesCount: vehicleIdSet.size,
+    latitude: lat,
+    longitude: lng,
+    location: primaryResolvedLoc,
+    recordedAt: new Date().toISOString(),
+  };
+}
+
+export async function recordDrayageDriverLogout(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    driverId?: string | null;
+    driverName?: string | null;
+    vehicleId?: string | null;
+    vehiclePlate?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const cleanDriverId = args.driverId ? String(args.driverId).trim() : '';
+  const cleanVehicleId = args.vehicleId ? String(args.vehicleId).trim() : '';
+  const cleanVehiclePlate = args.vehiclePlate ? String(args.vehiclePlate).trim() : '';
+
+  const vehicleIdSet = new Set<string>();
+  if (cleanVehicleId) vehicleIdSet.add(cleanVehicleId);
+
+  if (cleanVehicleId || cleanVehiclePlate || cleanDriverId) {
+    const matchedVehicles = await db
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM vehicles
+          WHERE tenant_id::text = $1
+            AND deleted_at IS NULL
+            AND (
+              ($2 <> '' AND id::text = $2)
+              OR ($3 <> '' AND (
+                UPPER(COALESCE(license_plate, '')) = UPPER($3)
+                OR UPPER(COALESCE(plate_number, '')) = UPPER($3)
+                OR UPPER(COALESCE(vehicle_code, '')) = UPPER($3)
+                OR UPPER(COALESCE(registration_no, '')) = UPPER($3)
+              ))
+              OR ($4 <> '' AND assigned_driver_id::text = $4)
+            )
+          LIMIT 5`,
+        args.tenantId,
+        cleanVehicleId,
+        cleanVehiclePlate,
+        cleanDriverId,
+      )
+      .catch(() => []);
+    for (const v of matchedVehicles) {
+      if (v.id) vehicleIdSet.add(String(v.id));
+    }
+  }
+
+  for (const vId of vehicleIdSet) {
+    await db
+      .$executeRawUnsafe(
+        `DELETE FROM fleet.bus_gps_pings
+          WHERE tenant_id = $1
+            AND vehicle_id = $2
+            AND COALESCE(source, 'DRIVER_APP') = 'DRIVER_APP'
+            AND occurred_at >= NOW() - INTERVAL '2 hours'`,
+        args.tenantId,
+        vId,
+      )
+      .catch(() => {});
+
+    await db
+      .$executeRawUnsafe(
+        `UPDATE driver_shifts
+            SET status = 'COMPLETED',
+                ended_at = NOW(),
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND vehicle_id = $2
+            AND status = 'ACTIVE'`,
+        args.tenantId,
+        vId,
+      )
+      .catch(() => {});
+  }
+
+  if (cleanDriverId) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE driver_shifts
+            SET status = 'COMPLETED',
+                ended_at = NOW(),
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND driver_id = $2
+            AND status = 'ACTIVE'`,
+        args.tenantId,
+        cleanDriverId,
+      )
+      .catch(() => {});
+  }
+
+  return {
+    ok: true,
+    loggedOutVehiclesCount: vehicleIdSet.size,
+    loggedOutAt: new Date().toISOString(),
+  };
 }
 
 export function computeHaversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -3105,7 +5851,7 @@ export async function saveTenantAutomationConfig(
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
      VALUES ($1, $2, 'CONFIG_AUTO_L2_DISPATCH_T30', $3, NOW())
-     ON CONFLICT (id) DO UPDATE SET acknowledged = $3, updated_at = NOW()`,
+     ON CONFLICT (id) DO UPDATE SET acknowledged = $3, updated_at = NOW() WHERE logistics_drayage_alerts.tenant_id = EXCLUDED.tenant_id`,
     alertId,
     args.tenantId,
     nextConfig.autoL2DispatchEnabled,
@@ -3167,7 +5913,7 @@ export async function findBest4FactorAssetsForRampPickup(
         `SELECT id, plate_number, license_plate, make, model, status, current_lat, current_lng, fuel_level_pct, fuel_level, current_mileage, next_service_km, assigned_driver_id, updated_at
            FROM vehicles
           WHERE deleted_at IS NULL
-            AND (tenant_id = $1 OR vehicle_usage = 'LOGISTICS')
+            AND tenant_id = $1
           LIMIT 50`,
         args.tenantId,
       )
@@ -3177,7 +5923,7 @@ export async function findBest4FactorAssetsForRampPickup(
         `SELECT id, first_name, last_name, name, status, assigned_vehicle_id
            FROM drivers
           WHERE deleted_at IS NULL
-            AND (tenant_id = $1 OR driver_type = 'LOGISTICS')
+            AND tenant_id = $1
           LIMIT 50`,
         args.tenantId,
       )
@@ -3233,17 +5979,25 @@ export async function findBest4FactorAssetsForRampPickup(
 
   const scored = pool.map((v) => {
     const vId = String(v.id);
-    const vLat = v.current_lat != null && Number(v.current_lat) !== 0 ? Number(v.current_lat) : 24.985;
-    const vLng = v.current_lng != null && Number(v.current_lng) !== 0 ? Number(v.current_lng) : 55.076;
-    const distanceKm = computeHaversineKm(vLat, vLng, args.targetLat, args.targetLng);
+    const rawLat = v.current_lat != null ? Number(v.current_lat) : NaN;
+    const rawLng = v.current_lng != null ? Number(v.current_lng) : NaN;
+    const hasRealCoords =
+      !isNaN(rawLat) &&
+      !isNaN(rawLng) &&
+      (rawLat !== 0 || rawLng !== 0) &&
+      !(Math.abs(rawLat - 25.0112) < 0.0005 && (Math.abs(rawLng - 55.0612) < 0.0005 || Math.abs(rawLng - 55.0617) < 0.0005)) &&
+      !(Math.abs(rawLat - 25.2048) < 0.0005 && Math.abs(rawLng - 55.2708) < 0.0005);
+    const distanceKm = hasRealCoords ? computeHaversineKm(rawLat, rawLng, args.targetLat, args.targetLng) : 999;
 
     // 1. Proximity (Default 60%, Super Admin configurable)
-    let proximityScore = 100;
-    if (distanceKm <= 3) proximityScore = 100;
-    else if (distanceKm <= 10) proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
-    else if (distanceKm <= 30) proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
-    else if (distanceKm <= 70) proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
-    else proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+    let proximityScore = 0;
+    if (hasRealCoords) {
+      if (distanceKm <= 3) proximityScore = 100;
+      else if (distanceKm <= 10) proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
+      else if (distanceKm <= 30) proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
+      else if (distanceKm <= 70) proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
+      else proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+    }
 
     // 2. Idleness (Default 25%, Super Admin configurable)
     let idleHours = 2.4;
@@ -3289,11 +6043,18 @@ export async function findBest4FactorAssetsForRampPickup(
       driverId: dId,
       driverName: driverFullName,
       totalScore,
-      distanceKm: Math.round(distanceKm * 10) / 10,
+      distanceKm: hasRealCoords ? Math.round(distanceKm * 10) / 10 : 0,
+      hasLiveGps: hasRealCoords,
+      hasLoggedInDriver: Boolean(v.assigned_driver_id),
     };
   });
 
-  scored.sort((a, b) => b.totalScore - a.totalScore);
+  scored.sort((a, b) => {
+    const aActive = a.hasLoggedInDriver || a.hasLiveGps ? 1 : 0;
+    const bActive = b.hasLoggedInDriver || b.hasLiveGps ? 1 : 0;
+    if (bActive !== aActive) return bActive - aActive;
+    return b.totalScore - a.totalScore;
+  });
   const best = scored[0];
 
   let trailerId = args.preferredTrailerId ? String(args.preferredTrailerId) : '';
@@ -3306,7 +6067,7 @@ export async function findBest4FactorAssetsForRampPickup(
 
   return {
     ...best,
-    trailerId: trailerId || `tr-9901-${args.tenantId.slice(0, 8)}`,
+    trailerId: trailerId || `tr-9901-${crypto.createHash('sha256').update(args.tenantId).digest('hex').slice(0, 12)}`,
     trailerPlate: trailerPlate || 'DXB-TR-9901',
   };
 }
@@ -3328,36 +6089,136 @@ export async function activateL2EmptyReturnJob(
   );
   const l1 = jobRows[0];
   if (!l1) throw new Error('L1 Job not found');
+
+  const l2Code = String(l1.job_code).replace('L1', 'L2') || `DRY-L2-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // Idempotency & race guard: if an L2 job already exists for this L1 job or L2 jobCode, return it without inserting a duplicate
+  const existingL2Rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id, job_code, assigned_vehicle_plate, assigned_driver_name
+       FROM logistics_drayage_jobs
+      WHERE tenant_id = $1
+        AND job_phase = 'L2'
+        AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))
+      ORDER BY created_at ASC
+      LIMIT 1`,
+    args.tenantId,
+    args.l1JobId,
+    l2Code,
+  );
+  if (existingL2Rows.length > 0) {
+    const existingL2 = existingL2Rows[0];
+    if (!l1.l2_activated || String(l1.status).toUpperCase() !== 'COMPLETED') {
+      await db.$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET l2_activated = TRUE,
+                status = 'COMPLETED',
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        args.l1JobId,
+        args.tenantId,
+      );
+    }
+    return {
+      ok: true,
+      l2JobId: String(existingL2.id),
+      l2JobCode: String(existingL2.job_code),
+      preAssigned: Boolean(existingL2.assigned_vehicle_plate),
+      vehiclePlate: existingL2.assigned_vehicle_plate ? String(existingL2.assigned_vehicle_plate) : undefined,
+      driverName: existingL2.assigned_driver_name ? String(existingL2.assigned_driver_name) : undefined,
+    };
+  }
+
   if (l1.l2_activated) throw new Error('L2 Empty Return is already activated for this container');
 
-  const l1Stage = getDrayageOperationalStageIndex(String(l1.status || ''), Boolean(l1.trailer_detached));
+  const l1Status = String(l1.status || '').toUpperCase();
+  const l1Stage = getDrayageOperationalStageIndex(l1Status, Boolean(l1.trailer_detached));
   const l1Placement = String(l1.placement_location || '').toUpperCase();
-  if (l1Stage < 4 || l1Placement === 'YARD' || !l1.etc_time) {
+  const isInitialYardDrop =
+    l1Placement === 'YARD' &&
+    (['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(l1Status) ||
+      l1Status.includes('TO RAMP') ||
+      l1Status.includes('TO_RAMP'));
+  if (l1Stage < 5 || isInitialYardDrop) {
     throw new Error(
-      'L2 Empty Return can only be triggered after the container is Placed at Ramp with an Offloading ETC set.',
+      'L2 Empty Return can only be triggered after the container is Placed at Ramp, Ready for Pickup, or Detached after Reassignment.',
     );
   }
 
   const l2Id = `job-l2-${crypto.randomUUID().slice(0, 10)}`;
-  const l2Code = String(l1.job_code).replace('L1', 'L2') || `DRY-L2-${Math.floor(1000 + Math.random() * 9000)}`;
   const rampLat = l1.current_lat != null ? Number(l1.current_lat) : 24.9642;
   const rampLng = l1.current_lng != null ? Number(l1.current_lng) : 55.0915;
 
-  // Mark L1 as COMPLETED / L2_ACTIVATED
-  await db.$executeRawUnsafe(
+  // Atomically claim L1 as COMPLETED / L2_ACTIVATED so concurrent triggers cannot insert twice
+  const claimedRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `UPDATE logistics_drayage_jobs
         SET l2_activated = TRUE,
             status = 'COMPLETED',
             updated_at = NOW()
-      WHERE id = $1 AND tenant_id = $2`,
+      WHERE id = $1 AND tenant_id = $2 AND COALESCE(l2_activated, FALSE) = FALSE
+      RETURNING id`,
     args.l1JobId,
     args.tenantId,
   );
+  if (claimedRows.length === 0) {
+    const concurrentL2Rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT id, job_code, assigned_vehicle_plate, assigned_driver_name
+         FROM logistics_drayage_jobs
+        WHERE tenant_id = $1
+          AND job_phase = 'L2'
+          AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))
+        ORDER BY created_at ASC
+        LIMIT 1`,
+      args.tenantId,
+      args.l1JobId,
+      l2Code,
+    );
+    if (concurrentL2Rows.length > 0) {
+      const concurrentL2 = concurrentL2Rows[0];
+      return {
+        ok: true,
+        l2JobId: String(concurrentL2.id),
+        l2JobCode: String(concurrentL2.job_code),
+        preAssigned: Boolean(concurrentL2.assigned_vehicle_plate),
+      };
+    }
+    throw new Error('L2 Empty Return is already activated for this container');
+  }
 
-  const isAutoT30 = args.triggerSource === 'AUTO_T30';
-  const shouldPreAssign = args.preAssignTractor !== undefined ? args.preAssignTractor : isAutoT30;
+  const shouldPreAssign = Boolean(args.preAssignTractor);
 
-  // Create L2 Empty Return Job (from Warehouse back to Port Terminal)
+  // Resolve any redirected L2 Return Terminal set during L1 (EN_ROUTE_WAREHOUSE -> PLACED_AT_RAMP/YARD -> READY_FOR_PICKUP)
+  let targetReturnTerminalId: string | null = l1.return_terminal_id
+    ? String(l1.return_terminal_id)
+    : l1.terminal_id
+    ? String(l1.terminal_id)
+    : null;
+  let targetReturnTerminalName: string = l1.return_terminal_name
+    ? String(l1.return_terminal_name)
+    : String(l1.terminal_name);
+
+  const rtLogRows = await db
+    .$queryRawUnsafe<Array<{ notes: string }>>(
+      `SELECT notes
+         FROM logistics_drayage_status_logs
+        WHERE tenant_id = $1
+          AND (job_id = $2 OR UPPER(job_code) = UPPER($3))
+          AND status = 'RETURN_TERMINAL_CHANGED'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      args.tenantId,
+      args.l1JobId,
+      String(l1.job_code),
+    )
+    .catch(() => []);
+  if (rtLogRows[0]?.notes) {
+    const parsedRt = parseReturnTerminalTag(rtLogRows[0].notes);
+    if (parsedRt) {
+      targetReturnTerminalId = parsedRt.returnTerminalId ?? targetReturnTerminalId;
+      targetReturnTerminalName = parsedRt.returnTerminalName || targetReturnTerminalName;
+    }
+  }
+
+  // Create L2 Empty Return Job (from Warehouse back to Target Return Terminal)
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_jobs (
       id, tenant_id, job_code, job_phase, parent_job_id, shipment_type, status, priority,
@@ -3383,8 +6244,8 @@ export async function activateL2EmptyReturnJob(
     String(l1.customer_name),
     l1.warehouse_id ? String(l1.warehouse_id) : null,
     String(l1.warehouse_name),
-    l1.terminal_id ? String(l1.terminal_id) : null,
-    String(l1.terminal_name),
+    targetReturnTerminalId,
+    targetReturnTerminalName,
     l1.container_id ? String(l1.container_id) : null,
     String(l1.container_number),
     String(l1.container_size ?? '40HC'),
@@ -3394,10 +6255,23 @@ export async function activateL2EmptyReturnJob(
     l1.assigned_trailer_plate ? String(l1.assigned_trailer_plate) : null,
     rampLat,
     rampLng,
-    isAutoT30
-      ? `Auto-L2 Empty Return triggered at T-30m before ETC from ${l1.job_code}`
+    targetReturnTerminalName !== String(l1.terminal_name)
+      ? `Auto-generated L2 Empty Container Return from ${l1.job_code} (Return Terminal Redirected: ${l1.terminal_name} → ${targetReturnTerminalName})`
       : `Auto-generated L2 Empty Container Return from ${l1.job_code}`,
   );
+
+  await db
+    .$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET return_terminal_id = $3,
+              return_terminal_name = $4
+        WHERE id = $1 AND tenant_id = $2`,
+      l2Id,
+      args.tenantId,
+      targetReturnTerminalId,
+      targetReturnTerminalName,
+    )
+    .catch(() => {});
 
   let preAssignedInfo: {
     vehiclePlate?: string;
@@ -3419,7 +6293,7 @@ export async function activateL2EmptyReturnJob(
     });
 
     if (bestMatch) {
-      const termLower = String(l1.terminal_name ?? '').toLowerCase();
+      const termLower = String(targetReturnTerminalName ?? '').toLowerCase();
       const tokenPrefix = termLower.includes('khalifa') || termLower.includes('ad ports') ? 'MQT-L2' : 'DPW-L2';
       const tokenNumber = `${tokenPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -3467,8 +6341,8 @@ export async function activateL2EmptyReturnJob(
   }
 
   const logNote = preAssignedInfo
-    ? `L2 Empty Return ${l2Code} activated (${isAutoT30 ? 'Auto T-30m Threshold' : 'Manual Dispatch'}) & Pre-Assigned to ${preAssignedInfo.vehiclePlate} (${preAssignedInfo.driverName}) via 4-Factor Telematics Match [${preAssignedInfo.matchScorePct}% Match · ${preAssignedInfo.distanceKm} km]`
-    : `L2 Empty Container Return ${l2Code} activated for container ${l1.container_number}`;
+    ? `L2 Empty Return ${l2Code} activated & Pre-Assigned to ${preAssignedInfo.vehiclePlate} (${preAssignedInfo.driverName}) via 4-Factor Telematics Match [${preAssignedInfo.matchScorePct}% Match · ${preAssignedInfo.distanceKm} km]`
+    : `L2 Empty Container Return ${l2Code} activated for container ${l1.container_number} (Return Terminal: ${targetReturnTerminalName})`;
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
@@ -3478,7 +6352,7 @@ export async function activateL2EmptyReturnJob(
     args.l1JobId,
     String(l1.job_code),
     logNote,
-    isAutoT30 ? 'Auto-L2 Dispatch Engine (T-30m)' : 'Dispatch Console',
+    'Dispatch Console',
   );
 
   return {
@@ -3487,6 +6361,223 @@ export async function activateL2EmptyReturnJob(
     l2JobCode: l2Code,
     preAssigned: Boolean(preAssignedInfo),
     ...preAssignedInfo,
+  };
+}
+
+export async function updateDrayageReturnTerminal(
+  db: DrayageDbClient,
+  args: {
+    tenantId: string;
+    jobId: string;
+    returnTerminalId?: string | null;
+    returnTerminalName?: string | null;
+    reason?: string | null;
+    actor?: string | null;
+  },
+) {
+  await ensureDrayageSchema(db);
+  const jobRows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT * FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    args.jobId,
+    args.tenantId,
+  );
+  const job = jobRows[0];
+  if (!job) throw new Error('Drayage job not found');
+
+  const jobPhase =
+    String(job.job_phase || '').trim().toUpperCase() === 'L2' ||
+    String(job.job_code || '').toUpperCase().includes('-L2')
+      ? 'L2'
+      : 'L1';
+  const jobStatus = String(job.status || 'PENDING').trim();
+
+  // Enforce the exact status window:
+  // Unlocked starting from EN_ROUTE_WAREHOUSE on L1, through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP, and L2 - PENDING.
+  // Locked before EN_ROUTE_WAREHOUSE on L1 and locked after L2 - PENDING.
+  const isAllowed = canChangeDrayageReturnTerminal({
+    jobPhase,
+    jobCode: String(job.job_code || ''),
+    status: jobStatus,
+    l2Activated: Boolean(job.l2_activated),
+    assignedVehicleId: job.assigned_vehicle_id ? String(job.assigned_vehicle_id) : null,
+    assignedVehiclePlate: job.assigned_vehicle_plate ? String(job.assigned_vehicle_plate) : null,
+  });
+
+  if (!isAllowed) {
+    throw new Error(
+      jobPhase === 'L1'
+        ? `Return Terminal can only be changed after the container exits the port on L1 (starting from EN_ROUTE_WAREHOUSE through PLACED_AT_RAMP / PLACED_AT_YARD / MT_Reassign to Yard / READY_FOR_PICKUP). Current status: ${jobStatus}.`
+        : `Return Terminal for L2 jobs can only be changed while in PENDING status (before L2 Vehicle Assignment). Current status: ${jobStatus}.`,
+    );
+  }
+
+  // Resolve target terminal from Terminal Master
+  let resolvedTerminalId: string | null = args.returnTerminalId ? String(args.returnTerminalId).trim() : null;
+  let resolvedTerminalName: string = args.returnTerminalName ? String(args.returnTerminalName).trim() : '';
+
+  if (resolvedTerminalId) {
+    const termRows = await db
+      .$queryRawUnsafe<Array<{ id: string; name: string }>>(
+        `SELECT id, name FROM logistics_drayage_terminals WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        resolvedTerminalId,
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (termRows[0]) {
+      resolvedTerminalId = String(termRows[0].id);
+      resolvedTerminalName = String(termRows[0].name);
+    }
+  } else if (resolvedTerminalName) {
+    const termRows = await db
+      .$queryRawUnsafe<Array<{ id: string; name: string }>>(
+        `SELECT id, name FROM logistics_drayage_terminals WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1`,
+        args.tenantId,
+        resolvedTerminalName,
+      )
+      .catch(() => []);
+    if (termRows[0]) {
+      resolvedTerminalId = String(termRows[0].id);
+      resolvedTerminalName = String(termRows[0].name);
+    }
+  }
+
+  if (!resolvedTerminalName) {
+    throw new Error('Please select a valid Return Terminal.');
+  }
+
+  // Determine previous / origin terminal name for audit logging
+  let originTerminalName = String(job.terminal_name || 'Port Terminal');
+  if (jobPhase === 'L2' && job.parent_job_id) {
+    const parentRows = await db
+      .$queryRawUnsafe<Array<{ terminal_name: string }>>(
+        `SELECT terminal_name FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        String(job.parent_job_id),
+        args.tenantId,
+      )
+      .catch(() => []);
+    if (parentRows[0]?.terminal_name) {
+      originTerminalName = String(parentRows[0].terminal_name);
+    }
+  }
+
+  const prevReturnRows = await db
+    .$queryRawUnsafe<Array<{ notes: string }>>(
+      `SELECT notes
+         FROM logistics_drayage_status_logs
+        WHERE tenant_id = $1
+          AND (job_id = $2 OR UPPER(job_code) = UPPER($3))
+          AND status = 'RETURN_TERMINAL_CHANGED'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      args.tenantId,
+      args.jobId,
+      String(job.job_code),
+    )
+    .catch(() => []);
+  const prevParsed = prevReturnRows[0]?.notes ? parseReturnTerminalTag(prevReturnRows[0].notes) : null;
+  const previousEffectiveTerminalName =
+    prevParsed?.returnTerminalName ||
+    (job.return_terminal_name ? String(job.return_terminal_name) : String(job.terminal_name));
+
+  // 1. If L2 job (in PENDING status), update terminal_id and terminal_name directly on the L2 job
+  if (jobPhase === 'L2') {
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET terminal_id = $3,
+              terminal_name = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+      resolvedTerminalId,
+      resolvedTerminalName,
+    );
+  } else {
+    // Touch updated_at on L1 job so caches refresh
+    await db.$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+    );
+    // Also update any already-spawned PENDING L2 child job if one exists
+    const l2Code = String(job.job_code).replace('-L1-', '-L2-');
+    await db
+      .$executeRawUnsafe(
+        `UPDATE logistics_drayage_jobs
+            SET terminal_id = $4,
+                terminal_name = $5,
+                updated_at = NOW()
+          WHERE tenant_id = $1
+            AND job_phase = 'L2'
+            AND status = 'PENDING'
+            AND (parent_job_id = $2 OR UPPER(job_code) = UPPER($3))`,
+        args.tenantId,
+        args.jobId,
+        l2Code,
+        resolvedTerminalId,
+        resolvedTerminalName,
+      )
+      .catch(() => {});
+  }
+
+  // 2. Update return_terminal_id / return_terminal_name columns if migration is applied
+  await db
+    .$executeRawUnsafe(
+      `UPDATE logistics_drayage_jobs
+          SET return_terminal_id = $3,
+              return_terminal_name = $4,
+              updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2`,
+      args.jobId,
+      args.tenantId,
+      resolvedTerminalId,
+      resolvedTerminalName,
+    )
+    .catch(() => {});
+
+  if (job.container_id) {
+    await db
+      .$executeRawUnsafe(
+        `UPDATE logistics_drayage_containers
+            SET return_terminal_id = $3,
+                return_terminal_name = $4,
+                updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        String(job.container_id),
+        args.tenantId,
+        resolvedTerminalId,
+        resolvedTerminalName,
+      )
+      .catch(() => {});
+  }
+
+  // 3. Record RETURN_TERMINAL_CHANGED in logistics_drayage_status_logs (both for Timeline Audit & Zero-DDL persistence)
+  const reasonSuffix = args.reason && String(args.reason).trim() ? ` — Reason: ${String(args.reason).trim()}` : '';
+  const structuredTag = `[RETURN_TERM:${resolvedTerminalId || ''}|${resolvedTerminalName}|FROM:${originTerminalName}]`;
+  const auditNote = `${structuredTag} L2 Empty Return Terminal changed: ${previousEffectiveTerminalName} → ${resolvedTerminalName} (Origin L1 Pickup: ${originTerminalName})${reasonSuffix}`;
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+     VALUES ($1, $2, $3, $4, 'RETURN_TERMINAL_CHANGED', $5, $6)`,
+    `log-${crypto.randomUUID().slice(0, 12)}`,
+    args.tenantId,
+    args.jobId,
+    String(job.job_code),
+    auditNote,
+    args.actor || 'Dispatch Console',
+  );
+
+  return {
+    ok: true,
+    jobId: args.jobId,
+    jobCode: String(job.job_code),
+    jobPhase,
+    originTerminalName,
+    previousReturnTerminalName: previousEffectiveTerminalName,
+    returnTerminalId: resolvedTerminalId,
+    returnTerminalName: resolvedTerminalName,
   };
 }
 
@@ -3552,24 +6643,42 @@ export async function checkAndAutoActivateExpiredEtcJobs(
     driverName?: string;
     matchScorePct?: number;
   }>;
+  reassigned?: Array<{
+    jobId: string;
+    jobCode: string;
+    newStatus: string;
+  }>;
 }> {
   await ensureDrayageSchema(db);
-  if (tenantId) {
-    const isAutoEnabled = await getTenantAutoL2DispatchEnabled(db, tenantId);
-    if (!isAutoEnabled) {
-      return { checked: 0, activated: [] };
-    }
-  }
+  // LogiXL-Connect pattern (background_worker.go + status_helper.go):
+  // 1) Any L1 job at Ramp / Yard / Detached whose ETC has expired (etc_time <= NOW()) transitions to FCL_REASSIGN / MT_REASSIGN
+  //    so the Dispatcher is alerted and can reassign a tractor. ETC expiry NEVER triggers L2 directly.
+  // 2) Only jobs in READY_FOR_PICKUP (after Reassign) or CONTAINER_OFFLOADED activate L2 Empty Return.
+  const shouldPreAssign = Boolean(options?.preAssignTractor);
 
-  const thresholdMins = options?.thresholdMinutes ?? 30;
   const whereClause = tenantId
-    ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= (NOW() + ($2 || ' minutes')::interval)`
-    : `job_phase = 'L1' AND l2_activated = FALSE AND etc_time IS NOT NULL AND etc_time <= (NOW() + ($1 || ' minutes')::interval)`;
-  const params = tenantId ? [tenantId, String(thresholdMins)] : [String(thresholdMins)];
+    ? `tenant_id = $1 AND job_phase = 'L1' AND l2_activated = FALSE AND (
+         (etc_time IS NOT NULL AND etc_time <= NOW() + INTERVAL '15 minutes' AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
+         OR status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED')
+       )`
+    : `job_phase = 'L1' AND l2_activated = FALSE AND (
+         (etc_time IS NOT NULL AND etc_time <= NOW() + INTERVAL '15 minutes' AND status IN ('PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'PLACED_AT_YARD', 'TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'))
+         OR status IN ('READY_FOR_PICKUP', 'CONTAINER_OFFLOADED')
+       )`;
+  const params = tenantId ? [tenantId] : [];
   const dueJobs = await db.$queryRawUnsafe<
-    Array<{ id: string; tenant_id: string; job_code: string; status: string; placement_location: string | null; trailer_detached: boolean; etc_time: Date }>
+    Array<{
+      id: string;
+      tenant_id: string;
+      job_code: string;
+      shipment_type: string | null;
+      status: string;
+      placement_location: string | null;
+      trailer_detached: boolean;
+      etc_time: Date | null;
+    }>
   >(
-    `SELECT id, tenant_id, job_code, status, placement_location, trailer_detached, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
+    `SELECT id, tenant_id, job_code, shipment_type, status, placement_location, trailer_detached, etc_time FROM logistics_drayage_jobs WHERE ${whereClause} LIMIT 25`,
     ...params,
   );
 
@@ -3583,16 +6692,101 @@ export async function checkAndAutoActivateExpiredEtcJobs(
     matchScorePct?: number;
   }> = [];
 
+  const reassigned: Array<{
+    jobId: string;
+    jobCode: string;
+    newStatus: string;
+  }> = [];
+
   for (const job of dueJobs) {
     try {
-      const stage = getDrayageOperationalStageIndex(String(job.status || ''), Boolean(job.trailer_detached));
-      if (stage < 4 || String(job.placement_location || '').toUpperCase() === 'YARD') continue;
+      const jobStatus = String(job.status || '').toUpperCase();
+      const stage = getDrayageOperationalStageIndex(jobStatus, Boolean(job.trailer_detached));
+      if (stage < 5) continue;
+
+      // 1. First Alert (<= 15m) or ETC Expiry on Ramp / Yard / Detached jobs transitions to directional Reassign status
+      const isEtcAlertForReassign = [
+        'PLACED_AT_RAMP',
+        'REASSIGN_PLACED_AT_RAMP',
+        'PLACED_AT_YARD',
+        'TRAILER_DETACHED',
+        'CONTAINER_DETACHED',
+        'REASSIGN_TRAILER_DETACHED',
+      ].includes(jobStatus);
+
+      if (isEtcAlertForReassign) {
+        const etcMs = job.etc_time ? new Date(job.etc_time).getTime() : 0;
+        const minsLeft = Math.ceil((etcMs - Date.now()) / 60000);
+        const isExpired = minsLeft <= 0;
+        const isDetachedOrExpired =
+          isExpired ||
+          Boolean(job.trailer_detached) ||
+          ['TRAILER_DETACHED', 'CONTAINER_DETACHED', 'REASSIGN_TRAILER_DETACHED'].includes(jobStatus);
+        const originLoc =
+          jobStatus === 'PLACED_AT_YARD' || String(job.placement_location || '').toUpperCase() === 'YARD'
+            ? 'YARD'
+            : 'RAMP';
+        const nextStatus = resolveDirectionalReassignStatus({
+          originLocation: originLoc,
+          shipmentType: String(job.shipment_type || 'IMPORT'),
+        });
+        const nextAlertStatus = isExpired ? 'EXPIRED' : 'T15_WARNING';
+
+        if (isDetachedOrExpired) {
+          await db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET status = $2,
+                    placement_location = $3,
+                    etc_alert_status = $4,
+                    assigned_vehicle_id = NULL,
+                    assigned_vehicle_plate = NULL,
+                    assigned_driver_id = NULL,
+                    assigned_driver_name = NULL,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            job.id,
+            nextStatus,
+            originLoc,
+            nextAlertStatus,
+          );
+          await db.$executeRawUnsafe(
+            `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+             VALUES ($1, $2, $3, $4, $5, $6, 'ETC Background Worker')`,
+            `log-${crypto.randomUUID().slice(0, 12)}`,
+            String(job.tenant_id),
+            String(job.id),
+            String(job.job_code),
+            nextStatus,
+            `Auto-Trigger: First ETC Alert (${nextAlertStatus}) - Transitioned to ${nextStatus}`,
+          ).catch(() => {});
+          reassigned.push({
+            jobId: String(job.id),
+            jobCode: String(job.job_code),
+            newStatus: nextStatus,
+          });
+        } else {
+          await db.$executeRawUnsafe(
+            `UPDATE logistics_drayage_jobs
+                SET etc_alert_status = $2,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            job.id,
+            nextAlertStatus,
+          );
+        }
+        continue;
+      }
+
+      // 2. Only READY_FOR_PICKUP / CONTAINER_OFFLOADED jobs trigger L2 Empty Return
+      if (!['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED'].includes(jobStatus)) {
+        continue;
+      }
 
       const res = await activateL2EmptyReturnJob(db, {
         tenantId: String(job.tenant_id),
         l1JobId: String(job.id),
-        preAssignTractor: options?.preAssignTractor ?? true,
-        triggerSource: 'AUTO_T30',
+        preAssignTractor: shouldPreAssign,
+        triggerSource: 'MANUAL',
       });
       await db.$executeRawUnsafe(
         `UPDATE logistics_drayage_jobs
@@ -3611,10 +6805,10 @@ export async function checkAndAutoActivateExpiredEtcJobs(
         matchScorePct: res.matchScorePct,
       });
     } catch (err) {
-      console.error(`[checkAndAutoActivateExpiredEtcJobs] Error activating L2 for ${job.job_code}:`, err);
+      console.error(`[checkAndAutoActivateExpiredEtcJobs] Error processing ${job.job_code}:`, err);
     }
   }
-  return { checked: dueJobs.length, activated };
+  return { checked: dueJobs.length, activated, reassigned };
 }
 
 export async function recordDrayageStatusLog(
@@ -3762,6 +6956,10 @@ export async function sendDispatchChatMessage(
   },
 ) {
   await ensureDrayageSchema(db);
+  await db.$executeRawUnsafe(
+    `DELETE FROM logistics_drayage_messages WHERE tenant_id = $1 AND created_at < NOW() - INTERVAL '12 hours'`,
+    args.tenantId,
+  ).catch(() => {});
   const isBroadcast = Boolean(args.isBroadcast || args.jobId === 'BROADCAST');
   let jobCode = 'BROADCAST';
   if (!isBroadcast) {
@@ -3796,11 +6994,11 @@ export async function acknowledgeDrayageAlert(
   args: { tenantId: string; alertKey: string },
 ) {
   await ensureDrayageSchema(db);
-  const id = `ack-${args.tenantId.slice(0, 8)}-${args.alertKey}`;
+  const id = `ack-${crypto.createHash('sha256').update(args.tenantId).digest('hex').slice(0, 12)}-${args.alertKey}`;
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_alerts (id, tenant_id, alert_key, acknowledged, updated_at)
      VALUES ($1, $2, $3, TRUE, NOW())
-     ON CONFLICT (id) DO UPDATE SET acknowledged = TRUE, updated_at = NOW()`,
+     ON CONFLICT (id) DO UPDATE SET acknowledged = TRUE, updated_at = NOW() WHERE logistics_drayage_alerts.tenant_id = EXCLUDED.tenant_id`,
     id,
     args.tenantId,
     args.alertKey,
@@ -4323,9 +7521,28 @@ export async function findStreetTurnCandidates(
 ): Promise<StreetTurnMatch[]> {
   const workspace = await getDrayageWorkspaceData(db, tenantId);
   const whCoordsByName = new Map<string, { lat: number; lng: number }>();
+  const whAllowanceByName = new Map<string, number>();
   for (const w of workspace.warehouses) {
     whCoordsByName.set(w.name.toLowerCase(), { lat: w.lat, lng: w.lng });
+    if (w.driverAllowanceAed && w.driverAllowanceAed > 0) {
+      whAllowanceByName.set(w.name.toLowerCase(), w.driverAllowanceAed);
+    }
   }
+  const termCoordsByKey = new Map<string, { lat: number; lng: number }>();
+  for (const t of workspace.terminals) {
+    termCoordsByKey.set(t.name.toLowerCase(), { lat: t.lat, lng: t.lng });
+    termCoordsByKey.set(t.code.toLowerCase(), { lat: t.lat, lng: t.lng });
+  }
+  const resolveTerminalCoords = (termName?: string | null): { lat: number; lng: number } => {
+    const key = (termName || '').trim().toLowerCase();
+    const exact = termCoordsByKey.get(key);
+    if (exact) return exact;
+    if (key.includes('khalifa') || key.includes('auh')) return { lat: 24.8432, lng: 54.7121 };
+    if (key.includes('rashid')) return { lat: 25.2697, lng: 55.2758 };
+    if (key.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+    if (key.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+    return { lat: 25.0112, lng: 55.0617 };
+  };
 
   const resolveWarehouseCoords = (job: DrayageJob): { lat: number; lng: number } => {
     const exact = whCoordsByName.get((job.warehouseName || '').toLowerCase());
@@ -4338,29 +7555,49 @@ export async function findStreetTurnCandidates(
     return { lat: 24.9642, lng: 55.0915 };
   };
 
-  // Inbound candidates: L1 jobs Placed at Ramp (or detached at ramp) AND unassigned L2 Empty Return jobs
+  // Inbound candidates: L1 jobs Placed at Ramp (or detached after Reassign / Ready for Pickup) AND unassigned L2 Empty Return jobs
+  // Exclude initial Yard Drops (PLACED_AT_YARD / FCL_REASSIGN / MT_REASSIGN) which are still loaded (FCL) awaiting Yard-to-Ramp shunting
   const inboundRampOrEmptyJobs = workspace.jobs.filter((j) => {
     if (j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'STREET_TURNED' || j.streetTurnJobId) {
       return false;
     }
-    const isL1AtRamp =
+    const st = (j.status || '').toUpperCase();
+    const isInitialYardDrop =
+      ['PLACED_AT_YARD', 'FCL_REASSIGN', 'MT_REASSIGN'].includes(st) ||
+      ((j.placementLocation || '').toUpperCase() === 'YARD' &&
+        !['READY_FOR_PICKUP', 'CONTAINER_OFFLOADED', 'REASSIGN_TRAILER_DETACHED'].includes(st));
+    if (j.jobPhase === 'L1' && isInitialYardDrop) {
+      return false;
+    }
+    const isL1AtRampOrReady =
       j.jobPhase === 'L1' &&
       !j.l2Activated &&
-      (['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'WAITING_MT_RETURN'].includes(j.status) ||
+      (Boolean(j.trailerDetached) ||
+        [
+          'PLACED_AT_RAMP',
+          'REASSIGN_PLACED_AT_RAMP',
+          'CONTAINER_DETACHED',
+          'TRAILER_DETACHED',
+          'REASSIGN_TRAILER_DETACHED',
+          'READY_FOR_PICKUP',
+          'CONTAINER_OFFLOADED',
+          'WAITING_MT_RETURN',
+        ].includes(st) ||
         j.placementLocation === 'RAMP');
     const isUnassignedL2 =
-      !j.assignedVehicleId && (j.jobPhase === 'L2' || j.status === 'WAITING_MT_RETURN');
-    return isL1AtRamp || isUnassignedL2;
+      !j.assignedVehicleId && (j.jobPhase === 'L2' || st === 'WAITING_MT_RETURN');
+    return isL1AtRampOrReady || isUnassignedL2;
   });
 
-  // Outbound candidates: Pending Export L1 bookings OR L1 Import pickups at the same Port Terminal (Port Reload)
-  const unassignedJobs = workspace.jobs.filter(
-    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && j.status !== 'STREET_TURNED',
+  // Outbound candidates: Pending Export L1 bookings OR Pending L1 Import pickups at the same Port Terminal (Port Reload)
+  // Exclude jobs already picked up or sitting in Customer Yard (FCL_REASSIGN / MT_REASSIGN / trailerDetached)
+  const pendingOutboundJobs = workspace.jobs.filter(
+    (j) => !j.assignedVehicleId && j.status === 'PENDING' && !j.trailerDetached,
   );
-  const exportJobs = unassignedJobs.filter(
+  const exportJobs = pendingOutboundJobs.filter(
     (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'),
   );
-  const outboundCandidates = exportJobs.length > 0 ? exportJobs : unassignedJobs.filter((j) => j.jobPhase === 'L1');
+  const outboundCandidates = exportJobs.length > 0 ? exportJobs : pendingOutboundJobs.filter((j) => j.jobPhase === 'L1');
 
   if (inboundRampOrEmptyJobs.length === 0 || outboundCandidates.length === 0) return [];
 
@@ -4373,7 +7610,7 @@ export async function findStreetTurnCandidates(
       const isExportOutbound =
         exp.shipmentType === 'EXPORT' || exp.jobCode.startsWith('EXP') || exp.jobCode.includes('EXP');
       const sameTerminalReload =
-        inbound.jobPhase === 'L2' &&
+        !isExportOutbound &&
         (inbound.terminalName || '').trim().toLowerCase() === (exp.terminalName || '').trim().toLowerCase();
 
       // 1. Super Admin Configurable Radius Haversine Proximity Check (Default <= 15 km)
@@ -4393,13 +7630,16 @@ export async function findStreetTurnCandidates(
 
       if (!sameTerminalReload && interDist > maxRadiusKm) continue;
 
-      // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match
+      // 2. Equipment Size (20FT / 40HC / 40FT) & Grade/Type Match (Port Reload on a 40FT chassis supports any standard container)
       const sizeMatch =
+        sameTerminalReload ||
         inbound.containerSize === exp.containerSize ||
         (inbound.containerSize.startsWith('40') && exp.containerSize.startsWith('40'));
       if (!sizeMatch) continue;
 
-      const typeMatch = (inbound.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
+      const typeMatch =
+        sameTerminalReload ||
+        (inbound.containerType || 'DRY').toUpperCase() === (exp.containerType || 'DRY').toUpperCase();
       if (!typeMatch) continue;
 
       // 3. Carrier Line Matching (mandatory for inland box reuse, optional bonus for Port Terminal Reload)
@@ -4410,11 +7650,28 @@ export async function findStreetTurnCandidates(
         continue;
       }
 
-      const deadheadKmSaved = sameTerminalReload && !isExportOutbound
-        ? 38
-        : Math.max(44, Math.round(58 - interDist));
+      const tInbound = resolveTerminalCoords(inbound.returnTerminalName || inbound.terminalName);
+      const tOutbound = resolveTerminalCoords(exp.terminalName);
+      const distInboundWhToTermKm = Math.max(2.0, Math.round(computeHaversineKm(c1.lat, c1.lng, tInbound.lat, tInbound.lng) * 1.25 * 10) / 10);
+      const distOutboundTermToWhKm = Math.max(2.0, Math.round(computeHaversineKm(tOutbound.lat, tOutbound.lng, c2.lat, c2.lng) * 1.25 * 10) / 10);
+      const interTermKm = sameTerminalReload ? 0 : Math.round(computeHaversineKm(tInbound.lat, tInbound.lng, tOutbound.lat, tOutbound.lng) * 1.25 * 10) / 10;
+
+      const rawDeadheadSavedKm = sameTerminalReload && !isExportOutbound
+        ? distInboundWhToTermKm + distOutboundTermToWhKm - interTermKm
+        : distInboundWhToTermKm + distOutboundTermToWhKm - interDist;
+      const deadheadKmSaved = Math.max(1.0, Math.round(rawDeadheadSavedKm * 10) / 10);
       const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
-      const fuelSavingsAed = Math.round(deadheadKmSaved * 4.5 + 420);
+      const inboundAllowAed =
+        inbound.driverAllowanceAed ||
+        whAllowanceByName.get((inbound.warehouseName || '').toLowerCase()) ||
+        150;
+      const PORT_GATE_FEE_AED = 35;
+      const savedAllowanceAndGateAed = sameTerminalReload && !isExportOutbound
+        ? inboundAllowAed + PORT_GATE_FEE_AED
+        : inboundAllowAed + 2 * PORT_GATE_FEE_AED;
+      const fuelSavingsAed = Math.round(deadheadKmSaved * 3.85 + savedAllowanceAndGateAed);
+      const gateDwellSavedHrs = sameTerminalReload && !isExportOutbound ? 1.5 : 2.2;
+      const turnaroundHoursSaved = Math.round((deadheadKmSaved / 45 + gateDwellSavedHrs) * 10) / 10;
       const isReefer = (inbound.containerType || 'DRY').toUpperCase().includes('REEFER');
       const containerGrade = sameTerminalReload && !isExportOutbound
         ? `Port Dual-Transaction @ ${exp.terminalName} (0 km Handoff)`
@@ -4447,7 +7704,7 @@ export async function findStreetTurnCandidates(
         deadheadKmSaved,
         co2SavedKg,
         fuelSavingsAed,
-        turnaroundHoursSaved: 4.5,
+        turnaroundHoursSaved,
         score: Math.min(100, score),
       });
     }
@@ -4473,6 +7730,8 @@ export async function executeStreetTurnTriangulation(
     trailerId?: string;
     trailerPlate?: string;
     tokenNumber?: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
     actor?: string;
   },
 ) {
@@ -4595,6 +7854,8 @@ export async function executeStreetTurnTriangulation(
         trailerId: args.trailerId,
         trailerPlate: args.trailerPlate || 'DXB-TR-9901',
         tokenNumber: token,
+        pcsSlotStart: args.pcsSlotStart,
+        pcsSlotEnd: args.pcsSlotEnd,
       });
     }
   }
@@ -4611,6 +7872,8 @@ export async function executeStreetTurnTriangulation(
       trailerId: args.trailerId,
       trailerPlate: args.trailerPlate || 'DXB-TR-9901',
       tokenNumber: token,
+      pcsSlotStart: args.pcsSlotStart,
+      pcsSlotEnd: args.pcsSlotEnd,
     });
   }
 
@@ -4649,6 +7912,8 @@ export async function executeStreetTurnTriangulation(
         trailerId: args.trailerId,
         trailerPlate: args.trailerPlate || 'DXB-TR-9901',
         tokenNumber: token,
+        pcsSlotStart: args.pcsSlotStart,
+        pcsSlotEnd: args.pcsSlotEnd,
       });
     }
   }
@@ -4669,9 +7934,53 @@ export async function executeStreetTurnTriangulation(
     args.actor || 'Dispatcher Console',
   );
 
-  const deadheadKmSaved = args.leg3JobId && !args.holdLeg3 ? 68 : 52;
+  // Compute actual dynamic savings from terminal and warehouse records
+  const [termRows, whRows] = await Promise.all([
+    db.$queryRawUnsafe<Array<{ id: string; name: string; code: string; lat: number; lng: number }>>(
+      `SELECT id, name, code, lat, lng FROM logistics_drayage_terminals WHERE tenant_id = $1`,
+      args.tenantId,
+    ).catch(() => []),
+    db.$queryRawUnsafe<Array<{ id: string; name: string; lat: number; lng: number; driver_allowance_aed: number | null }>>(
+      `SELECT id, name, lat, lng, driver_allowance_aed FROM logistics_drayage_warehouses WHERE tenant_id = $1`,
+      args.tenantId,
+    ).catch(() => []),
+  ]);
+  const resolveWhCoordRow = (r: Record<string, unknown>) => {
+    const wId = r.warehouse_id ? String(r.warehouse_id) : '';
+    const wName = String(r.warehouse_name || '').toLowerCase();
+    const m = whRows.find((w) => w.id === wId || w.name.toLowerCase() === wName);
+    if (m && m.lat && m.lng) return { lat: Number(m.lat), lng: Number(m.lng), allowance: Number(m.driver_allowance_aed || 150) };
+    return { lat: 24.9602, lng: 55.0615, allowance: 150 };
+  };
+  const resolveTermCoordRow = (r: Record<string, unknown>) => {
+    const tId = String(r.return_terminal_id || r.terminal_id || '');
+    const tName = String(r.return_terminal_name || r.terminal_name || '').toLowerCase();
+    const m = termRows.find((t) => t.id === tId || t.name.toLowerCase() === tName || t.code.toLowerCase() === tName);
+    if (m && m.lat && m.lng) return { lat: Number(m.lat), lng: Number(m.lng) };
+    if (tName.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+    return { lat: 25.0112, lng: 55.0617 };
+  };
+  const wL2 = resolveWhCoordRow(l2);
+  const tL2 = resolveTermCoordRow(l2);
+  const wExp = resolveWhCoordRow(exp);
+  const tExp = resolveTermCoordRow(exp);
+  const dWh2Term2 = Math.max(2.0, computeHaversineKm(wL2.lat, wL2.lng, tL2.lat, tL2.lng) * 1.25);
+  const dTerm1Wh1 = Math.max(2.0, computeHaversineKm(tExp.lat, tExp.lng, wExp.lat, wExp.lng) * 1.25);
+  const dWh2Wh1 = isExportBoxReuse ? computeHaversineKm(wL2.lat, wL2.lng, wExp.lat, wExp.lng) * 1.25 : 0;
+  let leg3SavedKm = 0;
+  if (leg3 && args.leg3JobId && !args.holdLeg3) {
+    const w3 = resolveWhCoordRow(leg3);
+    const t3 = resolveTermCoordRow(leg3);
+    leg3SavedKm = Math.max(2.0, computeHaversineKm(t3.lat, t3.lng, w3.lat, w3.lng) * 1.25 - computeHaversineKm(wExp.lat, wExp.lng, w3.lat, w3.lng) * 1.25);
+  }
+  const deadheadKmSaved = Math.max(1.0, Math.round((dWh2Term2 + dTerm1Wh1 - dWh2Wh1 + leg3SavedKm) * 10) / 10);
   const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
-  const fuelSavingsAed = args.leg3JobId && !args.holdLeg3 ? 980 : 750;
+  const l2AllowAed = Number(l2.driver_allowance_aed || wL2.allowance || 150);
+  const l3AllowAed = leg3 && !args.holdLeg3 ? Number(leg3.driver_allowance_aed || 150) : 0;
+  const savedAllowAndGate = isExportBoxReuse
+    ? l2AllowAed + 70
+    : l2AllowAed + 35 + (leg3 && !args.holdLeg3 ? Math.round(l3AllowAed * 0.5) + 35 : 0);
+  const fuelSavingsAed = Math.round(deadheadKmSaved * 3.85 + savedAllowAndGate);
 
   return {
     ok: true,
@@ -4694,7 +8003,11 @@ export async function findBogiePairCandidates(
 ): Promise<BogiePairCandidate[]> {
   const workspace = await getDrayageWorkspaceData(db, tenantId);
   const unassignedJobs = workspace.jobs.filter(
-    (j) => !j.assignedVehicleId && j.status !== 'COMPLETED' && j.status !== 'CANCELLED'
+    (j) =>
+      !j.assignedVehicleId &&
+      j.jobPhase === 'L1' &&
+      j.status === 'PENDING' &&
+      !j.trailerDetached,
   );
   const twentyFtJobs = unassignedJobs.filter((j) => j.containerSize === '20FT');
 
@@ -4788,6 +8101,8 @@ export async function executeBogiePairDispatch(
     trailerId: string;
     trailerPlate: string;
     tokenNumber?: string;
+    pcsSlotStart?: string | null;
+    pcsSlotEnd?: string | null;
     actor?: string;
   },
 ) {
@@ -4857,6 +8172,8 @@ export async function executeBogiePairDispatch(
       trailerId: args.trailerId,
       trailerPlate: args.trailerPlate,
       tokenNumber: token,
+      pcsSlotStart: args.pcsSlotStart,
+      pcsSlotEnd: args.pcsSlotEnd,
     });
   }
 
@@ -5016,6 +8333,11 @@ export async function submitJobPodEvidence(
     photoUrl?: string | null;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
+    eventStatus?: string;
+    captureMethod?: 'SIGN_ON_GLASS' | 'UPLOADED_POD' | 'BOTH' | string;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -5030,27 +8352,78 @@ export async function submitJobPodEvidence(
   const receiver = (args.receiverName || 'Warehouse Bay Supervisor').trim();
   const signedAtIso = new Date().toISOString();
 
+  const hasLivePodCoords =
+    args.latitude != null &&
+    args.longitude != null &&
+    !isNaN(Number(args.latitude)) &&
+    !isNaN(Number(args.longitude)) &&
+    (Number(args.latitude) !== 0 || Number(args.longitude) !== 0);
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET pod_signature_name = $3,
             pod_signed_at = NOW(),
             pod_photo_url = COALESCE($4, pod_photo_url),
+            current_lat = COALESCE($5::double precision, current_lat),
+            current_lng = COALESCE($6::double precision, current_lng),
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
     args.tenantId,
     receiver,
     args.photoUrl ? String(args.photoUrl) : null,
+    hasLivePodCoords ? Number(args.latitude) : null,
+    hasLivePodCoords ? Number(args.longitude) : null,
   );
+
+  const epodLat = hasLivePodCoords
+    ? Number(args.latitude)
+    : job.current_lat != null
+    ? Number(job.current_lat)
+    : null;
+  const epodLng = hasLivePodCoords
+    ? Number(args.longitude)
+    : job.current_lng != null
+    ? Number(job.current_lng)
+    : null;
+
+  const lifecycleEventStatus = (args.eventStatus || 'POD_SIGNED / EPOD_CAPTURED').trim();
+
+  const epodLocation = resolveOperationalMilestoneLocation({
+    status: 'EPOD_SIGNED',
+    explicitLocation: args.location ?? null,
+    lat: epodLat,
+    lng: epodLng,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    terminalName: job.terminal_name ? String(job.terminal_name) : null,
+    warehouseName: job.warehouse_name ? String(job.warehouse_name) : null,
+  });
+
+  const methodLabel =
+    args.captureMethod === 'UPLOADED_POD'
+      ? 'Signed POD Document Uploaded'
+      : args.captureMethod === 'BOTH'
+      ? 'Sign-on-Glass + Signed POD Uploaded'
+      : 'Sign-on-Glass ePOD';
+
+  const epodNotes = [
+    epodLocation ? `[LOC:${epodLocation}]` : '',
+    `Signed by: ${receiver} (${methodLabel})`,
+    args.notes ? String(args.notes).trim() : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, 'EPOD_SIGNED', $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     `log-${crypto.randomUUID().slice(0, 12)}`,
     args.tenantId,
     args.jobId,
     String(job.job_code),
-    `Digital ePOD & Placement Photo verified by ${receiver}.${args.notes ? ` ${args.notes}` : ''}`,
+    lifecycleEventStatus,
+    epodNotes,
     args.actor || `${receiver} (Consignee Portal)`,
   );
 
@@ -5058,6 +8431,7 @@ export async function submitJobPodEvidence(
     ok: true,
     jobId: args.jobId,
     receiverName: receiver,
+    eventStatus: lifecycleEventStatus,
     signedAt: signedAtIso,
     photoUrl: args.photoUrl ?? null,
   };
@@ -5198,7 +8572,7 @@ export async function bookPcsToken(
     args.tenantId,
     args.jobId || `cnt-${args.containerId}`,
     targetJobCode || targetContainerNumber || 'PCS-APPOINTMENT',
-    `Dubai Trade / ATLP e-Token ${tokenNumber} confirmed. Port Gate slot window: ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+    `Dubai Trade / ATLP e-Token ${tokenNumber} confirmed. Port Gate slot window: ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })} – ${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })} GST.`,
     args.actor || 'PCS Integration Gateway',
   );
 
@@ -5222,6 +8596,9 @@ export async function clearPortInspection(
     clearedBy?: string;
     notes?: string;
     actor?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    location?: string | null;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -5233,6 +8610,7 @@ export async function clearPortInspection(
 
   let containerNumber = '';
   let jobCode = '';
+  let matchedJobRow: Record<string, unknown> | null = null;
 
   // Determine container and job references
   if (args.jobId) {
@@ -5242,6 +8620,7 @@ export async function clearPortInspection(
       args.tenantId,
     );
     if (jobRows[0]) {
+      matchedJobRow = jobRows[0];
       jobCode = String(jobRows[0].job_code);
       containerNumber = String(jobRows[0].container_number);
     }
@@ -5302,6 +8681,29 @@ export async function clearPortInspection(
   }
 
   // Audit log
+  const inspLat =
+    args.latitude != null && !isNaN(Number(args.latitude))
+      ? Number(args.latitude)
+      : matchedJobRow?.current_lat != null
+      ? Number(matchedJobRow.current_lat)
+      : null;
+  const inspLng =
+    args.longitude != null && !isNaN(Number(args.longitude))
+      ? Number(args.longitude)
+      : matchedJobRow?.current_lng != null
+      ? Number(matchedJobRow.current_lng)
+      : null;
+  const inspLocation = resolveOperationalMilestoneLocation({
+    status: 'INSPECTION_CLEARED',
+    explicitLocation: args.location ?? null,
+    lat: inspLat,
+    lng: inspLng,
+    jobPhase: matchedJobRow?.job_phase ? String(matchedJobRow.job_phase) : null,
+    jobCode: jobCode || null,
+    terminalName: matchedJobRow?.terminal_name ? String(matchedJobRow.terminal_name) : null,
+    warehouseName: matchedJobRow?.warehouse_name ? String(matchedJobRow.warehouse_name) : null,
+  });
+
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
      VALUES ($1, $2, $3, $4, 'INSPECTION_CLEARED', $5, $6)`,
@@ -5309,7 +8711,7 @@ export async function clearPortInspection(
     args.tenantId,
     args.jobId || `cnt-${containerNumber}`,
     jobCode || containerNumber || 'CLEARANCE',
-    `Port Authority inspection (${agency}) cleared by ${clearedBy}.${newSeal ? ` Verified new customs seal #${newSeal}.` : ''}${args.notes ? ` Remarks: ${args.notes}` : ''}`,
+    `${inspLocation ? `[LOC:${inspLocation}] · ` : ''}Port Authority inspection (${agency}) cleared by ${clearedBy}.${newSeal ? ` Verified new customs seal #${newSeal}.` : ''}${args.notes ? ` Remarks: ${args.notes}` : ''}`,
     args.actor || `${clearedBy} (Customs Clearance Desk)`,
   );
 
@@ -5399,7 +8801,7 @@ export async function revalidateDeliveryOrder(
     args.tenantId,
     args.jobId || `cnt-${containerNumber}`,
     jobCode || containerNumber || 'EDO-SYNC',
-    `Electronic Delivery Order (eDO) revalidated via Dubai Trade / ATLP API. Valid until ${newExpiry.toLocaleDateString()} (+${daysToAdd} days).`,
+    `Electronic Delivery Order (eDO) revalidated via Dubai Trade / ATLP API. Valid until ${newExpiry.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' })} (+${daysToAdd} days).`,
     args.actor || 'Shipping Line eDO Interface',
   );
 
@@ -5757,6 +9159,56 @@ export function isRampLinkActive(job: {
  * Generates a role-scoped, HMAC-SHA256 signed capability token per (tenantId, jobCode, containerNumber, role)
  * so external stakeholders (Customer, Client, or Ramp Supervisor) can open `/track/drayage/[token]` without logging in.
  */
+const shortTrackingTokenCache = new Map<
+  string,
+  {
+    tenantId: string;
+    jobCode: string;
+    containerNumber: string;
+    role: DrayageTrackingPortalRole;
+  }
+>();
+
+const shortTrackingJobCache = new Map<
+  string,
+  {
+    tenantId: string;
+    jobCode: string;
+    containerNumber: string;
+  }
+>();
+
+export function generateDrayageShortTrackingToken(args: {
+  tenantId: string;
+  jobCode: string;
+  containerNumber?: string;
+  role?: DrayageTrackingPortalRole;
+}): string {
+  const role: DrayageTrackingPortalRole = args.role || 'CUSTOMER';
+  const rolePrefix = role === 'RAMP' ? 'r' : role === 'CLIENT' ? 'u' : 'c';
+  const cleanTenantId = String(args.tenantId).trim();
+  const cleanJobCode = String(args.jobCode).trim().toUpperCase();
+  const cleanContainer = String(args.containerNumber || '').trim().toUpperCase();
+  const sig = crypto
+    .createHmac('sha256', getDrayageTrackingTokenSecret())
+    .update(`${cleanTenantId}:${cleanJobCode}:${role}`)
+    .digest('base64url')
+    .slice(0, 8);
+  const token = `${rolePrefix}-${cleanJobCode}-${sig}`;
+  shortTrackingTokenCache.set(token, {
+    tenantId: cleanTenantId,
+    jobCode: cleanJobCode,
+    containerNumber: cleanContainer,
+    role,
+  });
+  shortTrackingJobCache.set(cleanJobCode, {
+    tenantId: cleanTenantId,
+    jobCode: cleanJobCode,
+    containerNumber: cleanContainer,
+  });
+  return token;
+}
+
 export function generateDrayageCustomerTrackingToken(args: {
   tenantId: string;
   jobCode: string;
@@ -5780,7 +9232,8 @@ export function generateDrayageCustomerTrackingToken(args: {
 }
 
 /**
- * Verifies a shareable drayage tracking token and extracts tenantId, jobCode, containerNumber, and role.
+ * Verifies a shareable drayage tracking token (both compact short tokens `c-DRY-L1-4943-xxxxxxxx`
+ * and full signed `trk_...` tokens) and extracts tenantId, jobCode, containerNumber, and role.
  */
 export function verifyDrayageCustomerTrackingToken(rawToken: string): {
   valid: boolean;
@@ -5791,6 +9244,36 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
 } {
   try {
     const cleaned = decodeURIComponent(String(rawToken || '').trim());
+
+    const shortMatch = cleaned.match(/^(c|u|r)-(.+)-([A-Za-z0-9_-]{8})$/);
+    if (shortMatch) {
+      const rolePrefix = shortMatch[1];
+      const jobCode = shortMatch[2].trim().toUpperCase();
+      const providedSig = shortMatch[3];
+      const role: DrayageTrackingPortalRole =
+        rolePrefix === 'r' ? 'RAMP' : rolePrefix === 'u' ? 'CLIENT' : 'CUSTOMER';
+      const cached = shortTrackingTokenCache.get(cleaned) || shortTrackingJobCache.get(jobCode);
+      if (cached) {
+        const expectedSig = crypto
+          .createHmac('sha256', getDrayageTrackingTokenSecret())
+          .update(`${cached.tenantId}:${cached.jobCode}:${role}`)
+          .digest('base64url')
+          .slice(0, 8);
+        const a = Buffer.from(providedSig, 'utf8');
+        const b = Buffer.from(expectedSig, 'utf8');
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          return {
+            valid: true,
+            tenantId: cached.tenantId,
+            jobCode: cached.jobCode,
+            containerNumber: cached.containerNumber,
+            role,
+          };
+        }
+      }
+      return { valid: false };
+    }
+
     const withoutPrefix = cleaned.startsWith('trk_') ? cleaned.slice(4) : cleaned;
     const dotIdx = withoutPrefix.lastIndexOf('.');
     if (dotIdx <= 0) return { valid: false };
@@ -5827,6 +9310,93 @@ export function verifyDrayageCustomerTrackingToken(rawToken: string): {
       containerNumber: String(parsed.c || '').toUpperCase(),
       role,
     };
+  } catch {
+    return { valid: false };
+  }
+}
+
+/**
+ * Resolves and verifies either a full `trk_...` token or a short token (`c-DRY-L1-4943-xxxxxxxx`),
+ * falling back to a DB job lookup by `job_code` + constant-time HMAC check on cold start.
+ */
+export async function resolveDrayageCustomerTrackingToken(
+  db: DrayageDbClient,
+  rawToken: string,
+): Promise<{
+  valid: boolean;
+  tenantId?: string;
+  jobCode?: string;
+  containerNumber?: string;
+  role?: DrayageTrackingPortalRole;
+}> {
+  const syncResult = verifyDrayageCustomerTrackingToken(rawToken);
+  if (syncResult.valid) return syncResult;
+
+  try {
+    const cleaned = decodeURIComponent(String(rawToken || '').trim());
+    const shortMatch = cleaned.match(/^(c|u|r)-(.+)-([A-Za-z0-9_-]{8})$/);
+    if (!shortMatch) return { valid: false };
+
+    const rolePrefix = shortMatch[1];
+    const jobCode = shortMatch[2].trim().toUpperCase();
+    const providedSig = shortMatch[3];
+    const role: DrayageTrackingPortalRole =
+      rolePrefix === 'r' ? 'RAMP' : rolePrefix === 'u' ? 'CLIENT' : 'CUSTOMER';
+
+    // If the job is already known in memory and verifyDrayageCustomerTrackingToken returned false,
+    // the signature is forged — reject immediately without querying the database.
+    if (shortTrackingJobCache.has(jobCode)) {
+      return { valid: false };
+    }
+
+    const rows = await Promise.race([
+      db.$queryRawUnsafe<
+        Array<{ tenant_id: string; job_code: string; container_number: string }>
+      >(
+        `SELECT tenant_id, job_code, container_number
+           FROM logistics_drayage_jobs
+          WHERE UPPER(job_code) = $1
+          LIMIT 20`,
+        jobCode,
+      ),
+      new Promise<Array<{ tenant_id: string; job_code: string; container_number: string }>>(
+        (resolve) => setTimeout(() => resolve([]), 2500),
+      ),
+    ]);
+
+    for (const row of rows) {
+      const candidateTenantId = String(row.tenant_id || '').trim();
+      const candidateJobCode = String(row.job_code || jobCode).trim().toUpperCase();
+      const candidateContainer = String(row.container_number || '').trim().toUpperCase();
+      const expectedSig = crypto
+        .createHmac('sha256', getDrayageTrackingTokenSecret())
+        .update(`${candidateTenantId}:${candidateJobCode}:${role}`)
+        .digest('base64url')
+        .slice(0, 8);
+      const a = Buffer.from(providedSig, 'utf8');
+      const b = Buffer.from(expectedSig, 'utf8');
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        shortTrackingTokenCache.set(cleaned, {
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+          role,
+        });
+        shortTrackingJobCache.set(candidateJobCode, {
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+        });
+        return {
+          valid: true,
+          tenantId: candidateTenantId,
+          jobCode: candidateJobCode,
+          containerNumber: candidateContainer,
+          role,
+        };
+      }
+    }
+    return { valid: false };
   } catch {
     return { valid: false };
   }
@@ -5935,29 +9505,35 @@ export function formatMilestoneLabelForCustomer(status: string): {
 } {
   const s = String(status || '').toUpperCase();
   switch (s) {
-    case 'AT_PORT':
-    case 'ARRIVED_AT_PORT':
+    case 'ACCEPTED':
       return {
         stageNumber: 1,
-        title: '1. Gated In Port Terminal',
-        customerSummary: 'Prime mover has entered the port terminal gate via PCS token.',
+        title: '1. Job Accepted',
+        customerSummary: 'Driver has accepted the dispatch order and is proceeding to the terminal.',
       };
+    case 'AT_PORT':
+    case 'ARRIVED_AT_PORT':
     case 'LOADED':
     case 'CONTAINER_PICKED':
-    case 'UNDER_INSPECTION':
     case 'TRAILER_ATTACHED':
       return {
         stageNumber: 2,
-        title: '2. Container Loaded & Seal Verified',
-        customerSummary: 'Container has been mounted on chassis and customs seal / EIR verified.',
+        title: '2. Container Picked at Terminal',
+        customerSummary: 'Container has been mounted on chassis and gate-in / EIR verified.',
+      };
+    case 'UNDER_INSPECTION':
+      return {
+        stageNumber: 3,
+        title: '3. Under Inspection',
+        customerSummary: 'Container is undergoing regulatory / port terminal inspection.',
       };
     case 'IN_TRANSIT':
     case 'EN_ROUTE_WAREHOUSE':
     case 'EN_ROUTE_TERMINAL':
     case 'EMPTY_AT_PORT':
       return {
-        stageNumber: 3,
-        title: '3. In Transit on UAE Freight Corridor',
+        stageNumber: 4,
+        title: '4. En Route on UAE Freight Corridor',
         customerSummary: 'Prime mover is en route along the E11 / E311 freight corridor with live GPS tracking.',
       };
     case 'PLACED_AT_RAMP':
@@ -5965,30 +9541,32 @@ export function formatMilestoneLabelForCustomer(status: string): {
     case 'PLACED_AT_YARD':
     case 'REASSIGN_PLACED_AT_YARD':
       return {
-        stageNumber: 4,
-        title: '4. Placed at Customer Warehouse Ramp',
-        customerSummary: 'Container positioned at warehouse dock bay; offloading ETC countdown is active.',
+        stageNumber: 5,
+        title: s.includes('YARD') ? '5. Placed at Customer Yard' : '5. Placed at Customer Warehouse Ramp',
+        customerSummary: 'Container positioned at warehouse facility; offloading / staging active.',
       };
     case 'CONTAINER_DETACHED':
     case 'TRAILER_DETACHED':
     case 'REASSIGN_TRAILER_DETACHED':
     case 'READY_FOR_PICKUP':
     case 'WAITING_MT_RETURN':
-      return {
-        stageNumber: 5,
-        title: '5. Chassis Detached / Ready for Empty Return',
-        customerSummary: 'Container destuffing / drop-and-hook stage active; L2 Empty Return coordinated.',
-      };
     case 'EMPTY_DEPOSITED':
     case 'CONTAINER_DROPPED':
     case 'COMPLETED':
     case 'STREET_TURNED':
       return {
         stageNumber: 6,
-        title: '6. Completed & Empty Container Returned',
-        customerSummary: 'Empty container gate-in completed and EIR issued; drayage cycle closed.',
+        title: '6. Trailer Detached / Completed',
+        customerSummary: 'Stage completed and container status updated in dispatch console.',
       };
     default:
+      if (isDrayageReassignStatus(s)) {
+        return {
+          stageNumber: 6,
+          title: `6. ${status}`,
+          customerSummary: 'Container detached and queued for tractor reassignment shunt.',
+        };
+      }
       return {
         stageNumber: 0,
         title: '0. Dispatched & Assigned',
@@ -6080,19 +9658,19 @@ export async function dispatchDrayageCustomerMilestoneAlert(
     };
   }
 
-  const customerToken = generateDrayageCustomerTrackingToken({
+  const customerToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
     role: 'CUSTOMER',
   });
-  const clientToken = generateDrayageCustomerTrackingToken({
+  const clientToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
     role: 'CLIENT',
   });
-  const rampToken = generateDrayageCustomerTrackingToken({
+  const rampToken = generateDrayageShortTrackingToken({
     tenantId: args.tenantId,
     jobCode,
     containerNumber,
@@ -6220,27 +9798,8 @@ export async function dispatchDrayageCustomerMilestoneAlert(
       // Fallback simulated SMTP log
     }
   }
-
-  const activeLinksNote =
-    args.triggerSource === 'AUTO_STAGE_TRANSITION'
-      ? rampActive
-        ? `Customer Link + Client Link + Ramp Link (Activated @ PLACED_AT_RAMP)`
-        : `Customer Link + Client Link (Activated @ ${status})`
-      : `${requestedRole} Link (/track/drayage/${activeToken.slice(0, 18)}...)`;
-
-  const logNote = `[${requestedRole} Alert · WhatsApp → ${targetWhatsApp || 'N/A'} (${waProviderStatus})]${targetEmail ? ` + [Email → ${targetEmail} (${emailProviderStatus})]` : ''} · Milestone "${milestoneMeta.title}"${etcFormatted ? ` · ETC ${etcFormatted}` : ''} · ${activeLinksNote}`;
-
-  await db.$executeRawUnsafe(
-    `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    `log-${crypto.randomUUID().slice(0, 12)}`,
-    args.tenantId,
-    args.jobId,
-    jobCode,
-    `MILESTONE_ALERT_${status}`,
-    logNote,
-    'Customer Alert Engine (WhatsApp + Email)',
-  );
+  void waProviderStatus;
+  void emailProviderStatus;
 
   return {
     ok: true,
@@ -6485,6 +10044,7 @@ export async function getPublicCustomerTrackingByToken(
       etcTime: matchedJob.etcTime,
       currentLat: matchedJob.currentLat,
       currentLng: matchedJob.currentLng,
+      routePath: matchedJob.routePath || [],
       sealNumber: resolvedSealNumber,
       weightKg: resolvedWeightKg,
       inspectionStatus: matchedJob.inspectionStatus || 'CLEARED',

@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { Mail, Send, Trash2, AlertCircle, ArrowLeft } from 'lucide-react';
 import NewUserDialog from '@/components/admin/NewUserDialog';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
@@ -34,6 +35,8 @@ const STATUS_BADGE: Record<Invitation['status'], string> = {
 };
 
 export default function TenantInvitationsPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const params = useParams<{ id: string }>();
   const tenantId = params?.id ?? '';
 
@@ -99,9 +102,9 @@ export default function TenantInvitationsPage() {
             {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
           </p>
         </div>
-        <Link href="/admin/tenants"
+        <Link href={isSuperAdmin ? '/admin/tenants' : '/admin/company-profile'}
           className={`${BACK_BUTTON} shrink-0`}>
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
+          <ArrowLeft className="w-3.5 h-3.5" /> {isSuperAdmin ? 'Back to Tenants' : 'Back to Company Profile'}
         </Link>
       </div>
 

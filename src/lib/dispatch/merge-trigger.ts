@@ -5,23 +5,6 @@
  * Runs a targeted merge scan for the new job against all eligible
  * PENDING/SEARCHING jobs in the same tenant, and persists the best
  * candidates to `dispatch_merge_suggestions`.
- *
- * Design principles:
- *  • NON-BLOCKING — job creation always succeeds; this runs in the background.
- *  • FAST — Haversine pre-filter eliminates obvious non-candidates before
- *    any routing API call. The routing API is only called for pairs that
- *    pass the distance guard.
- *  • SELECTIVE — only fires for service types that benefit from merging:
- *      ✅ PASSENGER  — shared rides / carpooling
- *      ✅ FREIGHT    — consolidated freight
- *      ✅ DELIVERY   — batched last-mile delivery
- *      ❌ AMBULANCE  — emergency, every second counts; never merge
- *      ❌ SCHOOL_BUS — pre-planned fixed routes; not on-demand
- *      ❌ TECHNICIAN — skill-matched 1:1; merging doesn't apply
- *  • IDEMPOTENT — ON CONFLICT DO NOTHING on the UNIQUE(job_a_id, job_b_id)
- *    constraint prevents duplicate suggestions.
- *  • TTL-AWARE — suggestions expire after 30 minutes (configurable);
- *    stale suggestions are filtered out at query time.
  */
 
 import { prisma }              from '@/lib/prisma';
@@ -82,7 +65,6 @@ export async function triggerMergeScanOnCreate(
 
     // ── Guard 2: Must have GPS coordinates for Haversine pre-filter ──
     if (!job.origin_lat || !job.origin_lng) {
-      console.log(`[merge-trigger] Job ${job.id} has no GPS — skipping merge scan`);
       return result;
     }
 
@@ -91,7 +73,6 @@ export async function triggerMergeScanOnCreate(
     // ── Load tenant merge config ──
     const config = await loadMergeConfigPublic(job.tenant_id);
     if (!config.tripMergingEnabled) {
-      console.log(`[merge-trigger] Trip merging disabled for tenant ${job.tenant_id}`);
       return result;
     }
 
@@ -99,7 +80,10 @@ export async function triggerMergeScanOnCreate(
     type Row = Record<string, unknown>;
     const candidateRows = await prisma.$queryRawUnsafe<Row[]>(`
       SELECT id, service_type, priority, status,
-             origin_lat, origin_lng, dest_lat, dest_lng,
+             COALESCE(origin_lat, pickup_lat)   AS origin_lat,
+             COALESCE(origin_lng, pickup_lng)   AS origin_lng,
+             COALESCE(dest_lat,   dropoff_lat)  AS dest_lat,
+             COALESCE(dest_lng,   dropoff_lng)  AS dest_lng,
              origin_address, destination_address,
              scheduled_pickup, passenger_count, created_at
       FROM   dispatch_jobs
@@ -113,12 +97,11 @@ export async function triggerMergeScanOnCreate(
     `, job.tenant_id, job.id, job.service_type);
 
     if (candidateRows.length === 0) {
-      console.log(`[merge-trigger] No candidates for job ${job.id}`);
       return result;
     }
 
     // ── Haversine pre-filter — eliminate obviously too-far candidates ──
-    const haversineLimit = config.pickupDistanceKm * 2.5; // same guard as scan mode
+    const haversineLimit = config.pickupDistanceKm * 2.5;
     const nearbyRows = candidateRows.filter(row => {
       if (!row.origin_lat || !row.origin_lng) return false;
       const km = haversineKm(
@@ -129,18 +112,14 @@ export async function triggerMergeScanOnCreate(
     });
 
     if (nearbyRows.length === 0) {
-      console.log(`[merge-trigger] All ${candidateRows.length} candidates failed Haversine pre-filter (limit ${haversineLimit.toFixed(1)} km)`);
       return result;
     }
-
-    console.log(`[merge-trigger] ${nearbyRows.length}/${candidateRows.length} candidates pass Haversine — running routing API evaluation`);
 
     // ── Full evaluation via getMergeCandidates (reuses routing API + cache) ──
     const { candidates } = await getMergeCandidates(job.id, job.tenant_id);
 
     const eligible = candidates.filter(c => c.eligible);
     if (eligible.length === 0) {
-      console.log(`[merge-trigger] No eligible merge pairs after full evaluation for job ${job.id}`);
       return result;
     }
 
@@ -186,14 +165,12 @@ export async function triggerMergeScanOnCreate(
           result.suggestionsCreated++;
         }
       } catch (insertErr) {
-        // Conflict (duplicate pair) or schema issue — non-fatal
         console.warn(`[merge-trigger] Suggestion insert skipped:`, insertErr);
       }
     }
 
-    // ── Return the top suggestion for inline enrichment of the creation response ──
     if (suggestionIds.length > 0 && eligible.length > 0) {
-      const top = eligible[0]; // already sorted by score desc from getMergeCandidates
+      const top = eligible[0];
       result.topSuggestion = {
         suggestionId:     suggestionIds[0],
         candidateJobId:   top.candidateJobId,
@@ -204,10 +181,7 @@ export async function triggerMergeScanOnCreate(
         routingSource:    top.routingSource,
       };
     }
-
-    console.log(`[merge-trigger] Job ${job.id}: ${result.suggestionsCreated} suggestion(s) persisted. Top score: ${result.topSuggestion?.mergeScore ?? 'N/A'}`);
   } catch (err) {
-    // Never let merge scan failure bubble up — job creation must always succeed
     console.error(`[merge-trigger] Error during merge scan for job ${job.id}:`, err);
   }
 
@@ -219,12 +193,21 @@ export async function triggerMergeScanOnCreate(
 ───────────────────────────────────────────────────────────── */
 export async function expireOldSuggestions(tenantId?: string): Promise<number> {
   try {
+    if (tenantId) {
+      const result = await prisma.$executeRawUnsafe(`
+        UPDATE dispatch_merge_suggestions
+        SET    status = 'EXPIRED', actioned_at = NOW()
+        WHERE  status = 'PENDING'
+          AND  expires_at < NOW()
+          AND  tenant_id = $1
+      `, tenantId);
+      return Number(result);
+    }
     const result = await prisma.$executeRawUnsafe(`
       UPDATE dispatch_merge_suggestions
       SET    status = 'EXPIRED', actioned_at = NOW()
       WHERE  status = 'PENDING'
         AND  expires_at < NOW()
-        ${tenantId ? `AND tenant_id = '${tenantId.replace(/'/g, "''")}'` : ''}
     `);
     return Number(result);
   } catch {
@@ -234,18 +217,30 @@ export async function expireOldSuggestions(tenantId?: string): Promise<number> {
 
 /* ─────────────────────────────────────────────────────────────
    Also expire suggestions where either job is no longer PENDING
-   (e.g. already dispatched, cancelled, completed)
 ───────────────────────────────────────────────────────────── */
 export async function expireOrphanedSuggestions(tenantId?: string): Promise<number> {
   try {
+    if (tenantId) {
+      const result = await prisma.$executeRawUnsafe(`
+        UPDATE dispatch_merge_suggestions s
+        SET    status = 'EXPIRED', actioned_at = NOW()
+        WHERE  s.status = 'PENDING'
+          AND  s.tenant_id = $1
+          AND  EXISTS (
+            SELECT 1 FROM dispatch_jobs j
+            WHERE  (j.id = s.job_a_id OR j.id = s.job_b_id)
+              AND  j.status NOT IN ('PENDING', 'SEARCHING')
+          )
+      `, tenantId);
+      return Number(result);
+    }
     const result = await prisma.$executeRawUnsafe(`
       UPDATE dispatch_merge_suggestions s
       SET    status = 'EXPIRED', actioned_at = NOW()
       WHERE  s.status = 'PENDING'
-        ${tenantId ? `AND s.tenant_id = '${tenantId.replace(/'/g, "''")}'` : ''}
-        AND EXISTS (
+        AND  EXISTS (
           SELECT 1 FROM dispatch_jobs j
-          WHERE  j.id = s.job_a_id
+          WHERE  (j.id = s.job_a_id OR j.id = s.job_b_id)
             AND  j.status NOT IN ('PENDING', 'SEARCHING')
         )
     `);

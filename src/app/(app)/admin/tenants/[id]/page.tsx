@@ -861,6 +861,7 @@ export default function TenantDetailPage() {
       description: 'Foundational organizational structure, branches, and operational categories',
       items: [
         { key: 'hierarchy',       label: 'Region, Department & Section', desc: 'Manage 3-tier organizational hierarchy & Cost Centres' },
+        { key: 'departments',     label: 'Departments Master',           desc: 'Manage company departments for user RBAC & module access' },
         { key: 'branches',        label: 'Branches & Regions',           desc: 'Manage operational hubs, branch depots & regional offices' },
         { key: 'nui-reasons',     label: 'NUI Reason Master',            desc: 'Configure vehicle off-road & non-utilization categories' },
         { key: 'company-profile', label: 'Company Profile & Legal',      desc: 'Edit trade license, TRN tax number & corporate branding' },
@@ -1870,7 +1871,6 @@ export default function TenantDetailPage() {
                 { label: 'Platform Settings', desc: 'Root database timeouts & CORS origins' },
                 { label: 'Attachment Types', desc: 'Global document definitions' },
                 { label: 'Exchange Partners', desc: 'B2B global carrier network directory' },
-                { label: 'Brand Preview', desc: 'White-label SaaS theme customization' },
               ].map(item => (
                 <div key={item.label} className="flex items-center gap-2.5 p-2 rounded-lg bg-red-500/5 border border-red-500/10">
                   <div className="w-3.5 h-3.5 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">

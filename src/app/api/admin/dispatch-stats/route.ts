@@ -14,17 +14,12 @@ export const dynamic = 'force-dynamic';
  *
  * RLS: wrapped in withPlatformAdmin so the cross-tenant dispatch tables
  * (dispatch_jobs, driver_availability) are readable across all tenants.
- * The dispatch_jobs / driver_availability tables have tenant_id columns
- * but no RLS policy applied (they were created via the dynamic-DDL
- * ensureTables() below). Once the team adds RLS policies for these
- * tables, the platform-admin wrap will continue to work because the
- * '*' wildcard matches the policy.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
@@ -46,7 +41,6 @@ export async function GET(req: NextRequest) {
 
       // Build parameterized tenant filters for defense-in-depth
       const tenantFilterClause = filterTenantId ? 'AND dj.tenant_id = $2' : '';
-      const daFilterClause     = filterTenantId ? 'AND da.tenant_id = $2' : '';
       const tenantParams = filterTenantId ? [filterTenantId] : [];
 
       // ── 1. Overall job status breakdown ──────────────────────────────────────
@@ -55,7 +49,7 @@ export async function GET(req: NextRequest) {
           status,
           COUNT(*) AS cnt
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '$1 days'
+        WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
           ${tenantFilterClause}
         GROUP BY status
         ORDER BY cnt DESC`,
@@ -75,14 +69,24 @@ export async function GET(req: NextRequest) {
       const acceptanceRate = total > 0 ? Math.round(((completed + inProgress) / total) * 100) : 0;
 
       // ── 2. Driver pool stats ──────────────────────────────────────────────────
-      const driverRows = await tx.$queryRawUnsafe<Row[]>(
-        `SELECT
-          status,
-          COUNT(*) AS cnt
-        FROM driver_availability da
-        WHERE 1=1 ${daFilterClause}
-        GROUP BY status`,
-        ...tenantParams
+      const driverRows = await (filterTenantId
+        ? tx.$queryRawUnsafe<Row[]>(
+            `SELECT
+              da.status,
+              COUNT(*) AS cnt
+            FROM driver_availability da
+            INNER JOIN drivers d ON d.id::text = da.driver_id
+            WHERE d.tenant_id::text = $1
+            GROUP BY da.status`,
+            filterTenantId
+          )
+        : tx.$queryRawUnsafe<Row[]>(
+            `SELECT
+              status,
+              COUNT(*) AS cnt
+            FROM driver_availability
+            GROUP BY status`
+          )
       ).catch(() => [] as Row[]);
 
       const driverMap: Record<string, number> = {};
@@ -102,7 +106,7 @@ export async function GET(req: NextRequest) {
           COUNT(*) FILTER (WHERE status = 'COMPLETED')  AS completed,
           COUNT(*) FILTER (WHERE status IN ('FAILED','ESCALATED')) AS failed
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '$1 days'
+        WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
           ${tenantFilterClause}
         GROUP BY service_type
         ORDER BY total DESC`,
@@ -126,7 +130,7 @@ export async function GET(req: NextRequest) {
           COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed,
           COUNT(*) FILTER (WHERE status IN ('FAILED','ESCALATED')) AS failed
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '$1 days'
+        WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
           ${tenantFilterClause}
         GROUP BY day
         ORDER BY day ASC`,
@@ -149,7 +153,7 @@ export async function GET(req: NextRequest) {
           created_at, updated_at
         FROM dispatch_jobs dj
         WHERE status IN ('ESCALATED','FAILED')
-          AND created_at >= NOW() - INTERVAL '$1 days'
+          AND created_at >= NOW() - ($1 * INTERVAL '1 day')
           ${tenantFilterClause}
         ORDER BY
           CASE priority
@@ -191,8 +195,8 @@ export async function GET(req: NextRequest) {
             COUNT(*) FILTER (WHERE dj.status IN ('FAILED','ESCALATED')) AS failed,
             COUNT(*) FILTER (WHERE dj.status IN ('PENDING','SEARCHING','OFFERED','RETRYING','IN_PROGRESS')) AS active
           FROM dispatch_jobs dj
-          LEFT JOIN "Tenant" t ON t.id = dj.tenant_id
-          WHERE dj.created_at >= NOW() - INTERVAL '$1 days'
+          LEFT JOIN tenants t ON t.id::text = dj.tenant_id
+          WHERE dj.created_at >= NOW() - ($1 * INTERVAL '1 day')
           GROUP BY dj.tenant_id, t.name
           ORDER BY total DESC
           LIMIT 20`,
@@ -216,7 +220,7 @@ export async function GET(req: NextRequest) {
           AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FILTER (WHERE status = 'COMPLETED') AS avg_complete_min,
           AVG(current_attempt) FILTER (WHERE status = 'COMPLETED') AS avg_attempts
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '$1 days'
+        WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
           ${tenantFilterClause}`,
         days,
         ...tenantParams
@@ -247,7 +251,7 @@ export async function GET(req: NextRequest) {
         tenantBreakdown,
       });
     });
-    } catch (err) {
+  } catch (err) {
     console.error('[admin/dispatch-stats GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

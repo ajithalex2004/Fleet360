@@ -9,10 +9,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
-// A request runs no DDL: the runtime role may not create tables, and the
-// failed statement aborted the request's transaction, so every query after
-// it failed too.
 
 type StmtRow = Record<string, unknown>;
 type LineRow  = Record<string, unknown>;
@@ -85,7 +81,6 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
 
       if (body.action === 'import') {
-        // body.lines: [{txnDate, valueDate?, description, reference?, debit?, credit?, balance?}]
         const [stmt] = await tx.$queryRawUnsafe<StmtRow[]>(
           `INSERT INTO finance_bank_statements
              (tenant_id, bank_account_id, statement_date, period_start, period_end, opening_balance, closing_balance, imported_by, notes)
@@ -116,7 +111,6 @@ export async function POST(req: NextRequest) {
       }
 
       if (body.action === 'match_line') {
-        // Match a statement line to a payment
         const now = new Date().toISOString();
         await tx.$executeRawUnsafe(
           `UPDATE finance_bank_statement_lines
@@ -144,31 +138,70 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Auto-match: try to match unmatched lines to finance_payments by amount + date
+      // Auto-match: match unmatched lines against finance_payments, finance_invoices, finance_payables, and finance_expenses
       if (body.action === 'auto_match') {
         const statementId = body.statementId;
-        const unmatched = await tx.$queryRawUnsafe<{id: string; credit: string; txn_date: string}[]>(
-          `SELECT id, credit::text, txn_date FROM finance_bank_statement_lines
-           WHERE tenant_id=$1 AND statement_id=$2 AND match_status='UNMATCHED' AND credit IS NOT NULL`, tenantId, statementId
+        const unmatched = await tx.$queryRawUnsafe<{id: string; credit: string | null; debit: string | null; txn_date: string}[]>(
+          `SELECT id, credit::text, debit::text, txn_date FROM finance_bank_statement_lines
+           WHERE tenant_id=$1 AND statement_id=$2 AND match_status='UNMATCHED'`, tenantId, statementId
         ).catch(() => []);
 
         let matched = 0;
         for (const line of unmatched) {
-          const [payment] = await tx.$queryRawUnsafe<{id: string}[]>(
-            `SELECT id FROM finance_payments
-             WHERE tenant_id = $3
-               AND amount::numeric = $1::numeric
-               AND payment_date::date BETWEEN ($2::date - INTERVAL '3 days') AND ($2::date + INTERVAL '3 days')
-               AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
-                               WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
-             LIMIT 1`, line.credit, line.txn_date, tenantId
-          ).catch(() => []);
+          let candidateId: string | null = null;
 
-          if (payment) {
+          if (line.credit && Number(line.credit) > 0) {
+            // Check finance_payments or finance_invoices
+            const [payment] = await tx.$queryRawUnsafe<{id: string}[]>(
+              `SELECT id::text as id FROM finance_payments
+               WHERE tenant_id = $3
+                 AND amount::numeric = $1::numeric
+                 AND payment_date::date BETWEEN ($2::date - INTERVAL '7 days') AND ($2::date + INTERVAL '7 days')
+                 AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
+                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+               UNION ALL
+               SELECT id::text as id FROM finance_invoices
+               WHERE tenant_id = $3 AND deleted_at IS NULL
+                 AND total_amount::numeric = $1::numeric
+                 AND issue_date::date BETWEEN ($2::date - INTERVAL '14 days') AND ($2::date + INTERVAL '14 days')
+                 AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
+                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+               LIMIT 1`, line.credit, line.txn_date, tenantId
+            ).catch(() => []);
+            candidateId = payment?.id ?? null;
+          } else if (line.debit && Number(line.debit) > 0) {
+            // Check finance_payables, finance_expenses, or finance_payments
+            const [payableOrExp] = await tx.$queryRawUnsafe<{id: string}[]>(
+              `SELECT id::text as id FROM finance_payables
+               WHERE tenant_id = $3 AND deleted_at IS NULL
+                 AND total_amount::numeric = $1::numeric
+                 AND issue_date::date BETWEEN ($2::date - INTERVAL '14 days') AND ($2::date + INTERVAL '14 days')
+                 AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
+                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+               UNION ALL
+               SELECT id::text as id FROM finance_expenses
+               WHERE tenant_id = $3 AND deleted_at IS NULL
+                 AND total_amount::numeric = $1::numeric
+                 AND expense_date::date BETWEEN ($2::date - INTERVAL '14 days') AND ($2::date + INTERVAL '14 days')
+                 AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
+                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+               UNION ALL
+               SELECT id::text as id FROM finance_payments
+               WHERE tenant_id = $3
+                 AND amount::numeric = $1::numeric
+                 AND payment_date::date BETWEEN ($2::date - INTERVAL '7 days') AND ($2::date + INTERVAL '7 days')
+                 AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
+                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+               LIMIT 1`, line.debit, line.txn_date, tenantId
+            ).catch(() => []);
+            candidateId = payableOrExp?.id ?? null;
+          }
+
+          if (candidateId) {
             await tx.$executeRawUnsafe(
               `UPDATE finance_bank_statement_lines
                SET match_status='MATCHED', matched_payment_id=$2, matched_at=NOW(), matched_by='Auto'
-               WHERE id::text=$1 AND tenant_id=$3`, line.id, payment.id, tenantId
+               WHERE id::text=$1 AND tenant_id=$3`, line.id, candidateId, tenantId
             ).catch(() => {});
             matched++;
           }
@@ -180,4 +213,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   });
 }
-

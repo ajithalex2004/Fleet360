@@ -7,11 +7,12 @@
  *
  * The server repeats every check here (src/lib/tenant-attachments.ts).
  *
- * Choosing a file asks the server to read its Document Number and Expiry
- * Date (POST /api/admin/attachment-types/[id]/autofill). Values read are
- * only put into empty fields, are marked for checking, and stay editable.
+ * Choosing a file asks the server to read its Document Number, Expiry Date,
+ * and rich company registration fields (POST /api/admin/attachment-types/[id]/autofill).
+ * Values read are only put into empty fields, are marked for checking, and stay editable.
  */
 import React from 'react';
+import type { ExtractedCompanyProfileFields } from '@/lib/tenant-attachments-autofill';
 
 export interface AttachmentTypeOption {
   id: string;
@@ -39,7 +40,13 @@ export interface AttachmentDraft {
 }
 
 type AutofillReply =
-  | { status: 'ok'; documentNumber: string | null; expiryDate: string | null; warnings: string[] }
+  | {
+      status: 'ok';
+      documentNumber: string | null;
+      expiryDate: string | null;
+      warnings: string[];
+      extractedFields?: ExtractedCompanyProfileFields;
+    }
   | { status: 'skipped' | 'unavailable'; reason: string }
   | { error: string };
 
@@ -88,7 +95,15 @@ export function appendAttachmentDrafts(form: FormData, drafts: AttachmentDrafts)
   }
 }
 
-export function TenantAttachmentFields({ types, drafts, onChange, alreadyUploaded, showErrors, tenantId }: {
+export function TenantAttachmentFields({
+  types,
+  drafts,
+  onChange,
+  alreadyUploaded,
+  showErrors,
+  tenantId,
+  onExtractedCompanyProfile,
+}: {
   types: readonly AttachmentTypeOption[];
   drafts: AttachmentDrafts;
   /** Receives an updater, like a useState setter (autofill replies arrive later). */
@@ -99,6 +114,8 @@ export function TenantAttachmentFields({ types, drafts, onChange, alreadyUploade
   alreadyUploaded?: ReadonlySet<string>;
   /** Highlight missing mandatory documents (after a failed submit). */
   showErrors?: boolean;
+  /** Optional callback invoked when AI extracts rich company profile fields (Name, Arabic Name, TRN, License No, Address, Phone, Email). */
+  onExtractedCompanyProfile?: (extracted: ExtractedCompanyProfileFields) => void;
 }) {
   const set = (typeId: string, d: AttachmentDraft | undefined) => onChange((prev) => ({ ...prev, [typeId]: d }));
 
@@ -119,6 +136,9 @@ export function TenantAttachmentFields({ types, drafts, onChange, alreadyUploade
       reply = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
     } catch {
       reply = { status: 'unavailable', reason: 'The document could not be read right now.' };
+    }
+    if (!('error' in reply) && reply.status === 'ok' && reply.extractedFields && onExtractedCompanyProfile) {
+      onExtractedCompanyProfile(reply.extractedFields);
     }
     patchIfSameFile(typeId, file, (d) => {
       if ('error' in reply) return { ...d, autofill: { state: 'unavailable', message: reply.error } };
@@ -228,18 +248,14 @@ function AutofillStatus({ autofill }: { autofill: AttachmentAutofill }) {
   if (autofill.state === 'reading') {
     return <p className="mt-2 text-xs text-violet-300 animate-pulse" role="status">✨ Reading document number and expiry date…</p>;
   }
-  if (autofill.state === 'done') {
-    const filled = autofill.filledNumber || autofill.filledExpiry;
-    return (
-      <div className="mt-2 space-y-1" role="status">
-        {!filled && !autofill.warnings?.length && (
-          <p className="text-xs text-[var(--text-faint)]">Nothing could be read from the document: enter the details manually.</p>
-        )}
-        {autofill.warnings?.map((w) => (
-          <p key={w} className="text-xs text-amber-300">⚠ {w}</p>
-        ))}
-      </div>
-    );
+  if (autofill.state === 'skipped' || autofill.state === 'unavailable') {
+    return autofill.message ? <p className="mt-2 text-xs text-[var(--text-muted)]" role="status">{autofill.message}</p> : null;
   }
-  return <p className="mt-2 text-xs text-[var(--text-faint)]" role="status">{autofill.message ?? 'Enter the details manually.'}</p>;
+  return (
+    <>
+      {autofill.warnings?.map((w, i) => (
+        <p key={i} className="mt-2 text-xs text-amber-300" role="alert">⚠️ {w}</p>
+      ))}
+    </>
+  );
 }

@@ -3,13 +3,18 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { listCarrierPortalRfqs, resolveCarrierAppDevice, submitCarrierBid } from '@/lib/logistics/domain';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export const runtime = 'nodejs';
 
 async function requireDevice(req: NextRequest) {
   const token = req.headers.get('x-carrier-app-token') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
-  return resolveCarrierAppDevice(token);
+  try {
+    return await resolveCarrierAppDevice(token);
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -20,25 +25,27 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   try {
-    if (sp.get('view') === 'assigned') {
-      const data = await listAssignedCarrierLoads({
+    return await withTenantRls(prisma, device.tenantId, async () => {
+      if (sp.get('view') === 'assigned') {
+        const data = await listAssignedCarrierLoads({
+          tenantId: device.tenantId,
+          carrierId: device.carrierId,
+          search: sp.get('search') || null,
+          limit: Math.min(Math.max(parseInt(sp.get('limit') ?? '100', 10) || 100, 1), 300),
+        });
+        return NextResponse.json({ carrierId: device.carrierId, data }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+
+      const data = await listCarrierPortalRfqs({
         tenantId: device.tenantId,
         carrierId: device.carrierId,
+        status: sp.get('status') || null,
         search: sp.get('search') || null,
         limit: Math.min(Math.max(parseInt(sp.get('limit') ?? '100', 10) || 100, 1), 300),
       });
       return NextResponse.json({ carrierId: device.carrierId, data }, { headers: { 'Cache-Control': 'no-store' } });
-    }
-
-    const data = await listCarrierPortalRfqs({
-      tenantId: device.tenantId,
-      carrierId: device.carrierId,
-      status: sp.get('status') || null,
-      search: sp.get('search') || null,
-      limit: Math.min(Math.max(parseInt(sp.get('limit') ?? '100', 10) || 100, 1), 300),
     });
-    return NextResponse.json({ carrierId: device.carrierId, data }, { headers: { 'Cache-Control': 'no-store' } });
-    } catch (e) {
+  } catch (e) {
     console.error('[carrier-portal/app/loads GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load carrier loads' },
@@ -114,8 +121,9 @@ async function listAssignedCarrierLoads(args: {
           WHEN 'DISPATCHED' THEN 2
           WHEN 'ENROUTE_PICKUP' THEN 3
           WHEN 'LOADED' THEN 4
-          WHEN 'ENROUTE_DELIVERY' THEN 5
-          WHEN 'DELIVERED' THEN 6
+          WHEN ' IN_TRANSIT' THEN 5
+          WHEN 'ENROUTE_DELIVERY' THEN 6
+          WHEN 'DELIVERED' THEN 7
           ELSE 9
         END,
         so.pickup_window_from NULLS LAST,
@@ -167,19 +175,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const bid = await submitCarrierBid({
-      tenantId: device.tenantId,
-      shipmentOrderId: body.shipmentOrderId,
-      rfqId: body.rfqId,
-      carrierId: device.carrierId,
-      amount,
-      currency: body.currency ?? 'AED',
-      transitTimeHours: body.transitTimeHours == null || body.transitTimeHours === '' ? null : Number(body.transitTimeHours),
-      notes: body.notes ?? null,
-      status: 'SUBMITTED',
+    return await withTenantRls(prisma, device.tenantId, async () => {
+      const bid = await submitCarrierBid({
+        tenantId: device.tenantId,
+        shipmentOrderId: body.shipmentOrderId!,
+        rfqId: body.rfqId!,
+        carrierId: device.carrierId,
+        amount,
+        currency: body.currency ?? 'AED',
+        transitTimeHours: body.transitTimeHours == null || body.transitTimeHours === '' ? null : Number(body.transitTimeHours),
+        notes: body.notes ?? null,
+        status: 'SUBMITTED',
+      });
+      return NextResponse.json({ data: bid }, { status: 201 });
     });
-    return NextResponse.json({ data: bid }, { status: 201 });
-    } catch (e) {
+  } catch (e) {
     console.error('[carrier-portal/app/loads POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to submit bid' },

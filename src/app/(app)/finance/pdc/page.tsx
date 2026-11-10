@@ -10,6 +10,15 @@ interface PdcCheque {
   created_at: string;
 }
 
+interface InvoiceOption {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  total_amount: string | number;
+  paid_amount?: string | number;
+  payment_status: string;
+}
+
 interface Counts { status: string; count: string; total: string }
 
 const fmtAED    = (n: string | number) => `AED ${Number(n).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`;
@@ -30,16 +39,54 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
     chequeNumber: '', bankName: '', accountName: '', chequeDate: new Date().toISOString().slice(0,10),
     amount: '', direction: 'INCOMING', clientName: '', clientRef: '', linkedInvoiceId: '', notes: '',
   });
+  const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/finance/invoices?limit=100', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (d) setInvoices(d.data ?? d.invoices ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
   const s = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const handleLinkedInvoice = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const invId = e.target.value;
+    if (!invId) {
+      setForm(f => ({ ...f, linkedInvoiceId: '' }));
+      return;
+    }
+    const inv = invoices.find(i => i.id === invId);
+    if (inv) {
+      const bal = Math.max(0, Number(inv.total_amount ?? 0) - Number(inv.paid_amount ?? 0)) || Number(inv.total_amount ?? 0);
+      setForm(f => ({
+        ...f,
+        linkedInvoiceId: inv.id,
+        clientRef: f.clientRef || inv.invoice_number,
+        clientName: f.clientName || inv.client_name,
+        amount: f.amount || (bal > 0 ? bal.toFixed(2) : ''),
+      }));
+    }
+  };
+
+  const openInvoices = invoices.filter(i =>
+    ['OPEN', 'SENT', 'PARTIAL', 'OVERDUE', 'DRAFT'].includes(i.payment_status)
+  );
 
   const save = async () => {
     if (!form.chequeNumber || !form.bankName || !form.amount || !form.chequeDate) return;
     setSaving(true);
     const res = await fetch('/api/finance/pdc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+      body: JSON.stringify({
+        ...form,
+        linkedInvoiceId: form.linkedInvoiceId || null,
+        amount: parseFloat(form.amount),
+      }),
     });
     setSaving(false);
     if (res.ok) { onSaved(); onClose(); } else alert('Failed to save cheque');
@@ -68,6 +115,22 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
               <input type="date" value={form.chequeDate} onChange={s('chequeDate')} className={inp} />
             </div>
           </div>
+          {form.direction === 'INCOMING' && (
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Linked Invoice (Optional — auto-settles when cleared)</label>
+              <select value={form.linkedInvoiceId} onChange={handleLinkedInvoice} className={inp}>
+                <option value="">— No linked invoice —</option>
+                {openInvoices.map(inv => {
+                  const bal = Math.max(0, Number(inv.total_amount ?? 0) - Number(inv.paid_amount ?? 0));
+                  return (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoice_number} · {inv.client_name} ({fmtAED(bal)}) [{inv.payment_status}]
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Cheque Number *</label>
@@ -95,7 +158,7 @@ function AddModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
             </div>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Reference (Invoice / Contract)</label>
-              <input value={form.clientRef} onChange={s('clientRef')} placeholder="INV-202401-0001" className={inp} />
+              <input value={form.clientRef} onChange={s('clientRef')} placeholder="INV-202601-0001" className={inp} />
             </div>
           </div>
           <div>

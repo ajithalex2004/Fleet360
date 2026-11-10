@@ -65,6 +65,14 @@ export interface DrayageCorridorJob {
   etcTime?: string | null;
   currentLat?: number | null;
   currentLng?: number | null;
+  routePath?: Array<{
+    lat: number;
+    lng: number;
+    timestamp?: string;
+    location?: string;
+    status?: string;
+    speedKmh?: number;
+  }>;
   rateAmountAed: number;
   driverAllowanceAed?: number;
   cargoWeightKg?: number;
@@ -117,6 +125,9 @@ export interface DrayageCorridorVehicle {
   activeJobCode?: string | null;
   lat: number;
   lng: number;
+  hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' | string;
   fuelLevelPct?: number | null;
 }
 
@@ -276,9 +287,18 @@ function buildDrayageMarkerSvg(
   const plate = job.assignedVehiclePlate || 'TRACTOR';
   const cntNum = job.containerNumber ? job.containerNumber.slice(0, 11) : job.jobCode;
 
-  // Radar Pulse if Selected or Moving
+  // Radar Pulse if Selected or Active/Assigned Driver
   let radarPulse = '';
-  if (isSelected || job.status === 'IN_TRANSIT') {
+  const stUpper = (job.status || '').toUpperCase();
+  if (
+    isSelected ||
+    stUpper === 'IN_TRANSIT' ||
+    stUpper === 'EN_ROUTE_WAREHOUSE' ||
+    stUpper === 'EN_ROUTE_TERMINAL' ||
+    stUpper === 'ACCEPTED' ||
+    stUpper === 'ASSIGNED' ||
+    stUpper === 'RE-ASSIGNED'
+  ) {
     radarPulse = `
       <circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
         <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
@@ -395,11 +415,71 @@ function buildWarehouseMarkerSvg(zone: string): string {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
 
+/**
+ * Builds SVG icon for 1-Minute In-Transit GPS Breadcrumb Waypoints along a job's routePath.
+ */
+function buildBreadcrumbWaypointSvg(
+  indexOneBased: number,
+  isSelectedJob: boolean,
+  isMilestoneStage: boolean,
+  jobPhase: 'L1' | 'L2',
+): string {
+  const fillColor = isMilestoneStage
+    ? jobPhase === 'L2'
+      ? '#F59E0B'
+      : '#2563EB'
+    : '#10B981';
+  const strokeColor = isSelectedJob ? '#FEF08A' : '#FFFFFF';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.2"/>
+    <text x="12" y="15" font-size="8.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, monospace" font-weight="900" fill="#FFFFFF" text-anchor="middle">${indexOneBased}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+function buildLoggedInTractorMarkerSvg(v: DrayageCorridorVehicle): string {
+  const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
+  const mainColor = isLoggedIn ? '#10B981' : '#64748B'; // Emerald when logged in, Slate when Switched Off
+  const badgeColor = isLoggedIn ? '#047857' : '#334155';
+  const badgeLabel = isLoggedIn ? 'ONLINE GPS' : 'SWITCHED OFF';
+  const plate = (v.plateNumber || 'TRACTOR').slice(0, 10);
+  const driverLabel = (v.assignedDriverName || (isLoggedIn ? 'ONLINE' : 'OFFLINE')).slice(0, 11);
+  const pulseSvg = isLoggedIn
+    ? `<circle cx="48" cy="28" r="22" fill="none" stroke="${mainColor}" stroke-width="2.5">
+        <animate attributeName="r" values="22;42;50" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.85;0.25;0" dur="1.6s" repeatCount="indefinite"/>
+      </circle>`
+    : '';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="88" viewBox="0 0 96 88">
+    ${pulseSvg}
+    <circle cx="48" cy="28" r="22" fill="${mainColor}" stroke="#FFFFFF" stroke-width="2.5"/>
+    <path d="M36 29 L36 20 C36 18 38 17 40 17 L48 17 L52 23 L58 23 L58 30 L36 30 Z" fill="#FFFFFF"/>
+    <circle cx="41" cy="31" r="2.8" fill="#1E293B"/>
+    <circle cx="53" cy="31" r="2.8" fill="#1E293B"/>
+    <g transform="translate(16, 2)">
+      <rect x="0" y="0" width="64" height="14" rx="4" fill="${badgeColor}" stroke="#FFFFFF" stroke-width="1.2"/>
+      <text x="32" y="10" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">${badgeLabel}</text>
+    </g>
+    <g transform="translate(8, 54)">
+      <rect x="0" y="0" width="80" height="20" rx="5" fill="#0F172A" stroke="${mainColor}" stroke-width="1.8"/>
+      <text x="40" y="13.5" font-size="9" font-family="ui-monospace, monospace" font-weight="900" fill="#F8FAFC" text-anchor="middle" letter-spacing="0.5">${plate}</text>
+    </g>
+    <g transform="translate(14, 73)">
+      <rect x="0" y="0" width="68" height="12" rx="3" fill="${isLoggedIn ? '#064E3B' : '#1E293B'}" stroke="${mainColor}" stroke-width="1"/>
+      <text x="34" y="9" font-size="7.5" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-weight="700" fill="${isLoggedIn ? '#A7F3D0' : '#CBD5E1'}" text-anchor="middle">${driverLabel}</text>
+    </g>
+  </svg>`;
+
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
 export default function DrayageCorridorLiveMap({
   jobs,
   terminals,
   warehouses,
   geofences,
+  vehicles = [],
   selectedJobId,
   onSelectJob,
   onVerifyEdi,
@@ -788,6 +868,102 @@ export default function DrayageCorridorLiveMap({
         flightpathPolylinesRef.current.push(flightpath);
       }
 
+      // Render 1-Minute In-Transit GPS Breadcrumb Route Path Polyline & Clickable Waypoints (ACCEPTED -> COMPLETED)
+      if (Array.isArray(job.routePath) && job.routePath.length >= 1) {
+        const validWaypoints = job.routePath.filter(
+          (pt) => pt && !isNaN(Number(pt.lat)) && !isNaN(Number(pt.lng)),
+        );
+        const pathPts = validWaypoints.map((pt) => ({
+          lat: Number(pt.lat),
+          lng: Number(pt.lng),
+        }));
+        const lastPt = pathPts[pathPts.length - 1];
+        if (!lastPt || Math.abs(lastPt.lat - lat) > 0.0001 || Math.abs(lastPt.lng - lng) > 0.0001) {
+          pathPts.push({ lat, lng });
+        }
+        if (pathPts.length >= 2) {
+          const breadcrumbLine = new ctors.Polyline({
+            path: pathPts,
+            map,
+            strokeColor: isSelected ? '#2563EB' : job.jobPhase === 'L2' ? '#D97706' : '#0284C7',
+            strokeOpacity: isSelected ? 0.95 : 0.8,
+            strokeWeight: isSelected ? 4.5 : 3.2,
+            zIndex: isSelected ? 25 : 15,
+          });
+          flightpathPolylinesRef.current.push(breadcrumbLine);
+        }
+
+        // Render clickable breadcrumb waypoint markers along the path
+        validWaypoints.forEach((pt, idx) => {
+          const ptLat = Number(pt.lat);
+          const ptLng = Number(pt.lng);
+          const isMilestone = Boolean(
+            pt.status && pt.status !== 'IN_TRANSIT_PING' && pt.status !== 'GPS_BREADCRUMB',
+          );
+          const wpMarker = new ctors.Marker({
+            position: { lat: ptLat, lng: ptLng },
+            map,
+            title: `${job.jobCode} · Pt #${idx + 1}: ${pt.location || `${ptLat.toFixed(4)}, ${ptLng.toFixed(4)}`}`,
+            icon: {
+              url: buildBreadcrumbWaypointSvg(idx + 1, isSelected, isMilestone, job.jobPhase),
+              scaledSize: { width: isSelected ? 22 : 18, height: isSelected ? 22 : 18 },
+              anchor: { x: isSelected ? 11 : 9, y: isSelected ? 11 : 9 },
+            },
+            zIndex: isSelected ? 160 : 90,
+          });
+
+          wpMarker.addListener('click', () => {
+            onSelectJob?.(job.id);
+            setDrawerOpen(true);
+            if (!infoWindowRef.current) return;
+            const timeLabel = pt.timestamp
+              ? new Date(pt.timestamp).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  timeZone: 'Asia/Dubai',
+                })
+              : 'Live Telemetry';
+            const statusLabel =
+              pt.status === 'IN_TRANSIT_PING' || pt.status === 'GPS_BREADCRUMB'
+                ? '1-Min GPS Breadcrumb'
+                : pt.status || 'GPS Waypoint';
+            const locLabel = pt.location || `(${ptLat.toFixed(4)}, ${ptLng.toFixed(4)})`;
+            const wpHtml = `
+              <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; min-width: 240px; max-width: 290px; padding: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;">
+                  <strong style="font-size: 12px; font-family: monospace;">${job.jobCode} · Waypoint #${idx + 1}/${validWaypoints.length}</strong>
+                  <span style="background: ${isMilestone ? '#2563EB' : '#10B981'}; color: #FFFFFF; font-weight: 800; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
+                    ${statusLabel}
+                  </span>
+                </div>
+                <div style="margin-bottom: 4px; font-size: 11px;">
+                  📍 <strong>${locLabel}</strong>
+                </div>
+                <div style="margin-bottom: 4px; font-size: 11px; color: #475569;">
+                  🕒 Time: <strong>${timeLabel} GST</strong>
+                </div>
+                ${
+                  pt.speedKmh !== undefined && pt.speedKmh !== null
+                    ? `<div style="margin-bottom: 4px; font-size: 11px; color: #0284C7;">🚀 Speed: <strong>${pt.speedKmh} km/h</strong></div>`
+                    : ''
+                }
+                <div style="font-size: 10px; color: #64748B;">
+                  Container: <strong style="font-family: monospace;">${job.containerNumber}</strong> · Driver: <strong>${job.assignedDriverName || 'Assigned'}</strong>
+                </div>
+              </div>
+            `;
+            infoWindowRef.current.setContent(wpHtml);
+            infoWindowRef.current.setPosition({ lat: ptLat, lng: ptLng });
+            infoWindowRef.current.open({ map, anchor: wpMarker });
+          });
+
+          vehicleMarkersRef.current.push(wpMarker);
+        });
+      }
+
       const marker = new ctors.Marker({
         position: { lat, lng },
         map,
@@ -824,7 +1000,8 @@ export default function DrayageCorridorLiveMap({
             </div>
             <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px; margin-bottom: 8px; font-size: 10px;">
               Status: <strong style="color: #0284C7;">${job.status}</strong>
-              ${job.etcTime ? `<div style="color: #D97706; margin-top: 2px;">⏳ ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>` : ''}
+              ${job.routePath && job.routePath.length > 0 ? `<div style="color: #059669; margin-top: 2px;">📍 Live GPS Path: ${job.routePath.length} pt${job.routePath.length === 1 ? '' : 's'} (1-min interval)</div>` : ''}
+              ${job.etcTime ? `<div style="color: #D97706; margin-top: 2px;">⏳ ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}</div>` : ''}
             </div>
             <div style="display: flex; gap: 4px;">
               <button id="btn-focus-${job.id}" style="flex: 1; background: #2563EB; color: #FFFFFF; border: none; border-radius: 4px; padding: 5px 8px; font-size: 11px; font-weight: bold; cursor: pointer;">
@@ -851,6 +1028,71 @@ export default function DrayageCorridorLiveMap({
       vehicleMarkersRef.current.push(marker);
     });
 
+    // Also render logged-in tractors from `vehicles` that are not already plotted via a job marker
+    const renderedPlates = new Set(
+      filteredJobs
+        .map((j) => (j.assignedVehiclePlate || '').trim().toUpperCase())
+        .filter(Boolean),
+    );
+    vehicles.forEach((v) => {
+      if (!v.assignedDriverName) return;
+      const plateKey = (v.plateNumber || '').trim().toUpperCase();
+      if (plateKey && renderedPlates.has(plateKey)) return;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          (v.plateNumber || '').toLowerCase().includes(q) ||
+          (v.assignedDriverName || '').toLowerCase().includes(q) ||
+          (v.activeJobCode || '').toLowerCase().includes(q);
+        if (!match) return;
+      }
+      if (!v.lat || !v.lng || isNaN(Number(v.lat)) || isNaN(Number(v.lng))) return;
+      const vLat = Number(v.lat);
+      const vLng = Number(v.lng);
+
+      const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
+      const vMarker = new ctors.Marker({
+        position: { lat: vLat, lng: vLng },
+        map,
+        title: `${v.plateNumber} · ${v.assignedDriverName} (${isLoggedIn ? 'Online GPS' : 'Switched Off'})`,
+        icon: {
+          url: buildLoggedInTractorMarkerSvg(v),
+          scaledSize: { width: 56, height: 52 },
+          anchor: { x: 28, y: 44 },
+        },
+        zIndex: 95,
+      });
+
+      vMarker.addListener('click', () => {
+        if (!infoWindowRef.current) return;
+        const vHtml = `
+          <div style="font-family: -apple-system, sans-serif; font-size: 12px; color: #0F172A; min-width: 240px; max-width: 290px; padding: 4px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;">
+              <strong style="font-size: 13px; font-family: monospace;">${v.plateNumber}</strong>
+              <span style="background: ${isLoggedIn ? '#10B981' : '#64748B'}; color: #FFFFFF; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px;">
+                ${isLoggedIn ? 'ONLINE · 1-MIN GPS' : 'SWITCHED OFF'}
+              </span>
+            </div>
+            <div style="margin-bottom: 4px; font-size: 11px;">
+              Driver: <strong>${v.assignedDriverName}</strong>
+            </div>
+            <div style="margin-bottom: 4px; font-size: 11px; color: #475569;">
+              Tractor: <strong>${v.make || ''} ${v.model || ''}</strong> (${isLoggedIn ? v.status || 'AVAILABLE' : 'SWITCHED OFF'})
+            </div>
+            <div style="background: ${isLoggedIn ? '#ECFDF5' : '#F1F5F9'}; border: 1px solid ${isLoggedIn ? '#A7F3D0' : '#CBD5E1'}; border-radius: 6px; padding: 6px; font-size: 10px; color: ${isLoggedIn ? '#065F46' : '#475569'};">
+              📍 ${isLoggedIn ? 'Live Coordinates' : 'Last Known Position'}: <strong>${vLat.toFixed(4)}, ${vLng.toFixed(4)}</strong>
+              <div style="margin-top: 2px;">${isLoggedIn ? '🕒 Active 1-Min Telemetry Since Login' : '⚫ Driver Not Logged In · Mobile GPS Off'}</div>
+            </div>
+          </div>
+        `;
+        infoWindowRef.current.setContent(vHtml);
+        infoWindowRef.current.setPosition({ lat: vLat, lng: vLng });
+        infoWindowRef.current.open({ map, anchor: vMarker });
+      });
+
+      vehicleMarkersRef.current.push(vMarker);
+    });
+
     // Render Bogie Pairing Tethers
     if (showBogieLinks) {
       bogieTetherMap.forEach((points) => {
@@ -867,7 +1109,7 @@ export default function DrayageCorridorLiveMap({
         }
       });
     }
-  }, [filteredJobs, selectedJobId, showBogieLinks, showStreetTurnLinks, onSelectJob]);
+  }, [filteredJobs, vehicles, searchQuery, selectedJobId, showBogieLinks, showStreetTurnLinks, onSelectJob]);
 
   // 7. Pan and Zoom to Selected Job when selectedJobId changes
   useEffect(() => {
@@ -1182,6 +1424,58 @@ export default function DrayageCorridorLiveMap({
               )}
             </div>
 
+            {/* Live 1-Minute GPS Breadcrumb Trail */}
+            {activeJob.routePath && activeJob.routePath.length > 0 && (
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5" />
+                    In-Transit GPS Path (1-Min)
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono text-[10px] font-bold">
+                    {activeJob.routePath.length} pt{activeJob.routePath.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                  {[...activeJob.routePath]
+                    .slice(-8)
+                    .reverse()
+                    .map((pt, idx) => {
+                      const ptNum = activeJob.routePath!.length - idx;
+                      const tStr = pt.timestamp
+                        ? new Date(pt.timestamp).toLocaleTimeString('en-GB', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Asia/Dubai',
+                          })
+                        : 'Live';
+                      return (
+                        <button
+                          key={`${pt.lat}-${pt.lng}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            if (mapRef.current) {
+                              mapRef.current.panTo({ lat: pt.lat, lng: pt.lng });
+                              mapRef.current.setZoom(14);
+                            }
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-lg bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 flex items-center justify-between gap-2 text-[10px] transition-colors"
+                        >
+                          <span className="truncate text-slate-200">
+                            <strong className="text-emerald-400 font-mono mr-1">#{ptNum}</strong>
+                            {pt.location || `(${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)})`}
+                          </span>
+                          <span className="shrink-0 font-mono text-slate-400">
+                            {pt.speedKmh != null ? `${pt.speedKmh}km/h · ` : ''}
+                            {tStr}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             {/* ETC Timer Countdown if Ramp Placement */}
             {activeJob.etcTime && (
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1">
@@ -1191,7 +1485,7 @@ export default function DrayageCorridorLiveMap({
                     Destuffing ETC Timer
                   </span>
                   <strong className="font-mono text-white">
-                    {new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(activeJob.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })}
                   </strong>
                 </div>
                 <div className="text-[10px] text-slate-400">

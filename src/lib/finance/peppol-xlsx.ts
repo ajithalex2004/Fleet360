@@ -1,137 +1,160 @@
-/**
- * Excel (.xlsx) rendering of a UAE Peppol PINT-UAE e-invoice.
- *
- * The XML is the document that is exchanged with the Peppol network; this
- * workbook is the human-readable companion for review in Excel: header,
- * parties, lines, VAT summary, validation result, and the XML itself.
- */
 import * as XLSX from 'xlsx';
-import type { PeppolInvoiceData, PeppolValidationResult } from './peppol-e-invoice';
+import type { PeppolInvoiceData, PeppolTaxCategoryCode, PeppolValidationResult } from './peppol-e-invoice';
 
-const TAX_CATEGORY: Record<string, string> = {
+const TAX_CATEGORY_NAME: Record<PeppolTaxCategoryCode, string> = {
   S: 'Standard rated',
   Z: 'Zero rated',
   E: 'Exempt',
   O: 'Out of scope',
+  AE: 'Reverse charge',
+  G: 'Export item',
 };
 
-// Excel caps a cell at 32,767 characters, so the XML goes one line per row.
-const MAX_CELL = 32000;
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-function sheet(rows: unknown[][], widths: number[]): XLSX.WorkSheet {
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = widths.map(wch => ({ wch }));
-  return ws;
-}
-
+/**
+ * Builds a multi-sheet XLSX workbook representing a UAE Peppol e-invoice for
+ * human review alongside the UBL 2.1 XML: header & parties, line items, VAT
+ * breakdown by category, validation results, and the raw XML.
+ */
 export function buildPeppolWorkbook(
-  data: PeppolInvoiceData,
+  invoice: PeppolInvoiceData,
   result: PeppolValidationResult,
   opts: { sample?: boolean } = {},
 ): Buffer {
-  const net = round2(data.lines.reduce((s, l) => s + Number(l.netAmount), 0));
-  const vat = round2(data.lines.reduce((s, l) => s + Number(l.vatAmount), 0));
-  const total = round2(net + vat);
-
-  const party = (label: string, p: PeppolInvoiceData['seller']): unknown[][] => [
-    [label, ''],
-    ['Legal name', p.name],
-    ['TRN', p.trn || ''],
-    ['Trade licence / CRN', p.crn || ''],
-    ['Street', p.address.street],
-    ['City', p.address.city],
-    ['Emirate', p.address.state || ''],
-    ['Country', p.address.countryCode],
-    ['Contact', p.contact?.name || ''],
-    ['Email', p.contact?.email || ''],
-    ['Phone', p.contact?.phone || ''],
-    [],
-  ];
-
-  const invoiceRows: unknown[][] = [
-    ['UAE MoF & FTA Peppol E-Invoice (PINT-UAE)', ''],
-    ...(opts.sample ? [['SAMPLE', 'Illustrative data only — not a real tax invoice']] : []),
-    [],
-    ['Invoice number', data.invoiceNumber],
-    ['Invoice type', '380 — Commercial invoice'],
-    ['Issue date', data.issueDate],
-    ['Due date', data.dueDate || ''],
-    ['Currency', data.currency],
-    ['Profile', 'urn:peppol:pint:billing-1@ae-1'],
-    ['Contract reference', data.referenceContractNo || ''],
-    [],
-    ...party('SELLER', data.seller),
-    ...party('BUYER', data.buyer),
-    ['TOTALS', ''],
-    ['Net amount (excl. VAT)', net],
-    ['VAT amount', vat],
-    ['Total amount (incl. VAT)', total],
-    ['Amount payable', total],
-    [],
-    ['Notes', data.notes || ''],
-  ];
-
-  const lineRows: unknown[][] = [
-    ['#', 'Item', 'Description', 'Quantity', 'Unit price', 'Net amount', 'VAT %', 'VAT amount', 'Line total', 'Tax category'],
-    ...data.lines.map(l => [
-      l.id,
-      l.name,
-      l.description || '',
-      Number(l.quantity),
-      Number(l.unitPrice),
-      Number(l.netAmount),
-      Number(l.vatRatePercent),
-      Number(l.vatAmount),
-      round2(Number(l.netAmount) + Number(l.vatAmount)),
-      `${l.taxCategoryCode} — ${TAX_CATEGORY[l.taxCategoryCode] ?? ''}`,
-    ]),
-    [],
-    ['', '', 'Totals', '', '', net, '', vat, total, ''],
-  ];
-
-  const byRate = new Map<string, { code: string; rate: number; taxable: number; vat: number }>();
-  for (const l of data.lines) {
-    const key = `${l.taxCategoryCode}-${l.vatRatePercent}`;
-    const cur = byRate.get(key) ?? { code: l.taxCategoryCode, rate: Number(l.vatRatePercent), taxable: 0, vat: 0 };
-    cur.taxable += Number(l.netAmount);
-    cur.vat += Number(l.vatAmount);
-    byRate.set(key, cur);
-  }
-  const vatRows: unknown[][] = [
-    ['Tax category', 'Description', 'VAT rate %', 'Taxable amount', 'VAT amount'],
-    ...[...byRate.values()].map(r => [
-      r.code, TAX_CATEGORY[r.code] ?? '', r.rate, round2(r.taxable), round2(r.vat),
-    ]),
-    [],
-    ['', 'Total', '', net, vat],
-  ];
-
-  const validationRows: unknown[][] = [
-    ['Check', 'Result'],
-    ['Valid PINT-UAE document', result.isValid ? 'Yes' : 'No'],
-    ['SHA-256 digest', result.digestHash || ''],
-    ...result.errors.map(e => ['Error', e]),
-    ...result.warnings.map(w => ['Warning', w]),
-    ...(result.errors.length + result.warnings.length === 0 ? [['Findings', 'None']] : []),
-  ];
-
-  const xmlRows: unknown[][] = [['Peppol UBL 2.1 XML']];
-  for (const line of (result.xml || '').split('\n')) {
-    for (let i = 0; i < Math.max(line.length, 1); i += MAX_CELL) {
-      xmlRows.push([line.slice(i, i + MAX_CELL)]);
-    }
-  }
-
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet(invoiceRows, [28, 60]), 'Invoice');
-  XLSX.utils.book_append_sheet(wb, sheet(lineRows, [5, 32, 40, 10, 12, 14, 8, 12, 14, 22]), 'Lines');
-  XLSX.utils.book_append_sheet(wb, sheet(vatRows, [14, 18, 12, 16, 14]), 'VAT Summary');
-  XLSX.utils.book_append_sheet(wb, sheet(validationRows, [26, 90]), 'Validation');
-  XLSX.utils.book_append_sheet(wb, sheet(xmlRows, [140]), 'XML');
+
+  const rawNetTotal = Number(invoice.lines.reduce((s, l) => s + l.netAmount, 0).toFixed(2));
+  const discountAmount = Math.max(0, Number((invoice.discountAmount ?? 0).toFixed(2)));
+  const netTotal = Math.max(0, Number((rawNetTotal - discountAmount).toFixed(2)));
+  const vatTotal = Number(invoice.lines.reduce((s, l) => s + l.vatAmount, 0).toFixed(2));
+  const grossTotal = Number((netTotal + vatTotal).toFixed(2));
+
+  const headerRows: (string | number)[][] = [
+    ['UAE Peppol E-Invoice (PINT-UAE / UBL 2.1)', ''],
+    ...(opts.sample ? [['SAMPLE', 'Placeholder data — configure your TRN in Admin → Company Profile and open a real invoice to generate a live document.']] : []),
+    ['', ''],
+    ['Document', ''],
+    ['Customization ID', 'urn:peppol:pint:billing-1@ae-1'],
+    ['Profile ID', 'urn:peppol:bis:billing'],
+    ['Invoice Type Code', invoice.invoiceTypeCode ?? '380'],
+    ['Invoice Number', invoice.invoiceNumber],
+    ['Issue Date', invoice.issueDate],
+    ['Issue Time', invoice.issueTime ?? '12:00:00'],
+    ['Supply Date (Tax Point)', invoice.supplyDate ?? invoice.issueDate],
+    ['Due Date', invoice.dueDate ?? ''],
+    ['Document Currency', invoice.currency],
+    ['Tax Currency', invoice.taxCurrencyCode ?? 'AED'],
+    ...(invoice.currency !== 'AED' ? [['FX Rate (to AED)', invoice.exchangeRate ?? 3.6725]] : []),
+    ['Buyer Reference', invoice.buyerReference ?? invoice.referenceContractNo ?? invoice.invoiceNumber],
+    ['Order Reference', invoice.orderReference ?? ''],
+    ['Preceding Invoice Ref', invoice.billingReference?.invoiceNumber ?? ''],
+    ['Payment Means Code (UNCL4461)', invoice.paymentMeansCode ?? '30'],
+    ['Payee IBAN', invoice.paymentIban ?? ''],
+    ['Contract Reference', invoice.referenceContractNo ?? ''],
+    ['Notes', invoice.notes ?? ''],
+    ['', ''],
+    ['Seller (AccountingSupplierParty)', ''],
+    ['Legal Name (English)', invoice.seller.name],
+    ['Legal Name (Arabic)', invoice.seller.nameAr ?? ''],
+    ['TRN (15-digit FTA)', invoice.seller.trn],
+    ['Corporate Tax TRN', invoice.seller.corporateTaxTrn ?? ''],
+    ['PEPPOL Endpoint ID (0235)', invoice.seller.endpointId ?? invoice.seller.trn],
+    ['Trade License / CRN', invoice.seller.crn ?? ''],
+    ['Street', invoice.seller.address.street],
+    ['City', invoice.seller.address.city],
+    ['Emirate (ISO 3166-2:AE)', invoice.seller.address.state ?? ''],
+    ['Postal Code', invoice.seller.address.postalCode ?? ''],
+    ['Country Code', invoice.seller.address.countryCode],
+    ['Contact Name', invoice.seller.contact?.name ?? ''],
+    ['Contact Email', invoice.seller.contact?.email ?? ''],
+    ['Contact Phone', invoice.seller.contact?.phone ?? ''],
+    ['', ''],
+    ['Buyer (AccountingCustomerParty)', ''],
+    ['Legal Name', invoice.buyer.name],
+    ['TRN (15-digit FTA)', invoice.buyer.trn || '(unregistered / B2C)'],
+    ['PEPPOL Endpoint ID', invoice.buyer.endpointId ?? invoice.buyer.trn ?? ''],
+    ['Trade License / CRN', invoice.buyer.crn ?? ''],
+    ['Street', invoice.buyer.address.street],
+    ['City', invoice.buyer.address.city],
+    ['Emirate', invoice.buyer.address.state ?? ''],
+    ['Postal Code', invoice.buyer.address.postalCode ?? ''],
+    ['Country Code', invoice.buyer.address.countryCode],
+    ['Contact Email', invoice.buyer.contact?.email ?? ''],
+    ['Contact Phone', invoice.buyer.contact?.phone ?? ''],
+    ['', ''],
+    ['Legal Monetary Total', invoice.currency],
+    ['Line extension amount (excl. VAT)', rawNetTotal],
+    ...(discountAmount > 0 ? [['Allowance / Discount amount', discountAmount]] : []),
+    ['Tax exclusive amount', netTotal],
+    ['VAT amount', vatTotal],
+    ['Total amount (incl. VAT)', grossTotal],
+    ['Payable amount', grossTotal],
+    ['', ''],
+    ['Validation Status', result.isValid ? 'VALID' : 'INVALID'],
+    ['SHA-256 Digest', result.digestHash ?? ''],
+    ['FTA TLV QR Code (Base64)', result.qrCodeBase64 ?? ''],
+  ];
+  const wsHeader = XLSX.utils.aoa_to_sheet(headerRows);
+  wsHeader['!cols'] = [{ wch: 34 }, { wch: 64 }];
+  XLSX.utils.book_append_sheet(wb, wsHeader, 'Invoice');
+
+  const lineRows: (string | number)[][] = [
+    ['Line #', 'Item Name', 'Description', 'Quantity', 'Unit Code', 'Unit Price', 'Net Amount', 'Tax Category', 'VAT Rate %', 'VAT Amount', 'Gross Amount'],
+    ...invoice.lines.map((l, idx) => [
+      l.id || idx + 1,
+      l.name,
+      l.description ?? l.name,
+      l.quantity,
+      l.unitCode ?? 'C62',
+      Number(l.unitPrice.toFixed(2)),
+      Number(l.netAmount.toFixed(2)),
+      l.taxCategoryCode,
+      l.vatRatePercent,
+      Number(l.vatAmount.toFixed(2)),
+      Number((l.netAmount + l.vatAmount).toFixed(2)),
+    ]),
+    ['', 'TOTAL', '', '', '', '', netTotal, '', '', vatTotal, grossTotal],
+  ];
+  const wsLines = XLSX.utils.aoa_to_sheet(lineRows);
+  wsLines['!cols'] = [{ wch: 8 }, { wch: 26 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 11 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsLines, 'Lines');
+
+  const byCat = new Map<string, { code: PeppolTaxCategoryCode; rate: number; taxable: number; tax: number }>();
+  for (const l of invoice.lines) {
+    const key = `${l.taxCategoryCode}:${l.vatRatePercent}`;
+    const cur = byCat.get(key) ?? { code: l.taxCategoryCode, rate: l.vatRatePercent, taxable: 0, tax: 0 };
+    cur.taxable += l.netAmount;
+    cur.tax += l.vatAmount;
+    byCat.set(key, cur);
+  }
+  const vatRows: (string | number)[][] = [
+    ['Tax Category Code', 'Category Description', 'VAT Rate %', `Taxable Amount (${invoice.currency})`, `Tax Amount (${invoice.currency})`],
+    ...Array.from(byCat.values()).map(g => [
+      g.code,
+      TAX_CATEGORY_NAME[g.code] ?? g.code,
+      g.rate,
+      Number(g.taxable.toFixed(2)),
+      Number(g.tax.toFixed(2)),
+    ]),
+    ['TOTAL', '', '', netTotal, vatTotal],
+  ];
+  const wsVat = XLSX.utils.aoa_to_sheet(vatRows);
+  wsVat['!cols'] = [{ wch: 18 }, { wch: 24 }, { wch: 12 }, { wch: 22 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, wsVat, 'VAT Summary');
+
+  const valRows: string[][] = [
+    ['Severity', 'Message'],
+    ...result.errors.map(m => ['ERROR', m]),
+    ...result.warnings.map(m => ['WARNING', m]),
+    ...(result.errors.length === 0 && result.warnings.length === 0 ? [['OK', 'All UAE MoF / FTA PINT-UAE checks passed.']] : []),
+  ];
+  const wsVal = XLSX.utils.aoa_to_sheet(valRows);
+  wsVal['!cols'] = [{ wch: 12 }, { wch: 80 }];
+  XLSX.utils.book_append_sheet(wb, wsVal, 'Validation');
+
+  const xmlLines = (result.xml ?? '<!-- XML not generated due to validation errors -->').split(/\r?\n/);
+  const wsXml = XLSX.utils.aoa_to_sheet([['UBL 2.1 / PINT-UAE XML'], ...xmlLines.map(l => [l])]);
+  wsXml['!cols'] = [{ wch: 120 }];
+  XLSX.utils.book_append_sheet(wb, wsXml, 'XML');
 
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 }

@@ -2,9 +2,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { usePermissions } from '@/contexts/PermissionContext';
 import PasswordInput from '@/components/ui/PasswordInput';
 
-type Tab = 'operations' | 'route' | 'notifications';
+type Tab = 'operations' | 'route' | 'notifications' | 'security';
+
+interface SecurityPolicy {
+  enforceMfaForAdmins: boolean;
+  enforceMfaForAllUsers: boolean;
+  enforceSsoOnly: boolean;
+  sessionIdleTimeoutMin: number;
+  allowedIpCidrs: string;
+}
+
+const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
+  enforceMfaForAdmins: false,
+  enforceMfaForAllUsers: false,
+  enforceSsoOnly: false,
+  sessionIdleTimeoutMin: 480,
+  allowedIpCidrs: '',
+};
 
 interface Settings {
   tripMergingEnabled: boolean; pickupMatchType: string; pickupDistanceKm: number;
@@ -71,10 +89,13 @@ const Section = ({ title, desc, icon, children }: { title: string; desc: string;
 );
 
 export default function TenantSettingsPage() {
+  const { user } = usePermissions();
+  const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
   const { id } = useParams<{ id: string }>() ?? {};
   const [tab, setTab]         = useState<Tab>('operations');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [notifPrefs, setNotifPrefs] = useState(DEFAULT_PREFS);
+  const [securityPolicy, setSecurityPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -85,8 +106,21 @@ export default function TenantSettingsPage() {
       const res = await fetch(`/api/admin/tenants/${id}/settings`);
       const data = await res.json();
       setSettings(data);
+      if (data.securityPolicy) {
+        setSecurityPolicy({ ...DEFAULT_SECURITY_POLICY, ...data.securityPolicy });
+      }
       if (data.notificationPreferences) {
-        try { setNotifPrefs({ ...DEFAULT_PREFS, ...JSON.parse(data.notificationPreferences) }); }
+        try {
+          const parsed = JSON.parse(data.notificationPreferences);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed._securityPolicy && !data.securityPolicy) {
+              setSecurityPolicy({ ...DEFAULT_SECURITY_POLICY, ...parsed._securityPolicy });
+            }
+            const { _securityPolicy: _ignored, ...rest } = parsed;
+            void _ignored;
+            setNotifPrefs({ ...DEFAULT_PREFS, ...rest });
+          }
+        }
         catch {}
       }
     } catch {} finally { setLoading(false); }
@@ -101,7 +135,11 @@ export default function TenantSettingsPage() {
     if (!settings) return;
     setSaving(true); setSaveMsg('');
     try {
-      const payload = { ...settings, notificationPreferences: JSON.stringify(notifPrefs) };
+      const payload = {
+        ...settings,
+        notificationPreferences: JSON.stringify({ ...notifPrefs, _securityPolicy: securityPolicy }),
+        securityPolicy,
+      };
       const res = await fetch(`/api/admin/tenants/${id}/settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -123,6 +161,10 @@ export default function TenantSettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
+          <Link href={isSuperAdmin ? '/admin/tenants' : '/admin/company-profile'}
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] mb-1 inline-block">
+            ← {isSuperAdmin ? 'Back to Tenants' : 'Back to Company Profile'}
+          </Link>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Tenant Settings</h1>
           <p className="text-[var(--text-muted)] text-xs">Configure operational settings, auto-dispatch rules, and notification preferences</p>
         </div>
@@ -137,7 +179,7 @@ export default function TenantSettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-[var(--border-subtle)]">
-        {([['operations','Operations'],['route','Route Optimization'],['notifications','Notifications']] as [Tab,string][]).map(([t,l]) => (
+        {([['operations','Operations'],['route','Route Optimization'],['notifications','Notifications'],['security','Security & Access']] as [Tab,string][]).map(([t,l]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${tab===t ? 'text-[var(--text-main)] border-blue-500' : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-muted)]'}`}>
             {l}
@@ -422,6 +464,91 @@ export default function TenantSettingsPage() {
             <div className="mt-5">
               <Field label="Trip Reminder Timing (minutes before pickup)" help="How many minutes before the scheduled pickup to send reminders">
                 <NumInput value={s.tripReminderTimingMin} onChange={v => set('tripReminderTimingMin', v)} placeholder="60" min={1} />
+              </Field>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {/*  SECURITY & ACCESS POLICY TAB  */}
+      {tab === 'security' && (
+        <div>
+          <Section
+            title="Multi-Factor Authentication (MFA) & SSO Enforcement"
+            desc="Control mandatory 2FA/TOTP enrollment and Single Sign-On login requirements for users in this organisation"
+            icon="🔐"
+          >
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">Enforce MFA for Company Administrators</div>
+                  <div className="text-xs text-[var(--text-muted)]">Require TENANT_ADMIN and privileged administrative roles to enrol in 2FA/TOTP</div>
+                </div>
+                <ToggleSwitch
+                  checked={securityPolicy.enforceMfaForAdmins || securityPolicy.enforceMfaForAllUsers}
+                  onChange={v => setSecurityPolicy(p => ({ ...p, enforceMfaForAdmins: v }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-4">
+                <div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">Enforce MFA for All Users</div>
+                  <div className="text-xs text-[var(--text-muted)]">Require every user in this tenant (staff, dispatchers, finance, and managers) to use 2FA</div>
+                </div>
+                <ToggleSwitch
+                  checked={securityPolicy.enforceMfaForAllUsers}
+                  onChange={v => setSecurityPolicy(p => ({ ...p, enforceMfaForAllUsers: v, enforceMfaForAdmins: v ? true : p.enforceMfaForAdmins }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-4">
+                <div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">Enforce Single Sign-On (SSO) Only</div>
+                  <div className="text-xs text-[var(--text-muted)]">Disable password-based login for non-admin members when OIDC SSO is active for this company</div>
+                </div>
+                <ToggleSwitch
+                  checked={securityPolicy.enforceSsoOnly}
+                  onChange={v => setSecurityPolicy(p => ({ ...p, enforceSsoOnly: v }))}
+                />
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            title="Session Governance & Network Access Control"
+            desc="Configure idle session expiration and optional IP/CIDR allowlists for corporate network security"
+            icon="🛡️"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <Field
+                label="Session Idle Timeout (minutes)"
+                help="Automatically sign out inactive web sessions after this duration (15 to 1440 minutes)"
+              >
+                <NumInput
+                  value={securityPolicy.sessionIdleTimeoutMin}
+                  onChange={v => setSecurityPolicy(p => ({ ...p, sessionIdleTimeoutMin: Math.min(1440, Math.max(15, v || 480)) }))}
+                  placeholder="480"
+                  min={15}
+                />
+              </Field>
+
+              <Field
+                label="Allowed IP / CIDR Ranges (Optional)"
+                help="Comma-separated corporate IPv4/CIDR blocks (e.g. 195.229.0.0/16, 94.200.12.40/32). Leave blank to allow all IPs."
+              >
+                <input
+                  type="text"
+                  value={securityPolicy.allowedIpCidrs}
+                  onChange={e => setSecurityPolicy(p => ({ ...p, allowedIpCidrs: e.target.value }))}
+                  placeholder="e.g. 195.229.0.0/16, 94.200.12.40/32"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm font-mono"
+                />
+              </Field>
+            </div>
+          </Section>
+        </div>
+      )}
+      {false && (<div><Section title="" desc="" icon=""><div><Field label="">{null}
               </Field>
             </div>
           </Section>

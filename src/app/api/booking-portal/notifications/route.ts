@@ -11,17 +11,16 @@ import {
 } from '@/lib/omnichannel-communication';
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
 
   try {
     const rawBody = await req.json();
-    // Body is user-supplied — every field but payload has a default below
-    // and is genuinely optional; payload has no sensible default and stays
-    // required, matching how it's used (unguarded) further down.
     const body = stripTenantOwnershipFields(rawBody) as {
       trigger?: NotificationTrigger;
-      payload: NotificationPayload;
+      payload?: NotificationPayload;
       channels?: NotificationChannel[];
       phone?: string;
       email?: string;
@@ -34,7 +33,11 @@ export async function POST(req: NextRequest) {
       email = 'passenger@company.ae',
     } = body;
 
-    const results: Record<string, any> = {};
+    if (!payload || !payload.bookingRef) {
+      return NextResponse.json({ error: 'payload with bookingRef is required' }, { status: 400 });
+    }
+
+    const results: Record<string, unknown> = {};
 
     if (channels.includes('WHATSAPP')) {
       const waMsg = buildWhatsAppNotification(trigger, payload, phone);

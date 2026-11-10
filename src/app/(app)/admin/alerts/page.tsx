@@ -27,8 +27,6 @@ const MODULE_SOURCES = [
   { icon: Shield,    label: 'Incidents',    description: 'Active incidents, escalation SLAs' },
 ];
 
-// href null: the screen isn't built yet, so it shows as "Coming soon"
-// rather than linking to a page that doesn't exist.
 const SECTIONS: Array<{
   href: string | null; icon: typeof Settings; label: string; description: string;
   accent: string; bg: string; iconColor: string;
@@ -44,19 +42,19 @@ const SECTIONS: Array<{
     iconColor:   'text-blue-400',
   },
   {
-    href:        null,
+    href:        '/incidents/active',
     icon:        Activity,
-    label:       'Active Alerts',
-    description: 'Triage, assign, and escalate open alerts across all fleet modules.',
+    label:       'Active Alerts & Incidents',
+    description: 'Triage, assign, and escalate open alerts and incidents across all fleet modules.',
     accent:      'from-amber-500 to-orange-600',
     bg:          'bg-amber-500/10 border-amber-500/30',
     iconColor:   'text-amber-400',
   },
   {
-    href:        null,
+    href:        '/admin/audit-logs',
     icon:        History,
-    label:       'Alert History',
-    description: 'Audit trail of resolved and closed alerts with full escalation timeline.',
+    label:       'Alert & Audit History',
+    description: 'Audit trail of resolved alerts, notifications, and administrative actions.',
     accent:      'from-emerald-500 to-teal-600',
     bg:          'bg-emerald-500/10 border-emerald-500/30',
     iconColor:   'text-emerald-400',

@@ -23,7 +23,6 @@ import {
   MapPin,
   Trash2,
   ArrowUpDown,
-  Leaf,
   Scale,
   Settings,
   Copy,
@@ -32,6 +31,8 @@ import {
   MessageSquare,
   Mail,
   MoreVertical,
+  Pencil,
+  Lock,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -43,9 +44,16 @@ import {
   subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
 import { DrayageSuperAdminConfigModal } from '@/components/logistics/drayage/DrayageSuperAdminConfigModal';
+import {
+  DrayageEditJobModal,
+  type EditJobMasterOption,
+} from '@/components/logistics/drayage/DrayageEditJobModal';
 import { usePermissions } from '@/contexts/PermissionContext';
 import {
   DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
+  canChangeDrayageReturnTerminal,
+  evaluateDispatcherJobReassignState,
+  isDrayageReassignStatus,
   type DrayageAutomationConfig,
 } from '@/lib/logistics/drayage-domain';
 
@@ -61,6 +69,10 @@ interface DrayageJob {
   warehouseId?: string | null;
   terminalName: string;
   terminalId?: string | null;
+  returnTerminalName?: string | null;
+  returnTerminalId?: string | null;
+  originTerminalName?: string | null;
+  originTerminalId?: string | null;
   containerNumber: string;
   containerSize: string;
   containerType: string;
@@ -169,6 +181,9 @@ interface MappedVehicle {
   nextServiceKm?: number | null;
   lat?: number | null;
   lng?: number | null;
+  hasLiveGps?: boolean;
+  isDriverLoggedIn?: boolean;
+  gpsStatus?: 'MOVING' | 'IDLE' | 'SWITCHED_OFF' | string;
   updatedAt?: string | null;
   assignedTripsCount?: number;
   assignedDriverId?: string | null;
@@ -193,6 +208,7 @@ interface DrayageTrailer {
   operationalStatus: string;
   capacityTons?: number;
   currentLocation?: string | null;
+  linkedContainerNumber?: string | null;
 }
 
 interface DrayageTerminal {
@@ -203,6 +219,8 @@ interface DrayageTerminal {
   emirate: string;
   lat?: number;
   lng?: number;
+  tripAmountAed?: number;
+  driverAllowanceAed?: number;
 }
 
 interface DrayageWarehouse {
@@ -213,6 +231,8 @@ interface DrayageWarehouse {
   address: string;
   lat?: number;
   lng?: number;
+  tripAmountAed?: number;
+  driverAllowanceAed?: number;
 }
 
 interface DemurrageRisk {
@@ -333,6 +353,7 @@ interface Vehicle4FactorScore {
   availabilityScore: number; // 5%
   totalScore: number;        // 100%
   distanceKm: number;
+  hasLiveGps: boolean;
   idleHours: number;
   tripsToday: number;
   fuelPct: number;
@@ -351,12 +372,15 @@ export default function DrayageAssignmentPage() {
   const [trailers, setTrailers] = useState<DrayageTrailer[]>(cached?.trailers || []);
   const [terminals, setTerminals] = useState<DrayageTerminal[]>(cached?.terminals || []);
   const [warehouses, setWarehouses] = useState<DrayageWarehouse[]>(cached?.warehouses || []);
+  const [customers, setCustomers] = useState<EditJobMasterOption[]>(cached?.customers || []);
+  const [editJobTarget, setEditJobTarget] = useState<DrayageJob | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
 
   // Smart Analysis UI state
   const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
+  const [showUrgentDemurrageAlert, setShowUrgentDemurrageAlert] = useState(false);
   const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<
-    'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD' | 'DEMURRAGE'
+    'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD'
   >('ALL');
   const [automationConfig, setAutomationConfig] = useState<DrayageAutomationConfig>(() => ({
     ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -511,16 +535,95 @@ export default function DrayageAssignmentPage() {
   const [assigningJob, setAssigningJob] = useState<DrayageJob | null>(null);
   const [editingTokenJob, setEditingTokenJob] = useState<DrayageJob | null>(null);
   const [newTokenValue, setNewTokenValue] = useState('');
+  const [editTokenSlotStartHour, setEditTokenSlotStartHour] = useState<number>(6);
   const [isBogieAssign, setIsBogieAssign] = useState(false);
   const [activeStreetTurnPair, setActiveStreetTurnPair] = useState<StreetTurnRecommendation | null>(null);
   const [holdLeg3InModal, setHoldLeg3InModal] = useState<boolean>(true);
+
+  // Return Terminal Redirection Modal State
+  const [changingReturnTerminalJob, setChangingReturnTerminalJob] = useState<DrayageJob | null>(null);
+  const [newReturnTerminalId, setNewReturnTerminalId] = useState('');
+  const [returnTerminalReason, setReturnTerminalReason] = useState('');
+  const [submittingReturnTerminal, setSubmittingReturnTerminal] = useState(false);
 
   // Assignment Modal Fields
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedTrailerId, setSelectedTrailerId] = useState('');
   const [tokenInput, setTokenInput] = useState('');
+  const [tokenSlotStartHour, setTokenSlotStartHour] = useState<number>(6);
+  const [assignReturnTerminalId, setAssignReturnTerminalId] = useState('');
   const [submittingAssign, setSubmittingAssign] = useState(false);
+
+  const formatShortHourAmPm = useCallback((hour24: number): string => {
+    const h = ((hour24 % 24) + 24) % 24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12} ${ampm}`;
+  }, []);
+
+  const formatFullHourAmPm = useCallback((hour24: number): string => {
+    const h = ((hour24 % 24) + 24) % 24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:00 ${ampm}`;
+  }, []);
+
+  const formatTwoHourWindowLabel = useCallback(
+    (startHour: number): string => {
+      const s = ((startHour % 24) + 24) % 24;
+      const e = (s + 2) % 24;
+      return `${formatShortHourAmPm(s)} to ${formatShortHourAmPm(e)}`;
+    },
+    [formatShortHourAmPm],
+  );
+
+  const buildSlotWindowIsoPair = useCallback((startHour: number): { pcsSlotStart: string; pcsSlotEnd: string } => {
+    const s = ((startHour % 24) + 24) % 24;
+    const uaeNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    const startDt = new Date(
+      Date.UTC(
+        uaeNow.getUTCFullYear(),
+        uaeNow.getUTCMonth(),
+        uaeNow.getUTCDate(),
+        s - 4,
+        0,
+        0,
+        0,
+      ),
+    );
+    const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+    return {
+      pcsSlotStart: startDt.toISOString(),
+      pcsSlotEnd: endDt.toISOString(),
+    };
+  }, []);
+
+  const extractStartHourFromJob = useCallback((job: DrayageJob | null | undefined): number => {
+    if (job?.pcsSlotStart) {
+      const dt = new Date(job.pcsSlotStart);
+      if (!Number.isNaN(dt.getTime())) {
+        return (dt.getUTCHours() + 4) % 24;
+      }
+    }
+    return 7; // Default 7 AM to 9 AM
+  }, []);
+
+  const formatJobTokenWindowBadge = useCallback(
+    (job: DrayageJob): string | null => {
+      if (job.pcsSlotStart && job.pcsSlotEnd) {
+        const sDt = new Date(job.pcsSlotStart);
+        const eDt = new Date(job.pcsSlotEnd);
+        if (!Number.isNaN(sDt.getTime()) && !Number.isNaN(eDt.getTime())) {
+          const sHr = (sDt.getUTCHours() + 4) % 24;
+          const eHr = (eDt.getUTCHours() + 4) % 24;
+          return `${formatShortHourAmPm(sHr)} to ${formatShortHourAmPm(eHr)}`;
+        }
+      }
+      return null;
+    },
+    [formatShortHourAmPm],
+  );
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -541,6 +644,7 @@ export default function DrayageAssignmentPage() {
       setTrailers(data?.trailers || []);
       setTerminals(data?.terminals || []);
       setWarehouses(data?.warehouses || []);
+      setCustomers(data?.customers || []);
       if (data?.automationConfig) {
         setAutomationConfig({
           ...DEFAULT_DRAYAGE_AUTOMATION_CONFIG,
@@ -669,10 +773,35 @@ export default function DrayageAssignmentPage() {
   const availableDrivers = useMemo(() => drivers.filter((d) => d.status === 'ACTIVE' && d.complianceOk), [drivers]);
   const availableTrailers = useMemo(() => trailers.filter((t) => t.masterStatus === 'AVAILABLE'), [trailers]);
 
-  // Filter unassigned jobs & all jobs
+  // Filter unassigned jobs & active queue jobs (exclude COMPLETED / L2-activated L1 jobs by default)
+  const [showCompletedJobs, setShowCompletedJobs] = useState(false);
+
+  const isJobCompletedOrSuperseded = useCallback((j: DrayageJob) => {
+    const st = (j.status || '').toUpperCase();
+    return (
+      ['COMPLETED', 'STREET_TURNED', 'EMPTY_DEPOSITED', 'CONTAINER_DROPPED', 'CANCELLED'].includes(st) ||
+      (j.jobPhase === 'L1' && Boolean(j.l2Activated))
+    );
+  }, []);
+
+  const activeQueueJobs = useMemo(
+    () => (showCompletedJobs ? jobs : jobs.filter((j) => !isJobCompletedOrSuperseded(j))),
+    [jobs, showCompletedJobs, isJobCompletedOrSuperseded],
+  );
+
+  const completedJobsCount = useMemo(
+    () => jobs.filter((j) => isJobCompletedOrSuperseded(j)).length,
+    [jobs, isJobCompletedOrSuperseded],
+  );
+
   const unassignedJobs = useMemo(
-    () => jobs.filter((j) => j.status === 'PENDING' || !j.assignedVehicleId),
-    [jobs],
+    () =>
+      jobs.filter((j) => {
+        if (isJobCompletedOrSuperseded(j)) return false;
+        const reassignState = evaluateDispatcherJobReassignState(j);
+        return j.status === 'PENDING' || !j.assignedVehicleId || reassignState.canReassign;
+      }),
+    [jobs, isJobCompletedOrSuperseded],
   );
 
   // =========================================================================
@@ -742,9 +871,12 @@ export default function DrayageAssignmentPage() {
     const slotEnd = slotStart + 2;
     const slotTime = `${String(slotStart).padStart(2, '0')}:00 - ${String(slotEnd).padStart(2, '0')}:00`;
 
-    const isSameTerminal = job2
-      ? job1.terminalName.trim().toLowerCase() === job2.terminalName.trim().toLowerCase()
-      : true;
+    const term1 = (job1.returnTerminalName || job1.terminalName || '').trim().toLowerCase();
+    const term2 = job2
+      ? (job2.returnTerminalName || job2.terminalName || '').trim().toLowerCase()
+      : term1;
+
+    const isSameTerminal = job2 ? term1 === term2 : true;
 
     return {
       slotTime,
@@ -778,7 +910,9 @@ export default function DrayageAssignmentPage() {
   // FEATURE 2: DUAL-20FT BOGIE / CHASSIS AUTO-BUNDLING ENGINE
   // =========================================================================
   const bogieCombos = useMemo(() => {
-    const twentyFtJobs = unassignedJobs.filter((j) => j.containerSize === '20FT');
+    const twentyFtJobs = unassignedJobs.filter(
+      (j) => j.containerSize === '20FT' && j.jobPhase === 'L1' && j.status === 'PENDING' && !j.trailerDetached,
+    );
     if (twentyFtJobs.length < 2) return [];
 
     const candidates: BogieComboRecommendation[] = [];
@@ -832,9 +966,59 @@ export default function DrayageAssignmentPage() {
         const drop1 = r1.hoursRemaining <= r2.hoursRemaining ? j1 : j2;
         const drop2 = drop1.id === j1.id ? j2 : j1;
 
-        const combinedRevenueAed = (j1.rateAmountAed || 1450) + (j2.rateAmountAed || 1450);
-        const combinedAllowanceAed = (j1.driverAllowanceAed || 150) + (j2.driverAllowanceAed || 150);
+        const resolveBogieWh = (whName: string, whId?: string | null) => {
+          if (whId) {
+            const wh = warehouses.find((w) => w.id === whId);
+            if (wh) return wh;
+          }
+          return warehouses.find((w) => w.name.toLowerCase() === (whName || '').toLowerCase());
+        };
+        const wh1Obj = resolveBogieWh(j1.warehouseName, j1.warehouseId);
+        const wh2Obj = resolveBogieWh(j2.warehouseName, j2.warehouseId);
+
+        const combinedRevenueAed =
+          (j1.rateAmountAed || wh1Obj?.tripAmountAed || 1450) +
+          (j2.rateAmountAed || wh2Obj?.tripAmountAed || 1450);
+        const combinedAllowanceAed =
+          (j1.driverAllowanceAed || wh1Obj?.driverAllowanceAed || 150) +
+          (j2.driverAllowanceAed || wh2Obj?.driverAllowanceAed || 150);
         const hasUrgentDemurrage = r1.level === 'CRITICAL' || r2.level === 'CRITICAL' || r1.level === 'EXPIRED' || r2.level === 'EXPIRED';
+
+        // Actual Dynamic Fuel Saving % for Dual-20FT Bogie vs 2 Separate Trips
+        const resolveTermCoord = (termName?: string | null) => {
+          const match = terminals.find(
+            (t) => t.name.toLowerCase() === (termName || '').toLowerCase() || t.code.toLowerCase() === (termName || '').toLowerCase(),
+          );
+          if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+            return { lat: match.lat, lng: match.lng };
+          }
+          const lower = (termName || '').toLowerCase();
+          if (lower.includes('khalifa') || lower.includes('auh')) return { lat: 24.8432, lng: 54.7121 };
+          if (lower.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+          if (lower.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+          return { lat: 25.0112, lng: 55.0617 };
+        };
+        const tCoord = resolveTermCoord(j1.terminalName);
+        const w1Coord = wh1Obj?.lat && wh1Obj?.lng ? { lat: wh1Obj.lat, lng: wh1Obj.lng } : { lat: 24.9602, lng: 55.0615 };
+        const w2Coord = wh2Obj?.lat && wh2Obj?.lng ? { lat: wh2Obj.lat, lng: wh2Obj.lng } : { lat: 24.9602, lng: 55.0615 };
+        const distFn = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+          const R = 6371;
+          const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+          const dLon = ((b.lng - a.lng) * Math.PI) / 180;
+          const s =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          return Math.max(2.0, R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s)) * 1.25);
+        };
+        const dTermW1 = distFn(tCoord, w1Coord);
+        const dTermW2 = distFn(tCoord, w2Coord);
+        const dW1W2 = sameZone && w1Coord.lat === w2Coord.lat && w1Coord.lng === w2Coord.lng ? 0 : distFn(w1Coord, w2Coord);
+        const separateRoundTripKm = 2 * dTermW1 + 2 * dTermW2;
+        const bogieRoundTripEffectiveKm = (dTermW1 + dW1W2 + dTermW2) * 1.08;
+        const dynamicFuelSavingPct = Math.max(
+          15,
+          Math.min(55, Math.round(((separateRoundTripKm - bogieRoundTripEffectiveKm) / Math.max(1, separateRoundTripKm)) * 100)),
+        );
 
         const tas = getTasSlotWindow(j1, j2);
 
@@ -857,7 +1041,7 @@ export default function DrayageAssignmentPage() {
           dropSequence: [`Drop #1: ${drop1.warehouseName} (${drop1.customerName})`, `Drop #2: ${drop2.warehouseName} (${drop2.customerName})`],
           combinedRevenueAed,
           combinedAllowanceAed,
-          fuelSavingPct: 45,
+          fuelSavingPct: dynamicFuelSavingPct,
           hasUrgentDemurrage,
           tasSlot: tas.slotTime,
           score,
@@ -885,7 +1069,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalCombos;
-  }, [unassignedJobs, automationConfig.bogieWindowHours, automationConfig.bogieMaxPayloadKg, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [unassignedJobs, warehouses, terminals, automationConfig.bogieWindowHours, automationConfig.bogieMaxPayloadKg, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
   // ZONE-BASED STREET-TURN MATCHING ENGINE (L2 Empty Warehouse -> Pending Export Booking)
@@ -934,32 +1118,67 @@ export default function DrayageAssignmentPage() {
       return { lat: 24.9602, lng: 55.0615 };
     };
 
-    // 1. Inbound containers: L1 Placed at Ramp containers OR unassigned L2 Empty Return jobs
-    const l2Inbound = jobs.filter(
-      (j) =>
-        !j.streetTurnJobId &&
-        j.status !== 'STREET_TURNED' &&
-        j.status !== 'COMPLETED' &&
-        ((j.jobPhase === 'L2' && (j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId)) ||
-          (j.jobPhase === 'L1' &&
-            (j.status === 'PLACED_AT_RAMP' ||
-              j.status === 'REASSIGN_PLACED_AT_RAMP' ||
-              j.status === 'CONTAINER_DETACHED' ||
-              j.status === 'WAITING_MT_RETURN' ||
-              j.placementLocation === 'RAMP')))
+    // 1. Inbound containers: L1 Placed at Ramp / MT_Reassign to Yard / Ready for Pickup containers OR unassigned L2 Empty Return jobs
+    //    Exclude initial full (FCL) Yard Drops (PLACED_AT_YARD / FCL_REASSIGN) which are still loaded awaiting Yard-to-Ramp shunting
+    const l2Inbound = jobs.filter((j) => {
+      if (j.streetTurnJobId || j.status === 'STREET_TURNED' || j.status === 'COMPLETED' || j.status === 'CANCELLED') {
+        return false;
+      }
+      if (j.jobPhase === 'L2') {
+        return j.status === 'PENDING' || j.status === 'WAITING_MT_RETURN' || !j.assignedVehicleId;
+      }
+      if (j.jobPhase === 'L1' && !j.l2Activated) {
+        const st = (j.status || '').toUpperCase();
+        const isInitialFclYardDrop =
+          ['PLACED_AT_YARD', 'FCL_REASSIGN', 'FCL_REASSIGN TO RAMP'].includes(st) ||
+          (j.placementLocation === 'YARD' &&
+            ![
+              'READY_FOR_PICKUP',
+              'CONTAINER_OFFLOADED',
+              'REASSIGN_TRAILER_DETACHED',
+              'REASSIGN_PLACED_AT_YARD',
+              'MT_REASSIGN',
+              'MT_REASSIGN TO YARD',
+            ].includes(st));
+        if (isInitialFclYardDrop) return false;
+        return (
+          Boolean(j.trailerDetached) ||
+          [
+            'PLACED_AT_RAMP',
+            'REASSIGN_PLACED_AT_RAMP',
+            'REASSIGN_PLACED_AT_YARD',
+            'MT_REASSIGN',
+            'MT_REASSIGN TO YARD',
+            'CONTAINER_DETACHED',
+            'TRAILER_DETACHED',
+            'REASSIGN_TRAILER_DETACHED',
+            'READY_FOR_PICKUP',
+            'CONTAINER_OFFLOADED',
+            'WAITING_MT_RETURN',
+          ].includes(st) ||
+          j.placementLocation === 'RAMP'
+        );
+      }
+      return false;
+    });
+    // 2. Pending outbound port/export bookings (strictly PENDING jobs not yet picked up from port/origin)
+    const pendingPortOrExportJobs = unassignedJobs.filter(
+      (j) => !j.streetTurnJobId && j.status === 'PENDING' && !j.trailerDetached,
     );
-    // 2. Pending export bookings
-    const exportBookings = unassignedJobs.filter(
-      (j) => !j.streetTurnJobId && (j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'))
+    const exportBookings = pendingPortOrExportJobs.filter(
+      (j) => j.shipmentType === 'EXPORT' || j.jobCode.startsWith('EXP') || j.jobCode.includes('EXP'),
     );
-    // Fallback: If no explicit EXPORT jobs in queue, also evaluate unassigned L1 jobs
-    const l1Outbound = exportBookings.length > 0 ? exportBookings : unassignedJobs.filter((j) => j.jobPhase === 'L1' && !j.streetTurnJobId);
+    // Fallback: If no explicit EXPORT jobs in queue, also evaluate pending L1 port pickups
+    const l1Outbound =
+      exportBookings.length > 0
+        ? exportBookings
+        : pendingPortOrExportJobs.filter((j) => j.jobPhase === 'L1');
 
     if (l2Inbound.length === 0 || l1Outbound.length === 0) return [];
 
-    // Count unassigned outbound L1 jobs per terminal so we know if a 3rd leg's destination terminal has a backhaul
+    // Count unassigned outbound L1 port pickups per terminal so we know if a 3rd leg's destination terminal has a backhaul
     const outboundCountByTerminal = new Map<string, number>();
-    for (const uJob of unassignedJobs) {
+    for (const uJob of pendingPortOrExportJobs) {
       if (uJob.jobPhase === 'L1') {
         const tKey = (uJob.terminalName || '').trim().toLowerCase();
         outboundCountByTerminal.set(tKey, (outboundCountByTerminal.get(tKey) || 0) + 1);
@@ -968,6 +1187,7 @@ export default function DrayageAssignmentPage() {
 
     const candidates: StreetTurnRecommendation[] = [];
     for (const j2 of l2Inbound) {
+      const j2ReturnTerminal = (j2.returnTerminalName || j2.terminalName || '').trim();
       for (const j1 of l1Outbound) {
         if (j2.id === j1.id) continue;
 
@@ -975,9 +1195,9 @@ export default function DrayageAssignmentPage() {
         const zoneL1 = getWarehouseZone(j1.warehouseName, j1.warehouseId);
         const sameZone = zoneL2.toLowerCase() === zoneL1.toLowerCase();
 
-        // Terminal Match (e.g. DIC -> Port T1 Empty Drop + Port T1 -> JAFZA South Import Pick)
+        // Terminal Match using effective L2 Return Terminal (supports post-port-exit terminal redirection!)
         const termMatch =
-          j2.terminalName.trim().toLowerCase() === j1.terminalName.trim().toLowerCase();
+          j2ReturnTerminal.toLowerCase() === (j1.terminalName || '').trim().toLowerCase();
 
         // Proximity Match: Same Zone or Corridor Cluster (JAFZA / NIP / Dubai South / DIC)
         const isClusterMatch =
@@ -1043,7 +1263,8 @@ export default function DrayageAssignmentPage() {
 
           leg3Candidate = j3;
           leg3Risk = getDemurrageRisk(j3);
-          const t3Key = (j3.terminalName || '').trim().toLowerCase();
+          const j3ReturnTerminal = (j3.returnTerminalName || j3.terminalName || '').trim();
+          const t3Key = j3ReturnTerminal.toLowerCase();
           // Exclude j1 if j1 is at the same terminal as j3
           const otherL1AtT3 =
             (outboundCountByTerminal.get(t3Key) || 0) -
@@ -1065,13 +1286,96 @@ export default function DrayageAssignmentPage() {
           : 'Grade A · Export Seaworthy / CW';
         const sourcePhase: 'L1_RAMP' | 'L2_EMPTY' = j2.jobPhase === 'L1' ? 'L1_RAMP' : 'L2_EMPTY';
 
-        const deadheadSaved = isPortTerminalReload
-          ? leg3Candidate && !holdLeg3Recommended
-            ? 68
-            : 54
-          : Math.max(48, Math.round(62 - interDist));
+        // 100% Actual Dynamic Calculations from Terminal-to-Warehouse Coordinates & Job Allowances
+        const resolveTerminalCoordsLocal = (termId?: string | null, termName?: string | null): { lat: number; lng: number } => {
+          const match = terminals.find(
+            (t) =>
+              (termId && t.id === termId) ||
+              (termName && (t.name.toLowerCase() === termName.toLowerCase() || t.code.toLowerCase() === termName.toLowerCase())),
+          );
+          if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+            return { lat: match.lat, lng: match.lng };
+          }
+          const lower = (termName || '').toLowerCase();
+          if (lower.includes('khalifa') || lower.includes('auh') || lower.includes('abu dhabi')) return { lat: 24.8432, lng: 54.7121 };
+          if (lower.includes('rashid')) return { lat: 25.2697, lng: 55.2758 };
+          if (lower.includes('sharjah') || lower.includes('khalid')) return { lat: 25.3582, lng: 55.3721 };
+          if (lower.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+          if (lower.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+          if (lower.includes('t4')) return { lat: 24.9895, lng: 55.0381 };
+          return { lat: 25.0112, lng: 55.0617 };
+        };
+        const resolveWarehouseObj = (whName: string, whId?: string | null) => {
+          if (whId) {
+            const wh = warehouses.find((w) => w.id === whId);
+            if (wh) return wh;
+          }
+          return warehouses.find((w) => w.name.toLowerCase() === (whName || '').toLowerCase());
+        };
+        const resolveActualAllowanceAed = (job: DrayageJob): number => {
+          if (typeof job.driverAllowanceAed === 'number' && job.driverAllowanceAed > 0) return job.driverAllowanceAed;
+          const wh = resolveWarehouseObj(job.warehouseName, job.warehouseId);
+          if (wh && typeof wh.driverAllowanceAed === 'number' && wh.driverAllowanceAed > 0) return wh.driverAllowanceAed;
+          return 150;
+        };
+        const resolveActualRevenueAed = (job: DrayageJob): number => {
+          if (typeof job.rateAmountAed === 'number' && job.rateAmountAed > 0) return job.rateAmountAed;
+          const wh = resolveWarehouseObj(job.warehouseName, job.warehouseId);
+          if (wh && typeof wh.tripAmountAed === 'number' && wh.tripAmountAed > 0) return wh.tripAmountAed;
+          return 1450;
+        };
+        const roadDistKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number =>
+          Math.round(haversineKm(a.lat, a.lng, b.lat, b.lng) * 1.25 * 10) / 10;
+
+        const t2Coords = resolveTerminalCoordsLocal(j2.returnTerminalId || j2.terminalId, j2ReturnTerminal);
+        const t1Coords = resolveTerminalCoordsLocal(j1.terminalId, j1.terminalName);
+        const distWh2ToTerm2Km = Math.max(2.0, roadDistKm(c2, t2Coords));
+        const distTerm1ToWh1Km = Math.max(2.0, roadDistKm(t1Coords, c1));
+        const interTerminalKm = termMatch ? 0 : roadDistKm(t2Coords, t1Coords);
+
+        let leg3DeadheadSavedKm = 0;
+        if (leg3Candidate && !holdLeg3Recommended) {
+          const c3 = resolveWarehouseCoords(leg3Candidate.warehouseName, leg3Candidate.warehouseId);
+          const t3Coords = resolveTerminalCoordsLocal(
+            leg3Candidate.returnTerminalId || leg3Candidate.terminalId,
+            leg3Candidate.returnTerminalName || leg3Candidate.terminalName,
+          );
+          const distTerm3ToWh3Km = Math.max(2.0, roadDistKm(t3Coords, c3));
+          const distWh1ToWh3Km = roadDistKm(c1, c3);
+          leg3DeadheadSavedKm = Math.max(2.0, distTerm3ToWh3Km - distWh1ToWh3Km);
+        }
+
+        // 1. Actual Deadhead Saved (km):
+        //    - Port Terminal Reload: Avoids Tractor #1 empty bobtail return (t2 -> c2) + Tractor #2 empty bobtail approach (c1 -> t1), minus interTerminalKm (0 km when same terminal)
+        //    - Inland Street Turn: Avoids empty return leg (c2 -> t2) + empty pickup leg (t1 -> c1), minus direct inter-warehouse repositioning (interDist)
+        const rawDeadheadSavedKm = isPortTerminalReload
+          ? distWh2ToTerm2Km + distTerm1ToWh1Km - interTerminalKm + leg3DeadheadSavedKm
+          : distWh2ToTerm2Km + distTerm1ToWh1Km - interDist;
+        const deadheadSaved = Math.max(1.0, Math.round(rawDeadheadSavedKm * 10) / 10);
+
+        // 2. Actual Carbon Avoided (kg CO2): Actual Deadhead Saved (km) * 0.95 kg CO2/km (heavy-duty diesel prime mover factor)
         const co2Saved = Math.round(deadheadSaved * 0.95 * 10) / 10;
-        const fuelSaved = Math.round(deadheadSaved * 4.5 + 400);
+
+        // 3. Actual Direct Cost Saved (AED):
+        //    (Actual Deadhead Saved km * 3.85 AED/km fuel & wear) + Actual Saved Driver Trip Allowance + Avoided Port Gate Fee (35 AED/pass)
+        const allow2Aed = resolveActualAllowanceAed(j2);
+        const allow1Aed = resolveActualAllowanceAed(j1);
+        const allow3Aed = leg3Candidate && !holdLeg3Recommended ? resolveActualAllowanceAed(leg3Candidate) : 0;
+        const rev2Aed = resolveActualRevenueAed(j2);
+        const rev1Aed = resolveActualRevenueAed(j1);
+        const rev3Aed = leg3Candidate && !holdLeg3Recommended ? resolveActualRevenueAed(leg3Candidate) : 0;
+        const PORT_GATE_FEE_AED = 35;
+        const savedAllowanceAndGateAed = isPortTerminalReload
+          ? allow2Aed + PORT_GATE_FEE_AED + (leg3Candidate && !holdLeg3Recommended ? Math.round(allow3Aed * 0.5) + PORT_GATE_FEE_AED : 0)
+          : allow2Aed + 2 * PORT_GATE_FEE_AED;
+        const fuelSaved = Math.round(deadheadSaved * 3.85 + savedAllowanceAndGateAed);
+
+        // 4. Actual Turnaround Saved (hrs):
+        //    Actual avoided deadhead driving hours (at 45 km/h corridor average) + avoided port gate queue & terminal dwell hours
+        const gateDwellSavedHrs = isPortTerminalReload
+          ? 1.5 + (leg3Candidate && !holdLeg3Recommended ? 1.2 : 0)
+          : 2.2;
+        const turnaroundHoursSaved = Math.round((deadheadSaved / 45 + gateDwellSavedHrs) * 10) / 10;
 
         const r2 = getDemurrageRisk(j2);
         const r1 = getDemurrageRisk(j1);
@@ -1106,22 +1410,16 @@ export default function DrayageAssignmentPage() {
           containerType: j2.containerType || 'DRY',
           originWarehouse: j2.warehouseName,
           destWarehouse: j1.warehouseName,
-          zone: zoneL2 === zoneL1 ? zoneL2 : `${zoneL2} ➜ ${j1.terminalName} ➜ ${zoneL1}`,
+          zone: zoneL2 === zoneL1 ? zoneL2 : `${zoneL2} ➜ ${j1.terminalName || j2ReturnTerminal} ➜ ${zoneL1}`,
           interWarehouseDistanceKm: interDist,
-          terminalName: j1.terminalName || j2.terminalName,
+          terminalName: j1.terminalName || j2ReturnTerminal,
           tasSlot: tas.slotTime,
-          combinedRevenueAed:
-            (j2.rateAmountAed || 1200) +
-            (j1.rateAmountAed || 1450) +
-            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.rateAmountAed || 1150 : 0),
-          combinedAllowanceAed:
-            (j2.driverAllowanceAed || 120) +
-            (j1.driverAllowanceAed || 150) +
-            (leg3Candidate && !holdLeg3Recommended ? leg3Candidate.driverAllowanceAed || 120 : 0),
+          combinedRevenueAed: rev2Aed + rev1Aed + rev3Aed,
+          combinedAllowanceAed: allow2Aed + allow1Aed + allow3Aed,
           deadheadKmSaved: deadheadSaved,
           co2SavedKg: co2Saved,
           fuelSavingsAed: fuelSaved,
-          turnaroundHoursSaved: leg3Candidate ? 5.5 : 4.0,
+          turnaroundHoursSaved,
           hasUrgentDemurrage: hasUrgent,
           score,
         });
@@ -1143,7 +1441,7 @@ export default function DrayageAssignmentPage() {
     }
 
     return finalStreetTurns;
-  }, [jobs, unassignedJobs, warehouses, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
+  }, [jobs, unassignedJobs, warehouses, terminals, automationConfig.streetTurnRadiusKm, getDemurrageRisk, getTasSlotWindow, getWarehouseZone]);
 
   // =========================================================================
   // SMART BACKHAUL HOLD ADVISOR (Non-Urgent L2 Empties to Deadhead Terminals like T2)
@@ -1151,7 +1449,7 @@ export default function DrayageAssignmentPage() {
   const smartBackhaulHoldJobs = useMemo<SmartBackhaulHoldItem[]>(() => {
     const outboundL1ByTerminal = new Map<string, number>();
     for (const j of unassignedJobs) {
-      if (j.jobPhase === 'L1') {
+      if (j.jobPhase === 'L1' && j.status === 'PENDING' && !j.trailerDetached) {
         const key = (j.terminalName || '').trim().toLowerCase();
         outboundL1ByTerminal.set(key, (outboundL1ByTerminal.get(key) || 0) + 1);
       }
@@ -1164,7 +1462,8 @@ export default function DrayageAssignmentPage() {
       // Only non-urgent L2 empty returns (> 36h free time remaining)
       if (risk.hoursRemaining <= 36) continue;
 
-      const tKey = (j.terminalName || '').trim().toLowerCase();
+      const returnTermName = (j.returnTerminalName || j.terminalName || '').trim();
+      const tKey = returnTermName.toLowerCase();
       const outboundL1AtTerminal = outboundL1ByTerminal.get(tKey) || 0;
       const isCurrentlyHeld = Boolean((j.notes || '').includes('[SMART_BACKHAUL_HOLD]'));
 
@@ -1172,24 +1471,58 @@ export default function DrayageAssignmentPage() {
       if (outboundL1AtTerminal === 0 || isCurrentlyHeld) {
         const zone = getWarehouseZone(j.warehouseName, j.warehouseId);
         const linkedDaisyChain = streetTurnPairs.find((p) => p.leg3Job?.id === j.id);
+        const whMatch =
+          (j.warehouseId ? warehouses.find((w) => w.id === j.warehouseId) : undefined) ||
+          warehouses.find((w) => w.name.toLowerCase() === (j.warehouseName || '').toLowerCase());
+        const whCoord =
+          whMatch && typeof whMatch.lat === 'number' && typeof whMatch.lng === 'number' && whMatch.lat !== 0
+            ? { lat: whMatch.lat, lng: whMatch.lng }
+            : { lat: 24.9602, lng: 55.0615 };
+        const termMatch = terminals.find(
+          (t) =>
+            t.id === (j.returnTerminalId || j.terminalId) ||
+            t.name.toLowerCase() === tKey ||
+            t.code.toLowerCase() === tKey,
+        );
+        const termCoord =
+          termMatch && typeof termMatch.lat === 'number' && typeof termMatch.lng === 'number' && termMatch.lat !== 0
+            ? { lat: termMatch.lat, lng: termMatch.lng }
+            : tKey.includes('t2')
+              ? { lat: 25.0185, lng: 55.0562 }
+              : { lat: 25.0112, lng: 55.0617 };
+        const R = 6371;
+        const dLat = ((termCoord.lat - whCoord.lat) * Math.PI) / 180;
+        const dLon = ((termCoord.lng - whCoord.lng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((whCoord.lat * Math.PI) / 180) *
+            Math.cos((termCoord.lat * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const actualDeadheadKm = Math.max(
+          2.0,
+          Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.25 * 10) / 10,
+        );
+        const actualAllowanceAed = j.driverAllowanceAed || whMatch?.driverAllowanceAed || 150;
+        const actualFuelRiskAed = Math.round(actualDeadheadKm * 3.85 + actualAllowanceAed);
         items.push({
           job: j,
           risk,
           zone,
-          terminalName: j.terminalName,
+          terminalName: returnTermName,
           outboundL1AtTerminal,
-          estimatedDeadheadKmAvoided: 34,
-          fuelRiskAvoidedAed: 245,
+          estimatedDeadheadKmAvoided: actualDeadheadKm,
+          fuelRiskAvoidedAed: actualFuelRiskAed,
           isCurrentlyHeld,
           linkedDaisyChainPairId: linkedDaisyChain?.id,
           recommendationText: linkedDaisyChain
-            ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${j.terminalName} L1 Import backhaul arrives.`
-            : `${j.jobCode} (${zone} ➜ ${j.terminalName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${j.terminalName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a 34 km empty return.`,
+            ? `Part of 3-Leg Chain (${linkedDaisyChain.inboundJob.jobCode} ➜ ${linkedDaisyChain.outboundJob.jobCode} ➜ ${j.jobCode}). Execute Leg 1 + Leg 2 now and hold ${j.jobCode} (${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h DO remaining) until a ${returnTermName} L1 Import backhaul arrives.`
+            : `${j.jobCode} (${zone} ➜ ${returnTermName}) has ${Math.floor(risk.hoursRemaining / 24)}d ${risk.hoursRemaining % 24}h until DO expiry, and ${returnTermName} has 0 outbound L1 pickups. Hold for backhaul or same-zone Export Street-Turn to avoid a ${actualDeadheadKm} km empty return.`,
         });
       }
     }
     return items;
-  }, [unassignedJobs, getDemurrageRisk, getWarehouseZone, streetTurnPairs]);
+  }, [unassignedJobs, warehouses, terminals, getDemurrageRisk, getWarehouseZone, streetTurnPairs]);
 
   // High Demurrage, Line Detention (<24h) & Port Slot Miss Risk Jobs
   const urgentDemurrageJobs = useMemo(() => {
@@ -1206,6 +1539,147 @@ export default function DrayageAssignmentPage() {
       );
     });
   }, [jobs, getDemurrageRisk]);
+
+  const resolveLinkedTrailerIdForJob = useCallback(
+    (job: DrayageJob | null | undefined): string => {
+      if (!job) return '';
+      const st = String(job.status || '').toUpperCase();
+      const hasLinkedOrDetachedChassis =
+        Boolean(job.trailerDetached) ||
+        job.jobPhase === 'L2' ||
+        isDrayageReassignStatus(st) ||
+        [
+          'TRAILER_DETACHED',
+          'CONTAINER_DETACHED',
+          'REASSIGN_TRAILER_DETACHED',
+          'PLACED_AT_RAMP',
+          'REASSIGN_PLACED_AT_RAMP',
+          'PLACED_AT_YARD',
+          'REASSIGN_PLACED_AT_YARD',
+          'WAITING_MT_RETURN',
+          'READY_FOR_PICKUP',
+        ].includes(st) ||
+        Boolean(job.assignedTrailerId || job.assignedTrailerPlate);
+
+      if (!hasLinkedOrDetachedChassis) return '';
+
+      const matchedTrailer = trailers.find(
+        (t) =>
+          (job.assignedTrailerId && t.id === job.assignedTrailerId) ||
+          (job.assignedTrailerPlate &&
+            t.plateNumber.trim().toLowerCase() === job.assignedTrailerPlate.trim().toLowerCase()) ||
+          (job.containerNumber &&
+            t.linkedContainerNumber &&
+            t.linkedContainerNumber.trim().toLowerCase() === job.containerNumber.trim().toLowerCase()),
+      );
+
+      return matchedTrailer?.id || job.assignedTrailerId || '';
+    },
+    [trailers],
+  );
+
+  const handleOpenChangeReturnTerminal = useCallback(
+    (job: DrayageJob) => {
+      if (!canChangeDrayageReturnTerminal(job)) {
+        showToast(
+          'error',
+          `Return Terminal is locked on ${job.jobCode} (${job.status}). It is only unlocked from EN_ROUTE_WAREHOUSE (post-port exit) through Warehouse Ramp/Yard/Ready for Pickup and L2 - PENDING.`,
+        );
+        return;
+      }
+      const currentRetTermName = (job.returnTerminalName || job.terminalName || '').trim();
+      const matchedTerm = terminals.find(
+        (t) =>
+          (job.returnTerminalId && t.id === job.returnTerminalId) ||
+          t.name.trim().toLowerCase() === currentRetTermName.toLowerCase(),
+      );
+      setChangingReturnTerminalJob(job);
+      setNewReturnTerminalId(matchedTerm?.id || terminals[0]?.id || '');
+      setReturnTerminalReason('');
+    },
+    [terminals],
+  );
+
+  const handleConfirmReturnTerminalChange = async () => {
+    if (!changingReturnTerminalJob) return;
+    const selectedTerm = terminals.find((t) => t.id === newReturnTerminalId);
+    if (!selectedTerm) {
+      showToast('error', 'Please select a target Return Terminal');
+      return;
+    }
+    try {
+      setSubmittingReturnTerminal(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'change_return_terminal',
+          jobId: changingReturnTerminalJob.id,
+          returnTerminalId: selectedTerm.id,
+          returnTerminalName: selectedTerm.name,
+          reason: returnTerminalReason.trim() || undefined,
+          actor: user?.username || 'Dispatcher',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update L2 Return Terminal');
+      invalidateDrayageClientCache();
+      showToast(
+        'success',
+        `↪ Redirected L2 Empty Return Terminal for ${changingReturnTerminalJob.containerNumber} (${changingReturnTerminalJob.jobCode}) from ${data.originTerminalName} ➜ ${data.returnTerminalName}! Smart Analysis re-evaluated.`,
+      );
+      setChangingReturnTerminalJob(null);
+      await loadData(true);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error updating Return Terminal');
+    } finally {
+      setSubmittingReturnTerminal(false);
+    }
+  };
+
+  // Open modal for single job — auto-populate detached/linked chassis when reassigning or dispatching L2; keep token blank
+  const handleOpenAssign = useCallback(
+    (job: DrayageJob) => {
+      if (isJobCompletedOrSuperseded(job)) {
+        showToast('error', `${job.jobCode} is already completed and cannot be reassigned.`);
+        return;
+      }
+      const reassignState = evaluateDispatcherJobReassignState(job);
+      if (reassignState.isWaitingForFirstRampAlert && reassignState.reassignLabel) {
+        showToast(
+          'error',
+          `${reassignState.reassignLabel} for ${job.jobCode} is locked until the First ETC Alert (T-15m)${
+            reassignState.minsLeft !== null ? ` (${reassignState.minsLeft}m remaining)` : ''
+          }.`,
+        );
+        return;
+      }
+      setAssigningJob(job);
+      setIsBogieAssign(false);
+      setSelectedJobIds([job.id]);
+      setSelectedVehicleId('');
+      setSelectedDriverId('');
+      setSelectedTrailerId(resolveLinkedTrailerIdForJob(job));
+      setTokenInput(job.tokenNumber || '');
+      setTokenSlotStartHour(extractStartHourFromJob(job));
+      const currentRetTermName = (job.returnTerminalName || job.terminalName || '').trim();
+      const matchedTerm = terminals.find(
+        (t) =>
+          (job.returnTerminalId && t.id === job.returnTerminalId) ||
+          t.name.trim().toLowerCase() === currentRetTermName.toLowerCase(),
+      );
+      setAssignReturnTerminalId(matchedTerm?.id || job.returnTerminalId || job.terminalId || '');
+    },
+    [resolveLinkedTrailerIdForJob, isJobCompletedOrSuperseded, extractStartHourFromJob, terminals],
+  );
+
+  useEffect(() => {
+    if (!assigningJob || isBogieAssign || activeStreetTurnPair) return;
+    const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
+    if (linkedTrId) {
+      setSelectedTrailerId((prev) => prev || linkedTrId);
+    }
+  }, [assigningJob, isBogieAssign, activeStreetTurnPair, resolveLinkedTrailerIdForJob]);
 
   // =========================================================================
   // FLEET DATA GRID (SMART DATA TABLE) COLUMNS
@@ -1274,14 +1748,71 @@ export default function DrayageAssignmentPage() {
     },
     {
       key: 'terminalName',
-      header: 'Terminal',
-      accessor: (j) => j.terminalName || '—',
+      header: 'Terminal & L2 Return',
+      accessor: (j) =>
+        `${j.terminalName || ''} ${j.returnTerminalName || ''} ${j.originTerminalName || ''}`.trim() || '—',
       filter: 'text',
-      render: (job) => (
-        <div className="text-xs font-medium text-[var(--text-main)] max-w-[160px] truncate" title={job.terminalName || '—'}>
-          {job.terminalName || '—'}
-        </div>
-      ),
+      render: (job) => {
+        const originTerm = (job.originTerminalName || job.terminalName || '').trim();
+        const returnTerm = (job.returnTerminalName || job.terminalName || '').trim();
+        const isRedirected = Boolean(originTerm && returnTerm && originTerm.toLowerCase() !== returnTerm.toLowerCase());
+        const canChangeReturn = canChangeDrayageReturnTerminal(job);
+
+        return (
+          <div className="max-w-[195px] space-y-1">
+            <div
+              className="text-xs font-medium text-[var(--text-main)] truncate"
+              title={
+                job.jobPhase === 'L2'
+                  ? `L2 Drop-off Terminal: ${returnTerm || '—'}`
+                  : `L1 Pickup Terminal: ${job.terminalName || '—'}`
+              }
+            >
+              {job.jobPhase === 'L2' ? returnTerm || '—' : job.terminalName || '—'}
+            </div>
+            {isRedirected && (
+              <div
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/35 text-[10px] font-bold text-violet-300 max-w-full truncate"
+                title={
+                  job.jobPhase === 'L2'
+                    ? `Redirected L2 Empty Return from ${originTerm} ➜ ${returnTerm}`
+                    : `L2 Empty Return redirected from ${originTerm} ➜ ${returnTerm}`
+                }
+              >
+                <span>↪ L2 Return: {returnTerm}</span>
+              </div>
+            )}
+            <div>
+              {canChangeReturn ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenChangeReturnTerminal(job);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 hover:bg-cyan-500/25 text-[10px] font-bold transition-colors whitespace-nowrap"
+                  title="Unlocked: Change L2 Empty Return Terminal (Post-Port Exit through L2 - PENDING)"
+                >
+                  <ArrowUpDown className="w-2.5 h-2.5 shrink-0" />
+                  <span>Change Return</span>
+                </button>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[9px] font-semibold opacity-65 cursor-not-allowed whitespace-nowrap"
+                  title={
+                    job.jobPhase === 'L2'
+                      ? 'Locked: L2 Return Terminal is locked after L2 - PENDING (Vehicle Assigned)'
+                      : 'Locked: Change Return Terminal unlocks at EN_ROUTE_WAREHOUSE (after exiting the port)'
+                  }
+                >
+                  <Lock className="w-2.5 h-2.5 shrink-0" />
+                  <span>Return Locked</span>
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: 'demurrage',
@@ -1300,39 +1831,52 @@ export default function DrayageAssignmentPage() {
     {
       key: 'tokenNumber',
       header: 'Port Gate Token & PCS',
-      accessor: (j) => j.tokenNumber || 'No Token',
+      accessor: (j) =>
+        `${j.tokenNumber || 'No Token'} ${formatJobTokenWindowBadge(j) || ''}`.trim(),
       filter: 'text',
-      render: (job) => (
-        <div className="space-y-1">
-          {job.tokenNumber ? (
-            <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
-              <Key className="w-3 h-3 shrink-0" />
-              <span>{job.tokenNumber}</span>
-              <button
-                onClick={() => {
-                  setEditingTokenJob(job);
-                  setNewTokenValue(job.tokenNumber || '');
-                }}
-                className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
-              >
-                Edit
-              </button>
-            </div>
-          ) : (
-            <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
-          )}
-          {job.inspectionStatus === 'HOLD_PENDING' && (
-            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-              Customs Hold Pending
-            </span>
-          )}
-          {job.doStatus === 'EXPIRED' && (
-            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
-              eDO Expired
-            </span>
-          )}
-        </div>
-      ),
+      render: (job) => {
+        const slotWindowBadge = formatJobTokenWindowBadge(job);
+        return (
+          <div className="space-y-1">
+            {job.tokenNumber ? (
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1 font-mono font-bold text-emerald-400">
+                  <Key className="w-3 h-3 shrink-0" />
+                  <span>{job.tokenNumber}</span>
+                  <button
+                    onClick={() => {
+                      setEditingTokenJob(job);
+                      setNewTokenValue(job.tokenNumber || '');
+                      setEditTokenSlotStartHour(extractStartHourFromJob(job));
+                    }}
+                    className="text-[10px] text-[var(--text-muted)] hover:text-blue-400 ml-1 underline"
+                  >
+                    Edit
+                  </button>
+                </div>
+                {slotWindowBadge && (
+                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/25 text-[10px] font-semibold text-blue-300">
+                    <Clock className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                    <span>{slotWindowBadge}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
+            )}
+            {job.inspectionStatus === 'HOLD_PENDING' && (
+              <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                Customs Hold Pending
+              </span>
+            )}
+            {job.doStatus === 'EXPIRED' && (
+              <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                eDO Expired
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'assignedAssets',
@@ -1340,10 +1884,13 @@ export default function DrayageAssignmentPage() {
       accessor: (j) =>
         j.assignedVehiclePlate
           ? `${j.assignedVehiclePlate} ${j.assignedDriverName || ''} ${j.assignedTrailerPlate || ''}`
+          : j.assignedTrailerPlate
+          ? `Pending Assignment (${j.assignedTrailerPlate})`
           : 'Pending Assignment',
       filter: 'text',
       render: (job) => {
-        const isAssigned = Boolean(job.assignedVehicleId);
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        const isAssigned = Boolean(job.assignedVehicleId) && !isDrayageReassignStatus(job.status) && !reassignState.canReassign;
         return isAssigned ? (
           <div className="space-y-0.5">
             <div className="font-semibold">{job.assignedVehiclePlate}</div>
@@ -1352,17 +1899,49 @@ export default function DrayageAssignmentPage() {
             </div>
           </div>
         ) : (
-          <span className="text-amber-400 text-[11px] font-medium">Pending Assignment</span>
+          <div className="space-y-0.5">
+            <span className="text-amber-400 text-[11px] font-medium block">
+              {reassignState.canReassign && reassignState.reassignLabel
+                ? `Awaiting ${reassignState.reassignLabel}`
+                : 'Pending Assignment'}
+            </span>
+            {job.assignedTrailerPlate && (
+              <div className="text-[10px] text-[var(--text-muted)]">
+                Linked Chassis: {job.assignedTrailerPlate}
+              </div>
+            )}
+          </div>
         );
       },
     },
     {
       key: 'status',
       header: 'Status',
-      accessor: (j) => j.status,
+      accessor: (j) => evaluateDispatcherJobReassignState(j).displayStatus,
       filter: 'select',
-      selectOptions: ['PENDING', 'ASSIGNED', 'IN_TRANSIT', 'PLACED_AT_RAMP', 'CONTAINER_DETACHED', 'COMPLETED'],
-      render: (job) => <StatusPill status={job.status.toLowerCase()} label={job.status} />,
+      selectOptions: [
+        'PENDING',
+        'ASSIGNED',
+        'RE-ASSIGNED',
+        'MT_Reassign to Yard',
+        'FCL_Reassign to Yard',
+        'FCL_Reassign to Ramp',
+        'MT_Reassign to Ramp',
+        'IN_TRANSIT',
+        'PLACED_AT_RAMP',
+        'REASSIGN_PLACED_AT_RAMP',
+        'PLACED_AT_YARD',
+        'REASSIGN_PLACED_AT_YARD',
+        'TRAILER_DETACHED',
+        'REASSIGN_TRAILER_DETACHED',
+        'CONTAINER_DETACHED',
+        'READY_FOR_PICKUP',
+        'COMPLETED',
+      ],
+      render: (job) => {
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        return <StatusPill status={reassignState.displayStatus} label={reassignState.displayStatus} />;
+      },
     },
     {
       key: 'actions',
@@ -1371,15 +1950,112 @@ export default function DrayageAssignmentPage() {
       sortable: false,
       filter: false,
       render: (job) => {
-        const isAssigned = Boolean(job.assignedVehicleId);
+        const editBtn = (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditJobTarget(job);
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-blue-400 hover:border-blue-500/40 text-[11px] font-semibold transition-colors whitespace-nowrap"
+            title={`Edit ${job.jobCode}`}
+          >
+            <Pencil className="w-3 h-3" />
+            <span>Edit</span>
+          </button>
+        );
+
+        if (isJobCompletedOrSuperseded(job)) {
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-60 whitespace-nowrap"
+                title={
+                  job.jobPhase === 'L1' && job.l2Activated
+                    ? 'L1 leg is completed and L2 Empty Return has been activated'
+                    : 'Job is completed'
+                }
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>{job.jobPhase === 'L1' && job.l2Activated ? 'L2 Activated' : 'Completed'}</span>
+              </span>
+            </div>
+          );
+        }
+
+        const reassignState = evaluateDispatcherJobReassignState(job);
+        const stUpper = (job.status || '').toUpperCase();
+
+        // 1. Unassigned initial PENDING job -> Assign Fleet
+        if (stUpper === 'PENDING') {
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
+              <button
+                type="button"
+                onClick={() => handleOpenAssign(job)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors whitespace-nowrap"
+              >
+                Assign Fleet
+              </button>
+            </div>
+          );
+        }
+
+        // 2. Eligible for Directional Reassign (Placed at Yard -> to Ramp; OR Placed at Ramp + 1st Alert -> to Yard)
+        if (reassignState.canReassign && reassignState.reassignLabel) {
+          const isToRamp = reassignState.originLocation === 'YARD';
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
+              <button
+                type="button"
+                onClick={() => handleOpenAssign(job)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors whitespace-nowrap shadow-sm ${
+                  isToRamp
+                    ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30'
+                    : 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                }`}
+                title={`Reassign Prime Mover & Driver (${reassignState.reassignLabel})`}
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>{reassignState.reassignLabel}</span>
+              </button>
+            </div>
+          );
+        }
+
+        // 3. At Ramp BEFORE First ETC Alert -> Disabled until First Alert (T-15m)
+        if (reassignState.isWaitingForFirstRampAlert && reassignState.reassignLabel) {
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {editBtn}
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-55 whitespace-nowrap"
+                title={`Reassign is disabled while offloading at Ramp${
+                  reassignState.minsLeft !== null ? ` (${reassignState.minsLeft}m left)` : ''
+                }. Unlocks as "${reassignState.reassignLabel}" upon First Alert (T-15m).`}
+              >
+                <Clock className="w-3 h-3 text-amber-400" />
+                <span>{reassignState.reassignLabel}</span>
+              </button>
+            </div>
+          );
+        }
+
+        // 4. Active in-progress leg (Assigned / Re-Assigned / En Route)
         return (
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-1.5">
+            {editBtn}
             <button
               type="button"
               onClick={() => handleOpenAssign(job)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-400 hover:bg-blue-600/25 text-[11px] font-semibold transition-colors whitespace-nowrap"
             >
-              {isAssigned ? 'Reassign' : 'Assign Fleet'}
+              {job.assignedVehicleId ? 'Reassign' : 'Assign Fleet'}
             </button>
           </div>
         );
@@ -1423,7 +2099,15 @@ export default function DrayageAssignmentPage() {
         );
       },
     },
-  ], [getDemurrageRisk, portalMenuState?.job.id]);
+  ], [
+    getDemurrageRisk,
+    portalMenuState?.job.id,
+    handleOpenAssign,
+    handleOpenChangeReturnTerminal,
+    isJobCompletedOrSuperseded,
+    extractStartHourFromJob,
+    formatJobTokenWindowBadge,
+  ]);
 
   // =========================================================================
   // 4-FACTOR WEIGHTED SCORING ENGINE (PROXIMITY 60%, IDLENESS 25%, WORKLOAD 10%, AVAILABILITY 5%)
@@ -1486,6 +2170,70 @@ export default function DrayageAssignmentPage() {
     [terminals]
   );
 
+  // Resolve Actual Pickup Coordinates for a Job Leg:
+  // - For L2 Empty Return jobs OR Reassigned/Detached L1 jobs (FCL_REASSIGN / MT_REASSIGN / PLACED_AT_YARD / TRAILER_DETACHED),
+  //   the container is physically at the Customer Warehouse, so score 4-Factor Proximity from the Warehouse!
+  // - For standard PENDING L1 jobs, score 4-Factor Proximity from the Port Terminal.
+  const getJobPickupCoordinates = useCallback(
+    (job?: DrayageJob | null): { lat: number; lng: number; name: string } => {
+      if (!job) return getTerminalCoordinates(null);
+      const st = (job.status || '').toUpperCase();
+      const isWarehousePickup =
+        job.jobPhase === 'L2' ||
+        Boolean(job.trailerDetached) ||
+        isDrayageReassignStatus(st) ||
+        [
+          'FCL_REASSIGN',
+          'MT_REASSIGN',
+          'RE-ASSIGNED',
+          'PLACED_AT_YARD',
+          'PLACED_AT_RAMP',
+          'TRAILER_DETACHED',
+          'CONTAINER_DETACHED',
+          'REASSIGN_PLACED_AT_YARD',
+          'REASSIGN_PLACED_AT_RAMP',
+          'REASSIGN_TRAILER_DETACHED',
+          'READY_FOR_PICKUP',
+          'WAITING_MT_RETURN',
+        ].includes(st);
+
+      if (isWarehousePickup) {
+        if (job.warehouseId) {
+          const wh = warehouses.find((w) => w.id === job.warehouseId);
+          if (wh && typeof wh.lat === 'number' && typeof wh.lng === 'number' && wh.lat !== 0) {
+            return { lat: wh.lat, lng: wh.lng, name: wh.name };
+          }
+        }
+        const byName = warehouses.find(
+          (w) => w.name.toLowerCase() === (job.warehouseName || '').toLowerCase(),
+        );
+        if (byName && typeof byName.lat === 'number' && typeof byName.lng === 'number' && byName.lat !== 0) {
+          return { lat: byName.lat, lng: byName.lng, name: byName.name };
+        }
+        const lower = (job.warehouseName || '').toLowerCase();
+        if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) {
+          return { lat: 24.7892, lng: 54.7341, name: job.warehouseName || 'KIZAD Industrial Hub' };
+        }
+        if (lower.includes('dic') || lower.includes('dubai industrial city') || lower.includes('industrial city')) {
+          return { lat: 24.8528, lng: 55.0636, name: job.warehouseName || 'Dubai Industrial City' };
+        }
+        if (lower.includes('dubai south') || lower.includes('dwc')) {
+          return { lat: 24.9182, lng: 55.1342, name: job.warehouseName || 'Dubai South Logistics' };
+        }
+        if (lower.includes('national industries') || lower.includes('nip')) {
+          return { lat: 24.9415, lng: 55.0695, name: job.warehouseName || 'NIP Hub' };
+        }
+        if (lower.includes('jafza north')) {
+          return { lat: 24.9964, lng: 55.0842, name: job.warehouseName || 'JAFZA North' };
+        }
+        return { lat: 24.9642, lng: 55.0915, name: job.warehouseName || 'Customer Warehouse' };
+      }
+
+      return getTerminalCoordinates(job.terminalId || job.terminalName);
+    },
+    [warehouses, getTerminalCoordinates],
+  );
+
   // Calculate 4-Factor Composite Telematics Score
   const calculate4FactorScore = useCallback(
     (
@@ -1494,21 +2242,35 @@ export default function DrayageAssignmentPage() {
       candidateDriver?: MappedDriver
     ): Vehicle4FactorScore => {
       // 1. 📍 Proximity Score (60%) — GPS distance to pickup terminal / corridor
-      const vLat = typeof vehicle.lat === 'number' && vehicle.lat !== 0 ? vehicle.lat : 25.0112;
-      const vLng = typeof vehicle.lng === 'number' && vehicle.lng !== 0 ? vehicle.lng : 55.0617;
-      const distanceKm = getHaversineDistanceKm(vLat, vLng, targetTerminalLoc.lat, targetTerminalLoc.lng);
+      const isLegacyFallbackCoord = (lat?: number | null, lng?: number | null) => {
+        if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return true;
+        if (lat === 0 && lng === 0) return true;
+        if (Math.abs(lat - 25.0112) < 0.0005 && (Math.abs(lng - 55.0612) < 0.0005 || Math.abs(lng - 55.0617) < 0.0005)) return true;
+        if (Math.abs(lat - 25.2048) < 0.0005 && Math.abs(lng - 55.2708) < 0.0005) return true;
+        return false;
+      };
+      const hasRealCoords =
+        typeof vehicle.hasLiveGps === 'boolean'
+          ? vehicle.hasLiveGps && typeof vehicle.lat === 'number' && typeof vehicle.lng === 'number'
+          : !isLegacyFallbackCoord(vehicle.lat, vehicle.lng);
 
-      let proximityScore = 100;
-      if (distanceKm <= 3) {
-        proximityScore = 100; // Directly at port gate or adjacent yard
-      } else if (distanceKm <= 10) {
-        proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
-      } else if (distanceKm <= 30) {
-        proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
-      } else if (distanceKm <= 70) {
-        proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
-      } else {
-        proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+      const distanceKm = hasRealCoords
+        ? getHaversineDistanceKm(vehicle.lat as number, vehicle.lng as number, targetTerminalLoc.lat, targetTerminalLoc.lng)
+        : 0;
+
+      let proximityScore = 0;
+      if (hasRealCoords) {
+        if (distanceKm <= 3) {
+          proximityScore = 100; // Directly at port gate or adjacent yard
+        } else if (distanceKm <= 10) {
+          proximityScore = Math.max(79, Math.round(100 - (distanceKm - 3) * 3));
+        } else if (distanceKm <= 30) {
+          proximityScore = Math.max(39, Math.round(79 - (distanceKm - 10) * 2));
+        } else if (distanceKm <= 70) {
+          proximityScore = Math.max(15, Math.round(39 - (distanceKm - 30) * 0.6));
+        } else {
+          proximityScore = Math.max(5, Math.round(15 - (distanceKm - 70) * 0.2));
+        }
       }
 
       // 2. ⏱️ Idleness Score (25%) — Turnaround queue / dwell time (FIFO balancing)
@@ -1593,7 +2355,8 @@ export default function DrayageAssignmentPage() {
         workloadScore,
         availabilityScore,
         totalScore,
-        distanceKm: Math.round(distanceKm * 10) / 10,
+        distanceKm: hasRealCoords ? Math.round(distanceKm * 10) / 10 : 0,
+        hasLiveGps: hasRealCoords,
         idleHours,
         tripsToday,
         fuelPct,
@@ -1614,8 +2377,8 @@ export default function DrayageAssignmentPage() {
   // =========================================================================
   const getSmartRecommendedAssets = useCallback(
     (job: DrayageJob | null, isBogie = false) => {
-      // 1. Resolve Target Pickup Terminal GPS Location
-      const targetLoc = getTerminalCoordinates(job?.terminalId || job?.terminalName);
+      // 1. Resolve Target Pickup GPS Location (Port Terminal for L1 PENDING; Customer Warehouse for L2 or L1 Reassign)
+      const targetLoc = getJobPickupCoordinates(job);
 
       // 2. Candidate vehicles: only heavy commercial prime movers
       const candidateVehicles = availableVehicles.length > 0 ? availableVehicles : primeMovers;
@@ -1630,8 +2393,13 @@ export default function DrayageAssignmentPage() {
         return calculate4FactorScore(v, targetLoc, candidateDrv);
       });
 
-      // Sort descending by 4-factor composite score
-      scoredList.sort((a, b) => b.totalScore - a.totalScore);
+      // Sort descending by logged-in/live-telemetry status first, then 4-factor composite score
+      scoredList.sort((a, b) => {
+        const aActive = a.vehicle.isDriverLoggedIn || a.hasLiveGps ? 1 : 0;
+        const bActive = b.vehicle.isDriverLoggedIn || b.hasLiveGps ? 1 : 0;
+        if (bActive !== aActive) return bActive - aActive;
+        return b.totalScore - a.totalScore;
+      });
       scoredList.forEach((item, index) => {
         if (index === 0) item.rankBadge = '🥇';
         else if (index === 1) item.rankBadge = '🥈';
@@ -1693,13 +2461,13 @@ export default function DrayageAssignmentPage() {
         rankedList: scoredList,
       };
     },
-    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers, getTerminalCoordinates, calculate4FactorScore],
+    [availableVehicles, primeMovers, availableTrailers, availableDrivers, drivers, getJobPickupCoordinates, calculate4FactorScore],
   );
 
-  // Target Terminal for active assignment modal
+  // Target Pickup Location (Port Terminal or Customer Warehouse) for active assignment modal
   const targetTerminalLoc = useMemo(() => {
-    return getTerminalCoordinates(assigningJob?.terminalId || assigningJob?.terminalName);
-  }, [assigningJob, getTerminalCoordinates]);
+    return getJobPickupCoordinates(assigningJob);
+  }, [assigningJob, getJobPickupCoordinates]);
 
   // Scored Prime Movers for current modal
   const scoredPrimeMovers = useMemo(() => {
@@ -1713,7 +2481,12 @@ export default function DrayageAssignmentPage() {
         drivers[0];
       return calculate4FactorScore(v, targetTerminalLoc, candidateDrv);
     });
-    scored.sort((a, b) => b.totalScore - a.totalScore);
+    scored.sort((a, b) => {
+      const aActive = a.vehicle.isDriverLoggedIn || a.hasLiveGps ? 1 : 0;
+      const bActive = b.vehicle.isDriverLoggedIn || b.hasLiveGps ? 1 : 0;
+      if (bActive !== aActive) return bActive - aActive;
+      return b.totalScore - a.totalScore;
+    });
     scored.forEach((item, idx) => {
       if (idx === 0) item.rankBadge = '🥇';
       else if (idx === 1) item.rankBadge = '🥈';
@@ -1736,11 +2509,18 @@ export default function DrayageAssignmentPage() {
         const drvName =
           s.vehicle.assignedDriverName ||
           drivers.find((d) => d.id === s.vehicle.assignedDriverId || d.assignedVehicleId === s.vehicle.id)?.fullName;
+        const isLoggedIn = Boolean(s.vehicle.isDriverLoggedIn || s.hasLiveGps);
+        const proxLabel = s.hasLiveGps
+          ? `${s.distanceKm}km (${s.proximityScore}pts)`
+          : `Switched Off (${s.proximityScore}pts)`;
+        const statusLabel = isLoggedIn
+          ? `⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts)`
+          : `⚫ Switched Off (${s.idlenessScore}pts)`;
         return {
           value: s.vehicle.id,
           label: `${s.rankBadge} ${s.vehicle.plateNumber} · ${s.vehicle.make} ${s.vehicle.model}${drvName ? ` (${drvName})` : ''} [${s.totalScore}% Match]`,
-          sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}📍 ${s.distanceKm}km (${s.proximityScore}pts) • ⏱️ Idle: ${s.idleHours}h (${s.idlenessScore}pts) • ⚖️ ${s.tripsToday} Trip(s) Today`,
-          badge: drvName ? `👤 ${drvName}` : `${s.totalScore}% Match`,
+          sublabel: `${drvName ? `👤 ${isLoggedIn ? 'Logged-in Driver' : 'Assigned Driver (Switched Off)'}: ${drvName} • ` : ''}📍 ${proxLabel} • ${statusLabel} • ⚖️ ${s.tripsToday} Trip(s) Today`,
+          badge: drvName ? `${isLoggedIn ? '🟢' : '⚫'} ${drvName}` : `${s.totalScore}% Match`,
         };
       });
     }
@@ -1748,11 +2528,12 @@ export default function DrayageAssignmentPage() {
       const drvName =
         v.assignedDriverName ||
         drivers.find((d) => d.id === v.assignedDriverId || d.assignedVehicleId === v.id)?.fullName;
+      const isLoggedIn = Boolean(v.isDriverLoggedIn || v.hasLiveGps);
       return {
         value: v.id,
         label: `${v.plateNumber} · ${v.make} ${v.model}${drvName ? ` (${drvName})` : ''}`,
-        sublabel: `${drvName ? `👤 Logged-in Driver: ${drvName} • ` : ''}Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${v.status}`,
-        badge: drvName ? `👤 ${drvName}` : v.status,
+        sublabel: `${drvName ? `👤 ${isLoggedIn ? 'Logged-in Driver' : 'Assigned Driver (Switched Off)'}: ${drvName} • ` : ''}Type: ${v.type || 'PRIME_MOVER'} • Usage: ${v.vehicleUsage || 'LOGISTICS'} • Status: ${isLoggedIn ? v.status : 'Switched Off'}`,
+        badge: drvName ? `${isLoggedIn ? '🟢' : '⚫'} ${drvName}` : v.status,
       };
     });
   }, [scoredPrimeMovers, primeMovers, drivers]);
@@ -1770,6 +2551,7 @@ export default function DrayageAssignmentPage() {
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
     setTokenInput(combo.job1.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(combo.job1));
   };
 
   const handleSwapBogieSequence = () => {
@@ -1798,8 +2580,9 @@ export default function DrayageAssignmentPage() {
     const rec = getSmartRecommendedAssets(pair.inboundJob, false);
     setSelectedVehicleId(rec.vehicleId);
     setSelectedDriverId(rec.driverId);
-    setSelectedTrailerId(rec.trailerId);
+    setSelectedTrailerId(resolveLinkedTrailerIdForJob(pair.inboundJob) || rec.trailerId);
     setTokenInput(pair.inboundJob.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(pair.inboundJob));
   };
 
   const handleToggleBackhaulHold = async (job: DrayageJob, hold: boolean) => {
@@ -1828,17 +2611,6 @@ export default function DrayageAssignmentPage() {
     }
   };
 
-  // Open modal for single job — clear fields so previous action values never pre-populate on Assign / Reassign
-  const handleOpenAssign = (job: DrayageJob) => {
-    setAssigningJob(job);
-    setIsBogieAssign(false);
-    setSelectedJobIds([job.id]);
-    setSelectedVehicleId('');
-    setSelectedDriverId('');
-    setSelectedTrailerId('');
-    setTokenInput('');
-  };
-
   // Open modal for bogie merge (strictly exactly 2 twenty-foot containers)
   const handleOpenBogieModal = () => {
     if (selectedJobIds.length !== 2) {
@@ -1860,6 +2632,7 @@ export default function DrayageAssignmentPage() {
     setSelectedDriverId(rec.driverId);
     setSelectedTrailerId(rec.trailerId);
     setTokenInput(firstJob.tokenNumber || '');
+    setTokenSlotStartHour(extractStartHourFromJob(firstJob));
   };
 
   // Confirm single / bogie assignment modal
@@ -1872,6 +2645,8 @@ export default function DrayageAssignmentPage() {
     const veh = vehicles.find((v) => v.id === selectedVehicleId);
     const drv = drivers.find((d) => d.id === selectedDriverId);
     const tr = trailers.find((t) => t.id === effectiveTrailerId);
+    const { pcsSlotStart, pcsSlotEnd } = buildSlotWindowIsoPair(tokenSlotStartHour);
+    const slotWindowLabel = formatTwoHourWindowLabel(tokenSlotStartHour);
 
     try {
       setSubmittingAssign(true);
@@ -1893,6 +2668,9 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
@@ -1907,7 +2685,7 @@ export default function DrayageAssignmentPage() {
               : `Street-Turn ${data.streetTurnRef}`;
         showToast(
           'success',
-          `⚡ ${modeLabel} executed! Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂) & AED ${data.fuelSavingsAed}!`
+          `⚡ ${modeLabel} executed! Window: ${slotWindowLabel} · Saved ${data.deadheadKmSaved}km deadhead (${data.co2SavedKg}kg CO₂)!`
         );
         setActiveStreetTurnPair(null);
         setSelectedJobIds([]);
@@ -1933,16 +2711,23 @@ export default function DrayageAssignmentPage() {
             trailerId: selectedTrailerId,
             trailerPlate: tr?.plateNumber || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to assign Bogie trip');
         showToast(
           'success',
-          `⚡ Dual-20FT Bogie dispatch ${data.bogieRef} confirmed! Total Payload: ${(data.totalPayloadKg / 1000).toFixed(1)}T (${data.isWeightCompliant ? 'Road Compliant' : 'Overweight Risk'}).`
+          `⚡ Dual-20FT Bogie dispatch ${data.bogieRef} confirmed (${slotWindowLabel})! Total Payload: ${(data.totalPayloadKg / 1000).toFixed(1)}T.`
         );
         setSelectedJobIds([]);
       } else if (assigningJob) {
+        const selectedRetTerm =
+          canChangeDrayageReturnTerminal(assigningJob) && assignReturnTerminalId
+            ? terminals.find((t) => t.id === assignReturnTerminalId)
+            : undefined;
         const res = await fetch('/api/logistics/drayage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1956,11 +2741,16 @@ export default function DrayageAssignmentPage() {
             trailerId: effectiveTrailerId,
             trailerPlate: tr?.plateNumber || assigningJob?.assignedTrailerPlate || 'DXB-TR-9901',
             tokenNumber: tokenInput,
+            pcsSlotStart,
+            pcsSlotEnd,
+            returnTerminalId: selectedRetTerm?.id,
+            returnTerminalName: selectedRetTerm?.name,
+            actor: user?.username || undefined,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to assign job');
-        showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber}!`);
+        showToast('success', `Job ${assigningJob.jobCode} assigned with token ${data.tokenNumber} (${slotWindowLabel})!`);
       }
       setAssigningJob(null);
       setActiveStreetTurnPair(null);
@@ -2006,7 +2796,12 @@ export default function DrayageAssignmentPage() {
         return calculate4FactorScore(v, terminalLoc, candidateDrv);
       });
 
-      scored.sort((a, b) => b.totalScore - a.totalScore);
+      scored.sort((a, b) => {
+      const aActive = a.vehicle.assignedDriverId || a.hasLiveGps ? 1 : 0;
+      const bActive = b.vehicle.assignedDriverId || b.hasLiveGps ? 1 : 0;
+      if (bActive !== aActive) return bActive - aActive;
+      return b.totalScore - a.totalScore;
+    });
       const topScored = scored[0];
       const vIdx = availV.findIndex((v) => v.id === topScored.vehicle.id);
       const veh = availV.splice(vIdx >= 0 ? vIdx : 0, 1)[0];
@@ -2156,7 +2951,7 @@ export default function DrayageAssignmentPage() {
     for (const job of remainingJobs) {
       if (availV.length === 0 || availD.length === 0 || availT.length === 0) break;
 
-      const termLoc = getTerminalCoordinates(job.terminalId || job.terminalName);
+      const termLoc = getJobPickupCoordinates(job);
       const best = pickBestTractorAndDriver(termLoc);
       if (!best) break;
 
@@ -2270,6 +3065,8 @@ export default function DrayageAssignmentPage() {
   const handleUpdateToken = async () => {
     if (!editingTokenJob || !newTokenValue.trim()) return;
     try {
+      const { pcsSlotStart, pcsSlotEnd } = buildSlotWindowIsoPair(editTokenSlotStartHour);
+      const slotWindowLabel = formatTwoHourWindowLabel(editTokenSlotStartHour);
       const res = await fetch('/api/logistics/drayage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2277,11 +3074,13 @@ export default function DrayageAssignmentPage() {
           action: 'update_token',
           jobId: editingTokenJob.id,
           tokenNumber: newTokenValue.trim().toUpperCase(),
+          pcsSlotStart,
+          pcsSlotEnd,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update token');
-      showToast('success', `Token updated to ${data.tokenNumber}!`);
+      showToast('success', `Token updated to ${data.tokenNumber} (${slotWindowLabel})!`);
       setEditingTokenJob(null);
       invalidateDrayageClientCache();
       await loadData(true);
@@ -2318,46 +3117,12 @@ export default function DrayageAssignmentPage() {
         accent="blue"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Super Admin Only: Manual vs Auto-L2 Dispatch & Engine Config */}
-            {isSuperAdmin && (
-            <div
-              className="flex items-center rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-0.5 text-xs shadow-sm"
-              title="Super Admin Dispatch Automation Mode: Switch between Manual L2 Dispatch and Automatic L2 Dispatch + 4-Factor Pre-Assignment at T-30 mins before Offloading ETC"
-            >
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(false)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
-                  !autoL2DispatchEnabled
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                Manual L2
-              </button>
-              <button
-                type="button"
-                disabled={togglingAutoL2}
-                onClick={() => handleToggleAutoL2Mode(true)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition-all ${
-                  autoL2DispatchEnabled
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                Auto-L2 @ T-{automationConfig.thresholdMinutes || 30}m
-              </button>
-            </div>
-            )}
-
             {isSuperAdmin && (
             <button
               type="button"
               onClick={() => setConfigModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700 text-xs font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
-              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, T-30m Timer, Street-Turn Radius, Demurrage Thresholds)"
+              title="Open Super Admin Drayage Engine Configuration (4-Factor Weights, Reassign T-15m Alert, Street-Turn Radius, Demurrage Thresholds)"
             >
               <Settings className="w-3.5 h-3.5 text-sky-400" />
               Engine Config
@@ -2366,16 +3131,9 @@ export default function DrayageAssignmentPage() {
 
             <button
               type="button"
-              onClick={() => {
-                if (showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE') {
-                  setSmartAnalysisFilter('ALL');
-                } else {
-                  setShowSmartAnalysis(true);
-                  setSmartAnalysisFilter('DEMURRAGE');
-                }
-              }}
+              onClick={() => setShowUrgentDemurrageAlert((prev) => !prev)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
-                showSmartAnalysis && smartAnalysisFilter === 'DEMURRAGE'
+                showUrgentDemurrageAlert
                   ? 'bg-rose-600 text-white shadow-rose-500/20'
                   : 'bg-[var(--bg-surface)] border border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
               }`}
@@ -2400,9 +3158,9 @@ export default function DrayageAssignmentPage() {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Smart Analysis</span>
-              {bogieCombos.length + streetTurnPairs.length > 0 && (
+              {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white text-blue-900 font-bold ml-0.5">
-                  {bogieCombos.length + streetTurnPairs.length}
+                  {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length}
                 </span>
               )}
             </button>
@@ -2534,16 +3292,6 @@ export default function DrayageAssignmentPage() {
               >
                 Smart Backhaul Hold ({smartBackhaulHoldJobs.length})
               </button>
-              <button
-                onClick={() => setSmartAnalysisFilter('DEMURRAGE')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                  smartAnalysisFilter === 'DEMURRAGE'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-rose-500 hover:text-rose-400'
-                }`}
-              >
-                Urgent Demurrage Alert ({urgentDemurrageJobs.length})
-              </button>
             </div>
           </div>
 
@@ -2628,23 +3376,23 @@ export default function DrayageAssignmentPage() {
                     })()}
 
                     {/* Drops Sequence */}
-                    <div className="space-y-1.5 pt-1 text-xs">
-                      <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
-                        <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
+                    <div className="space-y-2 pt-1 w-full">
+                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                        <div className="flex items-center justify-between text-sm font-mono font-bold text-[var(--text-main)]">
                           <span>1. {combo.job1.containerNumber} (20FT)</span>
-                          <span className="text-[10px] text-emerald-400 font-normal">{(combo.box1WeightKg / 1000).toFixed(1)}T</span>
+                          <span className="text-xs text-emerald-400 font-normal">{(combo.box1WeightKg / 1000).toFixed(1)}T</span>
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
                           {combo.job1.customerName} → {combo.job1.warehouseName} ({combo.zone1})
                         </div>
                       </div>
 
-                      <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
-                        <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
+                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                        <div className="flex items-center justify-between text-sm font-mono font-bold text-[var(--text-main)]">
                           <span>2. {combo.job2.containerNumber} (20FT)</span>
-                          <span className="text-[10px] text-emerald-400 font-normal">{(combo.box2WeightKg / 1000).toFixed(1)}T</span>
+                          <span className="text-xs text-emerald-400 font-normal">{(combo.box2WeightKg / 1000).toFixed(1)}T</span>
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
                           {combo.job2.customerName} → {combo.job2.warehouseName} ({combo.zone2})
                         </div>
                       </div>
@@ -2663,17 +3411,12 @@ export default function DrayageAssignmentPage() {
                       </div>
                     </div>
 
-                    <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3" />
-                      <span>~{combo.fuelSavingPct}% Fuel & Driver Cost Savings vs Single 20FT Runs</span>
-                    </div>
-
                     <button
                       onClick={() => handleUseBogiePair(combo)}
-                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 text-white text-xs sm:text-sm font-bold hover:bg-blue-500 transition-colors shadow-sm"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      ⚡ Dispatch Dual-20FT Bogie Pair
+                      <Sparkles className="w-4 h-4" />
+                      ⚡ Dispatch Job
                     </button>
                   </div>
                 </div>
@@ -2686,79 +3429,84 @@ export default function DrayageAssignmentPage() {
                   key={pair.id}
                   className="rounded-xl bg-[var(--bg-surface)] border border-emerald-500/30 p-4 space-y-3 hover:border-emerald-500/60 transition-all flex flex-col justify-between shadow-sm"
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5 w-full">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
+                      <span className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <TrendingUp className="w-3.5 h-3.5" />
                         {pair.matchMode === 'DAISY_CHAIN_3LEG'
                           ? '3-Leg Daisy-Chain Triangulation'
                           : pair.matchMode === 'PORT_TERMINAL_RELOAD'
                             ? 'Port Terminal Reload (0 km Handoff)'
                             : 'Street-Turn (Import ➔ Export)'}
                       </span>
-                      <span className="text-[10px] font-mono font-bold text-emerald-400">
+                      <span className="text-xs font-mono font-bold text-emerald-400">
                         Score: {pair.score}
                       </span>
                     </div>
 
                     {/* Carrier Line, Size & Grade Match Badge */}
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded-lg text-[11px] space-y-0.5">
+                    <div className="w-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl text-xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-bold flex items-center gap-1.5 text-sm">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                           {pair.shippingLine} Line ({pair.carrierPrefix})
                         </span>
-                        <span className="font-mono text-[10px] font-bold text-[var(--text-main)]">
+                        <span className="font-mono text-xs font-bold text-[var(--text-main)]">
                           {pair.containerSize} · {pair.containerType || 'DRY'}
                         </span>
                       </div>
-                      <div className="text-[10px] text-emerald-300/90 font-medium">
+                      <div className="text-xs text-emerald-300/90 font-medium">
                         ✓ {pair.containerGrade}
                       </div>
                     </div>
 
-                    <div className="space-y-1.5 pt-1 text-xs">
-                      {/* Leg 1: L1 Placed at Ramp or L2 Inbound Empty Box */}
-                      <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-amber-400">
+                    <div className="space-y-2.5 pt-1 w-full">
+                      {/* Leg 1: L1 Placed at Ramp / Detached or L2 Inbound Empty Box */}
+                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <span className="font-bold text-amber-400 leading-snug">
                             {pair.sourcePhase === 'L1_RAMP'
-                              ? '1. L1 Placed at Ramp (Import)'
+                              ? pair.inboundJob.trailerDetached ||
+                                ['TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP'].includes(
+                                  pair.inboundJob.status,
+                                )
+                                ? `1. L1 Trailer Detached / Empty Ready (${pair.inboundJob.jobCode})`
+                                : `1. L1 Placed at Ramp (${pair.inboundJob.jobCode})`
                               : `1. L2 Empty Return (${pair.inboundJob.jobCode})`}
                           </span>
-                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
+                          <span className="font-mono font-bold text-sm text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
                           {pair.originWarehouse} ➔ {pair.inboundJob.terminalName}
                         </div>
                       </div>
 
                       {/* Handoff Connector: Port Terminal Reload vs Direct Inland Repositioning */}
-                      <div className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 flex items-center justify-between">
-                        <span className="flex items-center gap-1">
-                          <ArrowRight className="w-3 h-3 text-emerald-400" />
+                      <div className="w-full px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 font-medium leading-snug">
+                          <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                           <span>
                             {pair.matchMode === 'INLAND_STREET_TURN'
                               ? `Direct Match (${pair.interWarehouseDistanceKm} km · ≤ ${automationConfig.streetTurnRadiusKm || 15} km Radius)`
                               : `Same-Terminal Reload @ ${pair.terminalName} (0.0 km Handoff · ${pair.tasSlot})`}
                           </span>
                         </span>
-                        <span className="font-bold text-emerald-400">
+                        <span className="font-bold text-emerald-400 shrink-0">
                           {pair.matchMode === 'INLAND_STREET_TURN' ? 'Zero Port Return' : 'Dual TAS Pass'}
                         </span>
                       </div>
 
                       {/* Leg 2: Outbound L1 Import Full or Export Loading */}
-                      <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-blue-400">
+                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <span className="font-bold text-blue-400 leading-snug">
                             {pair.matchMode === 'INLAND_STREET_TURN'
                               ? '2. Outbound Export Loading'
                               : `2. L1 Import Full (${pair.exportJob.jobCode})`}
                           </span>
-                          <span className="font-mono font-bold text-[var(--text-main)]">{pair.exportJob.containerNumber}</span>
+                          <span className="font-mono font-bold text-sm text-[var(--text-main)]">{pair.exportJob.containerNumber}</span>
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
                           {pair.matchMode === 'INLAND_STREET_TURN'
                             ? `${pair.destWarehouse} ➔ ${pair.terminalName}`
                             : `${pair.terminalName} ➔ ${pair.destWarehouse}`}
@@ -2768,82 +3516,56 @@ export default function DrayageAssignmentPage() {
                       {/* Leg 3: Optional 3-Leg Daisy-Chain Empty Return (e.g. JAFZA South -> T2) */}
                       {pair.leg3Job && (
                         <div
-                          className={`p-2 rounded-lg border space-y-1 ${
+                          className={`w-full p-3.5 rounded-xl border space-y-1.5 ${
                             pair.holdLeg3Recommended
                               ? 'bg-amber-500/10 border-amber-500/30'
                               : 'bg-indigo-500/10 border-indigo-500/30'
                           }`}
                         >
-                          <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                             <span className={`font-bold ${pair.holdLeg3Recommended ? 'text-amber-300' : 'text-indigo-300'}`}>
                               3. L2 Empty ({pair.leg3Job.jobCode})
                             </span>
-                            <span className="font-mono text-[10px] font-bold text-[var(--text-main)]">
+                            <span className="font-mono text-xs font-bold text-[var(--text-main)]">
                               {pair.leg3Job.warehouseName} ➔ {pair.leg3Job.terminalName}
                             </span>
                           </div>
-                          <div className="text-[10px] text-[var(--text-muted)] leading-snug">
+                          <div className="w-full text-xs text-[var(--text-muted)] leading-relaxed break-words">
                             {pair.holdLeg3Recommended
-                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.terminalName}. Hold Leg 3 to avoid 34 km empty return.`
-                              : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.terminalName})`}
+                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName}. Hold Leg 3 to avoid empty return deadhead.`
+                              : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName})`}
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Economic & Environmental Savings Metrics */}
-                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Saved</span>
-                        <span className="font-bold text-blue-400 flex items-center gap-1">
-                          <span>{pair.deadheadKmSaved} km zero-bobtail</span>
-                        </span>
-                      </div>
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Carbon Avoided</span>
-                        <span className="font-bold text-emerald-400 flex items-center gap-1">
-                          <Leaf className="w-3 h-3 text-emerald-400 shrink-0" />
-                          <span>{pair.co2SavedKg} kg CO₂</span>
-                        </span>
-                      </div>
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Direct Cost Saved</span>
-                        <span className="font-bold text-emerald-400">AED {pair.fuelSavingsAed.toLocaleString()}</span>
-                      </div>
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Turnaround Saved</span>
-                        <span className="font-bold text-cyan-400">{pair.turnaroundHoursSaved} hrs gate dwell</span>
-                      </div>
-                    </div>
-
+                  {/* Dispatch Action Footer (Deadhead, Carbon Avoided, Direct Cost Saved & Turnaround Saved moved exclusively to Analytics per Job) */}
+                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
                     {pair.leg3Job ? (
                       <div className="space-y-1.5">
                         <button
                           onClick={() => handleUseStreetTurnPair(pair, true)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs sm:text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm"
                         >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          ⚡ Dispatch Leg 1+2 & Hold Leg 3 ({pair.leg3Job.jobCode})
+                          <Sparkles className="w-4 h-4" />
+                          ⚡ Dispatch Job
                         </button>
                         <button
                           onClick={() => handleUseStreetTurnPair(pair, false)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold hover:bg-indigo-600/30 transition-colors"
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold hover:bg-indigo-600/30 transition-colors"
                         >
-                          <Truck className="w-3 h-3" />
+                          <Truck className="w-3.5 h-3.5" />
                           🔄 Dispatch Full 3-Leg Loop ({pair.inboundJob.jobCode} ➔ {pair.outboundJob.jobCode} ➔ {pair.leg3Job.jobCode})
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => handleUseStreetTurnPair(pair, false)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs sm:text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm"
                       >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        {pair.matchMode === 'PORT_TERMINAL_RELOAD'
-                          ? `⚡ Dispatch Port Reload (${pair.terminalName})`
-                          : '⚡ Execute Street-Turn Triangulation'}
+                        <Sparkles className="w-4 h-4" />
+                        ⚡ Dispatch Job
                       </button>
                     )}
                   </div>
@@ -2921,139 +3643,11 @@ export default function DrayageAssignmentPage() {
                 </div>
               ))}
 
-            {/* 3. Demurrage, Detention & Port Slot Risk Intelligence View (Shown ONLY when Urgent Demurrage Alert button is clicked) */}
-            {smartAnalysisFilter === 'DEMURRAGE' &&
-              urgentDemurrageJobs.map((job) => {
-                const risk = getDemurrageRisk(job);
-                const radar = job.riskRadar;
-                const slotPred = job.portSlotPrediction;
-                return (
-                  <div
-                    key={`RISK-${job.id}`}
-                    className="rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 p-4 space-y-3 flex flex-col justify-between shadow-sm"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
-                          {radar?.within24hPenaltyWindow
-                            ? '🚨 CRITICAL <24H FREE-TIME RADAR'
-                            : slotPred?.willMissSlot
-                            ? `⏱️ PORT SLOT MISS (${Math.abs(slotPred.slotBufferMinutes)}M LATE)`
-                            : risk.badgeText}
-                        </span>
-                        <span className="font-mono text-xs font-bold text-rose-400">{job.jobCode}</span>
-                      </div>
-
-                      <div className="text-xs space-y-0.5">
-                        <div className="font-bold font-mono text-[var(--text-main)] text-sm flex items-center justify-between">
-                          <span>{job.containerNumber} ({job.containerSize} · {job.containerType})</span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-sans font-bold">
-                            PRIORITY: CRITICAL
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate">
-                          {job.customerName} · {job.terminalName} ➔ {job.warehouseName}
-                        </div>
-                      </div>
-
-                      {/* Demurrage & Free-Time Countdown Radar (3 Columns) */}
-                      {radar && (
-                        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">Port Demurrage</span>
-                            <strong className={`font-mono ${radar.portDemurrageHoursRemaining <= 24 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                              {radar.portDemurrageHoursRemaining <= 0
-                                ? `Overdue`
-                                : `${radar.portDemurrageHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              AED {radar.portDailyDemurrageAed}/d
-                            </span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">Line Detention</span>
-                            <strong className={`font-mono ${radar.lineDetentionHoursRemaining <= 24 ? 'text-rose-400' : 'text-amber-400'}`}>
-                              {radar.lineDetentionHoursRemaining <= 0
-                                ? `Overdue`
-                                : `${radar.lineDetentionHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              AED {radar.lineDailyDetentionAed}/d
-                            </span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                            <span className="text-[9px] text-[var(--text-muted)] block">DO Expiry</span>
-                            <strong className={`font-mono ${radar.doHoursRemaining <= 24 ? 'text-rose-400' : 'text-blue-400'}`}>
-                              {radar.doHoursRemaining <= 0 ? 'Expired' : `${radar.doHoursRemaining}h left`}
-                            </strong>
-                            <span className="block text-[9px] text-[var(--text-muted)]">
-                              {new Date(radar.doExpiryDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Port Appointment Window & Gate Queue Predictor */}
-                      {slotPred && (
-                        <div
-                          className={`p-2 rounded-lg border text-[10px] space-y-1 ${
-                            slotPred.willMissSlot
-                              ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                              : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between font-bold">
-                            <span>Gate Slot: {slotPred.slotWindowLabel}</span>
-                            <span className={slotPred.willMissSlot ? 'text-rose-400' : 'text-emerald-400'}>
-                              ETA: {slotPred.predictedGateArrivalLabel} ({slotPred.willMissSlot ? `${Math.abs(slotPred.slotBufferMinutes)}m Late` : `+${slotPred.slotBufferMinutes}m Buffer`})
-                            </span>
-                          </div>
-                          <div className="text-[9px] opacity-90">
-                            {slotPred.corridorName} · {slotPred.distanceToPortKm}km @ {slotPred.avgCorridorSpeedKmh}km/h + {slotPred.gateQueueWaitMinutes}m Gate Queue
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleRebookJobPcsSlot(job.id)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-bold hover:bg-amber-400 transition-colors shadow-sm"
-                          title="Auto-rebook DP World / AD Ports PCS token to next 2-hour window matching live E11/E311 ETA"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          Auto-Rebook Token
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSwapJobRescueTractor(job.id)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
-                          title="Swap to nearest available tractor via 4-Factor Telematics to rescue port slot"
-                        >
-                          <Truck className="w-3 h-3" />
-                          Swap Tractor (4-Factor)
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAssign(job)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 transition-colors shadow-sm"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        Prioritize & Custom Assign
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
             {/* Empty state when no matches found */}
-            {((smartAnalysisFilter === 'DEMURRAGE' && urgentDemurrageJobs.length === 0) ||
-              (smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
-              (smartAnalysisFilter !== 'DEMURRAGE' &&
-                smartAnalysisFilter !== 'BACKHAUL_HOLD' &&
+            {((smartAnalysisFilter === 'BACKHAUL_HOLD' && smartBackhaulHoldJobs.length === 0) ||
+              (smartAnalysisFilter === 'BOGIE' && bogieCombos.length === 0) ||
+              (smartAnalysisFilter === 'STREET_TURN' && streetTurnPairs.length === 0) ||
+              (smartAnalysisFilter === 'ALL' &&
                 bogieCombos.length === 0 &&
                 streetTurnPairs.length === 0 &&
                 smartBackhaulHoldJobs.length === 0)) && (
@@ -3061,11 +3655,182 @@ export default function DrayageAssignmentPage() {
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
                 <h4 className="text-xs font-bold text-[var(--text-main)]">Queue Optimized</h4>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {smartAnalysisFilter === 'DEMURRAGE'
-                    ? 'No urgent demurrage or port slot risk alerts in current queue.'
-                    : smartAnalysisFilter === 'BACKHAUL_HOLD'
-                      ? 'No non-urgent L2 empty return deadhead risks detected.'
-                      : 'No pending pairing conflicts found in current queue.'}
+                  {smartAnalysisFilter === 'BACKHAUL_HOLD'
+                    ? 'No non-urgent L2 empty return deadhead risks detected.'
+                    : 'No pending pairing conflicts found in current queue.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          URGENT DEMURRAGE ALERT PANEL (Shown ONLY when clicking Urgent Demurrage Alert button at top)
+          ========================================================================= */}
+      {showUrgentDemurrageAlert && (
+        <div className="rounded-2xl bg-gradient-to-br from-rose-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-rose-500/40 p-5 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-500/20 pb-4">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
+                    Urgent Demurrage &amp; Port Slot Risk Alerts
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white whitespace-nowrap shadow-sm">
+                    {urgentDemurrageJobs.length} Critical Container{urgentDemurrageJobs.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Containers approaching port free-time expiry, shipping line detention, DO expiry, or TAS slot miss risk.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUrgentDemurrageAlert(false)}
+              className="px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors self-end sm:self-auto"
+            >
+              Close Alerts
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {urgentDemurrageJobs.map((job) => {
+              const risk = getDemurrageRisk(job);
+              const radar = job.riskRadar;
+              const slotPred = job.portSlotPrediction;
+              return (
+                <div
+                  key={`RISK-${job.id}`}
+                  className="rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 p-4 space-y-3 flex flex-col justify-between shadow-sm"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+                        {radar?.within24hPenaltyWindow
+                          ? '🚨 CRITICAL <24H FREE-TIME RADAR'
+                          : slotPred?.willMissSlot
+                          ? `⏱️ PORT SLOT MISS (${Math.abs(slotPred.slotBufferMinutes)}M LATE)`
+                          : risk.badgeText}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-rose-400">{job.jobCode}</span>
+                    </div>
+
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-bold font-mono text-[var(--text-main)] text-sm flex items-center justify-between">
+                        <span>{job.containerNumber} ({job.containerSize} · {job.containerType})</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-sans font-bold">
+                          PRIORITY: CRITICAL
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)] truncate">
+                        {job.customerName} · {job.terminalName} ➔ {job.warehouseName}
+                      </div>
+                    </div>
+
+                    {/* Demurrage & Free-Time Countdown Radar (3 Columns) */}
+                    {radar && (
+                      <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">Port Demurrage</span>
+                          <strong className={`font-mono ${radar.portDemurrageHoursRemaining <= 24 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {radar.portDemurrageHoursRemaining <= 0
+                              ? `Overdue`
+                              : `${radar.portDemurrageHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            AED {radar.portDailyDemurrageAed}/d
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">Line Detention</span>
+                          <strong className={`font-mono ${radar.lineDetentionHoursRemaining <= 24 ? 'text-rose-400' : 'text-amber-400'}`}>
+                            {radar.lineDetentionHoursRemaining <= 0
+                              ? `Overdue`
+                              : `${radar.lineDetentionHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            AED {radar.lineDailyDetentionAed}/d
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)]">
+                          <span className="text-[9px] text-[var(--text-muted)] block">DO Expiry</span>
+                          <strong className={`font-mono ${radar.doHoursRemaining <= 24 ? 'text-rose-400' : 'text-blue-400'}`}>
+                            {radar.doHoursRemaining <= 0 ? 'Expired' : `${radar.doHoursRemaining}h left`}
+                          </strong>
+                          <span className="block text-[9px] text-[var(--text-muted)]">
+                            {new Date(radar.doExpiryDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Port Appointment Window & Gate Queue Predictor */}
+                    {slotPred && (
+                      <div
+                        className={`p-2 rounded-lg border text-[10px] space-y-1 ${
+                          slotPred.willMissSlot
+                            ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                            : 'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold">
+                          <span>Gate Slot: {slotPred.slotWindowLabel}</span>
+                          <span className={slotPred.willMissSlot ? 'text-rose-400' : 'text-emerald-400'}>
+                            ETA: {slotPred.predictedGateArrivalLabel} ({slotPred.willMissSlot ? `${Math.abs(slotPred.slotBufferMinutes)}m Late` : `+${slotPred.slotBufferMinutes}m Buffer`})
+                          </span>
+                        </div>
+                        <div className="text-[9px] opacity-90">
+                          {slotPred.corridorName} · {slotPred.distanceToPortKm}km @ {slotPred.avgCorridorSpeedKmh}km/h + {slotPred.gateQueueWaitMinutes}m Gate Queue
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRebookJobPcsSlot(job.id)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-bold hover:bg-amber-400 transition-colors shadow-sm"
+                        title="Auto-rebook DP World / AD Ports PCS token to next 2-hour window matching live E11/E311 ETA"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Auto-Rebook Token
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSwapJobRescueTractor(job.id)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                        title="Swap to nearest available tractor via 4-Factor Telematics to rescue port slot"
+                      >
+                        <Truck className="w-3 h-3" />
+                        Swap Tractor (4-Factor)
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAssign(job)}
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 transition-colors shadow-sm"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Prioritize &amp; Custom Assign
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {urgentDemurrageJobs.length === 0 && (
+              <div className="col-span-full py-8 text-center text-[var(--text-muted)] space-y-1">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
+                <h4 className="text-xs font-bold text-[var(--text-main)]">No Urgent Demurrage Alerts</h4>
+                <p className="text-xs text-[var(--text-muted)]">
+                  No urgent demurrage or port slot risk alerts in current queue.
                 </p>
               </div>
             )}
@@ -3075,16 +3840,23 @@ export default function DrayageAssignmentPage() {
 
       {/* FleetDataGrid (Smart Data Table) */}
       <FleetDataGrid<DrayageJob>
-        rows={jobs}
+        rows={activeQueueJobs}
         columns={assignmentColumns}
         getRowId={(j) => j.id}
         loading={loading}
-        emptyMessage="No drayage jobs in queue"
+        emptyMessage="No active drayage jobs in queue"
         gridName="DrayageAssignmentGrid"
         numbered={true}
         selectable={true}
         selectedIds={new Set(selectedJobIds)}
-        onSelectionChange={(ids) => setSelectedJobIds(Array.from(ids))}
+        onSelectionChange={(ids) =>
+          setSelectedJobIds(
+            Array.from(ids).filter((id) => {
+              const target = jobs.find((j) => j.id === id);
+              return target ? !isJobCompletedOrSuperseded(target) : false;
+            }),
+          )
+        }
         toolbar={{
           title: 'Drayage Jobs Queue',
           search: true,
@@ -3095,6 +3867,21 @@ export default function DrayageAssignmentPage() {
           exportName: 'drayage_job_assignment',
           actions: (
             <div className="flex items-center gap-2">
+              {completedJobsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedJobs((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                    showCompletedJobs
+                      ? 'bg-slate-700 text-white border-slate-600'
+                      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                  }`}
+                  title="Show or hide completed L1/L2 jobs in the table"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{showCompletedJobs ? 'Hide Completed' : `Show Completed (${completedJobsCount})`}</span>
+                </button>
+              )}
               {selectedJobIds.length === 2 && (
                 <button
                   onClick={handleOpenBogieModal}
@@ -3320,6 +4107,8 @@ export default function DrayageAssignmentPage() {
                         : '⚡ Confirm Inland Street-Turn Triangulation'
                     : isBogieAssign
                     ? '⚡ Dual-20FT Bogie Dispatch (Single Prime Mover)'
+                    : evaluateDispatcherJobReassignState(assigningJob).reassignLabel
+                    ? `${evaluateDispatcherJobReassignState(assigningJob).reassignLabel}: ${assigningJob.jobCode}`
                     : `Assign Assets: ${assigningJob.jobCode}`}
                 </h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -3329,7 +4118,7 @@ export default function DrayageAssignmentPage() {
                       : `Port Reload: Drop ${activeStreetTurnPair.inboundJob.jobCode} (${activeStreetTurnPair.originWarehouse} ➜ ${activeStreetTurnPair.terminalName}) + Pick ${activeStreetTurnPair.outboundJob.jobCode} (${activeStreetTurnPair.terminalName} ➜ ${activeStreetTurnPair.destWarehouse})`
                     : isBogieAssign
                     ? `Coupling two 20FT containers onto a 40FT/45FT skeletal/bogie trailer`
-                    : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize})`}
+                    : `Container ${assigningJob.containerNumber} (${assigningJob.containerSize}) · ${assigningJob.shipmentType || 'IMPORT'}`}
                 </p>
               </div>
               <button
@@ -3356,24 +4145,6 @@ export default function DrayageAssignmentPage() {
                     <span className="font-mono text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded">
                       {activeStreetTurnPair.containerSize} {activeStreetTurnPair.containerType}
                     </span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
-                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
-                      <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Saved</span>
-                      <span className="font-bold text-blue-400">{activeStreetTurnPair.deadheadKmSaved} km zero-bobtail</span>
-                    </div>
-                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
-                      <span className="text-[var(--text-muted)] block text-[9px]">CO₂ Avoided</span>
-                      <span className="font-bold text-emerald-400">{activeStreetTurnPair.co2SavedKg} kg</span>
-                    </div>
-                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
-                      <span className="text-[var(--text-muted)] block text-[9px]">Cost Saved</span>
-                      <span className="font-bold text-emerald-400">AED {activeStreetTurnPair.fuelSavingsAed}</span>
-                    </div>
-                    <div className="p-1.5 rounded bg-[var(--bg-main)] border border-emerald-500/20">
-                      <span className="text-[var(--text-muted)] block text-[9px]">Port Turnaround</span>
-                      <span className="font-bold text-cyan-400">{activeStreetTurnPair.turnaroundHoursSaved}h dwell avoided</span>
-                    </div>
                   </div>
                   {activeStreetTurnPair.leg3Job && (
                     <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-amber-500/30 flex items-center justify-between gap-2 text-[11px]">
@@ -3503,6 +4274,10 @@ export default function DrayageAssignmentPage() {
                     if (loggedInDrv) {
                       setSelectedDriverId(loggedInDrv.id);
                     }
+                    if (assigningJob && !selectedTrailerId) {
+                      const linkedTrId = resolveLinkedTrailerIdForJob(assigningJob);
+                      if (linkedTrId) setSelectedTrailerId(linkedTrId);
+                    }
                   }}
                   options={primeMoverSelectOptions}
                   placeholder="-- Search & Choose Prime Mover --"
@@ -3543,7 +4318,7 @@ export default function DrayageAssignmentPage() {
                           <span>Proximity ({automationConfig.weightProximityPct ?? 60}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
-                          {currentVehicleScore.distanceKm} km
+                          {currentVehicleScore.hasLiveGps ? `${currentVehicleScore.distanceKm} km` : 'Switched Off'}
                         </div>
                         <div className="text-[9px] text-emerald-400">Score: {currentVehicleScore.proximityScore}/100</div>
                       </div>
@@ -3551,10 +4326,12 @@ export default function DrayageAssignmentPage() {
                       <div className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] space-y-0.5">
                         <div className="text-[var(--text-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
-                          <span>Idleness ({automationConfig.weightIdlenessPct ?? 25}%)</span>
+                          <span>Status ({automationConfig.weightIdlenessPct ?? 25}%)</span>
                         </div>
                         <div className="font-bold text-xs text-[var(--text-main)]">
-                          {currentVehicleScore.idleHours}h dwell
+                          {currentVehicleScore.vehicle.isDriverLoggedIn || currentVehicleScore.hasLiveGps
+                            ? `${currentVehicleScore.idleHours}h idle`
+                            : 'Switched Off'}
                         </div>
                         <div className="text-[9px] text-cyan-400">Score: {currentVehicleScore.idlenessScore}/100</div>
                       </div>
@@ -3656,14 +4433,28 @@ export default function DrayageAssignmentPage() {
                   return null;
                 })()}
                 <SearchableSelect
-                  value={selectedTrailerId}
+                  value={selectedTrailerId || resolveLinkedTrailerIdForJob(assigningJob)}
                   onChange={(val) => setSelectedTrailerId(val)}
-                  options={trailers.map((t) => ({
-                    value: t.id,
-                    label: `${t.plateNumber} · ${t.trailerType}`,
-                    sublabel: `Capacity: ${t.capacityTons}T • Loc: ${t.currentLocation || 'Depot'} • Master: ${t.masterStatus}`,
-                    badge: t.operationalStatus,
-                  }))}
+                  options={(() => {
+                    const baseOptions = trailers.map((t) => ({
+                      value: t.id,
+                      label: `${t.plateNumber} · ${t.trailerType}`,
+                      sublabel: `Capacity: ${t.capacityTons}T • Loc: ${t.currentLocation || 'Depot'} • Master: ${t.masterStatus}`,
+                      badge: t.operationalStatus,
+                    }));
+                    if (
+                      assigningJob?.assignedTrailerId &&
+                      !baseOptions.some((o) => o.value === assigningJob.assignedTrailerId)
+                    ) {
+                      baseOptions.unshift({
+                        value: assigningJob.assignedTrailerId,
+                        label: `${assigningJob.assignedTrailerPlate || assigningJob.assignedTrailerId} · 40FT_SKELETAL`,
+                        sublabel: `Linked Chassis for ${assigningJob.containerNumber} (${assigningJob.jobCode})`,
+                        badge: assigningJob.trailerDetached ? 'DETACHED' : 'LINKED',
+                      });
+                    }
+                    return baseOptions;
+                  })()}
                   placeholder="-- Search & Choose Chassis --"
                   searchPlaceholder="Type chassis plate, skeletal, flatbed..."
                   accent="emerald"
@@ -3671,19 +4462,111 @@ export default function DrayageAssignmentPage() {
                 />
               </div>
 
-              {/* Port Gate Token & PCS Pre-Dispatch Interlock */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[var(--text-muted)]">Port Gate Token / Appointment Code</label>
-
+              {/* L2 Empty Return Terminal Selector (Unlocked from EN_ROUTE_WAREHOUSE through L2 - PENDING) */}
+              {assigningJob && !isBogieAssign && !activeStreetTurnPair && canChangeDrayageReturnTerminal(assigningJob) && (
+                <div className="space-y-2 p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                      <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>L2 Empty Return Terminal (Drop-Off Destination)</span>
+                    </label>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-300">
+                      Unlocked · {assigningJob.jobPhase} - {assigningJob.status}
+                    </span>
+                  </div>
+                  <select
+                    value={assignReturnTerminalId}
+                    onChange={(e) => setAssignReturnTerminalId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-cyan-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-cyan-400 text-xs cursor-pointer"
+                  >
+                    {terminals.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.code} · {t.emirate})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                    <span>
+                      Origin Pickup Terminal:{' '}
+                      <strong className="text-[var(--text-main)]">
+                        {assigningJob.originTerminalName || assigningJob.terminalName}
+                      </strong>
+                    </span>
+                    <span className="text-cyan-300 font-semibold">
+                      Locks automatically once L2 reaches ASSIGNED
+                    </span>
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. DPW-T1-884120"
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500"
-                />
+              )}
+
+              {/* Port Gate Token & PCS Pre-Dispatch Interlock + 2-Hour Slot Time Window */}
+              <div className="space-y-3 p-3.5 rounded-xl bg-[var(--bg-main)]/60 border border-[var(--border-subtle)]">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Gate / Port Token & Appointment Time Window</span>
+                  </label>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[10px] font-bold text-blue-300">
+                    <Clock className="w-2.5 h-2.5 text-blue-400" />
+                    <span>{formatTwoHourWindowLabel(tokenSlotStartHour)} (2 Hrs Gap)</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                  <div className="sm:col-span-5 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      Token / Appointment Code
+                    </span>
+                    <input
+                      type="text"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. DPW-T1-884120"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono font-bold uppercase outline-none focus:border-blue-500 text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      Slot Start Time
+                    </span>
+                    <select
+                      value={tokenSlotStartHour}
+                      onChange={(e) => setTokenSlotStartHour(Number(e.target.value))}
+                      className="w-full px-2.5 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-blue-500 text-xs cursor-pointer"
+                    >
+                      {Array.from({ length: 24 }, (_, hr) => (
+                        <option key={hr} value={hr}>
+                          {formatShortHourAmPm(hr)} ({formatTwoHourWindowLabel(hr)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3 space-y-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] block">
+                      End Time (+2 Hrs)
+                    </span>
+                    <div
+                      className="w-full px-2.5 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-bold text-xs flex items-center justify-between select-none"
+                      title="Automatically calculated as Start Time + 2 Hours"
+                    >
+                      <span>{formatShortHourAmPm((tokenSlotStartHour + 2) % 24)}</span>
+                      <span className="text-[10px] font-mono text-blue-400/90">+2h</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] pt-0.5">
+                  <span>
+                    Selected Port Gate Window:{' '}
+                    <strong className="text-[var(--text-main)]">
+                      {formatFullHourAmPm(tokenSlotStartHour)} – {formatFullHourAmPm((tokenSlotStartHour + 2) % 24)}
+                    </strong>{' '}
+                    ({formatTwoHourWindowLabel(tokenSlotStartHour)})
+                  </span>
+                  <span className="text-emerald-400 font-medium">Auto 2-Hr Slot</span>
+                </div>
 
                 {assigningJob && (assigningJob.inspectionStatus === 'HOLD_PENDING' || assigningJob.doStatus === 'EXPIRED') && (
                   <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1">
@@ -3734,19 +4617,63 @@ export default function DrayageAssignmentPage() {
       {/* Edit Token Modal */}
       {editingTokenJob && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-5 space-y-4">
-            <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-              <Key className="w-4 h-4 text-emerald-400" />
-              Update Gate Token for {editingTokenJob.jobCode}
-            </h4>
-            <input
-              type="text"
-              value={newTokenValue}
-              onChange={(e) => setNewTokenValue(e.target.value.toUpperCase())}
-              placeholder="e.g. DPW-TKN-9021"
-              className="w-full text-xs font-mono font-bold p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 uppercase"
-            />
-            <div className="flex justify-end gap-2 pt-2">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
+                <Key className="w-4 h-4 text-emerald-400" />
+                Update Gate Token & 2-Hr Slot for {editingTokenJob.jobCode}
+              </h4>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[10px] font-bold text-blue-300">
+                <Clock className="w-2.5 h-2.5 text-blue-400" />
+                <span>{formatTwoHourWindowLabel(editTokenSlotStartHour)}</span>
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  Gate / Port Token Number
+                </label>
+                <input
+                  type="text"
+                  value={newTokenValue}
+                  onChange={(e) => setNewTokenValue(e.target.value.toUpperCase())}
+                  placeholder="e.g. DPW-TKN-9021"
+                  className="w-full text-xs font-mono font-bold p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500 uppercase"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    Slot Start Time
+                  </label>
+                  <select
+                    value={editTokenSlotStartHour}
+                    onChange={(e) => setEditTokenSlotStartHour(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-blue-500 text-xs cursor-pointer"
+                  >
+                    {Array.from({ length: 24 }, (_, hr) => (
+                      <option key={hr} value={hr}>
+                        {formatShortHourAmPm(hr)} ({formatTwoHourWindowLabel(hr)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    End Time (Auto +2 Hrs)
+                  </label>
+                  <div className="w-full p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-bold text-xs flex items-center justify-between select-none">
+                    <span>{formatShortHourAmPm((editTokenSlotStartHour + 2) % 24)}</span>
+                    <span className="text-[10px] font-mono text-blue-400">+2 Hrs Gap</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
               <button
                 type="button"
                 onClick={() => setEditingTokenJob(null)}
@@ -3759,7 +4686,149 @@ export default function DrayageAssignmentPage() {
                 onClick={handleUpdateToken}
                 className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-colors"
               >
-                Save Token
+                Save Token & Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change L2 Return Terminal Modal */}
+      {changingReturnTerminalJob && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-cyan-500/40 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                  <ArrowUpDown className="w-4 h-4 text-cyan-400" />
+                  <span>Change L2 Empty Return Terminal ({changingReturnTerminalJob.jobCode})</span>
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Container <strong className="font-mono text-[var(--text-main)]">{changingReturnTerminalJob.containerNumber}</strong> ({changingReturnTerminalJob.containerSize}) · Consignee: <strong className="text-[var(--text-main)]">{changingReturnTerminalJob.warehouseName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Eligibility Window Banner */}
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-emerald-300 flex items-center gap-1.5 text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Unlocked Eligibility Window ({changingReturnTerminalJob.jobPhase} · {changingReturnTerminalJob.status})</span>
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    Unlocked from <code className="font-mono">EN_ROUTE_WAREHOUSE</code> (post-port exit) through <code className="font-mono">PLACED_AT_RAMP</code> / <code className="font-mono">PLACED_AT_YARD</code> / <code className="font-mono">MT_Reassign to Yard</code>, <code className="font-mono">READY_FOR_PICKUP</code>, and <code className="font-mono">L2 - PENDING</code>.
+                  </div>
+                </div>
+              </div>
+
+              {/* Origin vs Current Return Terminal Summary */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block">
+                    L1 Origin Pickup Terminal
+                  </span>
+                  <strong className="text-xs text-[var(--text-main)] block truncate">
+                    {changingReturnTerminalJob.originTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+                <div className="p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/30 space-y-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-cyan-400 block">
+                    Current L2 Return Terminal
+                  </span>
+                  <strong className="text-xs text-cyan-300 block truncate">
+                    {changingReturnTerminalJob.returnTerminalName || changingReturnTerminalJob.terminalName}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Target L2 Return Terminal Selector */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  New L2 Empty Return Terminal *
+                </label>
+                <select
+                  value={newReturnTerminalId}
+                  onChange={(e) => setNewReturnTerminalId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-cyan-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-cyan-400 text-xs cursor-pointer"
+                >
+                  {terminals.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code} · {t.emirate})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Live Smart Analysis Impact Preview */}
+              {(() => {
+                const targetTerm = terminals.find((t) => t.id === newReturnTerminalId);
+                if (!targetTerm) return null;
+                const matchingOutboundL1 = unassignedJobs.filter(
+                  (j) =>
+                    j.jobPhase === 'L1' &&
+                    j.status === 'PENDING' &&
+                    !j.trailerDetached &&
+                    (j.terminalName || '').trim().toLowerCase() === targetTerm.name.trim().toLowerCase(),
+                );
+                return (
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 space-y-1">
+                    <div className="font-bold text-blue-300 flex items-center justify-between text-[11px]">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Smart Analysis Live Impact @ {targetTerm.name}</span>
+                      </span>
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                        {matchingOutboundL1.length} Pending L1 Pickup(s)
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)]">
+                      {matchingOutboundL1.length > 0
+                        ? `✓ Redirecting L2 return to ${targetTerm.name} unlocks immediate Port Terminal Reload / 3-Leg Daisy-Chain pairing with ${matchingOutboundL1.map((j) => j.jobCode).slice(0, 3).join(', ')} (0.0 km terminal handoff).`
+                        : `ℹ️ ${targetTerm.name} currently has 0 pending L1 pickups. Smart Backhaul Hold Advisor will monitor DO free time to prevent an empty return if needed.`}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Reason / Shipping Line Instruction */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                  Redirection Reason / Shipping Line Instruction (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={returnTerminalReason}
+                  onChange={(e) => setReturnTerminalReason(e.target.value)}
+                  placeholder="e.g. Shipping line empty depot redirection / Berth congestion at origin terminal"
+                  className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-cyan-400 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => setChangingReturnTerminalJob(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingReturnTerminal || !newReturnTerminalId}
+                onClick={handleConfirmReturnTerminalChange}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-500 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {submittingReturnTerminal ? 'Updating Return Terminal...' : 'Confirm Return Terminal Change'}
               </button>
             </div>
           </div>
@@ -4117,17 +5186,31 @@ export default function DrayageAssignmentPage() {
         </div>
       )}
 
+      <DrayageEditJobModal
+        open={Boolean(editJobTarget)}
+        job={editJobTarget}
+        customers={customers}
+        terminals={terminals}
+        warehouses={warehouses}
+        onClose={() => setEditJobTarget(null)}
+        onSaved={async (msg) => {
+          invalidateDrayageClientCache();
+          showToast('success', msg);
+          await loadData(true);
+        }}
+        onError={(msg) => showToast('error', msg)}
+      />
+
       <DrayageSuperAdminConfigModal
         open={configModalOpen}
         onClose={() => setConfigModalOpen(false)}
         config={automationConfig}
         onSaved={(updated) => {
           setAutomationConfig(updated);
-          setAutoL2DispatchEnabled(updated.autoL2DispatchEnabled);
           invalidateDrayageClientCache();
           showToast(
             'success',
-            `⚙️ Drayage Policy Updated: Auto-L2 @ T-${updated.thresholdMinutes}m · Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
+            `⚙️ Drayage Policy Updated: Street-Turn ≤${updated.streetTurnRadiusKm}km · Weights ${updated.weightProximityPct}/${updated.weightIdlenessPct}/${updated.weightWorkloadPct}/${updated.weightAvailabilityPct}%`,
           );
           loadData(true);
         }}

@@ -15,6 +15,7 @@
 import { prisma } from '@/lib/prisma';
 import { effectiveEndTime } from '@/lib/bus-ops/validate-assignment';
 import { TRIP_OPEN_STATUSES } from '@/lib/trip-status';
+import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
 type TripWindow = { id: string; departureTime: Date; arrivalTime: Date | null; route: { estimatedDurationMins: number | null } | null };
 
@@ -209,11 +210,6 @@ export async function getRecoveryAndReplacementOptions(
   if (!ticket) return null;
 
   const customFields = (ticket.custom_fields || {}) as Record<string, unknown>;
-  // custom_fields is an untyped jsonb blob; dispatchTowingVendor() and the
-  // replacement-provisioning step below both write a real, wider object
-  // (with extra bookkeeping fields like vendorId/dispatchedBy/domainAction)
-  // than RecoveryOptionsData exposes — narrow to exactly what that return
-  // type declares rather than passing the untyped blob through.
   const towingDetails = customFields.towingDispatch as RecoveryOptionsData['towingDispatchDetails'];
   const replacementDetails = customFields.replacementProvision as RecoveryOptionsData['replacementDetails'];
 
@@ -233,7 +229,6 @@ export async function getRecoveryAndReplacementOptions(
   const candidateVehicles = await prisma.vehicle.findMany({
     where: {
       tenantId,
-      // INACTIVE vehicles are off fleet (or grounded) — never offer them.
       status: 'AVAILABLE',
       isActive: true,
       deletedAt: null,
@@ -253,8 +248,6 @@ export async function getRecoveryAndReplacementOptions(
     },
   });
 
-  // Do not offer a vehicle already booked on a trip that overlaps the
-  // broken vehicle's upcoming trips it would take over.
   const tripsToCover = ticket.vehicle_id ? await upcomingScheduledTrips(tenantId, ticket.vehicle_id, new Date()) : [];
   const busy = await overlappingTripsByVehicle(tenantId, candidateVehicles.map((v) => v.id), tripsToCover);
   const availableVehicles = candidateVehicles.filter((v) => !busy.has(v.id)).slice(0, 4);
@@ -351,22 +344,55 @@ export async function getRecoveryAndReplacementOptions(
  */
 export async function dispatchTowingVendor(
   params: TowingDispatchParams
-): Promise<{ ok: boolean; etaMinutes: number; dispatchMessage: string }> {
-  // Check if vendorId corresponds to a registered garage
+): Promise<{ ok: boolean; etaMinutes: number; dispatchMessage: string; dispatchJobId?: string }> {
+  // 1. Verify ticket exists in this tenant and extract breakdown location
+  const [ticket] = await prisma.$queryRawUnsafe<
+    Array<{
+      id: string;
+      vehicle_id: string | null;
+      custom_fields: Record<string, unknown> | null;
+    }>
+  >(
+    `SELECT id, vehicle_id, custom_fields
+     FROM service_tickets
+     WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+     LIMIT 1`,
+    params.ticketId,
+    params.tenantId,
+  );
+
+  if (!ticket) {
+    return {
+      ok: false,
+      etaMinutes: 0,
+      dispatchMessage: 'Service ticket not found for this tenant',
+    };
+  }
+
+  const customFields = (ticket.custom_fields || {}) as Record<string, unknown>;
+  const breakdownLocation =
+    (typeof customFields.extractedLocation === 'string' && customFields.extractedLocation) ||
+    'Dubai, UAE';
+
+  // 2. Check if vendorId corresponds to a registered garage
   let resolvedVendorName = params.vendorName;
+  let vendorLocation = breakdownLocation;
   try {
     const matchedGarage = await prisma.garage.findFirst({
       where: { id: params.vendorId, tenantId: params.tenantId, deletedAt: null },
-      select: { name: true },
+      select: { name: true, location: true },
     });
     if (matchedGarage?.name) {
       resolvedVendorName = matchedGarage.name;
+    }
+    if (matchedGarage?.location) {
+      vendorLocation = matchedGarage.location;
     }
   } catch {
     // Keep original vendor name
   }
 
-  const etaMinutes = calculateRecoveryEta('Dubai', true);
+  const etaMinutes = calculateRecoveryEta(vendorLocation || breakdownLocation, true);
   const now = new Date();
 
   const dispatchDetails = {
@@ -376,20 +402,21 @@ export async function dispatchTowingVendor(
     etaMinutes,
     trackingStatus: 'DISPATCHED_EN_ROUTE',
     dispatchedBy: params.actorEmail || 'Dispatcher',
+    breakdownNotes: params.breakdownNotes ?? null,
   };
 
   const historyEntry = {
     status: 'In Progress',
     date: now.toISOString(),
     actor: params.actorEmail || 'Fleet Dispatcher',
-    note: `1-Click Recovery Dispatched: Assigned to ${params.vendorName}. Flatbed ETA: ${etaMinutes} mins.`,
+    note: `1-Click Recovery Dispatched: Assigned to ${resolvedVendorName}. Flatbed ETA: ${etaMinutes} mins.`,
   };
 
   await prisma.$executeRawUnsafe(
     `UPDATE service_tickets
      SET status = 'In Progress',
-         custom_fields = custom_fields || jsonb_build_object('towingDispatch', $2::jsonb),
-         history = history || $3::jsonb,
+         custom_fields = COALESCE(custom_fields, '{}'::jsonb) || jsonb_build_object('towingDispatch', $2::jsonb),
+         history = COALESCE(history, '[]'::jsonb) || $3::jsonb,
          updated_at = NOW()
      WHERE id = $1::uuid AND tenant_id = $4`,
     params.ticketId,
@@ -398,10 +425,42 @@ export async function dispatchTowingVendor(
     params.tenantId
   );
 
+  // 3. Create a dispatch_jobs record so towing recovery appears on the unified Dispatch Board
+  let dispatchJobId: string | undefined;
+  try {
+    await ensureDispatchSchema();
+    const [dj] = await prisma.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO dispatch_jobs (
+        tenant_id, booking_id, service_type, priority, status,
+        origin_address, metadata, meta
+      ) VALUES (
+        $1, $2, 'TECHNICIAN', 'URGENT', 'ACCEPTED',
+        $3, $4::jsonb, $4::jsonb
+      )
+      RETURNING id
+    `,
+      params.tenantId,
+      params.ticketId,
+      breakdownLocation,
+      JSON.stringify({
+        ticketId: params.ticketId,
+        vehicleId: ticket.vehicle_id,
+        vendorId: params.vendorId,
+        vendorName: resolvedVendorName,
+        etaMinutes,
+        breakdownNotes: params.breakdownNotes ?? null,
+      }),
+    );
+    dispatchJobId = dj?.id;
+  } catch {
+    // Non-fatal if dispatch_jobs insert fails
+  }
+
   return {
     ok: true,
     etaMinutes,
-    dispatchMessage: `Recovery flatbed dispatched to ${params.vendorName}. Driver ETA: ${etaMinutes} minutes.`,
+    dispatchJobId,
+    dispatchMessage: `Recovery flatbed dispatched to ${resolvedVendorName}. Driver ETA: ${etaMinutes} minutes.`,
   };
 }
 
@@ -417,15 +476,10 @@ export async function provisionReplacementVehicle(
   domainAction?: string;
   reassignedTripsCount?: number;
   reassignedBookingsCount?: number;
-  /** True when bus trips moved to the replacement: their earlier pre-trip
-   *  inspection was of the broken vehicle and does not count for it. */
   preTripInspectionRequired?: boolean;
 }> {
   const now = new Date();
 
-  // 1. Fetch Replacement Vehicle — it must be available right now. Lock
-  //    the row so two dispatchers cannot hand the same spare to two
-  //    breakdowns.
   await prisma.$queryRawUnsafe(
     `SELECT id FROM vehicles WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`,
     params.replacementVehicleId,
@@ -458,24 +512,14 @@ export async function provisionReplacementVehicle(
 
   // 3. Ground the broken vehicle if linked and execute domain-specific adapters
   if (ticket?.vehicle_id) {
-    // The broken vehicle cannot replace itself: it would be grounded, then
-    // handed its own trips and bookings, then set back in service below.
     if (ticket.vehicle_id === replacementVehicle.id) {
       throw new Error('Replacement vehicle cannot be the vehicle the ticket is for');
     }
-    // Fetch grounded vehicle metadata
     const groundedVehicle = await prisma.vehicle.findFirst({
       where: { id: ticket.vehicle_id, tenantId: params.tenantId },
       select: { id: true, licensePlate: true, vehicleUsage: true, vehicleGroup: true },
     });
 
-    // P0 Safety: Ground the broken vehicle. No .catch anywhere below: this
-    // runs on the request's RLS transaction, where a caught failure leaves
-    // the transaction aborted and the COMMIT silently rolls everything back
-    // while the dispatcher is told the swap succeeded.
-    // A vehicle already GROUNDED (critical DVIR defect, expired documents)
-    // keeps that status: overwriting it with MAINTENANCE would drop it out
-    // of the grounding checks that decide when it may be released.
     await prisma.vehicle.updateMany({
       where: {
         id: ticket.vehicle_id,
@@ -512,11 +556,7 @@ export async function provisionReplacementVehicle(
     }
 
     // --- Domain Adapter 2: Staff Transport / Bus Operations ---
-    // Do NOT modify past trips or the master schedule; reassign only upcoming scheduled trips
     const upcomingTrips = await upcomingScheduledTrips(params.tenantId, ticket.vehicle_id, now);
-    // The replacement stays AVAILABLE for Bus Ops, so the row lock above
-    // only guards concurrent swaps until commit: refuse a replacement that
-    // already runs a trip overlapping the ones it is about to take over.
     const conflicts = (await overlappingTripsByVehicle(params.tenantId, [replacementVehicle.id], upcomingTrips))
       .get(replacementVehicle.id);
     if (conflicts?.length) {
@@ -542,10 +582,6 @@ export async function provisionReplacementVehicle(
       reassignedTripsCount = tripUpdate.count;
       if (domainAction === 'GENERAL_FLEET_SWAP') {
         domainAction = 'STAFF_TRANSPORT_TRIPS_REASSIGNED';
-        // Bus Ops holds a vehicle through its trip assignments, and its
-        // dispatch validation refuses RESERVED / RENTED vehicles — so a
-        // replacement marked RESERVED could not run the very trips it was
-        // given. It stays AVAILABLE; the reassigned trips are its booking.
         replacementStatus = 'AVAILABLE';
       }
     }
@@ -610,9 +646,6 @@ export async function provisionReplacementVehicle(
 
   let domainSummary = 'Active lease contract billing continuity maintained.';
   if (domainAction === 'STAFF_TRANSPORT_TRIPS_REASSIGNED') {
-    // The pre-trip inspection on file was for the broken-down vehicle and
-    // does not carry over (inspectionAllowsDeparture matches on vehicle):
-    // the replacement must be inspected before each reassigned trip departs.
     domainSummary = `Reassigned ${reassignedTripsCount} upcoming staff/bus trip(s). A new pre-trip inspection of the replacement is required before departure.`;
   } else if (domainAction === 'RENTAL_BOOKING_REASSIGNED') {
     domainSummary = `Reassigned ${reassignedBookingsCount} active rental booking(s).`;

@@ -40,13 +40,15 @@ export async function GET(req: NextRequest) {
 
       // ── Pull live actuals from module tables ───────────────────────────────────
       type NumRow = { total: number | null };
+      type GroupRow = { key: string; total: number | null };
       const zero = () => Promise.resolve([{ total: 0 }] as NumRow[]);
 
       const [
         maintenanceActual, fuelActual, leasingActual, staffActual, schoolActual,
         rentalActual, logisticsActual, insuranceActual,
+        payableActuals, invoiceRevenueByCentre,
       ] = await Promise.all([
-        // Maintenance: approved quotations
+        // Maintenance: approved quotations + maintenance payables
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0) AS total FROM maintenance_requests
            WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('COMPLETED','IN_PROGRESS')
@@ -69,8 +71,7 @@ export async function GET(req: NextRequest) {
            WHERE tenant_id::text = $3 AND deleted_at IS NULL AND status = 'COMPLETED'
              AND departure_time::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
-        // School bus: its trips live in school_bus_trips (trip_schedules has
-        // no trip type)
+        // School bus: its trips live in school_bus_trips
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(COUNT(*) * 30,0) AS total FROM school_bus_trips
            WHERE tenant_id = $3 AND status = 'COMPLETED'
@@ -88,19 +89,51 @@ export async function GET(req: NextRequest) {
            WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
              AND created_at::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
-        // Insurance: from compliance documents (use static zero if table missing)
         zero(),
+        // AP Payables actuals by module / cost_centre
+        tx.$queryRawUnsafe<GroupRow[]>(
+          `SELECT COALESCE(module, cost_centre, 'GENERAL') AS key,
+                  COALESCE(SUM(total_amount), 0) AS total
+             FROM finance_payables
+            WHERE tenant_id = $3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID')
+              AND issue_date BETWEEN $1::date AND $2::date
+            GROUP BY COALESCE(module, cost_centre, 'GENERAL')`,
+          startDate, endDate, tenantId
+        ).catch(() => [] as GroupRow[]),
+        // Invoice revenue actuals matched on i.cost_centre = b.cost_centre OR ('PC-' || i.module) = b.cost_centre OR i.module = b.cost_centre
+        tx.$queryRawUnsafe<GroupRow[]>(
+          `SELECT COALESCE(i.cost_centre, i.module, 'GENERAL') AS key,
+                  COALESCE(SUM(i.subtotal), 0) AS total
+             FROM finance_invoices i
+            WHERE i.tenant_id = $3 AND i.deleted_at IS NULL AND i.payment_status NOT IN ('DRAFT','CANCELLED','VOID')
+              AND i.issue_date BETWEEN $1::date AND $2::date
+            GROUP BY COALESCE(i.cost_centre, i.module, 'GENERAL')`,
+          startDate, endDate, tenantId
+        ).catch(() => [] as GroupRow[]),
       ]);
 
+      const payableByModule: Record<string, number> = {};
+      for (const p of payableActuals) {
+        const k = String(p.key ?? 'GENERAL').toUpperCase();
+        payableByModule[k] = (payableByModule[k] ?? 0) + Number(p.total ?? 0);
+      }
+
+      const revenueByCentre: Record<string, number> = {};
+      for (const r of invoiceRevenueByCentre) {
+        const k = String(r.key ?? 'GENERAL').toUpperCase();
+        revenueByCentre[k] = (revenueByCentre[k] ?? 0) + Number(r.total ?? 0);
+        revenueByCentre[`PC-${k}`] = (revenueByCentre[`PC-${k}`] ?? 0) + Number(r.total ?? 0);
+      }
+
       const liveActuals: Record<string, number> = {
-        MAINTENANCE:     Math.round(Number(maintenanceActual[0]?.total ?? 0) * 100) / 100,
-        FUEL:            Math.round(Number(fuelActual[0]?.total         ?? 0) * 100) / 100,
-        LEASING:         Math.round(Number(leasingActual[0]?.total      ?? 0) * 100) / 100,
-        STAFF_TRANSPORT: Math.round(Number(staffActual[0]?.total        ?? 0) * 100) / 100,
-        SCHOOL_BUS:      Math.round(Number(schoolActual[0]?.total       ?? 0) * 100) / 100,
-        RAC:             Math.round(Number(rentalActual[0]?.total        ?? 0) * 100) / 100,
-        LOGISTICS:       Math.round(Number(logisticsActual[0]?.total     ?? 0) * 100) / 100,
-        INSURANCE:       Math.round(Number(insuranceActual[0]?.total     ?? 0) * 100) / 100,
+        MAINTENANCE:     Math.round((Number(maintenanceActual[0]?.total ?? 0) + (payableByModule['MAINTENANCE'] ?? 0)) * 100) / 100,
+        FUEL:            Math.round((Number(fuelActual[0]?.total         ?? 0) + (payableByModule['FUEL'] ?? 0)) * 100) / 100,
+        LEASING:         Math.round((Number(leasingActual[0]?.total      ?? 0) + (payableByModule['LEASING'] ?? 0) + (revenueByCentre['LEASING'] ?? 0)) * 100) / 100,
+        STAFF_TRANSPORT: Math.round((Number(staffActual[0]?.total        ?? 0) + (payableByModule['STAFF_TRANSPORT'] ?? 0)) * 100) / 100,
+        SCHOOL_BUS:      Math.round((Number(schoolActual[0]?.total       ?? 0) + (payableByModule['SCHOOL_BUS'] ?? 0)) * 100) / 100,
+        RAC:             Math.round((Number(rentalActual[0]?.total        ?? 0) + (payableByModule['RAC'] ?? 0) + (revenueByCentre['RAC'] ?? 0)) * 100) / 100,
+        LOGISTICS:       Math.round((Number(logisticsActual[0]?.total     ?? 0) + (payableByModule['LOGISTICS'] ?? 0) + (revenueByCentre['LOGISTICS'] ?? 0)) * 100) / 100,
+        INSURANCE:       Math.round((Number(insuranceActual[0]?.total     ?? 0) + (payableByModule['INSURANCE'] ?? 0)) * 100) / 100,
       };
 
       // ── Budget entries ─────────────────────────────────────────────────────────
@@ -111,7 +144,12 @@ export async function GET(req: NextRequest) {
 
       // Merge live actuals into budget rows
       const enriched = budgets.map(b => {
-        const actual    = liveActuals[b.category] ?? Number(b.actualAmount ?? 0);
+        const catKey = String(b.category ?? '').toUpperCase();
+        const actual =
+          liveActuals[catKey] ??
+          payableByModule[catKey] ??
+          revenueByCentre[catKey] ??
+          Number(b.actualAmount ?? 0);
         const budget    = Number(b.budgetAmount);
         const variance  = actual - budget;
         const variancePct = budget > 0 ? Math.round((variance / budget) * 100) : 0;
@@ -127,7 +165,7 @@ export async function GET(req: NextRequest) {
           isOverBudget: variance > 0,
           utilizationPct: budget > 0 ? Math.min(100, Math.round((actual / budget) * 100)) : 0,
           notes:        b.notes,
-          source:       liveActuals[b.category] != null ? 'LIVE' : 'MANUAL',
+          source:       (liveActuals[catKey] != null || payableByModule[catKey] != null || revenueByCentre[catKey] != null) ? 'LIVE' : 'MANUAL',
         };
       });
 
@@ -158,24 +196,23 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const budget = await tx.financeBudget.create({
-          data: {
-            tenantId,
-            category:     body.category,
-            year:         body.year ?? new Date().getFullYear(),
-            month:        body.month ?? null,
-            budgetAmount: body.budgetAmount ?? 0,
-            actualAmount: 0,
-            notes:        body.notes ?? null,
-          },
-        });
-        return NextResponse.json(budget, { status: 201 });
-        } catch (err) {
-        console.error('[finance/budgets POST]', err);
-        return NextResponse.json({ error: 'Failed to create budget' }, { status: 500 });
-      }
+      const budget = await tx.financeBudget.create({
+        data: {
+          tenantId,
+          category:     body.category,
+          year:         body.year ?? new Date().getFullYear(),
+          month:        body.month ?? null,
+          budgetAmount: body.budgetAmount ?? 0,
+          actualAmount: 0,
+          notes:        body.notes ?? null,
+        },
+      });
+      return NextResponse.json(budget, { status: 201 });
+    } catch (err) {
+      console.error('[finance/budgets POST]', err);
+      return NextResponse.json({ error: 'Failed to create budget' }, { status: 500 });
+    }
   });
 }
-

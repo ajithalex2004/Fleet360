@@ -97,11 +97,11 @@ export async function loadDriverActor(
   if (driver.status && driver.status !== 'ACTIVE') return null;
 
   const trips = await tx.$queryRawUnsafe<Array<{ id: string; vehicle_id: string | null; plate: string | null }>>(
-    `SELECT ts.id, ts.vehicle_id, v.license_plate AS plate
+    `SELECT ts.id::text AS id, ts.vehicle_id::text AS vehicle_id, v.license_plate AS plate
        FROM trip_schedules ts
-       LEFT JOIN vehicles v ON v.id = ts.vehicle_id AND v.tenant_id = ts.tenant_id
-      WHERE ts.tenant_id = $1::uuid
-        AND ts.driver_id IN ($2::text, $3::text)
+       LEFT JOIN vehicles v ON v.id::text = ts.vehicle_id::text AND v.tenant_id::text = ts.tenant_id::text
+      WHERE ts.tenant_id::text = $1::text
+        AND ts.driver_id::text IN ($2::text, $3::text)
         AND ts.status = 'IN_PROGRESS'
       ORDER BY ts.actual_departure_at DESC NULLS LAST
       LIMIT 1`,
@@ -112,10 +112,10 @@ export async function loadDriverActor(
   const trip = trips[0];
 
   const shifts = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null; plate: string | null }>>(
-    `SELECT s.vehicle_id, v.license_plate AS plate
+    `SELECT s.vehicle_id::text AS vehicle_id, v.license_plate AS plate
        FROM shifts s
-       LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.tenant_id = s.tenant_id
-      WHERE s.tenant_id = $1::uuid
+       LEFT JOIN vehicles v ON v.id::text = s.vehicle_id::text AND v.tenant_id::text = s.tenant_id::text
+      WHERE s.tenant_id::text = $1::text
         AND s.driver_id::text IN ($2::text, $3::text)
         AND s.status = 'ACTIVE'
       ORDER BY s.started_at DESC
@@ -124,7 +124,37 @@ export async function loadDriverActor(
     userId,
     driver.id,
   );
-  const shift = shifts[0];
+  let shift = shifts[0];
+
+  // Fallback for Logistics / Drayage drivers who bind to a tractor via /api/driver-app/auth/vehicle-login
+  // (which sets vehicles.assigned_driver_id = driver.id) or have assigned_vehicle_id on their driver profile.
+  if (!shift?.vehicle_id) {
+    const assignedVehicles = await tx
+      .$queryRawUnsafe<Array<{ vehicle_id: string; plate: string | null }>>(
+        `SELECT v.id::text AS vehicle_id, COALESCE(v.license_plate, v.vehicle_code) AS plate
+           FROM vehicles v
+          WHERE v.tenant_id = $1
+            AND v.deleted_at IS NULL
+            AND (
+              v.assigned_driver_id IN ($2::text, $3::text)
+              OR v.id::text = (
+                SELECT d.assigned_vehicle_id::text
+                  FROM drivers d
+                 WHERE d.tenant_id = $1 AND d.id = $3
+                 LIMIT 1
+              )
+            )
+          ORDER BY (v.assigned_driver_id IN ($2::text, $3::text)) DESC, v.updated_at DESC
+          LIMIT 1`,
+        tenantId,
+        userId,
+        driver.id,
+      )
+      .catch(() => []);
+    if (assignedVehicles[0]?.vehicle_id) {
+      shift = assignedVehicles[0];
+    }
+  }
 
   return {
     tenantId,

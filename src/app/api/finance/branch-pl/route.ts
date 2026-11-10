@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET /api/finance/branch-pl
  * Branch-level P&L segmented by cost center / emirate
@@ -14,14 +14,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  *   startDate  — YYYY-MM-DD (default: first day of current month)
  *   endDate    — YYYY-MM-DD (default: today)
  */
-
-type Row = Record<string, unknown>;
-
-function fmtDate(v: unknown): string | null {
-  if (!v) return null;
-  if (v instanceof Date) return v.toISOString().split('T')[0];
-  return String(v).split('T')[0];
-}
 
 function num(v: unknown): number {
   return v === null || v === undefined ? 0 : parseFloat(String(v));
@@ -38,9 +30,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   const branchId = new URL(req.url).searchParams.get('branchId') ?? '';
-  // Bound as a parameter below. It was interpolated into the SQL text
-  // unvalidated, so any caller with finance access could run arbitrary SQL in
-  // their tenant transaction (including resetting app.tenant_id).
   if (branchId && !UUID_RE.test(branchId)) {
     return NextResponse.json({ error: 'branchId must be a UUID' }, { status: 400 });
   }
@@ -65,10 +54,6 @@ export async function GET(req: NextRequest) {
         invoice_count: bigint;
       };
 
-      // One branch, or every branch: filters the branch row itself (b), in
-      // both queries. It filtered i.branch_id, an alias the expenses query
-      // doesn't have — that query failed, the failure was swallowed, and
-      // branch expenses always read 0.
       const branchParam = branchId || null;
 
       const revenueByBranch = await tx.$queryRawUnsafe<RevRow[]>(
@@ -86,8 +71,9 @@ export async function GET(req: NextRequest) {
          FROM tenant_branches b
          LEFT JOIN finance_invoices i
            ON i.branch_id = b.id
+           AND i.tenant_id = b.tenant_id
            AND i.deleted_at IS NULL
-           AND i.payment_status != 'DRAFT'
+           AND i.payment_status NOT IN ('DRAFT','CANCELLED','VOID')
            AND i.issue_date BETWEEN $1::date AND $2::date
          WHERE b.tenant_id = $3
            AND b.deleted_at IS NULL
@@ -104,8 +90,6 @@ export async function GET(req: NextRequest) {
         vat_collected: string | number;
         invoice_count: bigint;
       };
-      // Only for all branches: with one branch selected, these invoices are
-      // not that branch's, and they were added to its rows and totals.
       const unassigned = branchParam ? [] as NoBranchRow[] : await tx.$queryRawUnsafe<NoBranchRow[]>(
         `SELECT
            COALESCE(SUM(total_amount), 0) AS total_invoiced,
@@ -116,12 +100,12 @@ export async function GET(req: NextRequest) {
          WHERE tenant_id = $1
            AND branch_id IS NULL
            AND deleted_at IS NULL
-           AND payment_status != 'DRAFT'
+           AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')
            AND issue_date BETWEEN $2::date AND $3::date`,
         tenantId, startDate, endDate
       );
 
-      // ── Expenses by branch (from finance_expenses if table exists) ───────────
+      // ── Expenses by branch (from finance_expenses + finance_payables) ────────
       type ExpRow = {
         branch_id: string | null;
         branch_name: string | null;
@@ -137,6 +121,7 @@ export async function GET(req: NextRequest) {
          FROM tenant_branches b
          LEFT JOIN finance_expenses e
            ON e.branch_id = b.id
+           AND e.tenant_id = b.tenant_id
            AND e.deleted_at IS NULL
            AND e.expense_date BETWEEN $1::date AND $2::date
          WHERE b.tenant_id = $3
@@ -146,6 +131,38 @@ export async function GET(req: NextRequest) {
          ORDER BY total_expenses DESC`,
         startDate, endDate, tenantId, branchParam
       );
+
+      type PayBranchRow = {
+        branch_id: string | null;
+        total_payables: string | number;
+      };
+      const payablesByBranch = await tx.$queryRawUnsafe<PayBranchRow[]>(
+        `SELECT
+           pb.id AS branch_id,
+           COALESCE(SUM(p.subtotal), 0) AS total_payables
+         FROM tenant_branches pb
+         LEFT JOIN finance_payables p
+           ON (p.branch = pb.branch_name OR p.branch = pb.emirate OR p.cost_centre = pb.cost_center_code)
+           AND p.tenant_id = pb.tenant_id
+           AND p.deleted_at IS NULL
+           AND p.status IN ('APPROVED', 'POSTED')
+           AND p.issue_date BETWEEN $1::date AND $2::date
+         WHERE pb.tenant_id = $3
+           AND pb.deleted_at IS NULL
+           AND ($4::uuid IS NULL OR pb.id = $4::uuid)
+         GROUP BY pb.id`,
+        startDate, endDate, tenantId, branchParam
+      ).catch(() => [] as PayBranchRow[]);
+
+      const [unassignedPayables] = branchParam ? [{ total: 0 }] : await tx.$queryRawUnsafe<Array<{ total: string | number }>>(
+        `SELECT COALESCE(SUM(subtotal), 0) AS total
+           FROM finance_payables
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND status IN ('APPROVED', 'POSTED')
+            AND branch IS NULL
+            AND issue_date BETWEEN $2::date AND $3::date`,
+        tenantId, startDate, endDate
+      ).catch(() => [{ total: 0 }]);
 
       // ── Tenant info ──────────────────────────────────────────────────────────
       type TenantRow = { name: string; trn?: string; code?: string };
@@ -158,6 +175,9 @@ export async function GET(req: NextRequest) {
       const expMap: Record<string, number> = {};
       for (const e of expensesByBranch) {
         if (e.branch_id) expMap[String(e.branch_id)] = num(e.total_expenses);
+      }
+      for (const p of payablesByBranch) {
+        if (p.branch_id) expMap[String(p.branch_id)] = (expMap[String(p.branch_id)] ?? 0) + num(p.total_payables);
       }
 
       const branches = revenueByBranch.map(r => {
@@ -184,8 +204,10 @@ export async function GET(req: NextRequest) {
 
       // Unassigned row
       const ua = unassigned[0];
-      if (ua && num(ua.total_invoiced) > 0) {
-        const revenue  = num(ua.total_invoiced);
+      const uaExp = num(unassignedPayables?.total ?? 0);
+      if ((ua && num(ua.total_invoiced) > 0) || uaExp > 0) {
+        const revenue  = num(ua?.total_invoiced ?? 0);
+        const grossProfit = revenue - uaExp;
         branches.push({
           branch_id: null,
           branch_name: 'Unassigned (No Branch)',
@@ -193,13 +215,13 @@ export async function GET(req: NextRequest) {
           cost_center_code: null,
           trade_license_no: null,
           revenue:       Math.round(revenue * 100) / 100,
-          paid:          Math.round(num(ua.total_paid) * 100) / 100,
-          outstanding:   Math.round((revenue - num(ua.total_paid)) * 100) / 100,
-          vat_collected: Math.round(num(ua.vat_collected) * 100) / 100,
-          invoice_count: Number(ua.invoice_count),
-          expenses:      0,
-          gross_profit:  Math.round(revenue * 100) / 100,
-          margin_pct:    100,
+          paid:          Math.round(num(ua?.total_paid ?? 0) * 100) / 100,
+          outstanding:   Math.round((revenue - num(ua?.total_paid ?? 0)) * 100) / 100,
+          vat_collected: Math.round(num(ua?.vat_collected ?? 0) * 100) / 100,
+          invoice_count: Number(ua?.invoice_count ?? 0),
+          expenses:      Math.round(uaExp * 100) / 100,
+          gross_profit:  Math.round(grossProfit * 100) / 100,
+          margin_pct:    revenue > 0 ? Math.round((grossProfit / revenue) * 10000) / 100 : 0,
         });
       }
 

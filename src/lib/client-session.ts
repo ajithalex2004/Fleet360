@@ -3,6 +3,7 @@
 const CLIENT_SESSION_KEYS = [
   'xl_mobility_session',
   'xl_mobility_session_snapshot',
+  'xl_mobility_session_snapshot_v2',
   'xl_backend_token',
 ];
 
@@ -74,15 +75,14 @@ export function setClientSession(userId: string, tenantId: string, backendToken?
 
 export function setClientSessionSnapshot(snapshot: ClientSessionSnapshot) {
   try {
-    localStorage.setItem(
-      'xl_mobility_session_snapshot',
-      JSON.stringify({
-        user: snapshot.user,
-        tenant: snapshot.tenant,
-        permissions: snapshot.permissions ?? [],
-        ts: Date.now(),
-      }),
-    );
+    const serialized = JSON.stringify({
+      user: snapshot.user,
+      tenant: snapshot.tenant,
+      permissions: snapshot.permissions ?? [],
+      ts: Date.now(),
+    });
+    localStorage.setItem('xl_mobility_session_snapshot', serialized);
+    localStorage.setItem('xl_mobility_session_snapshot_v2', serialized);
     window.dispatchEvent(new CustomEvent('fleet360:session-updated', { detail: snapshot }));
   } catch {
     /* ignore storage access failures */

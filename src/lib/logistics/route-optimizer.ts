@@ -162,22 +162,35 @@ export function optimizeRoutes(input: SolverInput): RouteOptimizerResult {
   const maxCapKg = Math.max(...vehicles.map(v => v.capacityKg));
   const maxCapCbm = Math.max(...vehicles.map(v => v.capacityCbm));
   const maxDriveMin = Math.max(...vehicles.map(v => v.maxDriveMin));
+  const depotDepart = input.depotDepartMin ?? Math.min(...vehicles.map(v => v.shiftStartMin));
   const shipmentById = new Map(shipments.map(s => [s.shipmentId, s]));
 
-  // 2) Clarke-Wright savings merges. HOS-aware: a merge that would push the
-  //    route past even the most generous driver's drive-time limit is
-  //    rejected, so the solver spreads load across vehicles instead of
-  //    cramming one truck into a 14-hour day.
-  routes = clarkeWrightMerge(routes, distances, durations, shipmentById, maxCapKg, maxCapCbm, maxDriveMin);
+  // 2) Clarke-Wright savings merges. HOS- and time-window-aware: a merge that
+  //    would push the route past even the most generous driver's drive-time
+  //    limit or introduce new time-window violations is rejected, so the solver
+  //    spreads load across vehicles instead of cramming one truck into a
+  //    14-hour day or missing customer delivery windows.
+  routes = clarkeWrightMerge(
+    routes,
+    distances,
+    durations,
+    shipmentById,
+    maxCapKg,
+    maxCapCbm,
+    maxDriveMin,
+    depotDepart,
+  );
 
-  // 3) 2-opt improvement within each route.
-  routes = routes.map(r => ({ ...r, stops: twoOptImprove(r.stops, distances) }));
+  // 3) 2-opt improvement within each route (respecting PD order and time windows).
+  routes = routes.map(r => ({
+    ...r,
+    stops: twoOptImprove(r.stops, distances, durations, depotDepart),
+  }));
 
   // 4) Assign routes to vehicles (largest demand → largest vehicle first).
   const { assigned, unassignedShipmentIds } = assignVehicles(routes, vehicles, shipmentById);
 
   // 5) Build the output with timing + violation analysis.
-  const depotDepart = input.depotDepartMin ?? Math.min(...vehicles.map(v => v.shiftStartMin));
   const solvedRoutes = assigned.map(a =>
     buildSolvedRoute(a.route, a.vehicle, distances, durations, shipmentById, depotDepart),
   );
@@ -203,6 +216,7 @@ function clarkeWrightMerge(
   maxCapKg: number,
   maxCapCbm: number,
   maxDriveMin: number,
+  depotDepartMin: number,
 ): InternalRoute[] {
   // Savings are computed between the LAST stop of route a and the FIRST stop
   // of route b: saving = d(last_a, depot) + d(depot, first_b) - d(last_a, first_b).
@@ -238,6 +252,13 @@ function clarkeWrightMerge(
       const mergedStops = [...a.stops, ...b.stops];
       if (!routeFeasibleCapacity(mergedStops, shipmentById, maxCapKg, maxCapCbm)) continue;
       if (!pickupBeforeDelivery(mergedStops)) continue;
+      // Time-window ceiling: reject merges that introduce new time-window violations.
+      const beforeTwViolations =
+        countTimeWindowViolations(a.stops, durations, depotDepartMin) +
+        countTimeWindowViolations(b.stops, durations, depotDepartMin);
+      if (countTimeWindowViolations(mergedStops, durations, depotDepartMin) > beforeTwViolations) {
+        continue;
+      }
       // HOS ceiling: reject merges that would exceed the most generous
       // driver's drive-time budget. Keeps the solver from collapsing
       // everything onto one truck when spreading across idle vehicles
@@ -260,10 +281,18 @@ function clarkeWrightMerge(
 
 // ── 2-opt ───────────────────────────────────────────────────────────────────
 
-function twoOptImprove(stops: SolverStop[], distances: number[][]): SolverStop[] {
+function twoOptImprove(
+  stops: SolverStop[],
+  distances: number[][],
+  durations?: number[][],
+  depotDepartMin = 480,
+): SolverStop[] {
   if (stops.length < 4) return stops;
   let best = [...stops];
   let bestDist = routeDistance(best, distances);
+  let bestTwViolations = durations
+    ? countTimeWindowViolations(best, durations, depotDepartMin)
+    : 0;
   let improved = true;
 
   while (improved) {
@@ -272,10 +301,18 @@ function twoOptImprove(stops: SolverStop[], distances: number[][]): SolverStop[]
       for (let k = i + 1; k < best.length; k++) {
         const candidate = twoOptSwap(best, i, k);
         if (!pickupBeforeDelivery(candidate)) continue; // never break PD order
+        const candTwViolations = durations
+          ? countTimeWindowViolations(candidate, durations, depotDepartMin)
+          : 0;
+        if (candTwViolations > bestTwViolations) continue; // never introduce time-window violations
         const d = routeDistance(candidate, distances);
-        if (d < bestDist - 1e-9) {
+        if (
+          candTwViolations < bestTwViolations ||
+          (candTwViolations === bestTwViolations && d < bestDist - 1e-9)
+        ) {
           best = candidate;
           bestDist = d;
+          bestTwViolations = candTwViolations;
           improved = true;
         }
       }
@@ -310,6 +347,36 @@ export function pickupBeforeDelivery(stops: SolverStop[]): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Count stops that arrive after their windowToMin when starting from depot at
+ * depotDepartMin (waiting at stops if arriving before windowFromMin).
+ */
+export function countTimeWindowViolations(
+  stops: SolverStop[],
+  durations: number[][],
+  depotDepartMin: number,
+): number {
+  let prevIndex = DEPOT;
+  let clockMin = depotDepartMin;
+  let violations = 0;
+
+  for (const stop of stops) {
+    clockMin += durations[prevIndex]?.[stop.matrixIndex] ?? 0;
+    let arriveMin = clockMin;
+    if (stop.windowFromMin != null && arriveMin < stop.windowFromMin) {
+      arriveMin = stop.windowFromMin;
+      clockMin = stop.windowFromMin;
+    }
+    if (stop.windowToMin != null && arriveMin > stop.windowToMin) {
+      violations++;
+    }
+    clockMin = arriveMin + stop.serviceDurationMin;
+    prevIndex = stop.matrixIndex;
+  }
+
+  return violations;
 }
 
 /**

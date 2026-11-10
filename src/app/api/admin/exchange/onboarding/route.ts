@@ -14,8 +14,9 @@ export const runtime = 'nodejs';
  * GET /api/admin/exchange/onboarding
  *
  * The transport partners the caller's company onboarded, with their
- * activation stage and document checklist summary, for /admin/partner-
- * onboarding. Tenant administrators see their own tenant's partners;
+ * activation stage, document checklist summary, fleet/driver counts,
+ * and scorecard tier for /admin/partner-onboarding.
+ * Tenant administrators see their own tenant's partners;
  * platform administrators see every partner.
  */
 export async function GET(req: NextRequest) {
@@ -33,7 +34,8 @@ export async function GET(req: NextRequest) {
         onboardingStatus: true, operationalStatus: true, onboardedByTenantId: true, createdAt: true, approvedAt: true,
         capabilities: { select: { domain: true } },
         complianceDocuments: { select: { docType: true, docNumber: true, expiryDate: true, status: true } },
-        _count: { select: { users: true } },
+        scorecard: { select: { tier: true, compositeScore: true } },
+        _count: { select: { users: true, vehicles: true, drivers: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
   const { partners, tenantName } = run.value;
 
   return NextResponse.json({
-    partners: partners.map(({ capabilities, complianceDocuments, _count, ...p }) => {
+    partners: partners.map(({ capabilities = [], complianceDocuments = [], scorecard = null, _count, ...p }) => {
       const domains = [...new Set(capabilities.map((c) => c.domain as string))];
       const checklist = onboardingChecklist({ domains, emirate: emirateOf(p) }, complianceDocuments);
       return {
@@ -56,7 +58,11 @@ export async function GET(req: NextRequest) {
         domains,
         onboardingLabel: onboardingStatusLabel(p.onboardingStatus),
         onboardedByTenantName: p.onboardedByTenantId ? tenantName.get(p.onboardedByTenantId) ?? null : null,
-        memberCount: _count.users,
+        memberCount: _count?.users ?? 0,
+        vehicleCount: _count?.vehicles ?? 0,
+        driverCount: _count?.drivers ?? 0,
+        scorecardTier: scorecard?.tier ?? null,
+        compositeScore: scorecard?.compositeScore ?? null,
         required: checklist.items.length,
         approved: checklist.items.filter((i) => i.status === 'VALID' || i.status === 'EXPIRING').length,
         awaitingReview: complianceDocuments.filter((d) => d.status === 'PENDING').length,

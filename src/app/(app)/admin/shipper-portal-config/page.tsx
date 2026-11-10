@@ -17,7 +17,6 @@ import {
   Search, AlertCircle, CheckCircle2, Clock,
 } from 'lucide-react';
 import { TrackingVisibilityModal } from '@/components/TrackingVisibilityModal';
-import { usePermissions } from '@/contexts/PermissionContext';
 import type { TrackingLevel } from '@/lib/shipper-portal/visibility';
 
 interface CustomerRow {
@@ -142,7 +141,7 @@ export default function ShipperPortalConfigPage() {
             Manage portal access and tracking visibility per customer. Per-shipment overrides live on each shipment&apos;s detail page.
           </p>
         </div>
-        <SeedDemoButton onSeeded={() => void load()} />
+
         <button onClick={() => void load()}
           className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
           <RefreshCw className="w-4 h-4" />
@@ -298,77 +297,6 @@ export default function ShipperPortalConfigPage() {
           onInvited={() => { setInviting(null); void load(); }} />
       )}
     </div>
-  );
-}
-
-// ── Seed-demo button (dev/QA convenience) ─────────────────────────────
-// It writes a demo customer and shipments into the tenant's real data, so
-// only the platform super admin sees it.
-
-function SeedDemoButton({ onSeeded }: { onSeeded: () => void }) {
-  const { user } = usePermissions();
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ setupUrl: string; shipments: number } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  if (user?.roleCode !== 'SUPER_ADMIN') return null;
-
-  const seed = async () => {
-    setBusy(true); setErr(null);
-    try {
-      const res = await fetch('/api/admin/shipper-portal/seed-demo', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) { setErr(data?.error ?? 'Seed failed'); return; }
-      setResult({ setupUrl: data.setupUrl, shipments: (data.shipmentsCreated ?? []).length });
-      onSeeded();
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <>
-      <button onClick={seed} disabled={busy}
-        title="Create a demo customer + portal user + sample shipments"
-        className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-50">
-        <Settings className="w-3.5 h-3.5" /> {busy ? 'Seeding…' : 'Seed demo'}
-      </button>
-      {(result || err) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => { setResult(null); setErr(null); }}>
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3"
-            onClick={e => e.stopPropagation()}>
-            {err ? (
-              <>
-                <p className="text-sm font-bold text-rose-300 inline-flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" /> Seed failed
-                </p>
-                <p className="text-xs text-[var(--text-muted)]">{err}</p>
-              </>
-            ) : result && (
-              <>
-                <p className="text-sm font-bold text-[var(--text-main)] inline-flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" /> Demo data created
-                </p>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Created a demo customer, a portal user, and {result.shipments} sample shipments.
-                  Open the setup link in an incognito window to log in as the shipper.
-                </p>
-                <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Setup link</p>
-                  <input readOnly value={result.setupUrl}
-                    onClick={e => (e.target as HTMLInputElement).select()}
-                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </>
-            )}
-            <div className="flex justify-end">
-              <button onClick={() => { setResult(null); setErr(null); }}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 

@@ -26,7 +26,7 @@ vi.mock('@/lib/logistics/drayage-domain', async (importOriginal) => {
   };
 });
 
-const { generateDrayageCustomerTrackingToken } = await import('@/lib/logistics/drayage-domain');
+const { generateDrayageCustomerTrackingToken, generateDrayageShortTrackingToken } = await import('@/lib/logistics/drayage-domain');
 const { GET, POST } = await import('@/app/api/driver-app/customer-tracking/route');
 
 function req(url: string, body?: unknown) {
@@ -52,6 +52,12 @@ describe('drayage customer tracking link', () => {
     expect((await GET(req(`http://localhost/api/driver-app/customer-tracking?token=trk_${other}.${sig}`))).status).toBe(401);
 
     expect((await GET(req(`http://localhost/api/driver-app/customer-tracking?token=${encodeURIComponent(token)}`))).status).toBe(200);
+
+    // Compact short token also works and rejects tampered signatures.
+    const shortToken = generateDrayageShortTrackingToken({ tenantId: 'tenant-a', jobCode: 'DRY-1', containerNumber: 'MSCU1234567', role: 'CUSTOMER' });
+    expect(shortToken.length).toBeLessThan(30);
+    expect((await GET(req(`http://localhost/api/driver-app/customer-tracking?token=${encodeURIComponent(shortToken)}`))).status).toBe(200);
+    expect((await GET(req('http://localhost/api/driver-app/customer-tracking?token=c-DRY-1-00000000'))).status).toBe(401);
   });
 
   it('does not send alerts to recipients the caller did not give', async () => {

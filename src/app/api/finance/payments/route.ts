@@ -3,24 +3,19 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { resetInvoiceDunningOnSettlement } from '@/lib/finance/module-ledger';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
  * GET  /api/finance/payments — list payments with invoice reconciliation data
  * POST /api/finance/payments — record a payment and reconcile against finance_invoices
- *
- * finance_payments and finance_invoices are managed by Prisma migrations:
- *   - 20260810000001_finance_extended_columns
- * Runtime CREATE TABLE / ALTER TABLE removed — schema is authoritative.
  */
 
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
-
     return NextResponse.json({ error: authz.error }, { status: authz.status });
-
   }
 
   const { tenantId } = authz;
@@ -32,14 +27,12 @@ export async function GET(req: NextRequest) {
   const limit     = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
   const offset    = (page - 1) * limit;
 
-  // tenant scoping is the mandatory first condition
-  const conditions: string[] = ['i.tenant_id = $1'];
+  // tenant scoping on p.tenant_id so unlinked payments (p.invoice_id IS NULL) are included
+  const conditions: string[] = ['p.tenant_id = $1'];
   const values: unknown[]    = [tenantId];
 
   if (invoiceId) {
     values.push(invoiceId);
-    // ::uuid — finance_payments.invoice_id is uuid and the bound value is a
-    // JS string, which Postgres rejects with 42883 rather than coercing.
     conditions.push(`p.invoice_id = $${values.length}::uuid`);
   }
   if (q) {
@@ -54,8 +47,6 @@ export async function GET(req: NextRequest) {
   type SumRow = { total_paid: number | null; count: bigint };
 
   const { rows, countRows, summary } = await withTenantRls(prisma, tenantId, async (tx) => {
-    // Sequential, not Promise.all: inside the transaction these share a single
-    // connection, which Prisma will not multiplex.
     const rows = await tx.$queryRawUnsafe<PayRow[]>(
       `SELECT p.id, p.invoice_id, p.amount, p.payment_date, p.payment_method,
               p.reference, p.notes, p.created_at,
@@ -76,13 +67,6 @@ export async function GET(req: NextRequest) {
       ...values
     );
 
-    // Summary stats scoped to tenant via invoice join.
-    //
-    // This keeps its original zero-fallback, but a bare .catch() is not enough
-    // once the query runs inside a transaction: a failed statement aborts the
-    // whole tx, so the fallback would be returned and the commit would then
-    // fail anyway. The savepoint is what keeps the rollback local to this one
-    // statement.
     await tx.$executeRawUnsafe('SAVEPOINT summary_q');
     let summary: SumRow | undefined;
     try {
@@ -90,7 +74,7 @@ export async function GET(req: NextRequest) {
         `SELECT COALESCE(SUM(p.amount), 0) AS total_paid, COUNT(*) AS count
            FROM finance_payments p
            LEFT JOIN finance_invoices i ON i.id = p.invoice_id
-          WHERE i.tenant_id = $1`,
+          WHERE p.tenant_id = $1`,
         tenantId
       );
       await tx.$executeRawUnsafe('RELEASE SAVEPOINT summary_q');
@@ -125,9 +109,7 @@ export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
-
     return NextResponse.json({ error: authz.error }, { status: authz.status });
-
   }
 
   const { tenantId } = authz;
@@ -143,15 +125,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
 
-    // Insert + reconcile now share one transaction. They always should have:
-    // the payment row and the invoice's paid_amount/payment_status must move
-    // together, and previously a failure between them left the payment
-    // recorded against an invoice that still showed nothing paid.
-    //
-    // The ownership check returns a sentinel rather than a NextResponse so the
-    // transaction is not held open across response construction.
     const outcome = await withTenantRls(prisma, tenantId, async (tx) => {
-      // Verify the invoice belongs to this tenant before accepting payment
       if (invoiceId) {
         type OwnRow = { id: string };
         const [owned] = await tx.$queryRawUnsafe<OwnRow[]>(
@@ -162,15 +136,6 @@ export async function POST(req: NextRequest) {
         if (!owned) return { notFound: true as const };
       }
 
-      // Insert payment.
-      //
-      // tenant_id is supplied explicitly. Until 20260910000005 this INSERT had
-      // no tenant column to fill: `finance_payments` resolved to a shadow copy
-      // in `public` that had none, while the correctly tenant-isolated table
-      // sat unreachable in the `finance` schema behind it on search_path. The
-      // shadow is gone, so this now writes to the protected table — and would
-      // fail with 23502 rather than silently landing untenanted if it did not
-      // pass a tenant.
       type InsRow = { id: string };
       const [row] = await tx.$queryRawUnsafe<InsRow[]>(
         `INSERT INTO finance_payments (tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
@@ -184,11 +149,6 @@ export async function POST(req: NextRequest) {
         tenantId
       );
 
-      // Reconcile against the invoice through an allocation: the trigger on
-      // finance_payment_allocations sets the invoice's paid_amount (sum of its
-      // allocations) and payment_status. This added the payment to
-      // paid_amount directly, writing no allocation, and the next allocation
-      // on the invoice — which recomputes from allocations only — erased it.
       let newStatus: string | null = null;
       if (invoiceId) {
         await tx.$executeRawUnsafe(
@@ -199,11 +159,68 @@ export async function POST(req: NextRequest) {
           paymentDate ?? new Date().toISOString().split('T')[0],
           'Payment recorded against the invoice', req.headers.get('x-user-id'), tenantId,
         );
-        const [inv] = await tx.$queryRawUnsafe<Array<{ payment_status: string }>>(
-          `SELECT payment_status FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2`,
+        const [inv] = await tx.$queryRawUnsafe<Array<{
+          payment_status: string;
+          paid_amount: number | string | null;
+          total_amount: number | string | null;
+          module_source: string | null;
+          reference_type: string | null;
+          reference_id: string | null;
+        }>>(
+          `SELECT payment_status, paid_amount, total_amount, module_source, reference_type, reference_id::text
+             FROM finance_invoices
+            WHERE id = $1::uuid AND tenant_id = $2`,
           invoiceId, tenantId,
         );
         newStatus = inv?.payment_status ?? null;
+
+        const paidAmt = Number(inv?.paid_amount ?? amount);
+        const leaseInvId = String(inv?.reference_id || invoiceId);
+
+        // Propagate settlement to LeaseInvoice & reset dunning
+        if (newStatus === 'PAID') {
+          await resetInvoiceDunningOnSettlement(tx, tenantId, leaseInvId, 'finance-payment').catch(() => {});
+
+          if ((inv?.reference_type === 'LEASE_INVOICE' || inv?.module_source === 'LEASING') && inv?.reference_id) {
+            await tx.$executeRawUnsafe('SAVEPOINT sync_lease_inv');
+            try {
+              await tx.$executeRawUnsafe(
+                `UPDATE lease_invoices
+                    SET status = 'PAID', paid_at = NOW(), current_dunning_stage = 'SETTLED', updated_at = NOW()
+                  WHERE id = $1 AND tenant_id = $2`,
+                inv.reference_id, tenantId,
+              );
+              await tx.$executeRawUnsafe(
+                `UPDATE lease_dunning_notices
+                    SET dispatch_status = 'SUPPRESSED', updated_at = NOW()
+                  WHERE invoice_id = $1 AND tenant_id = $2 AND dispatch_status IN ('PENDING', 'FAILED')`,
+                inv.reference_id, tenantId,
+              );
+              await tx.$executeRawUnsafe('RELEASE SAVEPOINT sync_lease_inv');
+            } catch {
+              await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sync_lease_inv');
+            }
+          }
+        }
+
+        // Propagate payment to RentalInvoice
+        if ((inv?.reference_type === 'RENTAL_INVOICE' || inv?.module_source === 'RENTAL') && inv?.reference_id) {
+          await tx.$executeRawUnsafe('SAVEPOINT sync_rental_inv');
+          try {
+            await tx.$executeRawUnsafe(
+              `UPDATE rental_invoices
+                  SET paid_amount = $1::numeric,
+                      balance_due = GREATEST(0, total_amount - $1::numeric),
+                      status = CASE WHEN $1::numeric >= total_amount THEN 'PAID' ELSE 'PARTIALLY_PAID' END,
+                      updated_at = NOW()
+                WHERE id = $2 AND tenant_id = $3`,
+              paidAmt, inv.reference_id, tenantId,
+            );
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT sync_rental_inv');
+          } catch {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sync_rental_inv');
+          }
+        }
       }
 
       return { notFound: false as const, id: row.id, newStatus };
@@ -214,7 +231,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, id: outcome.id, newInvoiceStatus: outcome.newStatus }, { status: 201 });
-    } catch (err) {
+  } catch (err) {
     console.error('[finance/payments POST]', err);
     return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 });
   }

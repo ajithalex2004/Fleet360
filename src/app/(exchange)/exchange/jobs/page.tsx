@@ -1,8 +1,13 @@
 /**
  * src/app/(exchange)/exchange/jobs/page.tsx
  *
- * Jobs & Outsourced Trips Management for Transport Partners.
- * Handles Requests, Quote Submissions, Awards, Vehicle/Driver Assignments, and Driver Execution Links.
+ * Phase 4 & Phase 15: Jobs & Outsourced Trips Management for Transport Partners.
+ * Handles:
+ * - Requests, Quote Submissions & Revisions (Rev N+1)
+ * - Structured RFQ Decline (OutsourceDeclineReason — FUNC-3)
+ * - Awards with Frozen SHA-256 Rate-Card Snapshots & Agency/Principal Commercial Terms
+ * - 4-Step Driver Milestone & Live GPS Telemetry Tracker + 1-Click ePOD PDF Download (FUNC-2)
+ * - Vehicle/Driver Assignments with Stage-2 serviceDate Compliance Readiness Guard (FUNC-2)
  */
 
 'use client';
@@ -15,7 +20,14 @@ import {
   Copy,
   ExternalLink,
   Send,
+  Hash,
+  ShieldCheck,
+  Zap,
   X,
+  Download,
+  Navigation,
+  AlertTriangle,
+  Ban,
 } from 'lucide-react';
 
 interface PartnerQuoteRow {
@@ -42,10 +54,9 @@ interface OutsourceRequestRow {
   requiredCapacity: number;
   vehicleTypeRequired?: string | null;
   specialInstructions?: string | null;
-  // OutsourceRequest itself has no closesAt column — it lives on the related
-  // MarketplaceOpportunity (only present once the request has been published).
   opportunity?: { closesAt?: string | null } | null;
   quotes?: PartnerQuoteRow[];
+  invitedPartners?: Array<{ status: string; declineReason?: string | null }>;
 }
 
 interface PartnerAssignmentRow {
@@ -53,10 +64,26 @@ interface PartnerAssignmentRow {
   vehiclePlate?: string | null;
   driverName?: string | null;
   driverPhone?: string | null;
+  isTokenRevoked?: boolean | null;
+  reachedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  lastLat?: number | null;
+  lastLng?: number | null;
   pod?: {
     passengerCount?: number | null;
     signedByName?: string | null;
+    sealNumber?: string | null;
+    deliveredWeightKg?: number | null;
+    damageConditionNotes?: string | null;
   } | null;
+  events?: Array<{
+    id: string;
+    eventType: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    createdAt: string;
+  }>;
 }
 
 interface OutsourceAwardRow {
@@ -64,6 +91,7 @@ interface OutsourceAwardRow {
   status: string;
   totalAwarded: number | string;
   partnerId: string;
+  commercialSnapshot?: Record<string, any> | null;
   request?: OutsourceRequestRow | null;
   assignment?: PartnerAssignmentRow | null;
 }
@@ -72,13 +100,26 @@ interface PartnerVehicleRow {
   id: string;
   licensePlate: string;
   vehicleType: string;
+  mulkiyaExpiry?: string | null;
 }
 
 interface PartnerDriverRow {
   id: string;
   fullName: string;
   mobileNumber: string;
+  licenseExpiry?: string | null;
+  permitExpiry?: string | null;
 }
+
+const DECLINE_REASONS: Array<{ code: string; label: string }> = [
+  { code: 'NO_VEHICLE', label: 'No suitable vehicle available for requested date/time' },
+  { code: 'NO_DRIVER', label: 'No qualified driver available for shift' },
+  { code: 'AREA_NOT_SUPPORTED', label: 'Pickup or drop-off zone outside operating coverage' },
+  { code: 'TIMING_NOT_POSSIBLE', label: 'Lead time or schedule window cannot be met' },
+  { code: 'PRICE_NOT_VIABLE', label: 'Target tariff / commercial terms not viable' },
+  { code: 'COMPLIANCE_RESTRICTION', label: 'Special permit or zone pass restriction' },
+  { code: 'OTHER', label: 'Other operational reason' },
+];
 
 export default function ExchangeJobsPage() {
   const [activeTab, setActiveTab] = useState<'REQUESTS' | 'AWARDS'>('REQUESTS');
@@ -90,9 +131,24 @@ export default function ExchangeJobsPage() {
 
   // Modals state
   const [selectedRequestForQuote, setSelectedRequestForQuote] = useState<OutsourceRequestRow | null>(null);
+  const [selectedRequestForDecline, setSelectedRequestForDecline] = useState<OutsourceRequestRow | null>(null);
   const [selectedAwardForAssign, setSelectedAwardForAssign] = useState<OutsourceAwardRow | null>(null);
   const [generatedDriverLink, setGeneratedDriverLink] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [liveSyncEnabled, setLiveSyncEnabled] = useState(true);
+  const [lastLiveSyncAt, setLastLiveSyncAt] = useState<string | null>(null);
+
+  const emitExchangeEvent = (type: string) => {
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('fleet360-exchange-live');
+        bc.postMessage({ type, source: 'exchange-jobs', timestamp: Date.now() });
+        bc.close();
+      }
+    } catch {
+      // Ignore if BroadcastChannel is unavailable
+    }
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -118,6 +174,33 @@ export default function ExchangeJobsPage() {
     void loadAll();
   }, []);
 
+  // ARCH-5: Cross-Portal Live Sync (BroadcastChannel + 10s Live Driver Telemetry & Award Stream)
+  useEffect(() => {
+    if (!liveSyncEnabled) return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('fleet360-exchange-live');
+        bc.onmessage = () => {
+          setLastLiveSyncAt(new Date().toLocaleTimeString('en-AE'));
+          void loadAll();
+        };
+      }
+    } catch {
+      // Fallback
+    }
+
+    const timer = setInterval(() => {
+      setLastLiveSyncAt(new Date().toLocaleTimeString('en-AE'));
+      void loadAll();
+    }, 10_000);
+
+    return () => {
+      clearInterval(timer);
+      if (bc) bc.close();
+    };
+  }, [liveSyncEnabled]);
+
   const showToast = (msg: string) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(null), 4000);
@@ -130,32 +213,55 @@ export default function ExchangeJobsPage() {
         <div>
           <h1 className="text-xl font-black text-white">Jobs & Outsourced Trips</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Review invitations, submit quotations, assign resources, and monitor driver milestone execution.
+            Review invitations, submit or revise quotations, inspect frozen SHA-256 rate-card snapshots, assign resources, and monitor 4-step driver telemetry.
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-2xl">
+        {/* Tab Switcher + Live Sync */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab('REQUESTS')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-              activeTab === 'REQUESTS'
-                ? 'bg-cyan-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
+            type="button"
+            onClick={() => setLiveSyncEnabled((v) => !v)}
+            title={
+              liveSyncEnabled
+                ? `Live Driver Telemetry & Award Stream Active${lastLiveSyncAt ? ` (Last sync: ${lastLiveSyncAt})` : ''}`
+                : 'Click to resume Live Driver Telemetry & Award Stream'
+            }
+            className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition ${
+              liveSyncEnabled
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400'
             }`}
           >
-            📥 Open Requests ({requests.length})
+            <span
+              className={`w-2 h-2 rounded-full ${
+                liveSyncEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+              }`}
+            />
+            <span>{liveSyncEnabled ? 'LIVE 10s' : 'PAUSED'}</span>
           </button>
-          <button
-            onClick={() => setActiveTab('AWARDS')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-              activeTab === 'AWARDS'
-                ? 'bg-cyan-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            🏆 Awarded Jobs ({awards.length})
-          </button>
+          <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-2xl">
+            <button
+              onClick={() => setActiveTab('REQUESTS')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                activeTab === 'REQUESTS'
+                  ? 'bg-cyan-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              📥 Open Requests ({requests.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('AWARDS')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                activeTab === 'AWARDS'
+                  ? 'bg-cyan-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🏆 Awarded Jobs ({awards.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -167,8 +273,7 @@ export default function ExchangeJobsPage() {
         </div>
       )}
 
-      {/* Driver Execution Link — shown once, right when it's generated, since the raw
-          token is only ever returned by the assign endpoint and can't be retrieved later. */}
+      {/* Driver Execution Link */}
       {generatedDriverLink && (
         <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 text-xs space-y-2">
           <div className="flex items-center justify-between">
@@ -221,15 +326,20 @@ export default function ExchangeJobsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {requests.map((r) => {
                 const existingQuote = r.quotes?.[0];
+                const inviteRow = r.invitedPartners?.[0];
+                const isDeclined = inviteRow?.status === 'DECLINED';
                 return (
                   <div
                     key={r.id}
                     className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition space-y-3"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-cyan-400 font-bold text-xs">{r.requestNumber}</span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                          {r.domain || 'PASSENGER_TRANSPORT'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700 font-bold">
                           {r.pricingMethod}
                         </span>
                       </div>
@@ -251,7 +361,7 @@ export default function ExchangeJobsPage() {
                       <div className="text-slate-400 flex items-center gap-4 text-[11px]">
                         <span>📅 {new Date(r.serviceDate).toLocaleDateString()}</span>
                         <span>⏰ {r.pickupTime}</span>
-                        <span>👥 Capacity: {r.requiredCapacity} seats</span>
+                        <span>👥 Capacity: {r.requiredCapacity}</span>
                       </div>
                       {r.specialInstructions && (
                         <div className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 mt-2">
@@ -260,8 +370,13 @@ export default function ExchangeJobsPage() {
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                      {existingQuote ? (
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+                      {isDeclined ? (
+                        <span className="text-xs text-rose-400 font-semibold flex items-center gap-1">
+                          <Ban className="w-3.5 h-3.5" />
+                          <span>Declined ({inviteRow?.declineReason || 'DECLINED'})</span>
+                        </span>
+                      ) : existingQuote ? (
                         <div className="text-xs">
                           <span className="text-slate-400">Your Quote (Rev {existingQuote.revisionNo}): </span>
                           <span className="font-bold text-emerald-400">AED {Number(existingQuote.totalAmount).toFixed(2)}</span>
@@ -270,12 +385,24 @@ export default function ExchangeJobsPage() {
                         <span className="text-xs text-amber-400 font-semibold">Awaiting Quotation</span>
                       )}
 
-                      <button
-                        onClick={() => setSelectedRequestForQuote(r)}
-                        className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow transition active:scale-95"
-                      >
-                        {existingQuote ? 'Revise Quote' : 'Submit Quote'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {!existingQuote && !isDeclined && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequestForDecline(r)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-300 font-bold text-xs border border-slate-700 transition"
+                          >
+                            Decline RFQ
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRequestForQuote(r)}
+                          className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow transition active:scale-95"
+                        >
+                          {existingQuote ? `Revise Quote (Rev ${(existingQuote.revisionNo || 1) + 1})` : 'Submit Quote'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -302,6 +429,26 @@ export default function ExchangeJobsPage() {
               {awards.map((a) => {
                 const assignment = a.assignment;
                 const pod = assignment?.pod;
+                const snap = (a.commercialSnapshot || {}) as Record<string, any>;
+                const rcSnap = (snap.rateCardSnapshot || {}) as Record<string, any>;
+                const ancillary = (rcSnap.ancillaryCharges || {}) as Record<string, any>;
+                const commercialModel = snap.commercialModel || 'AGENCY';
+                const snapshotHash = rcSnap.snapshotHash || snap.snapshotHash || null;
+                const isFailoverPromoted = Boolean(snap.failoverPromotedAt || snap.failoverHistory);
+
+                // Phase 15 (FUNC-2): 4-Step Milestone & Live GPS Telemetry
+                const latestGpsEvent = (assignment?.events || []).find(
+                  (ev) => ev.latitude != null && ev.longitude != null
+                );
+                const liveLat = assignment?.lastLat ?? latestGpsEvent?.latitude ?? null;
+                const liveLng = assignment?.lastLng ?? latestGpsEvent?.longitude ?? null;
+                const steps = [
+                  { label: '1. Assigned', done: Boolean(assignment?.vehiclePlate) },
+                  { label: '2. Reached Pickup', done: Boolean(assignment?.reachedAt) },
+                  { label: '3. Trip Started', done: Boolean(assignment?.startedAt) },
+                  { label: '4. Completed & ePOD', done: Boolean(assignment?.completedAt || pod || a.status === 'COMPLETED') },
+                ];
+
                 return (
                   <div
                     key={a.id}
@@ -309,11 +456,24 @@ export default function ExchangeJobsPage() {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-emerald-400 font-bold text-xs">{a.request?.requestNumber || a.id.slice(0, 8)}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-emerald-400 font-bold text-xs">
+                            {a.request?.requestNumber || a.id.slice(0, 8)}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                            {a.request?.domain || 'PASSENGER_TRANSPORT'}
+                          </span>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
                             {a.status}
                           </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold">
+                            {commercialModel} MODEL
+                          </span>
+                          {isFailoverPromoted && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1">
+                              <Zap className="w-3 h-3" /> Standby Failover Promoted
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm font-bold text-white mt-1">
                           {a.request?.pickupLocation} → {a.request?.dropoffLocation}
@@ -323,6 +483,59 @@ export default function ExchangeJobsPage() {
                       <div className="text-right">
                         <div className="text-xs text-slate-400">Awarded Commercials</div>
                         <div className="text-base font-black text-white">AED {Number(a.totalAwarded).toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    {/* Frozen SHA-256 Rate-Card Snapshot & Ancillary Terms Banner */}
+                    <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center gap-2 text-slate-300">
+                        <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <span>
+                          <strong>Frozen Commercial Terms:</strong> Free Wait{' '}
+                          <span className="text-white font-mono">{ancillary.freeWaitingMinutes ?? 30}m</span> · Detention{' '}
+                          <span className="text-white font-mono">AED {ancillary.waitingFeePerHour ?? 100}/hr</span> · SLA Cancel Penalty{' '}
+                          <span className="text-amber-400 font-mono">{ancillary.cancellationFeePct ?? 25}%</span>
+                        </span>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[10px] text-cyan-400 shrink-0">
+                        <Hash className="w-3 h-3" />
+                        {snapshotHash ? `v${rcSnap.version ?? 1} · SHA-256 ${String(snapshotHash).slice(0, 12)}…` : 'v1 · IMMUTABLE SNAPSHOT'}
+                      </span>
+                    </div>
+
+                    {/* Phase 15 (FUNC-2): 4-Step Driver Execution Milestone Bar & Live GPS Coordinate Pill */}
+                    <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-[11px] font-bold text-slate-300">
+                          4-Step Execution Milestones & Live Telemetry
+                        </span>
+                        {liveLat != null && liveLng != null ? (
+                          <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                            <Navigation className="w-3 h-3 text-cyan-400" />
+                            <span>
+                              GPS {Number(liveLat).toFixed(4)}, {Number(liveLng).toFixed(4)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-500">
+                            GPS updates upon driver magic-link check-in
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {steps.map((st) => (
+                          <div
+                            key={st.label}
+                            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 ${
+                              st.done
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-slate-900 text-slate-500 border-slate-800'
+                            }`}
+                          >
+                            <CheckCircle2 className={`w-3.5 h-3.5 ${st.done ? 'text-emerald-400' : 'text-slate-600'}`} />
+                            <span>{st.label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -344,10 +557,11 @@ export default function ExchangeJobsPage() {
 
                       <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 flex flex-col justify-between">
                         <span className="text-slate-400 text-[11px] block">Driver Execution Link</span>
-                        {assignment ? (
-                          // The raw driver token is one-time-only (see the reveal banner
-                          // above right after assignment) — only its hash is ever stored,
-                          // so it can't be recovered or re-copied from here afterward.
+                        {assignment?.isTokenRevoked ? (
+                          <span className="text-[11px] text-rose-400 mt-1 font-bold">
+                            ⛔ Driver Token Revoked (Compliance / Failover)
+                          </span>
+                        ) : assignment ? (
                           <span className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
                             <Send className="w-3 h-3" />
                             Delivered to driver via WhatsApp/SMS
@@ -360,17 +574,38 @@ export default function ExchangeJobsPage() {
 
                     {/* Milestones & POD Summary */}
                     {pod && (
-                      <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-xs flex items-center justify-between">
+                      <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-xs flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2 text-emerald-300 font-semibold">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>POD Submitted by Driver (Passengers on Board: {pod.passengerCount || 'N/A'})</span>
+                          <span>
+                            ePOD Verified (
+                            {pod.passengerCount != null
+                              ? `Passengers: ${pod.passengerCount}`
+                              : pod.deliveredWeightKg != null
+                              ? `Delivered Weight: ${pod.deliveredWeightKg} kg`
+                              : pod.sealNumber
+                              ? `Seal: ${pod.sealNumber}`
+                              : 'Multi-Vertical ePOD Captured'}
+                            )
+                          </span>
                         </div>
                         <span className="text-[11px] text-slate-400">Signed by: {pod.signedByName || 'Site Lead'}</span>
                       </div>
                     )}
 
                     {/* Action Bar */}
-                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-800/60">
+                    <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-800/60 flex-wrap">
+                      {(pod || assignment?.completedAt || a.status === 'COMPLETED') && (
+                        <a
+                          href={`/api/exchange/awards/${a.id}/epod-pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-bold text-xs border border-emerald-500/30 inline-flex items-center gap-1.5 transition"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download ePOD PDF</span>
+                        </a>
+                      )}
                       <button
                         onClick={() => setSelectedAwardForAssign(a)}
                         className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition"
@@ -395,10 +630,29 @@ export default function ExchangeJobsPage() {
         <SubmitQuoteModal
           request={selectedRequestForQuote}
           onClose={() => setSelectedRequestForQuote(null)}
-          onSubmitted={() => {
+          onSubmitted={(revNo) => {
             setSelectedRequestForQuote(null);
-            showToast('✓ Quotation submitted successfully!');
+            showToast(
+              revNo && revNo > 1
+                ? `✓ Quote revised to Rev ${revNo} successfully!`
+                : '✓ Quotation submitted successfully!'
+            );
             void loadAll();
+            emitExchangeEvent(revNo && revNo > 1 ? 'QUOTE_REVISED' : 'QUOTE_SUBMITTED');
+          }}
+        />
+      )}
+
+      {/* ── MODAL 1B: DECLINE RFQ INVITATION (FUNC-3) ── */}
+      {selectedRequestForDecline && (
+        <DeclineRequestModal
+          request={selectedRequestForDecline}
+          onClose={() => setSelectedRequestForDecline(null)}
+          onDeclined={() => {
+            setSelectedRequestForDecline(null);
+            showToast('✓ RFQ invitation declined with structured operational reason.');
+            void loadAll();
+            emitExchangeEvent('RFQ_DECLINED');
           }}
         />
       )}
@@ -415,6 +669,7 @@ export default function ExchangeJobsPage() {
             setGeneratedDriverLink(link);
             showToast('✓ Vehicle and Driver assigned! Driver execution link generated.');
             void loadAll();
+            emitExchangeEvent('DRIVER_ASSIGNED');
           }}
         />
       )}
@@ -422,7 +677,7 @@ export default function ExchangeJobsPage() {
   );
 }
 
-// ── SUBMIT QUOTE MODAL COMPONENT ──────────────────────────────────────────
+// ── SUBMIT / REVISE QUOTE MODAL COMPONENT ──────────────────────────────────
 
 function SubmitQuoteModal({
   request,
@@ -431,10 +686,13 @@ function SubmitQuoteModal({
 }: {
   request: OutsourceRequestRow;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (revisionNo?: number) => void;
 }) {
-  const [amount, setAmount] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
+  const existingQuote = request.quotes?.[0];
+  const [amount, setAmount] = useState<string>(
+    existingQuote?.amount != null ? String(Number(existingQuote.amount)) : ''
+  );
+  const [notes, setNotes] = useState<string>(existingQuote?.notes || '');
   const [submitting, setSubmitting] = useState(false);
 
   const subtotal = Number(amount) || 0;
@@ -451,6 +709,8 @@ function SubmitQuoteModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: existingQuote ? 'REVISE' : 'SUBMIT',
+          quoteId: existingQuote?.id,
           requestId: request.id,
           amount: subtotal,
           vatAmount: vat,
@@ -462,7 +722,8 @@ function SubmitQuoteModal({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to submit quote');
       }
-      onSubmitted();
+      const data = await res.json().catch(() => ({}));
+      onSubmitted(data?.quote?.revisionNo);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error submitting quote');
     } finally {
@@ -475,7 +736,11 @@ function SubmitQuoteModal({
       <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-xs">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
-            <h3 className="text-sm font-bold text-white">Commercial Quotation</h3>
+            <h3 className="text-sm font-bold text-white">
+              {existingQuote
+                ? `Revise Commercial Quotation (Rev ${(existingQuote.revisionNo || 1) + 1})`
+                : 'Commercial Quotation'}
+            </h3>
             <p className="text-[11px] text-slate-400">Request: {request.requestNumber}</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
@@ -539,7 +804,11 @@ function SubmitQuoteModal({
               disabled={submitting || !subtotal}
               className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition disabled:opacity-50"
             >
-              {submitting ? 'Submitting...' : 'Submit Quote'}
+              {submitting
+                ? 'Submitting...'
+                : existingQuote
+                ? `Submit Rev ${(existingQuote.revisionNo || 1) + 1}`
+                : 'Submit Quote'}
             </button>
           </div>
         </form>
@@ -548,7 +817,106 @@ function SubmitQuoteModal({
   );
 }
 
-// ── ASSIGN DRIVER & VEHICLE MODAL COMPONENT ───────────────────────────────
+// ── DECLINE RFQ MODAL COMPONENT (FUNC-3) ──────────────────────────────────
+
+function DeclineRequestModal({
+  request,
+  onClose,
+  onDeclined,
+}: {
+  request: OutsourceRequestRow;
+  onClose: () => void;
+  onDeclined: () => void;
+}) {
+  const [declineReason, setDeclineReason] = useState<string>('NO_VEHICLE');
+  const [declineNotes, setDeclineNotes] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/exchange/jobs/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DECLINE',
+          requestId: request.id,
+          declineReason,
+          declineNotes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to decline RFQ');
+      }
+      onDeclined();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error declining RFQ');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-xs">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-white">Decline Outsource Request</h3>
+            <p className="text-[11px] text-slate-400">Request: {request.requestNumber}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">Structured Decline Reason *</label>
+            <select
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+            >
+              {DECLINE_REASONS.map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">Operational Notes (Optional)</label>
+            <textarea
+              rows={2}
+              value={declineNotes}
+              onChange={(e) => setDeclineNotes(e.target.value)}
+              placeholder="e.g. All 50-seater coaches committed to Abu Dhabi shift at 06:00."
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition disabled:opacity-50"
+            >
+              {submitting ? 'Declining...' : 'Confirm Decline'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── ASSIGN DRIVER & VEHICLE MODAL COMPONENT (with Stage-2 serviceDate Guard) ──
 
 function AssignDriverModal({
   award,
@@ -570,6 +938,31 @@ function AssignDriverModal({
   const [driverName, setDriverName] = useState<string>(drivers[0]?.fullName || '');
   const [driverPhone, setDriverPhone] = useState<string>(drivers[0]?.mobileNumber || '+971501234567');
   const [submitting, setSubmitting] = useState(false);
+
+  const cutoffMs = award.request?.serviceDate
+    ? new Date(award.request.serviceDate).getTime()
+    : Date.now();
+
+  const isVehicleReadyForServiceDate = (v: PartnerVehicleRow): boolean => {
+    if (!v.mulkiyaExpiry) return true;
+    const ms = new Date(v.mulkiyaExpiry).getTime();
+    return Number.isNaN(ms) || ms >= cutoffMs;
+  };
+
+  const isDriverReadyForServiceDate = (d: PartnerDriverRow): boolean => {
+    const dates = [d.licenseExpiry, d.permitExpiry]
+      .filter(Boolean)
+      .map((iso) => new Date(iso as string).getTime())
+      .filter((ms) => !Number.isNaN(ms));
+    if (dates.length === 0) return true;
+    return Math.min(...dates) >= cutoffMs;
+  };
+
+  const selectedVehicleObj = vehicles.find((v) => v.licensePlate === vehiclePlate);
+  const selectedDriverObj = drivers.find((d) => d.fullName === driverName);
+  const hasStage2Blocker =
+    (selectedVehicleObj && !isVehicleReadyForServiceDate(selectedVehicleObj)) ||
+    (selectedDriverObj && !isDriverReadyForServiceDate(selectedDriverObj));
 
   const handleDriverSelect = (fullName: string) => {
     setDriverName(fullName);
@@ -595,7 +988,10 @@ function AssignDriverModal({
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to assign resources');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to assign resources');
+      }
       const json = await res.json();
       onAssigned(json.driverSecureUrl);
     } catch (err) {
@@ -611,12 +1007,27 @@ function AssignDriverModal({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-sm font-bold text-white">Assign Vehicle & Driver</h3>
-            <p className="text-[11px] text-slate-400">Generates instant zero-login driver execution link</p>
+            <p className="text-[11px] text-slate-400">
+              Stage-2 Pre-Dispatch Gate checked against serviceDate (
+              {award.request?.serviceDate
+                ? new Date(award.request.serviceDate).toLocaleDateString()
+                : 'Today'}
+              )
+            </p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {hasStage2Blocker && (
+          <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-[11px] flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <span>
+              <strong>Stage-2 Pre-Dispatch Gate Warning:</strong> The selected vehicle Mulkiya or driver permit expires before the scheduled trip <code>serviceDate</code> and will be rejected by the compliance guard.
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -628,11 +1039,14 @@ function AssignDriverModal({
                 onChange={(e) => setVehiclePlate(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono uppercase focus:outline-none focus:border-cyan-500"
               >
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.licensePlate}>
-                    {v.licensePlate} — {v.vehicleType}
-                  </option>
-                ))}
+                {vehicles.map((v) => {
+                  const ready = isVehicleReadyForServiceDate(v);
+                  return (
+                    <option key={v.id} value={v.licensePlate}>
+                      {v.licensePlate} — {v.vehicleType} {ready ? '[✓ STAGE-2 READY]' : '[⛔ MULKIYA EXPIRED BY SERVICE DATE]'}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <input
@@ -655,11 +1069,14 @@ function AssignDriverModal({
                 onChange={(e) => handleDriverSelect(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
               >
-                {drivers.map((d) => (
-                  <option key={d.id} value={d.fullName}>
-                    {d.fullName} ({d.mobileNumber})
-                  </option>
-                ))}
+                {drivers.map((d) => {
+                  const ready = isDriverReadyForServiceDate(d);
+                  return (
+                    <option key={d.id} value={d.fullName}>
+                      {d.fullName} ({d.mobileNumber}) {ready ? '[✓ STAGE-2 READY]' : '[⛔ PERMIT EXPIRED BY SERVICE DATE]'}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <input

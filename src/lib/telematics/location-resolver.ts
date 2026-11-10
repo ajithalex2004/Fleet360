@@ -121,8 +121,9 @@ export function resolveLocation(
   const validDate = isNaN(pingDate.getTime()) ? new Date() : pingDate;
 
   // Format date & time
-  const dateFormatted = validDate.toLocaleDateString('en-GB'); // "25/10/2026"
+  const dateFormatted = validDate.toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' }); // "05/11/2026"
   const timeFormatted = validDate.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Dubai',
     hour12: true,
     hour: '2-digit',
     minute: '2-digit',

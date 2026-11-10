@@ -81,15 +81,9 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    id: 'feature_flags', label: 'Feature Flags', icon: '⚡', color: 'amber',
+    id: 'feature_flags', label: 'Platform AI & Document Controls', icon: '⚡', color: 'amber',
     fields: [
-      { key: 'ff_whatsapp',        label: 'WhatsApp Integration',  description: 'Enable WhatsApp AI support bot',            type: 'toggle' },
-      { key: 'ff_esign',           label: 'E-Signing',             description: 'Enable digital e-signing for agreements',   type: 'toggle' },
-      { key: 'ff_predictive_maint',label: 'Predictive Maintenance',description: 'AI-powered maintenance predictions',        type: 'toggle' },
-      { key: 'ff_ai_dispatch',     label: 'AI Dispatch Optimizer', description: 'Machine learning dispatch routing',         type: 'toggle' },
-      { key: 'ff_customer_portal', label: 'Customer Portal',       description: 'Self-service customer tracking portal',     type: 'toggle' },
-      { key: 'ff_mobile_app',      label: 'Mobile App Access',     description: 'Allow mobile app logins',                   type: 'toggle' },
-      { key: 'ff_attachment_autofill', label: 'Attachment Autofill (AI)', description: 'Read document number and expiry date from tenant attachments (sends the document to OpenAI; never for UAE/EU-resident tenants)', type: 'toggle' },
+      { key: 'ff_attachment_autofill', label: 'Attachment Autofill (AI)', description: 'Read document number and expiry date from tenant attachments (sends the document to OpenAI; never for UAE/EU-resident tenants). Per-tenant module & feature flags are managed under Admin → Tenants → [Tenant] → Modules & Feature Flags.', type: 'toggle' },
     ],
   },
   {
@@ -341,7 +335,7 @@ function SettingSection({ section, settings, onChange }: {
             <p className="text-base font-semibold text-[var(--text-main)]">{section.label}</p>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.badge}`}>
-            {section.fields.length} settings
+            {section.fields.length} {section.fields.length === 1 ? 'setting' : 'settings'}
           </span>
         </div>
         <span className={`text-[var(--text-muted)] text-lg transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
@@ -472,11 +466,11 @@ export default function PlatformSettingsPage() {
               ))}
             </div>
 
-            {/* Danger Zone */}
+            {/* Account Security */}
             <div className="bg-red-950/30 border border-red-500/20 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-red-500/10 flex items-center gap-3">
                 <span className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg">⚠️</span>
-                <span className="text-base font-semibold text-[var(--text-main)]">Danger Zone</span>
+                <span className="text-base font-semibold text-[var(--text-main)]">Account Security</span>
               </div>
               <div className="p-5 space-y-4">
                 <div className="flex items-center justify-between py-2">
@@ -487,16 +481,6 @@ export default function PlatformSettingsPage() {
                   <button onClick={() => setShowPwModal(true)}
                     className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm hover:bg-red-500/30 transition-colors">
                     🔑 Change Password
-                  </button>
-                </div>
-                <div className="flex items-center justify-between py-2 border-t border-red-500/10">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--text-main)]">Reset All Settings</p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">Restore all platform settings to defaults</p>
-                  </div>
-                  <button onClick={() => { if (confirm('Reset all settings to defaults? This cannot be undone.')) load(); }}
-                    className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm hover:bg-red-500/30 transition-colors">
-                    ↺ Reset Defaults
                   </button>
                 </div>
               </div>

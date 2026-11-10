@@ -247,10 +247,11 @@ test('XMOD-14: Finance sub-modules all accessible in one session', async ({ page
     await page.goto(path, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(500);
 
-    // Should not be an error page
-    const content = await page.content();
-    const isServerError = content.includes('Application error') ||
-      (content.includes('500') && content.includes('Error'));
+    // Should not be an error page (check visible body text, not raw HTML Tailwind -500 classes)
+    const visibleText = await page.locator('body').innerText();
+    const isServerError = visibleText.includes('Application error') ||
+      visibleText.includes('MODULE NOT SUBSCRIBED') ||
+      (visibleText.includes('500') && visibleText.includes('Internal Server Error'));
     expect(isServerError).toBe(false);
 
     // Should not have been redirected to login

@@ -10,8 +10,8 @@ import {
 import { withAuditedAction } from '@/lib/audited-action';
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
     const { searchParams } = new URL(req.url);
@@ -40,11 +40,15 @@ export async function GET(req: NextRequest) {
 }
 
 async function handlePOST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
     const rawBody = await req.json();
+    const requestedTenantId =
+      typeof rawBody?.tenantId === 'string' && rawBody.tenantId.trim()
+        ? rawBody.tenantId.trim()
+        : auth.tenantId || 'tnt-exl-solutions';
     const body = stripTenantOwnershipFields(rawBody);
     const action = body?.action; // 'CREATE_CLIENT' | 'ADD_USER_TO_ROSTER' | 'DELETE_USER_FROM_ROSTER'
 
@@ -88,12 +92,12 @@ async function handlePOST(req: NextRequest) {
     const {
       clientName,
       emailDomain,
-      tenantId = 'tnt-exl-solutions',
       tenantName = 'EXL Solutions',
       costCenterCode,
       discountPercent = 10,
       creditLimitAed = 50000,
     } = body;
+    const tenantId = requestedTenantId;
 
     if (!clientName || !emailDomain || !costCenterCode) {
       return NextResponse.json({ error: 'Missing required client fields' }, { status: 400 });

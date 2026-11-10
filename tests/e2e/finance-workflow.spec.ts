@@ -109,24 +109,21 @@ test('FIN-03: Create new invoice with line items', async ({ page }) => {
 
   // Wait for modal — the invoice creation modal is a raw div.fixed.inset-0.z-50
   // (no <form>, no role="dialog", no data-testid)
-  await page.waitForSelector(
-    'h2:has-text("New Invoice"), input[placeholder="Client / Company"]',
-    { timeout: 10_000 }
-  );
+  const modal = page.locator('div.fixed.inset-0').filter({ hasText: /New.*Invoice/i }).first();
+  await expect(modal).toBeVisible({ timeout: 10_000 });
 
-  // Fill in client name — actual placeholder is "Client / Company", no name attr
-  await page.locator(
-    'input[placeholder="Client / Company"], input[placeholder*="client" i], ' +
-    'input[placeholder*="company" i], input[name="clientName"]'
+  // Fill in client name inside the modal (scoped to modal so we never match the page search bar)
+  await modal.locator(
+    'input[placeholder*="Client / Company"], input[name="clientName"]'
   ).first().fill('Acme Transport LLC');
 
   // Fill client email if present
-  await page.locator(
+  await modal.locator(
     'input[type="email"], input[placeholder*="email" i], input[name="clientEmail"]'
   ).first().fill('billing@acme-transport.ae').catch(() => {});
 
   // Select service type if visible
-  const serviceTypeSelect = page.locator(
+  const serviceTypeSelect = modal.locator(
     'select[name="serviceType"], select[name="service_type"], ' +
     'select[id*="service"]'
   ).first();
@@ -134,33 +131,47 @@ test('FIN-03: Create new invoice with line items', async ({ page }) => {
     await serviceTypeSelect.selectOption({ index: 1 }).catch(() => {});
   }
 
-  // Add line item — fill quantity and unit price
-  // Line item inputs use placeholder="Qty" and placeholder="Unit Price"
-  const qtyInput = page.locator(
-    'input[placeholder="Qty"], input[placeholder*="qty" i], input[placeholder*="quantity" i], ' +
-    'input[name*="qty"], input[name*="quantity"]'
-  ).first();
-  if (await qtyInput.count() > 0) {
-    await qtyInput.fill('1');
+  // Add line item — fill description, quantity, and unit price
+  const itemDescInput = modal.locator('input[placeholder="Item description"]').first();
+  if (await itemDescInput.count() > 0) {
+    await itemDescInput.fill('Fleet Lease Monthly Fee');
   }
 
-  const priceInput = page.locator(
-    'input[placeholder="Unit Price"], input[placeholder*="unit price" i], ' +
-    'input[placeholder*="price" i], input[name*="unitPrice"], input[name*="unit_price"]'
-  ).first();
-  if (await priceInput.count() > 0) {
-    await priceInput.fill(String(INVOICE_AMOUNT));
+  const lineNumberInputs = modal.locator('div.grid-cols-12 input[type="number"]');
+  if (await lineNumberInputs.count() >= 2) {
+    await lineNumberInputs.nth(0).fill('1');
+    await lineNumberInputs.nth(1).fill(String(INVOICE_AMOUNT));
+  } else {
+    const qtyInput = modal.locator(
+      'input[placeholder="Qty"], input[placeholder*="qty" i], input[placeholder*="quantity" i], ' +
+      'input[name*="qty"], input[name*="quantity"]'
+    ).first();
+    if (await qtyInput.count() > 0) {
+      await qtyInput.fill('1');
+    }
+
+    const priceInput = modal.locator(
+      'input[placeholder="Unit Price"], input[placeholder*="unit price" i], ' +
+      'input[placeholder*="price" i], input[name*="unitPrice"], input[name*="unit_price"]'
+    ).first();
+    if (await priceInput.count() > 0) {
+      await priceInput.fill(String(INVOICE_AMOUNT));
+    }
   }
 
-  // Set due date (30 days from now)
+  // Set due date (30 days from now — second date input after Issue Date)
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
   const dueDateStr = dueDate.toISOString().slice(0, 10);
-  await page.locator('input[type="date"][name*="due"], input[placeholder*="due" i], input[type="date"]')
-    .first().fill(dueDateStr).catch(() => {});
+  const dateInputs = modal.locator('input[type="date"]');
+  if (await dateInputs.count() >= 2) {
+    await dateInputs.nth(1).fill(dueDateStr).catch(() => {});
+  } else {
+    await dateInputs.first().fill(dueDateStr).catch(() => {});
+  }
 
-  // Submit — actual button text is "Create Invoice" (disabled until required fields filled)
-  await page.locator('button:has-text("Create Invoice"), button:has-text("Creating")').first().click();
+  // Submit — actual button text is "Create Invoice" inside the modal
+  await modal.locator('button:has-text("Create Invoice"), button:has-text("Creating")').first().click();
 
   await waitForSettle(page, 20_000);
 

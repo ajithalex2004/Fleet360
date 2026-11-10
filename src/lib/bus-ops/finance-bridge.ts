@@ -5,16 +5,12 @@
  * All journal entries are created as DRAFT via createDraftJournalEntry().
  * Finance expenses are inserted idempotently keyed on expense_no = 'FUEL-{fuelLogId}'.
  *
- * GL mapping (aligned with src/lib/modules.ts:487 STAFF_TRANSPORT — R9 fix):
- *   4500  Bus Operations Revenue  (credit on AR mirror, module registry revenue)
- *   5145  Bus Operations Expense  (debit on trip completion, module registry expense)
- *   2100  Accounts Payable / Accrued Liabilities (credit on cost accrual)
+ * GL mapping (leaf accounts in standard transport Chart of Accounts):
+ *   4400  Staff Transport Revenue       (credit on AR mirror)
+ *   5210  Driver Salaries & Wages       (debit on trip completion)
+ *   2120  Accrued Liabilities           (credit on cost accrual)
  *
- * Prior codes were 4400/5400 which didn't match the module registry's
- * `revenue 4X00, expense 51XX` pattern (X = 5 for STAFF_TRANSPORT).
- * Reverse-lookups from GL back to owning module returned undefined.
- *
- * Cost centre / profit centre: PC-BUS
+ * Cost centre / profit centre: PC-BUS (or resolved from vehicle for fuel logs)
  *
  * ── R5 (2026-08-14): error propagation for outbox retry ──────────────────────
  *
@@ -52,14 +48,10 @@ export class FinanceBridgeError extends Error {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// CoA — keep in sync with src/lib/modules.ts:487 (STAFF_TRANSPORT: ['4500', '5145']).
-const GL_REVENUE  = '4500';  // Bus Operations Revenue
-const GL_EXPENSE  = '5145';  // Bus Operations Expense
-const GL_AP_ACCR  = '2100';  // Accounts Payable / Accrued Liabilities
-// Silence "declared but not used" for GL_REVENUE — it's the intended
-// AR account for future direct-JE revenue posting. upsertFinanceInvoice
-// derives its own account today; keeping the constant here means the
-// bridge is the single source of truth for bus-ops GL codes.
+// Leaf CoA codes in standard transport chart
+const GL_REVENUE  = '4400';  // Staff Transport Revenue
+const GL_EXPENSE  = '5210';  // Driver Salaries & Wages
+const GL_AP_ACCR  = '2120';  // Accrued Liabilities
 void GL_REVENUE;
 
 const DEFAULT_FUEL_RATE_AED   = 3.50;  // AED per litre — UAE diesel fallback
@@ -168,8 +160,8 @@ export async function postTripOperatingCostsToFinance(
       preparedBy: 'system',
       costCentre: BUS_COST_CENTRE,
       notes:      `Auto-generated on trip completion. Vehicle: ${schedule.vehicleId ?? 'N/A'}`,
-      debit:  { code: GL_EXPENSE, name: 'Bus Operations Expense',           description: narration },
-      credit: { code: GL_AP_ACCR, name: 'Accounts Payable / Accrued Exp.',  description: `Accrual: ${tripRef}` },
+      debit:  { code: GL_EXPENSE, name: 'Driver Salaries & Wages', description: narration },
+      credit: { code: GL_AP_ACCR, name: 'Accrued Liabilities',     description: `Accrual: ${tripRef}` },
     });
 
     return { jeId: je.id, jeNumber: je.number };
@@ -246,8 +238,12 @@ export async function mirrorBusTripRevenueToFinance(
 // ── 3. FuelLog → Finance Expense ─────────────────────────────────────────────
 
 /**
- * Mirror a fuel log entry to finance.finance_expenses.
+ * Mirror a fuel log entry to finance_expenses.
  * Idempotent — keyed on expense_no = 'FUEL-{fuelLogId}'.
+ *
+ * UAE pump fuel prices are VAT-inclusive (5%), so totalAmount = pump cost,
+ * subtotal = totalAmount / 1.05, vatAmount = totalAmount - subtotal.
+ * Also resolves the vehicle's actual module/cost-centre rather than hardcoding PC-BUS.
  *
  * Returns null when there's nothing to write (amount ≤ 0). Returns the
  * existing expense id on idempotency hit. THROWS FinanceBridgeError on
@@ -262,17 +258,47 @@ export async function postFuelLogToFinance(
       ?? Math.round(fuelLog.liters * DEFAULT_FUEL_RATE_AED * 100) / 100;
     if (amount <= 0) return null;
 
-    const vatAmount   = Math.round(amount * (FUEL_VAT_RATE / 100) * 100) / 100;
-    const totalAmount = amount + vatAmount;
+    // UAE pump fuel prices are VAT-inclusive (5%)
+    const totalAmount = Number(amount.toFixed(2));
+    const subtotal    = Number((totalAmount / (1 + FUEL_VAT_RATE / 100)).toFixed(2));
+    const vatAmount   = Number((totalAmount - subtotal).toFixed(2));
     const expenseNo   = `FUEL-${fuelLog.id}`;
     const expDate     = fuelLog.fuelDate.toISOString().split('T')[0];
 
     // Idempotency check — skip if already mirrored
     const [existing] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id FROM finance.finance_expenses WHERE expense_no = $1 LIMIT 1`,
+      `SELECT id FROM finance_expenses WHERE expense_no = $1 LIMIT 1`,
       expenseNo,
     ).catch(() => []);
     if (existing?.id) return { expenseId: existing.id };
+
+    // Resolve vehicle's actual module / cost centre
+    let costCentre = BUS_COST_CENTRE;
+    let subCategory = 'BUS_FUEL';
+    if (fuelLog.vehicleId) {
+      const [veh] = await prisma.$queryRawUnsafe<Array<{
+        usage_type?: string | null;
+        department?: string | null;
+        category?: string | null;
+      }>>(
+        `SELECT usage_type, department, category FROM vehicles WHERE id = $1 LIMIT 1`,
+        fuelLog.vehicleId,
+      ).catch(() => []);
+      const tag = `${veh?.usage_type ?? ''} ${veh?.department ?? ''} ${veh?.category ?? ''}`.toUpperCase();
+      if (tag.includes('RENTAL') || tag.includes('RENT')) {
+        costCentre = 'PC-RENTAL';
+        subCategory = 'RENTAL_FUEL';
+      } else if (tag.includes('LEAS')) {
+        costCentre = 'PC-LEASING';
+        subCategory = 'LEASING_FUEL';
+      } else if (tag.includes('LOGISTIC') || tag.includes('FREIGHT') || tag.includes('CARGO')) {
+        costCentre = 'PC-LOGISTICS';
+        subCategory = 'LOGISTICS_FUEL';
+      } else if (tag.includes('LIMO') || tag.includes('CHAUFFEUR')) {
+        costCentre = 'PC-LIMO';
+        subCategory = 'LIMO_FUEL';
+      }
+    }
 
     const description = [
       `Fuel log: ${fuelLog.liters.toFixed(2)}L`,
@@ -281,21 +307,23 @@ export async function postFuelLogToFinance(
     ].filter(Boolean).join(' ');
 
     const [row] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `INSERT INTO finance.finance_expenses
+      `INSERT INTO finance_expenses
          (expense_no, category, sub_category, description,
           amount, currency, vat_amount, total_amount,
           expense_date, status, vehicle_id, driver_id,
           cost_centre, profit_centre, reference_no, tenant_id)
-       VALUES ($1,'FUEL','BUS_FUEL',$2, $3,'AED',$4,$5, $6::date,'DRAFT',$7,$8,
-               'PC-BUS','PC-BUS',$9,$10)
+       VALUES ($1,'FUEL',$11,$2, $3,'AED',$4,$5, $6::date,'DRAFT',$7,$8,
+               $12,$12,$9,$10)
        RETURNING id::text`,
       expenseNo, description,
-      amount, vatAmount, totalAmount,
+      subtotal, vatAmount, totalAmount,
       expDate,
       fuelLog.vehicleId  ?? null,
       fuelLog.driverId   ?? null,
       fuelLog.id,    // reference_no → traceability back to fuel_logs.id
       tenantId,
+      subCategory,
+      costCentre,
     );
 
     if (!row?.id) throw new Error(`INSERT finance_expenses failed for ${expenseNo}`);

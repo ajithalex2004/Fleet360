@@ -28,6 +28,7 @@ export interface DispatchResult {
   recipient: string;
   messageId: string;
   dispatchUrl: string;
+  messageText?: string;
   timestamp: Date;
 }
 
@@ -52,19 +53,27 @@ ${dispatchUrl}
 
 - Fleet360 Transport Exchange`;
 
-    // 1. WhatsApp / SMS Provider Integration (Mock delivery + provider webhook handler)
     const channel: 'WHATSAPP' | 'SMS' = input.channel === 'SMS' ? 'SMS' : 'WHATSAPP';
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    // `messageText` is the real message body a WhatsApp Cloud API / Twilio SMS
-    // call would send — building it is done, but no such call exists yet
-    // (see below). This is a genuine unwired integration, not dead code:
-    // choosing/configuring an actual provider is an infrastructure decision
-    // beyond this fix, so it's flagged rather than guessed at.
-    void messageText;
-
-    // In production, invoke WhatsApp Cloud API or Twilio SMS client:
-    // await fetch('https://graph.facebook.com/v18.0/.../messages', { ... });
+    // 1. If WhatsApp API credentials are configured, send message via WhatsApp API
+    const waUrl   = process.env.WHATSAPP_API_URL;
+    const waToken = process.env.WHATSAPP_API_TOKEN;
+    if (channel === 'WHATSAPP' && waUrl && waToken && process.env.NODE_ENV !== 'test') {
+      await fetch(waUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${waToken}`,
+        },
+        body: JSON.stringify({
+          to:   cleanPhone,
+          type: 'text',
+          text: { body: messageText },
+        }),
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => {});
+    }
 
     // 2. Record Immutable PartnerTripEvent
     if (input.assignmentId) {
@@ -78,21 +87,28 @@ ${dispatchUrl}
             recipient: cleanPhone,
             messageId,
             dispatchUrl,
+            messageText,
           },
         },
-      });
-    }
+      }).catch(() => {});
 
-    // Platform-wide audit trail, matching the create-domain-record +
-    // logAudit pattern already established for other Exchange actions
-    // (e.g. MarketplaceService.publishOpportunity).
-    await logAudit({
-      entityType: 'PartnerTripDispatch',
-      entityId: input.assignmentId,
-      action: 'CREATE',
-      details: `Dispatched ${channel} trip link to ${input.driverName} (${cleanPhone}) for vehicle ${input.vehiclePlate}`,
-      userId: input.actorUserId,
-    }).catch(() => {});
+      // 3. Platform-wide audit trail
+      await logAudit({
+        entityType: 'PartnerTripDispatch',
+        entityId: input.assignmentId,
+        action: 'CREATE',
+        details: `Dispatched ${channel} trip link to ${input.driverName} (${cleanPhone}) for vehicle ${input.vehiclePlate}`,
+        userId: input.actorUserId,
+      }).catch(() => {});
+    } else if (process.env.NODE_ENV !== 'test') {
+      void logAudit({
+        entityType: 'PartnerTripDispatch',
+        entityId: input.assignmentId,
+        action: 'CREATE',
+        details: `Dispatched ${channel} trip link to ${input.driverName} (${cleanPhone}) for vehicle ${input.vehiclePlate}`,
+        userId: input.actorUserId,
+      }).catch(() => {});
+    }
 
     return {
       success: true,
@@ -100,7 +116,65 @@ ${dispatchUrl}
       recipient: cleanPhone,
       messageId,
       dispatchUrl,
+      messageText,
       timestamp: new Date(),
     };
+  }
+
+  /**
+   * Fetch active/assigned dispatch jobs for a specific driver within a tenant
+   */
+  static async getDriverTrips(driverId: string, tenantId: string) {
+    return prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+      `SELECT *
+       FROM dispatch_jobs
+       WHERE tenant_id = $1
+         AND (assigned_driver_id = $2 OR driver_id = $2)
+         AND status IN ('OFFERED', 'ACCEPTED', 'IN_PROGRESS')
+       ORDER BY created_at DESC`,
+      tenantId,
+      driverId,
+    ).catch(() => []);
+  }
+
+  /**
+   * Update trip status for a driver's dispatch job and sync availability when completed
+   */
+  static async updateTripStatus(
+    jobId: string,
+    tenantId: string,
+    status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
+  ) {
+    const [job] = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+      `UPDATE dispatch_jobs
+       SET status       = $3,
+           completed_at = CASE WHEN $3 = 'COMPLETED' THEN NOW() ELSE completed_at END,
+           updated_at   = NOW()
+       WHERE id = $1::uuid AND tenant_id = $2
+       RETURNING id, COALESCE(assigned_driver_id, driver_id) AS driver_id, COALESCE(assigned_vehicle_id, vehicle_id) AS vehicle_id, booking_id`,
+      jobId,
+      tenantId,
+      status,
+    ).catch(() => []);
+
+    if (job && (status === 'COMPLETED' || status === 'CANCELLED')) {
+      if (job.driver_id) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE driver_availability
+           SET status = 'AVAILABLE', current_job_id = NULL, updated_at = NOW()
+           WHERE driver_id = $1`,
+          String(job.driver_id),
+        ).catch(() => {});
+      }
+      if (job.vehicle_id) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE vehicles SET status = 'AVAILABLE' WHERE id::text = $1 AND tenant_id::text = $2`,
+          String(job.vehicle_id),
+          tenantId,
+        ).catch(() => {});
+      }
+    }
+
+    return job ?? null;
   }
 }

@@ -39,4 +39,30 @@ export async function ensureTenantChartOfAccounts(tx: TxClient, tenantId: string
      ON CONFLICT (tenant_id, account_code) DO NOTHING`,
     tenantId,
   );
+
+  // Best-effort sync of leaf accounts into public.finance_accounts if that table exists
+  const [pubState] = await tx.$queryRawUnsafe<Array<{ has_public: boolean; has_tenant: boolean }>>(
+    `SELECT to_regclass('public.finance_accounts') IS NOT NULL AS has_public,
+            EXISTS (SELECT 1 FROM pg_attribute
+                     WHERE attrelid = to_regclass('public.finance_accounts')
+                       AND attname = 'tenant_id' AND NOT attisdropped) AS has_tenant`,
+  ).catch(() => [{ has_public: false, has_tenant: false }]);
+
+  if (pubState?.has_public && pubState?.has_tenant) {
+    await tx.$executeRawUnsafe(
+      `INSERT INTO public.finance_accounts
+         (tenant_id, code, name, type, category, normal_balance, is_active, description)
+       SELECT c.tenant_id, c.account_code, c.account_name, c.account_type,
+              COALESCE(c.account_subtype, c.account_type), c.normal_balance, c.is_active, c.description
+         FROM finance.finance_chart_of_accounts c
+        WHERE c.tenant_id = $1
+          AND c.is_header = FALSE
+          AND NOT EXISTS (
+            SELECT 1 FROM public.finance_accounts pa
+             WHERE pa.tenant_id = c.tenant_id AND pa.code = c.account_code
+          )
+       ON CONFLICT DO NOTHING`,
+      tenantId,
+    ).catch(() => {});
+  }
 }

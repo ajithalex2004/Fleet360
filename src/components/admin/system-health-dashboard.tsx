@@ -454,6 +454,78 @@ export function SystemHealthDashboardView({
   const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
   const [showJsonInspector, setShowJsonInspector] = useState(false);
   const [showSchedulerJobs, setShowSchedulerJobs] = useState(false);
+  const [showOutboxExplorer, setShowOutboxExplorer] = useState(false);
+  const [loadingOutbox, setLoadingOutbox] = useState(false);
+  const [replayingOutbox, setReplayingOutbox] = useState(false);
+  const [outboxFeedback, setOutboxFeedback] = useState<string | null>(null);
+  const [selectedOutboxIds, setSelectedOutboxIds] = useState<string[]>([]);
+  const [outboxSnapshot, setOutboxSnapshot] = useState<{
+    counts: { pending: number; stuck: number; parked: number; publishedLast24h: number };
+    deadLetter: Array<{
+      id: string;
+      eventType: string;
+      tenantId: string | null;
+      retryCount: number;
+      failureReason: string | null;
+      createdAt: string;
+    }>;
+    inboxFailed: Array<{
+      eventId: string;
+      consumer: string;
+      error: string | null;
+      processedAt: string;
+    }>;
+  } | null>(null);
+
+  const loadOutboxSnapshot = useCallback(async () => {
+    setLoadingOutbox(true);
+    setOutboxFeedback(null);
+    try {
+      const res = await fetch('/api/admin/events/outbox?limit=50', { cache: 'no-store' });
+      const d = await res.json().catch(() => null);
+      if (res.ok && d?.ok) {
+        setOutboxSnapshot({
+          counts: d.counts,
+          deadLetter: Array.isArray(d.deadLetter) ? d.deadLetter : [],
+          inboxFailed: Array.isArray(d.inboxFailed) ? d.inboxFailed : [],
+        });
+      } else {
+        setOutboxFeedback(d?.error || 'Could not load outbox dead-letter snapshot.');
+      }
+    } catch {
+      setOutboxFeedback('Network error loading outbox dead-letter snapshot.');
+    } finally {
+      setLoadingOutbox(false);
+    }
+  }, []);
+
+  const replayOutboxEvents = async (opts: { eventIds?: string[]; dryRun?: boolean }) => {
+    setReplayingOutbox(true);
+    setOutboxFeedback(null);
+    try {
+      const res = await fetch('/api/admin/events/outbox/replay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(opts),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.ok) {
+        setOutboxFeedback(d?.error || 'Replay failed.');
+      } else if (d.dryRun) {
+        setOutboxFeedback(`Dry-run preview: ${d.matched} parked event(s) match and are ready for replay.`);
+      } else {
+        setOutboxFeedback(
+          `Replayed ${d.replayed} event(s) — ${d.publishNow?.published ?? 0} published immediately, ${d.publishNow?.failed ?? 0} failed.`,
+        );
+        setSelectedOutboxIds([]);
+        await loadOutboxSnapshot();
+      }
+    } catch {
+      setOutboxFeedback('Network error during outbox replay.');
+    } finally {
+      setReplayingOutbox(false);
+    }
+  };
   const [showLongQueries, setShowLongQueries] = useState(false);
 
   // Synthetic Self-Test States
@@ -2222,8 +2294,224 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
-                {data.jobsAndOutbox.outbox.message}
+              <div>
+              <div className="space-y-2 border-t border-[var(--border-subtle)] pt-2.5">
+                <div className="text-[11px] text-[var(--text-muted)]">
+                  {data.jobsAndOutbox.outbox.message}
+                </div>
+                {!isPublic && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !showOutboxExplorer;
+                      setShowOutboxExplorer(next);
+                      if (next) void loadOutboxSnapshot();
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-xs text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]/80 transition-colors"
+                  >
+                    <span>{showOutboxExplorer ? 'Hide Dead-Letter & Replay Explorer' : 'Inspect Dead-Letter & Replay Queue'}</span>
+                    {showOutboxExplorer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Collapsible Outbox Dead-Letter & Consumer Failure Explorer + Replay UI */}
+          {showOutboxExplorer && !isPublic && (
+            <div className="p-5 border border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 rounded-xl space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-[var(--text-main)] uppercase tracking-wider">
+                    Transactional Outbox Dead-Letter Explorer &amp; Replay Console
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Inspect parked events (retry_count &ge; 5) and failed consumer inbox entries, and trigger single-event or batch replay
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={loadingOutbox || replayingOutbox}
+                    onClick={() => void loadOutboxSnapshot()}
+                    className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-xs font-medium text-[var(--text-main)] hover:opacity-90 disabled:opacity-40"
+                  >
+                    {loadingOutbox ? 'Refreshing…' : '↻ Refresh Queue'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={replayingOutbox || (outboxSnapshot?.deadLetter.length ?? 0) === 0}
+                    onClick={() =>
+                      void replayOutboxEvents({
+                        ...(selectedOutboxIds.length > 0 ? { eventIds: selectedOutboxIds } : {}),
+                        dryRun: true,
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 disabled:opacity-40"
+                  >
+                    Dry-Run Preview
+                  </button>
+                  {selectedOutboxIds.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={replayingOutbox}
+                      onClick={() => void replayOutboxEvents({ eventIds: selectedOutboxIds })}
+                      className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/25 disabled:opacity-40"
+                    >
+                      ▶ Replay Selected ({selectedOutboxIds.length})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={replayingOutbox || (outboxSnapshot?.deadLetter.length ?? 0) === 0}
+                    onClick={() => {
+                      if (!window.confirm('Replay all parked dead-letter events now?')) return;
+                      void replayOutboxEvents({});
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/15 text-amber-300 text-xs font-semibold hover:bg-amber-500/25 disabled:opacity-40"
+                  >
+                    ⚡ Replay All Parked ({outboxSnapshot?.deadLetter.length ?? 0})
+                  </button>
+                </div>
+              </div>
+
+              {outboxFeedback && (
+                <div className="px-3.5 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-xs text-blue-300">
+                  {outboxFeedback}
+                </div>
+              )}
+
+              {loadingOutbox ? (
+                <div className="text-xs text-[var(--text-muted)] py-6 text-center animate-pulse">
+                  Loading outbox dead-letter &amp; consumer failure snapshot…
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Parked Dead-Letter Events */}
+                  <div className="border border-[var(--border-subtle)] rounded-xl p-4 bg-[var(--bg-surface)]/50 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--text-main)]">
+                        Parked Dead-Letter Events ({outboxSnapshot?.deadLetter.length ?? 0})
+                      </span>
+                      {(outboxSnapshot?.deadLetter.length ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = (outboxSnapshot?.deadLetter ?? []).map((e) => e.id);
+                            setSelectedOutboxIds((prev) => (prev.length === allIds.length ? [] : allIds));
+                          }}
+                          className="text-[11px] text-blue-400 hover:text-blue-300"
+                        >
+                          {selectedOutboxIds.length === (outboxSnapshot?.deadLetter.length ?? 0) ? 'Clear Selection' : 'Select All'}
+                        </button>
+                      )}
+                    </div>
+
+                    {(outboxSnapshot?.deadLetter.length ?? 0) === 0 ? (
+                      <div className="text-xs text-emerald-400 py-4 text-center bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+                        ✓ 0 dead-letter events — outbox queue is clean
+                      </div>
+                    ) : (
+                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                        {outboxSnapshot!.deadLetter.map((ev) => {
+                          const checked = selectedOutboxIds.includes(ev.id);
+                          return (
+                            <div
+                              key={ev.id}
+                              className="p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() =>
+                                      setSelectedOutboxIds((prev) =>
+                                        prev.includes(ev.id) ? prev.filter((id) => id !== ev.id) : [...prev, ev.id],
+                                      )
+                                    }
+                                    className="accent-blue-500"
+                                  />
+                                  <span className="font-mono font-semibold text-amber-300 truncate">{ev.eventType}</span>
+                                </label>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className="text-[10px] font-mono text-rose-400">retries: {ev.retryCount}</span>
+                                  <button
+                                    type="button"
+                                    disabled={replayingOutbox}
+                                    onClick={() => void replayOutboxEvents({ eventIds: [ev.id] })}
+                                    className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold hover:bg-emerald-500/25"
+                                  >
+                                    Replay
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-[10px] text-[var(--text-faint)] font-mono flex items-center justify-between">
+                                <span>ID: {ev.id.slice(0, 12)}… · Tenant: {ev.tenantId ?? 'global'}</span>
+                                <span>{new Date(ev.createdAt).toLocaleString()}</span>
+                              </div>
+                              {ev.failureReason && (
+                                <div className="text-[11px] text-rose-300 font-mono bg-rose-500/10 border border-rose-500/20 rounded px-2 py-1 break-all">
+                                  {ev.failureReason}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Failed Consumer Inbox Entries */}
+                  <div className="border border-[var(--border-subtle)] rounded-xl p-4 bg-[var(--bg-surface)]/50 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--text-main)]">
+                        Recent Consumer Inbox Failures ({outboxSnapshot?.inboxFailed.length ?? 0})
+                      </span>
+                      <span className="text-[10px] text-[var(--text-faint)]">events_inbox errors</span>
+                    </div>
+
+                    {(outboxSnapshot?.inboxFailed.length ?? 0) === 0 ? (
+                      <div className="text-xs text-emerald-400 py-4 text-center bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+                        ✓ 0 consumer failures recorded
+                      </div>
+                    ) : (
+                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                        {outboxSnapshot!.inboxFailed.map((item, idx) => (
+                          <div
+                            key={`${item.eventId}-${item.consumer}-${idx}`}
+                            className="p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 text-xs space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono font-semibold text-purple-300 truncate">{item.consumer}</span>
+                              <button
+                                type="button"
+                                disabled={replayingOutbox}
+                                onClick={() => void replayOutboxEvents({ eventIds: [item.eventId] })}
+                                className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold hover:bg-emerald-500/25"
+                              >
+                                Replay Event
+                              </button>
+                            </div>
+                            <div className="text-[10px] text-[var(--text-faint)] font-mono flex items-center justify-between">
+                              <span>Event ID: {item.eventId.slice(0, 14)}…</span>
+                              <span>{new Date(item.processedAt).toLocaleString()}</span>
+                            </div>
+                            {item.error && (
+                              <div className="text-[11px] text-rose-300 font-mono bg-rose-500/10 border border-rose-500/20 rounded px-2 py-1 break-all">
+                                {item.error}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <div><div>{false && data?.jobsAndOutbox?.outbox.message}
               </div>
             </div>
           </div>
@@ -2378,7 +2666,7 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
+              <div>
                 {data.dbPool.warningReason ?? 'Connection pool operating within normal limits.'}
               </div>
             </div>
@@ -2433,7 +2721,7 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
+              <div>
                 Low rollback rates confirm schema integrity and low lock contention across tenants.
               </div>
             </div>
@@ -2754,7 +3042,7 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
+              <div>
                 Stateless cryptographic tokens prevent DB session lookups on every HTTP hit.
               </div>
             </div>
@@ -2814,7 +3102,7 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
+              <div>
                 Monitored in real-time from immutable audit_logs table.
               </div>
             </div>
@@ -2873,7 +3161,7 @@ export function SystemHealthDashboardView({
                 </div>
               </div>
 
-              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2.5">
+              <div>
                 {data.security.mfa.adminEnrolledPercent === 100
                   ? 'All administrative personnel enforce TOTP MFA.'
                   : 'Recommend mandating MFA for all tenant admin roles in Settings.'}

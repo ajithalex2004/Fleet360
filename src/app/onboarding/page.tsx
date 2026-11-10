@@ -1,17 +1,37 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { MODULE_BY_KEY, type ModuleKey } from '@/lib/modules';
+import { Sparkles, Upload, FileText, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface OnboardingAttachmentPayload {
+  docType: 'TRADE_LICENSE' | 'VAT_CERTIFICATE' | 'CORPORATE_TAX_CERTIFICATE' | 'OTHER';
+  fileName: string;
+  mimeType: string;
+  base64: string;
+  documentNumber?: string | null;
+  expiryDate?: string | null;
+}
 
 interface FormData {
   // Step 1 — Company
   companyName: string;
+  arabicName: string;
   domain: string;
   country: string;
+  emirate: string;
+  emirateCode: string;
+  tradeLicenseNo: string;
+  tradeLicenseAuthority: string;
+  corporateTaxTrn: string;
+  streetName: string;
+  additionalStreetName: string;
+  postalZone: string;
+  address: string;
   contactPhone: string;
   trn: string;
   plan: 'TRIAL' | 'STANDARD' | 'PROFESSIONAL' | 'ENTERPRISE';
@@ -26,14 +46,6 @@ interface FormData {
 }
 
 // ── Module definitions ────────────────────────────────────────────────────────
-// Onboarding presents a curated subset of the canonical registry. Module
-// identifiers use kebab-case ModuleKeys so they match what /api/tenants/provision
-// and the admin tenants matrix write to the DB. Names + descriptions are
-// pulled from the registry at build time — single source of truth.
-//
-// The emoji icons here are onboarding-specific (consumer-friendly glyphs);
-// the registry uses lucide names for the platform home. Both styles are
-// kept here as a deliberate UX choice for the onboarding flow.
 
 const ONBOARDING_MODULE_KEYS = [
   'fleet', 'rental', 'logistics', 'bus-ops', 'school-bus', 'incidents', 'finance', 'dispatch',
@@ -61,8 +73,6 @@ const ALL_MODULES = ONBOARDING_MODULE_KEYS.map(key => {
 });
 
 // ── Plan cards ────────────────────────────────────────────────────────────────
-// Hardcoded fallback in case the API call fails or is still loading. The real
-// source is /api/platform/plans which reads from the platform_plans table.
 interface UiPlan { id: string; label: string; price: string; desc: string; highlight: boolean }
 
 const FALLBACK_PLANS: readonly UiPlan[] = [
@@ -125,19 +135,40 @@ export default function OnboardingPage() {
   const [otpError, setOtpError]         = useState<string | null>(null);
 
   const [form, setForm] = useState<FormData>({
-    companyName:    '',
-    domain:         '',
-    country:        'UAE',
-    contactPhone:   '',
-    trn:            '',
-    plan:           'TRIAL',
-    adminFirstName: '',
-    adminLastName:  '',
-    contactEmail:   '',
-    adminPassword:  '',
-    confirmPassword:'',
-    selectedModules: ALL_MODULES.map(m => m.id),
+    companyName:           '',
+    arabicName:            '',
+    domain:                '',
+    country:               'UAE',
+    emirate:               'Dubai',
+    emirateCode:           'AE-DU',
+    tradeLicenseNo:        '',
+    tradeLicenseAuthority: '',
+    corporateTaxTrn:       '',
+    streetName:            '',
+    additionalStreetName:  '',
+    postalZone:            '',
+    address:               '',
+    contactPhone:          '',
+    trn:                   '',
+    plan:                  'TRIAL',
+    adminFirstName:        '',
+    adminLastName:         '',
+    contactEmail:          '',
+    adminPassword:         '',
+    confirmPassword:       '',
+    selectedModules:       ALL_MODULES.map(m => m.id),
   });
+
+  // ── Step 1 — Trade License & VAT Certificate AI Autofill State ───────────
+  const tradeLicenseInputRef = useRef<HTMLInputElement | null>(null);
+  const vatCertInputRef = useRef<HTMLInputElement | null>(null);
+  const [scanningDoc, setScanningDoc] = useState<'TRADE_LICENSE' | 'VAT_CERTIFICATE' | null>(null);
+  const [tradeLicenseDoc, setTradeLicenseDoc] = useState<OnboardingAttachmentPayload | null>(null);
+  const [vatCertDoc, setVatCertDoc] = useState<OnboardingAttachmentPayload | null>(null);
+  const [tradeScanSuccess, setTradeScanSuccess] = useState<string | null>(null);
+  const [tradeScanError, setTradeScanError] = useState<string | null>(null);
+  const [vatScanSuccess, setVatScanSuccess] = useState<string | null>(null);
+  const [vatScanError, setVatScanError] = useState<string | null>(null);
 
   const [emailError, setEmailError] = useState<string | null>(null);
 
@@ -167,6 +198,108 @@ export default function OnboardingPage() {
   const update = useCallback((field: keyof FormData, value: string | string[]) => {
     setForm(prev => ({ ...prev, [field]: value }));
   }, []);
+
+  // ── Step 1 AI Document Upload & Autofill (Trade License & VAT Certificate) ──
+
+  const handleOnboardingDocUpload = async (
+    file: File,
+    docType: 'TRADE_LICENSE' | 'VAT_CERTIFICATE',
+  ) => {
+    if (!file) return;
+    setScanningDoc(docType);
+    if (docType === 'TRADE_LICENSE') {
+      setTradeScanSuccess(null);
+      setTradeScanError(null);
+    } else {
+      setVatScanSuccess(null);
+      setVatScanError(null);
+    }
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(String(e.target?.result ?? ''));
+        reader.onerror = () => reject(new Error('Could not read selected file'));
+        reader.readAsDataURL(file);
+      });
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      const mimeType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+
+      const res = await fetch('/api/tenants/pre-verify-domain?action=autofill-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64,
+          mimeType,
+          fileName: file.name,
+          docType,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to analyze document');
+      }
+
+      const attachmentPayload: OnboardingAttachmentPayload = {
+        docType,
+        fileName: file.name,
+        mimeType,
+        base64,
+        documentNumber: data.documentNumber || (docType === 'VAT_CERTIFICATE' ? data.trn : data.tradeLicenseNo) || null,
+        expiryDate: data.expiryDate || null,
+      };
+      if (docType === 'TRADE_LICENSE') setTradeLicenseDoc(attachmentPayload);
+      else setVatCertDoc(attachmentPayload);
+
+      if (data.status === 'unavailable' || data.status === 'error') {
+        const msg = data.message || 'Document attached. Enter company details manually below.';
+        if (docType === 'TRADE_LICENSE') setTradeScanError(msg);
+        else setVatScanError(msg);
+        return;
+      }
+
+      const populated: string[] = [];
+      if (data.companyName) populated.push(`Name: ${data.companyName}`);
+      if (data.arabicName) populated.push(`Arabic: ${data.arabicName}`);
+      if (data.tradeLicenseNo) populated.push(`License: ${data.tradeLicenseNo}`);
+      if (data.tradeLicenseAuthority) populated.push(`Authority: ${data.tradeLicenseAuthority}`);
+      if (data.trn) populated.push(`TRN: ${data.trn}`);
+      if (data.emirate) populated.push(`Emirate: ${data.emirate}`);
+      if (data.address) populated.push('Address');
+      if (data.contactPhone) populated.push(`Phone: ${data.contactPhone}`);
+
+      setForm(prev => {
+        const next = { ...prev };
+        if (data.companyName) next.companyName = data.companyName;
+        if (data.arabicName) next.arabicName = data.arabicName;
+        if (data.tradeLicenseNo) next.tradeLicenseNo = data.tradeLicenseNo;
+        if (data.tradeLicenseAuthority) next.tradeLicenseAuthority = data.tradeLicenseAuthority;
+        if (data.trn) next.trn = data.trn;
+        if (data.corporateTaxTrn) next.corporateTaxTrn = data.corporateTaxTrn;
+        if (data.emirate) next.emirate = data.emirate;
+        if (data.emirateCode) next.emirateCode = data.emirateCode;
+        if (data.streetName) next.streetName = data.streetName;
+        if (data.additionalStreetName) next.additionalStreetName = data.additionalStreetName;
+        if (data.postalZone) next.postalZone = data.postalZone;
+        if (data.address) next.address = data.address;
+        if (data.contactPhone && !next.contactPhone) next.contactPhone = data.contactPhone;
+        return next;
+      });
+
+      const confPct = Math.round((data.confidence || 0.92) * 100);
+      const label = docType === 'TRADE_LICENSE' ? 'Trade License' : 'VAT Certificate';
+      const msg = `✓ ${label} scanned: ${populated.length} fields autofilled (${confPct}% confidence) — ${populated.slice(0, 3).join(' · ')}`;
+      if (docType === 'TRADE_LICENSE') setTradeScanSuccess(msg);
+      else setVatScanSuccess(msg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not scan document';
+      if (docType === 'TRADE_LICENSE') setTradeScanError(msg);
+      else setVatScanError(msg);
+    } finally {
+      setScanningDoc(null);
+    }
+  };
 
   // ── Step 0: Initiate — register domain and show OTP email entry ──────────
 
@@ -221,7 +354,6 @@ export default function OnboardingPage() {
     setOtpError(null);
 
     try {
-      // Step 1: register domain (get pre-verify ID)
       let id = preVerifyId;
       if (!id) {
         const initRes = await fetch('/api/tenants/pre-verify-domain', {
@@ -243,7 +375,6 @@ export default function OnboardingPage() {
         }
       }
 
-      // Step 2: send OTP to the email
       const otpRes = await fetch('/api/tenants/pre-verify-domain?action=send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -263,7 +394,6 @@ export default function OnboardingPage() {
     }
   };
 
-  // Send OTP only (resend — domain already initialised)
   const sendOtp = async () => {
     if (!preVerifyId || !otpEmail) return;
     setOtpSending(true);
@@ -284,7 +414,6 @@ export default function OnboardingPage() {
     }
   };
 
-  // Verify OTP
   const verifyOtp = async () => {
     if (!preVerifyId || !otpCode) return;
     setOtpVerifying(true);
@@ -397,23 +526,38 @@ export default function OnboardingPage() {
 
     setLoading(true);
     try {
+      const attachments = [tradeLicenseDoc, vatCertDoc].filter(
+        (a): a is OnboardingAttachmentPayload => Boolean(a),
+      );
+
       const res = await fetch('/api/tenants/provision', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          companyName:       form.companyName,
-          domain:            form.domain,
-          contactEmail:      form.contactEmail,
-          contactName:       `${form.adminFirstName} ${form.adminLastName}`,
-          contactPhone:      form.contactPhone || undefined,
-          country:           form.country || undefined,
-          plan:              form.plan,
-          selectedModules:   form.selectedModules,
-          adminFirstName:    form.adminFirstName,
-          adminLastName:     form.adminLastName,
-          adminPassword:     form.adminPassword,
-          trn:               form.trn || undefined,
-          preVerificationId: preVerifyId || undefined,
+          companyName:           form.companyName,
+          arabicName:            form.arabicName || undefined,
+          domain:                form.domain,
+          contactEmail:          form.contactEmail,
+          contactName:           `${form.adminFirstName} ${form.adminLastName}`,
+          contactPhone:          form.contactPhone || undefined,
+          country:               form.country || undefined,
+          emirate:               form.emirate || undefined,
+          emirateCode:           form.emirateCode || undefined,
+          tradeLicenseNo:        form.tradeLicenseNo || undefined,
+          tradeLicenseAuthority: form.tradeLicenseAuthority || undefined,
+          corporateTaxTrn:       form.corporateTaxTrn || undefined,
+          streetName:            form.streetName || undefined,
+          additionalStreetName:  form.additionalStreetName || undefined,
+          postalZone:            form.postalZone || undefined,
+          address:               form.address || undefined,
+          plan:                  form.plan,
+          selectedModules:       form.selectedModules,
+          adminFirstName:        form.adminFirstName,
+          adminLastName:         form.adminLastName,
+          adminPassword:         form.adminPassword,
+          trn:                   form.trn || undefined,
+          attachments:           attachments.length > 0 ? attachments : undefined,
+          preVerificationId:     preVerifyId || undefined,
         }),
       });
 
@@ -432,8 +576,6 @@ export default function OnboardingPage() {
         domainVerified:    data.domainVerified ?? false,
       });
 
-      // If domain is already pre-verified, go straight to the platform with a hard
-      // redirect so the browser uses the new xl-session cookie (not any cached session).
       if (data.domainVerified) {
         window.location.href = '/platform';
         return;
@@ -492,7 +634,6 @@ export default function OnboardingPage() {
             </p>
           </div>
 
-          {/* Domain already verified — show green badge */}
           {domainAlreadyVerified && (
             <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
               <span className="text-2xl">🔒</span>
@@ -505,7 +646,6 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Still needs verification */}
           {!domainAlreadyVerified && !verified && (
             <>
               {token && (
@@ -575,7 +715,7 @@ export default function OnboardingPage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-3xl">
 
           {/* Progress indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -626,7 +766,6 @@ export default function OnboardingPage() {
                 {/* ── Phase A: Domain + email entry ─────────────────────────── */}
                 {!preVerified && !otpSent && (
                   <div className="space-y-4">
-                    {/* Single error banner for both domain + OTP init errors */}
                     {(domainInitError || otpError) && (
                       <div className="p-3 bg-red-950/60 border border-red-500/30 rounded-xl text-red-300 text-sm flex items-start gap-2">
                         <span className="shrink-0 mt-0.5">⚠️</span>
@@ -634,7 +773,6 @@ export default function OnboardingPage() {
                       </div>
                     )}
 
-                    {/* Domain */}
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1.5">
                         Company Domain <span className="text-red-400">*</span>
@@ -652,7 +790,6 @@ export default function OnboardingPage() {
                       </p>
                     </div>
 
-                    {/* Work email */}
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1.5">
                         Your Work Email <span className="text-red-400">*</span>
@@ -783,24 +920,209 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ── Step 1: Company Details ─────────────────────────────────── */}
+            {/* ── Step 1: Company Details + AI Document Autofill ──────────── */}
             {step === 1 && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-white">Company Details</h2>
-                  <p className="text-slate-400 mt-1 text-sm">Tell us about your organisation</p>
+                  <p className="text-slate-400 mt-1 text-sm">
+                    Attach your UAE Trade License and VAT Certificate to autofill your company registration via AI, or enter details manually.
+                  </p>
+                </div>
+
+                {/* ── AI Document Upload Cards (Trade License & VAT Certificate) ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1: Trade License */}
+                  <div className="bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-slate-800/80 border-2 border-dashed border-orange-500/30 hover:border-orange-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" /> Attach Trade License
+                        </span>
+                        <span className="text-[10px] font-semibold bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
+                          AI Autofill
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Upload UAE Trade License (PDF or image). AI extracts Company Name (EN/AR), License No, Authority, Emirate &amp; Address.
+                      </p>
+                    </div>
+
+                    {tradeScanSuccess && (
+                      <div className="my-2 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                        <span className="leading-snug">{tradeScanSuccess}</span>
+                      </div>
+                    )}
+
+                    {tradeScanError && (
+                      <div className="my-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                        <span className="leading-snug">{tradeScanError}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-3">
+                      <input
+                        ref={tradeLicenseInputRef}
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleOnboardingDocUpload(file, 'TRADE_LICENSE');
+                          e.target.value = '';
+                        }}
+                      />
+
+                      {tradeLicenseDoc ? (
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText className="w-4 h-4 text-orange-400 shrink-0" />
+                            <span className="text-xs font-medium text-white truncate font-mono">
+                              {tradeLicenseDoc.fileName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => tradeLicenseInputRef.current?.click()}
+                            disabled={scanningDoc !== null}
+                            className="text-xs font-semibold text-orange-400 hover:text-orange-300 shrink-0"
+                          >
+                            Replace
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => tradeLicenseInputRef.current?.click()}
+                          disabled={scanningDoc !== null}
+                          className="w-full py-2.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {scanningDoc === 'TRADE_LICENSE' ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
+                              <span>Reading Trade License with AI…</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              <span>Upload Trade License</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 2: VAT Certificate */}
+                  <div className="bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-slate-800/80 border-2 border-dashed border-blue-500/30 hover:border-blue-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" /> Attach VAT Certificate
+                        </span>
+                        <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                          AI Autofill
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Upload UAE FTA VAT Registration Certificate. AI extracts your 15-digit Tax Registration Number (TRN) &amp; legal entity details.
+                      </p>
+                    </div>
+
+                    {vatScanSuccess && (
+                      <div className="my-2 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                        <span className="leading-snug">{vatScanSuccess}</span>
+                      </div>
+                    )}
+
+                    {vatScanError && (
+                      <div className="my-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                        <span className="leading-snug">{vatScanError}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-3">
+                      <input
+                        ref={vatCertInputRef}
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleOnboardingDocUpload(file, 'VAT_CERTIFICATE');
+                          e.target.value = '';
+                        }}
+                      />
+
+                      {vatCertDoc ? (
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                            <span className="text-xs font-medium text-white truncate font-mono">
+                              {vatCertDoc.fileName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => vatCertInputRef.current?.click()}
+                            disabled={scanningDoc !== null}
+                            className="text-xs font-semibold text-blue-400 hover:text-blue-300 shrink-0"
+                          >
+                            Replace
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => vatCertInputRef.current?.click()}
+                          disabled={scanningDoc !== null}
+                          className="w-full py-2.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {scanningDoc === 'VAT_CERTIFICATE' ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                              <span>Reading VAT Certificate with AI…</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              <span>Upload VAT Certificate</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
+                  <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                      Company Name <span className="text-red-400">*</span>
+                      Company Name (English) <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
                       value={form.companyName}
                       onChange={e => update('companyName', e.target.value)}
                       placeholder="Acme Transport LLC"
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Company Name (Arabic / الاسم التجاري)
+                    </label>
+                    <input
+                      type="text"
+                      dir="rtl"
+                      value={form.arabicName}
+                      onChange={e => update('arabicName', e.target.value)}
+                      placeholder="شركة أكمي للنقل ذ.م.م"
                       className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -835,6 +1157,56 @@ export default function OnboardingPage() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Trade License Number (CRN)
+                    </label>
+                    <input
+                      type="text"
+                      value={form.tradeLicenseNo}
+                      onChange={e => update('tradeLicenseNo', e.target.value)}
+                      placeholder="CN-1234567"
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Issuing Authority
+                    </label>
+                    <input
+                      type="text"
+                      value={form.tradeLicenseAuthority}
+                      onChange={e => update('tradeLicenseAuthority', e.target.value)}
+                      placeholder="DED Dubai / ADDED Abu Dhabi / DMCC"
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Tax Registration Number (TRN — 15 digits)
+                    </label>
+                    <input
+                      type="text"
+                      value={form.trn}
+                      onChange={e => update('trn', e.target.value)}
+                      placeholder="100123456700003"
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Contact Phone</label>
+                    <input
+                      type="tel"
+                      value={form.contactPhone}
+                      onChange={e => update('contactPhone', e.target.value)}
+                      placeholder="+971 50 000 0000"
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">Country</label>
                     <select
                       value={form.country}
@@ -852,25 +1224,25 @@ export default function OnboardingPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Contact Phone</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Emirate / City</label>
                     <input
-                      type="tel"
-                      value={form.contactPhone}
-                      onChange={e => update('contactPhone', e.target.value)}
-                      placeholder="+971 50 000 0000"
+                      type="text"
+                      value={form.emirate}
+                      onChange={e => update('emirate', e.target.value)}
+                      placeholder="Dubai"
                       className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                      Tax Registration Number (TRN) <span className="text-slate-500 font-normal">— optional</span>
+                      Registered Address
                     </label>
                     <input
                       type="text"
-                      value={form.trn}
-                      onChange={e => update('trn', e.target.value)}
-                      placeholder="100123456700003"
+                      value={form.address}
+                      onChange={e => update('address', e.target.value)}
+                      placeholder="Sheikh Zayed Road, Business Bay, Dubai"
                       className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>

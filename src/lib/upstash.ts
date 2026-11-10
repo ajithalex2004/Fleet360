@@ -11,7 +11,7 @@
  *   if (!redis) { ... fallback ... }
  */
 
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 
 let _redis: Redis | null | undefined; // undefined = not yet initialised
 
@@ -22,10 +22,10 @@ let _redis: Redis | null | undefined; // undefined = not yet initialised
 export function getRedis(): Redis | null {
   if (_redis !== undefined) return _redis;
 
-  const url   = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url   = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
-  if (!url || !token) {
+  if (!url || !token || !/^https?:\/\//i.test(url)) {
     if (process.env.NODE_ENV !== 'test') {
       console.warn(
         '[upstash] UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set — ' +

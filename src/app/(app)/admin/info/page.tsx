@@ -1,5 +1,5 @@
-import SystemHealthDashboardView from '@/components/admin/system-health-dashboard';
+import { redirect } from 'next/navigation';
 
 export default function AdminInfoPage() {
-  return <SystemHealthDashboardView isPublic={false} initialTab="platform-info" />;
+  redirect('/admin/health?tab=platform-info');
 }

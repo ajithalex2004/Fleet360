@@ -69,6 +69,7 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/api/shipper-portal/': 'shipper-portal-session cookie (requireShipperPortal)',
   '/api/leasing-portal/': 'leasing-portal-session cookie (requireLeasingPortal)',
   '/api/carrier-portal/': 'carrier invite token',
+  '/api/public/partner-driver/': 'per-trip SHA-256 hashed driver capability token (withPartnerTokenTenant)',
   '/api/driver-app/': 'driver-app device session (verified in middleware) / WebAuthn',
   '/api/mobile/': 'none — static APK downloads; no database or tenant data',
   '/health': 'none — status page; data from the public /api/health, admin calls are SUPER_ADMIN-gated',

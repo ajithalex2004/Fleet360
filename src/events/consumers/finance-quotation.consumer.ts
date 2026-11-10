@@ -99,8 +99,8 @@ export class FinanceQuotationConsumer extends BaseEventConsumer<QuotationApprove
       currency,
       preparedBy: envelope.actor ?? 'system',
       costCentre: 'PC-MAINTENANCE',
-      debit:  { code: '5100', name: 'Maintenance Expense',             description: descr },
-      credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual: quotation ${quotationId}` },
+      debit:  { code: '5120', name: 'Vehicle Maintenance & Repairs',   description: descr },
+      credit: { code: '2110', name: 'Accounts Payable — Trade',        description: `Accrual: quotation ${quotationId}` },
     });
 
     console.log(

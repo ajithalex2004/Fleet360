@@ -69,10 +69,10 @@ function getJobMilestones(job: DrayageJob): LifecycleMilestone[] {
   const isAssigned = Boolean(job.assignedVehiclePlate || job.assignedDriverName) || isTokenIssued;
 
   const createdTime = new Date(job.createdAt).toLocaleString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai'
   });
   const updatedTime = new Date(job.updatedAt || job.createdAt).toLocaleString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai'
   });
 
   return [

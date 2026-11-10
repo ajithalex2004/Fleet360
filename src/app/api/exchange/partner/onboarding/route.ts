@@ -26,13 +26,14 @@ export async function GET(req: NextRequest) {
   if ('response' in run) return run.response;
   if (!run.value) return NextResponse.json({ error: 'Transport partner not found' }, { status: 404 });
 
-  const { partner, documents, checklist } = run.value;
+  const { partner, documents, checklist, qualificationCategories, fleetReadiness } = run.value;
   return NextResponse.json({
     partner: {
       id: partner.id,
       legalName: partner.legalName,
       emirate: partner.emirate,
       domains: partner.domains,
+      serviceAreas: partner.serviceAreas,
       onboardingStatus: partner.onboardingStatus,
       onboardingLabel: partner.onboardingLabel,
       // The reviewer's note when more information was asked for or the partner was rejected.
@@ -43,5 +44,7 @@ export async function GET(req: NextRequest) {
     role: auth.ctx.role,
     documents,
     checklist,
+    qualificationCategories,
+    fleetReadiness,
   });
 }

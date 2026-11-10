@@ -2,15 +2,8 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET  /api/dispatch/merge-candidates?jobId=X&tenantId=Y
- *      Returns ranked merge candidates for a specific dispatch job.
- *      Uses the three-stage merge engine:
- *        1. Haversine pre-filter
- *        2. Routing API road distance (GOOGLE_MAPS | OSRM | MAPBOX)
- *        3. Weighted merge scoring (0–100)
- *
  * GET  /api/dispatch/merge-candidates?tenantId=Y&scan=true
- *      Scans ALL PENDING jobs for the tenant and returns all merge opportunity pairs.
- *      Used by the Command Centre to populate the Merge Recommendations panel.
+ * POST /api/dispatch/merge-candidates
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -22,7 +15,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 type Row = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
-
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -31,111 +23,110 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
-        const sp       = new URL(req.url).searchParams;
-        const jobId    = sp.get('jobId')   ?? '';
-        const scan     = sp.get('scan')    === 'true';
+      const sp    = new URL(req.url).searchParams;
+      const jobId = sp.get('jobId') ?? '';
+      const scan  = sp.get('scan') === 'true';
 
-        /* ── Scan mode: find ALL merge pairs across pending jobs ── */
-        if (scan) {
-          const rows = await tx.$queryRawUnsafe<Row[]>(`
-            SELECT id, service_type, priority, status,
-                   origin_lat, origin_lng, dest_lat, dest_lng,
-                   origin_address, destination_address,
-                   scheduled_pickup, passenger_count, created_at
-            FROM dispatch_jobs
-            WHERE tenant_id = $1
-              AND status IN ('PENDING', 'SEARCHING')
-              AND created_at >= NOW() - INTERVAL '6 hours'
-            ORDER BY created_at ASC
-            LIMIT 50
-          `, tenantId);
+      /* ── Scan mode: find ALL merge pairs across pending jobs ── */
+      if (scan) {
+        const rows = await tx.$queryRawUnsafe<Row[]>(`
+          SELECT id, service_type, priority, status,
+                 COALESCE(origin_lat, pickup_lat)   AS origin_lat,
+                 COALESCE(origin_lng, pickup_lng)   AS origin_lng,
+                 COALESCE(dest_lat,   dropoff_lat)  AS dest_lat,
+                 COALESCE(dest_lng,   dropoff_lng)  AS dest_lng,
+                 origin_address, destination_address,
+                 scheduled_pickup, passenger_count, created_at
+          FROM dispatch_jobs
+          WHERE tenant_id = $1
+            AND status IN ('PENDING', 'SEARCHING')
+            AND created_at >= NOW() - INTERVAL '6 hours'
+          ORDER BY created_at ASC
+          LIMIT 50
+        `, tenantId);
 
-          if (rows.length < 2) {
-            return NextResponse.json({ pairs: [], total: 0 });
-          }
+        if (rows.length < 2) {
+          return NextResponse.json({ pairs: [], total: 0 });
+        }
 
-          const config = await loadMergeConfigPublic(tenantId);
-          if (!config.tripMergingEnabled) {
-            return NextResponse.json({ pairs: [], total: 0, reason: 'Trip merging disabled for this tenant' });
-          }
+        const config = await loadMergeConfigPublic(tenantId);
+        if (!config.tripMergingEnabled) {
+          return NextResponse.json({ pairs: [], total: 0, reason: 'Trip merging disabled for this tenant' });
+        }
 
-          // Evaluate unique pairs (A,B) where A < B by index
-          const pairs: Awaited<ReturnType<typeof evaluatePair>>[] = [];
-          const jobs  = rows.map(r => rowToJob(r));
+        const pairs: Awaited<ReturnType<typeof evaluatePair>>[] = [];
+        const jobs  = rows.map(r => rowToJob(r));
 
-          const evalQueue: Promise<void>[] = [];
+        const evalQueue: Promise<void>[] = [];
 
-          for (let i = 0; i < jobs.length; i++) {
-            for (let j = i + 1; j < jobs.length; j++) {
-              if (jobs[i].service_type !== jobs[j].service_type) continue;
-              // Quick Haversine guard before queueing async work
-              if (jobs[i].origin_lat && jobs[i].origin_lng && jobs[j].origin_lat && jobs[j].origin_lng) {
-                const hav = haversineKm(
-                  { lat: jobs[i].origin_lat!, lng: jobs[i].origin_lng! },
-                  { lat: jobs[j].origin_lat!, lng: jobs[j].origin_lng! },
-                );
-                if (hav > config.pickupDistanceKm * 2.5) continue; // far too far — skip
-              }
-              evalQueue.push(
-                evaluatePair(jobs[i], jobs[j], config).then(r => { pairs.push(r); })
+        for (let i = 0; i < jobs.length; i++) {
+          for (let j = i + 1; j < jobs.length; j++) {
+            if (jobs[i].service_type !== jobs[j].service_type) continue;
+            if (jobs[i].origin_lat && jobs[i].origin_lng && jobs[j].origin_lat && jobs[j].origin_lng) {
+              const hav = haversineKm(
+                { lat: jobs[i].origin_lat!, lng: jobs[i].origin_lng! },
+                { lat: jobs[j].origin_lat!, lng: jobs[j].origin_lng! },
               );
-              if (evalQueue.length >= 40) break; // cap concurrent API calls
+              if (hav > config.pickupDistanceKm * 2.5) continue;
             }
+            evalQueue.push(
+              evaluatePair(jobs[i], jobs[j], config).then(r => { pairs.push(r); })
+            );
             if (evalQueue.length >= 40) break;
           }
-
-          await Promise.all(evalQueue);
-
-          const eligible = pairs
-            .filter(p => p.eligible)
-            .sort((a, b) => b.mergeScore - a.mergeScore);
-
-          return NextResponse.json({
-            pairs:   serialize(eligible),
-            total:   eligible.length,
-            config: {
-              engine:            config.routingEngine,
-              pickupDistanceKm:  config.pickupDistanceKm,
-              pickupWindowMin:   config.pickupTimeWindowMin,
-              maxPassengers:     config.maxPassengers,
-              requireDropoff:    config.requireDropoffMatch,
-              dropoffDistanceKm: config.dropoffDistanceKm,
-            },
-          });
+          if (evalQueue.length >= 40) break;
         }
 
-        /* ── Single job mode ── */
-        if (!jobId) {
-          return NextResponse.json({ error: 'jobId or scan=true is required' }, { status: 400 });
-        }
+        await Promise.all(evalQueue);
 
-        const { candidates, config, targetJob } = await getMergeCandidates(jobId, tenantId);
+        const eligible = pairs
+          .filter(p => p.eligible)
+          .sort((a, b) => b.mergeScore - a.mergeScore);
 
         return NextResponse.json({
-          targetJob,
-          candidates: serialize(candidates),
-          eligible:   candidates.filter(c => c.eligible).length,
-          total:      candidates.length,
+          pairs:   serialize(eligible),
+          total:   eligible.length,
           config: {
-            engine:           config.routingEngine,
-            pickupDistanceKm: config.pickupDistanceKm,
-            pickupWindowMin:  config.pickupTimeWindowMin,
-            maxPassengers:    config.maxPassengers,
+            engine:            config.routingEngine,
+            pickupDistanceKm:  config.pickupDistanceKm,
+            pickupWindowMin:   config.pickupTimeWindowMin,
+            maxPassengers:     config.maxPassengers,
+            requireDropoff:    config.requireDropoffMatch,
+            dropoffDistanceKm: config.dropoffDistanceKm,
           },
         });
-        } catch (err) {
-        console.error('[dispatch/merge-candidates GET]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
       }
+
+      /* ── Single job mode ── */
+      if (!jobId) {
+        return NextResponse.json({ error: 'jobId or scan=true is required' }, { status: 400 });
+      }
+
+      const { candidates, config, targetJob } = await getMergeCandidates(jobId, tenantId);
+
+      return NextResponse.json({
+        targetJob,
+        candidates: serialize(candidates),
+        eligible:   candidates.filter(c => c.eligible).length,
+        total:      candidates.length,
+        config: {
+          engine:           config.routingEngine,
+          pickupDistanceKm: config.pickupDistanceKm,
+          pickupWindowMin:  config.pickupTimeWindowMin,
+          maxPassengers:    config.maxPassengers,
+        },
+      });
+    } catch (err) {
+      console.error('[dispatch/merge-candidates GET]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-
 
 /* ── POST: execute a merge (mark two jobs as merged, create combined job) ── */
 export async function POST(req: NextRequest) {
-
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -144,95 +135,108 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
-        const bodyRaw = await req.json();
-    const body = stripTenantOwnershipFields(bodyRaw);
-    const { jobIdA, jobIdB, adminId } = body;
-        if (!jobIdA || !jobIdB) {
-          return NextResponse.json({ error: 'jobIdA, jobIdB required' }, { status: 400 });
-        }
-
-        // Mark both jobs as CANCELLED with merge reason, create a new combined job
-        const [jobA] = await tx.$queryRawUnsafe<Row[]>(`
-          SELECT * FROM dispatch_jobs WHERE id = $1::uuid AND tenant_id = $2
-        `, jobIdA, tenantId);
-        const [jobB] = await tx.$queryRawUnsafe<Row[]>(`
-          SELECT * FROM dispatch_jobs WHERE id = $1::uuid AND tenant_id = $2
-        `, jobIdB, tenantId);
-
-        if (!jobA || !jobB) {
-          return NextResponse.json({ error: 'One or both jobs not found' }, { status: 404 });
-        }
-
-        // Create merged job — use jobA's origin, jobB's destination, combined passenger count
-        const [merged] = await tx.$queryRawUnsafe<{ id: string }[]>(`
-          INSERT INTO dispatch_jobs
-            (tenant_id, service_type, priority, status,
-             origin_lat, origin_lng, dest_lat, dest_lng,
-             origin_address, destination_address,
-             passenger_count, scheduled_pickup, meta)
-          VALUES
-            ($1, $2, $3, 'PENDING',
-             $4, $5, $6, $7,
-             $8, $9,
-             $10, $11, $12::jsonb)
-          RETURNING id
-        `,
-          tenantId,
-          jobA.service_type,
-          // Use higher priority of the two
-          priorityRank(String(jobA.priority)) >= priorityRank(String(jobB.priority))
-            ? jobA.priority : jobB.priority,
-          jobA.origin_lat ?? null, jobA.origin_lng ?? null,
-          jobB.dest_lat   ?? null, jobB.dest_lng   ?? null,
-          jobA.origin_address      ?? null,
-          jobB.destination_address ?? null,
-          (Number(jobA.passenger_count ?? 1) + Number(jobB.passenger_count ?? 1)),
-          jobA.scheduled_pickup ?? null,
-          JSON.stringify({
-            mergedFrom:  [jobIdA, jobIdB],
-            mergedBy:    adminId ?? 'system',
-            mergedAt:    new Date().toISOString(),
-            multiStop:   true,
-            stops:       [
-              { lat: jobA.origin_lat, lng: jobA.origin_lng, address: jobA.origin_address,   type: 'PICKUP' },
-              { lat: jobB.origin_lat, lng: jobB.origin_lng, address: jobB.origin_address,   type: 'PICKUP' },
-              { lat: jobA.dest_lat,   lng: jobA.dest_lng,   address: jobA.destination_address, type: 'DROPOFF' },
-              { lat: jobB.dest_lat,   lng: jobB.dest_lng,   address: jobB.destination_address, type: 'DROPOFF' },
-            ],
-          }),
-        );
-
-        // Cancel original jobs with merge reference
-        await Promise.all([
-          tx.$executeRawUnsafe(
-            `UPDATE dispatch_jobs SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1::uuid`,
-            jobIdA,
-          ),
-          tx.$executeRawUnsafe(
-            `UPDATE dispatch_jobs SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1::uuid`,
-            jobIdB,
-          ),
-        ]);
-
-        // Audit
-        await tx.$executeRawUnsafe(`
-          INSERT INTO audit_logs (entity_type, entity_id, action, actor_id, meta)
-          VALUES ('DISPATCH_JOB', $1, 'MERGED', $2, $3::jsonb)
-          ON CONFLICT DO NOTHING
-        `, merged.id, adminId ?? 'system',
-          JSON.stringify({ mergedFrom: [jobIdA, jobIdB] })
-        ).catch(() => {});
-
-        return NextResponse.json({ ok: true, mergedJobId: merged.id });
-        } catch (err) {
-        console.error('[dispatch/merge-candidates POST]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+      const { jobIdA, jobIdB, adminId } = body;
+      if (!jobIdA || !jobIdB) {
+        return NextResponse.json({ error: 'jobIdA, jobIdB required' }, { status: 400 });
       }
+
+      const [jobA] = await tx.$queryRawUnsafe<Row[]>(`
+        SELECT * FROM dispatch_jobs WHERE id = $1::uuid AND tenant_id = $2
+      `, jobIdA, tenantId);
+      const [jobB] = await tx.$queryRawUnsafe<Row[]>(`
+        SELECT * FROM dispatch_jobs WHERE id = $1::uuid AND tenant_id = $2
+      `, jobIdB, tenantId);
+
+      if (!jobA || !jobB) {
+        return NextResponse.json({ error: 'One or both jobs not found' }, { status: 404 });
+      }
+
+      const originLatA = jobA.origin_lat ?? jobA.pickup_lat ?? null;
+      const originLngA = jobA.origin_lng ?? jobA.pickup_lng ?? null;
+      const originLatB = jobB.origin_lat ?? jobB.pickup_lat ?? null;
+      const originLngB = jobB.origin_lng ?? jobB.pickup_lng ?? null;
+      const destLatA   = jobA.dest_lat   ?? jobA.dropoff_lat ?? null;
+      const destLngA   = jobA.dest_lng   ?? jobA.dropoff_lng ?? null;
+      const destLatB   = jobB.dest_lat   ?? jobB.dropoff_lat ?? null;
+      const destLngB   = jobB.dest_lng   ?? jobB.dropoff_lng ?? null;
+      const combinedPax = Number(jobA.passenger_count ?? 1) + Number(jobB.passenger_count ?? 1);
+
+      const metaJson = JSON.stringify({
+        passengerCount: combinedPax,
+        mergedFrom:  [jobIdA, jobIdB],
+        mergedBy:    adminId ?? 'system',
+        mergedAt:    new Date().toISOString(),
+        multiStop:   true,
+        stops:       [
+          { lat: originLatA, lng: originLngA, address: jobA.origin_address,      type: 'PICKUP' },
+          { lat: originLatB, lng: originLngB, address: jobB.origin_address,      type: 'PICKUP' },
+          { lat: destLatA,   lng: destLngA,   address: jobA.destination_address, type: 'DROPOFF' },
+          { lat: destLatB,   lng: destLngB,   address: jobB.destination_address, type: 'DROPOFF' },
+        ],
+      });
+
+      // Create merged job populating both pickup_*/dropoff_* and origin_*/dest_* columns
+      const [merged] = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO dispatch_jobs
+          (tenant_id, service_type, priority, status,
+           pickup_lat, pickup_lng, dropoff_lat, dropoff_lng,
+           origin_lat, origin_lng, dest_lat, dest_lng,
+           origin_address, destination_address,
+           passenger_count, scheduled_pickup, metadata, meta)
+        VALUES
+          ($1, $2, $3, 'PENDING',
+           $4, $5, $6, $7,
+           $4, $5, $6, $7,
+           $8, $9,
+           $10, $11, $12::jsonb, $12::jsonb)
+        RETURNING id
+      `,
+        tenantId,
+        jobA.service_type,
+        priorityRank(String(jobA.priority)) >= priorityRank(String(jobB.priority))
+          ? jobA.priority : jobB.priority,
+        originLatA, originLngA,
+        destLatB,   destLngB,
+        jobA.origin_address      ?? null,
+        jobB.destination_address ?? null,
+        combinedPax,
+        jobA.scheduled_pickup ?? null,
+        metaJson,
+      );
+
+      // Cancel original jobs scoped strictly to tenantId
+      await Promise.all([
+        tx.$executeRawUnsafe(
+          `UPDATE dispatch_jobs SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
+          jobIdA,
+          tenantId,
+        ),
+        tx.$executeRawUnsafe(
+          `UPDATE dispatch_jobs SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
+          jobIdB,
+          tenantId,
+        ),
+      ]);
+
+      // Audit
+      await tx.$executeRawUnsafe(`
+        INSERT INTO audit_logs (entity_type, entity_id, action, user_id, details)
+        VALUES ('DispatchJob', $1, 'MERGED', $2, $3)
+      `, merged.id, adminId ?? 'system',
+        JSON.stringify({ mergedFrom: [jobIdA, jobIdB] })
+      ).catch(() => {});
+
+      return NextResponse.json({ ok: true, mergedJobId: merged.id });
+    } catch (err) {
+      console.error('[dispatch/merge-candidates POST]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-
 
 /* ── Helpers ── */
 function priorityRank(p: string): number {

@@ -5,10 +5,18 @@ import { downloadXLSX } from '@/lib/exportUtils';
 import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
 /* ─────────────────────────── types ─────────────────────────── */
-interface LineItem { description: string; qty: number; unitPrice: number }
+interface LineItem {
+  description: string;
+  qty: number;
+  unitPrice: number;
+  taxCategoryCode?: 'S' | 'Z' | 'E' | 'O' | 'AE' | 'G';
+  vatRatePercent?: number;
+}
 interface Invoice {
   id: string; invoice_number: string; client_name: string; client_email?: string;
-  client_phone?: string; service_type: string; module: string; description?: string;
+  client_phone?: string; client_address?: string; customer_trn?: string;
+  peppol_status?: string; peppol_submission_id?: string; peppol_digest_hash?: string; qr_code_base64?: string;
+  service_type: string; module: string; description?: string;
   subtotal: number; discount_amount: number; vat_amount: number; total_amount: number;
   paid_amount: number; currency: string; issue_date: string; due_date?: string;
   payment_status: string; notes?: string; created_at: string; line_items?: LineItem[];
@@ -38,14 +46,11 @@ const fmtAED = (n: number) => `AED ${Number(n).toLocaleString('en-AE', { minimum
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-AE') : '—';
 
 /* ─────────────────────────── sub-components ─────────────────── */
-// Peppol downloads go through fetch so an error (e.g. the company TRN is not
-// set) is shown to the user instead of being saved as a file.
 async function downloadPeppol(id: string, format: 'xml' | 'xlsx') {
   const res = await fetch(`/api/finance/invoices/${encodeURIComponent(id)}/peppol-xml?format=${format}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const msg = body.error ?? 'Could not generate the Peppol e-invoice';
-    // A missing company TRN is fixed on the Company Profile page.
     if (body.fixUrl) {
       if (confirm(`${msg}\n\nOpen Company Profile now?`)) window.location.href = body.fixUrl;
     } else {
@@ -73,18 +78,19 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function EmptyLineItem(): LineItem { return { description: '', qty: 1, unitPrice: 0 }; }
+function EmptyLineItem(): LineItem { return { description: '', qty: 1, unitPrice: 0, taxCategoryCode: 'S', vatRatePercent: 5 }; }
 
 /* ─────────────────────────── CreateModal ────────────────────── */
 function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => void; onCreated: () => void; defaultModule?: string }) {
+  const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({
     clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
+    customerTrn: '', customerCrn: '', orderReference: '', supplyDate: today,
     serviceType: defaultModule === 'SCHOOL_BUS' ? 'TRANSPORT_EDU' : 'GENERAL',
     module: defaultModule ?? 'GENERAL', description: '',
     vatRate: defaultModule === 'SCHOOL_BUS' ? 0 : 5,
     discountAmount: 0, currency: 'AED',
-    issueDate: new Date().toISOString().split('T')[0], dueDate: '', notes: '',
-    // School Bus extra fields — stored in description / notes when module=SCHOOL_BUS
+    issueDate: today, dueDate: '', notes: '',
     sbStudentGrade: '', sbBusMode: 'TWO_WAY', sbPeriod: '',
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([EmptyLineItem()]);
@@ -92,7 +98,6 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
 
   const isSchoolBus = form.module === 'SCHOOL_BUS';
 
-  // Auto-switch VAT when module changes
   const handleModuleChange = (mod: string) => {
     setForm(f => ({
       ...f,
@@ -108,7 +113,14 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
   const total      = discounted + vatAmount;
 
   const setItem = (i: number, field: keyof LineItem, val: string | number) => {
-    setLineItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: field === 'description' ? val : Number(val) } : it));
+    setLineItems(prev => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      if (field === 'taxCategoryCode') {
+        const cat = val as LineItem['taxCategoryCode'];
+        return { ...it, taxCategoryCode: cat, vatRatePercent: cat === 'S' ? 5 : 0 };
+      }
+      return { ...it, [field]: field === 'description' ? val : Number(val) };
+    }));
   };
   const addItem = () => setLineItems(prev => [...prev, EmptyLineItem()]);
   const removeItem = (i: number) => setLineItems(prev => prev.filter((_, idx) => idx !== i));
@@ -116,7 +128,6 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
   const submit = async () => {
     if (!form.clientName) return alert('Client name is required');
     setSaving(true);
-    // Compose school-bus-specific description enrichment
     let enrichedNotes = form.notes;
     if (isSchoolBus) {
       const sbMeta = [
@@ -145,15 +156,20 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
-          <h2 className="text-lg font-bold text-[var(--text-main)]">New Invoice</h2>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">New Tax Invoice (UAE Peppol PINT-AE)</h2>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs text-[var(--text-muted)] mb-1">Client Name *</label>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Client Legal Name *</label>
               <input value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="Client / Company" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="Client / Company LLC" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Buyer 15-Digit UAE VAT TRN</label>
+              <input value={form.customerTrn} onChange={e => setForm(f => ({ ...f, customerTrn: e.target.value }))}
+                className="w-full font-mono bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="100123456700003" />
             </div>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
@@ -164,6 +180,16 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
               <label className="block text-xs text-[var(--text-muted)] mb-1">Phone</label>
               <input value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))}
                 className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="+971 …" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Buyer Registered Address (Emirate)</label>
+              <input value={form.clientAddress} onChange={e => setForm(f => ({ ...f, clientAddress: e.target.value }))}
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="Al Quoz Industrial 1, Dubai" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">PO / Order Reference (BT-13)</label>
+              <input value={form.orderReference} onChange={e => setForm(f => ({ ...f, orderReference: e.target.value }))}
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="PO-2026-001" />
             </div>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">Module</label>
@@ -178,7 +204,6 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                 className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
             </div>
 
-            {/* School Bus specific fields */}
             {isSchoolBus && (
               <div className="col-span-2 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
@@ -230,25 +255,34 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
           {/* Line Items */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-[var(--text-main)]">Line Items</h3>
+              <h3 className="text-sm font-medium text-[var(--text-main)]">Line Items &amp; Tax Category</h3>
               <button onClick={addItem} className="text-xs text-amber-400 hover:text-amber-300">+ Add Item</button>
             </div>
             <div className="space-y-2">
               <div className="grid grid-cols-12 gap-2 text-xs text-[var(--text-faint)] px-1">
-                <div className="col-span-6">Description</div>
+                <div className="col-span-5">Description</div>
+                <div className="col-span-2">Tax Cat</div>
                 <div className="col-span-2 text-right">Qty</div>
-                <div className="col-span-3 text-right">Unit Price</div>
+                <div className="col-span-2 text-right">Unit Price</div>
                 <div className="col-span-1"></div>
               </div>
               {lineItems.map((item, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <input value={item.description} onChange={e => setItem(i, 'description', e.target.value)}
                     placeholder="Item description"
-                    className="col-span-6 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)]" />
+                    className="col-span-5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)]" />
+                  <select value={item.taxCategoryCode || 'S'} onChange={e => setItem(i, 'taxCategoryCode', e.target.value)}
+                    className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-1.5 py-1.5 text-xs text-[var(--text-main)]">
+                    <option value="S">S (5%)</option>
+                    <option value="Z">Z (0%)</option>
+                    <option value="E">E (Exempt)</option>
+                    <option value="O">O (Out)</option>
+                    <option value="AE">AE (RC)</option>
+                  </select>
                   <input type="number" value={item.qty} min={1} onChange={e => setItem(i, 'qty', e.target.value)}
                     className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-right" />
                   <input type="number" value={item.unitPrice} min={0} step={0.01} onChange={e => setItem(i, 'unitPrice', e.target.value)}
-                    className="col-span-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-right" />
+                    className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-right" />
                   <button onClick={() => removeItem(i)} disabled={lineItems.length === 1}
                     className="col-span-1 text-[var(--text-faint)] hover:text-red-400 text-center disabled:opacity-30">×</button>
                 </div>
@@ -262,7 +296,7 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
               <span>Subtotal</span><span className="text-[var(--text-main)]">{fmtAED(subtotal)}</span>
             </div>
             <div className="flex justify-between items-center text-[var(--text-muted)]">
-              <span>Discount</span>
+              <span>Discount (BG-20 Allowance)</span>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[var(--text-faint)]">AED</span>
                 <input type="number" value={form.discountAmount} min={0} step={0.01}
@@ -380,6 +414,15 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
   const [inv, setInv] = useState<InvoiceDetail | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [transmitting, setTransmitting] = useState(false);
+  const [peppolReceipt, setPeppolReceipt] = useState<{
+    submissionId?: string;
+    peppolStatus?: string;
+    digestHash?: string;
+    qrCodeBase64?: string;
+    gatewayResponseNote?: string;
+    error?: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/finance/invoices/${invoiceId}`);
@@ -398,6 +441,30 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
     await load();
     onRefresh();
     setUpdatingStatus(false);
+  };
+
+  const transmitToPeppol = async () => {
+    setTransmitting(true);
+    setPeppolReceipt(null);
+    try {
+      const res = await fetch(`/api/finance/invoices/${encodeURIComponent(invoiceId)}/peppol-xml`, {
+        method: 'POST',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (body.fixUrl) {
+          if (confirm(`${body.error}\n\nOpen Company Profile now?`)) window.location.href = body.fixUrl;
+        }
+        setPeppolReceipt({ error: body.error || 'PEPPOL validation failed' });
+      } else {
+        setPeppolReceipt(body);
+        onRefresh();
+      }
+    } catch (e: any) {
+      setPeppolReceipt({ error: e.message });
+    } finally {
+      setTransmitting(false);
+    }
   };
 
   if (!inv) return (
@@ -431,6 +498,7 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
         <div className="p-5 space-y-5">
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-1.5">
             <p className="text-[var(--text-main)] font-semibold">{inv.client_name}</p>
+            {inv.customer_trn && <p className="text-amber-400 font-mono text-xs">Buyer TRN: {inv.customer_trn}</p>}
             {inv.client_email && <p className="text-[var(--text-muted)] text-sm">{inv.client_email}</p>}
             {inv.client_phone && <p className="text-[var(--text-muted)] text-sm">{inv.client_phone}</p>}
           </div>
@@ -512,7 +580,29 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
               </button>
             )}
 
-            {/* UAE Peppol E-Invoice (PINT-UAE): XML for exchange, Excel for review */}
+            {/* UAE Peppol E-Invoice (PINT-UAE): ASP Transmission, XML & Excel */}
+            <button
+              onClick={transmitToPeppol}
+              disabled={transmitting}
+              className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-xs transition-all disabled:opacity-50"
+            >
+              {transmitting ? '⟳ Validating & Transmitting to PEPPOL ASP…' : '🚀 Transmit to UAE Peppol ASP (PINT-AE Clearance)'}
+            </button>
+
+            {peppolReceipt?.error && (
+              <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-xs text-red-300">
+                {peppolReceipt.error}
+              </div>
+            )}
+            {peppolReceipt?.submissionId && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-1 font-mono">
+                <div className="text-emerald-300 font-sans font-semibold">✓ {peppolReceipt.gatewayResponseNote}</div>
+                <div className="text-[var(--text-muted)]">ID: <span className="text-[var(--text-main)]">{peppolReceipt.submissionId}</span></div>
+                {peppolReceipt.digestHash && <div className="text-[var(--text-muted)] truncate">SHA-256: <span className="text-emerald-400">{peppolReceipt.digestHash}</span></div>}
+                {peppolReceipt.qrCodeBase64 && <div className="text-[var(--text-muted)] truncate">FTA TLV QR: <span className="text-amber-300">{peppolReceipt.qrCodeBase64}</span></div>}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => downloadPeppol(inv.id, 'xlsx')}
@@ -565,7 +655,6 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
 const STATUS_TABS = ['ALL','DRAFT','SENT','PARTIAL','OVERDUE','PAID','CANCELLED'];
 
 function FinanceInvoicesInner() {
-  // Read ?module= from URL — useSearchParams avoids SSR/client hydration mismatch
   const searchParams = useSearchParams() ?? new URLSearchParams();
   const [invoices, setInvoices]   = useState<Invoice[]>([]);
   const [counts,   setCounts]     = useState<Record<string, number>>({});
@@ -575,7 +664,6 @@ function FinanceInvoicesInner() {
   const [q,        setQ]          = useState('');
   const [module,   setModule]     = useState('');
 
-  // Sync module filter from URL param after hydration (avoids SSR mismatch)
   useEffect(() => {
     const m = searchParams.get('module') ?? '';
     setModule(m);
@@ -634,7 +722,7 @@ function FinanceInvoicesInner() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Invoices</h1>
-          <p className="text-[var(--text-muted)] text-xs mt-0.5">Create, manage, and track all invoices</p>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Create, manage, and track all UAE tax invoices &amp; Peppol PINT-AE clearance</p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExport}
@@ -670,23 +758,23 @@ function FinanceInvoicesInner() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-[var(--text-main)]">UAE MoF & FTA Peppol E-Invoicing (PINT-UAE)</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">Phase 1 Active</span>
+              <p className="text-sm font-semibold text-[var(--text-main)]">UAE MoF &amp; FTA Peppol E-Invoicing (PINT-UAE)</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">PINT-AE + FTA TLV QR Active</span>
             </div>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              Invoices are generated with compliant UBL 2.1 XML, FTA TRN validation, and cryptographic SHA-256 digest hashes alongside bilingual PDF tax invoices.
+              Invoices are generated with compliant UBL 2.1 XML, FTA TRN validation, Base64 TLV QR codes, and cryptographic SHA-256 digest hashes.
             </p>
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button
-            onClick={() => downloadPeppol('INV-DEMO-001', 'xlsx')}
+            onClick={() => invoices.length > 0 ? downloadPeppol(invoices[0].id, 'xlsx') : window.open('/api/finance/invoices/sample/peppol-xml?format=xlsx&sample=1', '_blank')}
             className="px-3.5 py-1.5 rounded-xl bg-violet-500/25 hover:bg-violet-500/35 border border-violet-500/40 text-violet-200 text-xs font-semibold whitespace-nowrap transition-all shadow-sm"
           >
             Download Sample (Excel) ↓
           </button>
           <button
-            onClick={() => downloadPeppol('INV-DEMO-001', 'xml')}
+            onClick={() => invoices.length > 0 ? downloadPeppol(invoices[0].id, 'xml') : window.open('/api/finance/invoices/sample/peppol-xml?format=xml&sample=1', '_blank')}
             className="px-3.5 py-1.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-300 text-xs font-semibold whitespace-nowrap transition-all shadow-sm"
           >
             Sample XML ↓
@@ -748,7 +836,11 @@ function FinanceInvoicesInner() {
                     </td>
                     <td className="px-5 py-3">
                       <p className="text-[var(--text-main)]">{inv.client_name}</p>
-                      {inv.client_email && <p className="text-[var(--text-faint)] text-xs">{inv.client_email}</p>}
+                      {inv.customer_trn ? (
+                        <p className="text-amber-300/80 font-mono text-[11px]">TRN: {inv.customer_trn}</p>
+                      ) : (
+                        inv.client_email && <p className="text-[var(--text-faint)] text-xs">{inv.client_email}</p>
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       {inv.module === 'SCHOOL_BUS'
@@ -788,7 +880,6 @@ function FinanceInvoicesInner() {
         </div>
       )}
 
-      {/* School Bus active filter banner */}
       {module === 'SCHOOL_BUS' && (
         <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">

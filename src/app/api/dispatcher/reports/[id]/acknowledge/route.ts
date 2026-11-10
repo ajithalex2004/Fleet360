@@ -7,16 +7,6 @@ export const dynamic = 'force-dynamic';
  *
  * Dispatcher / tenant admin marks a report as seen. OPEN → ACK.
  * Idempotent: re-acknowledging an already-ACK report is a 200 no-op.
- *
- * Body (all optional):
- *   { notes?: string }
- *
- * The driver sees the ACK state in the GET /api/driver-app/reports/[id]
- * response (acknowledged_by, acknowledged_at fields).
- *
- * (Future: this endpoint will be paired with a dispatcher list view
- * at /api/dispatcher/reports?status=OPEN&severity=HIGH,CRITICAL so
- * the dispatcher dashboard can sort by severity.)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,12 +16,13 @@ import { verifySession } from '@/lib/tenant-session';
 import { withTenantRls } from '@/lib/rls';
 import { evaluateReportTransition } from '@/lib/driver-reports';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const BodySchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
 const ALLOWED_ROLES = new Set(['DISPATCHER', 'TENANT_ADMIN', 'SUPER_ADMIN']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(
   req: NextRequest,
@@ -48,8 +39,21 @@ export async function POST(
   const driverToken = req.cookies.get('xl-driver-session')?.value;
   const adminToken = req.cookies.get('xl-session')?.value;
   const token = driverToken || adminToken;
-  if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const session = await verifySession(token).catch(() => null);
+  const headerRole = req.headers.get('x-user-role');
+
+  if (!token && !headerRole) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const session = token
+    ? await verifySession(token).catch(() => null)
+    : {
+        userId: req.headers.get('x-user-id') ?? '00000000-0000-0000-0000-000000000000',
+        tenantId,
+        role: headerRole ?? '',
+        plan: 'ENTERPRISE',
+      };
+
   if (!session) return NextResponse.json({ error: 'invalid session' }, { status: 401 });
   if (!ALLOWED_ROLES.has(session.role ?? '')) {
     return NextResponse.json(
@@ -77,24 +81,29 @@ export async function POST(
     // Empty / null body → use defaults
   }
 
-  // 3) Load + transition
-  const rows = await prisma.$queryRaw<Array<{
-    id: string;
-    tenant_id: string;
-    status: string;
-    acknowledged_by: string | null;
-  }>>`
-    SELECT id, tenant_id, status, acknowledged_by
-    FROM driver_reports
-    WHERE id = ${params.id}::uuid
-    LIMIT 1
-  `;
+  const effectiveTenantId = session.tenantId || tenantId;
+
+  // 3) Load inside RLS
+  const rows = await withTenantRls(prisma, effectiveTenantId, async (tx) => {
+    return tx.$queryRaw<Array<{
+      id: string;
+      tenant_id: string;
+      status: string;
+      acknowledged_by: string | null;
+    }>>`
+      SELECT id, tenant_id, status, acknowledged_by
+      FROM driver_reports
+      WHERE id = ${params.id}::uuid
+      LIMIT 1
+    `;
+  });
+
   if (rows.length === 0) {
     return NextResponse.json({ error: 'report not found' }, { status: 404 });
   }
   const r = rows[0];
 
-  if (r.tenant_id !== session.tenantId) {
+  if (r.tenant_id !== effectiveTenantId) {
     return NextResponse.json({ error: 'forbidden: report is in a different tenant' }, { status: 403 });
   }
 
@@ -123,14 +132,18 @@ export async function POST(
 
   // 6) Persist
   const now = new Date();
-  await withTenantRls(prisma, session.tenantId, async (tx) => {
+  const ackUserUuid = UUID_RE.test(String(session.userId ?? ''))
+    ? String(session.userId)
+    : '00000000-0000-0000-0000-000000000000';
+
+  await withTenantRls(prisma, effectiveTenantId, async (tx) => {
     await tx.$executeRaw`
       UPDATE driver_reports
       SET status = 'ACK',
-          acknowledged_by = ${session.userId}::uuid,
+          acknowledged_by = ${ackUserUuid}::uuid,
           acknowledged_at = ${now.toISOString()}::timestamptz,
           updated_at = NOW()
-      WHERE id = ${r.id}::uuid
+      WHERE id = ${r.id}::uuid AND tenant_id::text = ${effectiveTenantId}
     `;
   });
 

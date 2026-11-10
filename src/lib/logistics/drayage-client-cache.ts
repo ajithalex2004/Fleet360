@@ -10,18 +10,47 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface CacheStore {
+  tenantKey: string | null;
   data: any | null;
   etag: string | null;
   timestamp: number;
   inflightPromise: Promise<any> | null;
 }
 
-const cacheStore: CacheStore = {
-  data: null,
-  etag: null,
-  timestamp: 0,
-  inflightPromise: null,
-};
+const cacheStoreByTenant = new Map<string, CacheStore>();
+let activeTenantKey = 'default';
+
+function resolveCurrentClientTenantKey(): string {
+  if (typeof window === 'undefined') return activeTenantKey;
+  try {
+    const stored =
+      window.localStorage.getItem('fleet360_tenant_id') ||
+      window.localStorage.getItem('tenantId') ||
+      window.sessionStorage.getItem('fleet360_tenant_id');
+    if (stored && stored.trim()) {
+      activeTenantKey = stored.trim();
+      return activeTenantKey;
+    }
+  } catch {
+    // ignore storage access issues
+  }
+  return activeTenantKey;
+}
+
+function getTenantCacheStore(tenantKey = resolveCurrentClientTenantKey()): CacheStore {
+  let entry = cacheStoreByTenant.get(tenantKey);
+  if (!entry) {
+    entry = {
+      tenantKey,
+      data: null,
+      etag: null,
+      timestamp: 0,
+      inflightPromise: null,
+    };
+    cacheStoreByTenant.set(tenantKey, entry);
+  }
+  return entry;
+}
 
 const DEFAULT_TTL_MS = 25_000; // 25 seconds TTL for background freshness
 
@@ -33,36 +62,42 @@ let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 /**
  * Returns currently cached drayage data synchronously (or null if not yet fetched)
  */
-export function getCachedDrayageData(): any | null {
-  return cacheStore.data;
+export function getCachedDrayageData(tenantId?: string): any | null {
+  const store = getTenantCacheStore(tenantId || resolveCurrentClientTenantKey());
+  return store.data;
 }
 
 /**
  * Invalidate the client-side cache so the next fetch reaches the server
  */
-export function invalidateDrayageClientCache(): void {
-  cacheStore.data = null;
-  cacheStore.etag = null;
-  cacheStore.timestamp = 0;
-  cacheStore.inflightPromise = null;
+export function invalidateDrayageClientCache(tenantId?: string): void {
+  if (tenantId) {
+    cacheStoreByTenant.delete(tenantId);
+    return;
+  }
+  cacheStoreByTenant.clear();
 }
 
 /**
  * Manually update the client cache after a successful mutation
  */
-export function updateDrayageClientCache(updater: (prev: any) => any): void {
-  if (cacheStore.data) {
-    cacheStore.data = updater(cacheStore.data);
-    cacheStore.timestamp = Date.now();
+export function updateDrayageClientCache(updater: (prev: any) => any, tenantId?: string): void {
+  const store = getTenantCacheStore(tenantId || resolveCurrentClientTenantKey());
+  if (store.data) {
+    store.data = updater(store.data);
+    store.timestamp = Date.now();
   }
 }
 
 /**
  * Set the client cache explicitly
  */
-export function setDrayageClientCache(data: any): void {
-  cacheStore.data = data;
-  cacheStore.timestamp = Date.now();
+export function setDrayageClientCache(data: any, tenantId?: string): void {
+  const resolvedKey = tenantId || data?.tenantId || resolveCurrentClientTenantKey();
+  activeTenantKey = resolvedKey;
+  const store = getTenantCacheStore(resolvedKey);
+  store.data = data;
+  store.timestamp = Date.now();
 }
 
 /**
@@ -73,10 +108,13 @@ export async function fetchDrayageWorkspaceCached(options?: {
   forceFresh?: boolean;
   ttlMs?: number;
   scope?: 'full' | 'jobs' | 'master' | 'telemetry';
+  tenantId?: string;
 }): Promise<any> {
   const forceFresh = options?.forceFresh ?? false;
   const ttl = options?.ttlMs ?? DEFAULT_TTL_MS;
   const scope = options?.scope ?? 'full';
+  const tenantKey = options?.tenantId || resolveCurrentClientTenantKey();
+  const cacheStore = getTenantCacheStore(tenantKey);
   const isFresh = cacheStore.data && Date.now() - cacheStore.timestamp < ttl;
 
   if (!forceFresh && isFresh && scope === 'full') {
@@ -106,10 +144,18 @@ export async function fetchDrayageWorkspaceCached(options?: {
       }
       const responseEtag = res.headers.get('etag');
       const data = await res.json();
+      const responseTenant = typeof data?.tenantId === 'string' && data.tenantId ? data.tenantId : tenantKey;
+      activeTenantKey = responseTenant;
+      const targetStore = getTenantCacheStore(responseTenant);
       if (scope === 'full') {
-        cacheStore.data = data;
-        cacheStore.etag = responseEtag;
-        cacheStore.timestamp = Date.now();
+        targetStore.data = data;
+        targetStore.etag = responseEtag;
+        targetStore.timestamp = Date.now();
+        if (targetStore !== cacheStore) {
+          cacheStore.data = data;
+          cacheStore.etag = responseEtag;
+          cacheStore.timestamp = Date.now();
+        }
       }
       return data;
     } finally {
@@ -141,6 +187,8 @@ function ensureSharedEventSource(): void {
       } catch {
         return;
       }
+
+      const cacheStore = getTenantCacheStore(evt?.tenantId || resolveCurrentClientTenantKey());
 
       // Fast-path in-place update for live vehicle GPS pings without full DB reload
       if (evt?.type === 'telemetry_ping' && evt.vehicleId && typeof evt.lat === 'number' && typeof evt.lng === 'number') {

@@ -60,12 +60,16 @@ test.beforeAll(async () => {
       passwordHash, tmUserId,
     );
 
-    const roleId = crypto.randomUUID();
-    await prisma.role.create({
-      data: { id: roleId, tenantId: tmTenantId, name: 'Tenant Admin', code: 'TENANT_ADMIN' },
+    let platformRole = await prisma.role.findFirst({
+      where: { tenantId: null, code: 'TENANT_ADMIN' },
     });
+    if (!platformRole) {
+      platformRole = await prisma.role.create({
+        data: { id: crypto.randomUUID(), tenantId: null, name: 'Tenant Admin', code: 'TENANT_ADMIN', isSystem: true },
+      });
+    }
     await prisma.userTenant.create({
-      data: { id: crypto.randomUUID(), userId: tmUserId, tenantId: tmTenantId, roleId, isActive: true },
+      data: { id: crypto.randomUUID(), userId: tmUserId, tenantId: tmTenantId, roleId: platformRole.id, isActive: true },
     });
   } finally {
     await prisma.$disconnect();
@@ -133,9 +137,15 @@ async function goToTenantsPage({ page }: { page: any }) {
     }
   });
 
+  // 2b. Mock attachment-types so Tab 4 (Attachments) renders empty state deterministically
+  await page.route('**/api/admin/attachment-types*', async (route: any) => {
+    await route.fulfill({ status: 200, json: [] });
+  });
+
   // 3. Navigate to the tenants page
   await page.goto('/admin/tenants');
-  await page.waitForLoadState('networkidle', { timeout: 15_000 });
+  await page.waitForLoadState('load', { timeout: 15_000 });
+  await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -201,8 +211,8 @@ test.describe('Tenant Management API & Functionalities', () => {
       await page.click('button:has-text("Next →")');
       await page.click('button:has-text("Next →")');
       await page.click('button:has-text("Next →")');
-      await expect(page.locator('p', { hasText: 'No attachments yet' })).toBeVisible({ timeout: 10_000 });
-      await expect(page.locator('p', { hasText: 'Attachments can be added after saving' })).toBeVisible();
+      await expect(page.locator('p', { hasText: 'No attachment types are active' })).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('p', { hasText: 'The logo is uploaded after creation' })).toBeVisible();
     });
 
     test('TS_TM_011: Submit mocked form gracefully', async ({ page }) => {

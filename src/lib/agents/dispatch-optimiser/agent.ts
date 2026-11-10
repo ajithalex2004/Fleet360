@@ -40,6 +40,8 @@ interface JobRow {
     estimatedDurationMin?: number;
     requiredVehicleTypes?: string[];
     requiredLicenseClass?: string;
+    requiredWeightKg?: number;
+    requiredVolumeCbm?: number;
     customerLanguage?: string;
     autoDispatch?: boolean;
     autoDispatchThreshold?: number;
@@ -51,6 +53,8 @@ interface VehicleRow {
   vehicle_code: string;
   vehicle_type: string;
   capacity: number | null;
+  payload_capacity_kg?: number | null;
+  cargo_volume_cbm?: number | null;
   status: string;
   current_lat: number | null;
   current_lng: number | null;
@@ -76,6 +80,16 @@ interface DriverRow {
   shift_start: Date | string | null;
   shift_end: Date | string | null;
 }
+
+const FREIGHT_SERVICE_TYPES = new Set([
+  'FREIGHT',
+  'LOGISTICS',
+  'CARGO',
+  'DELIVERY',
+  'DRAYAGE',
+  'FTL',
+  'LTL',
+]);
 
 async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
@@ -133,12 +147,14 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
     };
   }
 
-  // 2. Fetch available vehicles with registration & insurance compliance fields and risk scores
+  // 2. Fetch available vehicles with registration & insurance compliance fields, payload capacity, and risk scores
   const vehicles = await prisma.$queryRawUnsafe<VehicleRow[]>(`
     SELECT v.id::text,
            COALESCE(v.vehicle_code, v.plate_number, v.id::text) AS vehicle_code,
            COALESCE(v.type, v.vehicle_group, 'SEDAN') AS vehicle_type,
            COALESCE(v.seating_capacity, 4)::int AS capacity,
+           COALESCE(v.payload_capacity_kg, 0)::float8 AS payload_capacity_kg,
+           COALESCE(v.cargo_volume_cbm, 0)::float8 AS cargo_volume_cbm,
            v.status,
            vl.latitude::float8 AS current_lat,
            vl.longitude::float8 AS current_lng,
@@ -187,8 +203,13 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
     return [] as DriverRow[];
   });
 
-  // 4. Build vehicle map
+  // 4. Build vehicle map & distinct unassigned vehicle pool
   const vehicleMap = new Map(vehicles.map(v => [v.id, v]));
+  const assignedVehicleIds = new Set(
+    drivers.map(d => d.assigned_vehicle_id).filter((id): id is string => Boolean(id)),
+  );
+  const unassignedVehicles = vehicles.filter(v => !assignedVehicleIds.has(v.id));
+  let unassignedVehicleCursor = 0;
 
   // Helper date checker
   const now = new Date();
@@ -198,10 +219,19 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
     return dateObj.getTime() > now.getTime();
   };
 
-  // 5. Build candidates — driver + their assigned or available vehicle
-  const candidates: DriverCandidate[] = [];
+  // 5. Build candidates — pair each driver with their assigned vehicle or a distinct available vehicle from the pool
+  const baseCandidates: Array<{ driver: DriverRow; vehicle: VehicleRow; candidate: DriverCandidate }> = [];
   for (const d of drivers) {
-    const veh = d.assigned_vehicle_id ? vehicleMap.get(d.assigned_vehicle_id) : (vehicles.length > 0 ? vehicles[0] : null);
+    let veh = d.assigned_vehicle_id ? vehicleMap.get(d.assigned_vehicle_id) : undefined;
+    if (!veh) {
+      if (unassignedVehicles.length > 0) {
+        veh = unassignedVehicles[unassignedVehicleCursor % unassignedVehicles.length];
+        unassignedVehicleCursor++;
+      } else if (vehicles.length > 0) {
+        veh = vehicles[unassignedVehicleCursor % vehicles.length];
+        unassignedVehicleCursor++;
+      }
+    }
     if (!veh) continue;
 
     const hoursWorked = d.hours_worked_today ?? 0;
@@ -211,29 +241,33 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
     const isInsValid = isFutureDate(veh.insurance_expiry);
     const isLicValid = isFutureDate(d.license_expiry) && d.status !== 'SUSPENDED' && d.status !== 'INACTIVE';
 
-    candidates.push({
-      driverId:            d.id,
-      driverName:          `${d.first_name ?? 'Driver'} ${d.last_name ?? d.id.slice(0, 6)}`.trim(),
-      vehicleId:           veh.id,
-      vehicleCode:         veh.vehicle_code,
-      vehicleType:         veh.vehicle_type ?? 'SEDAN',
-      capacity:            veh.capacity ?? 4,
-      currentLat:          d.current_lat ?? veh.current_lat ?? 25.2048,
-      currentLng:          d.current_lng ?? veh.current_lng ?? 55.2708,
-      avgSpeedKmh:         40,
-      hoursRemainingToday: hoursRemaining,
-      ragScore:            88, // standard high baseline
-      fatigueScore:        Math.min(1.0, hoursWorked / 10 * 0.7), // fatigue scales with shift hours
-      currentJobCount:     0,
-      languages:           d.language ? [d.language, 'en'] : ['en', 'ar'],
-      licenseClasses:      d.license_class ? [d.license_class] : ['LIGHT'],
-      vehicleRiskScore:    veh.risk_score ?? 0.15,
-      zonesServed:         [],
-      isVehicleRegistered: isRegValid,
-      isVehicleInsured:    isInsValid,
-      isDriverLicensed:    isLicValid,
-      baseDepotLat:        25.2048,
-      baseDepotLng:        55.2708,
+    baseCandidates.push({
+      driver: d,
+      vehicle: veh,
+      candidate: {
+        driverId:            d.id,
+        driverName:          `${d.first_name ?? 'Driver'} ${d.last_name ?? d.id.slice(0, 6)}`.trim(),
+        vehicleId:           veh.id,
+        vehicleCode:         veh.vehicle_code,
+        vehicleType:         veh.vehicle_type ?? 'SEDAN',
+        capacity:            veh.capacity ?? 4,
+        currentLat:          d.current_lat ?? veh.current_lat ?? 25.2048,
+        currentLng:          d.current_lng ?? veh.current_lng ?? 55.2708,
+        avgSpeedKmh:         40,
+        hoursRemainingToday: hoursRemaining,
+        ragScore:            88, // standard high baseline
+        fatigueScore:        Math.min(1.0, hoursWorked / 10 * 0.7), // fatigue scales with shift hours
+        currentJobCount:     0,
+        languages:           d.language ? [d.language, 'en'] : ['en', 'ar'],
+        licenseClasses:      d.license_class ? [d.license_class] : ['LIGHT'],
+        vehicleRiskScore:    veh.risk_score ?? 0.15,
+        zonesServed:         [],
+        isVehicleRegistered: isRegValid,
+        isVehicleInsured:    isInsValid,
+        isDriverLicensed:    isLicValid,
+        baseDepotLat:        25.2048,
+        baseDepotLng:        55.2708,
+      },
     });
   }
 
@@ -246,9 +280,23 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
 
   // 6. Score each job with Spatial Shortlist & Top-5 Road Matrix Refinement
   for (const job of jobs) {
-    if (candidates.length === 0) break;
+    if (baseCandidates.length === 0) break;
 
     const meta = job.metadata ?? {};
+    const isFreightJob = FREIGHT_SERVICE_TYPES.has(String(job.service_type ?? '').toUpperCase());
+    const requiredCapacity = isFreightJob
+      ? (meta.requiredWeightKg ?? job.required_capacity ?? 1)
+      : (job.required_capacity ?? 1);
+
+    const candidates: DriverCandidate[] = baseCandidates.map(({ vehicle, candidate }) => ({
+      ...candidate,
+      capacity: isFreightJob
+        ? (Number(vehicle.payload_capacity_kg ?? 0) > 0
+            ? Number(vehicle.payload_capacity_kg)
+            : candidate.capacity)
+        : candidate.capacity,
+    }));
+
     const jobReq: JobRequirements = {
       jobId:                job.id,
       serviceType:          job.service_type,
@@ -257,7 +305,7 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
       pickupLng:            job.pickup_lng ?? 55.2708,
       dropoffLat:           job.dropoff_lat ?? null,
       dropoffLng:           job.dropoff_lng ?? null,
-      requiredCapacity:     job.required_capacity ?? 1,
+      requiredCapacity,
       requiredVehicleTypes: meta.requiredVehicleTypes ?? [],
       requiredLicenseClass: meta.requiredLicenseClass ?? null,
       slaDeadline:          job.sla_deadline ? new Date(job.sla_deadline) : null,
@@ -374,7 +422,7 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
       costAvoidedAed: totalCostAvoidedAed,
     },
     output: {
-      summary: `Evaluated ${jobs.length} job(s) across ${candidates.length} candidates (spatially pre-filtered to Top-20 with Top-5 road matrix refinement). Generated ${processed} recommendation(s) (${autoDispatchedCount} auto-dispatched). Avoided ${totalCostAvoidedAed.toFixed(2)} AED in routing matrix calls.${entityId ? ` [single-job mode: ${entityId}]` : ''}`,
+      summary: `Evaluated ${jobs.length} job(s) across ${baseCandidates.length} candidates (spatially pre-filtered to Top-20 with Top-5 road matrix refinement). Generated ${processed} recommendation(s) (${autoDispatchedCount} auto-dispatched). Avoided ${totalCostAvoidedAed.toFixed(2)} AED in routing matrix calls.${entityId ? ` [single-job mode: ${entityId}]` : ''}`,
       recommendations,
       routingStats: {
         matrixElementsQueried: totalMatrixElements,

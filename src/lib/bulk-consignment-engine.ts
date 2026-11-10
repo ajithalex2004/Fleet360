@@ -20,6 +20,9 @@ export interface BulkConsignmentRow {
   validationErrors: string[];
 }
 
+export type BulkConsignmentRowInput = Partial<BulkConsignmentRow>;
+export type ValidatedConsignmentRow = BulkConsignmentRow;
+
 export interface ClusteredVehicleRoute {
   clusterId: string;
   corridorName: string;
@@ -122,6 +125,85 @@ export function parseBulkConsignmentsCsv(csvText: string): BulkConsignmentRow[] 
   }
 
   return rows;
+}
+
+export const SAMPLE_BULK_CONSIGNMENT_CSV_ROWS: BulkConsignmentRow[] =
+  parseBulkConsignmentsCsv(SAMPLE_BULK_CSV_CONTENT);
+
+export function validateBulkConsignmentBatch(inputs: BulkConsignmentRowInput[]) {
+  const validatedRows: ValidatedConsignmentRow[] = inputs.map((item, idx) => {
+    const errors: string[] = [];
+    const consigneeName = item.consigneeName?.trim() || '';
+    const destinationAddress = item.destinationAddress?.trim() || '';
+    const palletCount = Number(item.palletCount ?? 1);
+    const grossWeightKg = Number(item.grossWeightKg ?? 500);
+
+    if (!consigneeName) errors.push('Missing Consignee Name');
+    if (!destinationAddress) errors.push('Missing Destination Address');
+    if (!Number.isFinite(palletCount) || palletCount <= 0) errors.push('Pallet count must be at least 1');
+    if (!Number.isFinite(grossWeightKg) || grossWeightKg <= 0) errors.push('Gross weight must be positive');
+
+    return {
+      consignmentRef: item.consignmentRef?.trim() || `CON-DXB-${String(idx + 1).padStart(3, '0')}`,
+      shipperName: item.shipperName?.trim() || 'EIN360 General Trading LLC',
+      originLocation: item.originLocation?.trim() || 'JAFZA Gate 4',
+      consigneeName: consigneeName || 'Retail Destination',
+      destinationAddress: destinationAddress || 'Dubai',
+      deliveryDate: item.deliveryDate || new Date().toISOString().split('T')[0],
+      timeWindowStart: item.timeWindowStart || '08:00',
+      timeWindowEnd: item.timeWindowEnd || '12:00',
+      palletCount: palletCount > 0 ? palletCount : 1,
+      grossWeightKg: grossWeightKg > 0 ? grossWeightKg : 500,
+      cargoCategory: item.cargoCategory || 'Dry Retail',
+      customsDecNo: item.customsDecNo || 'DEC-DXB-CUST-2026-098842',
+      receiverContactName: item.receiverContactName || 'Store Receiving Manager',
+      receiverPhone: item.receiverPhone || '+971 50 123 4567',
+      costCenter: item.costCenter || 'CC-EIN360-DEFAULT',
+      isValid: errors.length === 0,
+      validationErrors: errors,
+    };
+  });
+
+  const clusters = clusterConsignmentsIntoRoutes(validatedRows);
+  const validRows = validatedRows.filter((r) => r.isValid);
+  const invalidRows = validatedRows.filter((r) => !r.isValid);
+  const totalPallets = validRows.reduce((sum, r) => sum + r.palletCount, 0);
+  const totalWeightKg = validRows.reduce((sum, r) => sum + r.grossWeightKg, 0);
+  const summaryPricingAed = clusters.reduce((sum, c) => sum + c.totalFreightFareAed, 0);
+
+  return {
+    totalRows: validatedRows.length,
+    validRowsCount: validRows.length,
+    invalidRowsCount: invalidRows.length,
+    totalPallets,
+    totalWeightKg,
+    summaryPricingAed,
+    clusters,
+    rows: validatedRows,
+  };
+}
+
+export function dispatchBulkConsignments(rows: ValidatedConsignmentRow[], batchId: string) {
+  const summary = validateBulkConsignmentBatch(rows);
+  const sealPayload = JSON.stringify({
+    batchId,
+    validRowsCount: summary.validRowsCount,
+    totalPallets: summary.totalPallets,
+    totalWeightKg: summary.totalWeightKg,
+  });
+  const batchSeal = crypto.createHash('sha256').update(sealPayload).digest('hex');
+
+  return {
+    batchId,
+    dispatchedAt: new Date().toISOString(),
+    dispatchedConsignmentsCount: summary.validRowsCount,
+    routesCreatedCount: summary.clusters.length,
+    totalPallets: summary.totalPallets,
+    totalWeightKg: summary.totalWeightKg,
+    totalFreightFareAed: summary.summaryPricingAed,
+    cryptographicBatchSeal: batchSeal,
+    clusters: summary.clusters,
+  };
 }
 
 /**

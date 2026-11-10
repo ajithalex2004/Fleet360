@@ -8,6 +8,8 @@ import crypto from 'crypto';
 import {
   getDrayageWorkspaceData,
   createDrayageJobsBatch,
+  updateDrayageJobDetails,
+  updateDrayageReturnTerminal,
   assignDrayageJob,
   updateDrayageJobExecutionStatus,
   activateL2EmptyReturnJob,
@@ -280,36 +282,149 @@ export async function POST(req: NextRequest) {
 
     const dbStart = performance.now();
     const result = await withTenantRls(prisma, tenantId, async (tx) => {
+      let dispatcherActor = typeof body.actor === 'string' ? body.actor.trim() : '';
+      if (
+        !dispatcherActor ||
+        ['Dispatch Console', 'Dispatcher Console', 'Port Operations Desk', 'Super Admin'].includes(
+          dispatcherActor,
+        )
+      ) {
+        if (userId) {
+          const userRows = await tx
+            .$queryRawUnsafe<Array<{ username: string | null; email: string | null }>>(
+              `SELECT username, email FROM "User" WHERE id = $1 LIMIT 1`,
+              userId,
+            )
+            .catch(() => []);
+          if (userRows[0]?.username) {
+            dispatcherActor = String(userRows[0].username).trim();
+          } else if (userRows[0]?.email) {
+            dispatcherActor = String(userRows[0].email).split('@')[0].trim();
+          }
+        }
+      }
+      if (!dispatcherActor) {
+        dispatcherActor = 'dispatcher';
+      }
 
       switch (action) {
         case 'create_jobs': {
-          if (!String(body.customerName ?? '').trim() || !String(body.terminalName ?? '').trim() || !String(body.warehouseName ?? '').trim()) {
-            throw new Error('Customer, Port Terminal, and Destination Warehouse are mandatory to create a job.');
+          const rawContainers: Array<Record<string, unknown>> = Array.isArray(body.containers) ? body.containers : [];
+          const hasFallbackWarehouse = Boolean(String(body.warehouseName ?? '').trim());
+          const allContainersHaveWarehouse =
+            rawContainers.length > 0 &&
+            rawContainers.every((c) => Boolean(String(c.warehouseName ?? '').trim()));
+          if (!String(body.customerName ?? '').trim() || !String(body.terminalName ?? '').trim() || (!hasFallbackWarehouse && !allContainersHaveWarehouse)) {
+            throw new Error('Customer, Port Terminal, and Consignee Destination / Facility are mandatory to create a job.');
           }
-          const rawContainers = Array.isArray(body.containers) ? body.containers : [];
           if (rawContainers.length === 0 || rawContainers.some((c: Record<string, unknown>) => !String(c.containerNumber ?? '').trim())) {
             throw new Error('At least one valid Container Number is mandatory to create a job.');
           }
           const parsedRate = Number(body.rateAmountAed);
           const parsedAllow = Number(body.driverAllowanceAed);
+          const firstCntWhName = rawContainers[0]?.warehouseName ? String(rawContainers[0].warehouseName).trim() : '';
+          const firstCntWhId = rawContainers[0]?.warehouseId ? String(rawContainers[0].warehouseId) : null;
           return createDrayageJobsBatch(tx, {
             tenantId,
             shipmentType: body.shipmentType === 'EXPORT' ? 'EXPORT' : 'IMPORT',
             priority: body.priority || 'STANDARD',
             customerId: body.customerId ?? null,
             customerName: String(body.customerName || 'Enterprise Shipper').trim() || 'Enterprise Shipper',
-            warehouseId: body.warehouseId ?? null,
-            warehouseName: String(body.warehouseName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub',
+            warehouseId: body.warehouseId ?? firstCntWhId ?? null,
+            warehouseName: String(body.warehouseName || firstCntWhName || 'JAFZA South Bonded Hub').trim() || 'JAFZA South Bonded Hub',
             terminalId: body.terminalId ?? null,
             terminalName: String(body.terminalName || 'Jebel Ali Port - Terminal 1').trim() || 'Jebel Ali Port - Terminal 1',
             rateAmountAed: Number.isFinite(parsedRate) && parsedRate >= 0 ? parsedRate : 1550,
             driverAllowanceAed: Number.isFinite(parsedAllow) && parsedAllow >= 0 ? parsedAllow : 150,
             notes: body.notes ?? null,
-            containers: Array.isArray(body.containers) ? body.containers : [],
+            containers: rawContainers as never,
+          });
+        }
+
+        case 'edit_job':
+        case 'update_job': {
+          const jobId = String(body.jobId ?? '').trim();
+          if (!jobId) {
+            throw new Error('jobId is required to edit a job');
+          }
+          return updateDrayageJobDetails(tx, {
+            tenantId,
+            jobId,
+            containerNumber:
+              body.containerNumber !== undefined ? String(body.containerNumber).trim().toUpperCase() : undefined,
+            containerSize: body.containerSize !== undefined ? String(body.containerSize).trim() : undefined,
+            containerType: body.containerType !== undefined ? String(body.containerType).trim() : undefined,
+            sealNumber: body.sealNumber !== undefined ? (body.sealNumber ? String(body.sealNumber).trim() : null) : undefined,
+            weightKg:
+              body.weightKg !== undefined && Number.isFinite(Number(body.weightKg))
+                ? Number(body.weightKg)
+                : undefined,
+            shipmentType:
+              body.shipmentType === 'EXPORT' || body.shipmentType === 'IMPORT'
+                ? body.shipmentType
+                : undefined,
+            priority:
+              body.priority && ['STANDARD', 'HIGH', 'URGENT'].includes(String(body.priority).toUpperCase())
+                ? (String(body.priority).toUpperCase() as 'STANDARD' | 'HIGH' | 'URGENT')
+                : undefined,
+            customerId: body.customerId !== undefined ? (body.customerId ? String(body.customerId) : null) : undefined,
+            customerName: body.customerName !== undefined ? String(body.customerName).trim() : undefined,
+            terminalId: body.terminalId !== undefined ? (body.terminalId ? String(body.terminalId) : null) : undefined,
+            terminalName: body.terminalName !== undefined ? String(body.terminalName).trim() : undefined,
+            warehouseId: body.warehouseId !== undefined ? (body.warehouseId ? String(body.warehouseId) : null) : undefined,
+            warehouseName: body.warehouseName !== undefined ? String(body.warehouseName).trim() : undefined,
+            doExpiryDate: body.doExpiryDate !== undefined ? (body.doExpiryDate ? String(body.doExpiryDate) : null) : undefined,
+            dischargeDate: body.dischargeDate !== undefined ? (body.dischargeDate ? String(body.dischargeDate) : null) : undefined,
+            tokenNumber: body.tokenNumber !== undefined ? (body.tokenNumber ? String(body.tokenNumber).trim() : null) : undefined,
+            rateAmountAed:
+              body.rateAmountAed !== undefined && Number.isFinite(Number(body.rateAmountAed))
+                ? Number(body.rateAmountAed)
+                : undefined,
+            driverAllowanceAed:
+              body.driverAllowanceAed !== undefined && Number.isFinite(Number(body.driverAllowanceAed))
+                ? Number(body.driverAllowanceAed)
+                : undefined,
+            customsInspection:
+              body.customsInspection !== undefined ? Boolean(body.customsInspection) : undefined,
+            municipalityInspection:
+              body.municipalityInspection !== undefined ? Boolean(body.municipalityInspection) : undefined,
+            cpipInspection:
+              body.cpipInspection !== undefined ? Boolean(body.cpipInspection) : undefined,
+            mercInspection:
+              body.mercInspection !== undefined ? Boolean(body.mercInspection) : undefined,
+            boxcareInspection:
+              body.boxcareInspection !== undefined ? Boolean(body.boxcareInspection) : undefined,
+            notes: body.notes !== undefined ? (body.notes ? String(body.notes) : null) : undefined,
+            actor: dispatcherActor,
+          });
+        }
+
+        case 'change_return_terminal': {
+          const jobId = String(body.jobId ?? '').trim();
+          if (!jobId) {
+            throw new Error('jobId is required to change the Return Terminal');
+          }
+          return updateDrayageReturnTerminal(tx, {
+            tenantId,
+            jobId,
+            returnTerminalId: body.returnTerminalId ? String(body.returnTerminalId).trim() : null,
+            returnTerminalName: body.returnTerminalName ? String(body.returnTerminalName).trim() : null,
+            reason: body.reason ? String(body.reason).trim() : null,
+            actor: dispatcherActor,
           });
         }
 
         case 'assign_job': {
+          if (body.returnTerminalId || body.returnTerminalName) {
+            await updateDrayageReturnTerminal(tx, {
+              tenantId,
+              jobId: String(body.jobId),
+              returnTerminalId: body.returnTerminalId ? String(body.returnTerminalId).trim() : null,
+              returnTerminalName: body.returnTerminalName ? String(body.returnTerminalName).trim() : null,
+              reason: body.returnTerminalReason ? String(body.returnTerminalReason).trim() : 'Set during L2 Fleet Assignment',
+              actor: dispatcherActor,
+            }).catch(() => {});
+          }
           return assignDrayageJob(tx, {
             tenantId,
             jobId: String(body.jobId),
@@ -320,22 +435,79 @@ export async function POST(req: NextRequest) {
             trailerId: String(body.trailerId),
             trailerPlate: String(body.trailerPlate),
             tokenNumber: String(body.tokenNumber ?? ''),
+            pcsSlotStart: body.pcsSlotStart ? String(body.pcsSlotStart) : null,
+            pcsSlotEnd: body.pcsSlotEnd ? String(body.pcsSlotEnd) : null,
+            actor: dispatcherActor,
           });
         }
 
         case 'update_token': {
           const token = String(body.tokenNumber ?? '').trim().toUpperCase();
           if (!token) throw new Error('Token number is required');
+          let resolvedSlotStart: string | null = null;
+          let resolvedSlotEnd: string | null = null;
+          if (body.pcsSlotStart && String(body.pcsSlotStart).trim()) {
+            const startDt = new Date(String(body.pcsSlotStart).trim());
+            if (!Number.isNaN(startDt.getTime())) {
+              resolvedSlotStart = startDt.toISOString();
+              const endDt =
+                body.pcsSlotEnd && String(body.pcsSlotEnd).trim()
+                  ? new Date(String(body.pcsSlotEnd).trim())
+                  : new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+              resolvedSlotEnd = !Number.isNaN(endDt.getTime())
+                ? endDt.toISOString()
+                : new Date(startDt.getTime() + 2 * 60 * 60 * 1000).toISOString();
+            }
+          }
           await tx.$executeRawUnsafe(
             `UPDATE logistics_drayage_jobs
                 SET token_number = $3,
+                    pcs_token_number = $3,
+                    pcs_slot_start = COALESCE($4::timestamptz, pcs_slot_start),
+                    pcs_slot_end = COALESCE($5::timestamptz, pcs_slot_end),
+                    pcs_token_status = 'BOOKED',
                     updated_at = NOW()
-              WHERE id = $1 AND tenant_id = $2`,
+              WHERE tenant_id = $2
+                AND (
+                  id = $1
+                  OR street_turn_job_id = $1
+                  OR bogie_job_id = $1
+                  OR id IN (
+                    SELECT COALESCE(street_turn_job_id, bogie_job_id)
+                      FROM logistics_drayage_jobs
+                     WHERE id = $1 AND tenant_id = $2
+                  )
+                )`,
             String(body.jobId),
             tenantId,
             token,
+            resolvedSlotStart,
+            resolvedSlotEnd,
           );
-          return { ok: true, tokenNumber: token };
+          await tx.$executeRawUnsafe(
+            `UPDATE logistics_drayage_containers c
+                SET pcs_token_number = $3,
+                    pcs_slot_start = COALESCE($4::timestamptz, c.pcs_slot_start),
+                    pcs_slot_end = COALESCE($5::timestamptz, c.pcs_slot_end),
+                    pcs_token_status = 'BOOKED',
+                    updated_at = NOW()
+               FROM logistics_drayage_jobs j
+              WHERE j.id = $1
+                AND j.tenant_id = $2
+                AND c.tenant_id = $2
+                AND (c.id = j.container_id OR UPPER(c.container_number) = UPPER(j.container_number))`,
+            String(body.jobId),
+            tenantId,
+            token,
+            resolvedSlotStart,
+            resolvedSlotEnd,
+          ).catch(() => {});
+          return {
+            ok: true,
+            tokenNumber: token,
+            pcsSlotStart: resolvedSlotStart,
+            pcsSlotEnd: resolvedSlotEnd,
+          };
         }
 
         case 'get_street_turn_candidates': {
@@ -360,7 +532,9 @@ export async function POST(req: NextRequest) {
             trailerId: body.trailerId ? String(body.trailerId) : undefined,
             trailerPlate: body.trailerPlate ? String(body.trailerPlate) : undefined,
             tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
-            actor: String(body.actor || 'Dispatcher Console'),
+            pcsSlotStart: body.pcsSlotStart ? String(body.pcsSlotStart) : null,
+            pcsSlotEnd: body.pcsSlotEnd ? String(body.pcsSlotEnd) : null,
+            actor: dispatcherActor,
           });
           return res;
         }
@@ -418,7 +592,9 @@ export async function POST(req: NextRequest) {
             trailerId: String(body.trailerId),
             trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
             tokenNumber: body.tokenNumber ? String(body.tokenNumber) : undefined,
-            actor: String(body.actor || 'Dispatcher Console'),
+            pcsSlotStart: body.pcsSlotStart ? String(body.pcsSlotStart) : null,
+            pcsSlotEnd: body.pcsSlotEnd ? String(body.pcsSlotEnd) : null,
+            actor: dispatcherActor,
           });
           return res;
         }
@@ -461,6 +637,7 @@ export async function POST(req: NextRequest) {
                 trailerId: String(body.trailerId),
                 trailerPlate: String(body.trailerPlate ?? 'DXB-TR-9901'),
                 tokenNumber: String(body.tokenNumber ?? ''),
+                actor: dispatcherActor,
               });
             }
           }
@@ -527,6 +704,7 @@ export async function POST(req: NextRequest) {
                 trailerId: String(d.trailerId),
                 trailerPlate: String(d.trailerPlate ?? 'DXB-TR-9901'),
                 tokenNumber: token,
+                actor: dispatcherActor,
               });
               assignedCount++;
             }
@@ -560,7 +738,7 @@ export async function POST(req: NextRequest) {
             detachTrailer: body.detachTrailer,
             etcTime: body.etcTime || body.etc || undefined,
             notes: body.notes || undefined,
-            actor: body.actor || undefined,
+            actor: dispatcherActor,
           });
         }
 
@@ -570,7 +748,7 @@ export async function POST(req: NextRequest) {
             jobId: String(body.jobId),
             minutesToAdd: Number(body.minutesToAdd ?? 60),
             reason: body.reason ? String(body.reason) : undefined,
-            actor: body.actor ? String(body.actor) : 'Dispatch Console',
+            actor: dispatcherActor,
           });
         }
 
@@ -665,7 +843,7 @@ export async function POST(req: NextRequest) {
             if (!cntNum) {
               throw new Error('Container Number is mandatory.');
             }
-            const id = `cnt-${crypto.randomUUID().slice(0, 12)}`;
+            const id = `cnt-${crypto.randomUUID()}`;
             const doExp = safeIso(item.doExpiryDate, 5 * 86400000);
             const disch = safeIso(item.dischargeDate, 0);
             const weightKg = safeNum(item.weightKg, 22000) > 0 ? safeNum(item.weightKg, 22000) : 22000;
@@ -712,7 +890,7 @@ export async function POST(req: NextRequest) {
           if (!plateNum) {
             throw new Error('Trailer Plate Number is mandatory.');
           }
-          const id = `tr-${crypto.randomUUID().slice(0, 10)}`;
+          const id = `tr-${crypto.randomUUID()}`;
           await tx.$executeRawUnsafe(
             `INSERT INTO logistics_drayage_trailers (
               id, tenant_id, plate_number, trailer_type, capacity_tons,
@@ -763,7 +941,7 @@ export async function POST(req: NextRequest) {
         }
 
         case 'save_geofence': {
-          const id = body.id ? String(body.id) : `gf-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `gf-${crypto.randomUUID()}`;
           const gfShape = body.type === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
           const effectiveRadius = gfShape === 'POLYGON' ? 0 : Number(body.radiusMeters ?? 1500);
           const coords = Array.isArray(body.coordinates)
@@ -845,7 +1023,7 @@ export async function POST(req: NextRequest) {
 
         case 'create_terminal':
         case 'save_terminal': {
-          const id = body.id ? String(body.id) : `term-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `term-${crypto.randomUUID()}`;
           const termName = String(body.name ?? '').trim();
           const termCode = String(body.code ?? '').toUpperCase().trim();
           if (!termName || !termCode) {
@@ -955,7 +1133,8 @@ export async function POST(req: NextRequest) {
                      center_lat = EXCLUDED.center_lat,
                      center_lng = EXCLUDED.center_lng,
                      radius_meters = EXCLUDED.radius_meters,
-                     coordinates_json = EXCLUDED.coordinates_json`,
+                     coordinates_json = EXCLUDED.coordinates_json
+               WHERE logistics_drayage_geofences.tenant_id = EXCLUDED.tenant_id`,
               gfId,
               tenantId,
               id,
@@ -988,7 +1167,7 @@ export async function POST(req: NextRequest) {
 
         case 'create_client':
         case 'save_client': {
-          const id = body.id ? String(body.id) : `cli-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `cli-${crypto.randomUUID()}`;
           const name = String(body.name ?? '').trim();
           const code = String(body.code ?? '').trim().toUpperCase();
           if (!name || !code) {
@@ -1054,7 +1233,7 @@ export async function POST(req: NextRequest) {
           if (!String(body.name ?? '').trim()) {
             throw new Error('Facility / Warehouse Name is mandatory.');
           }
-          const id = body.id ? String(body.id) : `wh-${crypto.randomUUID().slice(0, 10)}`;
+          const id = body.id ? String(body.id) : `wh-${crypto.randomUUID()}`;
           const geofenceConfigured = Boolean(body.geofenceConfigured);
           const geofenceType = body.geofenceType === 'POLYGON' ? 'POLYGON' : 'CIRCLE';
           const geofenceRadiusMeters = geofenceType === 'POLYGON' ? safeNum(body.geofenceRadiusMeters, 0) : safeNum(body.geofenceRadiusMeters, 800);
@@ -1188,7 +1367,7 @@ export async function POST(req: NextRequest) {
           await tx.$executeRawUnsafe(
             `INSERT INTO drivers (
               id, tenant_id, name, first_name, last_name, phone, contact_number,
-              license_number, license_expiry, status, assignment_type, created_at, updated_at
+              license_number, license_expiry, status, driver_type, created_at, updated_at
             ) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8::timestamptz,'ACTIVE','LOGISTICS',NOW(),NOW())`,
             id,
             tenantId,
