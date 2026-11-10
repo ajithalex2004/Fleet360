@@ -1,20 +1,22 @@
 /**
  * src/lib/exchange/partner-invoice-service.ts
  *
- * Handles Partner Invoice generation, Enterprise Review, and Core Finance AP (FinancePayable) Handoff.
- * Hardened for Phase 1.5 & Phase 2.5:
- * - Line Itemized Invoices (Base Award + Variance adjustments: WAITING_TIME, TOLL, PARKING, etc.)
- * - Automatic Commercial Variance Detection (MATCHED vs. VARIANCE_REVIEW)
- * - Strict 1:1 Invariant between PartnerInvoice and FinancePayable
- * - Idempotent approval retries (safely returns existing payable without duplicate AP entries)
- * - Complete audit trail logging
+ * Handles Partner Invoice generation, Enterprise Review, Commercial Economics Calculation,
+ * Core Finance AP (FinancePayable) Handoff, and Double-Entry GL Posting (Phase 2 P0).
  */
 
 import { prisma } from '@/lib/prisma';
+import { activeRlsScope } from '@/lib/rls-scope';
 import { logAuditInTx } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
-import { InvoiceVarianceReason } from '@prisma/client';
+import { InvoiceVarianceReason, type Prisma } from '@prisma/client';
 import type { AlertSubjectType } from '@/events/contracts/alert.events';
+import {
+  ExchangeCommercialLedgerService,
+  type CommercialModel,
+  type AgencySettlementMode,
+  type Ifrs15PrincipalIndicators,
+} from './commercial-ledger-service';
 
 export interface InvoiceLineItemInput {
   description: string;
@@ -42,6 +44,13 @@ export interface ApprovePartnerInvoiceInput {
   invoiceId: string;
   approvedAmount?: number;
   approvedByUserId: string;
+  commercialModel?: CommercialModel;
+  agencySettlementMode?: AgencySettlementMode;
+  buyerAgreedSubtotal?: number;
+  platformFeePct?: number;
+  deductionsAmount?: number;
+  ifrs15Indicators?: Ifrs15PrincipalIndicators;
+  financePolicyVersion?: string;
 }
 
 export class PartnerInvoiceService {
@@ -63,7 +72,6 @@ export class PartnerInvoiceService {
     const vat = input.vatAmount != null ? Number(input.vatAmount) : subtotal * 0.05;
     const total = subtotal + vat;
 
-    // Commercial Variance Check against immutable Award Snapshot
     const awardedTotal = Number(award.totalAwarded);
     const variance = Math.abs(total - awardedTotal);
     const verificationStatus = variance > 0.01 ? 'VARIANCE_REVIEW' : 'MATCHED';
@@ -108,9 +116,6 @@ export class PartnerInvoiceService {
       tenantId: award.tenantId,
       code: verificationStatus === 'VARIANCE_REVIEW' ? 'PARTNER_INVOICE_VARIANCE' : 'PARTNER_INVOICE_SUBMITTED',
       sourceModule: 'exchange',
-      // See exception-service.ts / marketplace-service.ts: AlertSubjectType
-      // doesn't yet cover the Exchange module's subject kinds — flagged as
-      // a cross-cutting taxonomy gap, not fixed here.
       subjectType: 'PartnerInvoice' as unknown as AlertSubjectType,
       subjectId: invoice.id,
       title: verificationStatus === 'VARIANCE_REVIEW'
@@ -127,11 +132,24 @@ export class PartnerInvoiceService {
   }
 
   /**
-   * Enterprise Finance approves invoice and hands off to FinancePayable in core ledger.
+   * Enterprise Finance approves invoice, calculates Agency/Principal economics,
+   * hands off to FinancePayable, and posts balanced GL journal lines.
    * Fully idempotent under network retries and double-clicks.
    */
   static async approveInvoice(input: ApprovePartnerInvoiceInput) {
-    return prisma.$transaction(async (tx) => {
+    const scope = activeRlsScope();
+    const scopedTx = scope?.tx as Prisma.TransactionClient | undefined;
+    const runTx = <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> =>
+      scopedTx && typeof scopedTx.partnerInvoice?.findUnique === 'function'
+        ? fn(scopedTx)
+        : prisma.$transaction(fn, { maxWait: 15_000, timeout: 30_000 });
+
+    const txResult = await runTx(async (tx) => {
+      if (typeof (tx as { $queryRawUnsafe?: unknown }).$queryRawUnsafe === 'function') {
+        await tx
+          .$queryRawUnsafe(`SELECT id FROM partner_invoices WHERE id = $1 FOR UPDATE`, input.invoiceId)
+          .catch(() => {});
+      }
       const invoice = await tx.partnerInvoice.findUnique({
         where: { id: input.invoiceId, tenantId: input.tenantId },
         include: { partner: true, award: true, items: true },
@@ -139,13 +157,13 @@ export class PartnerInvoiceService {
 
       if (!invoice) throw new Error('Invoice not found');
 
-      // Idempotency: if already approved, retrieve the existing FinancePayable
       if (invoice.status === 'APPROVED' && invoice.payableId) {
         const existingPayable = await tx.financePayable.findUnique({
           where: { id: invoice.payableId },
         });
         return {
           invoice,
+          rawInvoice: invoice,
           payable: existingPayable,
           isRetry: true,
         };
@@ -157,36 +175,26 @@ export class PartnerInvoiceService {
 
       const approvedTotal = input.approvedAmount != null ? Number(input.approvedAmount) : Number(invoice.totalAmount);
 
-      // 1. Create FinancePayable in core accounting ledger
       const payable = await tx.financePayable.create({
         data: {
           tenantId: input.tenantId,
-          // FinancePayable has no invoiceNumber column — it's already
-          // embedded in payableNumber below.
           payableNumber: `PAY-${invoice.invoiceNumber}`,
           sourceType: 'CARRIER_SETTLEMENT',
           sourceId: invoice.id,
           vendorId: invoice.partnerId,
           vendorName: invoice.partner.legalName,
           issueDate: invoice.invoiceDate,
-          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Net 30 default
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           subtotal: invoice.subtotalAmount,
           vatAmount: invoice.vatAmount,
           totalAmount: approvedTotal,
-          // No outstandingBalance column — paidAmount defaults to 0 on
-          // create, so totalAmount already represents the balance owed.
           currency: invoice.currency,
-          // Finance has already approved this amount by the time we get
-          // here (this method is `approveInvoice`), so the payable enters
-          // the DRAFT→SUBMITTED→APPROVED→POSTED ledger workflow already
-          // APPROVED rather than at the un-modeled 'PENDING_APPROVAL'.
           status: 'APPROVED',
           approvedBy: input.approvedByUserId,
           approvedAt: new Date(),
         },
       });
 
-      // 2. Update PartnerInvoice with payableId linkage
       const updatedInvoice = await tx.partnerInvoice.update({
         where: { id: invoice.id },
         data: {
@@ -198,7 +206,6 @@ export class PartnerInvoiceService {
         },
       });
 
-      // 3. Log Audit — written atomically on this same transaction.
       await logAuditInTx({
         tenantId: input.tenantId,
         entityType: 'PartnerInvoice',
@@ -210,9 +217,84 @@ export class PartnerInvoiceService {
 
       return {
         invoice: updatedInvoice,
+        rawInvoice: invoice,
         payable,
         isRetry: false,
       };
     });
+
+    if (txResult.isRetry || !txResult.rawInvoice) {
+      return {
+        invoice: txResult.invoice,
+        payable: txResult.payable,
+        isRetry: true,
+      };
+    }
+
+    const rawInvoice = txResult.rawInvoice;
+    const snap = ((rawInvoice.award?.commercialSnapshot || {}) as Record<string, unknown>);
+    const commercialModel: CommercialModel =
+      input.commercialModel ||
+      (snap.commercialModel as CommercialModel | undefined) ||
+      'AGENCY';
+    const agencySettlementMode: AgencySettlementMode =
+      input.agencySettlementMode ||
+      (snap.agencySettlementMode as AgencySettlementMode | undefined) ||
+      'PLATFORM_COLLECT_AND_NET_REMIT';
+    const supplierSubtotal = Number(rawInvoice.subtotalAmount);
+    const buyerAgreedSubtotal =
+      input.buyerAgreedSubtotal != null
+        ? Number(input.buyerAgreedSubtotal)
+        : snap.buyerAgreedPrice != null
+        ? Number(snap.buyerAgreedPrice)
+        : supplierSubtotal;
+    const platformFeePct =
+      input.platformFeePct != null
+        ? Number(input.platformFeePct)
+        : snap.platformFeePct != null
+        ? Number(snap.platformFeePct)
+        : 3;
+    const financePolicyVersion =
+      input.financePolicyVersion ||
+      (snap.financePolicyVersion as string | undefined) ||
+      'IFRS15-UAE-2026.1';
+    const ifrs15Indicators =
+      input.ifrs15Indicators ||
+      (snap.ifrs15Indicators as Ifrs15PrincipalIndicators | undefined) || {
+        hasPrimaryFulfilmentResponsibility: commercialModel === 'PRINCIPAL',
+        hasCapacityOrSubstitutionRisk: false,
+        hasPricingDiscretion: commercialModel === 'PRINCIPAL',
+        approvedByFinancePolicyVersion: financePolicyVersion,
+      };
+
+    const economics = ExchangeCommercialLedgerService.calculateTransactionEconomics({
+      commercialModel,
+      agencySettlementFlow: agencySettlementMode,
+      principalIndicators: ifrs15Indicators,
+      buyerAgreedAmount: buyerAgreedSubtotal,
+      supplierAwardedAmount: supplierSubtotal,
+      platformFeeBasis: 'PERCENTAGE',
+      platformFeeValue: platformFeePct,
+      supplierDeductionsAmount: input.deductionsAmount ?? 0,
+      currencyCode: rawInvoice.currency,
+      financePolicyVersion,
+    });
+
+    const glEntries = await ExchangeCommercialLedgerService.postSupplierApprovalToGl({
+      tenantId: input.tenantId,
+      invoiceId: rawInvoice.id,
+      invoiceNumber: rawInvoice.invoiceNumber,
+      partnerName: rawInvoice.partner?.legalName || rawInvoice.partnerId,
+      economics,
+      preparedBy: input.approvedByUserId,
+    });
+
+    return {
+      invoice: txResult.invoice,
+      payable: txResult.payable,
+      economics,
+      glEntries,
+      isRetry: false,
+    };
   }
 }

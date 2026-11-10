@@ -2,7 +2,9 @@
  * src/app/track/partner-trip/[token]/page.tsx
  *
  * Public Mobile Web Screen for External Partner Drivers (Zero-Login).
- * Purpose-bound cryptographic token enables drivers to report milestones (Reached, Started, Completed) and submit POD.
+ * Purpose-bound cryptographic token enables drivers to report milestones
+ * (Reached, Started, Completed) and submit domain-specific 3-Way Match POD
+ * across Passenger Transport, Freight, Limousine, and Roadside Recovery.
  */
 
 'use client';
@@ -10,17 +12,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  MapPin,
   Clock,
   Users,
   CheckCircle2,
-  Navigation,
-  FileCheck,
   AlertCircle,
-  ShieldCheck,
-  Send,
 } from 'lucide-react';
 import { enqueueTelemetryPoint, flushBufferedTelemetryBatch } from '@/lib/tracking/offline-telemetry-queue';
+
+const DOMAIN_BADGE: Record<string, { label: string; cls: string }> = {
+  PASSENGER_TRANSPORT: { label: '🚌 Bus & Coach', cls: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+  FREIGHT: { label: '🚚 Freight Load', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  LIMOUSINE: { label: '🎩 Chauffeur Limo', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+  RECOVERY: { label: '🚨 Roadside Recovery', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
+};
 
 export default function PartnerDriverTripPage() {
   const params = useParams();
@@ -36,8 +40,16 @@ export default function PartnerDriverTripPage() {
   const [lastPingTime, setLastPingTime] = useState<string | null>(null);
   const [waypointData, setWaypointData] = useState<any | null>(null);
 
-  // POD Form state
+  // POD Form state (Multi-Vertical 3-Way Match Proof)
   const [passengerCount, setPassengerCount] = useState('48');
+  const [deliveredWeightKg, setDeliveredWeightKg] = useState('');
+  const [sealIntact, setSealIntact] = useState(true);
+  const [temperatureCelsius, setTemperatureCelsius] = useState('');
+  const [vipGuestConfirmed, setVipGuestConfirmed] = useState(true);
+  const [actualWaitingMinutes, setActualWaitingMinutes] = useState('0');
+  const [tollGateCount, setTollGateCount] = useState('0');
+  const [hookupPhotoVerified, setHookupPhotoVerified] = useState(true);
+  const [towDestinationWorkshop, setTowDestinationWorkshop] = useState('');
   const [signedByName, setSignedByName] = useState('');
   const [completionNotes, setCompletionNotes] = useState('');
 
@@ -51,6 +63,13 @@ export default function PartnerDriverTripPage() {
       }
       const data = await res.json();
       setTripData(data.trip);
+      if (data.trip?.requiredCapacity) {
+        setPassengerCount(String(data.trip.requiredCapacity));
+        setDeliveredWeightKg(String(data.trip.requiredCapacity));
+      }
+      if (data.trip?.dropoffLocation) {
+        setTowDestinationWorkshop(data.trip.dropoffLocation);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid or expired link');
     } finally {
@@ -94,7 +113,6 @@ export default function PartnerDriverTripPage() {
   useEffect(() => {
     if (!token || !navigator.geolocation || tripData?.completedAt) return;
 
-    // Listen for online reconnect event to auto-flush any buffered points
     const handleOnline = () => {
       flushBufferedTelemetryBatch(token).catch(() => {});
     };
@@ -108,7 +126,7 @@ export default function PartnerDriverTripPage() {
         const pingPayload = {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
-          speed: pos.coords.speed ? pos.coords.speed * 3.6 : undefined, // Convert m/s to km/h
+          speed: pos.coords.speed ? pos.coords.speed * 3.6 : undefined,
           heading: pos.coords.heading || undefined,
           accuracy: pos.coords.accuracy,
           timestamp: new Date().toISOString(),
@@ -122,7 +140,6 @@ export default function PartnerDriverTripPage() {
           });
 
           if (res.ok) {
-            // Success -> background flush any accumulated offline batch
             flushBufferedTelemetryBatch(token).catch(() => {});
             const result = await res.json();
             if (result.geofenceTriggered === 'PICKUP_REACHED' && !tripData?.reachedAt) {
@@ -130,11 +147,9 @@ export default function PartnerDriverTripPage() {
               await loadTrip();
             }
           } else {
-            // Buffer locally if server returned error
             await enqueueTelemetryPoint(token, pingPayload);
           }
         } catch {
-          // Network dropped / offline (e.g. tunnel or basement) -> buffer in IndexedDB
           await enqueueTelemetryPoint(token, pingPayload);
         }
       },
@@ -169,6 +184,13 @@ export default function PartnerDriverTripPage() {
       setTimeout(() => setFeedback(null), 4000);
       setPodModalOpen(false);
       await loadTrip();
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('fleet360-exchange-live');
+          bc.postMessage({ type: 'DRIVER_MILESTONE_UPDATED', action, source: 'driver-tracker', timestamp: Date.now() });
+          bc.close();
+        }
+      } catch {}
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error submitting milestone');
     } finally {
@@ -196,9 +218,37 @@ export default function PartnerDriverTripPage() {
     );
   }
 
+  const domain: string = tripData.domain || 'PASSENGER_TRANSPORT';
+  const domainInfo = DOMAIN_BADGE[domain] || DOMAIN_BADGE.PASSENGER_TRANSPORT;
   const reached = !!tripData.reachedAt;
   const started = !!tripData.startedAt;
   const completed = !!tripData.completedAt;
+
+  const submitDomainPod = () => {
+    const podMetadata: Record<string, unknown> = { domain };
+    if (domain === 'FREIGHT') {
+      podMetadata.deliveredWeightKg = Number(deliveredWeightKg || 0);
+      podMetadata.sealIntact = sealIntact;
+      if (temperatureCelsius !== '') podMetadata.temperatureCelsius = Number(temperatureCelsius);
+    } else if (domain === 'LIMOUSINE') {
+      podMetadata.vipGuestConfirmed = vipGuestConfirmed;
+      podMetadata.actualWaitingMinutes = Number(actualWaitingMinutes || 0);
+      podMetadata.tollGateCount = Number(tollGateCount || 0);
+    } else if (domain === 'RECOVERY') {
+      podMetadata.hookupPhotoVerified = hookupPhotoVerified;
+      podMetadata.towDestinationWorkshop = towDestinationWorkshop || tripData.dropoffLocation;
+    }
+
+    void handleAction('COMPLETED', {
+      passengerCount:
+        domain === 'FREIGHT'
+          ? Number(deliveredWeightKg || 0)
+          : Number(passengerCount || 1),
+      signedByName,
+      completionNotes,
+      podMetadata,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between max-w-md mx-auto shadow-2xl">
@@ -206,8 +256,13 @@ export default function PartnerDriverTripPage() {
       <header className="p-4 border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-20">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Outsourced Trip</span>
-            <div className="text-base font-black text-white">{tripData.requestNumber}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Outsourced Trip</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${domainInfo.cls}`}>
+                {domainInfo.label}
+              </span>
+            </div>
+            <div className="text-base font-black text-white mt-0.5">{tripData.requestNumber}</div>
           </div>
           <span
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
@@ -248,6 +303,7 @@ export default function PartnerDriverTripPage() {
         {/* Route Card */}
         <div className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
           <span className="text-[10px] uppercase font-bold text-slate-400">Route & Location</span>
+
           <div className="space-y-2">
             <div className="flex items-start gap-2.5">
               <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
@@ -277,7 +333,15 @@ export default function PartnerDriverTripPage() {
             </div>
             <div className="flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-slate-500" />
-              <span>{tripData.requiredCapacity} Passengers</span>
+              <span>
+                {domain === 'FREIGHT'
+                  ? `${tripData.requiredCapacity} kg Cargo`
+                  : domain === 'RECOVERY'
+                  ? tripData.vehicleTypeRequired || 'Flatbed Tow'
+                  : domain === 'LIMOUSINE'
+                  ? `${tripData.requiredCapacity} VIP Pax`
+                  : `${tripData.requiredCapacity} Passengers`}
+              </span>
             </div>
           </div>
         </div>
@@ -294,7 +358,6 @@ export default function PartnerDriverTripPage() {
               </span>
             </div>
 
-            {/* Progress Bar */}
             <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
               <div
                 className="bg-cyan-500 h-full rounded-full transition-all duration-500"
@@ -302,7 +365,6 @@ export default function PartnerDriverTripPage() {
               />
             </div>
 
-            {/* Vertical Stops Timeline */}
             <div className="space-y-2 pt-1">
               {waypointData.waypoints.map((wp: any) => {
                 const isTarget = wp.sequence === waypointData.currentActiveSequence && !wp.isCompleted;
@@ -338,7 +400,6 @@ export default function PartnerDriverTripPage() {
                         </div>
                       </div>
 
-                      {/* Checkin Action for Active Stop */}
                       {isTarget && (
                         <button
                           onClick={() => handleWaypointCheckin(wp.sequence, 'CHECKIN')}
@@ -398,7 +459,7 @@ export default function PartnerDriverTripPage() {
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-400' : 'bg-slate-700'}`} />
-                <span>3. Completed & POD Uploaded</span>
+                <span>3. Completed & 3-Way Match POD Uploaded</span>
               </span>
               <span className="font-mono text-[11px] text-slate-400">
                 {tripData.completedAt ? new Date(tripData.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
@@ -412,11 +473,12 @@ export default function PartnerDriverTripPage() {
           <div className="p-4 rounded-3xl bg-emerald-950/30 border border-emerald-500/40 text-xs space-y-1.5 text-emerald-200">
             <div className="font-bold flex items-center gap-1.5 text-emerald-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Proof of Delivery (POD) Verified</span>
+              <span>3-Way Match Proof of Delivery (POD) Verified</span>
             </div>
             <p className="text-[11px] text-emerald-300/80">
-              Passengers Boarded: <span className="font-bold">{tripData.pod.passengerCount}</span> · Signed by:{' '}
-              <span className="font-bold">{tripData.pod.signedByName || 'Site Lead'}</span>
+              {domain === 'FREIGHT' ? 'Cargo Weight (kg)' : 'Recorded Count'}:{' '}
+              <span className="font-bold">{tripData.pod.passengerCount}</span> · Signed by:{' '}
+              <span className="font-bold">{tripData.pod.signedByName || 'Authorized Receiver'}</span>
             </p>
           </div>
         )}
@@ -457,31 +519,139 @@ export default function PartnerDriverTripPage() {
         {completed && (
           <div className="py-2.5 text-center text-xs font-bold text-emerald-400 flex items-center justify-center gap-2">
             <CheckCircle2 className="w-4 h-4" />
-            <span>Trip Complete · Great job!</span>
+            <span>Trip Complete · 3-Way Match POD Recorded!</span>
           </div>
         )}
       </footer>
 
-      {/* ── SUBMIT POD MODAL ── */}
+      {/* ── SUBMIT DOMAIN-SPECIFIC POD MODAL ── */}
       {podModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-xs">
-            <h3 className="text-sm font-bold text-white">Trip Completion & Proof of Delivery</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">3-Way Match Proof of Delivery</h3>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${domainInfo.cls}`}>
+                {domainInfo.label}
+              </span>
+            </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Total Passengers Transported *</label>
-                <input
-                  type="number"
-                  required
-                  value={passengerCount}
-                  onChange={(e) => setPassengerCount(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+              {domain === 'FREIGHT' && (
+                <>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Delivered Cargo Weight (kg) *</label>
+                    <input
+                      type="number"
+                      required
+                      value={deliveredWeightKg}
+                      onChange={(e) => setDeliveredWeightKg(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sealIntact}
+                        onChange={(e) => setSealIntact(e.target.checked)}
+                      />
+                      <span>Seal Intact</span>
+                    </label>
+                    <div>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="Reefer °C (opt)"
+                        value={temperatureCelsius}
+                        onChange={(e) => setTemperatureCelsius(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {domain === 'LIMOUSINE' && (
+                <>
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={vipGuestConfirmed}
+                      onChange={(e) => setVipGuestConfirmed(e.target.checked)}
+                    />
+                    <span className="font-semibold">VIP Guest Drop-Off Confirmed</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-400 text-[10px] mb-1">Waiting Time (mins)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={actualWaitingMinutes}
+                        onChange={(e) => setActualWaitingMinutes(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-[10px] mb-1">Salik/Darb Tolls</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={tollGateCount}
+                        onChange={(e) => setTollGateCount(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-white"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {domain === 'RECOVERY' && (
+                <>
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hookupPhotoVerified}
+                      onChange={(e) => setHookupPhotoVerified(e.target.checked)}
+                    />
+                    <span className="font-semibold">4-Corner Pre-Tow & Hookup Photo Verified</span>
+                  </label>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Receiving Workshop / Garage *</label>
+                    <input
+                      type="text"
+                      value={towDestinationWorkshop}
+                      onChange={(e) => setTowDestinationWorkshop(e.target.value)}
+                      placeholder="e.g. Al Quoz Central Workshop"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {domain === 'PASSENGER_TRANSPORT' && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Total Passengers Transported *</label>
+                  <input
+                    type="number"
+                    required
+                    value={passengerCount}
+                    onChange={(e) => setPassengerCount(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Client / Site Sign-Off Name</label>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  {domain === 'FREIGHT'
+                    ? 'Consignee / Warehouse Receiver Name'
+                    : domain === 'RECOVERY'
+                    ? 'Workshop Service Advisor Sign-Off'
+                    : domain === 'LIMOUSINE'
+                    ? 'VIP / Concierge Sign-Off Name'
+                    : 'Client / Site Sign-Off Name'}
+                </label>
                 <input
                   type="text"
                   value={signedByName}
@@ -497,7 +667,7 @@ export default function PartnerDriverTripPage() {
                   rows={2}
                   value={completionNotes}
                   onChange={(e) => setCompletionNotes(e.target.value)}
-                  placeholder="e.g. Safe trip, dropped at Gate 4 on time"
+                  placeholder="e.g. Safe delivery, arrived on time"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -513,14 +683,8 @@ export default function PartnerDriverTripPage() {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleAction('COMPLETED', {
-                    passengerCount: Number(passengerCount),
-                    signedByName,
-                    completionNotes,
-                  })
-                }
-                disabled={submittingAction || !passengerCount}
+                onClick={submitDomainPod}
+                disabled={submittingAction}
                 className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
               >
                 {submittingAction ? 'Submitting...' : 'Confirm Completion'}

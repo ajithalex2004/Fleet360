@@ -3,8 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import * as dunningDispatch from '@/lib/finance/dunning-dispatch';
-import * as dunningTransition from '@/lib/finance/dunning-transition';
+import { resetInvoiceDunningOnSettlement } from '@/lib/finance/module-ledger';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
@@ -180,14 +179,7 @@ export async function POST(req: NextRequest) {
 
         // Propagate settlement to LeaseInvoice & reset dunning
         if (newStatus === 'PAID') {
-          const resetFn =
-            ((dunningDispatch as Record<string, unknown>).resetInvoiceDunningOnSettlement ??
-             (dunningTransition as Record<string, unknown>).resetInvoiceDunningOnSettlement) as
-              | ((...args: unknown[]) => Promise<unknown>)
-              | undefined;
-          if (typeof resetFn === 'function') {
-            await resetFn(tx, tenantId, leaseInvId, 'SETTLED').catch(() => {});
-          }
+          await resetInvoiceDunningOnSettlement(tx, tenantId, leaseInvId, 'finance-payment').catch(() => {});
 
           if ((inv?.reference_type === 'LEASE_INVOICE' || inv?.module_source === 'LEASING') && inv?.reference_id) {
             await tx.$executeRawUnsafe('SAVEPOINT sync_lease_inv');

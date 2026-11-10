@@ -2,20 +2,22 @@
  * src/lib/exchange/outsource-engine.ts
  *
  * Core Outsourcing Workflow Engine for Fleet360 Operations & Exchange.
- * Hardened for Phase 1.5 & Phase 2:
+ * Hardened for Phase 1 & Phase 2:
  * - Deterministic Partner Eligibility and Multi-Partner RFQ
  * - Partner Quote Decline with structured reason codes
  * - Deadline Governance & Extensions
- * - Contract-Rate Direct Award
+ * - Multi-Domain Contract-Rate Direct Award (Passenger Transport, Freight, Limousine, Recovery)
+ * - Immutable SHA-256 Rate-Card Snapshot & Commercial Economics frozen into OutsourceAward
+ * - Idempotent Award retries on same quoteId
  * - SHA-256 hashed driver execution tokens (zero plaintext in DB)
  * - Strict backend state machine enforcement (ASSIGNED -> REACHED -> STARTED -> COMPLETED / CANCELLED / ABORTED)
- * - Server-side compliance validation gates (vehicle mulkiya, driver license & RTA permits)
+ * - 3-Stage Synchronous Pre-Dispatch Compliance Guard (validating against serviceDate cutoff & revoking tokens on expiry)
  * - TenantPartnerRelationship authorization validation
  * - Immutable execution telemetry via PartnerTripEvent
- * - Concurrency and race-condition defenses
  */
 
 import { prisma } from '@/lib/prisma';
+import { activeRlsScope } from '@/lib/rls-scope';
 import { logAudit, logAuditInTx } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { randomBytes, createHash } from 'crypto';
@@ -30,14 +32,34 @@ import {
 import type { Prisma } from '@prisma/client';
 import type { AlertSubjectType } from '@/events/contracts/alert.events';
 import { DisclosurePolicyService } from './disclosure-service';
+import { PreDispatchComplianceGuard } from './compliance-guard';
+import {
+  RateCardService,
+  type RateCardSnapshot,
+  type RateCardAncillaryCharges,
+} from './rate-card-service';
+import type {
+  CommercialModel,
+  AgencySettlementMode,
+  Ifrs15PrincipalIndicators,
+} from './commercial-ledger-service';
 
 export function hashDriverToken(token: string): string {
   return createHash('sha256').update(token.trim()).digest('hex');
 }
 
+async function runInExchangeTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  const scope = activeRlsScope();
+  const scopedTx = scope?.tx as Prisma.TransactionClient | undefined;
+  if (scopedTx && typeof scopedTx.outsourceRequest?.findUnique === 'function') {
+    return fn(scopedTx);
+  }
+  return prisma.$transaction(fn, { maxWait: 15_000, timeout: 30_000 });
+}
+
 export interface CreateOutsourceRequestInput {
   tenantId: string;
-  sourceReferenceType?: string; // TRIP_SCHEDULE
+  sourceReferenceType?: string; // TRIP_SCHEDULE | SHIPMENT | LIMO_BOOKING | RECOVERY_INCIDENT
   sourceReferenceId: string;
   domain?: PartnerServiceDomain;
   pricingMethod?: OutsourcePricingMethod;
@@ -84,6 +106,14 @@ export interface AwardQuoteInput {
   requestId: string;
   quoteId: string;
   awardedByUserId: string;
+  rateCardSnapshot?: RateCardSnapshot;
+  ancillaryCharges?: Partial<RateCardAncillaryCharges>;
+  commercialModel?: CommercialModel;
+  agencySettlementMode?: AgencySettlementMode;
+  buyerAgreedPrice?: number;
+  platformFeePct?: number;
+  ifrs15Indicators?: Ifrs15PrincipalIndicators;
+  financePolicyVersion?: string;
 }
 
 export interface AssignVehicleDriverInput {
@@ -100,6 +130,9 @@ export interface AssignVehicleDriverInput {
 export interface ContractDirectAwardInput {
   tenantId: string;
   sourceReferenceId: string;
+  sourceReferenceType?: string;
+  domain?: PartnerServiceDomain;
+  vehicleTypeRequired?: string;
   partnerId: string;
   serviceDate: Date | string;
   pickupTime: string;
@@ -110,6 +143,15 @@ export interface ContractDirectAwardInput {
   vatAmount?: number;
   currency?: string;
   awardedByUserId: string;
+  rateCardId?: string;
+  rateCardVersion?: number;
+  ancillaryCharges?: Partial<RateCardAncillaryCharges>;
+  commercialModel?: CommercialModel;
+  agencySettlementMode?: AgencySettlementMode;
+  buyerAgreedPrice?: number;
+  platformFeePct?: number;
+  ifrs15Indicators?: Ifrs15PrincipalIndicators;
+  financePolicyVersion?: string;
 }
 
 export class OutsourceEngine {
@@ -175,10 +217,6 @@ export class OutsourceEngine {
       },
     });
 
-    // Deadline governance lives on MarketplaceOpportunity (the only table
-    // that actually has a closes_at column — OutsourceRequest never did).
-    // A DIRECT-visibility opportunity models the invite-only RFQ deadline
-    // without publishing this request to the broader marketplace/network.
     const disclosurePayload = DisclosurePolicyService.buildSanitizedDisclosure(
       request.domain,
       request.pickupLocation,
@@ -225,9 +263,6 @@ export class OutsourceEngine {
 
     if (!request) throw new Error('Outsource request not found');
 
-    // Deadline check — governed by the linked MarketplaceOpportunity (the
-    // only place a closing deadline is actually stored). Requests with no
-    // opportunity attached (e.g. legacy data) have no deadline to enforce.
     if (request.opportunity && new Date() > request.opportunity.closesAt) {
       throw new Error(`Quote submission deadline passed on ${request.opportunity.closesAt.toISOString()}`);
     }
@@ -257,7 +292,6 @@ export class OutsourceEngine {
       revisionNo = previousQuote.revisionNo + 1;
       supersedesQuoteId = previousQuote.id;
 
-      // Mark old quote as SUPERSEDED
       await prisma.partnerQuote.update({
         where: { id: previousQuote.id },
         data: { status: PartnerQuoteStatus.SUPERSEDED },
@@ -286,13 +320,11 @@ export class OutsourceEngine {
       },
     });
 
-    // Update invite status if existed
     await prisma.outsourceRequestPartner.updateMany({
       where: { requestId: input.requestId, partnerId: input.partnerId },
       data: { status: 'QUOTED' },
     });
 
-    // Update request status to QUOTED if still PUBLISHED
     if (request.status === OutsourceRequestStatus.PUBLISHED) {
       await prisma.outsourceRequest.update({
         where: { id: request.id },
@@ -300,14 +332,10 @@ export class OutsourceEngine {
       });
     }
 
-    // Notify Requesting Tenant
     await raiseAlert({
       tenantId: newQuote.request.tenantId,
       code: 'OUTSOURCE_QUOTE_RECEIVED',
       sourceModule: 'exchange',
-      // AlertSubjectType (@/events/contracts/alert.events) only covers the
-      // bus-ops/fleet domain — see the identical gap documented in
-      // marketplace-service.ts. Same typed bypass, not a guessed fallback.
       subjectType: 'OutsourceRequest' as unknown as AlertSubjectType,
       subjectId: input.requestId,
       title: `💰 Outsource Quote Received: ${newQuote.partner.legalName} (Rev ${revisionNo})`,
@@ -366,8 +394,6 @@ export class OutsourceEngine {
     tenantId: string,
     userId: string
   ) {
-    // The deadline lives on the linked MarketplaceOpportunity, not on
-    // OutsourceRequest itself — see createOutsourceRequest.
     const opportunity = await prisma.marketplaceOpportunity.findUnique({
       where: { outsourceRequestId: requestId },
     });
@@ -393,18 +419,33 @@ export class OutsourceEngine {
   }
 
   /**
-   * Award an Outsource Quote (Transaction-Safe with Row Locking & State Checks)
+   * Award an Outsource Quote (Transaction-Safe, Idempotent on same quoteId, with SHA-256 Rate-Card Snapshot)
    */
   static async awardQuote(input: AwardQuoteInput) {
-    return prisma.$transaction(async (tx) => {
-      // 1. Validate request and quote
+    return runInExchangeTx(async (tx) => {
+      // Serialize concurrent award attempts on the same OutsourceRequest under READ COMMITTED
+      // so parallel retries/competing awards never hit P2002 or abort outer RLS transactions.
+      if (typeof (tx as { $queryRawUnsafe?: unknown }).$queryRawUnsafe === 'function') {
+        await tx
+          .$queryRawUnsafe(`SELECT id FROM outsource_requests WHERE id = $1 FOR UPDATE`, input.requestId)
+          .catch(() => {});
+      }
+
       const request = await tx.outsourceRequest.findUnique({
         where: { id: input.requestId, tenantId: input.tenantId },
         include: { award: true },
       });
 
       if (!request) throw new Error('Outsource request not found');
-      if (request.award) throw new Error('Request has already been awarded');
+
+      // Idempotent retry: if already awarded to the exact same quoteId, return existing award
+      if (request.award) {
+        if (request.award.quoteId === input.quoteId) {
+          return request.award;
+        }
+        throw new Error('Request has already been awarded');
+      }
+
       if (request.status === OutsourceRequestStatus.CANCELLED) {
         throw new Error('Cannot award a cancelled request');
       }
@@ -432,7 +473,23 @@ export class OutsourceEngine {
         throw new Error(`Partner ${quote.partner.legalName} is blocked by this tenant`);
       }
 
-      // 2. Snapshot commercial terms
+      // Build immutable SHA-256 RateCardSnapshot frozen at award time
+      const rateCardSnapshot =
+        input.rateCardSnapshot ||
+        RateCardService.buildImmutableRateCardSnapshot({
+          rateCardId: `QUOTE-${quote.id}`,
+          version: quote.revisionNo,
+          effectiveFrom: request.serviceDate,
+          pricingUnit: 'PER_TRIP',
+          baseRate: Number(quote.amount),
+          minimumCharge: Number(quote.amount),
+          currency: quote.currency,
+          originZone: request.pickupLocation,
+          destinationZone: request.dropoffLocation,
+          vehicleType: request.vehicleTypeRequired ?? undefined,
+          ancillaryCharges: input.ancillaryCharges,
+        });
+
       const commercialSnapshot = {
         requestId: request.id,
         requestNumber: request.requestNumber,
@@ -449,9 +506,15 @@ export class OutsourceEngine {
         pickupLocation: request.pickupLocation,
         dropoffLocation: request.dropoffLocation,
         awardedAt: new Date().toISOString(),
+        rateCardSnapshot,
+        commercialModel: input.commercialModel || 'AGENCY',
+        agencySettlementMode: input.agencySettlementMode || 'PLATFORM_COLLECT_AND_NET_REMIT',
+        buyerAgreedPrice: input.buyerAgreedPrice != null ? Number(input.buyerAgreedPrice) : Number(quote.amount),
+        platformFeePct: input.platformFeePct != null ? Number(input.platformFeePct) : 3,
+        ifrs15Indicators: input.ifrs15Indicators || null,
+        financePolicyVersion: input.financePolicyVersion || 'IFRS15-UAE-2026.1',
       };
 
-      // 3. Create OutsourceAward
       const award = await tx.outsourceAward.create({
         data: {
           tenantId: input.tenantId,
@@ -462,13 +525,12 @@ export class OutsourceEngine {
           vatAmount: quote.vatAmount,
           totalAwarded: quote.totalAmount,
           currency: quote.currency,
-          commercialSnapshot,
+          commercialSnapshot: commercialSnapshot as unknown as Prisma.InputJsonValue,
           awardedBy: input.awardedByUserId,
           status: 'AWARDED',
         },
       });
 
-      // 4. Update Quote status to ACCEPTED, others to REJECTED
       await tx.partnerQuote.update({
         where: { id: quote.id },
         data: { status: PartnerQuoteStatus.ACCEPTED },
@@ -483,7 +545,6 @@ export class OutsourceEngine {
         data: { status: PartnerQuoteStatus.REJECTED },
       });
 
-      // 5. Update Invited Partners statuses: winning is AWARDED, others are NOT_SELECTED
       await tx.outsourceRequestPartner.updateMany({
         where: { requestId: request.id, partnerId: quote.partnerId },
         data: { status: 'AWARDED' },
@@ -498,14 +559,11 @@ export class OutsourceEngine {
         data: { status: 'NOT_SELECTED' },
       });
 
-      // 6. Update Request status to AWARDED
       await tx.outsourceRequest.update({
         where: { id: request.id },
         data: { status: OutsourceRequestStatus.AWARDED },
       });
 
-      // 7. Log Audit — written atomically on this same transaction, not
-      // fire-and-forget, so it can never observe a partial award.
       await logAuditInTx({
         tenantId: input.tenantId,
         entityType: 'OutsourceAward',
@@ -520,13 +578,23 @@ export class OutsourceEngine {
   }
 
   /**
-   * Direct Contract-Rate Award (Direct Procurement without RFQ bidding)
+   * Direct Contract-Rate Award across all 4 vertical domains (PASSENGER_TRANSPORT, FREIGHT, LIMOUSINE, RECOVERY)
    */
   static async createContractDirectAward(input: ContractDirectAwardInput) {
-    return prisma.$transaction(async (tx) => {
+    return runInExchangeTx(async (tx) => {
       const subtotal = Number(input.agreedPrice);
       const vat = input.vatAmount != null ? Number(input.vatAmount) : subtotal * 0.05;
       const total = subtotal + vat;
+      const domain = input.domain || PartnerServiceDomain.PASSENGER_TRANSPORT;
+      const sourceReferenceType = input.sourceReferenceType || (
+        domain === PartnerServiceDomain.FREIGHT
+          ? 'SHIPMENT'
+          : domain === PartnerServiceDomain.LIMOUSINE
+          ? 'LIMO_BOOKING'
+          : domain === PartnerServiceDomain.RECOVERY
+          ? 'RECOVERY_INCIDENT'
+          : 'TRIP_SCHEDULE'
+      );
 
       const partner = await tx.transportPartner.findUnique({
         where: { id: input.partnerId },
@@ -538,13 +606,12 @@ export class OutsourceEngine {
       });
       const requestNumber = `OUT-CTR-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
 
-      // Create OutsourceRequest in AWARDED status
       const request = await tx.outsourceRequest.create({
         data: {
           tenantId: input.tenantId,
           requestNumber,
-          domain: PartnerServiceDomain.PASSENGER_TRANSPORT,
-          sourceReferenceType: 'TRIP_SCHEDULE',
+          domain,
+          sourceReferenceType,
           sourceReferenceId: input.sourceReferenceId,
           pricingMethod: OutsourcePricingMethod.CONTRACT_RATE,
           status: OutsourceRequestStatus.AWARDED,
@@ -553,16 +620,13 @@ export class OutsourceEngine {
           pickupLocation: input.pickupLocation,
           dropoffLocation: input.dropoffLocation,
           requiredCapacity: input.requiredCapacity || 50,
-          // No MarketplaceOpportunity here — a direct contract-rate award
-          // skips the RFQ/bidding window entirely, so there's no deadline
-          // to record.
+          vehicleTypeRequired: input.vehicleTypeRequired || '50-Seat Bus',
           invitedPartners: {
             create: [{ partnerId: partner.id, status: 'AWARDED' }],
           },
         },
       });
 
-      // Create Quote in ACCEPTED status
       const quote = await tx.partnerQuote.create({
         data: {
           requestId: request.id,
@@ -578,6 +642,20 @@ export class OutsourceEngine {
         },
       });
 
+      const rateCardSnapshot = RateCardService.buildImmutableRateCardSnapshot({
+        rateCardId: input.rateCardId || `CONTRACT-${partner.id}`,
+        version: input.rateCardVersion ?? 1,
+        effectiveFrom: input.serviceDate,
+        pricingUnit: 'PER_TRIP',
+        baseRate: subtotal,
+        minimumCharge: subtotal,
+        currency: input.currency || 'AED',
+        originZone: input.pickupLocation,
+        destinationZone: input.dropoffLocation,
+        vehicleType: input.vehicleTypeRequired,
+        ancillaryCharges: input.ancillaryCharges,
+      });
+
       const commercialSnapshot = {
         requestId: request.id,
         requestNumber: request.requestNumber,
@@ -585,6 +663,8 @@ export class OutsourceEngine {
         partnerId: partner.id,
         partnerName: partner.legalName,
         partnerCode: partner.partnerCode,
+        domain,
+        sourceReferenceType,
         pricingMethod: 'CONTRACT_RATE',
         amount: subtotal,
         vatAmount: vat,
@@ -592,6 +672,13 @@ export class OutsourceEngine {
         currency: input.currency || 'AED',
         serviceDate: new Date(input.serviceDate).toISOString(),
         awardedAt: new Date().toISOString(),
+        rateCardSnapshot,
+        commercialModel: input.commercialModel || 'AGENCY',
+        agencySettlementMode: input.agencySettlementMode || 'PLATFORM_COLLECT_AND_NET_REMIT',
+        buyerAgreedPrice: input.buyerAgreedPrice != null ? Number(input.buyerAgreedPrice) : subtotal,
+        platformFeePct: input.platformFeePct != null ? Number(input.platformFeePct) : 3,
+        ifrs15Indicators: input.ifrs15Indicators || null,
+        financePolicyVersion: input.financePolicyVersion || 'IFRS15-UAE-2026.1',
       };
 
       const award = await tx.outsourceAward.create({
@@ -604,7 +691,7 @@ export class OutsourceEngine {
           vatAmount: vat,
           totalAwarded: total,
           currency: input.currency || 'AED',
-          commercialSnapshot,
+          commercialSnapshot: commercialSnapshot as unknown as Prisma.InputJsonValue,
           awardedBy: input.awardedByUserId,
           status: 'AWARDED',
         },
@@ -615,7 +702,7 @@ export class OutsourceEngine {
   }
 
   /**
-   * Assign Vehicle & Driver with Server-Side Compliance Enforcement Gates
+   * Assign Vehicle & Driver with Stage-2 Service-Date Compliance Enforcement Gates
    * and SHA-256 Hashed Driver Execution Token
    */
   static async assignVehicleAndDriver(input: AssignVehicleDriverInput) {
@@ -634,35 +721,54 @@ export class OutsourceEngine {
       throw new Error('Partner unauthorized for this award');
     }
 
-    // 1. Compliance Gate: Partner Operational Status
+    // Effective cutoff: Math.max(now, serviceDate) so documents expiring before future serviceDate are rejected!
+    const effectiveCutoff = PreDispatchComplianceGuard.computeEffectiveCutoff(
+      award.request?.serviceDate
+    );
+
+    // 1. Compliance Gate: Partner Operational Status & Company Documents
     if (award.partner.operationalStatus !== 'ACTIVE') {
       throw new Error(`Partner is not in ACTIVE operational status (current: ${award.partner.operationalStatus})`);
     }
 
-    // 2. Compliance Gate: Vehicle Mulkiya
+    if (Array.isArray(award.partner.complianceDocuments)) {
+      for (const doc of award.partner.complianceDocuments) {
+        if (
+          (doc.docType === 'TRADE_LICENSE' || doc.docType === 'COMMERCIAL_INSURANCE') &&
+          doc.expiryDate &&
+          new Date(doc.expiryDate) < effectiveCutoff
+        ) {
+          throw new Error(
+            `Partner ${doc.docType} expired on ${new Date(doc.expiryDate).toLocaleDateString()} before scheduled service date`
+          );
+        }
+      }
+    }
+
+    // 2. Compliance Gate: Vehicle Mulkiya against serviceDate cutoff
     if (input.vehicleId) {
       const vehicle = await prisma.partnerVehicle.findUnique({
         where: { id: input.vehicleId },
       });
       if (vehicle) {
         if (!vehicle.isActive) throw new Error(`Vehicle ${vehicle.licensePlate} is inactive`);
-        if (vehicle.mulkiyaExpiry && new Date(vehicle.mulkiyaExpiry) < new Date()) {
+        if (vehicle.mulkiyaExpiry && new Date(vehicle.mulkiyaExpiry) < effectiveCutoff) {
           throw new Error(`Vehicle ${vehicle.licensePlate} Mulkiya registration expired on ${new Date(vehicle.mulkiyaExpiry).toLocaleDateString()}`);
         }
       }
     }
 
-    // 3. Compliance Gate: Driver License & Regulatory Permit
+    // 3. Compliance Gate: Driver License & Regulatory Permit against serviceDate cutoff
     if (input.driverId) {
       const driver = await prisma.partnerDriver.findUnique({
         where: { id: input.driverId },
       });
       if (driver) {
         if (!driver.isActive) throw new Error(`Driver ${driver.fullName} is inactive`);
-        if (driver.licenseExpiry && new Date(driver.licenseExpiry) < new Date()) {
+        if (driver.licenseExpiry && new Date(driver.licenseExpiry) < effectiveCutoff) {
           throw new Error(`Driver ${driver.fullName} driving license expired on ${new Date(driver.licenseExpiry).toLocaleDateString()}`);
         }
-        if (driver.permitExpiry && new Date(driver.permitExpiry) < new Date()) {
+        if (driver.permitExpiry && new Date(driver.permitExpiry) < effectiveCutoff) {
           throw new Error(`Driver ${driver.fullName} RTA/regulatory permit expired on ${new Date(driver.permitExpiry).toLocaleDateString()}`);
         }
       }
@@ -722,7 +828,7 @@ export class OutsourceEngine {
     // Update award status to ASSIGNED
     await prisma.outsourceAward.update({
       where: { id: input.awardId },
-      data: { status: 'ASSIGNED' },
+      data: { status: 'AWARDED' === award.status ? 'ASSIGNED' : award.status },
     });
 
     // Automated WhatsApp / SMS Link Dispatch
@@ -755,6 +861,7 @@ export class OutsourceEngine {
 
   /**
    * Driver execution status milestone updates with strict State Machine
+   * and Synchronous Stage-3 Pre-Dispatch Compliance Guard
    * Sequence: ASSIGNED -> REACHED -> STARTED -> COMPLETED / ABORTED
    */
   static async updateDriverMilestone(
@@ -794,6 +901,11 @@ export class OutsourceEngine {
     }
     if (assignment.award.status === 'ABORTED') {
       throw new Error('Trip was aborted due to operational incident; further mutations rejected');
+    }
+
+    // 2. Stage-3 Synchronous Pre-Dispatch Compliance Guard on REACHED / STARTED
+    if (milestone === 'REACHED' || milestone === 'STARTED') {
+      await PreDispatchComplianceGuard.enforcePreDispatchForAssignment(assignment.id);
     }
 
     const now = new Date();
@@ -886,7 +998,6 @@ export class OutsourceEngine {
 
     const nextRevNo = assignment.revisions.length + 1;
 
-    // 1. Archive current resource to PartnerAssignmentRevision
     await prisma.partnerAssignmentRevision.create({
       data: {
         assignmentId: assignment.id,
@@ -899,12 +1010,10 @@ export class OutsourceEngine {
       },
     });
 
-    // 2. Generate new raw token & hash
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = hashDriverToken(rawToken);
     const tokenExp = new Date(Date.now() + 7 * 86400000);
 
-    // 3. Update assignment with new resources and rotated token
     const updated = await prisma.partnerAssignment.update({
       where: { id: assignment.id },
       data: {
@@ -918,7 +1027,6 @@ export class OutsourceEngine {
       },
     });
 
-    // 4. Record PartnerTripEvent
     await prisma.partnerTripEvent.create({
       data: {
         assignmentId: assignment.id,

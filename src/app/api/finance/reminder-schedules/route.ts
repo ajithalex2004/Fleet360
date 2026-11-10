@@ -10,7 +10,8 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantReminderSchedules } from '@/lib/finance/reminder-schedules';
 import { sendEmail } from '@/lib/email';
-import * as dunningDispatch from '@/lib/finance/dunning-dispatch';
+import { sendSms } from '@/lib/sms';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
@@ -143,21 +144,15 @@ export async function POST(req: NextRequest) {
               .replace(/\{invoice_no\}/g, invNo)
               .replace(/\{client_name\}/g, String(inv.client_name));
 
-            // Best-effort dunning notification dispatch
-            const sendDunningFn = (dunningDispatch as Record<string, unknown>).sendDunningNotification as
-              | ((...args: unknown[]) => Promise<unknown>)
-              | undefined;
-            if (typeof sendDunningFn === 'function' && (inv.client_email || inv.client_phone)) {
-              await sendDunningFn({
-                toEmail: inv.client_email ? String(inv.client_email) : undefined,
-                toPhone: inv.client_phone ? String(inv.client_phone) : undefined,
-                channel: String(sch.channel ?? 'EMAIL'),
-                subject,
-                body,
-                invoiceNo: invNo,
-                clientName: String(inv.client_name),
-              }).catch(() => {});
-            } else if (inv.client_email) {
+            // Best-effort multi-channel reminder dispatch
+            const channelUpper = String(sch.channel ?? 'EMAIL').toUpperCase();
+            if ((channelUpper === 'SMS' || channelUpper === 'MULTI' || channelUpper === 'ALL') && inv.client_phone) {
+              await sendSms({ to: String(inv.client_phone), body }).catch(() => {});
+            }
+            if ((channelUpper === 'WHATSAPP' || channelUpper === 'MULTI' || channelUpper === 'ALL') && inv.client_phone) {
+              await sendWhatsApp({ to: String(inv.client_phone), body }).catch(() => {});
+            }
+            if ((channelUpper === 'EMAIL' || channelUpper === 'MULTI' || channelUpper === 'ALL' || !inv.client_phone) && inv.client_email) {
               await sendEmail({
                 to: String(inv.client_email),
                 subject,

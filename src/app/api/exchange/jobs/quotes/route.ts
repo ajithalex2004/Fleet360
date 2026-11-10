@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { OutsourceDeclineReason } from '@prisma/client';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -20,9 +21,7 @@ export const runtime = 'nodejs';
  * POST /api/exchange/jobs/quotes — submit or revise a quote as that partner
  *
  * The partner is resolved from the caller's partner_users membership; a
- * partnerId in the body is ignored. (Both used to take partnerId from the
- * request: GET without one listed every partner's quotes, and POST let any
- * signed-in user quote as any partner.)
+ * partnerId in the body is ignored.
  */
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
@@ -37,7 +36,23 @@ export async function GET(req: NextRequest) {
       where: { partnerId: auth.ctx.partnerId },
       include: {
         request: {
-          select: { id: true, requestNumber: true, serviceDate: true, pickupTime: true, status: true, domain: true },
+          select: {
+            id: true,
+            requestNumber: true,
+            serviceDate: true,
+            pickupTime: true,
+            status: true,
+            domain: true,
+            requiredCapacity: true,
+            vehicleTypeRequired: true,
+            pricingMethod: true,
+            opportunity: {
+              select: {
+                disclosurePayload: true,
+                closesAt: true,
+              },
+            },
+          },
         },
         partner: { select: { id: true, legalName: true } },
       },
@@ -57,7 +72,42 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { requestId, amount, vatAmount, currency, validHours, proposedVehicleId, proposedDriverId, notes } = body;
+    const { action, requestId, amount, vatAmount, currency, validHours, proposedVehicleId, proposedDriverId, notes, declineReason, declineNotes } = body;
+
+    if (action === 'DECLINE') {
+      if (!requestId) {
+        return NextResponse.json({ error: 'requestId is required to decline an RFQ' }, { status: 400 });
+      }
+      const validReasons = Object.values(OutsourceDeclineReason) as string[];
+      const resolvedReason: OutsourceDeclineReason = validReasons.includes(String(declineReason))
+        ? (declineReason as OutsourceDeclineReason)
+        : OutsourceDeclineReason.OTHER;
+
+      const eligibility = await checkQuoteEligibility(partnerId, String(requestId));
+      if (!eligibility.ok) {
+        return NextResponse.json({ error: eligibility.error }, { status: eligibility.status });
+      }
+
+      const declined = await runAsTenant(eligibility.tenantId, () =>
+        OutsourceEngine.declineRequest({
+          requestId: String(requestId),
+          partnerId,
+          declineReason: resolvedReason,
+          declineNotes: typeof declineNotes === 'string' && declineNotes.trim() ? declineNotes.trim() : undefined,
+          actorUserId: userId,
+        }),
+      );
+
+      return NextResponse.json({
+        ok: true,
+        declined: {
+          requestId: String(requestId),
+          status: declined.status,
+          declineReason: declined.declineReason,
+          declinedAt: declined.declinedAt,
+        },
+      });
+    }
 
     if (!requestId || amount == null || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       return NextResponse.json({ error: 'requestId and a positive amount are required' }, { status: 400 });

@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
         request: true,
         quote: true,
         assignment: {
-          include: { pod: true },
+          include: {
+            pod: true,
+            events: true,
+          },
         },
         invoice: true,
       },

@@ -2,7 +2,8 @@
  * src/app/(exchange)/exchange/compliance/page.tsx
  *
  * Partner Compliance Vault: the mandatory documents for the partner's service
- * areas and emirate (src/lib/exchange/partner-activation.ts), uploads, and,
+ * areas and emirate (src/lib/exchange/partner-activation.ts), uploads, 6-Category
+ * Vertical Qualification Matrix, Stage-3 Fleet/Driver Pre-Dispatch Readiness, and,
  * while the partner is Pending Activation, submitting them to the onboarding
  * company for review.
  */
@@ -10,7 +11,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Plus, CheckCircle2, FileText, X, Send, Lock, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, CheckCircle2, FileText, X, Send, Lock, ExternalLink, ShieldCheck, Truck, Users } from 'lucide-react';
 import { COMPLIANCE_CATALOG, EMIRATE_LABELS, SUBMITTABLE_STATUSES, type Emirate } from '@/lib/exchange/partner-activation';
 
 interface ChecklistItem {
@@ -24,11 +26,31 @@ interface ChecklistItem {
   document: { id?: string; docNumber?: string | null; expiryDate?: string | null; reviewNote?: string | null } | null;
 }
 
+interface QualificationCategoryItem {
+  category: string;
+  label: string;
+  requiredDocTypes: string[];
+  approvedCount: number;
+  uploadedCount: number;
+  requiredCount: number;
+  ready: boolean;
+}
+
+interface FleetReadinessSummary {
+  totalVehicles: number;
+  readyVehicles: number;
+  expiredVehicles: number;
+  totalDrivers: number;
+  readyDrivers: number;
+  expiredDrivers: number;
+}
+
 interface Onboarding {
   partner: {
     legalName: string;
     emirate: Emirate | null;
     domains: string[];
+    serviceAreas?: Array<{ emirate: string; zoneName: string | null }>;
     onboardingStatus: string;
     onboardingLabel: string;
     reviewNote: string | null;
@@ -39,6 +61,8 @@ interface Onboarding {
     status: string; reviewNote: string | null; hasFile: boolean; createdAt: string;
   }>;
   checklist: { items: ChecklistItem[]; complete: boolean; allApproved: boolean; missing: string[] };
+  qualificationCategories?: QualificationCategoryItem[];
+  fleetReadiness?: FleetReadinessSummary;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -186,6 +210,94 @@ export default function ExchangeCompliancePage() {
               Your service areas are not set yet; your onboarding company sets them. Permits for your services will be added here.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Phase 14: 6-Category Vertical Qualification Matrix & Stage-3 Fleet/Driver Readiness */}
+      {data?.qualificationCategories && data.qualificationCategories.length > 0 && (
+        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800 space-y-4 text-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-sm font-bold text-white">
+                  6-Category Vertical Qualification & Stage-3 Pre-Dispatch Gate Matrix
+                </h2>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Synchronized with Buyer Onboarding Review and the 3-Stage Synchronous Pre-Dispatch Compliance Guard (`serviceDate` cutoff).
+              </p>
+            </div>
+            {data.fleetReadiness && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link
+                  href="/exchange/fleet"
+                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition ${
+                    data.fleetReadiness.expiredVehicles > 0
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                      : 'bg-slate-950 text-cyan-300 border-slate-800 hover:border-cyan-500/40'
+                  }`}
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>
+                    Fleet Gate: {data.fleetReadiness.readyVehicles}/{data.fleetReadiness.totalVehicles} Mulkiya Ready
+                  </span>
+                </Link>
+                <Link
+                  href="/exchange/drivers"
+                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition ${
+                    data.fleetReadiness.expiredDrivers > 0
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                      : 'bg-slate-950 text-emerald-300 border-slate-800 hover:border-emerald-500/40'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>
+                    Driver Gate: {data.fleetReadiness.readyDrivers}/{data.fleetReadiness.totalDrivers} Permits Ready
+                  </span>
+                </Link>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
+            {data.qualificationCategories.map((cat) => (
+              <div
+                key={cat.category}
+                className={`p-3 rounded-2xl border space-y-1.5 ${
+                  cat.ready
+                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                    : cat.uploadedCount > 0
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-slate-950/80 border-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-white text-[11px]">{cat.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                      cat.ready
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : cat.uploadedCount > 0
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {cat.ready ? 'READY' : cat.uploadedCount > 0 ? 'REVIEW' : 'PENDING'}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {cat.requiredCount > 0
+                    ? `${cat.approvedCount}/${cat.requiredCount} approved (${cat.uploadedCount} uploaded)`
+                    : cat.category === 'VEHICLE_COMPLIANCE'
+                    ? `${data.fleetReadiness?.readyVehicles ?? 0}/${data.fleetReadiness?.totalVehicles ?? 0} vehicles ready`
+                    : cat.category === 'DRIVER_CREDENTIAL'
+                    ? `${data.fleetReadiness?.readyDrivers ?? 0}/${data.fleetReadiness?.totalDrivers ?? 0} drivers ready`
+                    : 'Verified'}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

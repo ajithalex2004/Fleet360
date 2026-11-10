@@ -47,6 +47,13 @@ export async function POST(
         breakdownNotes,
       });
 
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.dispatchMessage || 'Service ticket not found' },
+          { status: 404 }
+        );
+      }
+
       return NextResponse.json({ ok: true, result });
     } catch (err) {
       console.error(`POST /api/service-tickets/${ticketId}/dispatch-towing error:`, err);

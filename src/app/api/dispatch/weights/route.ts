@@ -4,8 +4,6 @@ export const dynamic = 'force-dynamic';
  * GET  /api/dispatch/weights           — list all weight configs
  * PUT  /api/dispatch/weights           — upsert a config (admin only)
  * DELETE /api/dispatch/weights?id=X   — remove a custom config
- *
- * Only accessible by Super Admin / Platform Admin.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -29,11 +27,8 @@ function serialize(row: Row): Row {
 }
 
 export async function GET(req: NextRequest) {
-
   const authz = requireAuthorizedTenant(
     { headers: req.headers, nextUrl: req.nextUrl },
-    // A platform admin reads another tenant's records via ?tenantId=
-    // (Admin > Tenants > Manage); anyone else still gets 403.
     { allowPlatformSwitch: true },
   );
   if (!authz.ok) {
@@ -43,53 +38,55 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
+      const rows = await tx.$queryRawUnsafe<Row[]>(`
+        SELECT * FROM dispatch_weights
+        WHERE ($1::text IS NULL OR tenant_id = $1 OR tenant_id IS NULL)
+        ORDER BY service_type, priority, tenant_id NULLS FIRST
+      `, tenantId);
 
-        const rows = await tx.$queryRawUnsafe<Row[]>(`
-          SELECT * FROM dispatch_weights
-          WHERE ($1::text IS NULL OR tenant_id = $1 OR tenant_id IS NULL)
-          ORDER BY service_type, priority, tenant_id NULLS FIRST
-        `, tenantId);
+      // Merge defaults + custom configs into a unified structure
+      const configMap: Record<string, Record<string, Row>> = {};
 
-        // Merge defaults + custom configs into a unified structure
-        const configMap: Record<string, Record<string, Row>> = {};
-
-        // Seed with defaults
-        for (const [svc, priorities] of Object.entries(DEFAULT_WEIGHTS)) {
-          configMap[svc] = {};
-          for (const [pri, weights] of Object.entries(priorities)) {
-            configMap[svc][pri] = {
-              id: null, tenant_id: null, service_type: svc, priority: pri,
-              weights,
-              max_attempts: 3, driver_response_timeout_min: 6,
-              dispatch_radius_km: 10, prefer_same_zone: true,
-              cross_zone_allowed: true, allow_preemption: false,
-              preemptible_priorities: [],
-              is_default: true,
-            };
-          }
+      // Seed with defaults
+      for (const [svc, priorities] of Object.entries(DEFAULT_WEIGHTS)) {
+        configMap[svc] = {};
+        for (const [pri, weights] of Object.entries(priorities)) {
+          configMap[svc][pri] = {
+            id: null, tenant_id: null, service_type: svc, priority: pri,
+            weights,
+            max_attempts: 3, driver_response_timeout_min: 6,
+            dispatch_radius_km: 10, prefer_same_zone: true,
+            cross_zone_allowed: true,
+            allow_preemption: svc === 'AMBULANCE' && (pri === 'P1' || pri === 'P2'),
+            preemptible_priorities: svc === 'AMBULANCE' && pri === 'P1'
+              ? ['P2', 'P3', 'NORMAL', 'SCHEDULED']
+              : svc === 'AMBULANCE' && pri === 'P2'
+                ? ['P3', 'SCHEDULED']
+                : [],
+            is_default: true,
+          };
         }
-
-        // Override with DB rows
-        for (const row of rows) {
-          const svc = String(row.service_type);
-          const pri = String(row.priority);
-          if (!configMap[svc]) configMap[svc] = {};
-          configMap[svc][pri] = { ...serialize(row), is_default: false };
-        }
-
-        return NextResponse.json({ data: configMap, defaults: DEFAULT_WEIGHTS });
-        } catch (err) {
-        console.error('[dispatch/weights GET]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
       }
+
+      // Override with DB rows
+      for (const row of rows) {
+        const svc = String(row.service_type);
+        const pri = String(row.priority);
+        if (!configMap[svc]) configMap[svc] = {};
+        configMap[svc][pri] = { ...serialize(row), is_default: false };
+      }
+
+      return NextResponse.json({ data: configMap, defaults: DEFAULT_WEIGHTS });
+    } catch (err) {
+      console.error('[dispatch/weights GET]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-
 
 export async function PUT(req: NextRequest) {
-
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -98,72 +95,70 @@ export async function PUT(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
+      await ensureDispatchSchema();
 
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const {
-          serviceType,
-          priority,
-          weights,
-          maxAttempts = 3,
-          driverResponseTimeoutMin = 6,
-          dispatchRadiusKm = 10,
-          preferSameZone = true,
-          crossZoneAllowed = true,
-          allowPreemption = false,
-          preemptiblePriorities = [],
-        } = body;
+      const {
+        serviceType,
+        priority,
+        weights,
+        maxAttempts = 3,
+        driverResponseTimeoutMin = 6,
+        dispatchRadiusKm = 10,
+        preferSameZone = true,
+        crossZoneAllowed = true,
+        allowPreemption = false,
+        preemptiblePriorities = [],
+      } = body;
 
-        if (!serviceType || !priority) {
-          return NextResponse.json({ error: 'serviceType and priority are required' }, { status: 400 });
-        }
-
-        const [row] = await tx.$queryRawUnsafe<{ id: string }[]>(`
-          INSERT INTO dispatch_weights
-            (tenant_id, service_type, priority, weights,
-             max_attempts, driver_response_timeout_min,
-             dispatch_radius_km, prefer_same_zone, cross_zone_allowed,
-             allow_preemption, preemptible_priorities, updated_at)
-          VALUES
-            ($1, $2, $3, $4::jsonb,
-             $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
-          ON CONFLICT (tenant_id, service_type, priority) DO UPDATE SET
-            weights                     = EXCLUDED.weights,
-            max_attempts                = EXCLUDED.max_attempts,
-            driver_response_timeout_min = EXCLUDED.driver_response_timeout_min,
-            dispatch_radius_km          = EXCLUDED.dispatch_radius_km,
-            prefer_same_zone            = EXCLUDED.prefer_same_zone,
-            cross_zone_allowed          = EXCLUDED.cross_zone_allowed,
-            allow_preemption            = EXCLUDED.allow_preemption,
-            preemptible_priorities      = EXCLUDED.preemptible_priorities,
-            updated_at                  = NOW()
-          RETURNING id
-        `,
-          tenantId ?? null,
-          serviceType,
-          priority,
-          JSON.stringify(weights ?? {}),
-          maxAttempts,
-          driverResponseTimeoutMin,
-          dispatchRadiusKm,
-          preferSameZone,
-          crossZoneAllowed,
-          allowPreemption,
-          JSON.stringify(preemptiblePriorities),
-        );
-
-        return NextResponse.json({ ok: true, id: row?.id });
-        } catch (err) {
-        console.error('[dispatch/weights PUT]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
+      if (!serviceType || !priority) {
+        return NextResponse.json({ error: 'serviceType and priority are required' }, { status: 400 });
       }
+
+      const [row] = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO dispatch_weights
+          (tenant_id, service_type, priority, weights,
+           max_attempts, driver_response_timeout_min,
+           dispatch_radius_km, prefer_same_zone, cross_zone_allowed,
+           allow_preemption, preemptible_priorities, updated_at)
+        VALUES
+          ($1, $2, $3, $4::jsonb,
+           $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
+        ON CONFLICT (tenant_id, service_type, priority) DO UPDATE SET
+          weights                     = EXCLUDED.weights,
+          max_attempts                = EXCLUDED.max_attempts,
+          driver_response_timeout_min = EXCLUDED.driver_response_timeout_min,
+          dispatch_radius_km          = EXCLUDED.dispatch_radius_km,
+          prefer_same_zone            = EXCLUDED.prefer_same_zone,
+          cross_zone_allowed          = EXCLUDED.cross_zone_allowed,
+          allow_preemption            = EXCLUDED.allow_preemption,
+          preemptible_priorities      = EXCLUDED.preemptible_priorities,
+          updated_at                  = NOW()
+        RETURNING id
+      `,
+        tenantId ?? null,
+        serviceType,
+        priority,
+        JSON.stringify(weights ?? {}),
+        maxAttempts,
+        driverResponseTimeoutMin,
+        dispatchRadiusKm,
+        preferSameZone,
+        crossZoneAllowed,
+        allowPreemption,
+        JSON.stringify(preemptiblePriorities),
+      );
+
+      return NextResponse.json({ ok: true, id: row?.id });
+    } catch (err) {
+      console.error('[dispatch/weights PUT]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-
 
 export async function DELETE(req: NextRequest) {
-
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -172,15 +167,18 @@ export async function DELETE(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureDispatchSchema();
-        const id = new URL(req.url).searchParams.get('id');
-        if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
-        await tx.$executeRawUnsafe(`DELETE FROM dispatch_weights WHERE id = $1::uuid`, id);
-        return NextResponse.json({ ok: true });
-        } catch (err) {
-        console.error('[dispatch/weights DELETE]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
-      }
+      await ensureDispatchSchema();
+      const id = new URL(req.url).searchParams.get('id');
+      if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+      await tx.$executeRawUnsafe(
+        `DELETE FROM dispatch_weights WHERE id = $1::uuid AND tenant_id = $2`,
+        id,
+        tenantId,
+      );
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error('[dispatch/weights DELETE]', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
   });
 }
-

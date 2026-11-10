@@ -81,7 +81,23 @@ export function evaluateBookingApprovalPolicy(ctx: BookingPolicyContext): Policy
     });
   }
 
-  // 4. Automated Policy Rule: Auto-Approve Routine Staff Transport (<= AED 300)
+  // 4. Short Notice Policy (< 2 hours before start time)
+  if (ctx.startDate && ctx.createdAt) {
+    const startMs = new Date(ctx.startDate).getTime();
+    const createdMs = new Date(ctx.createdAt).getTime();
+    if (!Number.isNaN(startMs) && !Number.isNaN(createdMs)) {
+      const leadHours = (startMs - createdMs) / (1000 * 60 * 60);
+      if (leadHours >= 0 && leadHours < 2) {
+        violations.push({
+          code: 'SHORT_NOTICE',
+          severity: 'WARNING',
+          message: `Booking requested with less than 2 hours lead time (${leadHours.toFixed(1)}h). Expedited dispatch review required.`,
+        });
+      }
+    }
+  }
+
+  // 5. Automated Policy Rule: Auto-Approve Routine Staff Transport (<= AED 300)
   const isAutoApproved = service === 'STAFF_TRANSPORT' && fare > 0 && fare <= 300 && violations.length === 0;
 
   // Determine required tiers

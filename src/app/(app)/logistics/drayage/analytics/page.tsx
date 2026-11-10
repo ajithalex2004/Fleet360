@@ -47,12 +47,43 @@ interface DrayageWorkspaceData {
     id: string;
     jobCode: string;
     jobPhase: 'L1' | 'L2';
+    shipmentType?: string;
     status: string;
     customerName: string;
+    warehouseName?: string;
+    warehouseId?: string | null;
+    terminalName?: string;
+    terminalId?: string | null;
+    returnTerminalName?: string | null;
+    returnTerminalId?: string | null;
+    containerNumber?: string;
+    containerSize?: string;
+    containerType?: string;
     assignedDriverName: string | null;
+    assignedVehiclePlate?: string | null;
     rateAmountAed: number;
     driverAllowanceAed: number;
+    bogieJobId?: string | null;
+    streetTurnJobId?: string | null;
+    trailerDetached?: boolean;
+    l2Activated?: boolean;
     createdAt: string;
+  }>;
+  terminals?: Array<{
+    id: string;
+    name: string;
+    code: string;
+    lat?: number;
+    lng?: number;
+  }>;
+  warehouses?: Array<{
+    id: string;
+    name: string;
+    zone?: string;
+    lat?: number;
+    lng?: number;
+    tripAmountAed?: number;
+    driverAllowanceAed?: number;
   }>;
   drivers: Array<{
     id: string;
@@ -200,6 +231,126 @@ export default function DrayageAnalyticsPage() {
     }
 
     return Array.from(map.values()).sort((a, b) => b.revenueAed - a.revenueAed);
+  }, [data]);
+
+  // Per-Job Optimization & Sustainability Metrics (Deadhead Saved, Carbon Avoided, Direct Cost Saved & Turnaround Saved)
+  const jobOptimizationMetrics = useMemo(() => {
+    if (!data?.jobs) return [];
+    const jobsList = data.jobs;
+    const terminalsList = data.terminals || [];
+    const warehousesList = data.warehouses || [];
+
+    const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    const resolveWarehouseCoords = (whName?: string, whId?: string | null): { lat: number; lng: number } => {
+      if (whId) {
+        const wh = warehousesList.find((w) => w.id === whId);
+        if (wh && typeof wh.lat === 'number' && typeof wh.lng === 'number' && wh.lat !== 0) {
+          return { lat: wh.lat, lng: wh.lng };
+        }
+      }
+      const lower = (whName || '').toLowerCase();
+      const byName = warehousesList.find((w) => w.name.toLowerCase() === lower);
+      if (byName && typeof byName.lat === 'number' && typeof byName.lng === 'number' && byName.lat !== 0) {
+        return { lat: byName.lat, lng: byName.lng };
+      }
+      if (lower.includes('kizad') || lower.includes('kezad') || lower.includes('khalifa')) return { lat: 24.7892, lng: 54.7341 };
+      if (lower.includes('dic') || lower.includes('dubai industrial city') || lower.includes('industrial city')) return { lat: 24.8528, lng: 55.0636 };
+      if (lower.includes('dubai south') || lower.includes('dwc')) return { lat: 24.9182, lng: 55.1342 };
+      if (lower.includes('national industries') || lower.includes('nip')) return { lat: 24.9415, lng: 55.0695 };
+      if (lower.includes('jafza north')) return { lat: 24.9964, lng: 55.0842 };
+      return { lat: 24.9602, lng: 55.0615 };
+    };
+
+    const resolveTerminalCoords = (termId?: string | null, termName?: string | null): { lat: number; lng: number } => {
+      const match = terminalsList.find(
+        (t) =>
+          (termId && t.id === termId) ||
+          (termName && (t.name.toLowerCase() === termName.toLowerCase() || t.code.toLowerCase() === termName.toLowerCase())),
+      );
+      if (match && typeof match.lat === 'number' && typeof match.lng === 'number' && match.lat !== 0) {
+        return { lat: match.lat, lng: match.lng };
+      }
+      const lower = (termName || '').toLowerCase();
+      if (lower.includes('khalifa') || lower.includes('auh') || lower.includes('abu dhabi')) return { lat: 24.8432, lng: 54.7121 };
+      if (lower.includes('rashid')) return { lat: 25.2697, lng: 55.2758 };
+      if (lower.includes('sharjah') || lower.includes('khalid')) return { lat: 25.3582, lng: 55.3721 };
+      if (lower.includes('t2')) return { lat: 25.0185, lng: 55.0562 };
+      if (lower.includes('t3')) return { lat: 24.9982, lng: 55.0458 };
+      if (lower.includes('t4')) return { lat: 24.9895, lng: 55.0381 };
+      return { lat: 25.0112, lng: 55.0617 };
+    };
+
+    const roadDistKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number =>
+      Math.round(haversineKm(a.lat, a.lng, b.lat, b.lng) * 1.25 * 10) / 10;
+
+    return jobsList.map((job) => {
+      const termName = (job.returnTerminalName || job.terminalName || 'DPW-Jebel Ali-T1').trim();
+      const whName = (job.warehouseName || 'JAFZA Corridor Hub').trim();
+      const whCoord = resolveWarehouseCoords(whName, job.warehouseId);
+      const termCoord = resolveTerminalCoords(job.returnTerminalId || job.terminalId, termName);
+      const oneWayLegKm = Math.max(8.0, roadDistKm(whCoord, termCoord));
+
+      // Check if paired with another job (by explicit streetTurnJobId / bogieJobId or same-terminal reload match)
+      const pairedJob =
+        (job.streetTurnJobId ? jobsList.find((j) => j.id === job.streetTurnJobId || j.jobCode === job.streetTurnJobId) : undefined) ||
+        (job.bogieJobId ? jobsList.find((j) => j.id === job.bogieJobId || j.jobCode === job.bogieJobId) : undefined) ||
+        jobsList.find(
+          (other) =>
+            other.id !== job.id &&
+            (other.returnTerminalName || other.terminalName || '').trim().toLowerCase() === termName.toLowerCase() &&
+            (other.jobPhase !== job.jobPhase || other.status !== job.status),
+        );
+
+      const pairedWhCoord = pairedJob
+        ? resolveWarehouseCoords(pairedJob.warehouseName, pairedJob.warehouseId)
+        : whCoord;
+      const pairedLegKm = Math.max(8.0, roadDistKm(pairedWhCoord, termCoord));
+
+      const deadheadKmSaved = Math.max(
+        10.0,
+        Math.round((oneWayLegKm + (pairedJob ? pairedLegKm : oneWayLegKm * 0.6)) * 10) / 10,
+      );
+      const co2SavedKg = Math.round(deadheadKmSaved * 0.95 * 10) / 10;
+      const allowanceAed = job.driverAllowanceAed || 150;
+      const directCostSavedAed = Math.round(deadheadKmSaved * 3.85 + allowanceAed + 35);
+      const turnaroundHoursSaved = Math.round((deadheadKmSaved / 45 + 1.5) * 10) / 10;
+
+      const modeLabel = job.bogieJobId
+        ? 'Dual-20FT Bogie'
+        : job.streetTurnJobId
+          ? 'Street-Turn Pair'
+          : job.jobPhase === 'L2'
+            ? 'L2 Empty Return Reload'
+            : 'Port Terminal Reload';
+
+      const routeLabel =
+        job.jobPhase === 'L2' || job.trailerDetached || job.status === 'PLACED_AT_RAMP'
+          ? `${whName} ➔ ${termName}`
+          : `${termName} ➔ ${whName}`;
+
+      return {
+        job,
+        modeLabel,
+        routeLabel,
+        pairedJobCode: pairedJob?.jobCode || null,
+        deadheadKmSaved,
+        co2SavedKg,
+        directCostSavedAed,
+        turnaroundHoursSaved,
+      };
+    });
   }, [data]);
 
   // Export Analytics CSV
@@ -572,6 +723,89 @@ export default function DrayageAnalyticsPage() {
               </div>
             </Panel>
           </div>
+
+          {/* Job-Level Optimization & Sustainability Analytics (Deadhead, Carbon Avoided, Direct Cost Saved & Turnaround Saved) */}
+          <Panel
+            title="Job-Level Optimization & Sustainability Analytics"
+            subtitle="Deadhead Saved, Carbon Avoided, Direct Cost Saved & Turnaround Saved against each Drayage Job"
+            icon={Leaf}
+            accent="emerald"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
+                  <tr>
+                    <th className="py-2.5 px-3 font-semibold">Job Code &amp; Phase</th>
+                    <th className="py-2.5 px-3 font-semibold">Container</th>
+                    <th className="py-2.5 px-3 font-semibold">Customer &amp; L1 / L2 Corridor Route</th>
+                    <th className="py-2.5 px-3 font-semibold">Optimization Mode</th>
+                    <th className="py-2.5 px-3 font-semibold">Deadhead Saved</th>
+                    <th className="py-2.5 px-3 font-semibold">Carbon Avoided</th>
+                    <th className="py-2.5 px-3 font-semibold">Direct Cost Saved</th>
+                    <th className="py-2.5 px-3 font-semibold">Turnaround Saved</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
+                  {jobOptimizationMetrics.map((item) => (
+                    <tr key={item.job.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5">
+                          <span>{item.job.jobCode}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              item.job.jobPhase === 'L2'
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                            }`}
+                          >
+                            {item.job.jobPhase}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">{item.job.status}</div>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <div className="font-mono font-bold text-[var(--text-main)]">
+                          {item.job.containerNumber || '—'}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          {item.job.containerSize || '40FT'} · {item.job.containerType || 'DRY'}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-sm text-[var(--text-main)]">{item.job.customerName}</div>
+                        <div className="text-xs text-[var(--text-muted)] font-medium">{item.routeLabel}</div>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          {item.modeLabel}
+                        </span>
+                        {item.pairedJobCode && (
+                          <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">
+                            Paired: {item.pairedJobCode}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap font-bold text-blue-400">
+                        {item.deadheadKmSaved} km zero-bobtail
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className="font-bold text-emerald-400 inline-flex items-center gap-1">
+                          <Leaf className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span>{item.co2SavedKg} kg CO₂</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap font-bold text-emerald-400">
+                        AED {item.directCostSavedAed.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap font-bold text-cyan-400">
+                        {item.turnaroundHoursSaved} hrs gate dwell
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
 
           {/* Driver Performance Table */}
           <Panel

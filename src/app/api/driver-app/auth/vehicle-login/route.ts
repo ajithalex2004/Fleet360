@@ -71,39 +71,21 @@ async function resolveCallerAuth(
  * `matchDriverProfileForUser` (which self-heals `drivers.user_id`).
  */
 async function callerDriver(userId: string, tenantId: string): Promise<DriverRef | null> {
-  const fkRows = await prisma
-    .$queryRawUnsafe<
-      Array<{
-        id: string;
-        name: string | null;
-        firstName: string | null;
-        lastName: string | null;
-        email: string | null;
-        driverType: string | null;
-        assignedVehicleId: string | null;
-      }>
-    >(
-      `SELECT
-          id::text AS id,
-          name,
-          first_name AS "firstName",
-          last_name AS "lastName",
-          email,
-          driver_type AS "driverType",
-          assigned_vehicle_id AS "assignedVehicleId"
-         FROM drivers
-        WHERE tenant_id = $1
-          AND deleted_at IS NULL
-          AND (id::text = $2 OR user_id = $2)
-        ORDER BY (id::text = $2) DESC
-        LIMIT 1`,
-      tenantId,
-      userId,
-    )
-    .catch(() => []);
-  if (fkRows[0]) return fkRows[0];
+  const direct = await prisma.driver.findFirst({
+    where: { id: userId, tenantId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      driverType: true,
+      assignedVehicleId: true,
+    },
+  });
+  if (direct) return direct;
 
-  // Fallback when the session carries User.id and `drivers.user_id` has not yet been backfilled:
+  // Fallback when the session carries User.id and `drivers.user_id` or email/employeeId links it:
   // matchDriverProfileForUser resolves safely and self-heals `drivers.user_id`.
   try {
     const user = await prisma.user.findUnique({

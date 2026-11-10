@@ -44,19 +44,21 @@ function j<T>(v: unknown, fallback: T): T {
 
 type DriverRow = Record<string, unknown>;
 
-function meetsPassengerConstraints(meta: PassengerMeta | undefined, row: DriverRow): boolean {
-  if (!meta) return true;
-  const capacity = n(row.capacity);
-  if (meta.passengerCount && capacity < meta.passengerCount) return false;
-  if (meta.requireWheelchair && !b(row.has_wheelchair_ramp)) return false;
-  if (meta.requireChildSeat  && !b(row.has_child_seat))      return false;
+function meetsPassengerConstraints(meta: PassengerMeta | undefined, row: DriverRow, fallbackPax?: number): boolean {
+  const capacity = n(row.capacity) || 4;
+  const requiredPax = meta?.passengerCount ?? fallbackPax ?? 1;
+  if (requiredPax > 0 && capacity < requiredPax) return false;
+  if (meta?.requireWheelchair && !b(row.has_wheelchair_ramp)) return false;
+  if (meta?.requireChildSeat  && !b(row.has_child_seat))      return false;
   return true;
 }
 
 function meetsFreightConstraints(meta: FreightMeta | undefined, row: DriverRow): boolean {
   if (!meta) return true;
-  if (meta.weightKg  > 0 && n(row.payload_kg)  < meta.weightKg)  return false;
-  if (meta.volumeCbm > 0 && n(row.volume_cbm)  < meta.volumeCbm) return false;
+  const payloadKg = n(row.payload_kg);
+  const volumeCbm = n(row.volume_cbm);
+  if (meta.weightKg  > 0 && payloadKg > 0 && payloadKg < meta.weightKg)  return false;
+  if (meta.volumeCbm > 0 && volumeCbm > 0 && volumeCbm < meta.volumeCbm) return false;
   if (meta.temperatureControlled && !b(row.has_reefer)) return false;
   if (meta.hazmAt && !b(row.hazmat_certified)) return false;
   if (meta.requiredVehicleType && meta.requiredVehicleType !== 'ANY') {
@@ -67,9 +69,9 @@ function meetsFreightConstraints(meta: FreightMeta | undefined, row: DriverRow):
 }
 
 function meetsTechnicianConstraints(meta: TechnicianMeta | undefined, row: DriverRow): boolean {
-  if (!meta || meta.requiredSkills.length === 0) return true;
+  if (!meta || !Array.isArray(meta.requiredSkills) || meta.requiredSkills.length === 0) return true;
   const skills = j<string[]>(row.skill_tags, []);
-  return meta.requiredSkills.every(s => skills.includes(s));
+  return meta.requiredSkills.every(reqSkill => skills.includes(reqSkill));
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -81,16 +83,6 @@ export async function getEligibleCandidates(
   radiusKm: number,
   preferSameZone: boolean,
 ): Promise<Candidate[]> {
-  // NOTE: preferSameZone is accepted (engine.ts passes config.preferSameZone
-  // through) but not actually consulted anywhere — this is pure pass/fail
-  // eligibility (see file header), and scoring.ts's zoneBonus already
-  // applies its flat +0.05 same-zone boost unconditionally, regardless of
-  // this flag. So "prefer same zone" currently has no observable effect
-  // whether true or false. Wiring it in for real (hard-filter cross-zone
-  // candidates? weight the scoring boost by it?) is a product decision,
-  // flagged for follow-up rather than decided here.
-  void preferSameZone;
-
   const pickup: GeoPoint | null =
     job.pickupLat != null && job.pickupLng != null
       ? { lat: job.pickupLat, lng: job.pickupLng }
@@ -98,55 +90,72 @@ export async function getEligibleCandidates(
 
   const meta = job.metadata as Record<string, unknown> | undefined;
 
-  // Fetch available driver–vehicle pairs with location
+  // Fetch available driver–vehicle pairs scoped strictly to job.tenantId
+  // and excluding drivers who already rejected or timed out on this job
   const rows = await prisma.$queryRawUnsafe<DriverRow[]>(`
     SELECT
       da.driver_id,
-      da.zone_id,
+      COALESCE(da.zone_id, v.zone_id::text) AS zone_id,
       da.hours_worked_today,
-      v.id::text           AS vehicle_id,
-      v.type               AS vehicle_type,
-      COALESCE(v.capacity,         0)     AS capacity,
-      COALESCE(v.payload_kg,       0)     AS payload_kg,
-      COALESCE(v.volume_cbm,       0)     AS volume_cbm,
-      COALESCE(v.cost_per_km,      1.0)   AS cost_per_km,
-      COALESCE(v.has_wheelchair_ramp, FALSE) AS has_wheelchair_ramp,
-      COALESCE(v.has_child_seat,      FALSE) AS has_child_seat,
-      COALESCE(v.has_reefer,          FALSE) AS has_reefer,
-      COALESCE(v.hazmat_certified,    FALSE) AS hazmat_certified,
-      COALESCE(d.rating,           4.0)   AS driver_rating,
-      COALESCE(d.license_category, '')    AS license_category,
-      COALESCE(d.skill_tags,       '[]')  AS skill_tags,
-      COALESCE(vl.lat, 0)                 AS lat,
-      COALESCE(vl.lng, 0)                 AS lng
+      v.id::text                                      AS vehicle_id,
+      v.type                                          AS vehicle_type,
+      COALESCE(v.seating_capacity, v.capacity, 4)     AS capacity,
+      COALESCE(v.payload_kg,       0)                 AS payload_kg,
+      COALESCE(v.volume_cbm,       0)                 AS volume_cbm,
+      COALESCE(v.cost_per_km,      1.5)               AS cost_per_km,
+      COALESCE(v.has_wheelchair_ramp, FALSE)          AS has_wheelchair_ramp,
+      COALESCE(v.has_child_seat,      FALSE)          AS has_child_seat,
+      COALESCE(v.has_reefer,          FALSE)          AS has_reefer,
+      COALESCE(v.hazmat_certified,    FALSE)          AS hazmat_certified,
+      COALESCE(d.rating,           4.5)               AS driver_rating,
+      COALESCE(d.license_type,     '')                AS license_category,
+      COALESCE(d.contact_number,   '')                AS driver_phone,
+      COALESCE(d.skill_tags,       '[]'::jsonb)       AS skill_tags,
+      COALESCE(vl.lat, 0)                             AS lat,
+      COALESCE(vl.lng, 0)                             AS lng
     FROM driver_availability da
-    JOIN vehicles v        ON v.driver_id::text = da.driver_id
-                          AND v.status = 'AVAILABLE'
-                          AND v.deleted_at IS NULL
-    LEFT JOIN drivers d    ON d.id::text = da.driver_id
-                          AND d.deleted_at IS NULL
+    LEFT JOIN drivers d ON d.id::text = da.driver_id
+                       AND d.deleted_at IS NULL
+    JOIN vehicles v     ON (
+                             v.id::text = da.vehicle_id
+                             OR v.assigned_driver_id::text = da.driver_id
+                             OR d.assigned_vehicle_id::text = v.id::text
+                           )
+                       AND v.status = 'AVAILABLE'
+                       AND v.deleted_at IS NULL
+                       AND v.tenant_id::text = $1
     LEFT JOIN vehicle_locations vl ON vl.vehicle_id = v.id::text
     WHERE da.status = 'AVAILABLE'
-      AND (da.shift_end IS NULL OR da.shift_end > NOW())
-  `).catch(() => [] as DriverRow[]);
+      AND (da.tenant_id IS NULL OR da.tenant_id = $1)
+      AND (d.id IS NULL OR d.tenant_id::text = $1)
+      AND (COALESCE(da.shift_ends_at, da.shift_end) IS NULL OR COALESCE(da.shift_ends_at, da.shift_end) > NOW())
+      AND NOT EXISTS (
+        SELECT 1 FROM dispatch_attempts da2
+        WHERE da2.dispatch_job_id = $2::uuid
+          AND da2.driver_id = da.driver_id
+          AND da2.response IN ('REJECTED', 'TIMEOUT')
+      )
+  `, job.tenantId, job.id).catch(() => [] as DriverRow[]);
 
   const candidates: Candidate[] = [];
+  const seenDrivers = new Set<string>();
 
   for (const row of rows) {
+    const driverId = s(row.driver_id);
+    if (!driverId || seenDrivers.has(driverId)) continue;
+
     const loc: GeoPoint = { lat: n(row.lat), lng: n(row.lng) };
+    const hasGps = loc.lat !== 0 || loc.lng !== 0;
 
-    // Skip if no GPS and pickup is required
-    if (pickup && loc.lat === 0 && loc.lng === 0) continue;
+    const distanceKm = pickup && hasGps ? haversineKm(loc, pickup) : 0;
 
-    const distanceKm = pickup ? haversineKm(loc, pickup) : 0;
-
-    // Hard geo constraint
-    if (pickup && distanceKm > radiusKm) continue;
+    // Hard geo constraint when both job pickup and vehicle GPS exist
+    if (pickup && hasGps && distanceKm > radiusKm) continue;
 
     // Service-specific hard constraints
     switch (job.serviceType) {
       case 'PASSENGER':
-        if (!meetsPassengerConstraints(meta as unknown as PassengerMeta, row)) continue;
+        if (!meetsPassengerConstraints(meta as unknown as PassengerMeta, row, job.passengerCount)) continue;
         break;
       case 'FREIGHT':
       case 'DELIVERY':
@@ -164,18 +173,28 @@ export async function getEligibleCandidates(
     const hoursWorked = n(row.hours_worked_today);
     const utilizationScore = Math.min(hoursWorked / 12, 1);
 
+    seenDrivers.add(driverId);
     candidates.push({
-      driverId:        s(row.driver_id),
+      driverId,
       vehicleId:       s(row.vehicle_id),
+      driverPhone:     s(row.driver_phone) || undefined,
       distanceKm,
       etaMinutes:      etaMin,
-      driverRating:    n(row.driver_rating),
-      vehicleCapacity: n(row.capacity) || n(row.payload_kg),
+      driverRating:    n(row.driver_rating) || 4.5,
+      vehicleCapacity: n(row.capacity) || n(row.payload_kg) || 4,
       utilizationScore,
-      costPerKm:       n(row.cost_per_km),
-      zoneId:          s(row.zone_id),
+      costPerKm:       n(row.cost_per_km) || 1.5,
+      zoneId:          s(row.zone_id) || undefined,
       skillTags:       j<string[]>(row.skill_tags, []),
     });
+  }
+
+  // If preferSameZone is true and job specifies a zoneId, prioritize same-zone candidates first
+  if (preferSameZone && job.zoneId) {
+    const sameZone = candidates.filter(c => c.zoneId === job.zoneId);
+    if (sameZone.length > 0) {
+      return sameZone;
+    }
   }
 
   return candidates;
@@ -214,27 +233,46 @@ export async function getAmbulanceEligibleCandidates(
       ac.expires_at,
       ac.paramedic_certified,
       da.driver_id,
-      da.zone_id,
+      COALESCE(da.zone_id, v.zone_id::text) AS zone_id,
       da.hours_worked_today,
       COALESCE(vl.lat, 0) AS lat,
       COALESCE(vl.lng, 0) AS lng,
-      COALESCE(d.rating,  4.0) AS driver_rating
+      COALESCE(d.rating, 4.5) AS driver_rating,
+      COALESCE(d.contact_number, '') AS driver_phone
     FROM ambulance_capabilities ac
     JOIN vehicles v        ON v.id::text = ac.vehicle_id
                           AND v.status = 'AVAILABLE'
                           AND v.deleted_at IS NULL
-    JOIN driver_availability da ON da.driver_id::text = v.driver_id::text
+                          AND v.tenant_id::text = $1
+    JOIN driver_availability da ON (
+                                     da.vehicle_id = v.id::text
+                                     OR da.driver_id = v.assigned_driver_id::text
+                                     OR da.driver_id = ac.paramedic_id
+                                   )
                                AND da.status = 'AVAILABLE'
+                               AND (da.tenant_id IS NULL OR da.tenant_id = $1)
     LEFT JOIN drivers d    ON d.id::text = da.driver_id
+                          AND d.deleted_at IS NULL
     LEFT JOIN vehicle_locations vl ON vl.vehicle_id = ac.vehicle_id
     WHERE ac.operational_status = 'READY'
       AND ac.paramedic_certified = TRUE
       AND (ac.expires_at IS NULL OR ac.expires_at > NOW())
-  `).catch(() => [] as DriverRow[]);
+      AND (ac.tenant_id IS NULL OR ac.tenant_id = $1)
+      AND NOT EXISTS (
+        SELECT 1 FROM dispatch_attempts da2
+        WHERE da2.dispatch_job_id = $2::uuid
+          AND da2.driver_id = da.driver_id
+          AND da2.response IN ('REJECTED', 'TIMEOUT')
+      )
+  `, job.tenantId, job.id).catch(() => [] as DriverRow[]);
 
   const candidates: Candidate[] = [];
+  const seenDrivers = new Set<string>();
 
   for (const row of rows) {
+    const driverId = s(row.driver_id);
+    if (!driverId || seenDrivers.has(driverId)) continue;
+
     // ── Hard filter 1: Ambulance level ──────────────────────
     const available = s(row.level).toUpperCase() as AmbulanceLevel;
     if (!meetsAmbulanceLevel(requiredLevel, available)) continue;
@@ -250,32 +288,36 @@ export async function getAmbulanceEligibleCandidates(
     // ── Hard filter 4: Operational status = READY ───────────
     if (s(row.operational_status) !== 'READY') continue;
 
-    // ── Hard filter 5: Serviceable geo radius ────────────────
-    const loc: GeoPoint = { lat: n(row.lat), lng: n(row.lng) };
-    const distanceKm = pickup ? haversineKm(loc, pickup) : 0;
+    // ── Hard filter 5: Cross-zone check ─────────────────────
+    const candidateZone = s(row.zone_id);
+    if (!crossZoneAllowed && job.zoneId && candidateZone && candidateZone !== job.zoneId) {
+      continue;
+    }
 
-    // P1 cross-zone: allow up to 3× radius; no cross-zone: strict radius
+    // ── Hard filter 6: Serviceable geo radius ────────────────
+    const loc: GeoPoint = { lat: n(row.lat), lng: n(row.lng) };
+    const hasGps = loc.lat !== 0 || loc.lng !== 0;
+    const distanceKm = pickup && hasGps ? haversineKm(loc, pickup) : 0;
+
+    // P1/P2 cross-zone: allow up to 3× radius; no cross-zone: strict radius
     const effectiveRadius = crossZoneAllowed ? radiusKm * 3 : radiusKm;
-    if (pickup && distanceKm > effectiveRadius) continue;
+    if (pickup && hasGps && distanceKm > effectiveRadius) continue;
 
     // Ambulances travel faster (emergency speed)
     const etaMin = estimateEtaMin(distanceKm, 70);
 
-    // Equipment match score: scoring.ts already independently recomputes
-    // this exact ratio from candidate.equipmentTags + job.metadata (see
-    // its equipScore), so nothing here needs to pass a precomputed value
-    // through — Candidate has no field for it anyway.
-
+    seenDrivers.add(driverId);
     candidates.push({
-      driverId:        s(row.driver_id),
+      driverId,
       vehicleId:       s(row.vehicle_id),
+      driverPhone:     s(row.driver_phone) || undefined,
       distanceKm,
       etaMinutes:      etaMin,
-      driverRating:    n(row.driver_rating),
+      driverRating:    n(row.driver_rating) || 4.5,
       vehicleCapacity: 1,
       utilizationScore: Math.min(n(row.hours_worked_today) / 12, 1),
       costPerKm:       0,
-      zoneId:          s(row.zone_id),
+      zoneId:          candidateZone || undefined,
       equipmentTags:   equipmentOnBoard,
       ambulanceLevel:  available,
     });

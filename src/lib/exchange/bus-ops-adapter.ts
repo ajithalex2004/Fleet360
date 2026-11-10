@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { activeRlsScope } from '@/lib/rls-scope';
 import { logAudit } from '@/lib/audit';
 import { PartnerServiceDomain, Prisma } from '@prisma/client';
 import {
@@ -90,10 +91,30 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
     const tripId = award.request?.sourceReferenceId || award.sourceReferenceId;
     if (!tripId) return;
 
-    await prisma.tripSchedule.updateMany({
-      where: { id: tripId, tenantId: award.tenantId },
-      data: { status: 'ASSIGNED', updatedAt: new Date() },
-    });
+    // Respect public.enforce_trip_schedule_status_transition() (TRIP_TRANSITIONS):
+    // TripSchedule remains in its valid pre-departure status ('SCHEDULED') until the
+    // driver starts the trip ('DEPARTED'), while recording the outsource award in notes.
+    const db = (activeRlsScope()?.tx as Prisma.TransactionClient | undefined) ?? prisma;
+    const existing = await db.tripSchedule
+      .findFirst({
+        where: { id: tripId, tenantId: award.tenantId },
+        select: { id: true, notes: true },
+      })
+      .catch(() => null);
+
+    if (existing) {
+      const awardNote = `[Exchange Awarded] Partner ${award.partnerId} contracted for AED ${Number(award.totalAwarded ?? 0).toFixed(2)}`;
+      const combinedNotes = existing.notes
+        ? existing.notes.includes(awardNote)
+          ? existing.notes
+          : `${existing.notes}\n${awardNote}`
+        : awardNote;
+
+      await db.tripSchedule.updateMany({
+        where: { id: tripId, tenantId: award.tenantId },
+        data: { notes: combinedNotes, updatedAt: new Date() },
+      });
+    }
 
     await logAudit({
       tenantId: award.tenantId,
@@ -122,10 +143,29 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
     // the scheduled departureTime/arrivalTime) — writing to those field
     // names would fail Prisma's runtime schema validation. Only `status` is
     // updated here until real "actual time" tracking columns exist.
+    //
+    // Mirror src/lib/bus-ops/state-machines.ts TRIP_TRANSITIONS enforced by
+    // PostgreSQL trigger public.enforce_trip_schedule_status_transition():
+    //   SCHEDULED -> DEPARTED -> IN_TRANSIT / COMPLETED
     if (status === 'STARTED') {
-      updateData.status = 'IN_PROGRESS';
-    } else if (status === 'COMPLETED') {
-      updateData.status = 'COMPLETED';
+      updateData.status = 'DEPARTED';
+      await prisma.tripSchedule.updateMany({
+        where: { id: tripId, status: 'SCHEDULED' },
+        data: updateData,
+      });
+      return;
+    }
+
+    if (status === 'COMPLETED') {
+      await prisma.tripSchedule.updateMany({
+        where: { id: tripId, status: 'SCHEDULED' },
+        data: { status: 'DEPARTED', updatedAt: now },
+      });
+      await prisma.tripSchedule.updateMany({
+        where: { id: tripId, status: { in: ['DEPARTED', 'IN_TRANSIT'] } },
+        data: { status: 'COMPLETED', updatedAt: now },
+      });
+      return;
     }
 
     await prisma.tripSchedule.updateMany({

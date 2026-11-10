@@ -97,11 +97,11 @@ export async function loadDriverActor(
   if (driver.status && driver.status !== 'ACTIVE') return null;
 
   const trips = await tx.$queryRawUnsafe<Array<{ id: string; vehicle_id: string | null; plate: string | null }>>(
-    `SELECT ts.id, ts.vehicle_id, v.license_plate AS plate
+    `SELECT ts.id::text AS id, ts.vehicle_id::text AS vehicle_id, v.license_plate AS plate
        FROM trip_schedules ts
-       LEFT JOIN vehicles v ON v.id = ts.vehicle_id AND v.tenant_id = ts.tenant_id
-      WHERE ts.tenant_id = $1::uuid
-        AND ts.driver_id IN ($2::text, $3::text)
+       LEFT JOIN vehicles v ON v.id::text = ts.vehicle_id::text AND v.tenant_id::text = ts.tenant_id::text
+      WHERE ts.tenant_id::text = $1::text
+        AND ts.driver_id::text IN ($2::text, $3::text)
         AND ts.status = 'IN_PROGRESS'
       ORDER BY ts.actual_departure_at DESC NULLS LAST
       LIMIT 1`,
@@ -112,10 +112,10 @@ export async function loadDriverActor(
   const trip = trips[0];
 
   const shifts = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null; plate: string | null }>>(
-    `SELECT s.vehicle_id, v.license_plate AS plate
+    `SELECT s.vehicle_id::text AS vehicle_id, v.license_plate AS plate
        FROM shifts s
-       LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.tenant_id = s.tenant_id
-      WHERE s.tenant_id = $1::uuid
+       LEFT JOIN vehicles v ON v.id::text = s.vehicle_id::text AND v.tenant_id::text = s.tenant_id::text
+      WHERE s.tenant_id::text = $1::text
         AND s.driver_id::text IN ($2::text, $3::text)
         AND s.status = 'ACTIVE'
       ORDER BY s.started_at DESC

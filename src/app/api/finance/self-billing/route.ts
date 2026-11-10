@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import * as selfBillingLib from '@/lib/finance/self-billing';
 import { generateSelfBilledTaxInvoice } from '@/lib/finance/self-billing';
 
 export const dynamic = 'force-dynamic';
@@ -123,22 +122,7 @@ export async function POST(req: NextRequest) {
         paymentDueDate: body.paymentDueDate ?? body.dueDate,
       });
 
-      const genPayloadFn = (selfBillingLib as Record<string, unknown>).generateSelfBilledInvoicePayload as
-        | ((...args: unknown[]) => Record<string, unknown>)
-        | undefined;
-      const customPayload = typeof genPayloadFn === 'function'
-        ? genPayloadFn({
-            ...body,
-            selfBillNumber,
-            supplier,
-            items: rawItems,
-            carrierId,
-            carrierName: supplierName,
-            carrierTrn: supplierTrn,
-            billingPeriodStart,
-            billingPeriodEnd,
-          })
-        : null;
+      const customPayload: Record<string, unknown> | null = null;
 
       const enrichedLineItems = invoice.items.map((it) => ({
         ...it,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { NuiReasonMasterView } from '@/app/(app)/admin/nui-reasons/page';
+import { NuiReasonMasterView } from '@/components/fleet/NuiReasonMasterView';
 
 export default function FleetMaintenanceNuiReasonsPage() {
   return <NuiReasonMasterView scope="MAINTENANCE" />;

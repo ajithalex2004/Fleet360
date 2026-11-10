@@ -126,13 +126,23 @@ async function multiPassDelete(tenantId: string): Promise<Record<string, number>
     // without leaking `app.tenant_id = '*'` onto the pooled connection.
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
 
-    const tables = await tx.$queryRawUnsafe<{ table_name: string }[]>(
+    const txTables = await tx.$queryRawUnsafe<{ table_name: string }[]>(
       `SELECT table_name
          FROM information_schema.columns
         WHERE table_schema = 'public'
           AND column_name   = 'tenant_id'
         ORDER BY table_name`,
     );
+    const tables =
+      txTables.length > 0
+        ? txTables
+        : await prisma.$queryRawUnsafe<{ table_name: string }[]>(
+            `SELECT table_name
+               FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND column_name   = 'tenant_id'
+              ORDER BY table_name`,
+          );
     const allTables = tables.map(t => t.table_name).filter(n => n !== 'tenants');
 
     // 1. Which tables hold rows for this tenant. A table we cannot read is

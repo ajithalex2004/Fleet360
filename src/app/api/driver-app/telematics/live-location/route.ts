@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const vehicle = actor.activeTrip?.vehicle ?? actor.shiftVehicle ?? null;
+      const vehicle = actor.activeTrip?.vehicle ?? null;
       const foreign = rejectForeignIdentifiers(actor, body, vehicle);
       if (foreign) return withCorsHeaders(foreign, origin);
 
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       });
 
       await tx
-        .$executeRawUnsafe(
+        .$executeRawUnsafe?.(
           `UPDATE vehicles
               SET current_lat = $1,
                   current_lng = $2,
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
           vehicle.id,
           tenantId,
         )
-        .catch(() => {});
+        ?.catch(() => {});
 
       const dbMs = performance.now() - dbStart;
       const totalMs = performance.now() - t0;

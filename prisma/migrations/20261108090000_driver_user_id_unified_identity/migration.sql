@@ -1,9 +1,39 @@
 -- =============================================================================
 -- Pillar 3: Unified Identity Link (User.id <-> Driver.id Foreign Key)
 -- =============================================================================
--- 1. Add explicit user_id column on public.drivers referencing public."User"(id)
+-- 1. Ensure untracked Driver Hub extension columns exist on fresh database replay,
+--    and add explicit user_id column on public.drivers referencing public."User"(id)
 ALTER TABLE public.drivers
+  ADD COLUMN IF NOT EXISTS license_type TEXT,
+  ADD COLUMN IF NOT EXISTS emirates_id_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS passport_number TEXT,
+  ADD COLUMN IF NOT EXISTS passport_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS visa_expiry TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS garage_id TEXT,
+  ADD COLUMN IF NOT EXISTS employee_id TEXT,
+  ADD COLUMN IF NOT EXISTS driver_category TEXT,
+  ADD COLUMN IF NOT EXISTS issuing_authority TEXT,
+  ADD COLUMN IF NOT EXISTS additional_documents JSONB,
   ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES public."User"(id) ON DELETE SET NULL;
+
+-- 1b. Ensure untracked Drayage / Telematics extension columns exist on public.vehicles
+ALTER TABLE public.vehicles
+  ADD COLUMN IF NOT EXISTS fuel_level_pct INTEGER,
+  ADD COLUMN IF NOT EXISTS current_lat DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS current_lng DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS next_service_km INTEGER;
+
+-- 1c. Ensure untracked Bus Ops routing / scheduling columns exist on fresh database replay
+ALTER TABLE public.bus_routes
+  ADD COLUMN IF NOT EXISTS code TEXT,
+  ADD COLUMN IF NOT EXISTS required_vehicle_group TEXT,
+  ADD COLUMN IF NOT EXISTS required_license_type TEXT;
+
+ALTER TABLE public.trip_schedules
+  ADD COLUMN IF NOT EXISTS template_id TEXT,
+  ADD COLUMN IF NOT EXISTS latest_arrival_time TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS merged_into_trip_id TEXT,
+  ADD COLUMN IF NOT EXISTS route_variant_version_id TEXT;
 
 -- 2. Partial unique index ensuring 1-to-1 identity mapping for active drivers
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_user_id_unique

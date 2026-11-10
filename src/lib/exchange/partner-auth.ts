@@ -6,18 +6,18 @@
  * membership row in partner_users (partner_id, user_id, role), created by a
  * platform admin through /api/admin/exchange/partner-users.
  *
- * Before this, every marketplace route took the partner from a header, query
- * parameter or request body and trusted it, so any signed-in user could act
- * as any partner. requirePartnerContext() resolves the partner from the
- * caller's own memberships instead. A client may still name a partner
- * (x-partner-id header or ?partnerId=) to choose between several
- * memberships, but only one it is a member of.
+ * Hardened in Phase 1 (P0) with NetworkPolicyService:
+ * - Platform-level emergency kill switch enforcement
+ * - 3-Mode Buyer Network Access Policy (CLOSED | PREFERRED | EXTENDED)
+ * - Exclusive Preferred Partner quotation window enforcement
+ * - Consortium sharing consent verification for EXTENDED networks
  */
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { EXCHANGE_OPEN_MARKET, isActivated, onboardingStatusLabel } from '@/lib/exchange/partner-activation';
+import { NetworkPolicyService } from '@/lib/exchange/network-policy-service';
 
 export const PARTNER_ROLES = ['PARTNER_ADMIN', 'PARTNER_OPERATIONS', 'PARTNER_FINANCE', 'PARTNER_VIEWER'] as const;
 export type PartnerRole = (typeof PARTNER_ROLES)[number];
@@ -128,18 +128,6 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
 
 /**
  * Resolves the partner the signed-in caller acts for.
- *
- * - 401 without a verified user (middleware strips client-sent x-user-id).
- * - 403 when the user is not a member of any partner, is not a member of the
- *   partner it names, or its role is not in `opts.roles`.
- * - 400 when the user belongs to several partners and names none.
- * - 403 PARTNER_PENDING_ACTIVATION when the partner has not been activated
- *   by its onboarding tenant yet, unless `opts.allowPending`: routes a
- *   partner needs to complete onboarding (profile, compliance documents,
- *   fleet, drivers) pass it; the marketplace, quotes, jobs and invoices don't.
- *
- * `opts.requested` names a partner from the request body; otherwise the
- * x-partner-id header or ?partnerId= query does.
  */
 export async function requirePartnerContext(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
@@ -220,27 +208,24 @@ export type QuoteEligibility =
  * Whether `partnerId` may quote on outsource request `requestId`, and the
  * request's tenant (the buyer) if so. Runs in platform context: the request
  * belongs to another tenant than the partner user's session.
- *
- * Allowed when the partner is activated (onboarding APPROVED), marketplace-
- * APPROVED and ACTIVE, the buyer has not BLOCKED it, the request is still
- * open (PUBLISHED or QUOTED) and either
- *   - the partner was invited to it, or
- *   - its marketplace opportunity is OPEN, not past closes_at, in a domain the
- *     partner has an approved capability for, and visible to the partner:
- *     TENANT_NETWORK (partners with a relationship to the buyer), or
- *     EXCHANGE_NETWORK: any partner once EXCHANGE_OPEN_MARKET is on, until
- *     then only partners with a relationship to the buyer.
- *     DIRECT opportunities are invitation-only.
- * The same rules decide what listOpportunitiesForPartner shows.
  */
 export async function checkQuoteEligibility(partnerId: string, requestId: string): Promise<QuoteEligibility> {
+  await NetworkPolicyService.hydrateFromDatabaseIfStale(true);
+  if (NetworkPolicyService.isPlatformKillSwitchActive()) {
+    return {
+      ok: false,
+      status: 403,
+      error: 'The Private Partner Exchange is currently suspended by platform governance.',
+    };
+  }
+
   return withPlatformAdmin(prisma, async (tx) => {
     const request = await tx.outsourceRequest.findUnique({
       where: { id: requestId },
       select: {
         tenantId: true,
         status: true,
-        opportunity: { select: { status: true, closesAt: true, domain: true, visibility: true } },
+        opportunity: { select: { status: true, closesAt: true, domain: true, visibility: true, publishedAt: true } },
         invitedPartners: { where: { partnerId }, select: { status: true } },
       },
     });
@@ -274,15 +259,49 @@ export async function checkQuoteEligibility(partnerId: string, requestId: string
     const invited = request.invitedPartners.length > 0;
     if (invited) return { ok: true, tenantId: request.tenantId };
 
-    const opp = request.opportunity;
-    const domains = partner.capabilities.map((c) => c.domain);
+    const opp = request.opportunity as {
+      status: string;
+      closesAt: Date;
+      domain: string;
+      visibility: string;
+      publishedAt?: Date;
+    } | null;
+
+    // Enforce PREFERRED exclusive window when buyer policy is PREFERRED
+    if (opp) {
+      const windowCheck = NetworkPolicyService.isHeldInPreferredExclusiveWindow({
+        buyerTenantId: request.tenantId,
+        publishedAt: opp.publishedAt || new Date(),
+        relationshipStatus: relationship?.status ?? null,
+        isDirectlyInvited: false,
+      });
+      if (windowCheck.blocked) {
+        return {
+          ok: false,
+          status: 403,
+          error: windowCheck.reason || 'This opportunity is currently in its exclusive preferred-partner bidding window.',
+        };
+      }
+    }
+
+    const buyerPolicy = NetworkPolicyService.getTenantPolicy(request.tenantId);
+    const sharingConsents = NetworkPolicyService.getPartnerSharingConsents(partnerId);
+    const extendedConsortiumAllowed =
+      buyerPolicy.accessMode === 'EXTENDED' &&
+      sharingConsents.some(
+        (c) => buyerPolicy.consortiumIds.includes(c.consortiumId) && c.allowQualificationDiscovery
+      );
+
+    const domains = partner.capabilities.map((c) => c.domain as string);
     const visible =
       !!opp &&
       opp.status === 'OPEN' &&
       opp.closesAt > new Date() &&
       domains.includes(opp.domain) &&
       (opp.visibility === 'EXCHANGE_NETWORK' || opp.visibility === 'TENANT_NETWORK') &&
-      (!!relationship || (opp.visibility === 'EXCHANGE_NETWORK' && EXCHANGE_OPEN_MARKET));
+      (!!relationship ||
+        (opp.visibility === 'EXCHANGE_NETWORK' &&
+          (EXCHANGE_OPEN_MARKET || extendedConsortiumAllowed)));
     if (!visible) {
       return { ok: false, status: 403, error: 'This request is not open to your company.' };
     }
@@ -298,11 +317,6 @@ export type PartnerViewer =
 /**
  * Who may read a partner's profile or scorecard: the partner's own members,
  * or staff of a buying tenant that has a relationship with the partner.
- *
- * A partner member gets its own partner (a named partner chooses among its
- * memberships). Anyone else is treated as buyer staff of `tenantId`: a named
- * partner must have a tenant_partner_relationships row with that tenant, and
- * with none named the first related partner is used (null if there is none).
  */
 export async function resolvePartnerViewer(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
@@ -325,7 +339,6 @@ async function resolveViewer(
   const ownRequested = requested ? memberships.some((m) => m.partnerId === requested) : false;
 
   if (memberships.length > 0 && (!requested || ownRequested)) {
-    // A partner still being onboarded may read its own profile and scorecard.
     const auth = await requirePartnerContext(req, { requested, allowPending: true });
     if (!auth.ok) return auth;
     return { ok: true, viewer: 'partner', partnerId: auth.ctx.partnerId, ctx: auth.ctx };

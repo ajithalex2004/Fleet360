@@ -4024,7 +4024,7 @@ export async function resolveCarrierPortalInvite(token: string) {
     documents,
     vehicles,
     compliance: {
-      canBid: invite.carrier_status === 'ACTIVE',
+      canBid: invite.carrier_status === 'ACTIVE' && complianceBlockers.length === 0,
       blockers: complianceBlockers,
     },
   };
@@ -4172,8 +4172,16 @@ export async function listCarrierPortalRfqs(args: LogisticsCarrierPortalRfqFilte
     limit,
   );
 
-  return rows.map(row => ({
+  return rows.map(row => {
+    const isAwardedToCarrier = (row.awarded_bid_id != null && row.awarded_bid_id === row.carrier_bid_id) || row.carrier_bid_status === 'AWARDED';
+    const metaObj = (row.metadata && typeof row.metadata === 'object' ? row.metadata : {}) as Record<string, unknown>;
+    return {
     ...mapRfq(row),
+    exchangeBridge: {
+      exchangeRequestId: typeof metaObj.exchangeRequestId === 'string' ? metaObj.exchangeRequestId : null,
+      exchangeRequestNumber: typeof metaObj.exchangeRequestNumber === 'string' ? metaObj.exchangeRequestNumber : null,
+      disclosureStage: isAwardedToCarrier ? 'STAGE_3_AWARDED_PARTNER' : 'STAGE_2_INVITED_PARTNER',
+    },
     carrier: {
       id: args.carrierId,
       name: row.carrier_name,
@@ -4183,22 +4191,22 @@ export async function listCarrierPortalRfqs(args: LogisticsCarrierPortalRfqFilte
     shipment: {
       id: row.shipment_order_id,
       shipmentNo: row.shipment_no,
-      cargoOwnerCustomerId: row.cargo_owner_customer_id,
-      cargoOwnerName: row.cargo_owner_name,
+      cargoOwnerCustomerId: isAwardedToCarrier ? row.cargo_owner_customer_id : null,
+      cargoOwnerName: isAwardedToCarrier ? row.cargo_owner_name : 'Confidential Enterprise Shipper',
       shipmentType: row.shipment_type,
       status: row.shipment_status,
       priority: row.priority,
       originName: row.origin_name,
-      originAddress: row.origin_address,
+      originAddress: isAwardedToCarrier ? row.origin_address : (row.origin_name ?? 'Disclosed upon award'),
       destinationName: row.destination_name,
-      destinationAddress: row.destination_address,
+      destinationAddress: isAwardedToCarrier ? row.destination_address : (row.destination_name ?? 'Disclosed upon award'),
       pickupWindowFrom: iso(row.pickup_window_from),
       pickupWindowTo: iso(row.pickup_window_to),
       deliveryWindowFrom: iso(row.delivery_window_from),
       deliveryWindowTo: iso(row.delivery_window_to),
       requestedVehicleType: row.requested_vehicle_type,
       totalWeightKg: numberOrNull(row.total_weight_kg),
-      customerRateAmount: numberOrNull(row.customer_rate_amount),
+      customerRateAmount: null,
       currency: row.shipment_currency,
     },
     carrierBid: row.carrier_bid_id ? {
@@ -4212,7 +4220,8 @@ export async function listCarrierPortalRfqs(args: LogisticsCarrierPortalRfqFilte
       notes: row.carrier_bid_notes,
       createdAt: iso(row.carrier_bid_created_at),
     } : null,
-  }));
+  };
+  });
 }
 
 export async function createFreightRfq(input: LogisticsFreightRfqInput) {
@@ -4291,6 +4300,20 @@ export async function createFreightRfq(input: LogisticsFreightRfqInput) {
     metadata: { rfqId: rows[0]?.id, invitedCarrierIds: input.invitedCarrierIds ?? [] },
   });
 
+  if (rows[0]) {
+    try {
+      const { FreightRfqCanonicalBridge } = await import('@/lib/exchange/freight-rfq-bridge');
+      await FreightRfqCanonicalBridge.bridgeFreightRfqToCanonicalExchange({
+        tenantId: input.tenantId,
+        rfqId: rows[0].id,
+        rfqNo,
+        shipmentOrderId: input.shipmentOrderId,
+        inviteScope: input.inviteScope,
+        invitedCarrierIds: input.invitedCarrierIds ?? [],
+        bidDeadlineAt: input.bidDeadlineAt,
+      });
+    } catch {}
+  }
   return rows[0] ? mapRfq({ ...rows[0], bid_count: 0 }) : null;
 }
 
@@ -4408,6 +4431,22 @@ export async function submitCarrierBid(input: LogisticsCarrierBidInput) {
     },
   });
 
+  if (rows[0]) {
+    try {
+      const { FreightRfqCanonicalBridge } = await import('@/lib/exchange/freight-rfq-bridge');
+      await FreightRfqCanonicalBridge.bridgeCarrierBidToCanonicalQuote({
+        tenantId: input.tenantId,
+        rfqId: input.rfqId ?? null,
+        bidId: rows[0].id,
+        shipmentOrderId: input.shipmentOrderId,
+        carrierId: input.carrierId,
+        amount: Number(input.amount),
+        currency: input.currency ?? 'AED',
+        validityUntil: input.validityUntil,
+        notes: input.notes ?? null,
+      });
+    } catch {}
+  }
   return rows[0] ? mapBid(rows[0]) : null;
 }
 
@@ -7583,9 +7622,23 @@ export async function awardCarrierBid(args: {
     carrierId: bid.carrier_id,
     vehicleId: args.vehicleId ?? null,
     driverId: resolvedDriverId,
-    requireVehicle: true,
+    requireVehicle: args.dryRun ? Boolean(args.vehicleId) : true,
   });
   const overrideAllowed = Boolean(args.overrideCompliance && args.actorRole === 'SUPER_ADMIN');
+  if (args.dryRun) {
+    const ok = complianceBlockers.length === 0 || overrideAllowed;
+    return {
+      ok,
+      dryRun: true as const,
+      rfqId: args.rfqId,
+      bidId: args.bidId,
+      carrierId: bid.carrier_id,
+      carrierAmount: numberOrNull(bid.amount) ?? 0,
+      currency: bid.currency ?? 'AED',
+      complianceBlockers,
+      complianceOverride: overrideAllowed,
+    };
+  }
   if (complianceBlockers.length > 0 && !overrideAllowed) {
     throw complianceBlockedError('Carrier compliance blocks this award', complianceBlockers);
   }
@@ -7742,6 +7795,20 @@ export async function awardCarrierBid(args: {
       settlementId: settlement.settlement?.id ?? null,
     },
   });
+
+  try {
+    const { FreightRfqCanonicalBridge } = await import('@/lib/exchange/freight-rfq-bridge');
+    await FreightRfqCanonicalBridge.bridgeFreightAwardToCanonicalAward({
+      tenantId: args.tenantId,
+      rfqId: args.rfqId,
+      bidId: args.bidId,
+      shipmentOrderId: bid.shipment_order_id,
+      carrierId: bid.carrier_id,
+      amount: numberOrNull(bid.amount) ?? 0,
+      currency: bid.currency,
+      awardedByUserId: args.actorUserId ?? 'freight-marketplace',
+    });
+  } catch {}
 
   const rfq = (await listFreightRfqs({
     tenantId: args.tenantId,

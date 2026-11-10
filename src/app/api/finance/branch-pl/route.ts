@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
            COUNT(i.id)                        AS invoice_count
          FROM tenant_branches b
          LEFT JOIN finance_invoices i
-           ON (i.branch_id = b.id OR (i.branch_id IS NULL AND i.branch = b.branch_name))
+           ON i.branch_id = b.id
            AND i.tenant_id = b.tenant_id
            AND i.deleted_at IS NULL
            AND i.payment_status NOT IN ('DRAFT','CANCELLED','VOID')
@@ -138,19 +138,19 @@ export async function GET(req: NextRequest) {
       };
       const payablesByBranch = await tx.$queryRawUnsafe<PayBranchRow[]>(
         `SELECT
-           b.id AS branch_id,
+           pb.id AS branch_id,
            COALESCE(SUM(p.subtotal), 0) AS total_payables
-         FROM tenant_branches b
+         FROM tenant_branches pb
          LEFT JOIN finance_payables p
-           ON (p.branch = b.branch_name OR p.branch = b.emirate OR p.cost_centre = b.cost_center_code)
-           AND p.tenant_id = b.tenant_id
+           ON (p.branch = pb.branch_name OR p.branch = pb.emirate OR p.cost_centre = pb.cost_center_code)
+           AND p.tenant_id = pb.tenant_id
            AND p.deleted_at IS NULL
            AND p.status IN ('APPROVED', 'POSTED')
            AND p.issue_date BETWEEN $1::date AND $2::date
-         WHERE b.tenant_id = $3
-           AND b.deleted_at IS NULL
-           AND ($4::uuid IS NULL OR b.id = $4::uuid)
-         GROUP BY b.id`,
+         WHERE pb.tenant_id = $3
+           AND pb.deleted_at IS NULL
+           AND ($4::uuid IS NULL OR pb.id = $4::uuid)
+         GROUP BY pb.id`,
         startDate, endDate, tenantId, branchParam
       ).catch(() => [] as PayBranchRow[]);
 

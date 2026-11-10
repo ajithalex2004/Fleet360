@@ -136,6 +136,10 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
   const [resolveNote, setResolveNote]   = useState('');
   const [resolveBy,   setResolveBy]     = useState('');
   const [showResolve, setShowResolve]   = useState(false);
+  const [showOutsource, setShowOutsource] = useState(false);
+  const [recoveryType, setRecoveryType] = useState('FLATBED');
+  const [destinationWorkshop, setDestinationWorkshop] = useState('Al Quoz Central Fleet Workshop');
+  const [exchangeRfqNotice, setExchangeRfqNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadingD(true);
@@ -174,9 +178,37 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
     finally { setAdvancing(false); }
   }
 
+  async function outsourceRecovery() {
+    setAdvancing(true);
+    setExchangeRfqNotice(null);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'outsource_recovery',
+          recoveryType,
+          destinationWorkshop,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.exchangeRequest?.requestNumber) {
+        setExchangeRfqNotice(`Published to Recovery Exchange Network: ${data.exchangeRequest.requestNumber}`);
+        setShowOutsource(false);
+        load();
+        onUpdated();
+      }
+    } catch { /* silent */ }
+    finally { setAdvancing(false); }
+  }
+
   const inc = detail ?? incident;
   const stCfg = STATUS_CFG[inc.status] ?? STATUS_CFG.OPEN;
   const svCfg = SEVERITY_CFG[inc.severity] ?? SEVERITY_CFG.MEDIUM;
+  const canOutsourceRecovery =
+    (inc.incident_type === 'BREAKDOWN' || inc.incident_type === 'ACCIDENT') &&
+    inc.status !== 'RESOLVED' &&
+    inc.status !== 'CLOSED';
 
   const NOTE_TYPE_COLORS: Record<string, string> = {
     INVESTIGATION: 'text-amber-400', ESCALATION: 'text-red-400', UPDATE: 'text-blue-400', RESOLUTION: 'text-emerald-400',
@@ -208,6 +240,12 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
         </div>
 
         <div className="px-5 py-4 space-y-5">
+          {exchangeRfqNotice && (
+            <div className="rounded-xl border border-cyan-500/40 bg-cyan-500/15 px-3.5 py-2.5 text-xs text-cyan-200 font-semibold">
+              🌐 {exchangeRfqNotice}
+            </div>
+          )}
+
           {/* Details */}
           <div className="space-y-2 text-sm">
             {inc.description && <p className="text-[var(--text-muted)] bg-[var(--bg-surface)]/60 rounded-xl p-3 text-sm">{inc.description}</p>}
@@ -236,6 +274,12 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
                     🔍 Start Investigation
                   </button>
                 ) : null}
+                {canOutsourceRecovery ? (
+                  <button disabled={advancing} onClick={() => setShowOutsource(v => !v)}
+                    className="text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-3 py-2 rounded-lg hover:bg-cyan-500/30 transition-colors disabled:opacity-50">
+                    🌐 Outsource Recovery to Exchange
+                  </button>
+                ) : null}
                 {(inc.status === 'UNDER_INVESTIGATION' || inc.status === 'IN_PROGRESS') ? (
                   <button disabled={advancing} onClick={() => setShowEscalate(true)}
                     className="text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-2 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50">
@@ -255,6 +299,43 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
                   </button>
                 ) : null}
               </div>
+
+              {/* Outsource Recovery to Private Partner Exchange Network form */}
+              {showOutsource && (
+                <div className="mt-3 bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 space-y-2.5">
+                  <p className="text-xs text-cyan-300 font-semibold">🌐 Outsource to Private Recovery Exchange Network</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-[var(--text-muted)] block mb-1">Recovery Equipment</label>
+                      <select
+                        value={recoveryType}
+                        onChange={e => setRecoveryType(e.target.value)}
+                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)]"
+                      >
+                        <option value="FLATBED">Flatbed Recovery</option>
+                        <option value="WHEEL_LIFT">Wheel-Lift Tow</option>
+                        <option value="HEAVY_CRANE">Heavy Crane Recovery</option>
+                        <option value="WINCH_OFFROAD">Winch / Off-Road</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[var(--text-muted)] block mb-1">Destination Workshop</label>
+                      <input
+                        value={destinationWorkshop}
+                        onChange={e => setDestinationWorkshop(e.target.value)}
+                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowOutsource(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] transition-colors">Cancel</button>
+                    <button disabled={advancing} onClick={() => void outsourceRecovery()}
+                      className="text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                      {advancing ? 'Publishing RFQ…' : 'Publish Recovery RFQ'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Escalate form */}
               {showEscalate && (
@@ -404,7 +485,7 @@ export default function ActiveIncidentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Incident Management</h1>
-          <p className="text-[var(--text-muted)] text-xs mt-0.5">Full workflow: Report → Investigate → Escalate → Resolve → Close</p>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Full workflow: Report → Investigate → Outsource Recovery / Escalate → Resolve → Close</p>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="text-xs text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-2 rounded-xl hover:border-[var(--border-strong)] hover:text-[var(--text-main)] transition-colors">↺</button>

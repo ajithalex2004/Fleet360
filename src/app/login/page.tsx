@@ -338,6 +338,7 @@ export default function LoginPage() {
                 </label>
                 <input
                   type="text"
+                  name="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="username or you@yourcompany.com"
@@ -354,6 +355,7 @@ export default function LoginPage() {
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'}
+                    name="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"

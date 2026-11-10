@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
+import { Prisma, PartnerOperationalStatus } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { findActiveTenant, setOnboardingTenant } from '@/lib/exchange/partner-onboarding';
 import { isEmirate, SERVICE_DOMAINS, type ServiceDomain } from '@/lib/exchange/partner-activation';
+import { NetworkPolicyService } from '@/lib/exchange/network-policy-service';
 import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
@@ -24,15 +25,14 @@ export const runtime = 'nodejs';
  * GET  /api/admin/exchange/partners   every partner with its member count,
  *                                     approved service areas (approvedDomains),
  *                                     compliance documents awaiting review (pendingDocuments)
- *                                     and onboarding tenant (onboardedByTenantId/-Name)
+ *                                     and onboarding tenant (onboardedByTenantId/-Name).
+ *                                     Pass ?includeKillSwitch=1 to also include the platform kill-switch state.
  * POST /api/admin/exchange/partners   { legalName, partnerCode, onboardedByTenantId, emirate,
  *                                       serviceDomains?, tradeName?, city?, primaryContactName?,
  *                                       primaryContactEmail?, primaryContactPhone? }
- *
- * A new partner starts Pending Activation (onboarding DRAFT, marketplace
- * NOT_APPLIED): its onboarding tenant's administrators activate it once they
- * have approved its compliance documents (src/lib/exchange/partner-activation.ts).
- * The emirate and service areas decide which documents are mandatory.
+ *                                     Also supports platform governance actions:
+ *                                     - { action: 'SET_KILL_SWITCH', active: boolean, reason?: string }
+ *                                     - { action: 'SET_PARTNER_OPERATIONAL_STATUS', partnerId: string, operationalStatus: 'ACTIVE'|'SUSPENDED'|'BLOCKED' }
  */
 
 const PARTNER_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   if (!isSuperAdmin(req.headers)) return NextResponse.json({ error: 'Platform administrators only' }, { status: 403 });
+
+  const includeKillSwitch = req.nextUrl.searchParams.get('includeKillSwitch') === '1';
 
   const run = await notProvisionedAware(() => withPlatformAdmin(prisma, (tx) =>
     tx.transportPartner.findMany({
@@ -64,6 +66,23 @@ export async function GET(req: NextRequest) {
         _count: { select: { users: true } },
         capabilities: { where: { isApproved: true }, select: { domain: true } },
         complianceDocuments: { where: { status: 'PENDING' }, select: { id: true } },
+        ...(includeKillSwitch
+          ? {
+              vehicles: { where: { isActive: true }, select: { id: true, mulkiyaExpiry: true } },
+              drivers: { where: { isActive: true }, select: { id: true, licenseExpiry: true, permitExpiry: true } },
+              scorecard: {
+                select: {
+                  tier: true,
+                  compositeScore: true,
+                  onTimePerformance: true,
+                  quoteResponseRate: true,
+                  exceptionRate: true,
+                  totalAwardedTrips: true,
+                },
+              },
+              serviceAreas: { select: { emirate: true, zones: true } },
+            }
+          : {}),
       },
       orderBy: { legalName: 'asc' },
     }),
@@ -76,13 +95,46 @@ export async function GET(req: NextRequest) {
     : [];
   const tenantName = new Map(tenants.map((t) => [t.id, t.name]));
 
-  const partners = run.value.map(({ _count, capabilities, complianceDocuments, ...p }) => ({
-    ...p,
-    onboardedByTenantName: p.onboardedByTenantId ? tenantName.get(p.onboardedByTenantId) ?? null : null,
-    memberCount: _count.users,
-    approvedDomains: [...new Set(capabilities.map((c) => c.domain))],
-    pendingDocuments: complianceDocuments.length,
-  }));
+  const now = new Date();
+  const partners = run.value.map((raw: any) => {
+    const { _count, capabilities, complianceDocuments, vehicles, drivers, scorecard, serviceAreas, ...p } = raw;
+    const base = {
+      ...p,
+      onboardedByTenantName: p.onboardedByTenantId ? tenantName.get(p.onboardedByTenantId) ?? null : null,
+      memberCount: _count.users,
+      approvedDomains: [...new Set((capabilities || []).map((c: any) => c.domain))],
+      pendingDocuments: (complianceDocuments || []).length,
+    };
+    if (!includeKillSwitch) return base;
+
+    const vehList = Array.isArray(vehicles) ? vehicles : [];
+    const drvList = Array.isArray(drivers) ? drivers : [];
+    const dispatchReadyVehicles = vehList.filter((v: any) => !v.mulkiyaExpiry || new Date(v.mulkiyaExpiry) > now).length;
+    const dispatchReadyDrivers = drvList.filter(
+      (d: any) =>
+        (!d.licenseExpiry || new Date(d.licenseExpiry) > now) &&
+        (!d.permitExpiry || new Date(d.permitExpiry) > now),
+    ).length;
+
+    return {
+      ...base,
+      vehicleCount: vehList.length,
+      dispatchReadyVehicles,
+      driverCount: drvList.length,
+      dispatchReadyDrivers,
+      scorecard: scorecard ?? null,
+      serviceAreas: Array.isArray(serviceAreas) ? serviceAreas : [],
+    };
+  });
+
+  if (includeKillSwitch) {
+    await NetworkPolicyService.hydrateFromDatabaseIfStale(true);
+    return NextResponse.json({
+      partners,
+      killSwitch: NetworkPolicyService.getPlatformKillSwitchState(),
+    });
+  }
+
   return NextResponse.json({ partners });
 }
 
@@ -92,6 +144,50 @@ async function handlePOST(req: NextRequest) {
   if (!isSuperAdmin(req.headers)) return NextResponse.json({ error: 'Platform administrators only' }, { status: 403 });
 
   const body = stripTenantOwnershipFields(await req.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (body.action === 'SET_KILL_SWITCH') {
+    const active = Boolean(body.active);
+    const reason = optionalText(body.reason, 300);
+    const killSwitch = await NetworkPolicyService.setPlatformKillSwitch(
+      active,
+      reason,
+      req.headers.get('x-user-id') ?? 'PLATFORM_ADMIN'
+    );
+    return NextResponse.json({ ok: true, killSwitch });
+  }
+
+  if (body.action === 'SET_PARTNER_OPERATIONAL_STATUS') {
+    const partnerId = typeof body.partnerId === 'string' ? body.partnerId.trim() : '';
+    const rawStatusInput = typeof body.operationalStatus === 'string' ? body.operationalStatus.trim().toUpperCase() : '';
+    const normalizedStatus = rawStatusInput === 'BLOCKED' ? PartnerOperationalStatus.BLACKLISTED : rawStatusInput;
+    const validStatuses: string[] = [
+      PartnerOperationalStatus.ACTIVE,
+      PartnerOperationalStatus.SUSPENDED,
+      PartnerOperationalStatus.BLACKLISTED,
+    ];
+    if (!partnerId || !validStatuses.includes(normalizedStatus)) {
+      return NextResponse.json(
+        { error: 'partnerId and operationalStatus (ACTIVE | SUSPENDED | BLACKLISTED) are required' },
+        { status: 400 }
+      );
+    }
+    const updated = await withPlatformAdmin(prisma, (tx) =>
+      tx.transportPartner.update({
+        where: { id: partnerId },
+        data: { operationalStatus: normalizedStatus as PartnerOperationalStatus },
+        select: { id: true, legalName: true, partnerCode: true, operationalStatus: true },
+      })
+    );
+    await logAudit({
+      entityType: 'TransportPartner',
+      entityId: partnerId,
+      action: 'UPDATE',
+      details: `Platform admin updated partner operationalStatus to ${normalizedStatus}`,
+      userId: req.headers.get('x-user-id') ?? undefined,
+    });
+    return NextResponse.json({ ok: true, partner: updated });
+  }
+
   const legalName = optionalText(body.legalName);
   const partnerCode = typeof body.partnerCode === 'string' ? body.partnerCode.trim().toUpperCase() : '';
   const primaryContactEmail = optionalText(body.primaryContactEmail)?.toLowerCase();

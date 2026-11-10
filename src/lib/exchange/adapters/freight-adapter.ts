@@ -70,32 +70,32 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
           id: string;
           shipment_no: string | null;
           shipment_type: string | null;
-          service_level: string | null;
           origin_name: string | null;
           origin_address: string | null;
-          origin_lat: string | number | null;
-          origin_lng: string | number | null;
+          origin_lat?: number | null;
+          origin_lng?: number | null;
           destination_name: string | null;
           destination_address: string | null;
-          destination_lat: string | number | null;
-          destination_lng: string | number | null;
+          destination_lat?: number | null;
+          destination_lng?: number | null;
           pickup_window_from: Date | null;
           total_weight_kg: string | number | null;
           total_volume_cbm: string | number | null;
-          total_pieces: number | null;
-          vehicle_type_required: string | null;
-          temperature_control: string | null;
-          hazmat_flag: boolean | null;
-          customs_required: boolean | null;
+          total_pieces?: string | number | null;
+          requested_vehicle_type: string | null;
+          vehicle_type_required?: string | null;
+          temperature_control?: string | null;
+          hazmat_flag?: boolean | null;
+          customs_required?: boolean | null;
           notes: string | null;
-          special_instructions: string | null;
+          special_instructions?: string | null;
+          metadata: Record<string, unknown> | null;
         }>>(
-          `SELECT id, shipment_no, shipment_type, service_level,
-                  origin_name, origin_address, origin_lat, origin_lng,
-                  destination_name, destination_address, destination_lat, destination_lng,
-                  pickup_window_from, total_weight_kg, total_volume_cbm, total_pieces,
-                  vehicle_type_required, temperature_control, hazmat_flag, customs_required,
-                  notes, special_instructions
+          `SELECT id, shipment_no, shipment_type,
+                  origin_name, origin_address,
+                  destination_name, destination_address,
+                  pickup_window_from, total_weight_kg, total_volume_cbm,
+                  requested_vehicle_type, notes, metadata
              FROM logistics_shipment_orders
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
             LIMIT 1`,
@@ -106,17 +106,21 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
         if (!ship) return null;
 
         const cargoRows = await tx.$queryRawUnsafe<Array<{
-          commodity_type: string | null;
+          commodity_code: string | null;
+          commodity_type?: string | null;
           description: string | null;
           quantity: string | number | null;
           weight_kg: string | number | null;
           volume_cbm: string | number | null;
-          hazmat_class: string | null;
-          temperature_min_c: string | number | null;
-          temperature_max_c: string | number | null;
+          is_hazmat: boolean | null;
+          hazmat_class?: string | null;
+          temp_min_c: string | number | null;
+          temp_max_c: string | number | null;
+          temperature_min_c?: string | number | null;
+          temperature_max_c?: string | number | null;
         }>>(
-          `SELECT commodity_type, description, quantity, weight_kg, volume_cbm,
-                  hazmat_class, temperature_min_c, temperature_max_c
+          `SELECT commodity_code, description, quantity, weight_kg, volume_cbm,
+                  is_hazmat, temp_min_c, temp_max_c
              FROM logistics_cargo_lines
             WHERE shipment_order_id = $1 AND tenant_id = $2
             ORDER BY created_at ASC`,
@@ -129,27 +133,34 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
 
       if (data?.ship) {
         const { ship, cargoRows } = data;
+        const meta = (ship.metadata && typeof ship.metadata === 'object' ? ship.metadata : {}) as Record<string, unknown>;
         const cargoWeight = cargoRows.reduce((s, r) => s + Number(r.weight_kg ?? 0), 0);
         const cargoVol = cargoRows.reduce((s, r) => s + Number(r.volume_cbm ?? 0), 0);
         const cargoQty = cargoRows.reduce((s, r) => s + Number(r.quantity ?? 0), 0);
 
         const weightKg = Math.max(Number(ship.total_weight_kg ?? 0) || cargoWeight || 1000, 1);
         const volumeM3 = Number(ship.total_volume_cbm ?? 0) || cargoVol || 0;
-        const palletCount = Number(ship.total_pieces ?? 0) || cargoQty || 1;
-        const bodyType = inferBodyType(ship.vehicle_type_required, ship.temperature_control);
+        const palletCount = Number(meta.totalPieces ?? ship.total_pieces ?? 0) || cargoQty || 1;
+        const bodyType = inferBodyType(
+          ship.requested_vehicle_type ?? ship.vehicle_type_required,
+          typeof meta.temperatureControl === 'string'
+            ? meta.temperatureControl
+            : ship.temperature_control ?? (ship.shipment_type === 'COLD_CHAIN' ? 'CHILLED' : null),
+        );
         const tempControlled =
           bodyType === 'REEFER_COLD' ||
-          cargoRows.some((c) => c.temperature_min_c != null || c.temperature_max_c != null);
-        const firstTemp = cargoRows.find((c) => c.temperature_max_c != null || c.temperature_min_c != null);
+          cargoRows.some((c) => (c.temp_min_c ?? c.temperature_min_c) != null || (c.temp_max_c ?? c.temperature_max_c) != null);
+        const firstTemp = cargoRows.find((c) => (c.temp_max_c ?? c.temperature_max_c) != null || (c.temp_min_c ?? c.temperature_min_c) != null);
         const requiredTempCelsius = firstTemp
-          ? Number(firstTemp.temperature_max_c ?? firstTemp.temperature_min_c ?? 4)
+          ? Number(firstTemp.temp_max_c ?? firstTemp.temperature_max_c ?? firstTemp.temp_min_c ?? firstTemp.temperature_min_c ?? 4)
           : tempControlled
             ? 4
             : undefined;
-        const hazmat = Boolean(ship.hazmat_flag) || cargoRows.some((c) => Boolean(c.hazmat_class));
+        const hazmat = Boolean(meta.hazmatFlag ?? ship.hazmat_flag) || cargoRows.some((c) => Boolean(c.is_hazmat || c.hazmat_class));
         const cargoType =
-          cargoRows[0]?.commodity_type ||
           cargoRows[0]?.description ||
+          cargoRows[0]?.commodity_code ||
+          cargoRows[0]?.commodity_type ||
           ship.shipment_type ||
           'General Cargo';
         const serviceDate = ship.pickup_window_from ? new Date(ship.pickup_window_from) : new Date();
@@ -163,14 +174,17 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
           sourceReferenceId: shipmentId,
           tenantId,
           pickupLocation: ship.origin_name || ship.origin_address || 'Jebel Ali Free Zone (JAFZA) South',
-          pickupLatitude: ship.origin_lat != null ? Number(ship.origin_lat) : undefined,
-          pickupLongitude: ship.origin_lng != null ? Number(ship.origin_lng) : undefined,
+          pickupLatitude: (meta.originLat ?? ship.origin_lat) != null ? Number(meta.originLat ?? ship.origin_lat) : undefined,
+          pickupLongitude: (meta.originLng ?? ship.origin_lng) != null ? Number(meta.originLng ?? ship.origin_lng) : undefined,
           dropoffLocation: ship.destination_name || ship.destination_address || 'Dubai Industrial City Warehouse',
-          dropoffLatitude: ship.destination_lat != null ? Number(ship.destination_lat) : undefined,
-          dropoffLongitude: ship.destination_lng != null ? Number(ship.destination_lng) : undefined,
+          dropoffLatitude: (meta.destinationLat ?? ship.destination_lat) != null ? Number(meta.destinationLat ?? ship.destination_lat) : undefined,
+          dropoffLongitude: (meta.destinationLng ?? ship.destination_lng) != null ? Number(meta.destinationLng ?? ship.destination_lng) : undefined,
           serviceDate,
           pickupTime,
-          specialInstructions: ship.special_instructions || ship.notes || undefined,
+          specialInstructions:
+            typeof meta.specialInstructions === 'string'
+              ? meta.specialInstructions
+              : ship.special_instructions || ship.notes || undefined,
           domainPayload: {
             cargoType,
             weightKg,
@@ -181,7 +195,7 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
             requiredTempCelsius,
             hazmat,
             tailLiftRequired: false,
-            customsOrPortPermit: Boolean(ship.customs_required),
+            customsOrPortPermit: Boolean(meta.customsRequired ?? ship.customs_required),
           } as FreightRequirements,
         };
       }
@@ -263,19 +277,24 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
       await withTenantRls(prisma, award.tenantId, async (tx) => {
         await tx.$executeRawUnsafe(
           `UPDATE logistics_shipment_orders
-              SET assignment_type = 'PARTNER_CARRIER',
-                  assigned_carrier_id = $3,
-                  agreed_carrier_cost = CASE WHEN $4 > 0 THEN $4 ELSE agreed_carrier_cost END,
+              SET assigned_carrier_id = $3,
+                  carrier_cost_amount = CASE WHEN $4 > 0 THEN $4 ELSE carrier_cost_amount END,
                   status = CASE
-                    WHEN status IN ('DRAFT', 'PENDING', 'SUBMITTED', 'APPROVED') THEN 'ASSIGNED'
+                    WHEN status IN ('DRAFT', 'PENDING', 'SUBMITTED', 'APPROVED', 'RFQ_OPEN', 'OPEN') THEN 'ASSIGNED'
                     ELSE status
                   END,
+                  metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb,
                   updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
           shipmentId,
           award.tenantId,
           award.partnerId,
           agreedCost,
+          JSON.stringify({
+            assignmentType: 'PARTNER_CARRIER',
+            exchangePartnerId: award.partnerId,
+            exchangeTotalAwarded: agreedCost,
+          }),
         );
       }).catch(() => {});
     }
@@ -309,12 +328,11 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
     await withTenantRls(prisma, tenantId, async (tx) => {
       await tx.$executeRawUnsafe(
         `UPDATE logistics_shipment_orders
-            SET assignment_type = 'PARTNER_CARRIER',
-                assigned_carrier_id = COALESCE($3, assigned_carrier_id),
+            SET assigned_carrier_id = COALESCE($3, assigned_carrier_id),
                 assigned_vehicle_id = COALESCE($4, assigned_vehicle_id),
                 assigned_driver_id = COALESCE($5, assigned_driver_id),
                 status = CASE
-                  WHEN status IN ('DRAFT', 'PENDING', 'SUBMITTED', 'APPROVED') THEN 'ASSIGNED'
+                  WHEN status IN ('DRAFT', 'PENDING', 'SUBMITTED', 'APPROVED', 'RFQ_OPEN', 'OPEN') THEN 'ASSIGNED'
                   ELSE status
                 END,
                 metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb,
@@ -326,6 +344,7 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
         vehicleId,
         driverId,
         JSON.stringify({
+          assignmentType: 'PARTNER_CARRIER',
           exchangeAssignment: {
             partnerId,
             vehicleId,
@@ -355,6 +374,8 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
 
     const key = String(event.eventType ?? '').toUpperCase();
     const statusMap: Record<string, string> = {
+      REACHED: 'ARRIVED_PICKUP',
+      STARTED: 'IN_TRANSIT',
       DISPATCHED: 'DISPATCHED',
       TRIP_STARTED: 'DISPATCHED',
       ENROUTE_PICKUP: 'ENROUTE_PICKUP',
@@ -374,32 +395,58 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
     if (!nextStatus) return;
 
     const eventWithTenant = event as ExecutionStatusEvent & { tenantId?: string };
-    if (!eventWithTenant.tenantId) return;
+    const runUpdate = async (tx: typeof prisma, resolvedTenantId?: string) => {
+      const tenantIdToUse =
+        resolvedTenantId ||
+        (
+          await tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+            `SELECT tenant_id FROM logistics_shipment_orders WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+            shipmentId,
+          ).catch(() => [])
+        )[0]?.tenant_id;
 
-    await withTenantRls(prisma, eventWithTenant.tenantId, async (tx) => {
+      if (!tenantIdToUse) return;
+
+      const nowIso = new Date().toISOString();
+      const timingPatch: Record<string, unknown> = {};
+      if (['ARRIVED_PICKUP', 'LOADED', 'IN_TRANSIT'].includes(nextStatus)) {
+        timingPatch.actualPickupAt = nowIso;
+      }
+      if (['DELIVERED', 'POD_SUBMITTED', 'CLOSED'].includes(nextStatus)) {
+        timingPatch.actualDeliveryAt = nowIso;
+      }
+
       await tx.$executeRawUnsafe(
         `UPDATE logistics_shipment_orders
             SET status = $3,
-                actual_pickup_at = CASE WHEN $3 = 'LOADED' AND actual_pickup_at IS NULL THEN NOW() ELSE actual_pickup_at END,
-                actual_delivery_at = CASE WHEN $3 IN ('DELIVERED', 'POD_SUBMITTED', 'CLOSED') AND actual_delivery_at IS NULL THEN NOW() ELSE actual_delivery_at END,
+                metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb,
                 updated_at = NOW()
           WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         shipmentId,
-        eventWithTenant.tenantId,
+        tenantIdToUse,
         nextStatus,
+        JSON.stringify(timingPatch),
       );
 
       await tx.$executeRawUnsafe(
         `INSERT INTO logistics_tracking_events
            (tenant_id, shipment_order_id, event_type, status, source, notes, occurred_at)
          VALUES ($1, $2, $3, $4, 'EXCHANGE_PARTNER', $5, NOW())`,
-        eventWithTenant.tenantId,
+        tenantIdToUse,
         shipmentId,
         key,
         nextStatus,
         `Exchange execution milestone: ${key}`,
       );
-    }).catch(() => {});
+    };
+
+    if (eventWithTenant.tenantId) {
+      await withTenantRls(prisma, eventWithTenant.tenantId, (tx) =>
+        runUpdate(tx as typeof prisma, eventWithTenant.tenantId),
+      ).catch(() => {});
+    } else {
+      await runUpdate(prisma).catch(() => {});
+    }
   }
 
   async handleCancellation(requestId: string, reason: string): Promise<void> {
@@ -408,6 +455,6 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
       entityId: requestId,
       action: 'UPDATE',
       details: `FREIGHT_OUTSOURCE_CANCELLED: ${reason}`,
-    }).catch(() => {});
+      }).catch(() => {});
   }
 }

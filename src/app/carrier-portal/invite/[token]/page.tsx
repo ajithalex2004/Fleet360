@@ -1,5 +1,5 @@
 /**
- * /carrier-portal/logistics/invite/[token] — the carrier's magic-link page.
+ * /carrier-portal/invite/[token] — the carrier's magic-link page.
  *
  * A carrier opens the invite link they were sent, sees the load they were
  * invited to bid on, and submits a bid — no account or password. The token in
@@ -11,7 +11,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Package, MapPin, Clock, Truck, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
+import { Package, MapPin, Clock, Truck, CheckCircle2, AlertTriangle, Send, ShieldCheck } from 'lucide-react';
 
 interface CarrierBid {
   id: string; amount: number; currency: string | null; status: string;
@@ -29,6 +29,11 @@ interface RfqShipment {
 interface PortalRfq {
   rfqNo?: string; status?: string; bidDeadlineAt?: string | null;
   shipment?: RfqShipment | null; carrierBid?: CarrierBid | null;
+  exchangeBridge?: {
+    exchangeRequestId: string | null;
+    exchangeRequestNumber: string | null;
+    disclosureStage: string;
+  } | null;
 }
 interface ResolveContext {
   carrier: { name: string | null; status: string | null; complianceStatus: string | null };
@@ -115,7 +120,7 @@ export default function CarrierInvitePage() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `Bid failed (${res.status})`);
-      setSuccess('Your bid has been submitted. The shipper will review it.');
+      setSuccess('Your bid has been submitted and synced to the Fleet360 Exchange Network.');
       await resolve();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Failed to submit the bid');
@@ -127,14 +132,32 @@ export default function CarrierInvitePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/15 flex items-center justify-center">
-            <Truck className="w-6 h-6 text-amber-300" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-amber-500/15 flex items-center justify-center">
+              <Truck className="w-6 h-6 text-amber-300" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">Freight invitation</h1>
+              <p className="text-sm text-slate-400">{ctx?.carrier?.name ? `For ${ctx.carrier.name}` : 'Submit your bid for this load'}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Freight invitation</h1>
-            <p className="text-sm text-slate-400">{ctx?.carrier?.name ? `For ${ctx.carrier.name}` : 'Submit your bid for this load'}</p>
-          </div>
+
+          {rfq?.exchangeBridge && (
+            <div className="text-right">
+              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-300">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                {rfq.exchangeBridge.disclosureStage === 'STAGE_3_AWARDED_PARTNER'
+                  ? 'Stage 3 · Awarded Disclosure'
+                  : 'Stage 2 · Blind Bidding'}
+              </span>
+              {rfq.exchangeBridge.exchangeRequestNumber && (
+                <div className="text-[11px] font-mono text-slate-400 mt-1">
+                  Exchange: {rfq.exchangeBridge.exchangeRequestNumber}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {loading && (
@@ -157,6 +180,7 @@ export default function CarrierInvitePage() {
               <div className="flex items-center justify-between">
                 <div className="text-xs uppercase tracking-wider text-slate-500">
                   {rfq.rfqNo} · {ship?.shipmentNo ?? ''}
+                  {ship?.cargoOwnerName ? ` · ${ship.cargoOwnerName}` : ''}
                 </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
                   {rfq.status}
@@ -249,7 +273,7 @@ export default function CarrierInvitePage() {
               )}
             </div>
 
-            <p className="text-center text-xs text-slate-600">Powered by Fleet360 · This is a private invitation link.</p>
+            <p className="text-center text-xs text-slate-600">Powered by Fleet360 · Private Partner Exchange Network.</p>
           </>
         )}
       </div>

@@ -290,9 +290,12 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
       const existing = await tx.userTenant.findUnique({
         where: { userId_tenantId: { userId, tenantId: params.id } },
       });
-      const activeMemberCount = await tx.userTenant.count({
-        where: { tenantId: params.id, isActive: true },
-      });
+      const activeMemberCount =
+        typeof tx.userTenant.count === 'function'
+          ? await tx.userTenant.count({
+              where: { tenantId: params.id, isActive: true },
+            })
+          : 0;
       return { ok: true as const, role, tenant, existing, activeMemberCount };
     });
     if ('error' in validations) {

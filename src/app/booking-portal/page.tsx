@@ -68,7 +68,6 @@ function statusStyle(s: string | null) {
 
 // ── Service cards ─────────────────────────────────────────────────────────────
 
-
 const SERVICE_CARDS = [
   {
     type: 'RENTAL',
@@ -182,6 +181,81 @@ export default function BookingPortal() {
     driverName?: string;
   } | null>(null);
 
+  const [outsourceTarget, setOutsourceTarget] = useState<Booking | null>(null);
+  const [outsourcingId, setOutsourcingId] = useState<string | null>(null);
+  const [outsourceSuccess, setOutsourceSuccess] = useState<{
+    bookingRef: string;
+    requestNumber: string;
+    domain: string;
+  } | null>(null);
+
+  const handleOutsourceBooking = async (
+    b: Booking,
+    overrides?: {
+      pickupLocation?: string;
+      dropoffLocation?: string;
+      pickupTime?: string;
+      requiredCapacity?: number;
+      vehicleTypeRequired?: string;
+      specialInstructions?: string;
+    }
+  ) => {
+    const parsed = parseNotes(b.notes);
+    const domain = b.serviceType === 'EXECUTIVE' ? 'LIMOUSINE' : 'PASSENGER_TRANSPORT';
+    const defaultVehicle =
+      domain === 'LIMOUSINE'
+        ? b.vehicleCategory || 'Luxury Executive Sedan (Mercedes S-Class / BMW 7-Series)'
+        : b.vehicleCategory || '50-Seat Luxury Coach';
+    const defaultCap = domain === 'LIMOUSINE' ? 3 : 45;
+
+    setOutsourcingId(b.id);
+    setError('');
+    try {
+      const res = await fetch('/api/bus-ops/outsource', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE_REQUEST',
+          bookingId: b.id,
+          sourceReferenceId: b.id,
+          domain,
+          serviceDate: b.startDate || new Date().toISOString(),
+          pickupTime: overrides?.pickupTime || parsed.pickupTime || '09:00',
+          pickupLocation: overrides?.pickupLocation || parsed.origin || 'Dubai DIFC VIP Gate',
+          dropoffLocation: overrides?.dropoffLocation || parsed.destination || 'DXB VIP Terminal / Abu Dhabi',
+          requiredCapacity: overrides?.requiredCapacity || Number(parsed.passengers) || defaultCap,
+          vehicleTypeRequired: overrides?.vehicleTypeRequired || defaultVehicle,
+          pricingMethod: 'RFQ',
+          publishToMarketplace: true,
+          specialInstructions:
+            overrides?.specialInstructions ||
+            `Outsourced from Booking Portal (${b.bookingRef || b.id.slice(0, 8)}) — Requestor: ${b.requestorName || 'VIP Guest'}`,
+          requirementsPayload: {
+            serviceType: b.serviceType,
+            bookingRef: b.bookingRef || b.id,
+            vipMeetAndGreet: domain === 'LIMOUSINE',
+            vehicleCategory: overrides?.vehicleTypeRequired || defaultVehicle,
+          },
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to publish booking to Private Partner Exchange');
+      }
+      setOutsourceSuccess({
+        bookingRef: b.bookingRef || b.id.slice(0, 10),
+        requestNumber: json.request?.requestNumber || 'OUT-RFQ-PUBLISHED',
+        domain,
+      });
+      setOutsourceTarget(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to outsource booking');
+    } finally {
+      setOutsourcingId(null);
+    }
+  };
+
   useEffect(() => { load(); }, [load]);
 
   const filtered = bookings.filter(b => {
@@ -215,6 +289,12 @@ export default function BookingPortal() {
 
         <div className="flex items-center gap-3">
           <Link
+            href="/bus-ops/marketplace"
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-3.5 py-2 text-xs font-semibold text-amber-400 transition-all"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Private Partner Exchange →
+          </Link>
+          <Link
             href="/booking-portal/new"
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all"
           >
@@ -222,6 +302,32 @@ export default function BookingPortal() {
           </Link>
         </div>
       </div>
+
+      {outsourceSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              Booking <strong>{outsourceSuccess.bookingRef}</strong> published to the Private Partner Exchange as{' '}
+              <strong className="font-mono text-white">{outsourceSuccess.requestNumber}</strong> ({outsourceSuccess.domain}).
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/bus-ops/marketplace"
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition"
+            >
+              Open Exchange Desk →
+            </Link>
+            <button
+              onClick={() => setOutsourceSuccess(null)}
+              className="text-slate-400 hover:text-white font-semibold"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -492,6 +598,19 @@ export default function BookingPortal() {
                               className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
                               Dispatch →
                             </Link>
+                          ) : (b.serviceType === 'EXECUTIVE' ||
+                              b.serviceType === 'STAFF_TRANSPORT' ||
+                              b.serviceType === 'SCHOOL_BUS') ? (
+                            <button
+                              type="button"
+                              disabled={outsourcingId === b.id}
+                              onClick={() => setOutsourceTarget(b)}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-cyan-300 hover:text-white bg-cyan-500/15 hover:bg-cyan-500/25 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-colors disabled:opacity-50"
+                              title="Publish VIP Chauffeur or Passenger Transport RFQ to Private Partner Exchange"
+                            >
+                              <Sparkles className="w-3 h-3 text-cyan-400" />
+                              {outsourcingId === b.id ? 'Publishing…' : 'Outsource to Exchange'}
+                            </button>
                           ) : (
                             <button className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
                               View
@@ -519,6 +638,171 @@ export default function BookingPortal() {
           vehiclePlate={activeChat.plate}
         />
       )}
+
+      {/* 1-Click VIP Limousine & Passenger Booking Outsource Modal */}
+      {outsourceTarget && (
+        <OutsourceBookingModal
+          booking={outsourceTarget}
+          submitting={outsourcingId === outsourceTarget.id}
+          onClose={() => setOutsourceTarget(null)}
+          onConfirm={(overrides) => void handleOutsourceBooking(outsourceTarget, overrides)}
+        />
+      )}
+    </div>
+  );
+}
+
+function OutsourceBookingModal({
+  booking,
+  submitting,
+  onClose,
+  onConfirm,
+}: {
+  booking: Booking;
+  submitting: boolean;
+  onClose: () => void;
+  onConfirm: (overrides: {
+    pickupLocation: string;
+    dropoffLocation: string;
+    pickupTime: string;
+    requiredCapacity: number;
+    vehicleTypeRequired: string;
+    specialInstructions: string;
+  }) => void;
+}) {
+  const parsed = parseNotes(booking.notes);
+  const isLimo = booking.serviceType === 'EXECUTIVE';
+  const [pickupLocation, setPickupLocation] = useState(
+    parsed.origin || (isLimo ? 'DIFC Gate Village VIP Reception' : 'Dubai Marina Metro Hub')
+  );
+  const [dropoffLocation, setDropoffLocation] = useState(
+    parsed.destination || (isLimo ? 'DXB Airport Executive Terminal' : 'JAFZA South Business Park')
+  );
+  const [pickupTime, setPickupTime] = useState(parsed.pickupTime || '09:00');
+  const [requiredCapacity, setRequiredCapacity] = useState(
+    String(Number(parsed.passengers) || (isLimo ? 3 : 45))
+  );
+  const [vehicleTypeRequired, setVehicleTypeRequired] = useState(
+    booking.vehicleCategory || (isLimo ? 'Mercedes S-Class / BMW 7-Series Chauffeur' : '50-Seat Luxury Coach')
+  );
+  const [specialInstructions, setSpecialInstructions] = useState(
+    isLimo
+      ? `VIP Chauffeur Protocol — Meet & Greet for ${booking.requestorName || 'Executive Guest'} (${booking.bookingRef || booking.id.slice(0, 8)})`
+      : `Corporate Shuttle Dispatch — ${booking.requestorName || 'Staff Transport'} (${booking.bookingRef || booking.id.slice(0, 8)})`
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+      <div className="bg-slate-950 border border-cyan-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-xs text-slate-200">
+        <div className="flex items-start justify-between border-b border-white/10 pb-3">
+          <div>
+            <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
+              {isLimo ? 'LIMOUSINE EXCHANGE VERTICAL' : 'PASSENGER TRANSPORT EXCHANGE VERTICAL'}
+            </span>
+            <h3 className="text-base font-bold text-white mt-0.5">
+              Outsource Booking {booking.bookingRef || booking.id.slice(0, 10)} to Private Exchange
+            </h3>
+            <p className="text-slate-400 text-[11px] mt-0.5">
+              Publishes a sanitized RFQ opportunity to vetted {isLimo ? 'VIP Chauffeur & Limousine' : 'Passenger Coach'} partners.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-sm font-bold px-2">
+            ✕
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1">Pickup Location *</label>
+            <input
+              type="text"
+              value={pickupLocation}
+              onChange={(e) => setPickupLocation(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1">Dropoff Location *</label>
+            <input
+              type="text"
+              value={dropoffLocation}
+              onChange={(e) => setDropoffLocation(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1">Pickup Time</label>
+            <input
+              type="time"
+              value={pickupTime}
+              onChange={(e) => setPickupTime(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white font-mono"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1">Pax Capacity</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={requiredCapacity}
+              onChange={(e) => setRequiredCapacity(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white font-mono"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1">Vehicle Class</label>
+            <input
+              type="text"
+              value={vehicleTypeRequired}
+              onChange={(e) => setVehicleTypeRequired(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block font-semibold text-slate-300 mb-1">
+            {isLimo ? 'VIP Chauffeur & Flight / Meet-and-Greet Protocol' : 'Special Dispatch Instructions'}
+          </label>
+          <textarea
+            rows={2}
+            value={specialInstructions}
+            onChange={(e) => setSpecialInstructions(e.target.value)}
+            className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() =>
+              onConfirm({
+                pickupLocation,
+                dropoffLocation,
+                pickupTime,
+                requiredCapacity: Number(requiredCapacity) || 3,
+                vehicleTypeRequired,
+                specialInstructions,
+              })
+            }
+            className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition disabled:opacity-50"
+          >
+            {submitting ? 'Publishing to Exchange…' : 'Publish RFQ to Partner Exchange'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

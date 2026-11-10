@@ -3734,22 +3734,46 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
   const warningContainers = containers.filter(c => c.demurrage.status === 'WARNING');
   const totalDemurrageExposureAed = containers.reduce((sum, c) => sum + c.demurrage.accruedPenaltyAed, 0);
   const totalRevenueAed = jobs.reduce((sum, j) => sum + j.rateAmountAed, 0);
+  const totalAllowancesAed = allowances.reduce((sum, a) => sum + a.totalAmountAed, 0);
   const activeJobsCount = jobs.filter(j => j.status !== 'COMPLETED' && j.status !== 'PENDING').length;
   const pendingDispatchCount = jobs.filter(j => j.status === 'PENDING').length;
   const detachedWaitingL2Count = jobs.filter(j => j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP' || j.status === 'PLACED_AT_YARD') && !j.l2Activated).length;
+
+  const rateCards = [
+    ...clients.map(c => ({
+      id: `rc-client-${c.id}`,
+      scope: 'CLIENT' as const,
+      name: c.name,
+      code: c.code,
+      tripAmountAed: c.defaultTripAmountAed,
+      driverAllowanceAed: c.defaultDriverAllowanceAed,
+    })),
+    ...terminals.map(t => ({
+      id: `rc-terminal-${t.id}`,
+      scope: 'TERMINAL' as const,
+      name: t.name,
+      code: t.code,
+      freeDaysDry: t.freeDaysDry,
+      freeDaysReefer: t.freeDaysReefer,
+    })),
+  ];
 
   return {
     summary: {
       totalJobs: jobs.length,
       activeJobsCount,
+      activeTrips: activeJobsCount,
       pendingDispatchCount,
       detachedWaitingL2Count,
       totalContainers: containers.length,
       overdueContainersCount: overdueContainers.length,
+      etcOverdueContainers: overdueContainers.length,
       warningContainersCount: warningContainers.length,
       safeContainersCount: containers.filter(c => c.demurrage.status === 'SAFE').length,
       totalDemurrageExposureAed,
+      totalDemurrageAed: totalDemurrageExposureAed,
       totalRevenueAed,
+      totalAllowancesAed,
       mappedVehiclesCount: vehicles.length,
       mappedDriversCount: drivers.length,
       availableTrailersCount: trailers.filter(t => t.masterStatus === 'AVAILABLE').length,
@@ -3759,6 +3783,7 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     automationConfig,
     terminals,
     warehouses,
+    rateCards,
     trailers,
     containers,
     jobs,
