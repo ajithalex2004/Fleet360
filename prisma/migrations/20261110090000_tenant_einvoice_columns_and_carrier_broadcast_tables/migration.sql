@@ -136,3 +136,35 @@ BEGIN
     END LOOP;
   END IF;
 END $$;
+
+-- ── 5. Dispatch columns the dispatch module now requires ──
+-- src/lib/dispatch/schema.ts lists these in DISPATCH_SCHEMA (checked by
+-- /api/readyz) but only its non-production bootstrap added them, so a
+-- migrated database reported "schema incomplete" and production dispatch
+-- would refuse to start.
+ALTER TABLE IF EXISTS public.dispatch_jobs
+  ADD COLUMN IF NOT EXISTS origin_lat DECIMAL(10,8),
+  ADD COLUMN IF NOT EXISTS origin_lng DECIMAL(11,8),
+  ADD COLUMN IF NOT EXISTS dest_lat DECIMAL(10,8),
+  ADD COLUMN IF NOT EXISTS dest_lng DECIMAL(11,8),
+  ADD COLUMN IF NOT EXISTS origin_address TEXT,
+  ADD COLUMN IF NOT EXISTS destination_address TEXT,
+  ADD COLUMN IF NOT EXISTS scheduled_pickup TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS passenger_count INT DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS driver_id TEXT,
+  ADD COLUMN IF NOT EXISTS vehicle_id TEXT,
+  ADD COLUMN IF NOT EXISTS meta JSONB;
+
+ALTER TABLE IF EXISTS public.vehicle_locations
+  ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
+ALTER TABLE IF EXISTS public.driver_availability
+  ADD COLUMN IF NOT EXISTS tenant_id TEXT,
+  ADD COLUMN IF NOT EXISTS vehicle_id TEXT,
+  ADD COLUMN IF NOT EXISTS service_types JSONB DEFAULT '["PASSENGER"]',
+  ADD COLUMN IF NOT EXISTS shift_starts_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS shift_ends_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+ALTER TABLE IF EXISTS public.ambulance_capabilities
+  ADD COLUMN IF NOT EXISTS tenant_id TEXT;
