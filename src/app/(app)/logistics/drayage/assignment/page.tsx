@@ -546,6 +546,145 @@ export default function DrayageAssignmentPage() {
   const [returnTerminalReason, setReturnTerminalReason] = useState('');
   const [submittingReturnTerminal, setSubmittingReturnTerminal] = useState(false);
 
+  // Operations Status Update & Driver App Sync Modal State
+  const [statusUpdateJob, setStatusUpdateJob] = useState<DrayageJob | null>(null);
+  const [selectedTargetStatus, setSelectedTargetStatus] = useState<string>('ACCEPTED');
+  const [selectedPlacementLocation, setSelectedPlacementLocation] = useState<'RAMP' | 'YARD'>('RAMP');
+  const [selectedEtcHours, setSelectedEtcHours] = useState<number>(3);
+  const [statusUpdateNotes, setStatusUpdateNotes] = useState<string>('');
+  const [submittingStatusUpdate, setSubmittingStatusUpdate] = useState<boolean>(false);
+
+  const getRecommendedNextDriverStatus = useCallback((job: DrayageJob): { nextStatus: string; label: string; placement?: 'RAMP' | 'YARD' } => {
+    const st = (job.status || 'ASSIGNED').toUpperCase();
+    const isL2 = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
+    const originLoc = (job.placementLocation || '').toUpperCase();
+    if (st === 'RE-ASSIGNED' || st.includes('REASSIGN TO')) {
+      return { nextStatus: 'TRAILER_ATTACHED', label: 'Trailer Attached (Coupled)' };
+    }
+    if (st === 'TRAILER_ATTACHED') {
+      if (originLoc === 'RAMP') {
+        return { nextStatus: 'REASSIGN_PLACED_AT_YARD', label: 'Placed @ Yard (Shunted from Ramp)', placement: 'YARD' };
+      }
+      return { nextStatus: 'REASSIGN_PLACED_AT_RAMP', label: 'Placed @ Ramp (Shunted from Yard)', placement: 'RAMP' };
+    }
+    if (st === 'REASSIGN_PLACED_AT_RAMP') {
+      return { nextStatus: 'REASSIGN_TRAILER_DETACHED', label: 'Trailer Detached @ Ramp', placement: 'RAMP' };
+    }
+    if (st === 'REASSIGN_PLACED_AT_YARD') {
+      return { nextStatus: 'READY_FOR_PICKUP', label: 'Ready for Pickup (L2 Ready)', placement: 'YARD' };
+    }
+    if (isL2) {
+      switch (st) {
+        case 'PENDING':
+        case 'ASSIGNED':
+          return { nextStatus: 'CONTAINER_PICKED', label: 'Container Picked (at Warehouse)' };
+        case 'CONTAINER_PICKED':
+          return { nextStatus: 'EN_ROUTE_TERMINAL', label: 'En Route to Port Terminal' };
+        case 'EN_ROUTE_TERMINAL':
+        case 'IN_TRANSIT':
+          return { nextStatus: 'ARRIVED_AT_PORT', label: 'Arrived at Port Gate' };
+        case 'ARRIVED_AT_PORT':
+          return { nextStatus: 'UNDER_INSPECTION', label: 'Under Port Gate Inspection' };
+        case 'UNDER_INSPECTION':
+        default:
+          return { nextStatus: 'CONTAINER_DROPPED', label: 'Container Dropped (Complete L2)' };
+      }
+    }
+    switch (st) {
+      case 'PENDING':
+        return { nextStatus: 'ASSIGNED', label: 'Assigned' };
+      case 'ASSIGNED':
+        return { nextStatus: 'ACCEPTED', label: 'Job Accepted (Driver Accepted)' };
+      case 'ACCEPTED':
+        return { nextStatus: 'CONTAINER_PICKED', label: 'Container Picked (at Port)' };
+      case 'CONTAINER_PICKED':
+      case 'AT_PORT':
+        return { nextStatus: 'UNDER_INSPECTION', label: 'Under Inspection' };
+      case 'UNDER_INSPECTION':
+        return { nextStatus: 'EN_ROUTE_WAREHOUSE', label: 'En Route to Warehouse' };
+      case 'EN_ROUTE_WAREHOUSE':
+      case 'IN_TRANSIT':
+        return { nextStatus: 'PLACED_AT_RAMP', label: 'Placed @ Ramp (Warehouse Offload)', placement: 'RAMP' };
+      case 'PLACED_AT_RAMP':
+        return { nextStatus: 'TRAILER_DETACHED', label: 'Trailer Detached @ Ramp', placement: 'RAMP' };
+      case 'PLACED_AT_YARD':
+        return { nextStatus: 'TRAILER_DETACHED', label: 'Trailer Detached @ Yard', placement: 'YARD' };
+      default:
+        return { nextStatus: 'READY_FOR_PICKUP', label: 'Ready for Pickup (Activate L2)' };
+    }
+  }, []);
+
+  const handleOpenStatusUpdate = useCallback(
+    (job: DrayageJob) => {
+      const rec = getRecommendedNextDriverStatus(job);
+      setStatusUpdateJob(job);
+      setSelectedTargetStatus(rec.nextStatus);
+      setSelectedPlacementLocation(rec.placement || (job.placementLocation === 'YARD' ? 'YARD' : 'RAMP'));
+      setSelectedEtcHours(3);
+      setStatusUpdateNotes('');
+    },
+    [getRecommendedNextDriverStatus],
+  );
+
+  const handleConfirmOperatorStatusUpdate = async (overrideStatus?: string, overridePlacement?: 'RAMP' | 'YARD') => {
+    if (!statusUpdateJob) return;
+    const finalStatus = overrideStatus || selectedTargetStatus;
+    const finalPlacement =
+      overridePlacement ||
+      (finalStatus.toUpperCase().includes('YARD')
+        ? 'YARD'
+        : finalStatus.toUpperCase().includes('RAMP')
+        ? 'RAMP'
+        : selectedPlacementLocation);
+    const isRampStage = finalStatus.toUpperCase().includes('RAMP');
+    const etcIso = isRampStage
+      ? new Date(Date.now() + Number(selectedEtcHours || 3) * 3600000).toISOString()
+      : undefined;
+
+    try {
+      setSubmittingStatusUpdate(true);
+      const res = await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_status',
+          jobId: statusUpdateJob.id,
+          status: finalStatus,
+          placementLocation: finalPlacement,
+          detachTrailer:
+            finalStatus.includes('DETACHED') ||
+            finalStatus === 'READY_FOR_PICKUP' ||
+            finalStatus === 'CONTAINER_DROPPED',
+          etcTime: etcIso,
+          notes:
+            statusUpdateNotes.trim() ||
+            `Updated by Operations Team (${user?.username || 'Operations Desk'}) — synced with Driver App`,
+          actor: user?.username || 'Operations Desk',
+          operatorOverride: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update job status');
+      const syncedStatus = data.status || finalStatus;
+      invalidateDrayageClientCache();
+      setToast({
+        type: 'success',
+        message: `⚡ Updated ${statusUpdateJob.jobCode} status to ${syncedStatus} & synced live with Driver App!`,
+      });
+      setTimeout(() => setToast(null), 4000);
+      setStatusUpdateJob(null);
+      await loadData(true);
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Error updating job status',
+      });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setSubmittingStatusUpdate(false);
+    }
+  };
+
   // Assignment Modal Fields
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState('');
@@ -1946,7 +2085,20 @@ export default function DrayageAssignmentPage() {
       ],
       render: (job) => {
         const reassignState = evaluateDispatcherJobReassignState(job);
-        return <StatusPill status={reassignState.displayStatus} label={reassignState.displayStatus} />;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenStatusUpdate(job);
+            }}
+            className="inline-flex items-center gap-1 group rounded-lg focus:outline-none"
+            title={`Click to update status for ${job.jobCode} (Syncs automatically with Driver App)`}
+          >
+            <StatusPill status={reassignState.displayStatus} label={reassignState.displayStatus} />
+            <RefreshCw className="w-3 h-3 text-[var(--text-faint)] group-hover:text-emerald-400 transition-colors shrink-0" />
+          </button>
+        );
       },
     },
     {
@@ -1971,10 +2123,26 @@ export default function DrayageAssignmentPage() {
           </button>
         );
 
+        const updateStatusBtn = (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenStatusUpdate(job);
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 text-[11px] font-semibold transition-colors whitespace-nowrap"
+            title="Update Job Status by Operations Team (Auto-syncs with Driver App)"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Update Status</span>
+          </button>
+        );
+
         if (isJobCompletedOrSuperseded(job)) {
           return (
             <div className="flex items-center justify-end gap-1.5">
               {editBtn}
+              {updateStatusBtn}
               <span
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-[var(--border-subtle)] text-[var(--text-muted)] text-[11px] font-semibold cursor-not-allowed opacity-60 whitespace-nowrap"
                 title={
@@ -2016,6 +2184,7 @@ export default function DrayageAssignmentPage() {
           return (
             <div className="flex items-center justify-end gap-1.5">
               {editBtn}
+              {updateStatusBtn}
               <button
                 type="button"
                 onClick={() => handleOpenAssign(job)}
@@ -2040,6 +2209,7 @@ export default function DrayageAssignmentPage() {
           return (
             <div className="flex items-center justify-end gap-1.5">
               {editBtn}
+              {updateStatusBtn}
               <button
                 type="button"
                 disabled
@@ -2059,6 +2229,7 @@ export default function DrayageAssignmentPage() {
         return (
           <div className="flex items-center justify-end gap-1.5">
             {editBtn}
+            {updateStatusBtn}
             <button
               type="button"
               onClick={() => handleOpenAssign(job)}
@@ -2113,6 +2284,7 @@ export default function DrayageAssignmentPage() {
     portalMenuState?.job.id,
     handleOpenAssign,
     handleOpenChangeReturnTerminal,
+    handleOpenStatusUpdate,
     isJobCompletedOrSuperseded,
     extractStartHourFromJob,
     formatJobTokenWindowBadge,
@@ -5192,6 +5364,172 @@ export default function DrayageAssignmentPage() {
           </div>
         </div>
       )}
+
+      {/* Operations Team Status Update & Driver App Live Sync Modal */}
+      {statusUpdateJob && (() => {
+        const recNext = getRecommendedNextDriverStatus(statusUpdateJob);
+        const currentDisp = evaluateDispatcherJobReassignState(statusUpdateJob).displayStatus;
+        const isRampSelected = selectedTargetStatus.toUpperCase().includes('RAMP');
+        return (
+          <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/40 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+                <div>
+                  <h4 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-emerald-400" />
+                    <span>Operations Status Update ({statusUpdateJob.jobCode})</span>
+                  </h4>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    Container <strong className="font-mono text-[var(--text-main)]">{statusUpdateJob.containerNumber}</strong> ({statusUpdateJob.containerSize}) · Driver: <strong className="text-[var(--text-main)]">{statusUpdateJob.assignedDriverName || 'Unassigned'}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusUpdateJob(null)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                {/* Auto-Sync Banner */}
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-emerald-300 flex items-center gap-1.5 text-[11px]">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Automatic Two-Way Driver App Status Sync</span>
+                    </div>
+                    <div className="text-[10px] text-[var(--text-muted)]">
+                      Updating the status here immediately syncs to the assigned driver&apos;s mobile app (<strong className="text-[var(--text-main)]">{statusUpdateJob.assignedDriverName || 'Driver App'}</strong>) and advances their next action step.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Current Status & 1-Tap Recommended Next Driver Step */}
+                <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block">
+                      Current Job Status
+                    </span>
+                    <div className="mt-1">
+                      <StatusPill status={currentDisp} label={currentDisp} />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={submittingStatusUpdate}
+                    onClick={() => handleConfirmOperatorStatusUpdate(recNext.nextStatus, recNext.placement)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>1-Click Advance: {recNext.label}</span>
+                  </button>
+                </div>
+
+                {/* Or Select Any Target Status */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    Or Select Any Target Status (Override / Multi-Step Sync)
+                  </label>
+                  <select
+                    value={selectedTargetStatus}
+                    onChange={(e) => setSelectedTargetStatus(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-emerald-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-emerald-400 text-xs cursor-pointer"
+                  >
+                    <option value="PENDING">PENDING</option>
+                    <option value="ASSIGNED">ASSIGNED</option>
+                    <option value="ACCEPTED">ACCEPTED (Job Accepted by Driver)</option>
+                    <option value="CONTAINER_PICKED">CONTAINER_PICKED (Picked at Port / WH)</option>
+                    <option value="UNDER_INSPECTION">UNDER_INSPECTION (Port / Customs Inspection)</option>
+                    <option value="EN_ROUTE_WAREHOUSE">EN_ROUTE_WAREHOUSE (In Transit to Warehouse)</option>
+                    <option value="PLACED_AT_RAMP">PLACED_AT_RAMP (Placed @ Warehouse Ramp)</option>
+                    <option value="PLACED_AT_YARD">PLACED_AT_YARD (Placed @ Warehouse Yard)</option>
+                    <option value="TRAILER_DETACHED">TRAILER_DETACHED (Trailer Detached)</option>
+                    <option value="MT_Reassign to Yard">MT_Reassign to Yard</option>
+                    <option value="FCL_Reassign to Yard">FCL_Reassign to Yard</option>
+                    <option value="FCL_Reassign to Ramp">FCL_Reassign to Ramp</option>
+                    <option value="MT_Reassign to Ramp">MT_Reassign to Ramp</option>
+                    <option value="RE-ASSIGNED">RE-ASSIGNED</option>
+                    <option value="TRAILER_ATTACHED">TRAILER_ATTACHED (Reassign Coupled)</option>
+                    <option value="REASSIGN_PLACED_AT_RAMP">REASSIGN_PLACED_AT_RAMP (Shunted to Ramp)</option>
+                    <option value="REASSIGN_PLACED_AT_YARD">REASSIGN_PLACED_AT_YARD (Shunted to Yard)</option>
+                    <option value="READY_FOR_PICKUP">READY_FOR_PICKUP (Ready for L2 Return)</option>
+                    <option value="EN_ROUTE_TERMINAL">EN_ROUTE_TERMINAL (L2 In Transit to Port)</option>
+                    <option value="ARRIVED_AT_PORT">ARRIVED_AT_PORT (L2 Arrived at Port Gate)</option>
+                    <option value="CONTAINER_DROPPED">CONTAINER_DROPPED (L2 Empty Dropped at Port)</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                      Placement Location
+                    </label>
+                    <select
+                      value={selectedPlacementLocation}
+                      onChange={(e) => setSelectedPlacementLocation(e.target.value as 'RAMP' | 'YARD')}
+                      className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-emerald-400 text-xs cursor-pointer"
+                    >
+                      <option value="RAMP">RAMP (Offloading Dock)</option>
+                      <option value="YARD">YARD (Container Yard)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                      Ramp Offload ETC Timer {isRampSelected ? '*' : '(If at Ramp)'}
+                    </label>
+                    <select
+                      value={selectedEtcHours}
+                      onChange={(e) => setSelectedEtcHours(Number(e.target.value))}
+                      className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] font-semibold outline-none focus:border-emerald-400 text-xs cursor-pointer"
+                    >
+                      <option value={1}>1 Hour ETC</option>
+                      <option value={2}>2 Hours ETC</option>
+                      <option value={3}>3 Hours ETC (Standard)</option>
+                      <option value={4}>4 Hours ETC</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
+                    Operator Note / Reason (Synced to Audit Log &amp; Driver App)
+                  </label>
+                  <input
+                    type="text"
+                    value={statusUpdateNotes}
+                    onChange={(e) => setStatusUpdateNotes(e.target.value)}
+                    placeholder="e.g. Driver unable to update due to port network dead-zone — updated by Operations"
+                    className="w-full p-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-emerald-400 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setStatusUpdateJob(null)}
+                  className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submittingStatusUpdate}
+                  onClick={() => handleConfirmOperatorStatusUpdate()}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  {submittingStatusUpdate ? 'Syncing Status...' : `Update to ${selectedTargetStatus} & Sync Driver App`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <DrayageEditJobModal
         open={Boolean(editJobTarget)}

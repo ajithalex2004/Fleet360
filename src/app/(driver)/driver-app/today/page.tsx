@@ -754,6 +754,7 @@ export default function DriverTodayPage() {
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const seenMsgIdsRef = useRef<Set<string>>(new Set());
   const seenJobKeysRef = useRef<Set<string>>(new Set());
+  const prevJobStatusMapRef = useRef<Map<string, string>>(new Map());
   const initialLoadDoneRef = useRef(false);
   const initialJobLoadDoneRef = useRef(false);
   const driverCoordsRef = useRef<{
@@ -1415,6 +1416,20 @@ export default function DriverTodayPage() {
             }
           }
 
+          // Detect status updates synced remotely by the Operations team
+          for (const j of fetched) {
+            const st = (j.status || 'ASSIGNED').toUpperCase();
+            if (initialJobLoadDoneRef.current && prevJobStatusMapRef.current.has(j.id)) {
+              const prevSt = prevJobStatusMapRef.current.get(j.id)!;
+              if (prevSt !== st) {
+                prevJobStatusMapRef.current.set(j.id, st);
+                showToast(`⚡ Status synced by Operations: ${j.jobCode} → ${st.replace(/_/g, ' ')}`);
+              }
+            } else {
+              prevJobStatusMapRef.current.set(j.id, st);
+            }
+          }
+
           if (!initialJobLoadDoneRef.current) {
             initialJobLoadDoneRef.current = true;
           }
@@ -1527,12 +1542,28 @@ export default function DriverTodayPage() {
         void fetchDriverJobs(true);
       }
     };
+    let es: EventSource | null = null;
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onVisibleOrFocus);
       document.addEventListener('visibilitychange', onVisibleOrFocus);
+      if ('EventSource' in window) {
+        try {
+          es = new EventSource(getApiEndpoint('/api/logistics/drayage/stream'), {
+            withCredentials: true,
+          });
+          es.addEventListener('drayage_event', () => {
+            void fetchDriverJobs(true);
+          });
+        } catch {}
+      }
     }
     return () => {
       clearInterval(interval);
+      if (es) {
+        try {
+          es.close();
+        } catch {}
+      }
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onVisibleOrFocus);
         document.removeEventListener('visibilitychange', onVisibleOrFocus);
@@ -1822,6 +1853,7 @@ export default function DriverTodayPage() {
       } = await captureLiveDriverLocation(job, upperTarget);
 
       // Optimistic local state update so UI responds immediately
+      prevJobStatusMapRef.current.set(job.id, effectiveTargetStatus.toUpperCase());
       setJobs((prev) =>
         prev.map((j) =>
           j.id === job.id

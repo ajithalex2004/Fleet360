@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
           if (!jobId) {
             throw new Error('jobId is required to edit a job');
           }
-          return updateDrayageJobDetails(tx, {
+          const detailsRes = await updateDrayageJobDetails(tx, {
             tenantId,
             jobId,
             containerNumber:
@@ -397,6 +397,20 @@ export async function POST(req: NextRequest) {
             notes: body.notes !== undefined ? (body.notes ? String(body.notes) : null) : undefined,
             actor: dispatcherActor,
           });
+          if (body.status && typeof body.status === 'string' && body.status.trim() !== '') {
+            await updateDrayageJobExecutionStatus(tx, {
+              tenantId,
+              jobId,
+              status: body.status.trim(),
+              placementLocation: body.placementLocation ?? undefined,
+              detachTrailer: body.detachTrailer !== undefined ? Boolean(body.detachTrailer) : undefined,
+              etcTime: body.etcTime || body.etc || undefined,
+              notes: body.statusNotes ? String(body.statusNotes) : 'Updated by Operations Team via Edit Job',
+              actor: dispatcherActor,
+              operatorOverride: true,
+            });
+          }
+          return detailsRes;
         }
 
         case 'change_return_terminal': {
@@ -739,6 +753,7 @@ export async function POST(req: NextRequest) {
             etcTime: body.etcTime || body.etc || undefined,
             notes: body.notes || undefined,
             actor: dispatcherActor,
+            operatorOverride: body.operatorOverride !== undefined ? Boolean(body.operatorOverride) : true,
           });
         }
 

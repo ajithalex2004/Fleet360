@@ -5,8 +5,8 @@
  *
  *   • Sortable column headers (click cycles asc → desc → none, with indicators)
  *   • Inline filter row (per-column text or select filters)
- *   • Smart toolbar: global search, column show/hide, density, CSV export,
- *     a live "X of Y" count, and a one-click clear-all
+ *   • Smart toolbar: global search, column show/hide & custom column ordering,
+ *     density, CSV export, a live "X of Y" count, and a one-click clear-all
  *
  * Generic over the row type. Columns declare an `accessor` (used for sorting,
  * filtering, search and CSV) and an optional `render` for the cell. Pure client
@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
-  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronLeft,
+  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronLeft, GripVertical, RotateCcw,
 } from 'lucide-react';
 
 export type SortDir = 'asc' | 'desc';
@@ -95,60 +95,29 @@ interface DataGridProps<T> {
   gridName?: string;
   /**
    * Leading "#" column showing each row's position in the CURRENT view —
-   * i.e. after sort and filters are applied, not raw array index. A row's
-   * number moves when the user sorts or filters; that's intentional, it's
-   * "row 3 of what I'm looking at now", not a stable row identity. Default
-   * false — existing consumers are unaffected unless they opt in.
+   * i.e. after sort and filters are applied, not raw array index.
    */
   numbered?: boolean;
   /**
-   * Override the content of the `numbered` column for specific rows —
-   * e.g. swapping a trophy icon in for the winning row's position number.
-   * Receives the row and its 1-based position in the current view (same
-   * value the plain numbered column would render). Return the number
-   * itself (or any node) to fall back to default-looking output. Ignored
-   * when `numbered` is false.
+   * Override the content of the `numbered` column for specific rows.
    */
   numberRender?: (row: T, position: number) => React.ReactNode;
   /**
-   * Leading checkbox column for multi-row selection, for bulk actions the
-   * page wants to build on top (bulk delete/export/status-change/etc — this
-   * component only tracks which ids are checked, it doesn't know what to do
-   * with them). Independent of `selectedId` above, which is a single active
-   * row for click/highlight (e.g. master-detail) — the two are unrelated
-   * concepts and a page could use either, both, or neither.
-   *
-   * Controlled: pass `selectedIds` + `onSelectionChange`, same pattern as a
-   * controlled input. The "select all" header checkbox acts on the rows
-   * currently visible after filtering (`processed`), matching how filtered
-   * bulk-select conventionally behaves elsewhere (e.g. Gmail's "select all
-   * that match this search") — not the full unfiltered `rows`.
+   * Leading checkbox column for multi-row selection, for bulk actions.
    */
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
   /**
-   * Business-state-driven row background (e.g. tinting a "winner" row,
-   * muting an infeasible one) — a concern the grid has no opinion on.
-   * When provided for a given row, it fully replaces the default
-   * hover/selected background for that row rather than combining with
-   * it, so conflicting `bg-*` utilities never fight over specificity.
-   * Return '' to opt a specific row back into "no special background".
+   * Business-state-driven row background.
    */
   rowClassName?: (row: T) => string;
   /**
-   * Per-row detail panel — when this returns a node for a given row, that
-   * row gets a leading chevron and becomes expandable; clicking the
-   * chevron (or the row itself, when `onRowClick` isn't also set) inserts
-   * the returned content as a full-width row beneath it. Return null/
-   * undefined/false to make a specific row non-expandable while the
-   * feature is still on for the rest. Uncontrolled and single-open, like
-   * an accordion — expanding one row collapses whichever was open before.
-   * Not a fit for pages needing multiple rows open at once.
+   * Per-row detail panel.
    */
   expandable?: (row: T) => React.ReactNode | null | undefined | false;
   /**
-   * Show a synchronized horizontal scrollbar docked at the bottom of the screen
+   * Show a single synchronized horizontal scrollbar at the bottom of the screen
    * so users can easily scroll wide tables right and left even when the list is long.
    */
   stickyBottomScrollbar?: boolean;
@@ -183,11 +152,18 @@ export default function FleetDataGrid<T>({
   expandable, stickyBottomScrollbar = true, tableMinWidth,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
+  const storageKey = useMemo(
+    () => `fleet360_grid_cols_${(gridName || tb.title || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+    [gridName, tb.title],
+  );
 
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(initialSort ?? null);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [globalSearch, setGlobalSearch] = useState('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => columns.map((c) => c.key));
+  const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
+  const [dragOverColKey, setDragOverColKey] = useState<string | null>(null);
   const [dense, setDense] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [colMenuOpen, setColMenuOpen] = useState(false);
@@ -196,7 +172,122 @@ export default function FleetDataGrid<T>({
   /** Multi-value chip state: chip.key -> set of active option values. */
   const [chipValues, setChipValues] = useState<Record<string, Set<string>>>({});
 
-  // Horizontal scroll synchronization refs & state (for bottom-of-screen horizontal scrollbar)
+  // Load saved column order & hidden state from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedOrderRaw = localStorage.getItem(`${storageKey}_order`);
+      if (savedOrderRaw) {
+        const parsed = JSON.parse(savedOrderRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const validKeys = new Set(columns.map((c) => c.key));
+          const filtered = parsed.filter((k): k is string => typeof k === 'string' && validKeys.has(k));
+          const missing = columns.map((c) => c.key).filter((k) => !filtered.includes(k));
+          setColumnOrder([...filtered, ...missing]);
+        }
+      }
+      const savedHiddenRaw = localStorage.getItem(`${storageKey}_hidden`);
+      if (savedHiddenRaw) {
+        const parsedHidden = JSON.parse(savedHiddenRaw);
+        if (Array.isArray(parsedHidden)) {
+          setHidden(new Set(parsedHidden.filter((k): k is string => typeof k === 'string')));
+        }
+      }
+    } catch {}
+  }, [storageKey, columns]);
+
+  // Keep columnOrder in sync if columns prop changes dynamically
+  useEffect(() => {
+    setColumnOrder((prev) => {
+      const validKeys = new Set(columns.map((c) => c.key));
+      const kept = prev.filter((k) => validKeys.has(k));
+      const added = columns.map((c) => c.key).filter((k) => !kept.includes(k));
+      if (kept.length === prev.length && added.length === 0) return prev;
+      return [...kept, ...added];
+    });
+  }, [columns]);
+
+  const persistColumnOrder = useCallback(
+    (nextOrder: string[]) => {
+      setColumnOrder(nextOrder);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`${storageKey}_order`, JSON.stringify(nextOrder));
+        } catch {}
+      }
+    },
+    [storageKey],
+  );
+
+  const toggleColumnVisibility = useCallback(
+    (key: string) => {
+      setHidden((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`${storageKey}_hidden`, JSON.stringify(Array.from(next)));
+          } catch {}
+        }
+        return next;
+      });
+    },
+    [storageKey],
+  );
+
+  const moveColumnToIndex = useCallback(
+    (key: string, targetIndex: number) => {
+      const currentIdx = columnOrder.indexOf(key);
+      if (currentIdx === -1) return;
+      const boundedIdx = Math.max(0, Math.min(columnOrder.length - 1, targetIndex));
+      if (currentIdx === boundedIdx) return;
+      const next = [...columnOrder];
+      next.splice(currentIdx, 1);
+      next.splice(boundedIdx, 0, key);
+      persistColumnOrder(next);
+    },
+    [columnOrder, persistColumnOrder],
+  );
+
+  const resetColumnsToDefault = useCallback(() => {
+    const defaultOrder = columns.map((c) => c.key);
+    setColumnOrder(defaultOrder);
+    setHidden(new Set());
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`${storageKey}_order`);
+        localStorage.removeItem(`${storageKey}_hidden`);
+      } catch {}
+    }
+  }, [columns, storageKey]);
+
+  const orderedColumns = useMemo(() => {
+    const colMap = new Map(columns.map((c) => [c.key, c]));
+    const result: DataGridColumn<T>[] = [];
+    for (const k of columnOrder) {
+      const col = colMap.get(k);
+      if (col) {
+        result.push(col);
+        colMap.delete(k);
+      }
+    }
+    for (const col of colMap.values()) {
+      result.push(col);
+    }
+    return result;
+  }, [columns, columnOrder]);
+
+  const visibleColumns = useMemo(
+    () => orderedColumns.filter((c) => !hidden.has(c.key)),
+    [orderedColumns, hidden],
+  );
+  const sortableColumns = useMemo(
+    () => orderedColumns.filter((c) => (c.sortable ?? !!c.accessor) && c.accessor),
+    [orderedColumns],
+  );
+
+  // Horizontal scroll synchronization refs & state (single bottom horizontal scrollbar)
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomScrollRef = useRef<HTMLDivElement | null>(null);
   const fixedBottomScrollRef = useRef<HTMLDivElement | null>(null);
@@ -216,9 +307,6 @@ export default function FleetDataGrid<T>({
     dockWidth: 0,
     showFixedBottomDock: false,
   });
-
-  const visibleColumns = useMemo(() => columns.filter(c => !hidden.has(c.key)), [columns, hidden]);
-  const sortableColumns = useMemo(() => columns.filter(c => (c.sortable ?? !!c.accessor) && c.accessor), [columns]);
 
   // Unique values for select filters (per column), derived from the data.
   const selectValues = useMemo(() => {
@@ -292,8 +380,6 @@ export default function FleetDataGrid<T>({
     const sw = Math.max(el.scrollWidth, el.clientWidth);
     const cw = el.clientWidth;
     const sl = el.scrollLeft;
-    // Show the fixed bottom-of-screen horizontal scrollbar whenever the grid is visible on screen
-    // and its bottom edge is near or below the viewport bottom (so users don't have to scroll down past all rows).
     const isGridInViewport = rect.top < window.innerHeight - 70 && rect.bottom > 120;
     const isBottomBelowFold = rect.bottom > window.innerHeight - 36;
     setScrollMetrics({
@@ -465,7 +551,10 @@ export default function FleetDataGrid<T>({
 
   const hasHeader = (kpis && kpis.length > 0) || (filterChips && filterChips.length > 0);
   const effectiveMinWidth = tableMinWidth ?? (visibleColumns.length >= 7 ? '1380px' : undefined);
-  const scrollableRangePx = Math.max(1, scrollMetrics.scrollWidth - scrollMetrics.clientWidth);
+  const isCustomColumnOrder = useMemo(() => {
+    const def = columns.map((c) => c.key);
+    return def.length === columnOrder.length && def.some((k, idx) => columnOrder[idx] !== k);
+  }, [columns, columnOrder]);
 
   return (
     <div data-grid-name={gridName} className={hasHeader ? `space-y-4 ${className}` : className}>
@@ -591,23 +680,130 @@ export default function FleetDataGrid<T>({
 
         {tb.columns && (
           <div className="relative">
-            <ToolbarButton active={colMenuOpen} onClick={() => setColMenuOpen(v => !v)} title="Show / hide columns">
+            <ToolbarButton active={colMenuOpen || isCustomColumnOrder || hidden.size > 0} onClick={() => setColMenuOpen(v => !v)} title="Show / hide & reorder columns">
               <Columns3 className="w-3.5 h-3.5" /> Columns
+              {(isCustomColumnOrder || hidden.size > 0) && (
+                <span className="ml-0.5 rounded-full bg-violet-500/20 text-violet-300 px-1.5 text-[10px]">
+                  {visibleColumns.length}/{columns.length}
+                </span>
+              )}
             </ToolbarButton>
             {colMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setColMenuOpen(false)} />
-                <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xl p-1.5">
-                  {columns.map(c => (
-                    <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-surface-hover)] cursor-pointer text-sm text-[var(--text-muted)]">
-                      <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => setHidden(prev => {
-                        const next = new Set(prev);
-                        if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
-                        return next;
-                      })} className="accent-violet-500 w-3.5 h-3.5" />
-                      {c.header}
-                    </label>
-                  ))}
+                <div className="absolute right-0 mt-1 z-30 w-80 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl p-2 space-y-1">
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--border-subtle)]">
+                    <div>
+                      <div className="text-[11px] font-bold text-[var(--text-main)]">Columns &amp; Order</div>
+                      <div className="text-[10px] text-[var(--text-faint)]">Select/deselect, drag, or pick position #</div>
+                    </div>
+                    {(isCustomColumnOrder || hidden.size > 0) && (
+                      <button
+                        type="button"
+                        onClick={resetColumnsToDefault}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[10px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                        title="Reset column visibility and order to default"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto space-y-0.5 pr-0.5">
+                    {orderedColumns.map((c, idx) => {
+                      const isVisible = !hidden.has(c.key);
+                      const isDraggingThis = draggedColKey === c.key;
+                      const isDragOverThis = dragOverColKey === c.key && draggedColKey !== c.key;
+                      return (
+                        <div
+                          key={c.key}
+                          draggable
+                          onDragStart={() => setDraggedColKey(c.key)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (draggedColKey && draggedColKey !== c.key) {
+                              setDragOverColKey(c.key);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (draggedColKey && draggedColKey !== c.key) {
+                              moveColumnToIndex(draggedColKey, idx);
+                            }
+                            setDraggedColKey(null);
+                            setDragOverColKey(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedColKey(null);
+                            setDragOverColKey(null);
+                          }}
+                          className={`flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                            isDraggingThis
+                              ? 'opacity-50 bg-violet-500/15'
+                              : isDragOverThis
+                              ? 'border border-violet-500 bg-violet-500/10'
+                              : 'hover:bg-[var(--bg-surface-hover)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span
+                              className="cursor-grab active:cursor-grabbing text-[var(--text-faint)] hover:text-[var(--text-muted)] shrink-0"
+                              title="Drag to reorder column"
+                            >
+                              <GripVertical className="w-3.5 h-3.5" />
+                            </span>
+                            <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isVisible}
+                                onChange={() => toggleColumnVisibility(c.key)}
+                                className="accent-violet-500 w-3.5 h-3.5 shrink-0"
+                              />
+                              <span className={`truncate ${isVisible ? 'text-[var(--text-main)] font-medium' : 'text-[var(--text-faint)] line-through'}`}>
+                                {c.header}
+                              </span>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Direct Position Selector (e.g. Move Status from 2nd last to 3rd column) */}
+                            <select
+                              value={idx}
+                              onChange={(e) => moveColumnToIndex(c.key, Number(e.target.value))}
+                              title={`Move "${c.header}" to column position`}
+                              className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] focus:outline-none focus:border-violet-500 cursor-pointer"
+                            >
+                              {orderedColumns.map((_, posIdx) => (
+                                <option key={posIdx} value={posIdx}>
+                                  #{posIdx + 1}
+                                </option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => moveColumnToIndex(c.key, idx - 1)}
+                              className="p-1 rounded hover:bg-[var(--bg-main)] text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 disabled:pointer-events-none"
+                              title={`Move ${c.header} left / up`}
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === orderedColumns.length - 1}
+                              onClick={() => moveColumnToIndex(c.key, idx + 1)}
+                              className="p-1 rounded hover:bg-[var(--bg-main)] text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 disabled:pointer-events-none"
+                              title={`Move ${c.header} right / down`}
+                            >
+                              <ArrowDown className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}
@@ -639,7 +835,7 @@ export default function FleetDataGrid<T>({
       <div
         ref={tableScrollRef}
         onScroll={handleTableHorizontalScroll}
-        className="overflow-x-auto fleet-grid-hscroll"
+        className={`overflow-x-auto ${stickyBottomScrollbar ? '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden' : 'fleet-grid-hscroll'}`}
       >
         <table
           className="w-full text-sm"
@@ -672,10 +868,38 @@ export default function FleetDataGrid<T>({
               {visibleColumns.map(c => {
                 const sortable = c.sortable ?? !!c.accessor;
                 const isSorted = sort?.key === c.key;
+                const isDragOverHeader = dragOverColKey === c.key && draggedColKey !== c.key;
                 return (
-                  <th key={c.key} style={c.width ? { width: c.width } : undefined}
-                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-[var(--text-muted)]' : ''}`}
-                    onClick={sortable ? () => toggleSort(c.key) : undefined}>
+                  <th
+                    key={c.key}
+                    style={c.width ? { width: c.width } : undefined}
+                    draggable
+                    onDragStart={() => setDraggedColKey(c.key)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (draggedColKey && draggedColKey !== c.key) {
+                        setDragOverColKey(c.key);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggedColKey && draggedColKey !== c.key) {
+                        const targetOrderIdx = columnOrder.indexOf(c.key);
+                        if (targetOrderIdx !== -1) {
+                          moveColumnToIndex(draggedColKey, targetOrderIdx);
+                        }
+                      }
+                      setDraggedColKey(null);
+                      setDragOverColKey(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedColKey(null);
+                      setDragOverColKey(null);
+                    }}
+                    title="Click to sort · Drag header left/right to reorder column"
+                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-[var(--text-muted)]' : 'cursor-grab'} ${isDragOverHeader ? 'bg-violet-500/15 border-l-2 border-violet-500' : ''}`}
+                    onClick={sortable ? () => toggleSort(c.key) : undefined}
+                  >
                     <span className="inline-flex items-center gap-1">
                       {c.header}
                       {sortable && (
@@ -782,13 +1006,13 @@ export default function FleetDataGrid<T>({
         </table>
       </div>
 
-      {/* Inline Horizontal Scroll Bar at Bottom of Table */}
-      {stickyBottomScrollbar && (
+      {/* Single Inline Horizontal Scrollbar at Bottom of Table (shown when fixed bottom dock is not active) */}
+      {stickyBottomScrollbar && !scrollMetrics.showFixedBottomDock && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/80">
           <button
             type="button"
             onClick={() => scrollHorizontallyBy(-280)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] shrink-0 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
             title="Scroll table left"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -797,14 +1021,14 @@ export default function FleetDataGrid<T>({
           <div
             ref={bottomScrollRef}
             onScroll={handleBottomBarScroll}
-            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-3.5"
+            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-4"
           >
             <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 240)}px`, height: '1px' }} />
           </div>
           <button
             type="button"
             onClick={() => scrollHorizontallyBy(280)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] shrink-0 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
             title="Scroll table right"
           >
             <span>Right</span>
@@ -814,7 +1038,7 @@ export default function FleetDataGrid<T>({
       )}
       </div>
 
-      {/* Fixed Bottom-of-Screen Horizontal Scrollbar Dock when the table list is taller than the screen */}
+      {/* Single Fixed Bottom-of-Screen Horizontal Scrollbar Dock when the table list is taller than the screen */}
       {scrollMetrics.showFixedBottomDock && (
         <div
           style={{
@@ -826,41 +1050,25 @@ export default function FleetDataGrid<T>({
           <button
             type="button"
             onClick={() => scrollHorizontallyBy(-300)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-bold text-blue-400 hover:bg-blue-600/25 shrink-0 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
             title="Scroll table left"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             <span>Left</span>
           </button>
 
-          <div className="flex-1 flex flex-col gap-1 min-w-0">
-            <div
-              ref={fixedBottomScrollRef}
-              onScroll={handleFixedBottomBarScroll}
-              className="w-full overflow-x-scroll fleet-grid-hscroll h-3.5"
-            >
-              <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 260)}px`, height: '1px' }} />
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={scrollableRangePx}
-              value={Math.min(scrollableRangePx, scrollMetrics.scrollLeft)}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (tableScrollRef.current) {
-                  tableScrollRef.current.scrollLeft = next;
-                }
-              }}
-              aria-label="Horizontal table scroll position"
-              className="w-full h-1.5 accent-blue-500 cursor-pointer"
-            />
+          <div
+            ref={fixedBottomScrollRef}
+            onScroll={handleFixedBottomBarScroll}
+            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-4 min-w-0"
+          >
+            <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 260)}px`, height: '1px' }} />
           </div>
 
           <button
             type="button"
             onClick={() => scrollHorizontallyBy(300)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/15 border border-blue-500/30 text-xs font-bold text-blue-400 hover:bg-blue-600/25 shrink-0 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
             title="Scroll table right"
           >
             <span>Right</span>

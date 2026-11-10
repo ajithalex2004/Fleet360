@@ -111,6 +111,9 @@ export function DrayageEditJobModal({
   const [boxcareInspection, setBoxcareInspection] = useState(false);
 
   const [notes, setNotes] = useState<string>('');
+  const [jobStatus, setJobStatus] = useState<string>('PENDING');
+  const [placementLocation, setPlacementLocation] = useState<'RAMP' | 'YARD' | ''>('');
+  const [etcHours, setEtcHours] = useState<number>(3);
 
   useEffect(() => {
     if (!open || !job) return;
@@ -163,6 +166,15 @@ export function DrayageEditJobModal({
     setMercInspection(Boolean(job.mercInspection));
     setBoxcareInspection(Boolean(job.boxcareInspection));
     setNotes(job.notes || '');
+    setJobStatus(job.status || 'PENDING');
+    setPlacementLocation(
+      (job.status || '').toUpperCase().includes('YARD')
+        ? 'YARD'
+        : (job.status || '').toUpperCase().includes('RAMP')
+        ? 'RAMP'
+        : '',
+    );
+    setEtcHours(3);
   }, [open, job, customers, terminals, warehouses]);
 
   if (!open || !job) return null;
@@ -180,6 +192,12 @@ export function DrayageEditJobModal({
 
     try {
       setSaving(true);
+      const statusChanged = jobStatus && jobStatus.trim() !== '' && jobStatus.trim() !== job.status;
+      const isRampStatus = jobStatus.toUpperCase().includes('RAMP') || placementLocation === 'RAMP';
+      const computedEtcIso =
+        statusChanged && isRampStatus
+          ? new Date(Date.now() + Number(etcHours || 3) * 3600000).toISOString()
+          : undefined;
       const res = await fetch('/api/logistics/drayage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,6 +228,11 @@ export function DrayageEditJobModal({
           mercInspection,
           boxcareInspection,
           notes: notes.trim() || null,
+          status: statusChanged ? jobStatus.trim() : undefined,
+          placementLocation: statusChanged
+            ? placementLocation || (jobStatus.toUpperCase().includes('YARD') ? 'YARD' : jobStatus.toUpperCase().includes('RAMP') ? 'RAMP' : undefined)
+            : undefined,
+          etcTime: computedEtcIso,
         }),
       });
       const data = await res.json();
@@ -217,7 +240,9 @@ export function DrayageEditJobModal({
         throw new Error(data.error || 'Failed to update job details');
       }
       await onSaved(
-        `Updated ${job.jobCode} (${containerNumber.trim().toUpperCase()}) successfully!`,
+        statusChanged
+          ? `Updated ${job.jobCode} & synced status → ${jobStatus} with Driver App!`
+          : `Updated ${job.jobCode} (${containerNumber.trim().toUpperCase()}) successfully!`,
       );
       onClose();
     } catch (err) {
@@ -644,6 +669,85 @@ export function DrayageEditJobModal({
                 placeholder="Enter gate pass instructions, weighbridge notes, or DO reference..."
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
               />
+            </div>
+
+            {/* Section 5: Operations Team Status Override (Syncs automatically to Driver App) */}
+            <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                  5. Operations Status Override (Auto-Syncs with Driver App)
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  Current: <strong className="font-mono text-[var(--text-main)]">{job.status}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    Job Execution Status
+                  </label>
+                  <select
+                    value={jobStatus}
+                    onChange={(e) => setJobStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-emerald-500/40 text-[var(--text-main)] font-semibold outline-none focus:border-emerald-500"
+                  >
+                    <option value="PENDING">PENDING</option>
+                    <option value="ASSIGNED">ASSIGNED</option>
+                    <option value="ACCEPTED">ACCEPTED (Driver Accepted)</option>
+                    <option value="CONTAINER_PICKED">CONTAINER_PICKED (Picked at Port/WH)</option>
+                    <option value="UNDER_INSPECTION">UNDER_INSPECTION (Port/Customs Check)</option>
+                    <option value="EN_ROUTE_WAREHOUSE">EN_ROUTE_WAREHOUSE (In Transit to WH)</option>
+                    <option value="EN_ROUTE_TERMINAL">EN_ROUTE_TERMINAL (L2 In Transit to Port)</option>
+                    <option value="ARRIVED_AT_PORT">ARRIVED_AT_PORT (L2 Arrived at Port)</option>
+                    <option value="PLACED_AT_RAMP">PLACED_AT_RAMP (Placed @ Ramp)</option>
+                    <option value="PLACED_AT_YARD">PLACED_AT_YARD (Placed @ Yard)</option>
+                    <option value="TRAILER_DETACHED">TRAILER_DETACHED (Trailer Uncoupled)</option>
+                    <option value="MT_Reassign to Yard">MT_Reassign to Yard</option>
+                    <option value="FCL_Reassign to Yard">FCL_Reassign to Yard</option>
+                    <option value="FCL_Reassign to Ramp">FCL_Reassign to Ramp</option>
+                    <option value="MT_Reassign to Ramp">MT_Reassign to Ramp</option>
+                    <option value="RE-ASSIGNED">RE-ASSIGNED</option>
+                    <option value="TRAILER_ATTACHED">TRAILER_ATTACHED (Reassign Coupled)</option>
+                    <option value="REASSIGN_PLACED_AT_RAMP">REASSIGN_PLACED_AT_RAMP</option>
+                    <option value="REASSIGN_PLACED_AT_YARD">REASSIGN_PLACED_AT_YARD</option>
+                    <option value="READY_FOR_PICKUP">READY_FOR_PICKUP (Ready for L2)</option>
+                    <option value="CONTAINER_DROPPED">CONTAINER_DROPPED (L2 Empty Dropped)</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    Placement Location (If at WH)
+                  </label>
+                  <select
+                    value={placementLocation}
+                    onChange={(e) => setPlacementLocation(e.target.value as 'RAMP' | 'YARD' | '')}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value="">Auto / Default</option>
+                    <option value="RAMP">RAMP (Offloading Dock)</option>
+                    <option value="YARD">YARD (Container Yard)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    Ramp Offload ETC Timer
+                  </label>
+                  <select
+                    value={etcHours}
+                    onChange={(e) => setEtcHours(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] outline-none focus:border-blue-500"
+                  >
+                    <option value={1}>1 Hour ETC</option>
+                    <option value={2}>2 Hours ETC</option>
+                    <option value={3}>3 Hours ETC (Standard)</option>
+                    <option value={4}>4 Hours ETC</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 

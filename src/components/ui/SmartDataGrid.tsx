@@ -5,18 +5,18 @@
  *
  *   Header:  KPI summary tiles, filter chips (quick-toggle predicates)
  *   Toolbar: bulk actions on row selection, sort selector,
- *            column visibility, density, CSV export, global search
+ *            column visibility & custom ordering, density, CSV export, global search
  *
  * All new capabilities are opt-in via props — omit them and the grid behaves
  * exactly like the original data grid (sort headers + inline column filters).
  *
  * Generic over the row type. Pure client state, no server round-trips.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
-  Rows3, Filter, X, ArrowUpDown, CheckSquare, Square,
+  Rows3, Filter, X, ArrowUpDown, CheckSquare, Square, GripVertical, RotateCcw,
 } from 'lucide-react';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -147,11 +147,18 @@ export default function SmartDataGrid<T>({
     sortSelector: true,
     ...toolbar,
   };
+  const storageKey = useMemo(
+    () => `fleet360_smartgrid_cols_${(tb.title || tb.exportName || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+    [tb.title, tb.exportName],
+  );
 
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(initialSort ?? null);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [globalSearch, setGlobalSearch] = useState('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => columns.map((c) => c.key));
+  const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
+  const [dragOverColKey, setDragOverColKey] = useState<string | null>(null);
   const [dense, setDense] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [colMenuOpen, setColMenuOpen] = useState(false);
@@ -163,8 +170,122 @@ export default function SmartDataGrid<T>({
 
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const visibleColumns = useMemo(() => columns.filter(c => !hidden.has(c.key)), [columns, hidden]);
-  const sortableColumns = useMemo(() => columns.filter(c => (c.sortable ?? !!c.accessor) && c.accessor), [columns]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedOrderRaw = localStorage.getItem(`${storageKey}_order`);
+      if (savedOrderRaw) {
+        const parsed = JSON.parse(savedOrderRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const validKeys = new Set(columns.map((c) => c.key));
+          const filtered = parsed.filter((k): k is string => typeof k === 'string' && validKeys.has(k));
+          const missing = columns.map((c) => c.key).filter((k) => !filtered.includes(k));
+          setColumnOrder([...filtered, ...missing]);
+        }
+      }
+      const savedHiddenRaw = localStorage.getItem(`${storageKey}_hidden`);
+      if (savedHiddenRaw) {
+        const parsedHidden = JSON.parse(savedHiddenRaw);
+        if (Array.isArray(parsedHidden)) {
+          setHidden(new Set(parsedHidden.filter((k): k is string => typeof k === 'string')));
+        }
+      }
+    } catch {}
+  }, [storageKey, columns]);
+
+  useEffect(() => {
+    setColumnOrder((prev) => {
+      const validKeys = new Set(columns.map((c) => c.key));
+      const kept = prev.filter((k) => validKeys.has(k));
+      const added = columns.map((c) => c.key).filter((k) => !kept.includes(k));
+      if (kept.length === prev.length && added.length === 0) return prev;
+      return [...kept, ...added];
+    });
+  }, [columns]);
+
+  const persistColumnOrder = useCallback(
+    (nextOrder: string[]) => {
+      setColumnOrder(nextOrder);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`${storageKey}_order`, JSON.stringify(nextOrder));
+        } catch {}
+      }
+    },
+    [storageKey],
+  );
+
+  const toggleColumnVisibility = useCallback(
+    (key: string) => {
+      setHidden((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`${storageKey}_hidden`, JSON.stringify(Array.from(next)));
+          } catch {}
+        }
+        return next;
+      });
+    },
+    [storageKey],
+  );
+
+  const moveColumnToIndex = useCallback(
+    (key: string, targetIndex: number) => {
+      const currentIdx = columnOrder.indexOf(key);
+      if (currentIdx === -1) return;
+      const boundedIdx = Math.max(0, Math.min(columnOrder.length - 1, targetIndex));
+      if (currentIdx === boundedIdx) return;
+      const next = [...columnOrder];
+      next.splice(currentIdx, 1);
+      next.splice(boundedIdx, 0, key);
+      persistColumnOrder(next);
+    },
+    [columnOrder, persistColumnOrder],
+  );
+
+  const resetColumnsToDefault = useCallback(() => {
+    const defaultOrder = columns.map((c) => c.key);
+    setColumnOrder(defaultOrder);
+    setHidden(new Set());
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`${storageKey}_order`);
+        localStorage.removeItem(`${storageKey}_hidden`);
+      } catch {}
+    }
+  }, [columns, storageKey]);
+
+  const orderedColumns = useMemo(() => {
+    const colMap = new Map(columns.map((c) => [c.key, c]));
+    const result: SmartDataGridColumn<T>[] = [];
+    for (const k of columnOrder) {
+      const col = colMap.get(k);
+      if (col) {
+        result.push(col);
+        colMap.delete(k);
+      }
+    }
+    for (const col of colMap.values()) {
+      result.push(col);
+    }
+    return result;
+  }, [columns, columnOrder]);
+
+  const visibleColumns = useMemo(
+    () => orderedColumns.filter((c) => !hidden.has(c.key)),
+    [orderedColumns, hidden],
+  );
+  const sortableColumns = useMemo(
+    () => orderedColumns.filter((c) => (c.sortable ?? !!c.accessor) && c.accessor),
+    [orderedColumns],
+  );
+  const isCustomColumnOrder = useMemo(() => {
+    const def = columns.map((c) => c.key);
+    return def.length === columnOrder.length && def.some((k, idx) => columnOrder[idx] !== k);
+  }, [columns, columnOrder]);
 
   // Unique values for select filters (per column), derived from the data.
   const selectValues = useMemo(() => {
@@ -523,23 +644,128 @@ export default function SmartDataGrid<T>({
 
           {tb.columns && (
             <div className="relative">
-              <ToolbarButton active={colMenuOpen} onClick={() => setColMenuOpen(v => !v)} title="Show / hide columns">
+              <ToolbarButton active={colMenuOpen || isCustomColumnOrder || hidden.size > 0} onClick={() => setColMenuOpen(v => !v)} title="Show / hide & reorder columns">
                 <Columns3 className="w-3.5 h-3.5" /> Columns
+                {(isCustomColumnOrder || hidden.size > 0) && (
+                  <span className="ml-0.5 rounded-full bg-violet-500/20 text-violet-300 px-1.5 text-[10px]">
+                    {visibleColumns.length}/{columns.length}
+                  </span>
+                )}
               </ToolbarButton>
               {colMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setColMenuOpen(false)} />
-                  <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-white/10 bg-slate-900 shadow-xl p-1.5">
-                    {columns.map(c => (
-                      <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm text-slate-300">
-                        <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => setHidden(prev => {
-                          const next = new Set(prev);
-                          if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
-                          return next;
-                        })} className="accent-violet-500 w-3.5 h-3.5" />
-                        {c.header}
-                      </label>
-                    ))}
+                  <div className="absolute right-0 mt-1 z-30 w-80 rounded-xl border border-white/10 bg-slate-900 shadow-2xl p-2 space-y-1">
+                    <div className="flex items-center justify-between px-2 py-1 border-b border-white/10">
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-200">Columns &amp; Order</div>
+                        <div className="text-[10px] text-slate-500">Select/deselect, drag, or pick position #</div>
+                      </div>
+                      {(isCustomColumnOrder || hidden.size > 0) && (
+                        <button
+                          type="button"
+                          onClick={resetColumnsToDefault}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-950 border border-white/10 text-[10px] font-semibold text-slate-400 hover:text-white transition-colors"
+                          title="Reset column visibility and order to default"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Reset
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto space-y-0.5 pr-0.5">
+                      {orderedColumns.map((c, idx) => {
+                        const isVisible = !hidden.has(c.key);
+                        const isDraggingThis = draggedColKey === c.key;
+                        const isDragOverThis = dragOverColKey === c.key && draggedColKey !== c.key;
+                        return (
+                          <div
+                            key={c.key}
+                            draggable
+                            onDragStart={() => setDraggedColKey(c.key)}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              if (draggedColKey && draggedColKey !== c.key) {
+                                setDragOverColKey(c.key);
+                              }
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (draggedColKey && draggedColKey !== c.key) {
+                                moveColumnToIndex(draggedColKey, idx);
+                              }
+                              setDraggedColKey(null);
+                              setDragOverColKey(null);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedColKey(null);
+                              setDragOverColKey(null);
+                            }}
+                            className={`flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                              isDraggingThis
+                                ? 'opacity-50 bg-violet-500/15'
+                                : isDragOverThis
+                                ? 'border border-violet-500 bg-violet-500/10'
+                                : 'hover:bg-white/5'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span
+                                className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 shrink-0"
+                                title="Drag to reorder column"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </span>
+                              <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isVisible}
+                                  onChange={() => toggleColumnVisibility(c.key)}
+                                  className="accent-violet-500 w-3.5 h-3.5 shrink-0"
+                                />
+                                <span className={`truncate ${isVisible ? 'text-slate-200 font-medium' : 'text-slate-500 line-through'}`}>
+                                  {c.header}
+                                </span>
+                              </label>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <select
+                                value={idx}
+                                onChange={(e) => moveColumnToIndex(c.key, Number(e.target.value))}
+                                title={`Move "${c.header}" to column position`}
+                                className="bg-slate-950 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-300 hover:text-white focus:outline-none focus:border-violet-500 cursor-pointer"
+                              >
+                                {orderedColumns.map((_, posIdx) => (
+                                  <option key={posIdx} value={posIdx}>
+                                    #{posIdx + 1}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveColumnToIndex(c.key, idx - 1)}
+                                className="p-1 rounded hover:bg-slate-950 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+                                title={`Move ${c.header} left / up`}
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === orderedColumns.length - 1}
+                                onClick={() => moveColumnToIndex(c.key, idx + 1)}
+                                className="p-1 rounded hover:bg-slate-950 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+                                title={`Move ${c.header} right / down`}
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               )}
@@ -587,10 +813,38 @@ export default function SmartDataGrid<T>({
                 {visibleColumns.map(c => {
                   const sortable = c.sortable ?? !!c.accessor;
                   const isSorted = sort?.key === c.key;
+                  const isDragOverHeader = dragOverColKey === c.key && draggedColKey !== c.key;
                   return (
-                    <th key={c.key} style={c.width ? { width: c.width } : undefined}
-                      className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-slate-300' : ''}`}
-                      onClick={sortable ? () => toggleSort(c.key) : undefined}>
+                    <th
+                      key={c.key}
+                      style={c.width ? { width: c.width } : undefined}
+                      draggable
+                      onDragStart={() => setDraggedColKey(c.key)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggedColKey && draggedColKey !== c.key) {
+                          setDragOverColKey(c.key);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedColKey && draggedColKey !== c.key) {
+                          const targetOrderIdx = columnOrder.indexOf(c.key);
+                          if (targetOrderIdx !== -1) {
+                            moveColumnToIndex(draggedColKey, targetOrderIdx);
+                          }
+                        }
+                        setDraggedColKey(null);
+                        setDragOverColKey(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedColKey(null);
+                        setDragOverColKey(null);
+                      }}
+                      title="Click to sort · Drag header left/right to reorder column"
+                      className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-slate-300' : 'cursor-grab'} ${isDragOverHeader ? 'bg-violet-500/15 border-l-2 border-violet-500' : ''}`}
+                      onClick={sortable ? () => toggleSort(c.key) : undefined}
+                    >
                       <span className="inline-flex items-center gap-1">
                         {c.header}
                         {sortable && (

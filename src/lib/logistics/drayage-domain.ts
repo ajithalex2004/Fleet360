@@ -4788,6 +4788,7 @@ export async function updateDrayageJobExecutionStatus(
     latitude?: number | null;
     longitude?: number | null;
     location?: string | null;
+    operatorOverride?: boolean;
   },
 ) {
   await ensureDrayageSchema(db);
@@ -4847,7 +4848,7 @@ export async function updateDrayageJobExecutionStatus(
     String(job.job_phase || '').toUpperCase() === 'L2' ||
     String(job.job_code || '').toUpperCase().includes('-L2');
 
-  if (args.status !== currentStatus && !isReassignTransition) {
+  if (args.status !== currentStatus && !isReassignTransition && !args.operatorOverride) {
     const currentStage = getDrayageOperationalStageIndex(
       currentStatus,
       Boolean(job.trailer_detached),
@@ -5254,8 +5255,21 @@ export async function updateDrayageJobExecutionStatus(
     }
   }
 
-  // Automatically trigger WhatsApp & Email Customer Milestone Alert when stage advances
+  // Automatically trigger WhatsApp & Email Customer Milestone Alert + Driver App Sync Notice when stage advances
   if (effectiveStatus !== currentStatus) {
+    if (args.operatorOverride) {
+      await sendDispatchChatMessage(db, {
+        tenantId: args.tenantId,
+        jobId: args.jobId,
+        senderRole: 'DISPATCHER',
+        senderName: `${logActor} (Operations Sync)`,
+        message: `⚡ Operations Team updated job status to ${effectiveStatus.replace(/_/g, ' ')}${
+          placement ? ` (${placement})` : ''
+        } on your behalf.`,
+        isUrgent: false,
+      }).catch(() => {});
+    }
+
     await dispatchDrayageCustomerMilestoneAlert(db, {
       tenantId: args.tenantId,
       jobId: args.jobId,
