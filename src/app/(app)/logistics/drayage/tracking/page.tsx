@@ -60,6 +60,7 @@ import {
 import {
   fetchDrayageWorkspaceCached,
   getCachedDrayageData,
+  invalidateDrayageClientCache,
   subscribeDrayageLiveUpdates,
 } from '@/lib/logistics/drayage-client-cache';
 import type {
