@@ -1900,7 +1900,13 @@ export default function DrayageAssignmentPage() {
           </div>
         ) : (
           <div className="space-y-0.5">
-            <span className="text-amber-400 text-[11px] font-medium block">
+            <span
+              className={`text-[11px] font-semibold block ${
+                reassignState.reassignLabel === 'FCL_Reassign to Yard'
+                  ? 'text-purple-400'
+                  : 'text-amber-400'
+              }`}
+            >
               {reassignState.canReassign && reassignState.reassignLabel
                 ? `Awaiting ${reassignState.reassignLabel}`
                 : 'Pending Assignment'}
@@ -2006,6 +2012,7 @@ export default function DrayageAssignmentPage() {
         // 2. Eligible for Directional Reassign (Placed at Yard -> to Ramp; OR Placed at Ramp + 1st Alert -> to Yard)
         if (reassignState.canReassign && reassignState.reassignLabel) {
           const isToRamp = reassignState.originLocation === 'YARD';
+          const isFclToYard = reassignState.reassignLabel === 'FCL_Reassign to Yard';
           return (
             <div className="flex items-center justify-end gap-1.5">
               {editBtn}
@@ -2015,7 +2022,9 @@ export default function DrayageAssignmentPage() {
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors whitespace-nowrap shadow-sm ${
                   isToRamp
                     ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30'
-                    : 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                    : isFclToYard
+                      ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 hover:bg-purple-500/30'
+                      : 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
                 }`}
                 title={`Reassign Prime Mover & Driver (${reassignState.reassignLabel})`}
               >
@@ -3813,6 +3822,23 @@ export default function DrayageAssignmentPage() {
         gridName="DrayageAssignmentGrid"
         numbered={true}
         selectable={true}
+        stickyBottomScrollbar={true}
+        tableMinWidth="1480px"
+        rowClassName={(job) => {
+          const evalState = evaluateDispatcherJobReassignState(job);
+          const normDisplay = (evalState.displayStatus || '')
+            .trim()
+            .toUpperCase()
+            .replace(/_/g, ' ');
+          const rawUpper = (job.status || '').trim().toUpperCase().replace(/_/g, ' ');
+          if (normDisplay === 'MT REASSIGN TO YARD' || rawUpper === 'MT REASSIGN TO YARD' || rawUpper === 'MT REASSIGN') {
+            return 'row-mt-reassign-yard';
+          }
+          if (normDisplay === 'FCL REASSIGN TO YARD' || rawUpper === 'FCL REASSIGN TO YARD' || rawUpper === 'FCL REASSIGN') {
+            return 'row-fcl-reassign-yard';
+          }
+          return '';
+        }}
         selectedIds={new Set(selectedJobIds)}
         onSelectionChange={(ids) =>
           setSelectedJobIds(
@@ -3831,7 +3857,23 @@ export default function DrayageAssignmentPage() {
           exportCsv: true,
           exportName: 'drayage_job_assignment',
           actions: (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 mr-1">
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40"
+                  title="Rows highlighted in Amber indicate MT Reassign to Yard"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                  <span>MT Reassign to Yard</span>
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/40"
+                  title="Rows highlighted in Purple indicate FCL Reassign to Yard"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
+                  <span>FCL Reassign to Yard</span>
+                </span>
+              </div>
               {completedJobsCount > 0 && (
                 <button
                   type="button"

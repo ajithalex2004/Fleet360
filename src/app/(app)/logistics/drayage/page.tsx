@@ -447,8 +447,15 @@ export default function DrayageDashboardPage() {
             <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
               {data?.jobs.slice(0, 8).map((j) => {
                 const canTriggerL2 = j.jobPhase === 'L1' && (j.trailerDetached || j.status === 'CONTAINER_DETACHED' || j.status === 'PLACED_AT_RAMP') && !j.l2Activated;
+                const normStatus = (j.status || '').trim().toUpperCase().replace(/_/g, ' ');
+                const rowHighlight =
+                  normStatus === 'MT REASSIGN TO YARD' || normStatus === 'MT REASSIGN'
+                    ? 'row-mt-reassign-yard'
+                    : normStatus === 'FCL REASSIGN TO YARD' || normStatus === 'FCL REASSIGN'
+                      ? 'row-fcl-reassign-yard'
+                      : 'hover:bg-[var(--bg-surface-hover)]';
                 return (
-                  <tr key={j.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <tr key={j.id} className={`${rowHighlight} transition-colors`}>
                     <td className="py-3 px-3">
                       <div className="font-bold font-mono text-[var(--text-main)] flex items-center gap-1.5">
                         <span>{j.jobCode}</span>
