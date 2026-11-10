@@ -3995,7 +3995,7 @@ export default function DrayageAssignmentPage() {
         numbered={true}
         selectable={true}
         stickyBottomScrollbar={true}
-        tableMinWidth="1480px"
+        tableMinWidth="max(2100px, calc(100% + 520px))"
         rowClassName={(job) => {
           const evalState = evaluateDispatcherJobReassignState(job);
           const normDisplay = (evalState.displayStatus || '')

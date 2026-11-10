@@ -290,8 +290,9 @@ export default function FleetDataGrid<T>({
   // Horizontal scroll synchronization refs & state (single bottom horizontal scrollbar)
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomScrollRef = useRef<HTMLDivElement | null>(null);
-  const fixedBottomScrollRef = useRef<HTMLDivElement | null>(null);
-  const syncingRef = useRef<'table' | 'bottom' | 'fixed' | null>(null);
+  const syncingRef = useRef<'table' | 'bottom' | 'button' | null>(null);
+  const syncTimerRef = useRef<number | null>(null);
+  const buttonAnimFrameRef = useRef<number | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState<{
     scrollLeft: number;
     scrollWidth: number;
@@ -301,7 +302,7 @@ export default function FleetDataGrid<T>({
     showFixedBottomDock: boolean;
   }>({
     scrollLeft: 0,
-    scrollWidth: 1400,
+    scrollWidth: 1960,
     clientWidth: 1000,
     dockLeft: 0,
     dockWidth: 0,
@@ -390,11 +391,17 @@ export default function FleetDataGrid<T>({
       dockWidth: Math.max(240, rect.width),
       showFixedBottomDock: Boolean(stickyBottomScrollbar && isGridInViewport && isBottomBelowFold),
     });
-    if (bottomScrollRef.current && syncingRef.current !== 'bottom') {
-      bottomScrollRef.current.scrollLeft = sl;
-    }
-    if (fixedBottomScrollRef.current && syncingRef.current !== 'fixed') {
-      fixedBottomScrollRef.current.scrollLeft = sl;
+    if (bottomScrollRef.current && syncingRef.current === null) {
+      const maxTable = Math.max(1, sw - cw);
+      const ratio = Math.max(0, Math.min(1, sl / maxTable));
+      const maxBar = Math.max(
+        0,
+        bottomScrollRef.current.scrollWidth - bottomScrollRef.current.clientWidth,
+      );
+      const targetBarLeft = Math.round(ratio * maxBar);
+      if (Math.abs(bottomScrollRef.current.scrollLeft - targetBarLeft) >= 1) {
+        bottomScrollRef.current.scrollLeft = targetBarLeft;
+      }
     }
   }, [stickyBottomScrollbar]);
 
@@ -410,65 +417,137 @@ export default function FleetDataGrid<T>({
       if (tbl) ro.observe(tbl);
     }
 
-    const onWindowScrollOrResize = () => updateScrollMeasurement();
+    const onWindowScrollOrResize = (e?: Event) => {
+      // Never intercept horizontal scroll events from our own table or bottom scrollbar!
+      if (
+        e &&
+        (e.target === tableScrollRef.current || e.target === bottomScrollRef.current)
+      ) {
+        return;
+      }
+      updateScrollMeasurement();
+    };
     window.addEventListener('resize', onWindowScrollOrResize, { passive: true });
     window.addEventListener('scroll', onWindowScrollOrResize, true);
     return () => {
       ro?.disconnect();
       window.removeEventListener('resize', onWindowScrollOrResize);
       window.removeEventListener('scroll', onWindowScrollOrResize, true);
+      if (syncTimerRef.current != null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+      if (buttonAnimFrameRef.current != null) {
+        cancelAnimationFrame(buttonAnimFrameRef.current);
+      }
     };
   }, [updateScrollMeasurement, processed.length, visibleColumns.length, dense]);
 
   const handleTableHorizontalScroll = () => {
     const el = tableScrollRef.current;
     if (!el) return;
-    if (syncingRef.current === 'bottom' || syncingRef.current === 'fixed') return;
+    if (syncingRef.current === 'bottom' || syncingRef.current === 'button') return;
     syncingRef.current = 'table';
+    if (syncTimerRef.current != null) {
+      window.clearTimeout(syncTimerRef.current);
+    }
     const sl = el.scrollLeft;
-    if (bottomScrollRef.current) bottomScrollRef.current.scrollLeft = sl;
-    if (fixedBottomScrollRef.current) fixedBottomScrollRef.current.scrollLeft = sl;
+    const maxTable = Math.max(1, el.scrollWidth - el.clientWidth);
+    const ratio = Math.max(0, Math.min(1, sl / maxTable));
+    if (bottomScrollRef.current) {
+      const maxBar = Math.max(
+        0,
+        bottomScrollRef.current.scrollWidth - bottomScrollRef.current.clientWidth,
+      );
+      const nextBarLeft = Math.round(ratio * maxBar);
+      if (Math.abs(bottomScrollRef.current.scrollLeft - nextBarLeft) >= 1) {
+        bottomScrollRef.current.scrollLeft = nextBarLeft;
+      }
+    }
     setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
-    requestAnimationFrame(() => {
+    syncTimerRef.current = window.setTimeout(() => {
       syncingRef.current = null;
-    });
+      syncTimerRef.current = null;
+    }, 120);
   };
 
   const handleBottomBarScroll = () => {
     const bar = bottomScrollRef.current;
     const el = tableScrollRef.current;
     if (!bar || !el) return;
-    if (syncingRef.current === 'table' || syncingRef.current === 'fixed') return;
+    if (syncingRef.current === 'table' || syncingRef.current === 'button') return;
     syncingRef.current = 'bottom';
-    const sl = bar.scrollLeft;
-    el.scrollLeft = sl;
-    if (fixedBottomScrollRef.current) fixedBottomScrollRef.current.scrollLeft = sl;
-    setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
-    requestAnimationFrame(() => {
+    if (syncTimerRef.current != null) {
+      window.clearTimeout(syncTimerRef.current);
+    }
+    const maxBar = Math.max(1, bar.scrollWidth - bar.clientWidth);
+    const maxTable = Math.max(0, el.scrollWidth - el.clientWidth);
+    const ratio = Math.max(0, Math.min(1, bar.scrollLeft / maxBar));
+    const nextTableLeft = Math.round(ratio * maxTable);
+    if (Math.abs(el.scrollLeft - nextTableLeft) >= 1) {
+      el.scrollLeft = nextTableLeft;
+    }
+    setScrollMetrics(prev => ({ ...prev, scrollLeft: nextTableLeft }));
+    syncTimerRef.current = window.setTimeout(() => {
       syncingRef.current = null;
-    });
-  };
-
-  const handleFixedBottomBarScroll = () => {
-    const bar = fixedBottomScrollRef.current;
-    const el = tableScrollRef.current;
-    if (!bar || !el) return;
-    if (syncingRef.current === 'table' || syncingRef.current === 'bottom') return;
-    syncingRef.current = 'fixed';
-    const sl = bar.scrollLeft;
-    el.scrollLeft = sl;
-    if (bottomScrollRef.current) bottomScrollRef.current.scrollLeft = sl;
-    setScrollMetrics(prev => ({ ...prev, scrollLeft: sl }));
-    requestAnimationFrame(() => {
-      syncingRef.current = null;
-    });
+      syncTimerRef.current = null;
+    }, 120);
   };
 
   const scrollHorizontallyBy = (deltaPx: number) => {
     const el = tableScrollRef.current;
     if (!el) return;
-    const next = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + deltaPx));
-    el.scrollTo({ left: next, behavior: 'smooth' });
+    if (buttonAnimFrameRef.current != null) {
+      cancelAnimationFrame(buttonAnimFrameRef.current);
+      buttonAnimFrameRef.current = null;
+    }
+    if (syncTimerRef.current != null) {
+      window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    syncingRef.current = 'button';
+
+    const startLeft = el.scrollLeft;
+    const maxTable = Math.max(0, el.scrollWidth - el.clientWidth);
+    const targetLeft = Math.max(0, Math.min(maxTable, startLeft + deltaPx));
+    const distance = targetLeft - startLeft;
+
+    if (Math.abs(distance) < 1) {
+      syncingRef.current = null;
+      return;
+    }
+
+    const durationMs = 180;
+    const startTime = performance.now();
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const nextLeft = Math.round(startLeft + distance * eased);
+
+      el.scrollLeft = nextLeft;
+      const ratio = maxTable > 0 ? nextLeft / maxTable : 0;
+      if (bottomScrollRef.current) {
+        const maxBar = Math.max(
+          0,
+          bottomScrollRef.current.scrollWidth - bottomScrollRef.current.clientWidth,
+        );
+        bottomScrollRef.current.scrollLeft = Math.round(ratio * maxBar);
+      }
+      setScrollMetrics(prev => ({ ...prev, scrollLeft: nextLeft }));
+
+      if (t < 1) {
+        buttonAnimFrameRef.current = requestAnimationFrame(step);
+      } else {
+        buttonAnimFrameRef.current = null;
+        syncTimerRef.current = window.setTimeout(() => {
+          syncingRef.current = null;
+          syncTimerRef.current = null;
+        }, 80);
+      }
+    };
+
+    buttonAnimFrameRef.current = requestAnimationFrame(step);
   };
 
   const activeFilterCount =
@@ -550,7 +629,13 @@ export default function FleetDataGrid<T>({
   const title = tb.title ?? gridName;
 
   const hasHeader = (kpis && kpis.length > 0) || (filterChips && filterChips.length > 0);
-  const effectiveMinWidth = tableMinWidth ?? (visibleColumns.length >= 7 ? '1380px' : undefined);
+  const effectiveMinWidth =
+    tableMinWidth ??
+    (stickyBottomScrollbar
+      ? 'max(2100px, calc(100% + 520px))'
+      : visibleColumns.length >= 7
+        ? '1380px'
+        : undefined);
   const isCustomColumnOrder = useMemo(() => {
     const def = columns.map((c) => c.key);
     return def.length === columnOrder.length && def.some((k, idx) => columnOrder[idx] !== k);
@@ -1006,76 +1091,62 @@ export default function FleetDataGrid<T>({
         </table>
       </div>
 
-      {/* Single Inline Horizontal Scrollbar at Bottom of Table (shown when fixed bottom dock is not active) */}
-      {stickyBottomScrollbar && !scrollMetrics.showFixedBottomDock && (
-        <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/80">
-          <button
-            type="button"
-            onClick={() => scrollHorizontallyBy(-280)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
-            title="Scroll table left"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Left</span>
-          </button>
+      {/* Single Persistent Horizontal Scrollbar (Floats at Bottom of Screen when table bottom is below fold, or docks inline at table bottom) */}
+      {stickyBottomScrollbar && (
+        <>
+          {scrollMetrics.showFixedBottomDock && <div className="h-10" aria-hidden="true" />}
           <div
-            ref={bottomScrollRef}
-            onScroll={handleBottomBarScroll}
-            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-4"
+            style={
+              scrollMetrics.showFixedBottomDock
+                ? {
+                    left: `${scrollMetrics.dockLeft}px`,
+                    width: `${scrollMetrics.dockWidth}px`,
+                  }
+                : undefined
+            }
+            className={
+              scrollMetrics.showFixedBottomDock
+                ? 'fixed bottom-0 z-30 flex items-center gap-2.5 px-3 py-1.5 rounded-t-xl border border-b-0 border-blue-500/40 bg-[var(--bg-surface)]/95 backdrop-blur-md shadow-2xl'
+                : 'flex items-center gap-2.5 px-3 py-1.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/80'
+            }
           >
-            <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 240)}px`, height: '1px' }} />
+            <button
+              type="button"
+              onClick={() => scrollHorizontallyBy(-320)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 active:scale-95 shrink-0 transition-all shadow-sm cursor-pointer"
+              title="Scroll table left"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Left</span>
+            </button>
+
+            <div
+              ref={bottomScrollRef}
+              onScroll={handleBottomBarScroll}
+              className="flex-1 overflow-x-scroll fleet-grid-hscroll h-5 min-w-0 cursor-pointer"
+            >
+              <div
+                style={{
+                  width: `calc(100% + ${Math.max(520, scrollMetrics.scrollWidth - scrollMetrics.clientWidth)}px)`,
+                  height: '1px',
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => scrollHorizontallyBy(320)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 active:scale-95 shrink-0 transition-all shadow-sm cursor-pointer"
+              title="Scroll table right"
+            >
+              <span>Right</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => scrollHorizontallyBy(280)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
-            title="Scroll table right"
-          >
-            <span>Right</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        </>
       )}
       </div>
-
-      {/* Single Fixed Bottom-of-Screen Horizontal Scrollbar Dock when the table list is taller than the screen */}
-      {scrollMetrics.showFixedBottomDock && (
-        <div
-          style={{
-            left: `${scrollMetrics.dockLeft}px`,
-            width: `${scrollMetrics.dockWidth}px`,
-          }}
-          className="fixed bottom-0 z-30 flex items-center gap-2.5 px-3 py-1.5 rounded-t-xl border border-b-0 border-blue-500/40 bg-[var(--bg-surface)]/95 backdrop-blur-md shadow-2xl"
-        >
-          <button
-            type="button"
-            onClick={() => scrollHorizontallyBy(-300)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
-            title="Scroll table left"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Left</span>
-          </button>
-
-          <div
-            ref={fixedBottomScrollRef}
-            onScroll={handleFixedBottomBarScroll}
-            className="flex-1 overflow-x-scroll fleet-grid-hscroll h-4 min-w-0"
-          >
-            <div style={{ width: `${Math.max(scrollMetrics.scrollWidth, scrollMetrics.clientWidth + 260)}px`, height: '1px' }} />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => scrollHorizontallyBy(300)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shrink-0 transition-colors shadow-sm"
-            title="Scroll table right"
-          >
-            <span>Right</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }
