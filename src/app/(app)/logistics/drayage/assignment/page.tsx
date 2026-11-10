@@ -33,6 +33,10 @@ import {
   MoreVertical,
   Pencil,
   Lock,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { PageHeader, KpiCard, StatusPill } from '@/components/ui/page-theme';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -376,8 +380,28 @@ export default function DrayageAssignmentPage() {
   const [editJobTarget, setEditJobTarget] = useState<DrayageJob | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
 
-  // Smart Analysis UI state
-  const [showSmartAnalysis, setShowSmartAnalysis] = useState(true);
+  // Smart Analysis UI state (Show / Hide Widgets toggle)
+  const [showSmartAnalysis, setShowSmartAnalysis] = useState<boolean>(true);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem('fleet360_drayage_show_smart_analysis');
+      if (saved === 'false') setShowSmartAnalysis(false);
+      else if (saved === 'true') setShowSmartAnalysis(true);
+    } catch {}
+  }, []);
+
+  const handleToggleSmartAnalysis = useCallback((nextVal?: boolean) => {
+    setShowSmartAnalysis((prev) => {
+      const resolved = typeof nextVal === 'boolean' ? nextVal : !prev;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('fleet360_drayage_show_smart_analysis', String(resolved));
+        } catch {}
+      }
+      return resolved;
+    });
+  }, []);
   const [showUrgentDemurrageAlert, setShowUrgentDemurrageAlert] = useState(false);
   const [smartAnalysisFilter, setSmartAnalysisFilter] = useState<
     'ALL' | 'BOGIE' | 'STREET_TURN' | 'BACKHAUL_HOLD'
@@ -3330,15 +3354,21 @@ export default function DrayageAssignmentPage() {
             </button>
 
             <button
-              onClick={() => setShowSmartAnalysis((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+              type="button"
+              onClick={() => handleToggleSmartAnalysis()}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm cursor-pointer ${
                 showSmartAnalysis
-                  ? 'bg-blue-600 text-white shadow-blue-500/20'
+                  ? 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-500'
                   : 'bg-[var(--bg-surface)] border border-blue-500/40 text-blue-400 hover:bg-blue-500/10'
               }`}
+              title={showSmartAnalysis ? 'Hide Smart Analysis Widgets' : 'Show Smart Analysis Widgets'}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Smart Analysis</span>
+              {showSmartAnalysis ? (
+                <EyeOff className="w-3.5 h-3.5" />
+              ) : (
+                <Eye className="w-3.5 h-3.5" />
+              )}
+              <span>{showSmartAnalysis ? 'Hide Smart Analysis' : 'Show Smart Analysis'}</span>
               {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white text-blue-900 font-bold ml-0.5">
                   {bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length}
@@ -3409,32 +3439,40 @@ export default function DrayageAssignmentPage() {
       {/* =========================================================================
           SMART ANALYSIS ENGINE PANEL (BOGIE + STREET TURN + DEMURRAGE RESCUE)
           ========================================================================= */}
-      {showSmartAnalysis && (
-        <div className="rounded-xl bg-gradient-to-br from-blue-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-blue-500/30 p-3 space-y-2.5 shadow-xl">
-          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2 border-b border-blue-500/20 pb-2.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
-                <Sparkles className="w-4 h-4 text-blue-300" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
-                    Smart Drayage Analysis & Optimizer
-                  </h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white whitespace-nowrap shadow-sm">
-                    Dual-20FT · Street Turn · 3-Leg Chain
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] leading-tight mt-0.5">
-                  AI corridor pairing eliminates empty gate runs, bundles 2x20FT containers, holds deadhead L2s, and prioritizes expiring DOs.
-                </p>
-              </div>
+      <div className="rounded-xl bg-gradient-to-br from-blue-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-blue-500/30 p-3 space-y-2.5 shadow-xl">
+        <div
+          className={`flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2 ${
+            showSmartAnalysis ? 'border-b border-blue-500/20 pb-2.5' : ''
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+              <Sparkles className="w-4 h-4 text-blue-300" />
             </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
+                  Smart Drayage Analysis & Optimizer
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white whitespace-nowrap shadow-sm">
+                  Dual-20FT · Street Turn · 3-Leg Chain
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] leading-tight mt-0.5">
+                AI corridor pairing eliminates empty gate runs, bundles 2x20FT containers, holds deadhead L2s, and prioritizes expiring DOs.
+              </p>
+            </div>
+          </div>
 
-            {/* Single-Row Filter Pills */}
+          {/* Filter Pills + Show/Hide Widgets Toggle Button */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <div className="flex items-center gap-1 bg-[var(--bg-main)] p-1 rounded-lg border border-[var(--border-subtle)] overflow-x-auto w-fit max-w-full shrink-0">
               <button
-                onClick={() => setSmartAnalysisFilter('ALL')}
+                type="button"
+                onClick={() => {
+                  setSmartAnalysisFilter('ALL');
+                  if (!showSmartAnalysis) handleToggleSmartAnalysis(true);
+                }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'ALL'
                     ? 'bg-blue-600 text-white shadow-sm'
@@ -3444,7 +3482,11 @@ export default function DrayageAssignmentPage() {
                 All Matches ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length})
               </button>
               <button
-                onClick={() => setSmartAnalysisFilter('BOGIE')}
+                type="button"
+                onClick={() => {
+                  setSmartAnalysisFilter('BOGIE');
+                  if (!showSmartAnalysis) handleToggleSmartAnalysis(true);
+                }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BOGIE'
                     ? 'bg-blue-600 text-white shadow-sm'
@@ -3454,7 +3496,11 @@ export default function DrayageAssignmentPage() {
                 Dual-20FT Bogie ({bogieCombos.length})
               </button>
               <button
-                onClick={() => setSmartAnalysisFilter('STREET_TURN')}
+                type="button"
+                onClick={() => {
+                  setSmartAnalysisFilter('STREET_TURN');
+                  if (!showSmartAnalysis) handleToggleSmartAnalysis(true);
+                }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'STREET_TURN'
                     ? 'bg-blue-600 text-white shadow-sm'
@@ -3464,7 +3510,11 @@ export default function DrayageAssignmentPage() {
                 Street Turns & Chains ({streetTurnPairs.length})
               </button>
               <button
-                onClick={() => setSmartAnalysisFilter('BACKHAUL_HOLD')}
+                type="button"
+                onClick={() => {
+                  setSmartAnalysisFilter('BACKHAUL_HOLD');
+                  if (!showSmartAnalysis) handleToggleSmartAnalysis(true);
+                }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BACKHAUL_HOLD'
                     ? 'bg-amber-600 text-white shadow-sm'
@@ -3474,9 +3524,38 @@ export default function DrayageAssignmentPage() {
                 Smart Backhaul Hold ({smartBackhaulHoldJobs.length})
               </button>
             </div>
-          </div>
 
-          {/* Cards Grid */}
+            <button
+              type="button"
+              onClick={() => handleToggleSmartAnalysis()}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer ${
+                showSmartAnalysis
+                  ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-600'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25'
+              }`}
+              title={showSmartAnalysis ? 'Hide Smart Analysis Widgets' : 'Show Smart Analysis Widgets'}
+            >
+              {showSmartAnalysis ? (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span>Hide Widgets</span>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>
+                    Show Widgets ({bogieCombos.length + streetTurnPairs.length + smartBackhaulHoldJobs.length})
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Cards Grid (Collapsible via Show / Hide Widgets toggle) */}
+        {showSmartAnalysis && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
             {/* 1. Dual-20FT Bogie Combos */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BOGIE') &&
@@ -3808,8 +3887,8 @@ export default function DrayageAssignmentPage() {
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* =========================================================================
           URGENT DEMURRAGE ALERT PANEL (Shown ONLY when clicking Urgent Demurrage Alert button at top)
