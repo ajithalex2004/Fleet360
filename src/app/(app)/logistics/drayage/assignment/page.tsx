@@ -3229,32 +3229,32 @@ export default function DrayageAssignmentPage() {
           SMART ANALYSIS ENGINE PANEL (BOGIE + STREET TURN + DEMURRAGE RESCUE)
           ========================================================================= */}
       {showSmartAnalysis && (
-        <div className="rounded-2xl bg-gradient-to-br from-blue-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-blue-500/30 p-5 space-y-4 shadow-xl">
-          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 border-b border-blue-500/20 pb-4">
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
-                <Sparkles className="w-5 h-5 text-blue-300" />
+        <div className="rounded-xl bg-gradient-to-br from-blue-950/30 via-[var(--bg-surface)] to-[var(--bg-surface)] border border-blue-500/30 p-3 space-y-2.5 shadow-xl">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2 border-b border-blue-500/20 pb-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+                <Sparkles className="w-4 h-4 text-blue-300" />
               </div>
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-bold text-[var(--text-main)] whitespace-nowrap">
                     Smart Drayage Analysis & Optimizer
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-600 text-white whitespace-nowrap shadow-sm">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white whitespace-nowrap shadow-sm">
                     Dual-20FT · Street Turn · 3-Leg Chain
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-1">
+                <p className="text-[11px] text-[var(--text-muted)] leading-tight mt-0.5">
                   AI corridor pairing eliminates empty gate runs, bundles 2x20FT containers, holds deadhead L2s, and prioritizes expiring DOs.
                 </p>
               </div>
             </div>
 
             {/* Single-Row Filter Pills */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-subtle)] overflow-x-auto w-fit max-w-full shrink-0">
+            <div className="flex items-center gap-1 bg-[var(--bg-main)] p-1 rounded-lg border border-[var(--border-subtle)] overflow-x-auto w-fit max-w-full shrink-0">
               <button
                 onClick={() => setSmartAnalysisFilter('ALL')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'ALL'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
@@ -3264,7 +3264,7 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BOGIE')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BOGIE'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
@@ -3274,7 +3274,7 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('STREET_TURN')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'STREET_TURN'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
@@ -3284,7 +3284,7 @@ export default function DrayageAssignmentPage() {
               </button>
               <button
                 onClick={() => setSmartAnalysisFilter('BACKHAUL_HOLD')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   smartAnalysisFilter === 'BACKHAUL_HOLD'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'text-amber-500 hover:text-amber-400'
@@ -3296,26 +3296,26 @@ export default function DrayageAssignmentPage() {
           </div>
 
           {/* Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
             {/* 1. Dual-20FT Bogie Combos */}
             {(smartAnalysisFilter === 'ALL' || smartAnalysisFilter === 'BOGIE') &&
               bogieCombos.map((combo) => (
                 <div
                   key={combo.id}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-blue-500/30 p-4 space-y-3 hover:border-blue-500/60 transition-all flex flex-col justify-between shadow-sm"
+                  className="rounded-xl bg-[var(--bg-surface)] border border-blue-500/30 p-2.5 space-y-1.5 hover:border-blue-500/60 transition-all flex flex-col justify-between shadow-sm"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
-                        <Layers className="w-3 h-3" />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 whitespace-nowrap">
+                        <Layers className="w-3 h-3 shrink-0" />
                         Dual-20FT Bogie Combo
                       </span>
-                      <span className="text-[10px] font-mono font-bold text-blue-400">
+                      <span className="text-[11px] font-mono font-bold text-blue-400 whitespace-nowrap shrink-0">
                         Score: {combo.score}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg">
+                    <div className="flex items-center justify-between gap-1 text-[10px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-md">
                       <span className="flex items-center gap-1 truncate">
                         <Clock className="w-3 h-3 shrink-0" />
                         <span>{combo.tasSlot} TAS Slot</span>
@@ -3326,29 +3326,23 @@ export default function DrayageAssignmentPage() {
                     </div>
 
                     {/* Weight & Road Legal Safety Gauge */}
-                    <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px]">
+                    <div className="px-2 py-1 rounded-md bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
                         <span className="text-[var(--text-muted)] flex items-center gap-1">
                           <Scale className="w-3 h-3 text-indigo-400" />
-                          <span>Combined Payload:</span>
+                          <span>Payload: {(combo.totalPayloadKg / 1000).toFixed(1)}T / {(combo.weightLimitKg / 1000).toFixed(1)}T</span>
                         </span>
-                        <span className={`font-mono font-bold ${combo.isWeightCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {(combo.totalPayloadKg / 1000).toFixed(1)}T / {(combo.weightLimitKg / 1000).toFixed(1)}T
+                        <span className={`font-semibold ${combo.isWeightCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {combo.isWeightCompliant ? '✓ RTA 36T Legal' : '⚠️ Overweight'} ({combo.weightUtilizationPct}%)
                         </span>
                       </div>
-                      <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-neutral-800 h-1 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
                             combo.isWeightCompliant ? 'bg-emerald-500' : 'bg-rose-500'
                           }`}
                           style={{ width: `${Math.min(100, combo.weightUtilizationPct)}%` }}
                         />
-                      </div>
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className={`font-semibold ${combo.isWeightCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {combo.isWeightCompliant ? '✓ UAE RTA 36T Road Legal' : '⚠️ Overweight Road Violation'}
-                        </span>
-                        <span className="text-[var(--text-muted)]">{combo.weightUtilizationPct}% GCW</span>
                       </div>
                     </div>
 
@@ -3358,64 +3352,48 @@ export default function DrayageAssignmentPage() {
                       const recVeh = vehicles.find((v) => v.id === rec.vehicleId);
                       const recTr = trailers.find((t) => t.id === rec.trailerId);
                       return (
-                        <div className="px-2 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 space-y-0.5">
-                          <div className="flex items-center justify-between font-bold">
-                            <span className="flex items-center gap-1">
-                              <Truck className="w-3 h-3 text-blue-400 shrink-0" />
-                              <span>Rec: {recVeh?.plateNumber || 'PRIME_MOVER'} + {recTr?.plateNumber || '40FT_FLATBED'}</span>
-                            </span>
-                            {rec.topScore && (
-                              <span className="text-emerald-400">{rec.topScore.totalScore}% Match</span>
-                            )}
-                          </div>
-                          <div className="text-[9px] text-[var(--text-muted)]">
-                            Chassis: {combo.chassisRequirement} · Zone: {combo.zone1}
-                          </div>
+                        <div className="px-2 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 flex items-center justify-between gap-1">
+                          <span className="flex items-center gap-1 font-bold truncate">
+                            <Truck className="w-3 h-3 text-blue-400 shrink-0" />
+                            <span className="truncate">Rec: {recVeh?.plateNumber || 'PRIME_MOVER'} + {recTr?.plateNumber || '40FT_FLATBED'}</span>
+                          </span>
+                          {rec.topScore && (
+                            <span className="text-emerald-400 font-bold shrink-0">{rec.topScore.totalScore}%</span>
+                          )}
                         </div>
                       );
                     })()}
 
                     {/* Drops Sequence */}
-                    <div className="space-y-2 pt-1 w-full">
-                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                        <div className="flex items-center justify-between text-sm font-mono font-bold text-[var(--text-main)]">
-                          <span>1. {combo.job1.containerNumber} (20FT)</span>
-                          <span className="text-xs text-emerald-400 font-normal">{(combo.box1WeightKg / 1000).toFixed(1)}T</span>
+                    <div className="space-y-1 w-full">
+                      <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="flex items-center justify-between gap-1.5 text-xs font-mono font-bold text-[var(--text-main)]">
+                          <span className="truncate">1. {combo.job1.containerNumber} (20FT)</span>
+                          <span className="text-[11px] text-emerald-400 font-normal shrink-0">{(combo.box1WeightKg / 1000).toFixed(1)}T</span>
                         </div>
-                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
+                        <div className="w-full text-[13px] font-semibold text-[var(--text-main)] leading-tight truncate">
                           {combo.job1.customerName} → {combo.job1.warehouseName} ({combo.zone1})
                         </div>
                       </div>
 
-                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                        <div className="flex items-center justify-between text-sm font-mono font-bold text-[var(--text-main)]">
-                          <span>2. {combo.job2.containerNumber} (20FT)</span>
-                          <span className="text-xs text-emerald-400 font-normal">{(combo.box2WeightKg / 1000).toFixed(1)}T</span>
+                      <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="flex items-center justify-between gap-1.5 text-xs font-mono font-bold text-[var(--text-main)]">
+                          <span className="truncate">2. {combo.job2.containerNumber} (20FT)</span>
+                          <span className="text-[11px] text-emerald-400 font-normal shrink-0">{(combo.box2WeightKg / 1000).toFixed(1)}T</span>
                         </div>
-                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
+                        <div className="w-full text-[13px] font-semibold text-[var(--text-main)] leading-tight truncate">
                           {combo.job2.customerName} → {combo.job2.warehouseName} ({combo.zone2})
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div>
-                        <span className="text-[var(--text-muted)] block text-[10px]">Combined Revenue</span>
-                        <span className="font-bold text-emerald-400">AED {combo.combinedRevenueAed.toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="text-[var(--text-muted)] block text-[10px]">Driver Allowance</span>
-                        <span className="font-bold text-[var(--text-main)]">AED {combo.combinedAllowanceAed.toLocaleString()}</span>
-                      </div>
-                    </div>
-
+                  <div className="pt-1 space-y-1.5">
                     <button
                       onClick={() => handleUseBogiePair(combo)}
-                      className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 text-white text-xs sm:text-sm font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition-colors shadow-sm"
                     >
-                      <Sparkles className="w-4 h-4" />
+                      <Sparkles className="w-3.5 h-3.5" />
                       ⚡ Dispatch Job
                     </button>
                   </div>
@@ -3427,86 +3405,84 @@ export default function DrayageAssignmentPage() {
               streetTurnPairs.map((pair) => (
                 <div
                   key={pair.id}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-emerald-500/30 p-4 space-y-3 hover:border-emerald-500/60 transition-all flex flex-col justify-between shadow-sm"
+                  className="rounded-xl bg-[var(--bg-surface)] border border-emerald-500/30 p-2.5 space-y-1.5 hover:border-emerald-500/60 transition-all flex flex-col justify-between shadow-sm"
                 >
-                  <div className="space-y-2.5 w-full">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        {pair.matchMode === 'DAISY_CHAIN_3LEG'
-                          ? '3-Leg Daisy-Chain Triangulation'
-                          : pair.matchMode === 'PORT_TERMINAL_RELOAD'
-                            ? 'Port Terminal Reload (0 km Handoff)'
-                            : 'Street-Turn (Import ➔ Export)'}
+                  <div className="space-y-1.5 w-full">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 truncate">
+                        <TrendingUp className="w-3 h-3 shrink-0" />
+                        <span className="truncate">
+                          {pair.matchMode === 'DAISY_CHAIN_3LEG'
+                            ? '3-Leg Daisy-Chain'
+                            : pair.matchMode === 'PORT_TERMINAL_RELOAD'
+                              ? 'Port Terminal Reload (0 km Handoff)'
+                              : 'Street-Turn (Import ➔ Export)'}
+                        </span>
                       </span>
-                      <span className="text-xs font-mono font-bold text-emerald-400">
+                      <span className="text-[11px] font-mono font-bold text-emerald-400 whitespace-nowrap shrink-0">
                         Score: {pair.score}
                       </span>
                     </div>
 
-                    {/* Carrier Line, Size & Grade Match Badge */}
-                    <div className="w-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-emerald-400 font-bold flex items-center gap-1.5 text-sm">
-                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                          {pair.shippingLine} Line ({pair.carrierPrefix})
-                        </span>
-                        <span className="font-mono text-xs font-bold text-[var(--text-main)]">
-                          {pair.containerSize} · {pair.containerType || 'DRY'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-emerald-300/90 font-medium">
-                        ✓ {pair.containerGrade}
-                      </div>
+                    {/* Carrier Line, Size & Grade Match Badge (Single Compact Row) */}
+                    <div className="w-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center justify-between gap-2 text-xs">
+                      <span className="text-emerald-400 font-bold flex items-center gap-1 truncate">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{pair.shippingLine} Line ({pair.carrierPrefix})</span>
+                        <span className="text-[10px] text-emerald-300/90 font-medium truncate">· ✓ Grade A</span>
+                      </span>
+                      <span className="font-mono text-[11px] font-bold text-[var(--text-main)] whitespace-nowrap shrink-0">
+                        {pair.containerSize} · {pair.containerType || 'DRY'}
+                      </span>
                     </div>
 
-                    <div className="space-y-2.5 pt-1 w-full">
+                    <div className="space-y-1 w-full">
                       {/* Leg 1: L1 Placed at Ramp / Detached or L2 Inbound Empty Box */}
-                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span className="font-bold text-amber-400 leading-snug">
+                      <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="flex items-center justify-between gap-1.5 text-xs">
+                          <span className="font-bold text-amber-400 truncate">
                             {pair.sourcePhase === 'L1_RAMP'
                               ? pair.inboundJob.trailerDetached ||
                                 ['TRAILER_DETACHED', 'REASSIGN_TRAILER_DETACHED', 'READY_FOR_PICKUP'].includes(
                                   pair.inboundJob.status,
                                 )
-                                ? `1. L1 Trailer Detached / Empty Ready (${pair.inboundJob.jobCode})`
+                                ? `1. L1 Detached (${pair.inboundJob.jobCode})`
                                 : `1. L1 Placed at Ramp (${pair.inboundJob.jobCode})`
                               : `1. L2 Empty Return (${pair.inboundJob.jobCode})`}
                           </span>
-                          <span className="font-mono font-bold text-sm text-[var(--text-main)]">{pair.inboundJob.containerNumber}</span>
+                          <span className="font-mono font-bold text-xs text-[var(--text-main)] shrink-0">{pair.inboundJob.containerNumber}</span>
                         </div>
-                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
+                        <div className="w-full text-[13px] font-semibold text-[var(--text-main)] leading-tight truncate">
                           {pair.originWarehouse} ➔ {pair.inboundJob.terminalName}
                         </div>
                       </div>
 
                       {/* Handoff Connector: Port Terminal Reload vs Direct Inland Repositioning */}
-                      <div className="w-full px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 font-medium leading-snug">
-                          <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>
+                      <div className="w-full px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center justify-between gap-1.5">
+                        <span className="flex items-center gap-1 font-medium truncate">
+                          <ArrowRight className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span className="truncate">
                             {pair.matchMode === 'INLAND_STREET_TURN'
-                              ? `Direct Match (${pair.interWarehouseDistanceKm} km · ≤ ${automationConfig.streetTurnRadiusKm || 15} km Radius)`
-                              : `Same-Terminal Reload @ ${pair.terminalName} (0.0 km Handoff · ${pair.tasSlot})`}
+                              ? `Direct Match (${pair.interWarehouseDistanceKm} km · ≤ ${automationConfig.streetTurnRadiusKm || 15} km)`
+                              : `Reload @ ${pair.terminalName} (0.0 km · ${pair.tasSlot})`}
                           </span>
                         </span>
-                        <span className="font-bold text-emerald-400 shrink-0">
+                        <span className="font-bold text-emerald-400 whitespace-nowrap shrink-0 text-[10px]">
                           {pair.matchMode === 'INLAND_STREET_TURN' ? 'Zero Port Return' : 'Dual TAS Pass'}
                         </span>
                       </div>
 
                       {/* Leg 2: Outbound L1 Import Full or Export Loading */}
-                      <div className="w-full p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span className="font-bold text-blue-400 leading-snug">
+                      <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5">
+                        <div className="flex items-center justify-between gap-1.5 text-xs">
+                          <span className="font-bold text-blue-400 truncate">
                             {pair.matchMode === 'INLAND_STREET_TURN'
                               ? '2. Outbound Export Loading'
                               : `2. L1 Import Full (${pair.exportJob.jobCode})`}
                           </span>
-                          <span className="font-mono font-bold text-sm text-[var(--text-main)]">{pair.exportJob.containerNumber}</span>
+                          <span className="font-mono font-bold text-xs text-[var(--text-main)] shrink-0">{pair.exportJob.containerNumber}</span>
                         </div>
-                        <div className="w-full text-sm font-semibold text-[var(--text-main)] leading-snug break-words">
+                        <div className="w-full text-[13px] font-semibold text-[var(--text-main)] leading-tight truncate">
                           {pair.matchMode === 'INLAND_STREET_TURN'
                             ? `${pair.destWarehouse} ➔ ${pair.terminalName}`
                             : `${pair.terminalName} ➔ ${pair.destWarehouse}`}
@@ -3516,23 +3492,23 @@ export default function DrayageAssignmentPage() {
                       {/* Leg 3: Optional 3-Leg Daisy-Chain Empty Return (e.g. JAFZA South -> T2) */}
                       {pair.leg3Job && (
                         <div
-                          className={`w-full p-3.5 rounded-xl border space-y-1.5 ${
+                          className={`w-full px-2.5 py-1 rounded-lg border space-y-0.5 ${
                             pair.holdLeg3Recommended
                               ? 'bg-amber-500/10 border-amber-500/30'
                               : 'bg-indigo-500/10 border-indigo-500/30'
                           }`}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className={`font-bold ${pair.holdLeg3Recommended ? 'text-amber-300' : 'text-indigo-300'}`}>
+                          <div className="flex items-center justify-between gap-1.5 text-xs">
+                            <span className={`font-bold truncate ${pair.holdLeg3Recommended ? 'text-amber-300' : 'text-indigo-300'}`}>
                               3. L2 Empty ({pair.leg3Job.jobCode})
                             </span>
-                            <span className="font-mono text-xs font-bold text-[var(--text-main)]">
+                            <span className="font-mono text-[11px] font-bold text-[var(--text-main)] truncate shrink-0">
                               {pair.leg3Job.warehouseName} ➔ {pair.leg3Job.terminalName}
                             </span>
                           </div>
-                          <div className="w-full text-xs text-[var(--text-muted)] leading-relaxed break-words">
+                          <div className="w-full text-[11px] text-[var(--text-muted)] leading-tight truncate">
                             {pair.holdLeg3Recommended
-                              ? `⏸️ Smart Advisory: ${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free time` : 'Safe DO'} & 0 backhaul at ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName}. Hold Leg 3 to avoid empty return deadhead.`
+                              ? `⏸️ Hold Leg 3 (${pair.leg3Risk ? `${Math.floor(pair.leg3Risk.hoursRemaining / 24)}d free` : 'Safe DO'} · 0 backhaul @ ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName})`
                               : `✓ Ready for 3-Leg Chain (${pair.leg3Job.containerNumber} ➔ ${pair.leg3Job.returnTerminalName || pair.leg3Job.terminalName})`}
                           </div>
                         </div>
@@ -3540,31 +3516,31 @@ export default function DrayageAssignmentPage() {
                     </div>
                   </div>
 
-                  {/* Dispatch Action Footer (Deadhead, Carbon Avoided, Direct Cost Saved & Turnaround Saved moved exclusively to Analytics per Job) */}
-                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
+                  {/* Dispatch Action Footer */}
+                  <div className="pt-1">
                     {pair.leg3Job ? (
-                      <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <button
                           onClick={() => handleUseStreetTurnPair(pair, true)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs sm:text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                          className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
                         >
-                          <Sparkles className="w-4 h-4" />
-                          ⚡ Dispatch Job
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">⚡ Dispatch Job</span>
                         </button>
                         <button
                           onClick={() => handleUseStreetTurnPair(pair, false)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold hover:bg-indigo-600/30 transition-colors"
+                          className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold hover:bg-indigo-600/30 transition-colors"
                         >
-                          <Truck className="w-3.5 h-3.5" />
-                          🔄 Dispatch Full 3-Leg Loop ({pair.inboundJob.jobCode} ➔ {pair.outboundJob.jobCode} ➔ {pair.leg3Job.jobCode})
+                          <Truck className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">🔄 3-Leg Loop</span>
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => handleUseStreetTurnPair(pair, false)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs sm:text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm"
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors shadow-sm"
                       >
-                        <Sparkles className="w-4 h-4" />
+                        <Sparkles className="w-3.5 h-3.5" />
                         ⚡ Dispatch Job
                       </button>
                     )}
@@ -3577,46 +3553,35 @@ export default function DrayageAssignmentPage() {
               smartBackhaulHoldJobs.map((item) => (
                 <div
                   key={`HOLD-${item.job.id}`}
-                  className="rounded-xl bg-[var(--bg-surface)] border border-amber-500/40 p-4 space-y-3 hover:border-amber-500/70 transition-all flex flex-col justify-between shadow-sm"
+                  className="rounded-xl bg-[var(--bg-surface)] border border-amber-500/40 p-2.5 space-y-1.5 hover:border-amber-500/70 transition-all flex flex-col justify-between shadow-sm"
                 >
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {item.isCurrentlyHeld ? '⏸️ On Smart Backhaul Hold' : 'Smart Backhaul Hold Advisor'}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 truncate">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{item.isCurrentlyHeld ? '⏸️ On Smart Backhaul Hold' : 'Smart Backhaul Hold Advisor'}</span>
                       </span>
-                      <span className="font-mono text-xs font-bold text-amber-400">{item.job.jobCode}</span>
+                      <span className="font-mono text-xs font-bold text-amber-400 shrink-0">{item.job.jobCode}</span>
                     </div>
 
-                    <div className="p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1 text-xs">
+                    <div className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-0.5 text-xs">
                       <div className="flex items-center justify-between font-mono font-bold text-[var(--text-main)]">
                         <span>{item.job.containerNumber} ({item.job.containerSize})</span>
                         <span className="text-[10px] text-emerald-400 font-sans">
                           {Math.floor(item.risk.hoursRemaining / 24)}d {item.risk.hoursRemaining % 24}h DO Free Time
                         </span>
                       </div>
-                      <div className="text-[11px] text-[var(--text-muted)] truncate">
+                      <div className="text-[13px] font-semibold text-[var(--text-main)] leading-tight truncate">
                         {item.job.warehouseName} ({item.zone}) ➔ {item.terminalName}
                       </div>
                     </div>
 
-                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 leading-relaxed">
+                    <div className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 leading-snug line-clamp-2">
                       {item.recommendationText}
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Empty Return Avoided</span>
-                        <span className="font-bold text-amber-400">{item.estimatedDeadheadKmAvoided} km from {item.terminalName}</span>
-                      </div>
-                      <div className="p-1.5 rounded bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                        <span className="text-[var(--text-muted)] block text-[9px]">Deadhead Cost Saved</span>
-                        <span className="font-bold text-emerald-400">AED {item.fuelRiskAvoidedAed}</span>
-                      </div>
-                    </div>
-
+                  <div className="pt-1">
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
