@@ -99,6 +99,8 @@ interface DrayageJob {
   customsInspection?: boolean;
   municipalityInspection?: boolean;
   cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
   pcsTokenNumber?: string | null;
   pcsSlotStart?: string | null;
   pcsSlotEnd?: string | null;
@@ -578,10 +580,33 @@ export default function DrayageAssignmentPage() {
   const [statusUpdateNotes, setStatusUpdateNotes] = useState<string>('');
   const [submittingStatusUpdate, setSubmittingStatusUpdate] = useState<boolean>(false);
 
+  const getActiveJobInspectionLabels = useCallback((job: DrayageJob): string[] => {
+    const labels: string[] = [];
+    if (job.customsInspection) labels.push('Dubai Customs');
+    if (job.municipalityInspection) labels.push('Dubai Municipality');
+    if (job.cpipInspection) labels.push('CPIP');
+    if (job.mercInspection) labels.push('Merc');
+    if (job.boxcareInspection) labels.push('Boxcare');
+    return labels;
+  }, []);
+
+  const doesJobRequireInspection = useCallback((job: DrayageJob): boolean => {
+    const hasAnyFlag = Boolean(
+      job.customsInspection ||
+        job.municipalityInspection ||
+        job.cpipInspection ||
+        job.mercInspection ||
+        job.boxcareInspection,
+    );
+    const inspUpper = String(job.inspectionStatus || '').toUpperCase();
+    return hasAnyFlag || ['HOLD_PENDING', 'INSPECTION_BOOKED', 'REJECTED'].includes(inspUpper);
+  }, []);
+
   const getRecommendedNextDriverStatus = useCallback((job: DrayageJob): { nextStatus: string; label: string; placement?: 'RAMP' | 'YARD' } => {
     const st = (job.status || 'ASSIGNED').toUpperCase();
     const isL2 = job.jobPhase === 'L2' || Boolean(job.jobCode && job.jobCode.includes('-L2'));
     const originLoc = (job.placementLocation || '').toUpperCase();
+    const requiresInspection = doesJobRequireInspection(job);
     if (st === 'RE-ASSIGNED' || st.includes('REASSIGN TO')) {
       return { nextStatus: 'TRAILER_ATTACHED', label: 'Trailer Attached (Coupled)' };
     }
@@ -608,7 +633,9 @@ export default function DrayageAssignmentPage() {
         case 'IN_TRANSIT':
           return { nextStatus: 'ARRIVED_AT_PORT', label: 'Arrived at Port Gate' };
         case 'ARRIVED_AT_PORT':
-          return { nextStatus: 'UNDER_INSPECTION', label: 'Under Port Gate Inspection' };
+          return requiresInspection
+            ? { nextStatus: 'UNDER_INSPECTION', label: 'Under Port Gate Inspection' }
+            : { nextStatus: 'CONTAINER_DROPPED', label: 'Container Dropped (No Inspection)' };
         case 'UNDER_INSPECTION':
         default:
           return { nextStatus: 'CONTAINER_DROPPED', label: 'Container Dropped (Complete L2)' };
@@ -623,7 +650,9 @@ export default function DrayageAssignmentPage() {
         return { nextStatus: 'CONTAINER_PICKED', label: 'Container Picked (at Port)' };
       case 'CONTAINER_PICKED':
       case 'AT_PORT':
-        return { nextStatus: 'UNDER_INSPECTION', label: 'Under Inspection' };
+        return requiresInspection
+          ? { nextStatus: 'UNDER_INSPECTION', label: 'Under Inspection' }
+          : { nextStatus: 'EN_ROUTE_WAREHOUSE', label: 'En Route to Warehouse (No Inspection)' };
       case 'UNDER_INSPECTION':
         return { nextStatus: 'EN_ROUTE_WAREHOUSE', label: 'En Route to Warehouse' };
       case 'EN_ROUTE_WAREHOUSE':
@@ -636,7 +665,7 @@ export default function DrayageAssignmentPage() {
       default:
         return { nextStatus: 'READY_FOR_PICKUP', label: 'Ready for Pickup (Activate L2)' };
     }
-  }, []);
+  }, [doesJobRequireInspection]);
 
   const handleOpenStatusUpdate = useCallback(
     (job: DrayageJob) => {
@@ -2027,9 +2056,17 @@ export default function DrayageAssignmentPage() {
             ) : (
               <span className="text-[var(--text-muted)] italic text-[11px]">No Token</span>
             )}
-            {job.inspectionStatus === 'HOLD_PENDING' && (
+            {(job.inspectionStatus === 'HOLD_PENDING' || job.inspectionStatus === 'INSPECTION_BOOKED') && (
               <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                Customs Hold Pending
+                {(() => {
+                  const labels = getActiveJobInspectionLabels(job);
+                  if (labels.length === 1 && labels[0] === 'Dubai Customs') {
+                    return 'Dubai Customs Hold Pending';
+                  }
+                  return labels.length > 0
+                    ? `Inspection Hold: ${labels.join(' + ')}`
+                    : 'Customs Hold Pending';
+                })()}
               </span>
             )}
             {job.doStatus === 'EXPIRED' && (
@@ -5491,8 +5528,17 @@ export default function DrayageAssignmentPage() {
                     <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] block">
                       Current Job Status
                     </span>
-                    <div className="mt-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <StatusPill status={currentDisp} label={currentDisp} />
+                      {doesJobRequireInspection(statusUpdateJob) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                          🛃 Inspection Required ({getActiveJobInspectionLabels(statusUpdateJob).join(', ') || 'Hold Active'})
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                          ✓ Green Channel (Under Inspection Auto-Bypassed)
+                        </span>
+                      )}
                     </div>
                   </div>
 
