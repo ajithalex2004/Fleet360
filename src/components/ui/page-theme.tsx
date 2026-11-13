@@ -42,17 +42,74 @@ import { useLanguage } from '@/contexts/LanguageContext';
 /**
  * Brand-rolled accents (Staff Transportation unified gradient palette).
  */
-export const ACCENTS: Record<string, { text: string; ring: string; bg: string; gradient: string }> = {
-  /* Primary brand — Cyan to Blue (matches Staff Transportation card 1) */
-  default: { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 to-blue-600' },
-  cyan:    { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 to-blue-600' },
-  blue:    { text: 'text-blue-400',   ring: 'ring-blue-500/40',    bg: 'bg-blue-500/15',    gradient: 'from-blue-500 to-indigo-600' },
-  violet:  { text: 'text-violet-400', ring: 'ring-violet-500/40',  bg: 'bg-violet-500/15',  gradient: 'from-violet-500 to-purple-600' },
-  emerald: { text: 'text-emerald-400',ring: 'ring-emerald-500/40', bg: 'bg-emerald-500/15', gradient: 'from-emerald-500 to-teal-600' },
-  amber:   { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-500 to-orange-600' },
-  rose:    { text: 'text-rose-400',   ring: 'ring-rose-500/40',    bg: 'bg-rose-500/15',    gradient: 'from-rose-500 to-pink-600' },
-  slate:   { text: 'text-[var(--text-muted)]',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-500 to-slate-700' },
-  gold:    { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-400 to-orange-500' },
+export const ACCENTS: Record<
+  string,
+  { text: string; ring: string; bg: string; gradient: string; kpiGradient: string }
+> = {
+  /* Primary brand — Cyan to Blue (softer kpiGradient for KpiCards) */
+  default: {
+    text: 'text-cyan-400',
+    ring: 'ring-cyan-500/40',
+    bg: 'bg-cyan-500/15',
+    gradient: 'from-cyan-500 to-blue-600',
+    kpiGradient: 'from-sky-500/80 to-blue-600/85',
+  },
+  cyan: {
+    text: 'text-cyan-400',
+    ring: 'ring-cyan-500/40',
+    bg: 'bg-cyan-500/15',
+    gradient: 'from-cyan-500 to-blue-600',
+    kpiGradient: 'from-sky-500/80 to-blue-600/85',
+  },
+  blue: {
+    text: 'text-blue-400',
+    ring: 'ring-blue-500/40',
+    bg: 'bg-blue-500/15',
+    gradient: 'from-blue-500 to-indigo-600',
+    kpiGradient: 'from-blue-500/80 to-indigo-600/85',
+  },
+  violet: {
+    text: 'text-violet-400',
+    ring: 'ring-violet-500/40',
+    bg: 'bg-violet-500/15',
+    gradient: 'from-violet-500 to-purple-600',
+    kpiGradient: 'from-violet-500/80 to-purple-600/85',
+  },
+  emerald: {
+    text: 'text-emerald-400',
+    ring: 'ring-emerald-500/40',
+    bg: 'bg-emerald-500/15',
+    gradient: 'from-emerald-500 to-teal-600',
+    kpiGradient: 'from-emerald-500/80 to-teal-600/85',
+  },
+  amber: {
+    text: 'text-amber-400',
+    ring: 'ring-amber-500/40',
+    bg: 'bg-amber-500/15',
+    gradient: 'from-amber-500 to-orange-600',
+    kpiGradient: 'from-amber-500/80 to-orange-600/85',
+  },
+  rose: {
+    text: 'text-rose-400',
+    ring: 'ring-rose-500/40',
+    bg: 'bg-rose-500/15',
+    gradient: 'from-rose-500 to-pink-600',
+    kpiGradient: 'from-rose-500/80 to-pink-600/85',
+  },
+  slate: {
+    text: 'text-[var(--text-muted)]',
+    ring: 'ring-slate-500/40',
+    bg: 'bg-slate-500/15',
+    gradient: 'from-slate-500 to-slate-700',
+    kpiGradient: 'from-slate-500/80 to-slate-700/85',
+  },
+  gold: {
+    text: 'text-amber-400',
+    ring: 'ring-amber-500/40',
+    bg: 'bg-amber-500/15',
+    gradient: 'from-amber-400 to-orange-500',
+    kpiGradient: 'from-amber-400/80 to-orange-500/85',
+  },
 };
 
 export type PageAccent = keyof typeof ACCENTS;
@@ -121,7 +178,7 @@ export function KpiCard({
   const translatedLabel = tLabel(label);
   const translatedSub = sub ? tLabel(sub) : undefined;
   const interactive = Boolean(href || onClick);
-  const baseClass = `block w-full text-start relative overflow-hidden rounded-2xl bg-gradient-to-br ${a.gradient} p-4 shadow-sm min-h-[88px] transition-all duration-150 ${
+  const baseClass = `block w-full text-start relative overflow-hidden rounded-2xl bg-gradient-to-br ${a.kpiGradient} border border-white/15 p-4 shadow-sm min-h-[88px] transition-all duration-150 ${
     interactive ? 'cursor-pointer hover:brightness-105 hover:shadow-md active:scale-[0.99]' : ''
   } ${active ? 'ring-2 ring-white/90 shadow-md' : ''} ${className}`.trim();
 
