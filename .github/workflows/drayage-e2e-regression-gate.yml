@@ -46,7 +46,9 @@ jobs:
   e2e-5phase-regression-gate:
     name: 'Gate 2: 21-Check 5-Phase Playwright UI/UX & API Suite'
     needs: [static-and-type-gate]
-    runs-on: ubuntu-latest
+    # Playwright has no Chromium build for ubuntu26.04 yet (ubuntu-latest);
+    # pinned until it does, or the browser install fails before any test runs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.target_url || vars.PLAYWRIGHT_BASE_URL || 'https://fleet360-app-production.up.railway.app' }}

@@ -145,12 +145,12 @@ export async function POST(req: NextRequest) {
         admin_fee: rawAdminFeeSnake,
         knowledgeFee: rawKnowledgeFee,
         knowledge_fee: rawKnowledgeFeeSnake,
-        isBilledToCustomer: _ignoredBilled1,
-        is_billed_to_customer: _ignoredBilled2,
-        billedInvoiceId: _ignoredInv1,
-        billed_invoice_id: _ignoredInv2,
         ...prismaBody
       } = sanitized;
+      // Billing state is set by the invoicing flow, never by this request.
+      for (const k of ['isBilledToCustomer', 'is_billed_to_customer', 'billedInvoiceId', 'billed_invoice_id']) {
+        delete (prismaBody as Record<string, unknown>)[k];
+      }
 
       const explicitAgreementId =
         typeof rawRentalAgreementId === 'string' && rawRentalAgreementId.trim()

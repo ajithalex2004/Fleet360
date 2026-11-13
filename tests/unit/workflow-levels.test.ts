@@ -240,9 +240,12 @@ describe('approval level conditions', () => {
     const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
     expect(connected).toContain("'RAC.BOOKING_APPROVAL'");
     expect(readFileSync('src/app/api/rental/bookings/route.ts', 'utf8')).toContain("referenceType: 'rental_booking'");
-    for (const action of ['confirm', 'activate']) {
-      expect(readFileSync(`src/app/api/rental/bookings/[id]/${action}/route.ts`, 'utf8')).toContain('requireApproved(');
-    }
+    // Confirm waits for the approval; hand-over (activate) refuses any booking
+    // that is not CONFIRMED, so it cannot skip the approval either.
+    expect(readFileSync('src/app/api/rental/bookings/[id]/confirm/route.ts', 'utf8')).toContain('requireApproved(');
+    const activate = readFileSync('src/app/api/rental/bookings/[id]/activate/route.ts', 'utf8');
+    expect(activate).toContain("code: 'BOOKING_NOT_CONFIRMED'");
+    expect(activate).toMatch(/normalizedBookingStatus !== 'CONFIRMED'/);
     expect(readFileSync('src/app/api/rental/bookings/[id]/cancel/route.ts', 'utf8')).toContain("withdrawApproval(tenantId, 'rental_booking'");
     expect(conditionApplies(cond('oneWay', 'EQ', 'YES'), { oneWay: 'YES' })).toBe(true);
     expect(conditionApplies(cond('rentalDays', 'GT', 28), { rentalDays: 3 })).toBe(false);

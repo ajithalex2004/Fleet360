@@ -20,6 +20,9 @@ import path from 'path';
 import { PUBLIC_EXACT, PUBLIC_PREFIXES, isPublicPath } from '@/lib/auth-route-policies';
 
 const PUBLIC_ROUTE_AUTH: Record<string, string> = {
+  '/api/esign/verify': 'e-sign signing token (hashed lookup) with per-IP and per-token rate limits and a failed-attempt counter',
+  '/rac-portal': 'none — RAC customer portal shell; data comes from /api/rac-portal/',
+  '/api/rac-portal/': 'RAC portal session (requireRacPortalRole) on every data route; auth/login, auth/setup (setup token) and auth/logout are rate limited',
   // Pages: render without data; their API calls are protected or listed here.
   '/': 'none — marketing page',
   '/login': 'none — sign-in page',

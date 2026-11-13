@@ -8,22 +8,18 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  Clock,
   Coins,
   Cpu,
   RefreshCw,
-  Sliders,
   Play,
   Gauge,
   MapPin,
   Bot,
-  AlertTriangle,
   ArrowUpRight,
   BarChart3,
   Layers,
   FileCheck,
 } from 'lucide-react';
-import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface RoiSummary {
   totalAgentRuns: number;

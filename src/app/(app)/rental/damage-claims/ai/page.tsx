@@ -418,14 +418,3 @@ export default function DamageAIPage() {
     </div>
   );
 }
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'rose' }) {
-  return (
-    <div className="p-3 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]">
-      <div className="text-xs text-[var(--text-muted)]">{label}</div>
-      <div className={`text-lg font-bold mt-0.5 ${tone === 'rose' ? 'text-rose-300' : 'text-[var(--text-main)]'}`}>
-        {value}
-      </div>
-    </div>
-  );
-}

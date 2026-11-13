@@ -11,6 +11,11 @@
 import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
+/** The raw-SQL part of a Prisma client or transaction. */
+type RawSqlQueryDb = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+};
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type CreateDraftJournalEntryParams = {
@@ -125,7 +130,7 @@ export function normalizeLeafGlAccount(code: string, fallbackName: string): { co
  * Throws an Error with statusCode = 422 if locked.
  */
 export async function assertPeriodOpen(
-  tx: { $queryRawUnsafe: Function },
+  tx: RawSqlQueryDb,
   tenantId: string,
   dateStr?: string | Date | null,
 ): Promise<void> {
@@ -137,7 +142,7 @@ export async function assertPeriodOpen(
 
   let rows: Array<{ status?: string; period_name?: string }> = [];
   try {
-    rows = await tx.$queryRawUnsafe(
+    rows = await tx.$queryRawUnsafe<Array<{ status?: string; period_name?: string }>>(
       `SELECT status, period_name
          FROM finance_periods
         WHERE tenant_id = $1
@@ -149,7 +154,7 @@ export async function assertPeriodOpen(
     );
   } catch {
     try {
-      rows = await tx.$queryRawUnsafe(
+      rows = await tx.$queryRawUnsafe<Array<{ status?: string; period_name?: string }>>(
         `SELECT status, period_name
            FROM finance_periods
           WHERE tenant_id = $1

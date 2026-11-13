@@ -46,10 +46,9 @@ interface Trip {
 
 // Palettes come from src/lib/bus-ops/status-meta.ts so every bus-ops UI
 // renders the same status with the same colour.
-import { TRIP_STATUS_META, PASSENGER_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
+import { PASSENGER_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
 import { allowedPassengerTransitions, type TripScheduleStatus as TripStatus } from '@/lib/bus-ops/state-machines';
 const PAX_PILL  = Object.fromEntries(Object.entries(PASSENGER_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<PassengerStatus, string>;
-const TRIP_PILL = Object.fromEntries(Object.entries(TRIP_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<TripStatus, string>;
 
 // Allowed passenger status advances the ops UI surfaces per current status.
 //

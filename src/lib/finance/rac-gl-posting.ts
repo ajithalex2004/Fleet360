@@ -209,7 +209,7 @@ export function buildRacInvoiceCreditBuckets(args: {
   }
 
   // Apply commercial discount across revenue buckets (never reducing statutory 2160 fine principal first)
-  let grossSum = round2(Array.from(buckets.values()).reduce((s, b) => s + b.amount, 0));
+  const grossSum = round2(Array.from(buckets.values()).reduce((s, b) => s + b.amount, 0));
   const discountToApply = round2(Math.max(0, grossSum - targetNet));
   if (discountToApply > 0 && grossSum > 0) {
     const revBuckets = Array.from(buckets.values()).filter((b) => !b.isClearing && b.amount > 0);

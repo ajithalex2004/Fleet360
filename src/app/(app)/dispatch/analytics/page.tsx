@@ -33,21 +33,6 @@ interface ServiceBreakdown {
   failed: number;
 }
 
-function MetricCard({ icon, label, value, sub, color = 'text-[var(--text-main)]' }: {
-  icon: string; label: string; value: string | number; sub?: string; color?: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5">
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-2xl">{icon}</span>
-        <span className={`text-3xl font-bold ${color}`}>{value}</span>
-      </div>
-      <p className="text-[var(--text-muted)] text-sm font-medium">{label}</p>
-      {sub && <p className="text-[var(--text-faint)] text-xs mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
 function DonutSegment({ value, total, color, label }: { value: number; total: number; color: string; label: string }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
