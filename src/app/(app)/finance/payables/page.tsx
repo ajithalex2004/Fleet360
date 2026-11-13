@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { downloadXLSX } from '@/lib/exportUtils';
 import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
@@ -508,22 +509,30 @@ export default function PayablesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {kpis.map(k => (
-          <button key={k.key} onClick={() => { setTab(k.key); setOverdueOnly(false); }}
-            className="text-left bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 hover:border-[var(--border-strong)]">
-            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
-            <p className={`text-xl font-bold mt-0.5 ${k.tone}`}>{count(k.key)}</p>
-            <p className="text-xs text-[var(--text-faint)]">{fmtAED(summOf(k.key)?.total ?? '0')}</p>
-          </button>
-        ))}
-        <button onClick={() => { setTab('ALL'); setOverdueOnly(true); }}
-          className="text-left bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 hover:border-[var(--border-strong)]">
-          <p className="text-xs text-[var(--text-faint)]">Overdue, unpaid</p>
-          <p className={`text-xl font-bold mt-0.5 ${overdueCount ? 'text-red-400' : 'text-[var(--text-main)]'}`}>{overdueCount}</p>
-          <p className="text-xs text-[var(--text-faint)]">past due date</p>
-        </button>
-      </div>
+      <StatGrid cols={5}>
+        {kpis.map((k, idx) => {
+          const accents: PageAccent[] = ['slate', 'cyan', 'emerald', 'violet'];
+          return (
+            <KpiCard
+              key={k.key}
+              label={k.label}
+              value={count(k.key)}
+              sub={fmtAED(summOf(k.key)?.total ?? '0')}
+              accent={accents[idx % accents.length]}
+              active={!overdueOnly && tab === k.key}
+              onClick={() => { setTab(k.key); setOverdueOnly(false); }}
+            />
+          );
+        })}
+        <KpiCard
+          label="Overdue, unpaid"
+          value={overdueCount}
+          sub="past due date"
+          accent={overdueCount ? 'rose' : 'slate'}
+          active={overdueOnly}
+          onClick={() => { setTab('ALL'); setOverdueOnly(true); }}
+        />
+      </StatGrid>
 
       {count('SUBMITTED') > 0 && (
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 flex items-center gap-3">

@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useCallback, useEffect, useState } from 'react';
 import { PMItemStatus } from '@/types/maintenance';
@@ -166,19 +167,12 @@ export default function PMSchedulePage() {
             )}
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Overdue',        value: counts[PMItemStatus.OVERDUE],  color: 'text-red-400' },
-                    { label: 'Due soon',        value: counts[PMItemStatus.DUE],      color: 'text-amber-300' },
-                    { label: 'Upcoming',        value: counts[PMItemStatus.UPCOMING], color: 'text-[var(--text-muted)]' },
-                    { label: 'No service on record', value: counts[NO_HISTORY],       color: 'text-sky-300' },
-                ].map(kpi => (
-                    <div key={kpi.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-                        <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{kpi.label}</p>
-                        <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
-                    </div>
-                ))}
-            </div>
+            <StatGrid cols={4}>
+                <KpiCard label="Overdue" value={counts[PMItemStatus.OVERDUE]} accent="rose" />
+                <KpiCard label="Due soon" value={counts[PMItemStatus.DUE]} accent="amber" />
+                <KpiCard label="Upcoming" value={counts[PMItemStatus.UPCOMING]} accent="slate" />
+                <KpiCard label="No service on record" value={counts[NO_HISTORY]} accent="cyan" />
+            </StatGrid>
 
             {/* Tabs */}
             <div className="flex gap-0 border-b border-[var(--border-subtle)]">

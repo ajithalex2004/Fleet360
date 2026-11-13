@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { shortId } from '@/lib/ui/display-id';
+import { Shuffle, Route } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface MergePair {
@@ -288,24 +290,12 @@ export default function MergeOptimizerPage() {
 
       {/* Session stats */}
       {(merged > 0 || saved > 0) && (
-        <div className="flex gap-4">
-          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-3 flex items-center gap-3">
-            <span className="text-emerald-400 text-2xl font-bold">{merged}</span>
-            <div>
-              <p className="text-emerald-300 text-xs font-semibold">Trips merged this session</p>
-              <p className="text-[var(--text-faint)] text-[10px]">Combined into multi-stop jobs</p>
-            </div>
-          </div>
+        <StatGrid cols={2}>
+          <KpiCard label="Trips merged this session" value={merged} sub="Combined into multi-stop jobs" icon={Shuffle} accent="emerald" />
           {saved > 0 && (
-            <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 flex items-center gap-3">
-              <span className="text-blue-400 text-2xl font-bold">~{saved.toFixed(1)}</span>
-              <div>
-                <p className="text-blue-300 text-xs font-semibold">km saved (estimated)</p>
-                <p className="text-[var(--text-faint)] text-[10px]">Reduced fleet kilometres</p>
-              </div>
-            </div>
+            <KpiCard label="km saved (estimated)" value={`~${saved.toFixed(1)}`} sub="Reduced fleet kilometres" icon={Route} accent="blue" />
           )}
-        </div>
+        </StatGrid>
       )}
 
       {/* Pair list */}

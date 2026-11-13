@@ -35,28 +35,24 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 /**
- * Brand-rolled accents (royal-maritime palette).
- * The original `violet` and `cyan` accents are kept as deprecated
- * aliases that now resolve to the brand `gold` and `blue` so all
- * existing module pages adopt the new palette without any caller
- * changes. Status colours (emerald / amber / rose) are preserved
- * because they carry semantic meaning.
+ * Brand-rolled accents (Staff Transportation unified gradient palette).
  */
 export const ACCENTS: Record<string, { text: string; ring: string; bg: string; gradient: string }> = {
-  /* Primary brand — Electric Cyan to Blue */
-  default: { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 via-blue-500 to-indigo-600' },
-  cyan:    { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 via-blue-500 to-indigo-600' },
-  blue:    { text: 'text-blue-400',   ring: 'ring-blue-500/40',    bg: 'bg-blue-500/15',    gradient: 'from-blue-600 to-indigo-700' },
-  violet:  { text: 'text-violet-400', ring: 'ring-violet-500/40',  bg: 'bg-violet-500/15',  gradient: 'from-violet-600 to-purple-700' },
+  /* Primary brand — Cyan to Blue (matches Staff Transportation card 1) */
+  default: { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 to-blue-600' },
+  cyan:    { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 to-blue-600' },
+  blue:    { text: 'text-blue-400',   ring: 'ring-blue-500/40',    bg: 'bg-blue-500/15',    gradient: 'from-blue-500 to-indigo-600' },
+  violet:  { text: 'text-violet-400', ring: 'ring-violet-500/40',  bg: 'bg-violet-500/15',  gradient: 'from-violet-500 to-purple-600' },
   emerald: { text: 'text-emerald-400',ring: 'ring-emerald-500/40', bg: 'bg-emerald-500/15', gradient: 'from-emerald-500 to-teal-600' },
   amber:   { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-500 to-orange-600' },
   rose:    { text: 'text-rose-400',   ring: 'ring-rose-500/40',    bg: 'bg-rose-500/15',    gradient: 'from-rose-500 to-pink-600' },
-  slate:   { text: 'text-[var(--text-muted)]',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-600 to-slate-700' },
-  gold:    { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-400 to-yellow-600' },
+  slate:   { text: 'text-[var(--text-muted)]',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-500 to-slate-700' },
+  gold:    { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-400 to-orange-500' },
 };
 
 export type PageAccent = keyof typeof ACCENTS;
@@ -103,27 +99,88 @@ interface KpiCardProps {
   sub?: string;
   icon?: LucideIcon;
   accent?: PageAccent;
+  href?: string;
+  onClick?: () => void;
+  active?: boolean;
+  className?: string;
 }
 
-export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: KpiCardProps) {
+export function KpiCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  accent = 'default',
+  href,
+  onClick,
+  active = false,
+  className = '',
+}: KpiCardProps) {
   const { tLabel } = useLanguage();
   const a = ACCENTS[accent] ?? ACCENTS.default;
   const translatedLabel = tLabel(label);
   const translatedSub = sub ? tLabel(sub) : undefined;
-  return (
-    <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 shadow-sm hover:border-[var(--border-strong)] transition-all duration-150">
-      <div className="flex items-start justify-between gap-2 mb-2.5">
-        <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">{translatedLabel}</span>
-        {Icon && (
-          <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
-            <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
-          </div>
+  const interactive = Boolean(href || onClick);
+  const baseClass = `block w-full text-start relative overflow-hidden rounded-2xl bg-gradient-to-br ${a.gradient} p-4 shadow-sm min-h-[88px] transition-all duration-150 ${
+    interactive ? 'cursor-pointer hover:brightness-105 hover:shadow-md active:scale-[0.99]' : ''
+  } ${active ? 'ring-2 ring-white/90 shadow-md' : ''} ${className}`.trim();
+
+  const inner = (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-2xl font-bold text-white tabular-nums tracking-tight leading-tight truncate">
+          {value}
+        </p>
+        <p className="mt-1 text-xs font-medium text-white/85 truncate">{translatedLabel}</p>
+        {translatedSub && (
+          <p className="mt-0.5 text-[11px] font-medium text-white/70 truncate">{translatedSub}</p>
         )}
       </div>
-      <div className="text-2xl font-bold font-mono text-[var(--text-main)] tracking-tight">{value}</div>
-      {translatedSub && <div className="text-xs text-[var(--text-muted)] mt-1 font-medium">{translatedSub}</div>}
+      {Icon && (
+        <div className="shrink-0 w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center">
+          <Icon className="w-3.5 h-3.5 text-white/90" strokeWidth={2} />
+        </div>
+      )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className={baseClass}>
+        {inner}
+      </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={baseClass}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className={baseClass}>{inner}</div>;
+}
+
+export function StatGrid({
+  children,
+  cols = 6,
+  className = '',
+}: {
+  children: React.ReactNode;
+  cols?: 2 | 3 | 4 | 5 | 6;
+  className?: string;
+}) {
+  const colClass =
+    cols === 2
+      ? 'grid-cols-1 sm:grid-cols-2'
+      : cols === 3
+      ? 'grid-cols-2 lg:grid-cols-3'
+      : cols === 4
+      ? 'grid-cols-2 lg:grid-cols-4'
+      : cols === 5
+      ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+      : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6';
+  return <div className={`grid ${colClass} gap-3 ${className}`.trim()}>{children}</div>;
 }
 
 /* ── Section panel ──────────────────────────────────────────────────────── */

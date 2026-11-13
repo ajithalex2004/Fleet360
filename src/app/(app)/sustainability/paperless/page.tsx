@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { ClipboardList, FileText, Leaf, Trees } from 'lucide-react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 interface DashData {
   paperless?: {
@@ -92,20 +94,16 @@ export default function PaperlessPage() {
           </div>
 
           {/* KPI tiles */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { icon: '📋', label: 'Digital Trip Sheets', value: (p?.digital_trip_sheets ?? 0).toLocaleString(), sub: 'paperless runsheets', color: 'text-emerald-400' },
-              { icon: '📄', label: 'Digital Invoices', value: (p?.digital_invoices ?? 0).toLocaleString(), sub: 'emailed PDF', color: 'text-blue-400' },
-              { icon: '🌿', label: 'CO₂ Offset', value: `${((p?.co2_saved_kg ?? 0) / 1000).toFixed(2)} t`, sub: 'paper production avoided', color: 'text-emerald-400' },
-              { icon: '🌳', label: 'Trees Equivalent', value: Math.round(p?.trees_equivalent ?? 0).toLocaleString(), sub: 'paper trees saved', color: 'text-green-400' },
-            ].map(k => (
-              <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
-                <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-                <p className="text-[var(--text-faint)] text-xs mt-1">{k.sub}</p>
-              </div>
+          <StatGrid cols={4}>
+            {([
+              { icon: ClipboardList, label: 'Digital Trip Sheets', value: (p?.digital_trip_sheets ?? 0).toLocaleString(), sub: 'paperless runsheets', accent: 'emerald' as PageAccent },
+              { icon: FileText, label: 'Digital Invoices', value: (p?.digital_invoices ?? 0).toLocaleString(), sub: 'emailed PDF', accent: 'cyan' as PageAccent },
+              { icon: Leaf, label: 'CO₂ Offset', value: `${((p?.co2_saved_kg ?? 0) / 1000).toFixed(2)} t`, sub: 'paper production avoided', accent: 'violet' as PageAccent },
+              { icon: Trees, label: 'Trees Equivalent', value: Math.round(p?.trees_equivalent ?? 0).toLocaleString(), sub: 'paper trees saved', accent: 'amber' as PageAccent },
+            ]).map(k => (
+              <KpiCard key={k.label} label={k.label} value={k.value} sub={k.sub} icon={k.icon} accent={k.accent} />
             ))}
-          </div>
+          </StatGrid>
 
           {/* Paper facts */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

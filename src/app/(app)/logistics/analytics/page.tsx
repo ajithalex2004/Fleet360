@@ -4,6 +4,8 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import { ClipboardList, CheckCircle2, Truck, Clock, XCircle, Timer, Gauge } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,38 +57,6 @@ const STATUS_LABEL: Record<string, string> = {
   DELIVERED: 'Delivered', POD_SUBMITTED: 'POD Submitted',
   CLOSED: 'Closed', COMPLETED: 'Closed', CANCELLED: 'Cancelled',
 };
-
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  icon, label, value, sub, color = 'text-[var(--text-main)]', ring,
-}: {
-  icon: string; label: string; value: string | number; sub?: string;
-  color?: string; ring?: number;
-}) {
-  return (
-    <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)] space-y-2">
-      <div className="flex items-start justify-between">
-        <span className="text-2xl">{icon}</span>
-        {ring != null && (
-          <div className="relative w-10 h-10">
-            <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15" fill="none" stroke="#1e293b" strokeWidth="3" />
-              <circle cx="18" cy="18" r="15" fill="none" stroke="#f59e0b" strokeWidth="3"
-                strokeDasharray={`${(ring / 100) * 94.2} 94.2`} strokeLinecap="round" />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-amber-400">
-              {ring}%
-            </span>
-          </div>
-        )}
-      </div>
-      <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      <div className="text-sm font-medium text-[var(--text-main)]">{label}</div>
-      {sub && <div className="text-xs text-[var(--text-faint)]">{sub}</div>}
-    </div>
-  );
-}
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
@@ -164,39 +134,34 @@ export default function LogisticsAnalyticsPage() {
       </div>
 
       {/* ── KPI Grid ────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard icon="📋" label="Total Trips" value={data.totalTrips} sub="All-time logistics bookings" />
-        <KpiCard icon="✅" label="Completed" value={data.completedTrips}
-          color="text-emerald-400" sub="Delivered + closed" ring={data.completionRate} />
-        <KpiCard icon="🚛" label="Active Now" value={data.activeTrips}
-          color="text-blue-400" sub="En-route & in-transit" />
-        <KpiCard icon="📋" label="Pending" value={data.pendingTrips}
-          color="text-amber-400" sub="Awaiting approval" />
-        <KpiCard icon="❌" label="Cancelled" value={data.cancelledTrips}
-          color="text-red-400" sub={`${data.cancellationRate}% cancellation rate`} />
-        <KpiCard icon="⏱️" label="On-Time Rate"
+      <StatGrid cols={4}>
+        <KpiCard icon={ClipboardList} label="Total Trips" value={data.totalTrips} sub="All-time logistics bookings" accent="slate" />
+        <KpiCard icon={CheckCircle2} label="Completed" value={data.completedTrips} accent="emerald" sub={`Delivered + closed · ${data.completionRate}%`} />
+        <KpiCard icon={Truck} label="Active Now" value={data.activeTrips} accent="cyan" sub="En-route & in-transit" />
+        <KpiCard icon={Clock} label="Pending" value={data.pendingTrips} accent="amber" sub="Awaiting approval" />
+        <KpiCard icon={XCircle} label="Cancelled" value={data.cancelledTrips} accent="rose" sub={`${data.cancellationRate}% cancellation rate`} />
+        <KpiCard
+          icon={Timer}
+          label="On-Time Rate"
           value={data.onTimeRate != null ? `${data.onTimeRate}%` : 'N/A'}
-          color={data.onTimeRate != null ? (data.onTimeRate >= 80 ? 'text-emerald-400' : data.onTimeRate >= 60 ? 'text-amber-400' : 'text-red-400') : 'text-[var(--text-muted)]'}
-          sub="Trips delivered by deadline" />
-        <KpiCard icon="🚛" label="Fleet Size" value={data.totalVehicles}
-          sub={`${data.availableVehicles} available · ${data.maintenanceVehicles} in maintenance`} />
-        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-2xl">📈</span>
-            <span className={`text-sm font-bold ${
-              data.fleetUtilization >= 70 ? 'text-emerald-400'
-              : data.fleetUtilization >= 40 ? 'text-amber-400'
-              : 'text-red-400'
-            }`}>{data.fleetUtilization}%</span>
-          </div>
-          <div className="h-2 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden mb-2">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all"
-              style={{ width: `${data.fleetUtilization}%` }} />
-          </div>
-          <div className="text-sm font-medium text-[var(--text-main)]">Fleet Utilization</div>
-          <div className="text-xs text-[var(--text-faint)] mt-0.5">Active vs total vehicles</div>
-        </div>
-      </div>
+          accent={data.onTimeRate != null ? (data.onTimeRate >= 80 ? 'emerald' : data.onTimeRate >= 60 ? 'amber' : 'rose') : 'slate'}
+          sub="Trips delivered by deadline"
+        />
+        <KpiCard
+          icon={Truck}
+          label="Fleet Size"
+          value={data.totalVehicles}
+          accent="violet"
+          sub={`${data.availableVehicles} available · ${data.maintenanceVehicles} in maintenance`}
+        />
+        <KpiCard
+          icon={Gauge}
+          label="Fleet Utilization"
+          value={`${data.fleetUtilization}%`}
+          accent={data.fleetUtilization >= 70 ? 'emerald' : data.fleetUtilization >= 40 ? 'amber' : 'rose'}
+          sub="Active vs total vehicles"
+        />
+      </StatGrid>
 
       {/* ── Charts Row 1 ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

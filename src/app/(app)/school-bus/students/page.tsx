@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Users, Map, Radio, HeartPulse } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Guardian { name: string | null; phone: string | null; email: string | null }
@@ -354,19 +356,12 @@ export default function SchoolBusStudentsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { icon: '👧', label: 'Active Students', value: statActive,  color: 'text-yellow-300' },
-          { icon: '🗺️', label: 'No Route Assigned', value: statNoRoute, color: statNoRoute > 0 ? 'text-amber-400' : 'text-[var(--text-muted)]' },
-          { icon: '📡', label: 'No RFID Card',    value: statNoRfid,  color: statNoRfid > 0 ? 'text-amber-400' : 'text-[var(--text-muted)]' },
-          { icon: '🏥', label: 'Medical Notes',   value: statMedical, color: statMedical > 0 ? 'text-red-400' : 'text-[var(--text-muted)]' },
-        ].map(s => (
-          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">{s.icon} {s.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Active Students" value={statActive} icon={Users} accent="amber" />
+        <KpiCard label="No Route Assigned" value={statNoRoute} icon={Map} accent={statNoRoute > 0 ? 'amber' : 'slate'} />
+        <KpiCard label="No RFID Card" value={statNoRfid} icon={Radio} accent={statNoRfid > 0 ? 'amber' : 'slate'} />
+        <KpiCard label="Medical Notes" value={statMedical} icon={HeartPulse} accent={statMedical > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

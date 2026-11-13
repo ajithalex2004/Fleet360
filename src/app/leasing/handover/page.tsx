@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, X, AlertTriangle, Info, Star } from 'lucide-react';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -172,17 +173,6 @@ function fmtDatetime(d: string | null) {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, accent }: {
-  label: string; value: string | number; sub?: string; accent: string;
-}) {
-  return (
-    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-5">
-      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
-    </div>
-  );
-}
 
 function FuelGauge({ level }: { level: number | null }) {
   if (level === null) return <span className="text-[var(--text-faint)] text-xs">—</span>;
@@ -529,32 +519,32 @@ export default function HandoverPage() {
       </div>
 
       {/* ─── KPI Cards ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatGrid cols={4}>
         <KpiCard
           label="Scheduled Deliveries"
           value={summary.scheduledDeliveries}
           sub="Upcoming vehicle deliveries"
-          accent="text-teal-400"
+          accent="cyan"
         />
         <KpiCard
           label="Scheduled Returns"
           value={summary.scheduledReturns}
           sub="Upcoming end-of-lease returns"
-          accent="text-violet-400"
+          accent="violet"
         />
         <KpiCard
           label="Completed Today"
           value={summary.completedToday}
           sub="Handovers signed off today"
-          accent="text-emerald-400"
+          accent="emerald"
         />
         <KpiCard
           label="Pending Sign-off"
           value={summary.pendingSignoff}
           sub="In-progress, awaiting signature"
-          accent="text-amber-400"
+          accent="amber"
         />
-      </div>
+      </StatGrid>
 
       {/* ─── Filters ─── */}
       <div className="flex flex-col sm:flex-row gap-3">

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import type {
   DrayageCorridorTerminal,
   DrayageCorridorWarehouse,
@@ -742,72 +743,46 @@ export default function CustomerDrayageTrackingPortalPage() {
           </div>
 
           {/* 4-Column Customer Telemetry Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-              <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-                Origin Port & PCS Gate Token
-              </span>
-              <strong className="text-slate-100 text-sm block mt-0.5 truncate">{job.terminalName}</strong>
-              <div className="text-[11px] text-emerald-400 font-mono mt-1">
-                Token: {job.tokenNumber || 'Verified Gate Pass'}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-              <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-                Destination Facility / Ramp
-              </span>
-              <strong className="text-slate-100 text-sm block mt-0.5 truncate">{job.warehouseName}</strong>
-              <div className="text-[11px] text-slate-400 mt-1">
-                Placement: <strong className="text-amber-300">{job.placementLocation || 'RAMP'}</strong>
-                {job.podSignatureName ? ` · Signed: ${job.podSignatureName}` : ''}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-              <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-                Assigned Prime Mover & Driver
-              </span>
-              <strong className="text-slate-100 text-sm font-mono block mt-0.5">
-                {job.assignedVehiclePlate || 'Assigned Tractor'}
-              </strong>
-              <div className="text-[11px] text-slate-400 mt-1 truncate">
-                {job.assignedDriverName || 'Verified Driver'} · Chassis {job.assignedTrailerPlate || 'Coupled'}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30">
-              <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold block">
-                Offloading ETC & Corridor ETA
-              </span>
-              {job.etcTime ? (
-                <>
-                  <strong className="text-amber-300 text-sm font-mono block mt-0.5">
-                    ETC:{' '}
-                    {new Date(job.etcTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </strong>
-                  <div className="text-[11px] text-emerald-400 font-semibold mt-1">
-                    {etcRemainingMins !== null && etcRemainingMins <= 0
-                      ? '✓ Ramp window completed — Pickup Ready'
-                      : `${etcRemainingMins} mins remaining at facility ramp`}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <strong className="text-cyan-300 text-sm font-mono block mt-0.5">
-                    ETA: {job.portSlotPrediction?.predictedGateArrivalLabel || 'On Schedule'} (
-                    {job.portSlotPrediction?.totalEtaMinutes || 22}m)
-                  </strong>
-                  <div className="text-[11px] text-slate-400 mt-1 truncate">
-                    {job.portSlotPrediction?.corridorName || 'E11 / E311 UAE Freight Corridor'}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard
+              label="Origin Port & PCS Gate Token"
+              value={job.terminalName}
+              sub={`Token: ${job.tokenNumber || 'Verified Gate Pass'}`}
+              icon={ShieldCheck}
+              accent="emerald"
+            />
+            <KpiCard
+              label="Destination Facility / Ramp"
+              value={job.warehouseName}
+              sub={`Placement: ${job.placementLocation || 'RAMP'}${job.podSignatureName ? ` · Signed: ${job.podSignatureName}` : ''}`}
+              icon={MapPin}
+              accent="cyan"
+            />
+            <KpiCard
+              label="Assigned Prime Mover & Driver"
+              value={job.assignedVehiclePlate || 'Assigned Tractor'}
+              sub={`${job.assignedDriverName || 'Verified Driver'} · Chassis ${job.assignedTrailerPlate || 'Coupled'}`}
+              icon={Navigation}
+              accent="slate"
+            />
+            <KpiCard
+              label="Offloading ETC & Corridor ETA"
+              value={
+                job.etcTime
+                  ? `ETC: ${new Date(job.etcTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : `ETA: ${job.portSlotPrediction?.predictedGateArrivalLabel || 'On Schedule'} (${job.portSlotPrediction?.totalEtaMinutes || 22}m)`
+              }
+              sub={
+                job.etcTime
+                  ? etcRemainingMins !== null && etcRemainingMins <= 0
+                    ? '✓ Ramp window completed — Pickup Ready'
+                    : `${etcRemainingMins} mins remaining at facility ramp`
+                  : job.portSlotPrediction?.corridorName || 'E11 / E311 UAE Freight Corridor'
+              }
+              icon={Clock}
+              accent="amber"
+            />
+          </StatGrid>
 
           {/* RAMP SUPERVISOR STUFFING / DESTUFFING COMPLETION PANEL (Shown on RAMP Link, or CLIENT Link when at Ramp) */}
           {portalRole !== 'CUSTOMER' &&

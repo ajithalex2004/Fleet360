@@ -1,4 +1,6 @@
 'use client';
+import { CheckCircle2, ClipboardList, Send, XCircle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useEffect, useState, useCallback } from 'react';
 
 interface Schedule {
@@ -209,20 +211,12 @@ export default function PaymentRemindersPage() {
       </div>
 
       {/* Stats strip */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Active Schedules', value: activeCount,                              icon: '🟢', color: 'from-emerald-600 to-teal-600' },
-          { label: 'Total Schedules',  value: schedules.length,                         icon: '📋', color: 'from-slate-600 to-slate-700' },
-          { label: 'Total Sent',       value: schedules.reduce((s,x) => s + Number(x.stats?.total_sent ?? 0), 0), icon: '📨', color: 'from-blue-600 to-indigo-600' },
-          { label: 'Failed',           value: schedules.reduce((s,x) => s + Number(x.stats?.failed ?? 0), 0),     icon: '❌', color: 'from-red-600 to-rose-600' },
-        ].map(c => (
-          <div key={c.label} className={`bg-gradient-to-br ${c.color} rounded-2xl p-4`}>
-            <p className="text-2xl mb-1">{c.icon}</p>
-            <p className="text-2xl font-bold text-white">{c.value}</p>
-            <p className="text-white/70 text-xs mt-0.5">{c.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4} className="mb-6">
+        <KpiCard label="Active Schedules" value={activeCount} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Total Schedules" value={schedules.length} icon={ClipboardList} accent="slate" />
+        <KpiCard label="Total Sent" value={schedules.reduce((s,x) => s + Number(x.stats?.total_sent ?? 0), 0)} icon={Send} accent="cyan" />
+        <KpiCard label="Failed" value={schedules.reduce((s,x) => s + Number(x.stats?.failed ?? 0), 0)} icon={XCircle} accent="rose" />
+      </StatGrid>
 
       {/* Run result */}
       {runResult && (

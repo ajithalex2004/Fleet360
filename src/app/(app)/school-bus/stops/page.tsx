@@ -5,6 +5,8 @@
  * Stops are linked to routes and used for student pickup/dropoff assignments.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { MapPin, CheckCircle2, PauseCircle, Map } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Stop {
   id: string;
@@ -244,22 +246,12 @@ export default function StopsPage() {
       </div>
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: 'Total Stops',   value: stops.length,   color: 'text-[var(--text-main)]',         icon: '📍' },
-          { label: 'Active',        value: activeCount,    color: 'text-emerald-400',   icon: '✅' },
-          { label: 'Inactive',      value: inactiveCount,  color: 'text-[var(--text-muted)]',     icon: '⏸️' },
-          { label: 'Emirates',      value: [...new Set(stops.map(s => s.emirate))].length, color: 'text-blue-400', icon: '🗺️' },
-        ].map(k => (
-          <div key={k.label} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xl">{k.icon}</span>
-              <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-            </div>
-            <p className="text-[var(--text-faint)] text-xs mt-1">{k.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Stops" value={loading ? '…' : stops.length} icon={MapPin} accent="slate" />
+        <KpiCard label="Active" value={loading ? '…' : activeCount} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Inactive" value={loading ? '…' : inactiveCount} icon={PauseCircle} accent="slate" />
+        <KpiCard label="Emirates" value={loading ? '…' : [...new Set(stops.map(s => s.emirate))].length} icon={Map} accent="blue" />
+      </StatGrid>
 
       {/* Filters */}
       <div className="flex gap-3">

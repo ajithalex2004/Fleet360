@@ -6,6 +6,8 @@
  * tenant's routes, allocations, trips and school-bus invoices.
  */
 import { useEffect, useState } from 'react';
+import { Map as MapIcon, Users, CheckCircle2, CreditCard } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface RouteUtil {
   routeCode: string; routeName: string; emirate: string; vehicle: string;
@@ -83,16 +85,18 @@ export default function SchoolBusAnalyticsPage() {
 
       {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Active routes" value={k ? String(k.activeRoutes) : '—'} sub={k ? `${k.totalVehicles} buses` : undefined} />
-        <Kpi label="Students riding" value={k ? k.totalStudents.toLocaleString('en-AE') : '—'} sub={seats > 0 ? `${Math.round((riders / seats) * 100)}% of ${seats} seats` : undefined} />
-        <Kpi
+      <StatGrid cols={4}>
+        <KpiCard label="Active routes" value={k ? String(k.activeRoutes) : '—'} sub={k ? `${k.totalVehicles} buses` : undefined} icon={MapIcon} accent="cyan" />
+        <KpiCard label="Students riding" value={k ? k.totalStudents.toLocaleString('en-AE') : '—'} sub={seats > 0 ? `${Math.round((riders / seats) * 100)}% of ${seats} seats` : undefined} icon={Users} accent="blue" />
+        <KpiCard
           label="Boarding rate (30 days)"
           value={trips && trips.kpis.totalMarked > 0 ? `${trips.kpis.boardingRate}%` : '—'}
           sub={trips && trips.kpis.totalMarked > 0 ? `${trips.kpis.totalBoarded} of ${trips.kpis.totalMarked} boarded` : 'No trips recorded'}
+          icon={CheckCircle2}
+          accent="emerald"
         />
-        <Kpi label="Fees invoiced this month" value={fees && fees.monthlyRevenue > 0 ? aed(fees.monthlyRevenue) : '—'} sub={fees && fees.payingRiders > 0 ? `${fees.payingRiders} invoices` : 'No invoices yet'} />
-      </div>
+        <KpiCard label="Fees invoiced this month" value={fees && fees.monthlyRevenue > 0 ? aed(fees.monthlyRevenue) : '—'} sub={fees && fees.payingRiders > 0 ? `${fees.payingRiders} invoices` : 'No invoices yet'} icon={CreditCard} accent="amber" />
+      </StatGrid>
 
       <div className="flex gap-2 border-b border-[var(--border-subtle)]">
         {([['routes', 'Route performance'], ['enrolment', 'Enrolment & fees'], ['areas', 'Pickup areas']] as const).map(([id, label]) => (

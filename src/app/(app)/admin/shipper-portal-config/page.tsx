@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { TrackingVisibilityModal } from '@/components/TrackingVisibilityModal';
 import type { TrackingLevel } from '@/lib/shipper-portal/visibility';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface CustomerRow {
   id: string;
@@ -171,12 +172,12 @@ export default function ShipperPortalConfigPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Customers"      value={stats.total}     tone="slate" />
-        <StatCard label="Onboarded"      value={stats.onboarded} tone="emerald" icon={CheckCircle2} />
-        <StatCard label="Pending invite" value={stats.pending}   tone="amber"   icon={Clock} />
-        <StatCard label="Not invited"    value={stats.notInvited} tone="rose"   icon={AlertCircle} />
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Customers"      value={stats.total.toLocaleString()}      accent="slate" />
+        <KpiCard label="Onboarded"      value={stats.onboarded.toLocaleString()}  accent="emerald" icon={CheckCircle2} />
+        <KpiCard label="Pending invite" value={stats.pending.toLocaleString()}    accent="amber"   icon={Clock} />
+        <KpiCard label="Not invited"    value={stats.notInvited.toLocaleString()} accent="rose"    icon={AlertCircle} />
+      </StatGrid>
 
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-sm flex items-center gap-2">

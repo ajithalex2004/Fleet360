@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Activity,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { usePartnerMembership } from '@/components/exchange/PartnerMembershipContext';
 import { PartnerTierBadge } from '@/components/exchange/PartnerTierBadge';
 
@@ -262,61 +263,38 @@ export default function ExchangeDashboardPage() {
       ) : null}
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">New Requests</span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <Briefcase className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-white">{requests.length}</div>
-          <div className="text-[11px] text-cyan-400">Awaiting your quotation</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">Awarded Jobs</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <Award className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-white">{awards.length}</div>
-          <div className="text-[11px] text-emerald-400">Active contracts & trips</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">Fleet & Drivers</span>
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-              <Truck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-white">
-            {`${vehicles.length} ${vehicles.length === 1 ? 'vehicle' : 'vehicles'}`}
-          </div>
-          <div className="text-[11px] text-purple-400">
-            {`${drivers.length} active ${drivers.length === 1 ? 'driver' : 'drivers'}`}
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">Invoiced Revenue</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-white">
-            {invoicedTotal === null ? '—' : `AED ${invoicedTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
-          </div>
-          <div className="text-[11px] text-amber-400">
-            {invoices === null
-              ? 'Invoices unavailable'
-              : `${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'} · ${invoices.filter((i) => i.status === 'PAID').length} paid`}
-          </div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="New Requests"
+          value={requests.length}
+          sub="Awaiting your quotation"
+          icon={Briefcase}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Awarded Jobs"
+          value={awards.length}
+          sub="Active contracts & trips"
+          icon={Award}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Fleet & Drivers"
+          value={`${vehicles.length} ${vehicles.length === 1 ? 'vehicle' : 'vehicles'}`}
+          sub={`${drivers.length} active ${drivers.length === 1 ? 'driver' : 'drivers'}`}
+          icon={Truck}
+          accent="violet"
+        />
+        <KpiCard
+          label="Invoiced Revenue"
+          value={invoicedTotal === null ? '—' : `AED ${invoicedTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          sub={invoices === null
+            ? 'Invoices unavailable'
+            : `${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'} · ${invoices.filter((i) => i.status === 'PAID').length} paid`}
+          icon={DollarSign}
+          accent="amber"
+        />
+      </StatGrid>
 
       {/* Phase 13: Partner Trust Scorecard, 5-KPI SLA Breakdown & Exception History */}
       <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 space-y-5">

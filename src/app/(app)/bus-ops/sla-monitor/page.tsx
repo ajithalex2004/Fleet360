@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { SlaMonitorSummary, TripSlaEvaluation, SlaStatus } from '@/lib/bus-ops/sla-monitor';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -197,72 +198,13 @@ export default function ShiftSlaMonitorPage() {
       </div>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">On-Time Rate</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-[var(--text-main)]">{data ? `${data.onTimeRatePercent}%` : '—'}</span>
-            <span className="text-xs text-emerald-400 font-medium">SLA Target &gt;95%</span>
-          </div>
-          <div className="mt-2 w-full bg-[var(--bg-surface)] rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${data?.onTimeRatePercent || 0}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Active Commutes</span>
-            <Bus className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-[var(--text-main)]">{data?.totalActiveTrips ?? '—'}</span>
-            <span className="text-xs text-[var(--text-muted)]">running / scheduled</span>
-          </div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">In transit to work sites</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">At-Risk Trips</span>
-            <Clock className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-amber-400">{data?.atRiskCount ?? '—'}</span>
-            <span className="text-xs text-[var(--text-muted)]">5–15 min delay</span>
-          </div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Predicted before shift start</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Critical Breaches</span>
-            <Flame className="w-4 h-4 text-red-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-red-400">{data?.breachCount ?? '—'}</span>
-            <span className="text-xs text-red-400 font-medium">&gt;15m or past SLA</span>
-          </div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Requires immediate dispatch action</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Impacted Staff</span>
-            <Users className="w-4 h-4 text-orange-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-[var(--text-main)]">{data?.totalImpactedPassengers ?? 0}</span>
-            <span className="text-xs text-orange-400">passengers affected</span>
-          </div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">In at-risk or delayed buses</p>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="On-Time Rate" value={data ? `${data.onTimeRatePercent}%` : '—'} sub="SLA Target >95%" icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Active Commutes" value={data?.totalActiveTrips ?? '—'} sub="Running / scheduled" icon={Bus} accent="blue" />
+        <KpiCard label="At-Risk Trips" value={data?.atRiskCount ?? '—'} sub="5–15 min delay" icon={Clock} accent="amber" />
+        <KpiCard label="Critical Breaches" value={data?.breachCount ?? '—'} sub=">15m or past SLA" icon={Flame} accent="rose" />
+        <KpiCard label="Impacted Staff" value={data?.totalImpactedPassengers ?? 0} sub="In at-risk or delayed buses" icon={Users} accent="amber" />
+      </StatGrid>
 
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[var(--bg-surface)]/40 p-3 rounded-xl border border-[var(--border-subtle)]">

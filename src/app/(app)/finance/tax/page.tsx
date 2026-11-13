@@ -1,4 +1,6 @@
 'use client';
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface TaxCategory { id: string; code: string; name: string; rate: string; description: string | null; is_default: boolean; is_active: boolean; fta_code: string | null; }
@@ -169,25 +171,29 @@ export default function TaxPage() {
           ) : summary && (
             <div className="space-y-4">
               {/* VAT summary cards */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
-                  <p className="text-xs text-[var(--text-faint)]">📤 Output VAT (Collected)</p>
-                  <p className="text-3xl font-bold text-amber-400 mt-2">{fmtAED(summary.output.vat)}</p>
-                  <p className="text-xs text-[var(--text-faint)] mt-1">From {summary.output.invoices} invoices</p>
-                </div>
-                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
-                  <p className="text-xs text-[var(--text-faint)]">📥 Input VAT (Recoverable)</p>
-                  <p className="text-3xl font-bold text-blue-400 mt-2">{fmtAED(summary.input.vat)}</p>
-                  <p className="text-xs text-[var(--text-faint)] mt-1">Fuel + maintenance purchases</p>
-                </div>
-                <div className={`border rounded-2xl p-5 ${summary.net.payable ? 'bg-red-900/20 border-red-500/30' : 'bg-emerald-900/20 border-emerald-500/30'}`}>
-                  <p className="text-xs text-[var(--text-faint)]">{summary.net.payable ? '⚠️ Net VAT Payable' : '✅ VAT Refundable'}</p>
-                  <p className={`text-3xl font-bold mt-2 ${summary.net.payable ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {fmtAED(Math.abs(summary.net.vat))}
-                  </p>
-                  <p className="text-xs text-[var(--text-faint)] mt-1">Q{summary.period.quarter} {summary.period.year}</p>
-                </div>
-              </div>
+              <StatGrid cols={3}>
+                <KpiCard
+                  label="Output VAT (Collected)"
+                  value={fmtAED(summary.output.vat)}
+                  sub={`From ${summary.output.invoices} invoices`}
+                  icon={ArrowUpRight}
+                  accent="amber"
+                />
+                <KpiCard
+                  label="Input VAT (Recoverable)"
+                  value={fmtAED(summary.input.vat)}
+                  sub="Fuel + maintenance purchases"
+                  icon={ArrowDownLeft}
+                  accent="cyan"
+                />
+                <KpiCard
+                  label={summary.net.payable ? 'Net VAT Payable' : 'VAT Refundable'}
+                  value={fmtAED(Math.abs(summary.net.vat))}
+                  sub={`Q${summary.period.quarter} ${summary.period.year}`}
+                  icon={summary.net.payable ? AlertTriangle : CheckCircle2}
+                  accent={summary.net.payable ? 'rose' : 'emerald'}
+                />
+              </StatGrid>
 
               {/* Period info */}
               <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">

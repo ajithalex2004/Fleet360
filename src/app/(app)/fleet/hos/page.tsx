@@ -1,4 +1,6 @@
 'use client';
+import { AlertTriangle, CheckCircle2, ShieldAlert, Users } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { shortId } from '@/lib/ui/display-id';
@@ -513,24 +515,12 @@ export default function HosDashboard() {
       )}
 
       {/* Fleet KPI Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Drivers', value: loading ? '…' : String(totalDrivers), icon: '👤', color: 'text-[var(--text-main)]', grad: 'from-slate-500/10 to-slate-600/10', border: 'border-slate-500/20' },
-          { label: 'Compliant', value: loading ? '…' : String(totalDrivers - redCount - amberCount), icon: '✅', color: 'text-emerald-400', grad: 'from-emerald-500/10 to-green-500/10', border: 'border-emerald-500/20' },
-          { label: 'Caution', value: loading ? '…' : String(amberCount), icon: '🟡', color: 'text-amber-400', grad: 'from-amber-500/10 to-yellow-500/10', border: 'border-amber-500/20' },
-          { label: 'Violations', value: loading ? '…' : String(totalViolations), icon: '🚨', color: 'text-red-400', grad: 'from-red-500/10 to-rose-500/10', border: 'border-red-500/20' },
-        ].map(k => (
-          <div key={k.label} className={`bg-gradient-to-br ${k.grad} border ${k.border} rounded-2xl p-4`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[var(--text-muted)] text-xs font-medium mb-1">{k.label}</p>
-                <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
-              </div>
-              <span className="text-2xl">{k.icon}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Drivers" value={loading ? '…' : String(totalDrivers)} icon={Users} accent="slate" />
+        <KpiCard label="Compliant" value={loading ? '…' : String(totalDrivers - redCount - amberCount)} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Caution" value={loading ? '…' : String(amberCount)} icon={AlertTriangle} accent="amber" />
+        <KpiCard label="Violations" value={loading ? '…' : String(totalViolations)} icon={ShieldAlert} accent="rose" />
+      </StatGrid>
 
       {/* HoS Rules Reference */}
       <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-4">

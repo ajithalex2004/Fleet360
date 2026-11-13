@@ -6,6 +6,7 @@ import {
   Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat, Calculator, Zap, Leaf,
 } from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -130,21 +131,14 @@ export default function BusOpsDashboard() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        {[
-          { label: 'Active Routes',      value: routes.filter((r)=>r.isActive).length,          href: '/bus-ops/routes',      tone: 'from-cyan-500 to-blue-600' },
-          { label: "Today's Trips",      value: todayTrips.length,                              href: '/bus-ops/schedules',   tone: 'from-emerald-500 to-teal-600' },
-          { label: 'In Progress',        value: activeTrips.length,                             href: '/bus-ops/schedules',   tone: 'from-amber-500 to-orange-600' },
-          { label: 'Staff Registered',   value: staff.filter((s)=>s.isActive).length,           href: '/bus-ops/staff',       tone: 'from-violet-500 to-purple-600' },
-          { label: 'Open Incidents',     value: openIncidents.length,                           href: '/bus-ops/incidents',   tone: 'from-rose-500 to-pink-600' },
-          { label: 'Pending Requests',   value: pendingReqs.length,                             href: '/bus-ops/passengers',  tone: 'from-slate-500 to-slate-700' },
-        ].map(card => (
-          <Link key={card.label} href={card.href} className={`block relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
-            <p className="text-2xl font-bold text-white">{card.value}</p>
-            <p className="mt-1 text-xs font-medium text-white/80">{tLabel(card.label)}</p>
-          </Link>
-        ))}
-      </div>
+      <StatGrid cols={6}>
+        <KpiCard label="Active Routes" value={routes.filter((r)=>r.isActive).length} href="/bus-ops/routes" icon={MapIcon} accent="cyan" />
+        <KpiCard label="Today's Trips" value={todayTrips.length} href="/bus-ops/schedules" icon={Calendar} accent="emerald" />
+        <KpiCard label="In Progress" value={activeTrips.length} href="/bus-ops/schedules" icon={ClockIcon} accent="amber" />
+        <KpiCard label="Staff Registered" value={staff.filter((s)=>s.isActive).length} href="/bus-ops/staff" icon={Users} accent="violet" />
+        <KpiCard label="Open Incidents" value={openIncidents.length} href="/bus-ops/incidents" icon={AlertTriangle} accent="rose" />
+        <KpiCard label="Pending Requests" value={pendingReqs.length} href="/bus-ops/passengers" icon={FileText} accent="slate" />
+      </StatGrid>
 
       {/* Today's Trips */}
       <Panel

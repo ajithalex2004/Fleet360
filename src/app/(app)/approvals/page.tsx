@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ClipboardCheck } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 type SlaState = 'ESCALATED' | 'OVERDUE' | 'DUE_SOON' | 'ON_TRACK' | 'NO_SLA';
 
@@ -274,7 +274,7 @@ export default function ApprovalsPage() {
     const style = SLA_STYLES[s.state];
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs border flex-shrink-0 ${style.cls}`}>
-        {style.label}{s.hoursLeft != null && s.state !== 'ESCALATED' && s.state !== 'ON_TRACK' ? ` · ${hoursText(s.hoursLeft)}` : ''}
+        {style.label}{s.hoursLeft != null && s.state !== 'ESCALATED' && s.state !== 'ON_TRACK' ? ` Â· ${hoursText(s.hoursLeft)}` : ''}
       </span>
     );
   };
@@ -303,7 +303,7 @@ export default function ApprovalsPage() {
         <SlaBadge a={a} />
       </div>
       <p className="text-[var(--text-main)] font-bold text-sm">{a.referenceNumber}</p>
-      <p className="text-[var(--text-muted)] text-xs mt-0.5">{a.workflowName} · {a.stepName}</p>
+      <p className="text-[var(--text-muted)] text-xs mt-0.5">{a.workflowName} Â· {a.stepName}</p>
       {a.highlights && a.highlights.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
           {a.highlights.map((h) => (
@@ -339,12 +339,12 @@ export default function ApprovalsPage() {
     </div>
   );
 
-  const tiles: Array<{ key: SlaFilter | 'ESCALATED_TO_ME'; label: string; value: number; cls: string }> = [
-    { key: 'ALL', label: 'Waiting for me', value: summary?.total ?? approvals.length, cls: 'text-violet-400' },
-    { key: 'DUE_SOON', label: 'Due soon', value: summary?.dueSoon ?? 0, cls: 'text-amber-400' },
-    { key: 'OVERDUE', label: 'Overdue', value: summary?.overdue ?? 0, cls: 'text-rose-400' },
-    { key: 'ESCALATED', label: 'Escalated', value: summary?.escalated ?? 0, cls: 'text-rose-300' },
-    { key: 'ESCALATED_TO_ME', label: 'Escalated to me', value: summary?.escalatedToMe ?? escalated.length, cls: 'text-orange-400' },
+  const tiles: Array<{ key: SlaFilter | 'ESCALATED_TO_ME'; label: string; value: number; accent: PageAccent }> = [
+    { key: 'ALL', label: 'Waiting for me', value: summary?.total ?? approvals.length, accent: 'violet' },
+    { key: 'DUE_SOON', label: 'Due soon', value: summary?.dueSoon ?? 0, accent: 'amber' },
+    { key: 'OVERDUE', label: 'Overdue', value: summary?.overdue ?? 0, accent: 'rose' },
+    { key: 'ESCALATED', label: 'Escalated', value: summary?.escalated ?? 0, accent: 'rose' },
+    { key: 'ESCALATED_TO_ME', label: 'Escalated to me', value: summary?.escalatedToMe ?? escalated.length, accent: 'amber' },
   ];
 
   const tabBtn = (v: ViewMode, label: string, badge?: number) => (
@@ -385,27 +385,29 @@ export default function ApprovalsPage() {
       ) : (
         <>
           {/* SLA summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatGrid cols={5}>
             {tiles.map((t) => {
               const active = t.key === 'ESCALATED_TO_ME' ? viewMode === 'escalated' : viewMode === 'my' && slaFilter === t.key;
               return (
-                <button key={t.key}
+                <KpiCard
+                  key={t.key}
+                  label={t.label}
+                  value={t.value}
+                  accent={t.accent}
+                  active={active}
                   onClick={() => {
                     if (t.key === 'ESCALATED_TO_ME') { switchView('escalated'); return; }
                     if (viewMode !== 'my') switchView('my');
                     setSlaFilter(t.key);
                   }}
-                  className={`text-left bg-[var(--bg-surface)] border rounded-xl px-4 py-3 transition-all ${active ? 'border-violet-500/50' : 'border-[var(--border-subtle)] hover:border-violet-500/30'}`}>
-                  <p className={`text-2xl font-bold ${t.cls}`}>{t.value}</p>
-                  <p className="text-xs text-[var(--text-faint)]">{t.label}</p>
-                </button>
+                />
               );
             })}
-          </div>
+          </StatGrid>
 
           {/* Filters */}
           <div className="flex items-center gap-2 flex-wrap">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reference, workflow, submitter…"
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reference, workflow, submitterâ€¦"
               className="px-3 py-1.5 rounded-xl text-sm bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500/50 w-full sm:w-72" />
             {modules.length > 2 && modules.map(m => (
               <button key={m} onClick={() => setModuleFilter(m)}
@@ -417,7 +419,7 @@ export default function ApprovalsPage() {
             {slaFilter !== 'ALL' && (
               <button onClick={() => setSlaFilter('ALL')}
                 className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet-600/20 text-violet-300 border border-violet-500/30">
-                {SLA_STYLES[slaFilter as SlaState]?.label ?? slaFilter} ✕
+                {SLA_STYLES[slaFilter as SlaState]?.label ?? slaFilter} âœ•
               </button>
             )}
             <button onClick={() => { void loadMyApprovals(); if (viewMode === 'all') void loadAllPending(); }}
@@ -438,7 +440,7 @@ export default function ApprovalsPage() {
                 className="flex-1 min-w-0 px-3 py-1.5 rounded-lg text-sm bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500/50" />
               <button onClick={bulkApprove} disabled={bulkBusy || checked.size === 0}
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40 flex-shrink-0">
-                {bulkBusy ? 'Approving…' : `Approve selected${checked.size ? ` (${checked.size})` : ''}`}
+                {bulkBusy ? 'Approvingâ€¦' : `Approve selected${checked.size ? ` (${checked.size})` : ''}`}
               </button>
             </div>
           )}
@@ -467,7 +469,7 @@ export default function ApprovalsPage() {
                     {source.length ? 'Clear the filters to see everything.'
                       : viewMode === 'my' ? 'No approvals are waiting for you.'
                       : viewMode === 'escalated' ? 'Approvals that wait past their escalation time, where you are the escalation contact, show here.'
-                      : 'No workflows are waiting. Set them up in Admin › Workflows.'}
+                      : 'No workflows are waiting. Set them up in Admin â€º Workflows.'}
                   </p>
                 </div>
               ) : displayList.map(a => <ApprovalCard key={a.stepInstanceId} a={a} />)}
@@ -507,7 +509,7 @@ export default function ApprovalsPage() {
             {selectedApproval.sla && selectedApproval.sla.state !== 'NO_SLA' && (
               <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-white/20 text-white">
                 {SLA_STYLES[selectedApproval.sla.state].label}
-                {selectedApproval.sla.hoursLeft != null && selectedApproval.sla.state !== 'ESCALATED' ? ` · ${hoursText(selectedApproval.sla.hoursLeft)}` : ''}
+                {selectedApproval.sla.hoursLeft != null && selectedApproval.sla.state !== 'ESCALATED' ? ` Â· ${hoursText(selectedApproval.sla.hoursLeft)}` : ''}
               </span>
             )}
           </div>
@@ -558,7 +560,7 @@ export default function ApprovalsPage() {
                           {s.requireAllApprovers ? 'All of: ' : 'Any of: '}
                           {s.approverEmails.map((e, i) => {
                             const d = s.approvals?.find(a => a.email.toLowerCase() === e.toLowerCase());
-                            return <span key={e}>{i > 0 && ', '}{e}{d ? (d.action === 'APPROVE' ? ' ✓' : ' ✗') : ''}</span>;
+                            return <span key={e}>{i > 0 && ', '}{e}{d ? (d.action === 'APPROVE' ? ' âœ“' : ' âœ—') : ''}</span>;
                           })}
                         </p>
                       ) : s.assignedToEmail && <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.assignedToEmail}</p>}

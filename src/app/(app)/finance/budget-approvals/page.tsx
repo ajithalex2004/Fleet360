@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface BudgetSub {
   id: string; submission_no: string; fiscal_year: number; department: string;
@@ -342,20 +343,12 @@ export default function BudgetApprovalsPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: 'Pending Review', value: pending, color: 'text-amber-400', note: 'Awaiting action' },
-          { label: 'Approved', value: approved, color: 'text-emerald-400', note: 'This year' },
-          { label: 'Total Approved', value: `AED ${fmt(totalApproved)}`, color: 'text-[var(--text-main)]', note: `FY ${selectedYear}` },
-          { label: 'Submissions', value: subs.length, color: 'text-blue-400', note: 'All statuses' },
-        ].map(kpi => (
-          <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
-            <p className="text-xs text-[var(--text-faint)] mt-0.5">{kpi.note}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Pending Review" value={pending} sub="Awaiting action" accent="amber" />
+        <KpiCard label="Approved" value={approved} sub="This year" accent="emerald" />
+        <KpiCard label="Total Approved" value={`AED ${fmt(totalApproved)}`} sub={`FY ${selectedYear}`} accent="violet" />
+        <KpiCard label="Submissions" value={subs.length} sub="All statuses" accent="cyan" />
+      </StatGrid>
 
       {/* Status filter */}
       <div className="flex gap-2 flex-wrap">

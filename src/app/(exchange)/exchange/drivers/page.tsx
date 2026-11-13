@@ -18,6 +18,7 @@ import {
   Phone,
   X,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 const DRIVER_PERMIT_CLASSIFICATIONS = [
   {
@@ -166,24 +167,12 @@ export default function ExchangeDriversPage() {
       </div>
 
       {/* Driver Gate KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
-          <span className="text-[10px] font-bold uppercase text-slate-400">Total Driver Roster</span>
-          <div className="text-2xl font-black text-white mt-1 font-mono">{stats.total}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30">
-          <span className="text-[10px] font-bold uppercase text-emerald-400">Stage-3 Dispatch Ready</span>
-          <div className="text-2xl font-black text-emerald-300 mt-1 font-mono">{stats.ready}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30">
-          <span className="text-[10px] font-bold uppercase text-amber-400">Credentials Expiring &lt; 30d</span>
-          <div className="text-2xl font-black text-amber-300 mt-1 font-mono">{stats.expiring}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/30">
-          <span className="text-[10px] font-bold uppercase text-rose-400">Stage-3 Blocked (Expired)</span>
-          <div className="text-2xl font-black text-rose-300 mt-1 font-mono">{stats.blocked}</div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Driver Roster" value={stats.total} accent="slate" />
+        <KpiCard label="Stage-3 Dispatch Ready" value={stats.ready} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Credentials Expiring < 30d" value={stats.expiring} icon={AlertTriangle} accent="amber" />
+        <KpiCard label="Stage-3 Blocked (Expired)" value={stats.blocked} icon={XCircle} accent="rose" />
+      </StatGrid>
 
       {/* Domain Filter Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">

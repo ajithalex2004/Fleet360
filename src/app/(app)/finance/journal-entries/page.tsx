@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface JeLine { lineNumber: number; accountCode: string; accountName: string; description: string; debitAmount: string; creditAmount: string; costCentre?: string; }
@@ -342,18 +343,22 @@ export default function JournalEntriesPage() {
       </div>
 
       {/* Status KPI Cards */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-        {STATUSES.filter(s => s !== 'ALL').map(s => {
+      <StatGrid cols={6}>
+        {STATUSES.filter(s => s !== 'ALL').map((s, idx) => {
           const d = countOf(s);
+          const accents: PageAccent[] = ['slate', 'amber', 'cyan', 'emerald', 'violet', 'rose'];
           return (
-            <div key={s} onClick={() => setTab(tab === s ? 'ALL' : s)}
-              className={`bg-[var(--bg-surface)]/60 border rounded-xl p-3 cursor-pointer transition-all ${tab === s ? 'border-emerald-500/50' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
-              <p className="text-xs text-[var(--text-faint)]">{s}</p>
-              <p className="text-xl font-bold text-[var(--text-main)] mt-0.5">{d?.count ?? 0}</p>
-            </div>
+            <KpiCard
+              key={s}
+              label={s}
+              value={d?.count ?? 0}
+              accent={accents[idx % accents.length]}
+              active={tab === s}
+              onClick={() => setTab(tab === s ? 'ALL' : s)}
+            />
           );
         })}
-      </div>
+      </StatGrid>
 
       {/* Approval Queue */}
       {parseInt(countOf('SUBMITTED')?.count ?? '0') > 0 && (

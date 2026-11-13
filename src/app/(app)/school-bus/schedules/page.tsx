@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { Calendar, CheckCircle2, CalendarDays, Sun, PauseCircle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ──────────────────────── types ──────────────────────────── */
 interface Schedule {
@@ -441,20 +443,13 @@ export default function SchedulesPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { label: 'Total', val: counts.total, color: 'text-[var(--text-main)]', bg: 'bg-[var(--bg-surface)]' },
-          { label: 'Active', val: counts.active, color: 'text-green-400', bg: 'bg-green-500/10' },
-          { label: 'Sun–Thu', val: counts.monThu, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
-          { label: 'Friday', val: counts.friday, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-          { label: 'Suspended', val: counts.suspended, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-        ].map(k => (
-          <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center`}>
-            <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total" value={counts.total} icon={Calendar} accent="slate" />
+        <KpiCard label="Active" value={counts.active} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Sun–Thu" value={counts.monThu} icon={CalendarDays} accent="violet" />
+        <KpiCard label="Friday" value={counts.friday} icon={Sun} accent="cyan" />
+        <KpiCard label="Suspended" value={counts.suspended} icon={PauseCircle} accent="amber" />
+      </StatGrid>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

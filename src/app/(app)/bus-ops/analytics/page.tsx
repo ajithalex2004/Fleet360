@@ -5,8 +5,9 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
-import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck, TrendingUp, X } from 'lucide-react';
+import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck, TrendingUp, X, Bus, CheckCircle2, Users, Gauge, Map as MapIcon } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface CostRow {
   id: string; label: string;
@@ -66,15 +67,6 @@ function ChartTip({ active, payload, label }: any) {
 }
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
-function KpiCard({ icon, label, value, sub, color }: { icon: string; label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-1">
-      <p className="text-xs text-[var(--text-faint)] flex items-center gap-1.5">{icon} {label}</p>
-      <p className={`text-2xl font-bold ${color ?? 'text-[var(--text-main)]'}`}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-faint)]">{sub}</p>}
-    </div>
-  );
-}
 
 // ── Metric bar ────────────────────────────────────────────────────────────────
 function MetricBar({ label, value, color, max = 100 }: { label: string; value: number; color: string; max?: number }) {
@@ -152,13 +144,13 @@ export default function BusOpsAnalyticsPage() {
       />
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <KpiCard icon="🚌" label="Total Trips"     value={kpis.totalTrips}      color="text-[var(--text-main)]" />
-        <KpiCard icon="✅" label="Completed"        value={kpis.completedTrips}  color="text-emerald-400" sub={`${kpis.completionRate}%`} />
-        <KpiCard icon="👥" label="Passengers"       value={kpis.totalPassengers.toLocaleString()} color="text-purple-400" />
-        <KpiCard icon="📍" label="Avg Occupancy"    value={`${kpis.avgOccupancy}%`} color={kpis.avgOccupancy >= 70 ? 'text-emerald-400' : 'text-amber-400'} />
-        <KpiCard icon="🗺️" label="Active Routes"    value={kpis.totalRoutes}     color="text-sky-400" sub={`${kpis.totalStaff} staff`} />
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total Trips" value={kpis.totalTrips} icon={Bus} accent="slate" />
+        <KpiCard label="Completed" value={kpis.completedTrips} sub={`${kpis.completionRate}%`} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Passengers" value={kpis.totalPassengers.toLocaleString()} icon={Users} accent="violet" />
+        <KpiCard label="Avg Occupancy" value={`${kpis.avgOccupancy}%`} icon={Gauge} accent={kpis.avgOccupancy >= 70 ? 'emerald' : 'amber'} />
+        <KpiCard label="Active Routes" value={kpis.totalRoutes} sub={`${kpis.totalStaff} staff`} icon={MapIcon} accent="cyan" />
+      </StatGrid>
 
       {/* Performance bars */}
       <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-6">

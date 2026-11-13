@@ -16,6 +16,8 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { Map, Armchair, CheckCircle2, Zap, AlertOctagon } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface RouteCapacity {
   routeId:           string;
@@ -190,39 +192,13 @@ export default function SeatAvailabilityPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          {
-            icon: '🗺️', label: 'Total Routes',
-            value: summary.total, sub: 'active routes', color: 'text-[var(--text-main)]',
-          },
-          {
-            icon: '🪑', label: 'Total Seats',
-            value: totalSeats, sub: `${totalEnrolled} enrolled`, color: 'text-[var(--text-main)]',
-          },
-          {
-            icon: '✅', label: 'Seats Available',
-            value: totalFree, sub: `${100 - overallPct}% fleet free`, color: 'text-emerald-400',
-          },
-          {
-            icon: '⚡', label: 'Near Full',
-            value: summary.warning, sub: '≥ 90% full', color: 'text-amber-400',
-          },
-          {
-            icon: '🚨', label: 'Overloaded',
-            value: summary.overload, sub: 'exceed capacity', color: summary.overload > 0 ? 'text-red-400' : 'text-[var(--text-faint)]',
-          },
-        ].map(k => (
-          <div key={k.label} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xl">{k.icon}</span>
-              <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-            </div>
-            <p className="text-[var(--text-main)] text-sm font-semibold mt-1">{k.label}</p>
-            <p className="text-[var(--text-faint)] text-xs">{k.sub}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total Routes" value={loading ? '…' : summary.total} sub="active routes" icon={Map} accent="slate" />
+        <KpiCard label="Total Seats" value={loading ? '…' : totalSeats} sub={`${totalEnrolled} enrolled`} icon={Armchair} accent="blue" />
+        <KpiCard label="Seats Available" value={loading ? '…' : totalFree} sub={`${100 - overallPct}% fleet free`} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Near Full" value={loading ? '…' : summary.warning} sub="≥ 90% full" icon={Zap} accent="amber" />
+        <KpiCard label="Overloaded" value={loading ? '…' : summary.overload} sub="exceed capacity" icon={AlertOctagon} accent={summary.overload > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* ── Fleet utilisation bar ── */}
       <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5">

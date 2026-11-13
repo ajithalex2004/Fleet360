@@ -9,6 +9,8 @@
  *  - Capacity Guard, Stop Sequence Engine, UAE compliance checks
  */
 import { useState, useEffect, useCallback } from 'react';
+import { Map, CheckCircle2, PauseCircle, Zap, AlertOctagon } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ─────────────────────── types ─────────────────────────── */
 interface StopStep {
@@ -623,23 +625,13 @@ export default function SchoolBusRoutesPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-4">
-        {[
-          { label: 'Total Routes',  value: routes.length,      color: 'text-[var(--text-main)]',         icon: '🗺️' },
-          { label: 'Active',        value: activeCount,         color: 'text-emerald-400',   icon: '🟢' },
-          { label: 'Inactive',      value: routes.length - activeCount, color: 'text-[var(--text-muted)]', icon: '⚪' },
-          { label: 'Near Full',     value: Object.values(capacity).filter(c => c.capacityStatus === 'WARNING').length, color: 'text-amber-400', icon: '⚡' },
-          { label: 'Overloaded',    value: overloadCount,       color: overloadCount > 0 ? 'text-red-400' : 'text-[var(--text-muted)]', icon: '🚨' },
-        ].map(k => (
-          <div key={k.label} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xl">{k.icon}</span>
-              <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-            </div>
-            <p className="text-[var(--text-faint)] text-xs mt-1">{k.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total Routes" value={loading ? '…' : routes.length} icon={Map} accent="slate" />
+        <KpiCard label="Active" value={loading ? '…' : activeCount} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Inactive" value={loading ? '…' : routes.length - activeCount} icon={PauseCircle} accent="slate" />
+        <KpiCard label="Near Full" value={loading ? '…' : Object.values(capacity).filter(c => c.capacityStatus === 'WARNING').length} icon={Zap} accent="amber" />
+        <KpiCard label="Overloaded" value={loading ? '…' : overloadCount} icon={AlertOctagon} accent={overloadCount > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">

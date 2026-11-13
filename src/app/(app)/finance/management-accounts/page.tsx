@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SWITCH_OFF } from '@/lib/ui/toggle';
@@ -564,50 +565,49 @@ export default function ManagementAccountsPage() {
 
       {/* KPI bar — Income Statement */}
       {data && data.type === 'income_statement' && (
-        <div className="grid grid-cols-5 gap-3">
+        <StatGrid cols={5}>
           {[
-            { label: 'Revenue',     value: data.summary.totalRevenue, compVal: data.comparison?.summary.totalRevenue, color: 'text-emerald-400' },
-            { label: 'Gross Profit',value: data.summary.grossProfit,  compVal: data.comparison?.summary.grossProfit,  color: data.summary.grossProfit >= 0 ? 'text-blue-400' : 'text-red-400', pct: `${data.summary.grossMarginPct}%` },
-            { label: 'EBITDA',      value: data.summary.ebitda,       compVal: data.comparison?.summary.ebitda,       color: data.summary.ebitda >= 0 ? 'text-purple-400' : 'text-red-400', pct: `${data.summary.ebitdaMarginPct}%` },
-            { label: 'EBIT',        value: data.summary.ebit,         compVal: data.comparison?.summary.ebit,         color: data.summary.ebit >= 0 ? 'text-blue-300' : 'text-red-400' },
-            { label: 'Net Profit',  value: data.summary.netProfit,    compVal: data.comparison?.summary.netProfit,    color: data.summary.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400', pct: `${data.summary.netMarginPct}%` },
+            { label: 'Revenue',     value: data.summary.totalRevenue, compVal: data.comparison?.summary.totalRevenue, accent: 'emerald' as PageAccent },
+            { label: 'Gross Profit',value: data.summary.grossProfit,  compVal: data.comparison?.summary.grossProfit,  accent: (data.summary.grossProfit >= 0 ? 'cyan' : 'rose') as PageAccent, pct: `${data.summary.grossMarginPct}%` },
+            { label: 'EBITDA',      value: data.summary.ebitda,       compVal: data.comparison?.summary.ebitda,       accent: (data.summary.ebitda >= 0 ? 'violet' : 'rose') as PageAccent, pct: `${data.summary.ebitdaMarginPct}%` },
+            { label: 'EBIT',        value: data.summary.ebit,         compVal: data.comparison?.summary.ebit,         accent: (data.summary.ebit >= 0 ? 'slate' : 'rose') as PageAccent },
+            { label: 'Net Profit',  value: data.summary.netProfit,    compVal: data.comparison?.summary.netProfit,    accent: (data.summary.netProfit >= 0 ? 'emerald' : 'rose') as PageAccent, pct: `${data.summary.netMarginPct}%` },
           ].map(kpi => {
             const delta = kpi.compVal !== undefined ? kpi.value - kpi.compVal : null;
+            const subParts = [
+              kpi.pct ? `${kpi.pct} margin` : null,
+              delta !== null ? `${delta >= 0 ? '▲' : '▼'} AED ${fmt(Math.abs(delta))} vs prior` : null,
+            ].filter(Boolean);
             return (
-              <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-                <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
-                <p className={`text-base font-bold mt-1 tabular-nums ${kpi.color}`}>
-                  AED {kpi.value < 0 ? '(' : ''}{fmt(Math.abs(kpi.value))}{kpi.value < 0 ? ')' : ''}
-                </p>
-                {kpi.pct && <p className="text-xs text-[var(--text-faint)] mt-0.5">{kpi.pct} margin</p>}
-                {delta !== null && (
-                  <p className={`text-xs mt-1 tabular-nums ${delta >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {delta >= 0 ? '▲' : '▼'} AED {fmt(Math.abs(delta))} vs prior
-                  </p>
-                )}
-              </div>
+              <KpiCard
+                key={kpi.label}
+                label={kpi.label}
+                value={`AED ${kpi.value < 0 ? '(' : ''}${fmt(Math.abs(kpi.value))}${kpi.value < 0 ? ')' : ''}`}
+                sub={subParts.length ? subParts.join(' · ') : undefined}
+                accent={kpi.accent}
+              />
             );
           })}
-        </div>
+        </StatGrid>
       )}
 
       {/* KPI bar — Cash Flow */}
       {data && data.type === 'cash_flow' && (
-        <div className="grid grid-cols-4 gap-3">
+        <StatGrid cols={4}>
           {[
-            { label: 'Operating Cash Flow',  value: data.operating.netOperatingCashFlow,  color: 'text-blue-400' },
-            { label: 'Investing Cash Flow',   value: data.investing.netInvestingCashFlow,  color: 'text-purple-400' },
-            { label: 'Financing Cash Flow',   value: data.financing.netFinancingCashFlow,  color: 'text-amber-400' },
-            { label: 'Net Cash Flow',         value: data.summary.netCashFlow,             color: data.summary.netCashFlow >= 0 ? 'text-emerald-400' : 'text-red-400' },
+            { label: 'Operating Cash Flow',  value: data.operating.netOperatingCashFlow,  accent: 'cyan' as PageAccent },
+            { label: 'Investing Cash Flow',   value: data.investing.netInvestingCashFlow,  accent: 'violet' as PageAccent },
+            { label: 'Financing Cash Flow',   value: data.financing.netFinancingCashFlow,  accent: 'amber' as PageAccent },
+            { label: 'Net Cash Flow',         value: data.summary.netCashFlow,             accent: (data.summary.netCashFlow >= 0 ? 'emerald' : 'rose') as PageAccent },
           ].map(kpi => (
-            <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-              <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
-              <p className={`text-base font-bold mt-1 tabular-nums ${kpi.color}`}>
-                AED {kpi.value < 0 ? `(${fmt(Math.abs(kpi.value))})` : fmt(kpi.value)}
-              </p>
-            </div>
+            <KpiCard
+              key={kpi.label}
+              label={kpi.label}
+              value={`AED ${kpi.value < 0 ? `(${fmt(Math.abs(kpi.value))})` : fmt(kpi.value)}`}
+              accent={kpi.accent}
+            />
           ))}
-        </div>
+        </StatGrid>
       )}
 
       {/* Period info */}

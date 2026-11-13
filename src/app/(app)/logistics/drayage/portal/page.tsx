@@ -23,7 +23,7 @@ import {
   ExternalLink,
   Timer,
 } from 'lucide-react';
-import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { KpiCard, PageHeader, Panel, StatGrid, StatusPill } from '@/components/ui/page-theme';
 
 interface PortalJob {
   id: string;
@@ -720,41 +720,35 @@ export default function ConsigneeTrackingPortalPage() {
               }
             >
               <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">Estimated Arrival</span>
-                    <strong className="font-mono text-sm text-emerald-400">
-                      {activeJob.status === 'IN_TRANSIT'
+                <StatGrid cols={3}>
+                  <KpiCard
+                    label="Estimated Arrival"
+                    value={
+                      activeJob.status === 'IN_TRANSIT'
                         ? '~18 Mins (On Time)'
                         : currentMilestoneStep >= 4
                         ? 'Arrived at Facility'
-                        : 'Awaiting Gate-Out'}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
-                      Corridor: E11 Sheikh Zayed Rd
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">Prime Mover & Chassis</span>
-                    <strong className="font-mono text-sm text-[var(--text-main)]">
-                      {activeJob.assignedVehiclePlate || 'Pending Dispatch'}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5 truncate">
-                      {activeJob.assignedDriverName || 'Driver Unassigned'} · {activeJob.assignedTrailerPlate || '40FT Skeletal'}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">Port Gate Pass Token</span>
-                    <strong className="font-mono text-sm text-cyan-400">
-                      {activeJob.tokenNumber || 'Pending EDI Token'}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
-                      Weight: {((activeJob.cargoWeightKg || 22000) / 1000).toFixed(1)}T Gross
-                    </span>
-                  </div>
-                </div>
+                        : 'Awaiting Gate-Out'
+                    }
+                    sub="Corridor: E11 Sheikh Zayed Rd"
+                    icon={Clock}
+                    accent="emerald"
+                  />
+                  <KpiCard
+                    label="Prime Mover & Chassis"
+                    value={activeJob.assignedVehiclePlate || 'Pending Dispatch'}
+                    sub={`${activeJob.assignedDriverName || 'Driver Unassigned'} · ${activeJob.assignedTrailerPlate || '40FT Skeletal'}`}
+                    icon={Truck}
+                    accent="slate"
+                  />
+                  <KpiCard
+                    label="Port Gate Pass Token"
+                    value={activeJob.tokenNumber || 'Pending EDI Token'}
+                    sub={`Weight: ${((activeJob.cargoWeightKg || 22000) / 1000).toFixed(1)}T Gross`}
+                    icon={ShieldCheck}
+                    accent="cyan"
+                  />
+                </StatGrid>
 
                 {/* Ramp Offloading ETC Countdown & Consignee Self-Service Controls */}
                 <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
@@ -821,55 +815,37 @@ export default function ConsigneeTrackingPortalPage() {
               }
             >
               <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">DO Expiry Countdown</span>
-                    <strong
-                      className={`font-mono text-sm ${
-                        doCountdown.expired
-                          ? 'text-rose-400'
-                          : doCountdown.urgent
-                          ? 'text-amber-400'
-                          : 'text-emerald-400'
-                      }`}
-                    >
-                      {doCountdown.label}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
-                      {activeJob.doExpiryDate
+                <StatGrid cols={3}>
+                  <KpiCard
+                    label="DO Expiry Countdown"
+                    value={doCountdown.label}
+                    sub={
+                      activeJob.doExpiryDate
                         ? `Valid til ${new Date(activeJob.doExpiryDate).toLocaleDateString()}`
-                        : 'Electronic DO Active'}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">Port Free Days</span>
-                    <strong className="font-mono text-sm text-[var(--text-main)]">
-                      {linkedContainer
+                        : 'Electronic DO Active'
+                    }
+                    icon={Clock}
+                    accent={doCountdown.expired ? 'rose' : doCountdown.urgent ? 'amber' : 'emerald'}
+                  />
+                  <KpiCard
+                    label="Port Free Days"
+                    value={
+                      linkedContainer
                         ? `${linkedContainer.demurrage.elapsedDays} / ${linkedContainer.demurrage.freeDaysAllowed} Days Used`
-                        : '2 / 5 Free Days'}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
-                      {linkedContainer?.demurrage.tierLabel || 'Free Period (Tier 0)'}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] block">Demurrage Exposure</span>
-                    <strong
-                      className={`font-mono text-sm ${
-                        (linkedContainer?.demurrage.accruedPenaltyAed || 0) > 0
-                          ? 'text-rose-400'
-                          : 'text-emerald-400'
-                      }`}
-                    >
-                      AED {(linkedContainer?.demurrage.accruedPenaltyAed || 0).toLocaleString()}
-                    </strong>
-                    <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
-                      {linkedContainer?.demurrage.status || 'SAFE'}
-                    </span>
-                  </div>
-                </div>
+                        : '2 / 5 Free Days'
+                    }
+                    sub={linkedContainer?.demurrage.tierLabel || 'Free Period (Tier 0)'}
+                    icon={Calendar}
+                    accent="cyan"
+                  />
+                  <KpiCard
+                    label="Demurrage Exposure"
+                    value={`AED ${(linkedContainer?.demurrage.accruedPenaltyAed || 0).toLocaleString()}`}
+                    sub={linkedContainer?.demurrage.status || 'SAFE'}
+                    icon={AlertTriangle}
+                    accent={(linkedContainer?.demurrage.accruedPenaltyAed || 0) > 0 ? 'rose' : 'emerald'}
+                  />
+                </StatGrid>
 
                 {/* Free Day Utilization Bar */}
                 <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] space-y-1.5">

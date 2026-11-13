@@ -17,6 +17,7 @@ import {
   Lock,
   ExternalLink,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Connection {
   id: string;

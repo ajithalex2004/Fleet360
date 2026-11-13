@@ -3,6 +3,7 @@
  * Previously at /maintenance/garage-portal.
  */
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { Send, FileText, CheckCircle2, Clock } from 'lucide-react';
 
@@ -24,21 +25,11 @@ export default function VendorGaragePortalPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          { icon: FileText, label: 'Pending submissions', color: 'blue' },
-          { icon: CheckCircle2, label: 'Submitted this month', color: 'emerald' },
-          { icon: Clock, label: 'Awaiting approval', color: 'amber' },
-        ].map(({ icon: Icon, label, color }) => (
-          <div key={label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6">
-            <div className={`rounded-lg bg-${color}-500/20 p-2 w-fit mb-3`}>
-              <Icon className={`h-5 w-5 text-${color}-400`} />
-            </div>
-            <p className="text-sm text-[var(--text-faint)]">{label}</p>
-            <p className="text-3xl font-bold text-[var(--text-main)] mt-1">—</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard label="Pending submissions" value="—" icon={FileText} accent="cyan" />
+        <KpiCard label="Submitted this month" value="—" icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Awaiting approval" value="—" icon={Clock} accent="amber" />
+      </StatGrid>
 
       <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
         <Send className="h-12 w-12 text-[var(--text-faint)] mx-auto mb-3" />

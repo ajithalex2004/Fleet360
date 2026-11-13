@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface RevenueTrendData {
   month: string;
@@ -86,56 +87,36 @@ export default function RevenueAnalysisPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Total Revenue</p>
-            <p className="text-3xl font-bold text-emerald-400">AED {summary.totalRevenue.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Total Costs</p>
-            <p className="text-3xl font-bold text-rose-400">AED {summary.totalCosts.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Net Profit</p>
-            <p className="text-3xl font-bold text-blue-400">AED {summary.netProfit.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Profit Margin</p>
-            <p className="text-3xl font-bold text-indigo-400">{summary.marginPercent.toFixed(1)}%</p>
-          </div>
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Revenue" value={`AED ${summary.totalRevenue.toLocaleString()}`} accent="emerald" />
+          <KpiCard label="Total Costs" value={`AED ${summary.totalCosts.toLocaleString()}`} accent="rose" />
+          <KpiCard label="Net Profit" value={`AED ${summary.netProfit.toLocaleString()}`} accent="cyan" />
+          <KpiCard label="Profit Margin" value={`${summary.marginPercent.toFixed(1)}%`} accent="violet" />
+        </StatGrid>
       )}
 
       {/* Revenue Breakdown */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Rental Revenue</p>
-            <p className="text-2xl font-bold text-[var(--text-main)]">AED {summary.rentalRevenue.toLocaleString()}</p>
-            <p className="text-[var(--text-faint)] text-xs mt-2">
-              {((summary.rentalRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total
-            </p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Leasing Revenue</p>
-            <p className="text-2xl font-bold text-[var(--text-main)]">AED {summary.leasingRevenue.toLocaleString()}</p>
-            <p className="text-[var(--text-faint)] text-xs mt-2">
-              {((summary.leasingRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total
-            </p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Other Revenue</p>
-            <p className="text-2xl font-bold text-[var(--text-main)]">AED {summary.otherRevenue.toLocaleString()}</p>
-            <p className="text-[var(--text-faint)] text-xs mt-2">
-              {((summary.otherRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total
-            </p>
-          </div>
-        </div>
+        <StatGrid cols={3}>
+          <KpiCard
+            label="Rental Revenue"
+            value={`AED ${summary.rentalRevenue.toLocaleString()}`}
+            sub={`${((summary.rentalRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total`}
+            accent="cyan"
+          />
+          <KpiCard
+            label="Leasing Revenue"
+            value={`AED ${summary.leasingRevenue.toLocaleString()}`}
+            sub={`${((summary.leasingRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total`}
+            accent="violet"
+          />
+          <KpiCard
+            label="Other Revenue"
+            value={`AED ${summary.otherRevenue.toLocaleString()}`}
+            sub={`${((summary.otherRevenue / summary.totalRevenue) * 100).toFixed(1)}% of total`}
+            accent="slate"
+          />
+        </StatGrid>
       )}
 
       {/* Trend Table */}

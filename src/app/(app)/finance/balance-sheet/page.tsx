@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface BSLine { code: string; label: string; amount: number; subtype?: string | null; }
 interface BSData {
@@ -222,30 +223,24 @@ export default function BalanceSheetPage() {
       {data && !loading && (
         <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
           <h3 className="text-sm font-bold text-[var(--text-main)] mb-4">Key Financial Ratios</h3>
-          <div className="grid grid-cols-4 gap-4">
-            {(() => {
-              const currentRatio = data.liabilities.totalCurrent > 0
-                ? Math.round((data.assets.totalCurrent / data.liabilities.totalCurrent) * 100) / 100 : 0;
-              const debtToEquity = data.equity.totalEquity > 0
-                ? Math.round((data.liabilities.totalLiabilities / data.equity.totalEquity) * 100) / 100 : 0;
-              const equityRatio = data.summary.totalAssets > 0
-                ? Math.round((data.equity.totalEquity / data.summary.totalAssets) * 1000) / 10 : 0;
-              const debtRatio = data.summary.totalAssets > 0
-                ? Math.round((data.liabilities.totalLiabilities / data.summary.totalAssets) * 1000) / 10 : 0;
-              return [
-                { label: 'Current Ratio', value: `${currentRatio}x`, note: currentRatio >= 2 ? '✓ Healthy (≥2x)' : currentRatio >= 1 ? '⚠ Adequate (≥1x)' : '✗ Below 1x', good: currentRatio >= 2 },
-                { label: 'Debt-to-Equity', value: `${debtToEquity}x`, note: debtToEquity <= 1 ? '✓ Conservative' : '⚠ Leveraged', good: debtToEquity <= 1 },
-                { label: 'Equity Ratio', value: `${equityRatio}%`, note: equityRatio >= 50 ? '✓ Strong equity base' : '⚠ Debt-heavy', good: equityRatio >= 50 },
-                { label: 'Debt Ratio', value: `${debtRatio}%`, note: debtRatio <= 50 ? '✓ Low leverage' : '⚠ High leverage', good: debtRatio <= 50 },
-              ].map(r => (
-                <div key={r.label} className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
-                  <p className="text-xs text-[var(--text-muted)]">{r.label}</p>
-                  <p className="text-xl font-bold text-[var(--text-main)] mt-1">{r.value}</p>
-                  <p className={`text-xs mt-1 ${r.good ? 'text-emerald-400' : 'text-amber-400'}`}>{r.note}</p>
-                </div>
-              ));
-            })()}
-          </div>
+          {(() => {
+            const currentRatio = data.liabilities.totalCurrent > 0
+              ? Math.round((data.assets.totalCurrent / data.liabilities.totalCurrent) * 100) / 100 : 0;
+            const debtToEquity = data.equity.totalEquity > 0
+              ? Math.round((data.liabilities.totalLiabilities / data.equity.totalEquity) * 100) / 100 : 0;
+            const equityRatio = data.summary.totalAssets > 0
+              ? Math.round((data.equity.totalEquity / data.summary.totalAssets) * 1000) / 10 : 0;
+            const debtRatio = data.summary.totalAssets > 0
+              ? Math.round((data.liabilities.totalLiabilities / data.summary.totalAssets) * 1000) / 10 : 0;
+            return (
+              <StatGrid cols={4}>
+                <KpiCard label="Current Ratio" value={`${currentRatio}x`} sub={currentRatio >= 2 ? '✓ Healthy (≥2x)' : currentRatio >= 1 ? '⚠ Adequate (≥1x)' : '✗ Below 1x'} accent={currentRatio >= 2 ? 'emerald' : 'amber'} />
+                <KpiCard label="Debt-to-Equity" value={`${debtToEquity}x`} sub={debtToEquity <= 1 ? '✓ Conservative' : '⚠ Leveraged'} accent={debtToEquity <= 1 ? 'emerald' : 'amber'} />
+                <KpiCard label="Equity Ratio" value={`${equityRatio}%`} sub={equityRatio >= 50 ? '✓ Strong equity base' : '⚠ Debt-heavy'} accent={equityRatio >= 50 ? 'cyan' : 'amber'} />
+                <KpiCard label="Debt Ratio" value={`${debtRatio}%`} sub={debtRatio <= 50 ? '✓ Low leverage' : '⚠ High leverage'} accent={debtRatio <= 50 ? 'emerald' : 'rose'} />
+              </StatGrid>
+            );
+          })()}
         </div>
       )}
     </div>

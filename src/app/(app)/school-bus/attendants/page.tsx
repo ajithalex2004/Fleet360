@@ -5,6 +5,8 @@
  * This registry tracks certifications, Emirates ID expiry, and route assignments.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { Users, CheckCircle2, Bus, AlertTriangle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Attendant {
   id: string;
@@ -236,24 +238,12 @@ export default function AttendantsPage() {
       </div>
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label:'Total Attendants', value: attendants.length, color:'text-[var(--text-main)]',       icon:'👩' },
-          { label:'Active',           value: active,            color:'text-emerald-400', icon:'✅' },
-          { label:'Route Assigned',   value: assigned,          color:'text-blue-400',    icon:'🚌' },
-          { label:'Docs Expiring',    value: expiring,          color: expiring > 0 ? 'text-red-400' : 'text-[var(--text-muted)]', icon:'⚠️' },
-        ].map(k => (
-          <div key={k.label} className={`rounded-2xl bg-[var(--bg-surface)] border p-4 ${
-            k.label === 'Docs Expiring' && expiring > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-[var(--border-subtle)]'
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className="text-xl">{k.icon}</span>
-              <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-            </div>
-            <p className="text-[var(--text-faint)] text-xs mt-1">{k.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Attendants" value={loading ? '…' : attendants.length} icon={Users} accent="slate" />
+        <KpiCard label="Active" value={loading ? '…' : active} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Route Assigned" value={loading ? '…' : assigned} icon={Bus} accent="blue" />
+        <KpiCard label="Docs Expiring" value={loading ? '…' : expiring} icon={AlertTriangle} accent={expiring > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* Search */}
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, employee ID or phone…"

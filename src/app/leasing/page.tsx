@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFetchedData, invalidate } from '@/hooks/useFetchedData';
 
@@ -130,38 +130,37 @@ export default function LeasingDashboard() {
         </div>
       )}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <StatGrid cols={4}>
         {[
-          { label: 'Active contracts', value: kpis.activeContracts, sub: `${kpis.totalContracts} ${tLabel('total contracts')}`, tone: 'from-blue-500 to-indigo-600' },
-          { label: 'Monthly revenue', value: moneyShort(kpis.monthlyRevenue, 1000, 'K'), sub: tLabel('active lease run-rate'), tone: 'from-emerald-500 to-teal-600' },
-          { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: tLabel('contracted value'), tone: 'from-violet-500 to-purple-600' },
-          { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: tLabel('finance-owned collections'), tone: 'from-amber-500 to-orange-600' },
+          { label: 'Active contracts', value: kpis.activeContracts, sub: `${kpis.totalContracts} ${tLabel('total contracts')}`, accent: 'cyan' as const },
+          { label: 'Monthly revenue', value: moneyShort(kpis.monthlyRevenue, 1000, 'K'), sub: tLabel('active lease run-rate'), accent: 'emerald' as const },
+          { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: tLabel('contracted value'), accent: 'violet' as const },
+          { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: tLabel('finance-owned collections'), accent: 'amber' as const },
         ].map(card => (
-          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
-            <p className="text-sm font-medium text-white/80">{tLabel(card.label)}</p>
-            <p className="mt-3 text-3xl font-bold text-white">
-              {loadingAnalytics ? '...' : card.value}
-            </p>
-            <p className="mt-1 text-xs text-white/60">{card.sub}</p>
-          </div>
+          <KpiCard
+            key={card.label}
+            label={card.label}
+            value={loadingAnalytics ? '...' : card.value}
+            sub={card.sub}
+            accent={card.accent}
+          />
         ))}
-      </section>
+      </StatGrid>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        {attentionItems.map(item => (
-          <div key={item.label} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text-main)]">{tLabel(item.label)}</p>
-                <p className="mt-2 text-2xl font-bold text-[var(--text-main)]">{loadingAnalytics ? '...' : item.value}</p>
-              </div>
-              <span className="rounded-full bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--text-faint)] shadow-sm">
-                {tLabel(item.state)}
-              </span>
-            </div>
-          </div>
-        ))}
-      </section>
+      <StatGrid cols={3}>
+        {attentionItems.map((item, idx) => {
+          const accents = ['rose', 'amber', 'violet'] as const;
+          return (
+            <KpiCard
+              key={item.label}
+              label={item.label}
+              value={loadingAnalytics ? '...' : item.value}
+              sub={tLabel(item.state)}
+              accent={accents[idx % accents.length]}
+            />
+          );
+        })}
+      </StatGrid>
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">

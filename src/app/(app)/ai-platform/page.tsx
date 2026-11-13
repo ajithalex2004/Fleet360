@@ -23,6 +23,7 @@ import {
   Layers,
   FileCheck,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface RoiSummary {
   totalAgentRuns: number;

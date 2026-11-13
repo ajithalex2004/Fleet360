@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useCallback, useEffect, useState } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -221,22 +222,12 @@ export default function BreakdownPage() {
             )}
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                    { label: 'Active Incidents', value: active,     icon: AlertTriangle, cls: 'text-red-400' },
-                    { label: 'Recovery En Route', value: dispatched, icon: Truck,         cls: 'text-amber-400' },
-                    { label: 'At Workshop',        value: atWorkshop, icon: Wrench,        cls: 'text-purple-400' },
-                    { label: 'Resolved',           value: resolved,   icon: CheckCircle2,  cls: 'text-emerald-400' },
-                ].map(({ label, value, icon: Icon, cls }) => (
-                    <div key={label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-4 flex items-center gap-4">
-                        <Icon className={`h-8 w-8 ${cls}`} />
-                        <div>
-                            <p className="text-2xl font-bold text-[var(--text-main)]">{value}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{label}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <StatGrid cols={4}>
+                <KpiCard label="Active Incidents" value={active} icon={AlertTriangle} accent="rose" />
+                <KpiCard label="Recovery En Route" value={dispatched} icon={Truck} accent="amber" />
+                <KpiCard label="At Workshop" value={atWorkshop} icon={Wrench} accent="violet" />
+                <KpiCard label="Resolved" value={resolved} icon={CheckCircle2} accent="emerald" />
+            </StatGrid>
 
             {/* Filter tabs */}
             <div className="flex gap-2 flex-wrap">

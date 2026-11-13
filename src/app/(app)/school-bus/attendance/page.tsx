@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Users, CheckCircle2, XCircle, Clock, FileCheck, BarChart3 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AttStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
@@ -261,21 +263,14 @@ export default function SchoolBusAttendancePage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        {[
-          { label: 'Total',       value: summary.total,    color: 'text-[var(--text-main)]',        icon: '👥' },
-          { label: 'Present',     value: summary.present,  color: 'text-emerald-400',  icon: '✅' },
-          { label: 'Absent',      value: summary.absent,   color: 'text-red-400',      icon: '❌' },
-          { label: 'Late',        value: summary.late,     color: 'text-amber-400',    icon: '⏰' },
-          { label: 'Excused',     value: summary.excused,  color: 'text-blue-400',     icon: '📋' },
-          { label: 'Attendance %',value: `${attendanceRate}%`, color: attendanceRate >= 80 ? 'text-emerald-400' : attendanceRate >= 60 ? 'text-amber-400' : 'text-red-400', icon: '📊' },
-        ].map(s => (
-          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-3 text-center">
-            <p className="text-xs text-[var(--text-faint)]">{s.icon} {s.label}</p>
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={6}>
+        <KpiCard label="Total" value={summary.total} icon={Users} accent="slate" />
+        <KpiCard label="Present" value={summary.present} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Absent" value={summary.absent} icon={XCircle} accent="rose" />
+        <KpiCard label="Late" value={summary.late} icon={Clock} accent="amber" />
+        <KpiCard label="Excused" value={summary.excused} icon={FileCheck} accent="blue" />
+        <KpiCard label="Attendance %" value={`${attendanceRate}%`} icon={BarChart3} accent={attendanceRate >= 80 ? 'emerald' : attendanceRate >= 60 ? 'amber' : 'rose'} />
+      </StatGrid>
 
       {/* Bulk actions + filter */}
       <div className="flex flex-wrap items-center gap-3">

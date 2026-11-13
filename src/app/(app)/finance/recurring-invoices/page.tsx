@@ -1,4 +1,6 @@
 'use client';
+import { CheckCircle2, DollarSign, PauseCircle, Receipt, Zap } from 'lucide-react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useEffect, useState, useCallback } from 'react';
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -353,15 +355,21 @@ export default function RecurringInvoicesPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-8">
-        {kpiCards.map(c => (
-          <div key={c.label} className={`bg-gradient-to-br ${c.color} rounded-2xl p-4`}>
-            <p className="text-2xl mb-1">{c.icon}</p>
-            <p className="text-xl font-bold text-white">{c.value}</p>
-            <p className="text-white/70 text-xs mt-0.5">{c.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5} className="mb-8">
+        {kpiCards.map((c, idx) => {
+          const accents: PageAccent[] = ['emerald', 'cyan', Number(kpi?.due_today) > 0 ? 'amber' : 'slate', 'slate', 'violet'];
+          const icons = [CheckCircle2, DollarSign, Zap, PauseCircle, Receipt];
+          return (
+            <KpiCard
+              key={c.label}
+              label={c.label}
+              value={c.value}
+              icon={icons[idx % icons.length]}
+              accent={accents[idx % accents.length]}
+            />
+          );
+        })}
+      </StatGrid>
 
       {/* Due Today Alert */}
       {kpi && Number(kpi.due_today) > 0 && (

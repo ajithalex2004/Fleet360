@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface Alert {
@@ -166,27 +167,26 @@ export default function BLEAlertsPage() {
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Open Alerts', value: openCount, color: 'text-red-400', bg: 'border-red-500/20' },
-          { label: 'Acknowledged', value: ackCount, color: 'text-amber-400', bg: 'border-amber-500/20' },
-          { label: 'Resolved', value: resolvedCount, color: 'text-emerald-400', bg: 'border-emerald-500/20' },
-        ].map(k => (
-          <div key={k.label} className={`bg-[var(--bg-surface)] border ${k.bg} rounded-xl p-5`}>
-            {loading ? (
-              <div className="space-y-2">
-                <div className="h-8 bg-[var(--bg-surface)] rounded animate-pulse w-12" />
-                <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
-              </div>
-            ) : (
-              <>
-                <p className={`text-3xl font-bold ${k.color}`}>{k.value}</p>
-                <p className="text-[var(--text-muted)] text-sm mt-1">{k.label}</p>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-3 gap-4">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+              <div className="h-8 bg-[var(--bg-surface)] rounded animate-pulse w-12" />
+              <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <StatGrid cols={3}>
+          {[
+            { label: 'Open Alerts', value: openCount, accent: 'rose' as PageAccent },
+            { label: 'Acknowledged', value: ackCount, accent: 'amber' as PageAccent },
+            { label: 'Resolved', value: resolvedCount, accent: 'emerald' as PageAccent },
+          ].map(k => (
+            <KpiCard key={k.label} label={k.label} value={k.value} accent={k.accent} />
+          ))}
+        </StatGrid>
+      )}
 
       {/* Filters */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">

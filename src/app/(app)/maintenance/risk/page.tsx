@@ -10,7 +10,7 @@
 
 import React, { useState } from 'react';
 import { Gauge, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
-import { PageHeader, KpiCard } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import type { MaintenanceRiskScore, RiskBand, RiskFactor } from '@/types/maintenance';
 
@@ -205,12 +205,12 @@ export default function RiskScorePage() {
             )}
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatGrid cols={4}>
                 <KpiCard label="🔴 Critical"  value={criticalCount} icon={Gauge} accent="rose"    />
                 <KpiCard label="🟠 High"      value={highCount}     icon={Gauge} accent="amber"   />
-                <KpiCard label="🟡 Medium"    value={mediumCount}   icon={Gauge} accent="default" />
+                <KpiCard label="🟡 Medium"    value={mediumCount}   icon={Gauge} accent="cyan"    />
                 <KpiCard label="🟢 Low"       value={lowCount}      icon={Gauge} accent="emerald" />
-            </div>
+            </StatGrid>
 
             {/* Table card */}
             <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">

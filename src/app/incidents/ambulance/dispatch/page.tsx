@@ -18,6 +18,8 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { Phone, Siren, CheckCircle2, Ambulance } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import PlatformHomeBar from '@/components/PlatformHomeBar';
 import { shortId } from '@/lib/ui/display-id';
 
@@ -311,22 +313,12 @@ export default function AmbulanceDispatchPage() {
         </div>
 
         {/* KPI strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label:'Active Calls',    value: activeCalls.length,    color:'text-blue-400',   bg:'from-blue-600/15 to-blue-600/5',   icon:'📞' },
-            { label:'P1 / Emergency',  value: p1Calls.length,        color:'text-red-400',    bg:'from-red-600/20 to-red-600/5',     icon:'🆘' },
-            { label:'Units Available', value: availableUnits.length, color:'text-green-400',  bg:'from-green-600/15 to-green-600/5', icon:'✅' },
-            { label:'On Active Calls', value: busyUnits.length,      color:'text-cyan-400',   bg:'from-cyan-600/15 to-cyan-600/5',   icon:'🚑' },
-          ].map(k => (
-            <div key={k.label} className={`rounded-2xl bg-gradient-to-br ${k.bg} border border-[var(--border-subtle)] p-5`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">{k.icon}</span>
-                <span className={`text-3xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-              </div>
-              <p className="text-[var(--text-muted)] text-xs font-medium">{k.label}</p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Active Calls" value={loading ? '…' : activeCalls.length} icon={Phone} accent="blue" />
+          <KpiCard label="P1 / Emergency" value={loading ? '…' : p1Calls.length} icon={Siren} accent="rose" />
+          <KpiCard label="Units Available" value={loading ? '…' : availableUnits.length} icon={CheckCircle2} accent="emerald" />
+          <KpiCard label="On Active Calls" value={loading ? '…' : busyUnits.length} icon={Ambulance} accent="cyan" />
+        </StatGrid>
 
         {/* Tabs */}
         <div className="flex gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-1 w-fit">

@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useState, useMemo, useEffect } from 'react';
 import {
@@ -67,26 +68,7 @@ function phaseBarColor(status: SLAPhaseSnapshot['status']): string {
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
-function KpiCard({
-    icon, label, value, sub, colorCls,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    value: number | string;
-    sub?: string;
-    colorCls: string;
-}) {
-    return (
-        <div className="bg-white rounded-xl border border-[var(--border-subtle)] p-4 flex items-start gap-3">
-            <div className={`p-2 rounded-lg ${colorCls}`}>{icon}</div>
-            <div>
-                <p className="text-2xl font-bold text-[var(--text-main)]">{value}</p>
-                <p className="text-sm text-[var(--text-faint)]">{label}</p>
-                {sub && <p className="text-xs text-[var(--text-muted)] mt-0.5">{sub}</p>}
-            </div>
-        </div>
-    );
-}
+
 
 function StatusPill({ status }: { status: SLAStatus | 'PENDING' }) {
     if (status === 'PENDING') {
@@ -225,30 +207,34 @@ export default function SLADashboardPage() {
             </div>
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <StatGrid cols={4}>
                 <KpiCard
-                    icon={<Activity className="w-4 h-4 text-blue-600" />}
-                    label="Total monitored" value={snapshots.length}
-                    colorCls="bg-blue-50"
+                    icon={Activity}
+                    label="Total monitored"
+                    value={snapshots.length}
+                    accent="cyan"
                 />
                 <KpiCard
-                    icon={<XCircle className="w-4 h-4 text-red-600" />}
-                    label="SLA breached" value={breached}
+                    icon={XCircle}
+                    label="SLA breached"
+                    value={breached}
                     sub={snapshots.length ? `${Math.round((breached / snapshots.length) * 100)}% of total` : 'None monitored'}
-                    colorCls="bg-red-50"
+                    accent="rose"
                 />
                 <KpiCard
-                    icon={<AlertTriangle className="w-4 h-4 text-amber-600" />}
-                    label="At risk" value={atRisk}
+                    icon={AlertTriangle}
+                    label="At risk"
+                    value={atRisk}
                     sub="≤ 20% time remaining"
-                    colorCls="bg-amber-50"
+                    accent="amber"
                 />
                 <KpiCard
-                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                    label="SLA met" value={met}
-                    colorCls="bg-emerald-50"
+                    icon={CheckCircle2}
+                    label="SLA met"
+                    value={met}
+                    accent="emerald"
                 />
-            </div>
+            </StatGrid>
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">

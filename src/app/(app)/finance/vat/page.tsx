@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CheckCircle2, DollarSign } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface VATReturn {
   id: string; status: string; periodStart: string; periodEnd: string;
@@ -197,21 +199,17 @@ export default function VATPage() {
           </div>
 
           {/* Main VAT figures */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'Total Revenue (Excl. VAT)', value: fmtAED(summary.totalRevenue), color: 'text-[var(--text-main)]', icon: '💰' },
-              { label: 'Output VAT (Box 12)', value: fmtAED(summary.totalVatCollected), color: 'text-amber-400', icon: '📤' },
-              { label: 'Input VAT Recoverable (Box 13)', value: fmtAED(summary.inputVat), color: 'text-blue-400', icon: '📥' },
-              { label: summary.netVatPayable > 0 ? 'Net VAT Payable (Box 14)' : 'VAT Refundable (Box 14)',
-                value: fmtAED(summary.netVatPayable > 0 ? summary.netVatPayable : summary.vatRefundable),
-                color: summary.netVatPayable > 0 ? 'text-red-400' : 'text-emerald-400', icon: summary.netVatPayable > 0 ? '⚠️' : '✅' },
-            ].map(k => (
-              <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
-                <p className="text-xs text-[var(--text-faint)]">{k.icon} {k.label}</p>
-                <p className={`text-lg font-bold mt-1 ${k.color}`}>{k.value}</p>
-              </div>
-            ))}
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard label="Total Revenue (Excl. VAT)" value={fmtAED(summary.totalRevenue)} icon={DollarSign} accent="slate" />
+            <KpiCard label="Output VAT (Box 12)" value={fmtAED(summary.totalVatCollected)} icon={ArrowUpRight} accent="amber" />
+            <KpiCard label="Input VAT Recoverable (Box 13)" value={fmtAED(summary.inputVat)} icon={ArrowDownLeft} accent="cyan" />
+            <KpiCard
+              label={summary.netVatPayable > 0 ? 'Net VAT Payable (Box 14)' : 'VAT Refundable (Box 14)'}
+              value={fmtAED(summary.netVatPayable > 0 ? summary.netVatPayable : summary.vatRefundable)}
+              icon={summary.netVatPayable > 0 ? AlertTriangle : CheckCircle2}
+              accent={summary.netVatPayable > 0 ? 'rose' : 'emerald'}
+            />
+          </StatGrid>
 
           {/* UAE Form VAT 201 Box 1a-1g Emirate Breakdown */}
           {summary.vat201Boxes && (

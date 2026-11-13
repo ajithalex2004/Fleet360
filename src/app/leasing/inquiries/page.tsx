@@ -1,5 +1,6 @@
 'use client';
 import { VEHICLE_GROUPS, VEHICLE_MAKES, getModelsForMake, getGroupsForModel } from '@/lib/vehicleMaster';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -353,17 +354,19 @@ export default function LeaseInquiriesPage() {
         </div>
 
         {/* Stats */}
-        <div className="mb-8 grid grid-cols-4 gap-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6"
-            >
-              <p className="text-[var(--text-muted)] text-sm mb-2">{stat.label}</p>
-              <p className="text-4xl font-bold text-[var(--text-main)]">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4} className="mb-8">
+          {stats.map((stat, idx) => {
+            const accents = ['cyan', 'amber', 'emerald', 'violet'] as const;
+            return (
+              <KpiCard
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                accent={accents[idx % accents.length]}
+              />
+            );
+          })}
+        </StatGrid>
 
         {/* Filters */}
         <div className="mb-6 bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-4">

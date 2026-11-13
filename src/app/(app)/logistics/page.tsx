@@ -4,8 +4,9 @@ import Link from 'next/link';
 import {
   Truck, MapPin, Inbox, Package,
   Plus, Map, Gavel, Building2, WalletCards,
+  CheckCircle2, Navigation, Clock, Wrench, Users, Gauge,
 } from 'lucide-react';
-import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { KpiCard, PageHeader, Panel, StatGrid, StatusPill } from '@/components/ui/page-theme';
 import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 import { fetchCached } from '@/lib/fetch-cache';
 import RateCoveragePanel from '@/components/logistics/RateCoveragePanel';
@@ -86,35 +87,22 @@ export default function LogisticsDashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'Fleet vehicles',   value: stats?.totalVehicles ?? 0,     sub: 'Logistics fleet',   tone: 'from-amber-500 to-orange-600' },
-              { label: 'Available now',    value: stats?.availableVehicles ?? 0, sub: 'Ready to dispatch', tone: 'from-emerald-500 to-teal-600' },
-              { label: 'Active shipments', value: stats?.activeTrips ?? 0,       sub: 'In transit',        tone: 'from-cyan-500 to-blue-600' },
-              { label: 'Pending',          value: stats?.pendingBookings ?? 0,   sub: 'Awaiting dispatch', tone: 'from-orange-500 to-red-600' },
-              { label: 'Completed today',  value: stats?.completedToday ?? 0,    sub: 'Shipments finished',tone: 'from-green-500 to-emerald-600' },
-              { label: 'In maintenance',   value: stats?.inMaintenance ?? 0,     sub: 'Out of service',    tone: 'from-rose-500 to-pink-600' },
-              { label: 'Drivers',          value: stats?.drivers ?? 0,           sub: 'Logistics-assigned',tone: 'from-violet-500 to-purple-600' },
-            ].map(card => (
-              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
-                <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
-                <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
-              </div>
-            ))}
-
-            {/* Utilisation tile with progress bar */}
-            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br p-4 shadow-sm ${
-              utilPct >= 70 ? 'from-emerald-500 to-teal-600' : utilPct >= 40 ? 'from-amber-500 to-orange-600' : 'from-rose-500 to-pink-600'
-            }`}>
-              <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">Utilisation</p>
-              <p className="mt-2 text-3xl font-bold text-white">{utilPct}%</p>
-              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
-                <div className="h-full bg-white rounded-full transition-all" style={{ width: `${utilPct}%` }} />
-              </div>
-              <p className="text-xs text-white/60 mt-1">Active vs available</p>
-            </div>
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard label="Fleet vehicles"   value={stats?.totalVehicles ?? 0}     sub="Logistics fleet"    icon={Truck}        accent="amber" />
+            <KpiCard label="Available now"    value={stats?.availableVehicles ?? 0} sub="Ready to dispatch"  icon={CheckCircle2} accent="emerald" />
+            <KpiCard label="Active shipments" value={stats?.activeTrips ?? 0}       sub="In transit"         icon={Navigation}   accent="cyan" />
+            <KpiCard label="Pending"          value={stats?.pendingBookings ?? 0}   sub="Awaiting dispatch"  icon={Clock}        accent="amber" />
+            <KpiCard label="Completed today"  value={stats?.completedToday ?? 0}    sub="Shipments finished" icon={CheckCircle2} accent="emerald" />
+            <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Out of service"     icon={Wrench}       accent="rose" />
+            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="Logistics-assigned" icon={Users}        accent="violet" />
+            <KpiCard
+              label="Utilisation"
+              value={`${utilPct}%`}
+              sub="Active vs available"
+              icon={Gauge}
+              accent={utilPct >= 70 ? 'emerald' : utilPct >= 40 ? 'amber' : 'rose'}
+            />
+          </StatGrid>
 
           <RateCoveragePanel />
 

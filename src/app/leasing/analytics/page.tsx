@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface KPIs {
   activeContracts: number;
@@ -127,24 +128,20 @@ export default function AnalyticsPage() {
       )}
 
       {/* KPI Cards — clickable for drill-down */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <StatGrid cols={4}>
         {[
-          { label: 'Active Contracts',     value: kpis.activeContracts,                       sub: `of ${kpis.totalContracts} total`,      color: 'from-blue-500 to-indigo-600',          href: '/leasing/contracts-v2?status=ACTIVE' },
-          { label: 'Monthly Revenue',      value: `AED ${((kpis.monthlyRevenue ?? 0) / 1000).toFixed(1)}K`, sub: 'from active contracts', color: 'from-emerald-500 to-teal-600',     href: '/finance/payments' },
-          { label: 'Portfolio Value',      value: `AED ${((kpis.portfolioValue ?? 0) / 1000000).toFixed(2)}M`, sub: 'total contract value',  color: 'from-indigo-500 to-violet-600',  href: '/leasing/contracts-v2' },
-          { label: 'Overdue Amount',       value: `AED ${(kpis.overdueAmount ?? 0).toLocaleString()}`,     sub: (kpis.overdueAmount ?? 0) > 50000 ? 'CRITICAL' : 'pending collection', color: (kpis.overdueAmount ?? 0) > 50000 ? 'from-red-600 to-rose-600' : 'from-orange-500 to-amber-600', href: '/finance/ar-aging' },
-          { label: 'Unbilled Charges',     value: `AED ${(kpis.totalUnbilled ?? 0).toLocaleString()}`,     sub: 'fines + fuel + overage',   color: 'from-amber-500 to-orange-600',     href: '/leasing/mileage-overages?status=PENDING' },
-          { label: 'Expiring Policies',    value: kpis.expiringPolicies ?? 0,                 sub: 'insurance within 30 days', color: (kpis.expiringPolicies ?? 0) > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-600 to-slate-500', href: '/fleet/insurance' },
-          { label: 'Renewal Pipeline',     value: kpis.renewalsPending ?? 0,                  sub: 'awaiting customer response', color: 'from-violet-500 to-purple-600',  href: '/leasing/renewals' },
-          { label: 'Total Lessees',        value: kpis.totalLessees ?? 0,                     sub: `${kpis.corporateLessees ?? 0} corporate`, color: 'from-cyan-500 to-blue-600',  href: '/leasing/lessees' },
-        ].map(({ label, value, sub, color, href }) => (
-          <Link key={label} href={href} className={`rounded-2xl bg-gradient-to-br ${color} p-5 block hover:scale-[1.02] transition-transform`}>
-            <div className="text-2xl font-bold text-[var(--text-main)]">{value}</div>
-            <div className="text-sm font-medium text-[var(--text-main)]/80 mt-1">{label}</div>
-            <div className="text-xs text-[var(--text-main)]/60 mt-0.5">{sub} <span className="opacity-70">→</span></div>
-          </Link>
+          { label: 'Active Contracts',     value: kpis.activeContracts,                       sub: `of ${kpis.totalContracts} total`,      accent: 'cyan' as const,          href: '/leasing/contracts-v2?status=ACTIVE' },
+          { label: 'Monthly Revenue',      value: `AED ${((kpis.monthlyRevenue ?? 0) / 1000).toFixed(1)}K`, sub: 'from active contracts', accent: 'emerald' as const,     href: '/finance/payments' },
+          { label: 'Portfolio Value',      value: `AED ${((kpis.portfolioValue ?? 0) / 1000000).toFixed(2)}M`, sub: 'total contract value',  accent: 'violet' as const,  href: '/leasing/contracts-v2' },
+          { label: 'Overdue Amount',       value: `AED ${(kpis.overdueAmount ?? 0).toLocaleString()}`,     sub: (kpis.overdueAmount ?? 0) > 50000 ? 'CRITICAL' : 'pending collection', accent: ((kpis.overdueAmount ?? 0) > 50000 ? 'rose' : 'amber') as 'rose' | 'amber', href: '/finance/ar-aging' },
+          { label: 'Unbilled Charges',     value: `AED ${(kpis.totalUnbilled ?? 0).toLocaleString()}`,     sub: 'fines + fuel + overage',   accent: 'amber' as const,     href: '/leasing/mileage-overages?status=PENDING' },
+          { label: 'Expiring Policies',    value: kpis.expiringPolicies ?? 0,                 sub: 'insurance within 30 days', accent: ((kpis.expiringPolicies ?? 0) > 0 ? 'rose' : 'slate') as 'rose' | 'slate', href: '/fleet/insurance' },
+          { label: 'Renewal Pipeline',     value: kpis.renewalsPending ?? 0,                  sub: 'awaiting customer response', accent: 'violet' as const,  href: '/leasing/renewals' },
+          { label: 'Total Lessees',        value: kpis.totalLessees ?? 0,                     sub: `${kpis.corporateLessees ?? 0} corporate`, accent: 'cyan' as const,  href: '/leasing/lessees' },
+        ].map(({ label, value, sub, accent, href }) => (
+          <KpiCard key={label} label={label} value={value} sub={`${sub} →`} accent={accent} href={href} />
         ))}
-      </div>
+      </StatGrid>
 
       {/* Fleet Utilisation — real vehicle-month-based calc */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">

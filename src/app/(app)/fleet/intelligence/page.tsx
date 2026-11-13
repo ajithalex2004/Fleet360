@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useCallback, useEffect, useState } from 'react';
 import { runAgentAndWait } from '@/lib/agents/run-client';
 
@@ -243,19 +244,22 @@ export default function FleetIntelligencePage() {
       )}
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {kpiCards.map((k) => (
-          <div
-            key={k.label}
-            className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 text-center cursor-pointer hover:border-[var(--border-subtle)] transition-all"
-            onClick={() => setFilterLevel(k.label === 'Vehicles Scored' || k.label === 'Healthy (Low)' ? (k.label === 'Healthy (Low)' ? 'LOW' : '') : k.label.replace(' Risk','').toUpperCase())}
-          >
-            <div className="text-xl mb-1">{k.icon}</div>
-            <div className="text-2xl font-bold" style={{ color: k.color }}>{k.value}</div>
-            <div className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</div>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        {kpiCards.map((k, idx) => {
+          const accents: PageAccent[] = ['violet', 'rose', 'amber', 'cyan', 'emerald'];
+          const nextLevel = k.label === 'Vehicles Scored' || k.label === 'Healthy (Low)' ? (k.label === 'Healthy (Low)' ? 'LOW' : '') : k.label.replace(' Risk','').toUpperCase();
+          return (
+            <KpiCard
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              accent={accents[idx % accents.length]}
+              active={filterLevel === nextLevel && nextLevel !== ''}
+              onClick={() => setFilterLevel(nextLevel)}
+            />
+          );
+        })}
+      </StatGrid>
 
       {/* Risk Distribution Bar */}
       {total > 0 && (

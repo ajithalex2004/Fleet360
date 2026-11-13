@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Bot, RefreshCw } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { Bot, RefreshCw, Zap, Clock, Map, Search } from 'lucide-react';
+import { PageHeader, KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { runAgentAndWait } from '@/lib/agents/run-client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -616,21 +616,17 @@ export default function AgentsPage() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[
-            { label: 'Active Agents',       value: strip?.activeAgents ?? 0,               color: 'text-emerald-400', icon: '🟢' },
-            { label: 'Actions Today',        value: strip?.actionsToday ?? 0,               color: 'text-blue-400',    icon: '⚡' },
-            { label: 'Awaiting Approval',    value: strip?.pendingApprovals ?? 0,           color: strip?.pendingApprovals ? 'text-amber-400' : 'text-[var(--text-muted)]', icon: '⏳' },
-            { label: 'Route km Saved 7d',   value: `${strip?.routeKmSaved7d ?? 0} km`,     color: 'text-purple-400',  icon: '🗺️' },
-            { label: 'Anomalies Flagged 7d', value: strip?.anomaliesFlagged7d ?? 0,         color: 'text-red-400',     icon: '🔍' },
-          ].map(k => (
-            <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
-              <div className="text-lg mb-1">{k.icon}</div>
-              <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
-              <div className="text-[11px] text-[var(--text-faint)] mt-1">{k.label}</div>
-            </div>
+        <StatGrid cols={5}>
+          {([
+            { label: 'Active Agents',       value: strip?.activeAgents ?? 0,               accent: 'emerald' as PageAccent, icon: Bot },
+            { label: 'Actions Today',        value: strip?.actionsToday ?? 0,               accent: 'cyan' as PageAccent,    icon: Zap },
+            { label: 'Awaiting Approval',    value: strip?.pendingApprovals ?? 0,           accent: (strip?.pendingApprovals ? 'amber' : 'slate') as PageAccent, icon: Clock },
+            { label: 'Route km Saved 7d',   value: `${strip?.routeKmSaved7d ?? 0} km`,     accent: 'violet' as PageAccent,  icon: Map },
+            { label: 'Anomalies Flagged 7d', value: strip?.anomaliesFlagged7d ?? 0,         accent: 'rose' as PageAccent,    icon: Search },
+          ]).map(k => (
+            <KpiCard key={k.label} label={k.label} value={k.value} icon={k.icon} accent={k.accent} />
           ))}
-        </div>
+        </StatGrid>
       )}
 
       {/* ── BATCH AGENTS ─────────────────────────────────────────────────────── */}

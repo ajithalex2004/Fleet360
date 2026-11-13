@@ -2,7 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Settings, Activity } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { usePermissions } from '@/contexts/PermissionContext';
 
@@ -29,11 +29,11 @@ export default function AdminOverview() {
     permissions: permissions.data?.length  ?? 0,
   };
 
-  const cards = [
-    ...(isSuperAdmin ? [{ label: 'Tenants', value: stats.tenants, color: 'from-blue-500 to-indigo-600', href: '/admin/tenants' }] : []),
-    { label: 'Users',       value: stats.users,       color: 'from-violet-500 to-purple-600', href: '/admin/users' },
-    { label: 'Roles',       value: stats.roles,       color: 'from-emerald-500 to-teal-600',  href: '/admin/roles' },
-    { label: 'Permissions', value: stats.permissions, color: 'from-amber-500 to-orange-600',  href: '/admin/roles' },
+  const cards: Array<{ label: string; value: number; accent: PageAccent; href: string }> = [
+    ...(isSuperAdmin ? [{ label: 'Tenants', value: stats.tenants, accent: 'cyan' as PageAccent, href: '/admin/tenants' }] : []),
+    { label: 'Users',       value: stats.users,       accent: 'violet',  href: '/admin/users' },
+    { label: 'Roles',       value: stats.roles,       accent: 'emerald', href: '/admin/roles' },
+    { label: 'Permissions', value: stats.permissions, accent: 'amber',   href: '/admin/roles' },
   ];
 
   return (
@@ -46,15 +46,11 @@ export default function AdminOverview() {
       />
 
       {/* Stats — instant on re-visit, fast first paint via Data Cache + CDN */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatGrid cols={isSuperAdmin ? 4 : 3}>
         {cards.map(c => (
-          <Link key={c.label} href={c.href}
-            className={`rounded-2xl bg-gradient-to-br ${c.color} p-6 hover:opacity-90 transition-all`}>
-            <div className="text-4xl font-bold text-white">{c.value}</div>
-            <div className="text-sm text-white/80 mt-1">{c.label}</div>
-          </Link>
+          <KpiCard key={c.label} label={c.label} value={c.value} accent={c.accent} href={c.href} />
         ))}
-      </div>
+      </StatGrid>
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 interface CoaAccount {
   id: string; account_code: string; account_name: string; account_type: string;
@@ -201,16 +202,22 @@ export default function CoaPage() {
       </div>
 
       {/* Type Summary */}
-      <div className="grid grid-cols-5 gap-3">
-        {typeCounts.map(tc => (
-          <button key={tc.type} onClick={() => setTypeFilter(typeFilter === tc.type ? 'ALL' : tc.type)}
-            className={`p-4 rounded-2xl border transition-all text-left ${typeFilter === tc.type ? TYPE_COLORS[tc.type] + ' border-2' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
-            <p className="text-xs text-[var(--text-muted)]">{tc.type}</p>
-            <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{tc.count}</p>
-            <p className="text-xs text-[var(--text-faint)] mt-0.5">accounts</p>
-          </button>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        {typeCounts.map((tc, idx) => {
+          const accents: PageAccent[] = ['cyan', 'amber', 'violet', 'emerald', 'rose'];
+          return (
+            <KpiCard
+              key={tc.type}
+              label={tc.type}
+              value={tc.count}
+              sub="accounts"
+              accent={accents[idx % accents.length]}
+              active={typeFilter === tc.type}
+              onClick={() => setTypeFilter(typeFilter === tc.type ? 'ALL' : tc.type)}
+            />
+          );
+        })}
+      </StatGrid>
 
       {/* Search + Filter */}
       <div className="flex items-center gap-3">

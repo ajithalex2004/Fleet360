@@ -2,6 +2,7 @@
 import { contractToRenewal, toDateInput } from '@/lib/autoFill';
 import React, { useState, useCallback, useEffect } from 'react';
 import { shortId } from '@/lib/ui/display-id';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Renewal {
   id: string;
@@ -188,28 +189,13 @@ export default function RenewalsPage() {
       </div>
 
       {/* Status Pipeline */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-[var(--text-main)]">{statusCounts.PROPOSED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">PROPOSED</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-blue-400">{statusCounts.SENT_TO_CUSTOMER}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">SENT TO CUSTOMER</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-emerald-400">{statusCounts.ACCEPTED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">ACCEPTED</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-rose-400">{statusCounts.REJECTED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">REJECTED</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-amber-400">{statusCounts.EXPIRED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">EXPIRED</div>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="PROPOSED" value={statusCounts.PROPOSED} accent="slate" />
+        <KpiCard label="SENT TO CUSTOMER" value={statusCounts.SENT_TO_CUSTOMER} accent="cyan" />
+        <KpiCard label="ACCEPTED" value={statusCounts.ACCEPTED} accent="emerald" />
+        <KpiCard label="REJECTED" value={statusCounts.REJECTED} accent="rose" />
+        <KpiCard label="EXPIRED" value={statusCounts.EXPIRED} accent="amber" />
+      </StatGrid>
 
       {/* Filter Bar */}
       <div className="flex gap-4 flex-wrap">

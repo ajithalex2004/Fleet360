@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import Link from 'next/link';
 
 /**
@@ -665,78 +666,49 @@ export default function TelematicsPage() {
       </div>
 
       {/* KPI Cards: Operational Vehicle Status */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div 
+      <StatGrid cols={5}>
+        <KpiCard
+          label="Total Fleet"
+          value={devices.length}
+          sub="All registered vehicles"
+          accent="cyan"
+          active={filter === 'ALL'}
           onClick={() => setFilter('ALL')}
-          className={`p-4 rounded-2xl bg-[var(--bg-surface)]/60 border cursor-pointer transition ${
-            filter === 'ALL' ? 'border-cyan-500 shadow-md ring-1 ring-cyan-500/30' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
-          } space-y-1`}
-        >
-          <p className="text-xs text-[var(--text-muted)] font-medium">Total Fleet</p>
-          <p className="text-2xl font-bold text-[var(--text-main)]">{devices.length}</p>
-          <p className="text-[11px] text-[var(--text-faint)]">All registered vehicles</p>
-        </div>
-
-        <div 
+        />
+        <KpiCard
+          label="Moving (Green)"
+          value={movingCount}
+          sub="Speed > 0 km/h · On road"
+          accent="emerald"
+          active={filter === 'MOVING'}
           onClick={() => setFilter('MOVING')}
-          className={`p-4 rounded-2xl bg-emerald-950/30 border cursor-pointer transition ${
-            filter === 'MOVING' ? 'border-emerald-500 shadow-md ring-1 ring-emerald-500/30' : 'border-emerald-500/30 hover:border-emerald-500/50'
-          } space-y-1`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Moving (Green)</p>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-          </div>
-          <p className="text-2xl font-bold text-emerald-300">{movingCount}</p>
-          <p className="text-[11px] text-emerald-500/80">Speed &gt; 0 km/h · On road</p>
-        </div>
-
-        <div 
+        />
+        <KpiCard
+          label="Idle (Dark Yellow)"
+          value={idleCount}
+          sub="Ignition ON · Speed 0 km/h"
+          accent="amber"
+          active={filter === 'IDLE'}
           onClick={() => setFilter('IDLE')}
-          className={`p-4 rounded-2xl bg-yellow-950/30 border cursor-pointer transition ${
-            filter === 'IDLE' ? 'border-yellow-500 shadow-md ring-1 ring-yellow-500/30' : 'border-yellow-500/30 hover:border-yellow-500/50'
-          } space-y-1`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-yellow-400 font-bold uppercase tracking-wider">Idle (Dark Yellow)</p>
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-          </div>
-          <p className="text-2xl font-bold text-yellow-300">{idleCount}</p>
-          <p className="text-[11px] text-yellow-500/80">Ignition ON · Speed 0 km/h</p>
-        </div>
-
-        <div 
+        />
+        <KpiCard
+          label="Switched Off"
+          value={switchedOffCount + stopCount}
+          sub="Driver Logged Out · GPS Off"
+          accent="slate"
+          active={filter === 'SWITCHED_OFF'}
           onClick={() => setFilter('SWITCHED_OFF')}
-          className={`p-4 rounded-2xl bg-slate-900/50 border cursor-pointer transition ${
-            filter === 'SWITCHED_OFF' ? 'border-slate-400 shadow-md ring-1 ring-slate-400/30' : 'border-slate-500/30 hover:border-slate-400/50'
-          } space-y-1`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-300 font-bold uppercase tracking-wider">Switched Off</p>
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-          </div>
-          <p className="text-2xl font-bold text-slate-200">{switchedOffCount + stopCount}</p>
-          <p className="text-[11px] text-slate-400/90">Driver Logged Out · GPS Off</p>
-        </div>
-
-        <div 
+        />
+        <KpiCard
+          label="Alerts (Active)"
+          value={alertVehiclesCount}
+          sub="Overspeed, Idle, Harsh, Geofence"
+          icon={alertVehiclesCount > 0 ? undefined : CheckCircle2}
+          accent="rose"
+          active={filter === 'ALERTS'}
           onClick={() => setFilter('ALERTS')}
-          className={`p-4 rounded-2xl bg-rose-950/20 border cursor-pointer transition ${
-            filter === 'ALERTS' ? 'border-rose-500 shadow-md ring-1 ring-rose-500/40' : 'border-rose-500/30 hover:border-rose-500/50'
-          } space-y-1 col-span-2 sm:col-span-1`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">Alerts (Active)</p>
-            {alertVehiclesCount > 0 ? (
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-ping" />
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            )}
-          </div>
-          <p className="text-2xl font-bold text-rose-300">{alertVehiclesCount}</p>
-          <p className="text-[11px] text-rose-400/80">Overspeed, Idle, Harsh, Geofence</p>
-        </div>
-      </div>
+        />
+      </StatGrid>
 
       {/* Tab Navigation */}
       <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-2 overflow-x-auto">

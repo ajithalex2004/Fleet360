@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
@@ -691,20 +692,12 @@ export default function FixedAssetsPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: 'Total Assets', value: `AED ${fmt(summary.total_cost)}`, sub: `${summary.count} assets`, color: 'text-[var(--text-main)]' },
-            { label: 'Accumulated Depreciation', value: `AED ${fmt(summary.total_acc_dep)}`, sub: `${pct(summary.total_acc_dep, summary.total_cost)}% depreciated`, color: 'text-amber-400' },
-            { label: 'Net Book Value', value: `AED ${fmt(summary.total_nbv)}`, sub: 'Current carrying value', color: 'text-emerald-400' },
-            { label: 'Active Assets', value: summary.active_count, sub: 'In service', color: 'text-blue-400' },
-          ].map(card => (
-            <div key={card.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-              <p className="text-xs text-[var(--text-muted)]">{card.label}</p>
-              <p className={`text-xl font-bold mt-1 ${card.color}`}>{card.value}</p>
-              <p className="text-xs text-[var(--text-faint)] mt-0.5">{card.sub}</p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Assets" value={`AED ${fmt(summary.total_cost)}`} sub={`${summary.count} assets`} accent="slate" />
+          <KpiCard label="Accumulated Depreciation" value={`AED ${fmt(summary.total_acc_dep)}`} sub={`${pct(summary.total_acc_dep, summary.total_cost)}% depreciated`} accent="amber" />
+          <KpiCard label="Net Book Value" value={`AED ${fmt(summary.total_nbv)}`} sub="Current carrying value" accent="emerald" />
+          <KpiCard label="Active Assets" value={summary.active_count} sub="In service" accent="cyan" />
+        </StatGrid>
       )}
 
       {/* Status filter */}

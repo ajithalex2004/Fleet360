@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { ListChecks, Calendar, Navigation, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ──────────────────────── types ───────────────────────────── */
 interface Trip {
@@ -682,22 +684,14 @@ export default function TripsPage() {
 
         {/* KPIs */}
         {counts && (
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {[
-              { label: 'Total',       val: counts.total,      color: 'text-[var(--text-main)]',      bg: 'bg-[var(--bg-surface)]' },
-              { label: 'Scheduled',   val: counts.scheduled,  color: 'text-[var(--text-muted)]',  bg: 'bg-[var(--bg-surface)]/60' },
-              { label: 'In Progress', val: counts.inProgress, color: 'text-green-400',  bg: 'bg-green-500/10' },
-              { label: 'Completed',   val: counts.completed,  color: 'text-blue-400',   bg: 'bg-blue-500/10' },
-              { label: 'Cancelled',   val: counts.cancelled,  color: 'text-[var(--text-faint)]',  bg: 'bg-[var(--bg-surface)]/40' },
-              { label: 'Breakdown',   val: counts.breakdown,  color: 'text-red-400',    bg: 'bg-red-500/10' },
-            ].map(k => (
-              <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center cursor-pointer hover:border-[var(--border-subtle)] transition-colors`}
-                onClick={() => setFilterStatus(k.label === 'Total' ? '' : k.label === 'In Progress' ? 'IN_PROGRESS' : k.label.toUpperCase())}>
-                <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-                <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
-              </div>
-            ))}
-          </div>
+          <StatGrid cols={6}>
+            <KpiCard label="Total" value={counts.total} icon={ListChecks} accent="slate" active={filterStatus === ''} onClick={() => setFilterStatus('')} />
+            <KpiCard label="Scheduled" value={counts.scheduled} icon={Calendar} accent="cyan" active={filterStatus === 'SCHEDULED'} onClick={() => setFilterStatus('SCHEDULED')} />
+            <KpiCard label="In Progress" value={counts.inProgress} icon={Navigation} accent="emerald" active={filterStatus === 'IN_PROGRESS'} onClick={() => setFilterStatus('IN_PROGRESS')} />
+            <KpiCard label="Completed" value={counts.completed} icon={CheckCircle2} accent="blue" active={filterStatus === 'COMPLETED'} onClick={() => setFilterStatus('COMPLETED')} />
+            <KpiCard label="Cancelled" value={counts.cancelled} icon={XCircle} accent="slate" active={filterStatus === 'CANCELLED'} onClick={() => setFilterStatus('CANCELLED')} />
+            <KpiCard label="Breakdown" value={counts.breakdown} icon={AlertTriangle} accent="rose" active={filterStatus === 'BREAKDOWN'} onClick={() => setFilterStatus('BREAKDOWN')} />
+          </StatGrid>
         )}
 
         {/* Alerts */}

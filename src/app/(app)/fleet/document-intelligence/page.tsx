@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -604,51 +605,36 @@ export default function DocumentIntelligencePage() {
       </div>
 
       {/* KPI Stats Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Straight-Through Rate</span>
-            <Zap className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-400 mt-2">
-            {stats.stpRatePct != null ? `${stats.stpRatePct}%` : '—'}
-          </div>
-          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">Auto-processed without manual touch</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Average Risk Score</span>
-            <Shield className="w-5 h-5 text-cyan-400" />
-          </div>
-          <div className="text-2xl font-bold text-cyan-400 mt-2">
-            {stats.avgRiskScore !== undefined ? `${stats.avgRiskScore}/100` : '12/100'}
-          </div>
-          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">Low-risk fleet compliance threshold</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active vs Superseded</span>
-            <Layers className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="text-2xl font-bold text-white mt-2">
-            {stats.activeDocuments || extractions.length} <span className="text-xs text-slate-500 font-normal">Active / {stats.supersededDocuments || 0} Superseded</span>
-          </div>
-          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">Automated lifecycle version control</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Cost & Admin Savings</span>
-            <Clock className="w-5 h-5 text-purple-400" />
-          </div>
-          <div className="text-2xl font-bold text-purple-400 mt-2">
-            AED {(stats.estimatedSavingsAed ?? 0).toLocaleString()}
-          </div>
-          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">≈ {(stats.estimatedHoursSaved ?? 0).toFixed(1)} hrs labor saved</span>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Straight-Through Rate"
+          value={stats.stpRatePct != null ? `${stats.stpRatePct}%` : '—'}
+          sub="Auto-processed without manual touch"
+          icon={Zap}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Average Risk Score"
+          value={stats.avgRiskScore !== undefined ? `${stats.avgRiskScore}/100` : '12/100'}
+          sub="Low-risk fleet compliance threshold"
+          icon={Shield}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Active vs Superseded"
+          value={`${stats.activeDocuments || extractions.length} Active / ${stats.supersededDocuments || 0} Superseded`}
+          sub="Automated lifecycle version control"
+          icon={Layers}
+          accent="slate"
+        />
+        <KpiCard
+          label="Cost & Admin Savings"
+          value={`AED ${(stats.estimatedSavingsAed ?? 0).toLocaleString()}`}
+          sub={`≈ ${(stats.estimatedHoursSaved ?? 0).toFixed(1)} hrs labor saved`}
+          icon={Clock}
+          accent="violet"
+        />
+      </StatGrid>
 
       {/* Action Notification */}
       {actionMessage && (

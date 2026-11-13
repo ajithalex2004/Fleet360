@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Clock, DollarSign, Receipt, TrendingUp } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface BranchPL {
   branch_id: string | null;
@@ -101,20 +103,12 @@ export default function BranchPLPage() {
 
       {/* Consolidated totals */}
       {totals && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Revenue', value: fmt(totals.revenue), color: 'text-emerald-400', icon: '💰' },
-            { label: 'Gross Profit', value: fmt(totals.gross_profit), sub: `${totals.margin_pct}% margin`, color: 'text-blue-400', icon: '📈' },
-            { label: 'VAT Collected', value: fmt(totals.vat_collected), sub: 'Output VAT 5%', color: 'text-amber-400', icon: '🧾' },
-            { label: 'Outstanding', value: fmt(totals.outstanding), sub: `${totals.invoice_count} invoices`, color: 'text-rose-400', icon: '⏳' },
-          ].map(k => (
-            <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
-              <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
-              <p className={`text-2xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-              {k.sub && <p className="text-[var(--text-faint)] text-xs mt-1">{k.sub}</p>}
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Revenue" value={fmt(totals.revenue)} icon={DollarSign} accent="emerald" />
+          <KpiCard label="Gross Profit" value={fmt(totals.gross_profit)} sub={`${totals.margin_pct}% margin`} icon={TrendingUp} accent="cyan" />
+          <KpiCard label="VAT Collected" value={fmt(totals.vat_collected)} sub="Output VAT 5%" icon={Receipt} accent="amber" />
+          <KpiCard label="Outstanding" value={fmt(totals.outstanding)} sub={`${totals.invoice_count} invoices`} icon={Clock} accent="rose" />
+        </StatGrid>
       )}
 
       {/* Revenue bar chart by branch */}

@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 
@@ -582,23 +583,11 @@ export default function SpmTicketsPage() {
       </div>
 
       {/* ── KPI Strip ── */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Open Tickets</p>
-          <p className="text-3xl font-bold text-blue-400">{openCount}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">Awaiting action</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">In Progress</p>
-          <p className="text-3xl font-bold text-amber-400">{inProgressCount}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">Currently being worked</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Completed This Month</p>
-          <p className="text-3xl font-bold text-emerald-400">{completedCount}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">Successfully closed</p>
-        </div>
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard label="Open Tickets" value={openCount} sub="Awaiting action" accent="cyan" />
+        <KpiCard label="In Progress" value={inProgressCount} sub="Currently being worked" accent="amber" />
+        <KpiCard label="Completed This Month" value={completedCount} sub="Successfully closed" accent="emerald" />
+      </StatGrid>
 
       {/* ── Filters ── */}
       <div className="flex flex-wrap gap-3 items-center">

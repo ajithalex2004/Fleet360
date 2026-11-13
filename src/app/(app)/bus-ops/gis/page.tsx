@@ -18,6 +18,7 @@
 import React, { useMemo, useState } from 'react';
 import { Map, Layers, Eye, EyeOff, X, MapPin, Clock, Building2 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import {
   GIS_LAYERS, GIS_DATA,
   type GisLayerId, type RouteFeature, type StopFeature,
@@ -316,12 +317,12 @@ export default function GisPage() {
           )}
 
           {/* Stats strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
-            <Mini label="Routes" value={(GIS_DATA.routes as RouteFeature[]).length} />
-            <Mini label="Stops" value={(GIS_DATA.stops as StopFeature[]).length} />
-            <Mini label="Landmarks" value={(GIS_DATA.landmarks as PointFeature[]).length} />
-            <Mini label="Layers on" value={`${enabled.size} / ${GIS_LAYERS.length}`} />
-          </div>
+          <StatGrid cols={4} className="mt-4">
+            <KpiCard label="Routes" value={(GIS_DATA.routes as RouteFeature[]).length} icon={Map} accent="cyan" />
+            <KpiCard label="Stops" value={(GIS_DATA.stops as StopFeature[]).length} icon={MapPin} accent="emerald" />
+            <KpiCard label="Landmarks" value={(GIS_DATA.landmarks as PointFeature[]).length} icon={Building2} accent="violet" />
+            <KpiCard label="Layers on" value={`${enabled.size} / ${GIS_LAYERS.length}`} icon={Layers} accent="blue" />
+          </StatGrid>
         </div>
       </div>
     </div>

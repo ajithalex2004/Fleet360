@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 interface CollectionCase {
   id: string; case_no: string; invoice_id: string; invoice_no: string;
@@ -211,18 +212,21 @@ export default function CollectionsPage() {
       {/* AR Aging Buckets */}
       <div>
         <h2 className="text-sm font-semibold text-[var(--text-muted)] mb-3">AR AGING ANALYSIS</h2>
-        <div className="grid grid-cols-5 gap-3">
-          {['CURRENT', '1-30', '31-60', '61-90', '90+'].map(bucket => {
+        <StatGrid cols={5}>
+          {(['CURRENT', '1-30', '31-60', '61-90', '90+'] as const).map((bucket, idx) => {
             const d = aging.find(a => a.bucket === bucket);
+            const accents: PageAccent[] = ['emerald', 'cyan', 'amber', 'violet', 'rose'];
             return (
-              <div key={bucket} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
-                <p className="text-xs text-[var(--text-faint)]">{bucket === 'CURRENT' ? 'Current' : `${bucket} days`}</p>
-                <p className={`text-2xl font-bold mt-1 ${AGING_STYLE[bucket]}`}>{fmtAED(d?.total ?? '0')}</p>
-                <p className="text-xs text-[var(--text-faint)] mt-0.5">{d?.count ?? 0} cases</p>
-              </div>
+              <KpiCard
+                key={bucket}
+                label={bucket === 'CURRENT' ? 'Current' : `${bucket} days`}
+                value={fmtAED(d?.total ?? '0')}
+                sub={`${d?.count ?? 0} cases`}
+                accent={accents[idx]}
+              />
             );
           })}
-        </div>
+        </StatGrid>
       </div>
 
       {/* Total Outstanding Banner */}

@@ -14,9 +14,11 @@ import {
   ChevronRight,
   Filter,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { PolicyEvaluationResult } from '@/lib/booking-approval-policy';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 const SERVICE_STYLE: Record<string, { label: string; icon: string; color: string }> = {
   RENTAL:          { label: 'Rent-a-Car',     icon: '🚗', color: 'text-emerald-400' },
@@ -193,32 +195,13 @@ export default function MultiLevelApprovalsPage() {
       )}
 
       {/* ── KPI Metrics Ribbon ── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pending</p>
-          <p className="text-2xl font-bold font-mono text-white">{stats.totalPending}</p>
-        </div>
-
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-          <p className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider mb-1">Tier 1: Line Manager</p>
-          <p className="text-2xl font-bold font-mono text-purple-300">{stats.tier1Count}</p>
-        </div>
-
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-          <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider mb-1">Tier 2: Dept Head (&gt;1k)</p>
-          <p className="text-2xl font-bold font-mono text-amber-300">{stats.tier2Count}</p>
-        </div>
-
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-          <p className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider mb-1">Tier 3: Fleet Ops</p>
-          <p className="text-2xl font-bold font-mono text-blue-300">{stats.tier3Count}</p>
-        </div>
-
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-          <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">⚡ Auto-Approved</p>
-          <p className="text-2xl font-bold font-mono text-emerald-300">{stats.autoApprovedCount}</p>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total Pending" value={stats.totalPending} accent="slate" />
+        <KpiCard label="Tier 1: Line Manager" value={stats.tier1Count} accent="violet" />
+        <KpiCard label="Tier 2: Dept Head (>1k)" value={stats.tier2Count} accent="amber" />
+        <KpiCard label="Tier 3: Fleet Ops" value={stats.tier3Count} accent="cyan" />
+        <KpiCard label="Auto-Approved" value={stats.autoApprovedCount} icon={Zap} accent="emerald" />
+      </StatGrid>
 
       {/* ── Filter Tabs ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">

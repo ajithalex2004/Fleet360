@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Inquiry {
   id: string;
@@ -135,19 +136,22 @@ export default function CRMPage() {
         {!loading && data && (
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">Sales Pipeline</h2>
-            <div className="grid grid-cols-5 gap-3">
-              {pipelineStages.map((stage) => {
+            <StatGrid cols={5}>
+              {pipelineStages.map((stage, idx) => {
+                const accents = ['cyan', 'violet', 'amber', 'emerald', 'rose'] as const;
                 const count = data.pipeline[stage] || 0;
                 const percentage = pipelineTotal > 0 ? ((count / pipelineTotal) * 100).toFixed(0) : 0;
                 return (
-                  <div key={stage} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-4 text-center">
-                    <p className="text-[var(--text-muted)] text-xs font-medium mb-2">{stage.replace('_', ' ')}</p>
-                    <p className="text-2xl font-bold text-[var(--text-main)]">{count}</p>
-                    <p className="text-xs text-[var(--text-faint)] mt-1">{percentage}%</p>
-                  </div>
+                  <KpiCard
+                    key={stage}
+                    label={stage.replace('_', ' ')}
+                    value={count}
+                    sub={`${percentage}%`}
+                    accent={accents[idx % accents.length]}
+                  />
                 );
               })}
-            </div>
+            </StatGrid>
 
             {/* Conversion Rate */}
             <div className="mt-6 bg-gradient-to-r from-gray-800 to-gray-700 border border-[var(--border-strong)] rounded-lg p-6">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface MaintenanceCost {
   id: string;
@@ -105,27 +106,12 @@ export default function MaintenanceCostPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Total Cost</p>
-            <p className="text-3xl font-bold text-rose-400">AED {summary.totalCost.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Average per Vehicle</p>
-            <p className="text-3xl font-bold text-amber-400">AED {summary.averagePerVehicle.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Highest Cost Vehicle</p>
-            <p className="text-xl font-bold text-[var(--text-main)] truncate">{summary.highestCostVehicle}</p>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-            <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Records</p>
-            <p className="text-3xl font-bold text-indigo-400">{costs.length}</p>
-          </div>
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Cost" value={`AED ${summary.totalCost.toLocaleString()}`} accent="rose" />
+          <KpiCard label="Average per Vehicle" value={`AED ${summary.averagePerVehicle.toLocaleString()}`} accent="amber" />
+          <KpiCard label="Highest Cost Vehicle" value={summary.highestCostVehicle} accent="slate" />
+          <KpiCard label="Records" value={costs.length} accent="violet" />
+        </StatGrid>
       )}
 
       {/* Cost by Category */}

@@ -19,7 +19,7 @@ import {
   Gauge,
   Info,
 } from 'lucide-react';
-import { PageHeader, Panel } from '@/components/ui/page-theme';
+import { KpiCard, PageHeader, Panel, StatGrid } from '@/components/ui/page-theme';
 
 export default function MaintenanceDashboard() {
   const [forecasts, setForecasts] = useState<any[]>([]);
@@ -137,20 +137,12 @@ export default function MaintenanceDashboard() {
       )}
 
       {/* Top Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'Vehicles Scanned', value: summary?.totalForecasts ?? 0, sub: 'Continuously monitored', tone: 'from-blue-500 to-indigo-600' },
-          { label: 'Overdue', value: summary?.overdueCount ?? 0, sub: 'Past their service threshold', tone: 'from-rose-500 to-red-600' },
-          { label: 'Due Soon (≤7 Days)', value: summary?.dueSoonCount ?? 0, sub: 'Optimal slots computed', tone: 'from-amber-500 to-orange-600' },
-          { label: 'Upcoming (8–21 Days)', value: summary?.upcomingCount ?? 0, sub: 'Projected burn-down tracking', tone: 'from-cyan-500 to-blue-600' },
-        ].map((card) => (
-          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
-            <p className="text-sm font-medium text-white/80">{card.label}</p>
-            <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
-            <p className="mt-1 text-xs text-white/60">{card.sub}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Vehicles Scanned" value={summary?.totalForecasts ?? 0} sub="Continuously monitored" accent="violet" />
+        <KpiCard label="Overdue" value={summary?.overdueCount ?? 0} sub="Past their service threshold" accent="rose" />
+        <KpiCard label="Due Soon (≤7 Days)" value={summary?.dueSoonCount ?? 0} sub="Optimal slots computed" accent="amber" />
+        <KpiCard label="Upcoming (8–21 Days)" value={summary?.upcomingCount ?? 0} sub="Projected burn-down tracking" accent="cyan" />
+      </StatGrid>
 
       {/* Continuous Preventive Maintenance AI Forecaster Panel */}
       <Panel

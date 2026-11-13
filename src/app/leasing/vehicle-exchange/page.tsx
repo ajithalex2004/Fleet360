@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Exchange {
   id: string;
@@ -244,24 +245,12 @@ export default function VehicleExchangePage() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-[var(--text-muted)] text-xs font-medium mb-1">Total This Month</p>
-          <p className="text-2xl font-bold text-[var(--text-main)]">{stats.thisMonth}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-[var(--text-muted)] text-xs font-medium mb-1">Pending Exchanges</p>
-          <p className="text-2xl font-bold text-amber-400">{stats.pending}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-[var(--text-muted)] text-xs font-medium mb-1">Vans Exchanged</p>
-          <p className="text-2xl font-bold text-blue-400">{stats.byType.VAN}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-[var(--text-muted)] text-xs font-medium mb-1">Sedans Exchanged</p>
-          <p className="text-2xl font-bold text-cyan-400">{stats.byType.SEDAN}</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total This Month" value={stats.thisMonth} accent="slate" />
+        <KpiCard label="Pending Exchanges" value={stats.pending} accent="amber" />
+        <KpiCard label="Vans Exchanged" value={stats.byType.VAN} accent="violet" />
+        <KpiCard label="Sedans Exchanged" value={stats.byType.SEDAN} accent="cyan" />
+      </StatGrid>
 
       {/* Exchanges Table */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
