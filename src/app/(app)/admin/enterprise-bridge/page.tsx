@@ -5,19 +5,12 @@ import {
   Network,
   Plus,
   CheckCircle2,
-  AlertTriangle,
   RefreshCw,
   Server,
-  ArrowUpRight,
-  ArrowDownLeft,
   ShieldCheck,
   Activity,
-  Layers,
-  Code,
   Lock,
-  ExternalLink,
 } from 'lucide-react';
-import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Connection {
   id: string;
@@ -132,7 +125,7 @@ export default function EnterpriseBridgePage() {
   const testConnection = async (conn: Connection) => {
     setTestingId(conn.id);
     try {
-      const res = await fetch('/api/integrations/enterprise/sync', {
+      await fetch('/api/integrations/enterprise/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

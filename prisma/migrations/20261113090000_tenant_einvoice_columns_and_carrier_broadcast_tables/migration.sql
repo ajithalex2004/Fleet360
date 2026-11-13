@@ -168,3 +168,8 @@ ALTER TABLE IF EXISTS public.driver_availability
 
 ALTER TABLE IF EXISTS public.ambulance_capabilities
   ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
+-- ── 6. E-sign brute-force counter ──
+-- src/app/api/esign/verify/route.ts used to add this at request time.
+ALTER TABLE IF EXISTS public.esign_requests
+  ADD COLUMN IF NOT EXISTS failed_attempts INT NOT NULL DEFAULT 0;

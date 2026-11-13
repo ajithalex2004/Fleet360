@@ -29,16 +29,6 @@ interface Reports {
 const aed = (n: number) => `AED ${Math.round(n).toLocaleString('en-AE')}`;
 const pctColor = (p: number) => (p >= 90 ? 'text-red-400' : p >= 70 ? 'text-amber-400' : 'text-emerald-400');
 
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-      <p className="text-xs text-[var(--text-faint)]">{label}</p>
-      <p className={`text-2xl font-bold ${value === '—' ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]'}`}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
 function Empty({ text }: { text: string }) {
   return <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-10 text-center text-sm text-[var(--text-faint)]">{text}</div>;
 }

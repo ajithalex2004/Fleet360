@@ -7856,7 +7856,7 @@ export interface CarrierAppDeviceRecord {
 }
 
 // Carrier app / broadcast tables come from migration
-// 20261110090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
+// 20261113090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
 
 function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;

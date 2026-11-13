@@ -30,7 +30,7 @@ import {
 import type { StoredFile } from '@/lib/storage';
 
 // The tenants e-invoicing columns come from migration
-// 20261110090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
+// 20261113090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
 
 interface TenantCompanyRow {
   id: string;

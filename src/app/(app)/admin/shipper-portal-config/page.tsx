@@ -415,30 +415,6 @@ function LevelPill({ level }: { level: TrackingLevel }) {
   );
 }
 
-function StatCard({
-  label, value, tone, icon: Icon,
-}: {
-  label: string; value: number;
-  tone: 'slate' | 'emerald' | 'amber' | 'rose';
-  icon?: React.ComponentType<{ className?: string }>;
-}) {
-  const cls = {
-    slate:   'bg-[var(--bg-surface-hover)]/30   border-[var(--border-subtle)]       text-[var(--text-muted)]',
-    emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
-    amber:   'bg-amber-500/10   border-amber-500/30   text-amber-300',
-    rose:    'bg-rose-500/10    border-rose-500/30    text-rose-300',
-  }[tone];
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${cls}`}>
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-wider opacity-80">{label}</p>
-        {Icon && <Icon className="w-3.5 h-3.5 opacity-70" />}
-      </div>
-      <p className="text-2xl font-bold tabular-nums mt-1">{value.toLocaleString()}</p>
-    </div>
-  );
-}
-
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1">

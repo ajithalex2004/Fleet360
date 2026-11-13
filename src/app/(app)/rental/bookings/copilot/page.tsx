@@ -1204,16 +1204,6 @@ export default function RentalCopilotPage() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div>
-      <div className="text-xs text-[var(--text-muted)]">{label}</div>
-      <div className="font-semibold text-[var(--text-main)] mt-0.5">{value}</div>
-      {sub && <div className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
 function Row({
   label,
   sub,

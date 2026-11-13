@@ -63,7 +63,6 @@ import {
 } from '@/lib/finance/rac-gl-posting';
 import { calculateUaeTollTariff } from '@/lib/fines/toll-reconciliation';
 import {
-  RentalSecurityError,
   assertAdditionalDriversEligible,
   assertCustomerEligibleForRental,
   isValidEmiratesIdNumber,
