@@ -16,6 +16,7 @@ import {
   Package, TrendingUp, CheckCircle2, Calendar,
   Plus, ArrowRight, Lock, MapPin, Activity,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Stats {
   total: number;
@@ -103,12 +104,12 @@ export default function ShipperPortalDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total shipments" value={stats?.total ?? 0} icon={Package} tone="emerald" />
-        <StatCard label="Active right now" value={stats?.active ?? 0} icon={Activity} tone="amber" />
-        <StatCard label="Delivered" value={stats?.delivered ?? 0} icon={CheckCircle2} tone="blue" />
-        <StatCard label="Last 30 days" value={stats?.last30Days ?? 0} icon={Calendar} tone="violet" />
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total shipments" value={(stats?.total ?? 0).toLocaleString()} icon={Package} accent="emerald" />
+        <KpiCard label="Active right now" value={(stats?.active ?? 0).toLocaleString()} icon={Activity} accent="amber" />
+        <KpiCard label="Delivered" value={(stats?.delivered ?? 0).toLocaleString()} icon={CheckCircle2} accent="cyan" />
+        <KpiCard label="Last 30 days" value={(stats?.last30Days ?? 0).toLocaleString()} icon={Calendar} accent="violet" />
+      </StatGrid>
 
       {/* Primary action — when no shipments yet, this is the only thing on the page */}
       {(stats?.total ?? 0) === 0 ? (
@@ -159,30 +160,6 @@ export default function ShipperPortalDashboard() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  label, value, icon: Icon, tone,
-}: {
-  label: string; value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  tone: 'emerald' | 'amber' | 'blue' | 'violet';
-}) {
-  const cls = {
-    emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
-    amber:   'bg-amber-500/10   border-amber-500/30   text-amber-300',
-    blue:    'bg-blue-500/10    border-blue-500/30    text-blue-300',
-    violet:  'bg-violet-500/10  border-violet-500/30  text-violet-300',
-  }[tone];
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${cls}`}>
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-wider opacity-80">{label}</p>
-        <Icon className="w-4 h-4 opacity-70" />
-      </div>
-      <p className="text-2xl font-bold tabular-nums mt-1">{value.toLocaleString()}</p>
     </div>
   );
 }

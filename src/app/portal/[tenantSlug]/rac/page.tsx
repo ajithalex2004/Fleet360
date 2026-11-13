@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTenantPortal } from '../tenant-portal-shell';
+import { useVerifiedPortalTenant } from './_use-verified-portal-tenant';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface FleetSummary {
@@ -15,20 +16,43 @@ interface FleetSummary {
 
 interface Booking {
   id: string;
-  bookingRef?: string;
-  booking_ref?: string;
-  customerName?: string;
-  customer_name?: string;
-  vehicleReg?: string;
-  vehicle_reg?: string;
-  vehicleModel?: string;
-  startDate?: string;
-  start_date?: string;
-  endDate?: string;
-  end_date?: string;
+  bookingRef?: string | null;
+  booking_ref?: string | null;
+  customerName?: string | null;
+  customer_name?: string | null;
+  customer?: {
+    fullName?: string | null;
+    companyName?: string | null;
+  } | null;
+  vehicleReg?: string | null;
+  vehicle_reg?: string | null;
+  vehicleModel?: string | null;
+  vehicleCategory?: string | null;
+  vehicle_category?: string | null;
+  pickupDate?: string | null;
+  pickup_date?: string | null;
+  dropoffDate?: string | null;
+  dropoff_date?: string | null;
+  startDate?: string | null;
+  start_date?: string | null;
+  endDate?: string | null;
+  end_date?: string | null;
   status: string;
-  amount?: number;
+  totalAmount?: number | null;
+  total_amount?: number | null;
+  amount?: number | null;
   currency?: string;
+}
+
+function unwrapBookings(payload: unknown): Booking[] {
+  if (Array.isArray(payload)) return payload as Booking[];
+  if (payload && typeof payload === 'object') {
+    const rec = payload as Record<string, unknown>;
+    for (const k of ['data', 'bookings', 'items', 'rows']) {
+      if (Array.isArray(rec[k])) return rec[k] as Booking[];
+    }
+  }
+  return [];
 }
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
@@ -74,7 +98,8 @@ function KpiCard({ icon, label, value, sub, colorClass = 'border-cyan-500/20 bg-
 export default function TenantRACPage() {
   const params = useParams();
   const slug = (params?.tenantSlug as string) ?? '';
-  const { tenant } = useTenantPortal();
+  const { tenant: contextTenant } = useTenantPortal();
+  const guard = useVerifiedPortalTenant(slug);
 
   const [fleet, setFleet]         = useState<FleetSummary | null>(null);
   const [bookings, setBookings]   = useState<Booking[]>([]);
@@ -87,7 +112,7 @@ export default function TenantRACPage() {
   const monthStart = today.slice(0, 8) + '01';
 
   useEffect(() => {
-    if (!tenant) return;
+    if (guard.status !== 'verified') return;
 
     // Fleet summary
     fetch('/api/fleet/stats', { cache: 'no-store' })
@@ -99,19 +124,18 @@ export default function TenantRACPage() {
             available: d.available ?? 0,
             rented: d.allocated ?? 0,
             maintenance: d.inMaintenance ?? 0,
-            maxVehicles: undefined,
+            maxVehicles: guard.tenant.maxVehicles,
           });
         }
       })
       .catch(() => {})
       .finally(() => setLoadingFleet(false));
 
-    // Recent bookings
-    fetch(`/api/bookings?tenantId=${tenant.id}&limit=10&sort=createdAt_desc`)
+    // Recent rental bookings (fetched from canonical /api/rental/bookings)
+    fetch('/api/rental/bookings?limit=200', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        const rows = Array.isArray(d) ? d : d?.bookings ?? d?.data ?? [];
-        setBookings(rows);
+        setBookings(unwrapBookings(d).slice(0, 10));
       })
       .catch(() => {})
       .finally(() => setLoadingBookings(false));
@@ -123,18 +147,21 @@ export default function TenantRACPage() {
       .catch(() => {});
 
     // Agreements count
-    fetch('/api/rental/agreements?status=ACTIVE&limit=1', { cache: 'no-store' })
+    fetch('/api/rental/agreements?status=ACTIVE&limit=200', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setAgreements(d?.total ?? 0))
+      .then(d => {
+        if (typeof d?.total === 'number') {
+          setAgreements(d.total);
+        } else if (Array.isArray(d)) {
+          setAgreements(d.length);
+        } else if (Array.isArray(d?.data)) {
+          setAgreements(d.data.length);
+        }
+      })
       .catch(() => {});
-  }, [tenant, today, monthStart]);
+  }, [guard.status, guard.tenant, today, monthStart]);
 
-  const fleetData: FleetSummary = fleet ?? { total: 0, available: 0, rented: 0, maintenance: 0, maxVehicles: undefined };
-  const usagePct = fleetData.total > 0 ? Math.round((fleetData.rented / fleetData.total) * 100) : 0;
-  const limitPct = fleetData.maxVehicles ? Math.round((fleetData.total / fleetData.maxVehicles) * 100) : 0;
-  const nearLimit = fleetData.maxVehicles && limitPct >= 90;
-
-  if (!tenant) {
+  if (guard.status === 'checking') {
     return (
       <div className="p-6 flex items-center justify-center h-64">
         <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
@@ -142,27 +169,138 @@ export default function TenantRACPage() {
     );
   }
 
+  if (guard.status === 'mismatch') {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 space-y-3"
+        >
+          <p className="text-rose-300 font-semibold text-base">
+            Tenant Access Mismatch
+          </p>
+          <p className="text-slate-300 text-sm">
+            Your signed-in session belongs to{' '}
+            <span className="font-semibold text-white">{guard.tenant.name}</span>
+            {guard.tenant.slug ? ` (${guard.tenant.slug})` : ''}, which does not match portal URL{' '}
+            <span className="font-mono text-rose-200">/portal/{slug}/rac</span>. Cross-tenant portal rendering has been blocked to prevent mixed-tenant data display.
+          </p>
+          <div className="flex flex-wrap gap-3 pt-1">
+            {guard.expectedSlug && (
+              <Link
+                href={`/portal/${guard.expectedSlug}/rac`}
+                className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 text-xs font-bold hover:bg-cyan-400 transition-colors"
+              >
+                Switch to /portal/{guard.expectedSlug}/rac →
+              </Link>
+            )}
+            <Link
+              href="/platform"
+              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 border border-white/10 text-xs font-semibold hover:bg-slate-700 transition-colors"
+            >
+              Back to Platform
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (guard.status === 'unauthorized') {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div
+          role="alert"
+          className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 space-y-3"
+        >
+          <p className="text-amber-300 font-semibold text-base">
+            Authentication Required
+          </p>
+          <p className="text-slate-300 text-sm">
+            Unable to verify your tenant session for <span className="font-mono text-amber-200">/portal/{slug}/rac</span>. Please sign in with an authorized staff account.
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold hover:bg-amber-400 transition-colors"
+          >
+            Go to Staff Sign In →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const displayTenantName = guard.tenant.name || contextTenant?.name || slug;
+  const fleetData: FleetSummary = fleet ?? {
+    total: 0,
+    available: 0,
+    rented: 0,
+    maintenance: 0,
+    maxVehicles: guard.tenant.maxVehicles,
+  };
+  const usagePct = fleetData.total > 0 ? Math.round((fleetData.rented / fleetData.total) * 100) : 0;
+  const limitPct = fleetData.maxVehicles ? Math.round((fleetData.total / fleetData.maxVehicles) * 100) : 0;
+  const nearLimit = fleetData.maxVehicles && limitPct >= 90;
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">🚗 Rent-A-Car</h1>
-          <p className="text-slate-400 text-sm mt-1">{tenant.name} · RAC module overview</p>
+          <p className="text-slate-400 text-sm mt-1">{displayTenantName} · RAC module overview</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a
+            href="/rac-portal"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-sm font-bold hover:bg-emerald-400 transition-colors"
+          >
+            🏢 Customer B2B Portal ↗
+          </a>
           <Link href={`/portal/${slug}/rac/bookings`}
             className="px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-sm font-medium hover:bg-cyan-500/30 transition-colors">
-            + New Booking
+            📅 Bookings
           </Link>
-          <Link href={`/portal/${slug}/rac`}
+          <Link href={`/portal/${slug}/rac/fleet`}
             className="px-4 py-2 rounded-xl bg-slate-700 text-slate-300 border border-white/10 text-sm font-medium hover:bg-slate-600 transition-colors">
-            + Add Vehicle
+            🚘 Fleet Vehicles
           </Link>
           <Link href={`/portal/${slug}/rac/agreements`}
             className="px-4 py-2 rounded-xl bg-slate-700 text-slate-300 border border-white/10 text-sm font-medium hover:bg-slate-600 transition-colors">
             📋 View Agreements
           </Link>
+        </div>
+      </div>
+
+      {/* Standalone B2B Corporate RAC Portal bridge banner */}
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <p className="text-emerald-300 font-semibold text-sm">
+            🏢 B2B Corporate Self-Service Portal Ready
+          </p>
+          <p className="text-slate-300 text-xs mt-0.5">
+            Corporate customers sign in at <span className="font-mono text-emerald-200">/rac-portal</span> for live availability search, mandatory PCI-safe card pre-authorization, digital agreement e-signing, extensions, and online invoice payment.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="/rac-portal/book"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/30 transition-colors"
+          >
+            Customer B2B Portal ↗
+          </a>
+          <a
+            href="/rac-portal/login"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-slate-800/80 text-slate-200 border border-white/10 text-xs font-semibold hover:bg-slate-700 transition-colors"
+          >
+            Corporate Login ↗
+          </a>
         </div>
       </div>
 
@@ -235,10 +373,12 @@ export default function TenantRACPage() {
               <p className="text-3xl mb-3">📅</p>
               <p className="text-slate-400 text-sm font-medium">No bookings yet</p>
               <p className="text-slate-600 text-xs mt-1">Your rental bookings will appear here once created</p>
-              <Link href={`/portal/${slug}/rac/bookings`}
-                className="mt-4 inline-flex items-center px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-sm font-medium hover:bg-cyan-500/30 transition-colors">
-                Create first booking →
-              </Link>
+              <a href="/rac-portal"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-medium hover:bg-emerald-500/30 transition-colors">
+                Customer B2B Portal ↗
+              </a>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -246,7 +386,7 @@ export default function TenantRACPage() {
                 <tr className="border-b border-white/5 text-xs text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3 text-left">Ref</th>
                   <th className="px-4 py-3 text-left">Customer</th>
-                  <th className="px-4 py-3 text-left">Vehicle</th>
+                  <th className="px-4 py-3 text-left">Vehicle / Category</th>
                   <th className="px-4 py-3 text-center">Dates</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-right">Amount</th>
@@ -255,16 +395,17 @@ export default function TenantRACPage() {
               <tbody>
                 {bookings.map(b => {
                   const ref     = b.bookingRef ?? b.booking_ref;
-                  const cust    = b.customerName ?? b.customer_name;
-                  const veh     = b.vehicleReg ?? b.vehicle_reg;
-                  const start   = b.startDate ?? b.start_date;
-                  const end     = b.endDate ?? b.end_date;
+                  const cust    = b.customer?.companyName ?? b.customer?.fullName ?? b.customerName ?? b.customer_name;
+                  const veh     = b.vehicleReg ?? b.vehicle_reg ?? b.vehicleModel ?? b.vehicleCategory ?? b.vehicle_category;
+                  const start   = b.pickupDate ?? b.pickup_date ?? b.startDate ?? b.start_date;
+                  const end     = b.dropoffDate ?? b.dropoff_date ?? b.endDate ?? b.end_date;
+                  const amt     = b.totalAmount ?? b.total_amount ?? b.amount;
                   const st      = b.status?.toUpperCase() ?? 'PENDING';
                   return (
                     <tr key={b.id} className="border-b border-white/5 hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-cyan-400">{ref ?? b.id.slice(0,8)}</td>
-                      <td className="px-4 py-3 text-slate-300 truncate max-w-[120px]">{cust ?? '—'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{veh ?? b.vehicleModel ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-300 truncate max-w-[160px]">{cust ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">{veh ?? '—'}</td>
                       <td className="px-4 py-3 text-center text-xs text-slate-500">
                         {fmtDate(start)} → {fmtDate(end)}
                       </td>
@@ -274,7 +415,7 @@ export default function TenantRACPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-white">
-                        {b.amount != null ? fmt(b.amount, b.currency) : '—'}
+                        {amt != null ? fmt(Number(amt), b.currency) : '—'}
                       </td>
                     </tr>
                   );

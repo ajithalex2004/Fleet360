@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface VehicleReturn {
   id: string;
@@ -149,25 +150,16 @@ export default function ReturnsPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-4">Total Returns</h3>
-          <p className="text-3xl font-bold text-[var(--text-main)]">{returns.length}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-2">Processed</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-4">Total Damage Costs</h3>
-          <p className="text-3xl font-bold text-rose-400">AED {totalDamages.toLocaleString()}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-2">All returns</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-4">Avg. Mileage</h3>
-          <p className="text-3xl font-bold text-amber-400">
-            {returns.length > 0 ? Math.round(returns.reduce((sum, r) => sum + r.mileage, 0) / returns.length).toLocaleString() : 0}
-          </p>
-          <p className="text-xs text-[var(--text-faint)] mt-2">Per vehicle</p>
-        </div>
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard label="Total Returns" value={returns.length} sub="Processed" accent="cyan" />
+        <KpiCard label="Total Damage Costs" value={`AED ${totalDamages.toLocaleString()}`} sub="All returns" accent="rose" />
+        <KpiCard
+          label="Avg. Mileage"
+          value={returns.length > 0 ? Math.round(returns.reduce((sum, r) => sum + r.mileage, 0) / returns.length).toLocaleString() : 0}
+          sub="Per vehicle"
+          accent="amber"
+        />
+      </StatGrid>
 
       {/* Returns Table */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">

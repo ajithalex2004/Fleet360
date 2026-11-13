@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, ChevronRight, Search, Filter, X, Check, AlertTriangle, ArrowRight } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,15 +122,6 @@ function fmtDate(d: string | null) {
 
 // ─── KPI Card ────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent: string }) {
-  return (
-    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-5">
-      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
-    </div>
-  );
-}
 
 // ─── Input helpers ───────────────────────────────────────────────────────────
 
@@ -301,32 +293,32 @@ export default function AmendmentsPage() {
       </div>
 
       {/* ─── KPI Cards ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatGrid cols={4}>
         <KpiCard
           label="Total Amendments"
           value={pagination.total}
           sub="All time"
-          accent="text-[var(--text-main)]"
+          accent="slate"
         />
         <KpiCard
           label="Pending Approval"
           value={summary.pendingApproval}
           sub="Submitted, awaiting review"
-          accent="text-amber-400"
+          accent="amber"
         />
         <KpiCard
           label="Approved This Month"
           value={summary.approvedThisMonth}
           sub="Current month"
-          accent="text-emerald-400"
+          accent="emerald"
         />
         <KpiCard
           label="Financial Impact"
           value={`AED ${fmt(summary.totalFinancialImpact)}`}
           sub="Total positive adjustments"
-          accent="text-violet-400"
+          accent="violet"
         />
-      </div>
+      </StatGrid>
 
       {/* ─── Status Pipeline Banner ─── */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">

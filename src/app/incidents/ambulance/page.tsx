@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Phone, Ambulance, MapPin, Navigation, Building2, CheckCircle2, Clock } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type CallStatus = 'CALL_RECEIVED' | 'DISPATCHED' | 'ON_SCENE' | 'TRANSPORTING' | 'AT_HOSPITAL' | 'CLEARED';
@@ -360,23 +362,20 @@ export default function AmbulancePage() {
       </div>
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
-        {[
-          { label: 'Calls',      value: stats.callReceived,  color: 'text-sky-300',     icon: '📞' },
-          { label: 'Dispatched', value: stats.dispatched,    color: 'text-amber-300',   icon: '🚑' },
-          { label: 'On Scene',   value: stats.onScene,       color: 'text-orange-300',  icon: '🏥' },
-          { label: 'Transport',  value: stats.transporting,  color: 'text-purple-300',  icon: '🏎️' },
-          { label: 'Hospital',   value: stats.atHospital,    color: 'text-blue-300',    icon: '🏨' },
-          { label: 'Cleared',    value: stats.cleared,       color: 'text-emerald-300', icon: '✅' },
-          { label: 'Avg Resp',   value: `${stats.avgResponseMin}m`, color: stats.avgResponseMin <= 8 ? 'text-emerald-300' : stats.avgResponseMin <= 15 ? 'text-amber-300' : 'text-red-400', icon: '⏱' },
-        ].map(s => (
-          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
-            <p className="text-xs text-[var(--text-faint)]">{s.icon}</p>
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Calls" value={stats.callReceived} icon={Phone} accent="cyan" />
+        <KpiCard label="Dispatched" value={stats.dispatched} icon={Ambulance} accent="amber" />
+        <KpiCard label="On Scene" value={stats.onScene} icon={MapPin} accent="amber" />
+        <KpiCard label="Transport" value={stats.transporting} icon={Navigation} accent="violet" />
+        <KpiCard label="Hospital" value={stats.atHospital} icon={Building2} accent="blue" />
+        <KpiCard label="Cleared" value={stats.cleared} icon={CheckCircle2} accent="emerald" />
+        <KpiCard
+          label="Avg Resp"
+          value={`${stats.avgResponseMin}m`}
+          icon={Clock}
+          accent={stats.avgResponseMin <= 8 ? 'emerald' : stats.avgResponseMin <= 15 ? 'amber' : 'rose'}
+        />
+      </StatGrid>
 
       {/* Kanban board — active calls */}
       {active.length > 0 && (

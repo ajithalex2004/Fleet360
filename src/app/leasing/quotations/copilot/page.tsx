@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface SuggestedVehicle {
   vehicleType: string;
@@ -227,12 +228,12 @@ export default function QuotationCopilotPage() {
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <Stat label="Lease Type" value={suggestion.leaseType.replace('_', ' ')} />
-              <Stat label="Duration" value={`${suggestion.durationMonths} months`} />
-              <Stat label="Mileage Cap" value={`${suggestion.mileageCapPerMonth.toLocaleString()} km/mo`} />
-              <Stat label="Security Deposit" value={`AED ${suggestion.securityDeposit.toLocaleString()}`} />
-            </div>
+            <StatGrid cols={4} className="mt-4">
+              <KpiCard label="Lease Type" value={suggestion.leaseType.replace('_', ' ')} accent="cyan" />
+              <KpiCard label="Duration" value={`${suggestion.durationMonths} months`} accent="violet" />
+              <KpiCard label="Mileage Cap" value={`${suggestion.mileageCapPerMonth.toLocaleString()} km/mo`} accent="amber" />
+              <KpiCard label="Security Deposit" value={`AED ${suggestion.securityDeposit.toLocaleString()}`} accent="emerald" />
+            </StatGrid>
           </div>
 
           {/* Vehicles */}

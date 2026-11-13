@@ -1,5 +1,7 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Policy {
   id: string;
@@ -56,9 +58,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function daysColor(days: number): string {
-  if (days < 0)  return 'text-rose-400';
-  if (days < 30) return 'text-rose-400';
-  if (days < 90) return 'text-amber-400';
+  if (days < 0)   return 'text-rose-400';
+  if (days <= 30) return 'text-rose-400';
+  if (days <= 90) return 'text-amber-400';
   return 'text-emerald-400';
 }
 
@@ -75,20 +77,35 @@ function fmtDate(d: string | null): string {
 const emptyForm = {
   vehicleNo: '', vehicleName: '', insurer: 'AXA', policyType: 'COMPREHENSIVE',
   coverageAmount: '', excessAmount: '0', premiumAnnual: '',
-  startDate: '', endDate: '', notes: '',
+  startDate: '', endDate: '', notes: '', documentUrl: '',
 };
 
-export default function InsurancePage() {
+function InsurancePageInner() {
+  const searchParams              = useSearchParams();
+  const focusPolicyId             = searchParams?.get('id')?.trim() || '';
+
   const [policies, setPolicies]   = useState<Policy[]>([]);
   const [stats, setStats]         = useState<Stats | null>(null);
   const [tab, setTab]             = useState('ALL');
   const [search, setSearch]       = useState('');
+  const [highlightId, setHighlightId] = useState<string>(focusPolicyId);
+  const [filterByFocus, setFilterByFocus] = useState<boolean>(Boolean(focusPolicyId));
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
+  const [modalError, setModalError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null);
+  const [policyFile, setPolicyFile] = useState<File | null>(null);
   const [saving, setSaving]       = useState(false);
   const [formData, setFormData]   = useState(emptyForm);
+
+  useEffect(() => {
+    if (focusPolicyId) {
+      setHighlightId(focusPolicyId);
+      setFilterByFocus(true);
+      setTab('ALL');
+    }
+  }, [focusPolicyId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,11 +115,14 @@ export default function InsurancePage() {
       if (tab !== 'ALL') params.set('status', tab);
       if (search)        params.set('search', search);
       const res  = await fetch(`/api/rental/insurance?${params}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to load insurance policies (${res.status})`);
+      }
       setPolicies(data.policies ?? []);
       setStats(data.stats ?? null);
-    } catch {
-      setError('Failed to load insurance policies');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load insurance policies');
     } finally {
       setLoading(false);
     }
@@ -113,11 +133,15 @@ export default function InsurancePage() {
   const openNew = () => {
     setEditPolicy(null);
     setFormData(emptyForm);
+    setPolicyFile(null);
+    setModalError('');
     setShowModal(true);
   };
 
   const openEdit = (p: Policy) => {
     setEditPolicy(p);
+    setPolicyFile(null);
+    setModalError('');
     setFormData({
       vehicleNo:      p.vehicleNo,
       vehicleName:    p.vehicleName ?? '',
@@ -129,6 +153,7 @@ export default function InsurancePage() {
       startDate:      p.startDate.slice(0, 10),
       endDate:        p.endDate.slice(0, 10),
       notes:          p.notes ?? '',
+      documentUrl:    p.documentUrl ?? '',
     });
     setShowModal(true);
   };
@@ -136,7 +161,27 @@ export default function InsurancePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setModalError('');
     try {
+      let uploadedUrl: string | null = formData.documentUrl || null;
+      if (policyFile) {
+        const fd = new FormData();
+        fd.append('file', policyFile);
+        fd.append('entityType', 'INSURANCE');
+        fd.append('entityId', editPolicy?.id ?? '');
+        fd.append('docType', 'INSURANCE');
+        fd.append('docName', `${formData.vehicleNo || 'Vehicle'} - ${formData.insurer} Policy`);
+        const upRes = await fetch('/api/rental/documents/upload', {
+          method: 'POST',
+          body: fd,
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) {
+          throw new Error(upData.error || `Policy PDF upload failed (${upRes.status})`);
+        }
+        uploadedUrl = upData.url ?? upData.fileUrl ?? uploadedUrl;
+      }
+
       const payload = {
         vehicleNo:      formData.vehicleNo,
         vehicleName:    formData.vehicleName || null,
@@ -147,6 +192,7 @@ export default function InsurancePage() {
         premiumAnnual:  formData.premiumAnnual ? Number(formData.premiumAnnual) : null,
         startDate:      formData.startDate,
         endDate:        formData.endDate,
+        documentUrl:    uploadedUrl,
         notes:          formData.notes || null,
       };
 
@@ -163,13 +209,16 @@ export default function InsurancePage() {
         });
       }
       if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Failed to save');
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Failed to save policy (${res.status})`);
       }
       setShowModal(false);
+      setPolicyFile(null);
       load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save policy');
+      const msg = err instanceof Error ? err.message : 'Failed to save policy';
+      setModalError(msg);
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -177,18 +226,28 @@ export default function InsurancePage() {
 
   const handleCancel = async (p: Policy) => {
     if (!confirm(`Cancel policy ${p.policyNo}?`)) return;
+    setError('');
     try {
-      await fetch('/api/rental/insurance', {
+      const res = await fetch('/api/rental/insurance', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: p.id, status: 'CANCELLED' }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Failed to cancel policy (${res.status})`);
+      }
       load();
-    } catch {
-      setError('Failed to cancel policy');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel policy');
     }
   };
 
   const expiringSoon = stats?.expiringSoon ?? 0;
+
+  const displayedPolicies =
+    filterByFocus && highlightId
+      ? policies.filter((p) => p.id === highlightId)
+      : policies;
 
   const inputCls = 'w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm';
   const labelCls = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
@@ -222,32 +281,40 @@ export default function InsurancePage() {
         </div>
       )}
 
+      {filterByFocus && highlightId && (
+        <div className="flex items-center justify-between gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3 text-sm text-teal-300">
+          <span>Showing selected policy from Expiry Alerts.</span>
+          <button
+            type="button"
+            onClick={() => setFilterByFocus(false)}
+            className="px-3 py-1 rounded-lg bg-teal-600/20 border border-teal-500/30 text-xs font-medium hover:bg-teal-600/30"
+          >
+            Show All Policies
+          </button>
+        </div>
+      )}
+
       {error && (
-        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">
-          {error}
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm flex items-center justify-between gap-3">
+          <span>⚠️ {error}</span>
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="text-xs text-rose-300 hover:text-[var(--text-main)] font-medium"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
       {/* KPI Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Active Policies',     value: stats.active,           color: 'text-emerald-400', icon: '✅' },
-            { label: 'Expiring Soon',       value: stats.expiringSoon,     color: 'text-amber-400',   icon: '⏳' },
-            { label: 'Expired',             value: stats.expired,          color: 'text-rose-400',    icon: '❌' },
-            { label: 'Total Premium (AED/yr)', value: `AED ${fmt(stats.totalPremiumAed, 0)}`, color: 'text-teal-400', icon: '💰', raw: true },
-          ].map(({ label, value, color, icon, raw }) => (
-            <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">{icon}</span>
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
-              </div>
-              <p className={`text-3xl font-bold ${color}`}>
-                {raw ? value : fmt(value as number)}
-              </p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Active Policies" value={fmt(stats.active)} accent="emerald" />
+          <KpiCard label="Expiring Soon" value={fmt(stats.expiringSoon)} accent="amber" />
+          <KpiCard label="Expired" value={fmt(stats.expired)} accent="rose" />
+          <KpiCard label="Total Premium (AED/yr)" value={`AED ${fmt(stats.totalPremiumAed, 0)}`} accent="cyan" />
+        </StatGrid>
       )}
 
       {/* Tabs */}
@@ -255,7 +322,7 @@ export default function InsurancePage() {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); setFilterByFocus(false); }}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               tab === t.key
                 ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white'
@@ -273,7 +340,7 @@ export default function InsurancePage() {
       {/* Search */}
       <input
         value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={e => { setSearch(e.target.value); setFilterByFocus(false); }}
         placeholder="Search by vehicle no, policy no, or insurer..."
         className="w-full max-w-md px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
       />
@@ -282,7 +349,7 @@ export default function InsurancePage() {
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden backdrop-blur-sm">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[var(--text-muted)] animate-pulse">Loading policies...</div>
-        ) : policies.length === 0 ? (
+        ) : displayedPolicies.length === 0 ? (
           <div className="text-center text-[var(--text-muted)] py-16">No insurance policies found</div>
         ) : (
           <div className="overflow-x-auto">
@@ -295,12 +362,19 @@ export default function InsurancePage() {
                 </tr>
               </thead>
               <tbody>
-                {policies.map(p => {
-                  const isWarning = p.expiryDaysRemaining >= 0 && p.expiryDaysRemaining < 30;
+                {displayedPolicies.map(p => {
+                  const isWarning = p.expiryDaysRemaining >= 0 && p.expiryDaysRemaining <= 30;
+                  const isHighlighted = highlightId === p.id;
                   return (
                     <tr
                       key={p.id}
-                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${isWarning ? 'bg-amber-500/5' : ''}`}
+                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${
+                        isHighlighted
+                          ? 'bg-teal-500/10 ring-1 ring-inset ring-teal-500/40'
+                          : isWarning
+                            ? 'bg-amber-500/5'
+                            : ''
+                      }`}
                     >
                       <td className="px-4 py-3 text-sm font-mono text-teal-400 whitespace-nowrap">
                         {p.policyNo}
@@ -337,7 +411,17 @@ export default function InsurancePage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
+                          {p.documentUrl && (
+                            <a
+                              href={p.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2.5 py-1 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30"
+                            >
+                              View Policy PDF ↗
+                            </a>
+                          )}
                           <button
                             onClick={() => openEdit(p)}
                             className="text-xs px-2.5 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30"
@@ -373,6 +457,12 @@ export default function InsurancePage() {
               </h2>
               <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
+
+            {modalError && (
+              <div className="mb-4 bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">
+                ⚠️ {modalError}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -444,7 +534,28 @@ export default function InsurancePage() {
                     className={inputCls}
                   />
                 </div>
-                <div className="col-span-1" />
+                <div>
+                  <label className={labelCls}>Policy PDF / Scan (optional)</label>
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    onChange={e => setPolicyFile(e.target.files?.[0] ?? null)}
+                    className="w-full text-xs text-[var(--text-muted)] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-teal-700 file:text-white hover:file:bg-teal-600"
+                  />
+                  {policyFile && (
+                    <p className="mt-1 text-xs text-teal-400 truncate">Selected: {policyFile.name}</p>
+                  )}
+                  {!policyFile && formData.documentUrl && (
+                    <a
+                      href={formData.documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block mt-1 text-xs text-teal-400 hover:underline"
+                    >
+                      View Policy PDF ↗
+                    </a>
+                  )}
+                </div>
 
                 <div>
                   <label className={labelCls}>Start Date *</label>
@@ -495,5 +606,13 @@ export default function InsurancePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function InsurancePage() {
+  return (
+    <Suspense fallback={<div className="py-16 text-center text-[var(--text-muted)]">Loading policies...</div>}>
+      <InsurancePageInner />
+    </Suspense>
   );
 }

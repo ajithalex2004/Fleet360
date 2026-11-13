@@ -8,12 +8,12 @@ import type { TxClient } from '@/lib/rls';
  *
  * Contract-only locking isn't enough on its own: a vehicle can be touched
  * by flows on two *different* contracts at once (an exchange mid-flight on
- * contract A, a fresh allocation attempt on contract B), so this also
- * locks each vehicleId given. Locks are acquired in a fixed canonical
- * order — contract first, then vehicle IDs sorted ascending — mirroring
- * src/lib/bus-ops/assignment-txn.ts's vehicle-before-driver ordering, so
- * two transactions contending for overlapping resources always acquire
- * them in the same order and one simply waits rather than deadlocking.
+ * contract A, a fresh allocation attempt on contract B), or concurrently
+ * across Leasing and Rent-A-Car (RAC). Locks are acquired in a fixed canonical
+ * order — contract first, then sorted vehicle IDs (`fleet-vehicle:*` shared
+ * with `withRentalLock` in `src/lib/rental/locks.ts`, followed by
+ * `lease-vehicle:*`) — so two transactions contending for overlapping
+ * resources always acquire them in the same order and never deadlock.
  *
  * Must be called from inside the same withTenantRls transaction that
  * performs the guarded reads/writes — the lock releases automatically at
@@ -35,6 +35,10 @@ export async function withContractAndVehicleLock<T>(
   ).sort();
 
   for (const vehicleId of vehicleIds) {
+    await tx.$executeRawUnsafe(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      `fleet-vehicle:${tenantId}:${vehicleId}`,
+    );
     await tx.$executeRawUnsafe(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
       `lease-vehicle:${tenantId}:${vehicleId}`,

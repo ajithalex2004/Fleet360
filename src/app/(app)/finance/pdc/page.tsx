@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Building2, CheckCircle2, ClipboardList, XCircle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface PdcCheque {
   id: string; cheque_number: string; bank_name: string; account_name: string | null;
@@ -308,20 +310,12 @@ export default function PdcPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Held (Pending)',  stat: countOf('HELD'),     color: 'text-amber-400',   icon: '📋' },
-          { label: 'Deposited',       stat: countOf('DEPOSITED'), color: 'text-blue-400',    icon: '🏦' },
-          { label: 'Cleared',         stat: countOf('CLEARED'),  color: 'text-emerald-400', icon: '✅' },
-          { label: 'Bounced',         stat: countOf('BOUNCED'),  color: 'text-red-400',     icon: '🔴' },
-        ].map(k => (
-          <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">{k.icon} {k.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${k.color}`}>{k.stat?.count ?? 0}</p>
-            <p className="text-xs text-[var(--text-faint)] mt-0.5">{fmtAED(k.stat?.total ?? '0')}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Held (Pending)" value={countOf('HELD')?.count ?? 0} sub={fmtAED(countOf('HELD')?.total ?? '0')} icon={ClipboardList} accent="amber" />
+        <KpiCard label="Deposited" value={countOf('DEPOSITED')?.count ?? 0} sub={fmtAED(countOf('DEPOSITED')?.total ?? '0')} icon={Building2} accent="cyan" />
+        <KpiCard label="Cleared" value={countOf('CLEARED')?.count ?? 0} sub={fmtAED(countOf('CLEARED')?.total ?? '0')} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Bounced" value={countOf('BOUNCED')?.count ?? 0} sub={fmtAED(countOf('BOUNCED')?.total ?? '0')} icon={XCircle} accent="rose" />
+      </StatGrid>
 
       {/* Maturity Alert */}
       {maturingSoon > 0 && (

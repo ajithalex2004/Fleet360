@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { Plus, Edit2 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface CreditAssessment {
   id: string;
@@ -174,24 +175,12 @@ export default function CreditAssessmentsPage() {
         )}
 
         {/* Summary Cards */}
-        <div className="mb-8 grid grid-cols-4 gap-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
-            <p className="text-[var(--text-muted)] text-sm mb-1">Total Assessed</p>
-            <p className="text-3xl font-bold text-blue-400">{totalAssessed}</p>
-          </div>
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
-            <p className="text-[var(--text-muted)] text-sm mb-1">Avg Credit Score</p>
-            <p className="text-3xl font-bold text-emerald-400">{avgCreditScore}</p>
-          </div>
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
-            <p className="text-[var(--text-muted)] text-sm mb-1">High Risk Count</p>
-            <p className="text-3xl font-bold text-rose-400">{highRiskCount}</p>
-          </div>
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
-            <p className="text-[var(--text-muted)] text-sm mb-1">Total Exposure</p>
-            <p className="text-3xl font-bold text-amber-400">{totalExposure.toFixed(2)} AED</p>
-          </div>
-        </div>
+        <StatGrid cols={4} className="mb-8">
+          <KpiCard label="Total Assessed" value={totalAssessed} accent="cyan" />
+          <KpiCard label="Avg Credit Score" value={avgCreditScore} accent="emerald" />
+          <KpiCard label="High Risk Count" value={highRiskCount} accent="rose" />
+          <KpiCard label="Total Exposure" value={`${totalExposure.toFixed(2)} AED`} accent="amber" />
+        </StatGrid>
 
         {loading ? (
           <div className="text-center py-12">Loading assessments...</div>

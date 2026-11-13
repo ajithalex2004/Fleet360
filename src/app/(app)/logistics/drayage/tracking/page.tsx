@@ -121,6 +121,7 @@ interface DrayageJob {
   cpipInspection?: boolean;
   mercInspection?: boolean;
   boxcareInspection?: boolean;
+  inspectionStatus?: string | null;
   currentLat?: number | null;
   currentLng?: number | null;
   routePath?: Array<{
@@ -830,6 +831,7 @@ export default function DrayageJobTrackingPage() {
           detachTrailer: detach,
           etcTime: etcTime || undefined,
           actor: user?.username || undefined,
+          operatorOverride: true,
         }),
       });
       const data = await res.json();
@@ -2355,12 +2357,32 @@ export default function DrayageJobTrackingPage() {
                     statusUpper.includes('TO RAMP') ||
                     statusUpper.includes('TO_RAMP') ||
                     (activeJob.placementLocation || '').toUpperCase() === 'YARD';
+                  const hasInspectionFlags = Boolean(
+                    activeJob.customsInspection ||
+                      activeJob.municipalityInspection ||
+                      activeJob.cpipInspection ||
+                      activeJob.mercInspection ||
+                      activeJob.boxcareInspection,
+                  );
+                  const requiresInspection =
+                    hasInspectionFlags ||
+                    ['HOLD_PENDING', 'INSPECTION_BOOKED', 'REJECTED'].includes(
+                      String(activeJob.inspectionStatus || '').toUpperCase(),
+                    );
+                  const hadUnderInspectionLog = statusLogs.some(
+                    (l) =>
+                      (l.jobId === activeJob.id || l.jobCode === activeJob.jobCode) &&
+                      String(l.status || '').toUpperCase() === 'UNDER_INSPECTION',
+                  );
 
                   const stages: Array<{
                     key: string;
                     stageNum: number;
                     label: string;
                     isUnchosenBranch?: boolean;
+                    isBypassedStage?: boolean;
+                    isOptionalInspection?: boolean;
+                    isGreenChannelNext?: boolean;
                     onClick: () => void;
                   }> = isL2Job
                     ? [
@@ -2385,13 +2407,21 @@ export default function DrayageJobTrackingPage() {
                         {
                           key: 'l2-4',
                           stageNum: 4,
-                          label: '4. Under Inspection',
+                          label:
+                            !requiresInspection && currentStage >= 5 && !hadUnderInspectionLog
+                              ? '4. Under Inspection (Bypassed)'
+                              : !requiresInspection && currentStage <= 3
+                              ? '4. Under Inspection (Optional)'
+                              : '4. Under Inspection',
+                          isBypassedStage: !requiresInspection && currentStage >= 5 && !hadUnderInspectionLog,
+                          isOptionalInspection: !requiresInspection && currentStage === 3,
                           onClick: () => handleUpdateStatus('UNDER_INSPECTION'),
                         },
                         {
                           key: 'l2-5',
                           stageNum: 5,
                           label: '5. Container Dropped (Complete)',
+                          isGreenChannelNext: !requiresInspection && currentStage === 3,
                           onClick: () => handleUpdateStatus('CONTAINER_DROPPED', undefined, true),
                         },
                       ]
@@ -2449,13 +2479,21 @@ export default function DrayageJobTrackingPage() {
                         {
                           key: 'l1-3',
                           stageNum: 3,
-                          label: '3. Under Inspection',
+                          label:
+                            !requiresInspection && currentStage >= 4 && !hadUnderInspectionLog
+                              ? '3. Under Inspection (Bypassed)'
+                              : !requiresInspection && currentStage <= 2
+                              ? '3. Under Inspection (Optional)'
+                              : '3. Under Inspection',
+                          isBypassedStage: !requiresInspection && currentStage >= 4 && !hadUnderInspectionLog,
+                          isOptionalInspection: !requiresInspection && currentStage === 2,
                           onClick: () => handleUpdateStatus('UNDER_INSPECTION'),
                         },
                         {
                           key: 'l1-4',
                           stageNum: 4,
                           label: '4. En Route to Warehouse',
+                          isGreenChannelNext: !requiresInspection && currentStage === 2,
                           onClick: () => handleUpdateStatus('EN_ROUTE_WAREHOUSE'),
                         },
                         {
@@ -2491,6 +2529,11 @@ export default function DrayageJobTrackingPage() {
                         },
                       ];
 
+                  const isAtGreenChannelBypassPoint =
+                    !isReassignFlow &&
+                    !requiresInspection &&
+                    ((!isL2Job && currentStage === 2) || (isL2Job && currentStage === 3));
+
                   return (
                     <div className="pt-2">
                       <div className="text-[11px] font-bold text-[var(--text-main)] mb-2 flex items-center justify-between">
@@ -2503,20 +2546,31 @@ export default function DrayageJobTrackingPage() {
                         <span className="text-[10px] text-[var(--text-muted)]">
                           {currentStage >= totalStages
                             ? 'Workflow completed'
+                            : isAtGreenChannelBypassPoint
+                            ? `Current Stage: ${currentStage}/${totalStages} · Green Channel (No Inspection Flags) — Stage ${currentStage + 2} unlocked`
                             : `Current Stage: ${currentStage}/${totalStages} · Only Stage ${currentStage + 1} is enabled`}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {stages.map((st) => {
                           const isUnchosen = Boolean(st.isUnchosenBranch);
-                          const isPast = !isUnchosen && st.stageNum < currentStage;
+                          const isBypassed = Boolean(st.isBypassedStage);
+                          const isOptionalInspect = Boolean(st.isOptionalInspection);
+                          const isPast = !isUnchosen && !isBypassed && st.stageNum < currentStage;
                           const isCurrent = !isUnchosen && st.stageNum === currentStage;
-                          const isNext = st.stageNum === currentStage + 1;
-                          const isFuture = st.stageNum > currentStage + 1 || isUnchosen;
+                          const isNext =
+                            (st.stageNum === currentStage + 1 && !isOptionalInspect) ||
+                            Boolean(st.isGreenChannelNext);
+                          const isClickable = isNext || isOptionalInspect;
+                          const isFuture =
+                            (!isClickable && st.stageNum > currentStage) || isUnchosen;
 
                           let btnClass =
                             'px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all inline-flex items-center gap-1.5 ';
-                          if (isPast) {
+                          if (isBypassed) {
+                            btnClass +=
+                              'bg-emerald-500/5 border-emerald-500/25 text-emerald-500/75 opacity-60 cursor-not-allowed';
+                          } else if (isPast) {
                             btnClass +=
                               'bg-slate-500/5 border-[var(--border-subtle)] text-[var(--text-muted)] opacity-45 cursor-not-allowed line-through';
                           } else if (isCurrent) {
@@ -2525,6 +2579,9 @@ export default function DrayageJobTrackingPage() {
                           } else if (isNext) {
                             btnClass +=
                               'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 dark:bg-amber-400/20 dark:hover:bg-amber-400/30 dark:text-amber-200 dark:border-amber-400/50 shadow-sm cursor-pointer';
+                          } else if (isOptionalInspect) {
+                            btnClass +=
+                              'bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 border-purple-400/40 dark:text-purple-300 dark:border-purple-400/40 cursor-pointer';
                           } else if (isFuture) {
                             btnClass +=
                               'bg-[var(--bg-main)] border-[var(--border-subtle)] text-[var(--text-muted)] opacity-35 cursor-not-allowed';
@@ -2532,10 +2589,16 @@ export default function DrayageJobTrackingPage() {
 
                           const tooltip = isUnchosen
                             ? 'Alternate placement branch (not selected for this container)'
+                            : isBypassed
+                            ? 'Bypassed (Green Channel — no regulatory inspection flags were enabled)'
                             : isPast
                             ? 'Completed stage (locked — cannot revert to a previous status)'
                             : isCurrent
                             ? 'Current active stage'
+                            : st.isGreenChannelNext
+                            ? 'Green Channel (no inspection flags) — click to advance directly past Under Inspection'
+                            : isOptionalInspect
+                            ? 'No regulatory inspection flags set — click ONLY if randomly held for gate inspection'
                             : isNext
                             ? 'Click to advance to the immediate next stage'
                             : `Locked: Complete Stage ${currentStage + 1} first`;
@@ -2543,11 +2606,12 @@ export default function DrayageJobTrackingPage() {
                           return (
                             <button
                               key={st.key}
-                              onClick={isNext ? st.onClick : undefined}
-                              disabled={updatingStatus || !isNext}
+                              onClick={isClickable ? st.onClick : undefined}
+                              disabled={updatingStatus || !isClickable}
                               title={tooltip}
                               className={btnClass}
                             >
+                              {isBypassed && <span aria-hidden="true">↷</span>}
                               {isPast && <span aria-hidden="true">✓</span>}
                               {isCurrent && <span aria-hidden="true">●</span>}
                               <span>{st.label}</span>

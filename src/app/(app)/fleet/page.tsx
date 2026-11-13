@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CarFront, Gauge, ArrowRight } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { KpiCard, PageHeader, StatGrid } from '@/components/ui/page-theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
 import type { MaintenanceRiskScore } from '@/types/maintenance';
@@ -95,19 +95,12 @@ export default function FleetDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {[
-          { label: 'Total fleet size',    value: stats.totalVehicles,  tone: 'from-cyan-500 to-blue-600' },
-          { label: 'Active vehicles',     value: stats.available,      tone: 'from-emerald-500 to-teal-600' },
-          { label: 'In maintenance',      value: stats.inMaintenance,  tone: 'from-amber-500 to-orange-600' },
-          { label: 'Expiring docs (30d)', value: stats.expiringDocs,   tone: stats.expiringDocs > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-700' },
-        ].map(card => (
-          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
-            <p className="text-sm font-medium text-white/80">{tLabel(card.label)}</p>
-            <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total fleet size" value={stats.totalVehicles} accent="cyan" />
+        <KpiCard label="Active vehicles" value={stats.available} accent="emerald" />
+        <KpiCard label="In maintenance" value={stats.inMaintenance} accent="amber" />
+        <KpiCard label="Expiring docs (30d)" value={stats.expiringDocs} accent={stats.expiringDocs > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* Fleet Health Summary */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">

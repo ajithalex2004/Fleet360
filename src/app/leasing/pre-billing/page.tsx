@@ -1,6 +1,7 @@
 'use client';
 import { contractToPreBilling } from '@/lib/autoFill';
 import React, { useState, useCallback, useEffect } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface PreBillingStatement {
   id: string;
@@ -204,28 +205,13 @@ export default function PreBillingPage() {
       </div>
 
       {/* Status Pipeline */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-[var(--text-muted)]">{statusCounts.DRAFT}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">DRAFT</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-blue-400">{statusCounts.SENT}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">SENT</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-emerald-400">{statusCounts.CONFIRMED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">CONFIRMED</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-amber-400">{statusCounts.DISPUTED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">DISPUTED</div>
-        </div>
-        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-indigo-400">{statusCounts.FINALIZED}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-2">FINALIZED</div>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="DRAFT" value={statusCounts.DRAFT} accent="slate" />
+        <KpiCard label="SENT" value={statusCounts.SENT} accent="cyan" />
+        <KpiCard label="CONFIRMED" value={statusCounts.CONFIRMED} accent="emerald" />
+        <KpiCard label="DISPUTED" value={statusCounts.DISPUTED} accent="amber" />
+        <KpiCard label="FINALIZED" value={statusCounts.FINALIZED} accent="violet" />
+      </StatGrid>
 
       {/* Filter Bar */}
       <div className="flex gap-4 flex-wrap">

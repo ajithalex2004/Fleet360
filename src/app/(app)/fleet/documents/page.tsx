@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
@@ -240,51 +241,36 @@ export default function FleetDocumentsPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-emerald-400 font-medium">Fully Compliant</span>
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-[var(--text-main)]">
-            {sweepSummary?.compliantVehiclesCount || 0}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">All mandatory documents valid</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-400 font-medium">Expiring in 30 Days</span>
-            <Clock className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-2xl font-bold text-amber-300">
-            {sweepSummary?.warningVehiclesCount || 0}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Upcoming renewals needed</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-orange-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-orange-400 font-medium">Critical (&le; 7 Days)</span>
-            <AlertTriangle className="w-4 h-4 text-orange-400" />
-          </div>
-          <p className="text-2xl font-bold text-orange-300">
-            {sweepSummary?.criticalVehiclesCount || 0}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Immediate action required</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/40 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-rose-400 font-medium">Grounded / Expired</span>
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
-          </div>
-          <p className="text-2xl font-bold text-rose-300">
-            {sweepSummary?.groundedVehiclesCount || groundedVehicles.length}
-          </p>
-          <p className="text-[11px] text-rose-400/80">Blocked from trip dispatch</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Fully Compliant"
+          value={sweepSummary?.compliantVehiclesCount || 0}
+          sub="All mandatory documents valid"
+          icon={ShieldCheck}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Expiring in 30 Days"
+          value={sweepSummary?.warningVehiclesCount || 0}
+          sub="Upcoming renewals needed"
+          icon={Clock}
+          accent="amber"
+        />
+        <KpiCard
+          label="Critical (≤ 7 Days)"
+          value={sweepSummary?.criticalVehiclesCount || 0}
+          sub="Immediate action required"
+          icon={AlertTriangle}
+          accent="amber"
+        />
+        <KpiCard
+          label="Grounded / Expired"
+          value={sweepSummary?.groundedVehiclesCount || groundedVehicles.length}
+          sub="Blocked from trip dispatch"
+          icon={ShieldAlert}
+          accent="rose"
+        />
+      </StatGrid>
 
       {/* Grounded Quarantine Banner */}
       {groundedVehicles.length > 0 && (

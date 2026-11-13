@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 import { displayCode, shortId } from '@/lib/ui/display-id';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,16 +118,6 @@ function fmtDate(d: string) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub, red }: { label: string; value: string; sub?: string; red?: boolean }) {
-  return (
-    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 flex flex-col gap-1">
-      <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
-      <p className={`text-2xl font-bold ${red ? 'text-red-400' : 'text-[var(--text-main)]'}`}>{value}</p>
-      {sub && <p className="text-xs text-[var(--text-faint)]">{sub}</p>}
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_COLORS[status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
@@ -755,17 +746,17 @@ export default function BillingPage() {
       {!loading && activeTab === 'overview' && (
         <div className="space-y-8">
           {/* MRR / ARR stat cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Monthly Recurring Revenue" value={fmt(ov?.mrr ?? 0)} sub="MRR (AED)" />
-            <StatCard label="Annual Recurring Revenue" value={fmt(ov?.arr ?? 0)} sub="ARR (AED)" />
-            <StatCard label="Active Subscriptions" value={String(ov?.active_subscriptions ?? 0)} sub="across all tenants" />
-            <StatCard
+          <StatGrid cols={4}>
+            <KpiCard label="Monthly Recurring Revenue" value={fmt(ov?.mrr ?? 0)} sub="MRR (AED)" accent="cyan" />
+            <KpiCard label="Annual Recurring Revenue" value={fmt(ov?.arr ?? 0)} sub="ARR (AED)" accent="emerald" />
+            <KpiCard label="Active Subscriptions" value={String(ov?.active_subscriptions ?? 0)} sub="across all tenants" accent="violet" />
+            <KpiCard
               label="Outstanding Invoices"
               value={fmt(dashboard?.outstanding_invoices?.total_outstanding ?? 0)}
               sub={`${dashboard?.outstanding_invoices?.count ?? 0} invoice(s) unpaid`}
-              red={(dashboard?.outstanding_invoices?.total_outstanding ?? 0) > 0}
+              accent={(dashboard?.outstanding_invoices?.total_outstanding ?? 0) > 0 ? 'rose' : 'slate'}
             />
-          </div>
+          </StatGrid>
 
           {/* Module Revenue Breakdown */}
           <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">

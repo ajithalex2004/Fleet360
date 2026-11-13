@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { ArrowLeft, Users, RefreshCw } from 'lucide-react';
 import { TripDisruptionPanel } from '@/components/bus-ops/trip-disruption-panel';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ALIGHTED' | 'ABSENT' | 'NO_SHOW' | 'CANCELLED' | 'WAITLISTED';
 
@@ -188,20 +189,13 @@ export default function TripDetailPage() {
       ) : (
         <>
           {/* Status + KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <div className="col-span-2 md:col-span-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
-              <p className="text-xs text-[var(--text-faint)] mb-1">Trip status</p>
-              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${TRIP_PILL[(trip.status ?? 'SCHEDULED') as TripStatus]}`}>
-                {trip.status ?? 'SCHEDULED'}
-              </span>
-            </div>
-            {(['CONFIRMED','BOARDED','ALIGHTED','ABSENT','WAITLISTED'] as PassengerStatus[]).map(s => (
-              <div key={s} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
-                <p className="text-lg font-bold text-[var(--text-main)]">{counts[s]}</p>
-                <p className="text-[10px] text-[var(--text-faint)] uppercase mt-0.5">{s}</p>
-              </div>
-            ))}
-          </div>
+          <StatGrid cols={6}>
+            <KpiCard label="Trip status" value={trip.status ?? 'SCHEDULED'} accent="violet" />
+            {(['CONFIRMED','BOARDED','ALIGHTED','ABSENT','WAITLISTED'] as PassengerStatus[]).map((s, idx) => {
+              const accents: PageAccent[] = ['blue', 'emerald', 'cyan', 'rose', 'amber'];
+              return <KpiCard key={s} label={s} value={counts[s]} accent={accents[idx] ?? 'slate'} />;
+            })}
+          </StatGrid>
 
           <TripDisruptionPanel scheduleId={trip.id} tripStatus={trip.status} onChanged={load} />
 

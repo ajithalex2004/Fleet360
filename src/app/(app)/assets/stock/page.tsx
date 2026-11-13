@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface Asset {
@@ -122,20 +123,11 @@ export default function StockLevelsPage() {
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] border-l-4 border-l-blue-500 rounded-xl p-5">
-          <p className="text-[var(--text-muted)] text-xs uppercase font-medium">Total SKUs</p>
-          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{filtered.length.toLocaleString()}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] border-l-4 border-l-yellow-400 rounded-xl p-5">
-          <p className="text-[var(--text-muted)] text-xs uppercase font-medium">Total Value AED</p>
-          <p className="text-2xl font-bold text-yellow-300 mt-1">{totalValue.toLocaleString()}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] border-l-4 border-l-red-500 rounded-xl p-5">
-          <p className="text-[var(--text-muted)] text-xs uppercase font-medium">Needs Reorder</p>
-          <p className="text-2xl font-bold text-red-400 mt-1">{needsReorder}</p>
-        </div>
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard label="Total SKUs" value={filtered.length.toLocaleString()} accent="cyan" />
+        <KpiCard label="Total Value AED" value={totalValue.toLocaleString()} accent="amber" />
+        <KpiCard label="Needs Reorder" value={needsReorder} accent="rose" />
+      </StatGrid>
 
       {/* Filters */}
       <div className="flex gap-3">

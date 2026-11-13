@@ -8,6 +8,7 @@
  */
 
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -1082,72 +1083,41 @@ export default function EnterprisePartnerDirectoryPage() {
       {mainSection === 'EXECUTIVE_ANALYTICS' && (
         <div className="space-y-6">
           {/* Executive Summary KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Total Outsourced Spend
-              </div>
-              <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
-                AED{' '}
-                {Number(executiveAnalytics?.commercialLedger?.totalAwardedGrossAed ?? 0).toLocaleString('en-AE', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {(executiveAnalytics?.commercialLedger?.agencyAwardCount ?? 0) +
-                  (executiveAnalytics?.commercialLedger?.principalAwardCount ?? 0)}{' '}
-                governed awards across 4 verticals
-              </div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-              <div className="text-[11px] font-bold text-cyan-500 uppercase tracking-wider">
-                Platform Commissions & Margin
-              </div>
-              <div className="text-2xl font-black font-mono text-cyan-500">
-                AED{' '}
-                {Number(
-                  (executiveAnalytics?.commercialLedger?.agencyPlatformFeeEarnedAed ?? 0) +
-                    (executiveAnalytics?.commercialLedger?.principalGrossMarginAed ?? 0),
-                ).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Agency Fees: AED{' '}
-                {Number(executiveAnalytics?.commercialLedger?.agencyPlatformFeeEarnedAed ?? 0).toFixed(2)} · Principal
-                Margin: AED {Number(executiveAnalytics?.commercialLedger?.principalGrossMarginAed ?? 0).toFixed(2)}
-              </div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-              <div className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider">
-                3-Way Match Auto-Approval
-              </div>
-              <div className="text-2xl font-black font-mono text-emerald-500">
-                {Number(executiveAnalytics?.threeWayMatchStats?.autoMatchRatePct ?? 100).toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {executiveAnalytics?.threeWayMatchStats?.autoMatchedCount ?? 0} matched ·{' '}
-                {executiveAnalytics?.threeWayMatchStats?.varianceHoldCount ?? 0} held on variance review
-              </div>
-            </div>
-
-            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-              <div className="text-[11px] font-bold text-amber-500 uppercase tracking-wider">
-                3-Way Audit & SLA Savings
-              </div>
-              <div className="text-2xl font-black font-mono text-amber-500">
-                AED{' '}
-                {Number(executiveAnalytics?.threeWayMatchStats?.varianceSavingsAed ?? 0).toLocaleString('en-AE', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Prevented overcharges & SLA penalty deductions
-              </div>
-            </div>
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard
+              label="Total Outsourced Spend"
+              value={`AED ${Number(executiveAnalytics?.commercialLedger?.totalAwardedGrossAed ?? 0).toLocaleString('en-AE', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
+              sub={`${(executiveAnalytics?.commercialLedger?.agencyAwardCount ?? 0) + (executiveAnalytics?.commercialLedger?.principalAwardCount ?? 0)} governed awards across 4 verticals`}
+              accent="slate"
+            />
+            <KpiCard
+              label="Platform Commissions & Margin"
+              value={`AED ${Number(
+                (executiveAnalytics?.commercialLedger?.agencyPlatformFeeEarnedAed ?? 0) +
+                  (executiveAnalytics?.commercialLedger?.principalGrossMarginAed ?? 0),
+              ).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              sub={`Agency Fees: AED ${Number(executiveAnalytics?.commercialLedger?.agencyPlatformFeeEarnedAed ?? 0).toFixed(2)} · Principal Margin: AED ${Number(executiveAnalytics?.commercialLedger?.principalGrossMarginAed ?? 0).toFixed(2)}`}
+              accent="cyan"
+            />
+            <KpiCard
+              label="3-Way Match Auto-Approval"
+              value={`${Number(executiveAnalytics?.threeWayMatchStats?.autoMatchRatePct ?? 100).toFixed(1)}%`}
+              sub={`${executiveAnalytics?.threeWayMatchStats?.autoMatchedCount ?? 0} matched · ${executiveAnalytics?.threeWayMatchStats?.varianceHoldCount ?? 0} held on variance review`}
+              accent="emerald"
+            />
+            <KpiCard
+              label="3-Way Audit & SLA Savings"
+              value={`AED ${Number(executiveAnalytics?.threeWayMatchStats?.varianceSavingsAed ?? 0).toLocaleString('en-AE', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
+              sub="Prevented overcharges & SLA penalty deductions"
+              accent="amber"
+            />
+          </StatGrid>
 
           {/* Cross-Vertical Outsource Spend & Volume Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

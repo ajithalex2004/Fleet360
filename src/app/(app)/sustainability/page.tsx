@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Leaf, RefreshCw, Download } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { Leaf, RefreshCw, Download, Wind, Fuel, Zap, Bus, Car, FileText } from 'lucide-react';
+import { PageHeader, KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -94,44 +94,6 @@ const CERT_CONFIG = {
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function KPICard({
-  label, value, unit, sub, icon, color = 'emerald', trend,
-}: {
-  label: string; value: string; unit?: string; sub?: string;
-  icon: string; color?: string; trend?: number;
-}) {
-  const colors: Record<string, string> = {
-    emerald: 'from-emerald-500 to-teal-600',
-    blue:    'from-blue-500 to-indigo-600',
-    purple:  'from-violet-500 to-purple-600',
-    amber:   'from-amber-500 to-orange-600',
-    teal:    'from-teal-500 to-cyan-600',
-    rose:    'from-rose-500 to-pink-600',
-  };
-  return (
-    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${colors[color] ?? colors.emerald} p-5 flex flex-col gap-3 shadow-sm`}>
-      <div className="flex items-start justify-between">
-        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl">
-          {icon}
-        </div>
-        {trend !== undefined && (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white bg-white/20">
-            {trend > 0 ? '↑' : trend < 0 ? '↓' : '—'} {Math.abs(trend)}%
-          </span>
-        )}
-      </div>
-      <div>
-        <p className="text-white/80 text-xs uppercase tracking-wider mb-1">{label}</p>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold text-white">{value}</span>
-          {unit && <span className="text-sm text-white/70">{unit}</span>}
-        </div>
-        {sub && <p className="text-xs text-white/60 mt-1">{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 function ProgressBar({ pct, color = 'emerald', label, sublabel }: {
   pct: number; color?: string; label: string; sublabel?: string;
@@ -296,55 +258,50 @@ export default function SustainabilityPage() {
       {!loading && data && (
         <>
           {/* ── 6 KPI Cards ── */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            <KPICard
+          <StatGrid cols={6}>
+            <KpiCard
               label="CO₂ Avoided"
-              value={fmtNum(ov?.co2_avoided_tonnes ?? 0, 2)}
-              unit="tonnes"
+              value={`${fmtNum(ov?.co2_avoided_tonnes ?? 0, 2)} tonnes`}
               sub={`vs ${fmtNum(ov?.co2_baseline_kg ?? 0)} kg baseline`}
-              icon="💨"
-              color="emerald"
+              icon={Wind}
+              accent="emerald"
             />
-            <KPICard
+            <KpiCard
               label="Fuel Saved"
-              value={fmtNum(ov?.fuel_saved_litres ?? 0)}
-              unit="L"
+              value={`${fmtNum(ov?.fuel_saved_litres ?? 0)} L`}
               sub={`of ${fmtNum(ov?.fuel_litres ?? 0)} L total`}
-              icon="⛽"
-              color="blue"
+              icon={Fuel}
+              accent="cyan"
             />
-            <KPICard
+            <KpiCard
               label="Green Fleet"
-              value={fmtNum(fl?.ev_pct ?? 0, 1)}
-              unit="%"
+              value={`${fmtNum(fl?.ev_pct ?? 0, 1)}%`}
               sub={`${fl?.ev_vehicles ?? 0} EV of ${fl?.total_vehicles ?? 0} vehicles`}
-              icon="⚡"
-              color="teal"
+              icon={Zap}
+              accent="emerald"
             />
-            <KPICard
+            <KpiCard
               label="Bus Occupancy"
-              value={fmtNum(data.school_bus.occupancy_pct, 1)}
-              unit="%"
+              value={`${fmtNum(data.school_bus.occupancy_pct, 1)}%`}
               sub={`${fmtNum(data.school_bus.total_passengers)} passengers`}
-              icon="🏫"
-              color="purple"
+              icon={Bus}
+              accent="violet"
             />
-            <KPICard
+            <KpiCard
               label="Cars Removed"
               value={fmtNum(data.modal_shift.car_equiv_removed)}
               sub="private car trips avoided"
-              icon="🔄"
-              color="amber"
+              icon={Car}
+              accent="amber"
             />
-            <KPICard
+            <KpiCard
               label="Paperless Score"
-              value={fmtNum(data.paperless.paperless_pct, 1)}
-              unit="%"
+              value={`${fmtNum(data.paperless.paperless_pct, 1)}%`}
               sub={`${fmtNum(data.paperless.digital_docs)} digital docs`}
-              icon="📄"
-              color="rose"
+              icon={FileText}
+              accent="rose"
             />
-          </div>
+          </StatGrid>
 
           {/* ── Certification Readiness ── */}
           <div className={`rounded-2xl border p-5 ${cert?.bg ?? 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]'}`}>

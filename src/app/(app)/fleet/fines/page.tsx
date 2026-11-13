@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
@@ -238,53 +239,35 @@ export default function TrafficFinesPage() {
       )}
 
       {/* KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
-          <span className="text-xs text-[var(--text-muted)] font-medium">Total Outstanding</span>
-          <p className="text-2xl font-bold text-[var(--text-main)]">
-            AED {(summary?.outstanding || 0).toLocaleString()}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Unpaid violations in system</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-cyan-400 font-medium">Driver Recoverable</span>
-            <User className="w-4 h-4 text-cyan-400" />
-          </div>
-          <p className="text-2xl font-bold text-cyan-300">
-            AED {driverLiabilityAed.toLocaleString()}
-          </p>
-          <p className="text-[11px] text-cyan-500/80">Matched & pending payroll deduction</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-400 font-medium">Company Liability</span>
-            <Building className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-2xl font-bold text-amber-300">
-            AED {companyLiabilityAed.toLocaleString()}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Vehicle defects / company permits</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-emerald-400 font-medium">Auto-Matched Rate</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-emerald-300">
-            {fines.length
-              ? Math.round(
-                  ((fines.filter((f) => f.driverId).length) / fines.length) * 100
-                )
-              : 100}
-            %
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Shifts temporally correlated</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Total Outstanding"
+          value={`AED ${(summary?.outstanding || 0).toLocaleString()}`}
+          sub="Unpaid violations in system"
+          accent="slate"
+        />
+        <KpiCard
+          label="Driver Recoverable"
+          value={`AED ${driverLiabilityAed.toLocaleString()}`}
+          sub="Matched & pending payroll deduction"
+          icon={User}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Company Liability"
+          value={`AED ${companyLiabilityAed.toLocaleString()}`}
+          sub="Vehicle defects / company permits"
+          icon={Building}
+          accent="amber"
+        />
+        <KpiCard
+          label="Auto-Matched Rate"
+          value={`${fines.length ? Math.round(((fines.filter((f) => f.driverId).length) / fines.length) * 100) : 100}%`}
+          sub="Shifts temporally correlated"
+          icon={CheckCircle2}
+          accent="emerald"
+        />
+      </StatGrid>
 
       {/* Tabs & Search */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">

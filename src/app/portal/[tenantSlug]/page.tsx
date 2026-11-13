@@ -75,16 +75,20 @@ const STATUS_BADGE: Record<string, string> = {
 //
 // Keys are canonical ModuleKeys. To support any leftover pre-migration rows
 // (where the DB might still hold 'rac' or 'school_bus'), we also project
-// legacy aliases through the same map — see LEGACY_OVERRIDES below.
+// legacy aliases through the same map — see LEGACY_META_OVERRIDES below.
 
 type ModuleMeta = { icon: string; label: string; path: string; color: string };
+
+const PORTAL_PATH_OVERRIDES: Partial<Record<ModuleKey, string>> = {
+  rental: 'rac',
+};
 
 function projectMeta(key: ModuleKey): ModuleMeta {
   const m = MODULE_BY_KEY[key];
   return {
     icon:  PORTAL_ICONS[key],
     label: m.shortName ?? m.name,
-    path:  m.href.replace(/^\//, ''),  // strip leading slash — tenant-relative
+    path:  PORTAL_PATH_OVERRIDES[key] ?? m.href.replace(/^\//, ''),  // strip leading slash — tenant-relative
     color: m.gradient,
   };
 }
@@ -132,7 +136,10 @@ const MODULE_META: Readonly<Record<string, ModuleMeta>> = Object.fromEntries(
 // fallback is dead code. Kept for defense in depth.
 const LEGACY_META_OVERRIDES: Readonly<Record<string, ModuleMeta>> = {
   rac:        projectMeta('rental'),
+  RAC:        projectMeta('rental'),
+  RENTAL:     projectMeta('rental'),
   school_bus: projectMeta('school-bus'),
+  SCHOOL_BUS: projectMeta('school-bus'),
 };
 
 /* ─────────────────────────── KPI Card ─────────────────────────── */
@@ -169,8 +176,10 @@ export default function TenantDashboard() {
   const [billing, setBilling]   = useState<BillingSummary | null>(null);
   const [pl, setPL]             = useState<PLData | null>(null);
   const [invoices, setInvoices] = useState<SubInvoice[]>([]);
+  const [activeVehiclesCount, setActiveVehiclesCount] = useState<number | null>(null);
   const [loadingBilling, setLoadingBilling] = useState(true);
   const [loadingPL, setLoadingPL]           = useState(true);
+  const [loadingVehicles, setLoadingVehicles] = useState(true);
 
   const today = new Date().toISOString().slice(0, 10);
   const yearStart = today.slice(0, 4) + '-01-01';
@@ -192,14 +201,63 @@ export default function TenantDashboard() {
       .catch(() => {})
       .finally(() => setLoadingPL(false));
 
-    // Subscription invoices
+    // Subscription invoices (handles both raw array and paginated { data: [...] } responses)
     fetch(`/api/finance/invoices?clientTenantId=${tenant.id}&prefix=SUB&limit=10`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const rows = Array.isArray(d) ? d : d?.invoices ?? d?.data ?? [];
-        setInvoices(rows);
+      .then(invData => {
+        const rawList: Array<Record<string, unknown>> = Array.isArray(invData)
+          ? invData
+          : Array.isArray(invData?.data)
+          ? invData.data
+          : Array.isArray(invData?.invoices)
+          ? invData.invoices
+          : [];
+        const normalized: SubInvoice[] = rawList.map((r, idx) => ({
+          id: String(r.id ?? `inv-${idx}`),
+          invoiceNumber: String(
+            r.invoiceNumber ??
+              r.invoice_number ??
+              r.invoiceNo ??
+              r.invoice_no ??
+              (typeof r.id === 'string' ? r.id.slice(0, 8) : '—'),
+          ),
+          amount: Number(r.amount ?? r.totalAmount ?? r.total_amount ?? 0) || 0,
+          currency: String(r.currency ?? 'AED'),
+          status: String(r.status ?? r.paymentStatus ?? r.payment_status ?? 'PENDING').toUpperCase(),
+          dueDate: typeof (r.dueDate ?? r.due_date) === 'string' ? String(r.dueDate ?? r.due_date) : '',
+          description: String(r.description ?? r.notes ?? ''),
+        }));
+        setInvoices(normalized);
       })
       .catch(() => {});
+
+    // Active fleet vehicles count
+    setLoadingVehicles(true);
+    fetch('/api/vehicles?limit=200')
+      .then(r => r.ok ? r.json() : null)
+      .then(vData => {
+        if (!vData) {
+          setActiveVehiclesCount(null);
+          return;
+        }
+        const list: Array<Record<string, unknown>> = Array.isArray(vData)
+          ? vData
+          : Array.isArray(vData?.data)
+          ? vData.data
+          : Array.isArray(vData?.vehicles)
+          ? vData.vehicles
+          : [];
+        const active = list.filter(v => {
+          if (v.isActive === false || v.is_active === false) return false;
+          const st = String(v.status ?? 'AVAILABLE').toUpperCase();
+          if (['RETIRED', 'INACTIVE', 'SOLD'].includes(st)) return false;
+          const usage = v.vehicleUsage ?? v.vehicle_usage;
+          return !usage || String(usage).toUpperCase() === 'RENTAL';
+        });
+        setActiveVehiclesCount(active.length);
+      })
+      .catch(() => setActiveVehiclesCount(null))
+      .finally(() => setLoadingVehicles(false));
   }, [tenant, today, yearStart]);
 
   const activeModules = tenant?.modules.filter(m => m.isEnabled) ?? [];
@@ -234,7 +292,18 @@ export default function TenantDashboard() {
             Tenant Portal · {slug}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasRAC && (
+            <a
+              href="/rac-portal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 hover:bg-emerald-500/30 transition-colors"
+            >
+              <span>🏢</span>
+              <span>Customer B2B Portal ↗</span>
+            </a>
+          )}
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
             {tenant?.plan ?? '—'} Plan
           </span>
@@ -243,6 +312,38 @@ export default function TenantDashboard() {
           </span>
         </div>
       </div>
+
+      {/* Standalone B2B RAC Portal launch banner */}
+      {hasRAC && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 p-5 flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              <span>🏢 Corporate Self-Service</span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px]">LIVE</span>
+            </div>
+            <h2 className="text-base font-bold text-white">Standalone B2B Corporate Rent-a-Car Portal</h2>
+            <p className="text-xs text-slate-300 max-w-2xl">
+              Corporate fleet managers and travel bookers can check live branch availability, place bookings with mandatory PCI-safe card pre-authorization, digitally e-sign rental agreements, request extensions, and settle corporate invoices online.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/portal/${slug}/rac`}
+              className="px-4 py-2 rounded-xl bg-slate-800/80 text-slate-200 border border-white/10 text-xs font-semibold hover:bg-slate-700 transition-colors"
+            >
+              Tenant RAC View →
+            </Link>
+            <a
+              href="/rac-portal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold hover:bg-emerald-400 transition-colors"
+            >
+              Customer B2B Portal ↗
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Subscription status cards */}
       <section>
@@ -311,7 +412,7 @@ export default function TenantDashboard() {
             <KpiCard
               icon="🚗"
               label="Active Vehicles"
-              value="—"
+              value={loadingVehicles ? '…' : activeVehiclesCount != null ? activeVehiclesCount.toString() : '0'}
               sub="Visit Fleet page"
               color="blue"
             />
@@ -386,18 +487,37 @@ export default function TenantDashboard() {
             const m = MODULE_BY_KEY['rental'];
             const meta = MODULE_META['rental']!;
             return (
-              <Link href={`/portal/${slug}/${meta.path}`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-blue-500/30 p-6 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-2xl flex-shrink-0`}>
-                    {meta.icon}
+              <>
+                <Link href={`/portal/${slug}/${meta.path}`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-blue-500/30 p-6 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-2xl flex-shrink-0`}>
+                      {meta.icon}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white group-hover:text-blue-300 transition-colors">{meta.label}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Fleet · Bookings · Agreements</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-white group-hover:text-blue-300 transition-colors">{meta.label}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Fleet · Bookings · Agreements</p>
+                  <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage your rental fleet →</p>
+                </Link>
+                <a
+                  href="/rac-portal"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-2xl border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15 hover:border-emerald-400/40 p-6 transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl flex-shrink-0">
+                      🏢
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white group-hover:text-emerald-300 transition-colors">Customer B2B Portal ↗</p>
+                      <p className="text-xs text-emerald-300/80 mt-0.5">Availability · Pre-Auth · E-Sign</p>
+                    </div>
                   </div>
-                </div>
-                <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage your rental fleet →</p>
-              </Link>
+                  <p className="mt-4 text-xs text-emerald-300/70 group-hover:text-emerald-200 transition-colors">Customer B2B Portal ↗</p>
+                </a>
+              </>
             );
           })()}
           {hasBus && (() => {

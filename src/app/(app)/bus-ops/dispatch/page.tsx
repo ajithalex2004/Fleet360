@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { RadioTower, AlertTriangle, RefreshCw, Plus } from 'lucide-react';
+import { RadioTower, AlertTriangle, RefreshCw, Plus, Calendar, Navigation, CheckCircle2, Users } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -377,19 +378,12 @@ export default function BusOpsDispatchPage() {
         />
 
         {/* KPI row */}
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: 'Scheduled',  value: schedules.filter(s => s.status === 'SCHEDULED').length, color: 'text-blue-400' },
-            { label: 'En Route', value: inTransit,  color: 'text-amber-400' },
-            { label: 'Completed',  value: completed,   color: 'text-emerald-400' },
-            { label: 'Passengers', value: totalPax,    color: 'text-purple-400' },
-          ].map(k => (
-            <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-center">
-              <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
-              <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Scheduled" value={schedules.filter(s => s.status === 'SCHEDULED').length} icon={Calendar} accent="blue" />
+          <KpiCard label="En Route" value={inTransit} icon={Navigation} accent="amber" />
+          <KpiCard label="Completed" value={completed} icon={CheckCircle2} accent="emerald" />
+          <KpiCard label="Passengers" value={totalPax} icon={Users} accent="violet" />
+        </StatGrid>
 
         {/* Filter bar — route + driver + vehicle dropdowns.
             Shift chips sit below; clear-all button appears when >=1 filter active. */}

@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -148,42 +149,27 @@ export default function LeasingExpiryAlertsPage() {
         </button>
       </div>
 
-      {/* ── Severity Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🔴</span>
-            <div>
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider">CRITICAL</p>
-              <p className="text-xs text-[var(--text-faint)]">Expired</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-red-400">{summary.critical}</p>
-          <p className="text-xs text-red-400/70 mt-1">Requires immediate action</p>
-        </div>
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🟡</span>
-            <div>
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">WARNING</p>
-              <p className="text-xs text-[var(--text-faint)]">Expires in 1–30 days</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-amber-400">{summary.warning}</p>
-          <p className="text-xs text-amber-400/70 mt-1">Action required soon</p>
-        </div>
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🔵</span>
-            <div>
-              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">NOTICE</p>
-              <p className="text-xs text-[var(--text-faint)]">Expires in 31–90 days</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-blue-400">{summary.notice}</p>
-          <p className="text-xs text-blue-400/70 mt-1">Plan ahead</p>
-        </div>
-      </div>
+      {/* ?? Severity Summary Cards ?? */}
+      <StatGrid cols={3}>
+        <KpiCard
+          label="CRITICAL · Expired"
+          value={summary.critical}
+          sub="Requires immediate action"
+          accent="rose"
+        />
+        <KpiCard
+          label="WARNING · Expires in 1–30 days"
+          value={summary.warning}
+          sub="Action required soon"
+          accent="amber"
+        />
+        <KpiCard
+          label="NOTICE · Expires in 31–90 days"
+          value={summary.notice}
+          sub="Plan ahead"
+          accent="cyan"
+        />
+      </StatGrid>
 
       {/* ── Leasing-specific notice: contract renewals & mileage ── */}
       <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl px-5 py-4 flex items-start gap-3">

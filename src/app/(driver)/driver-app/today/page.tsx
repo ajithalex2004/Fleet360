@@ -183,6 +183,13 @@ interface DrayageAssignment {
   pcsSlotStart?: string | null;
   pcsSlotEnd?: string | null;
   tokenTimeSlot?: string | null;
+  customsInspection?: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
+  inspectionStatus?: string | null;
+  requiresInspection?: boolean;
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
   assignedVehiclePlate: string | null;
@@ -246,6 +253,34 @@ interface NextStepMeta {
   color: string;
   isDualChoice?: boolean;
   isReassign?: boolean;
+  canManualInspectOverride?: boolean;
+}
+
+function getDriverJobInspectionBadges(job: DrayageAssignment | null | undefined): string[] {
+  if (!job) return [];
+  const badges: string[] = [];
+  if (job.customsInspection) badges.push('Dubai Customs');
+  if (job.municipalityInspection) badges.push('Dubai Municipality');
+  if (job.cpipInspection) badges.push('CPIP');
+  if (job.mercInspection) badges.push('Merc');
+  if (job.boxcareInspection) badges.push('Boxcare');
+  return badges;
+}
+
+function doesDriverJobRequireInspection(job: DrayageAssignment | null | undefined): boolean {
+  if (!job) return false;
+  if (typeof job.requiresInspection === 'boolean') {
+    return job.requiresInspection;
+  }
+  const hasAnyFlag = Boolean(
+    job.customsInspection ||
+      job.municipalityInspection ||
+      job.cpipInspection ||
+      job.mercInspection ||
+      job.boxcareInspection,
+  );
+  const inspUpper = String(job.inspectionStatus || '').toUpperCase();
+  return hasAnyFlag || ['HOLD_PENDING', 'INSPECTION_BOOKED', 'REJECTED'].includes(inspUpper);
 }
 
 // Terminal statuses where the driver's leg is finished and the job moves to History
@@ -378,11 +413,24 @@ function getNextStep(job: DrayageAssignment): NextStepMeta | null {
         };
       case 'ARRIVED_AT_PORT':
       case 'AT_PORT':
+        if (doesDriverJobRequireInspection(job)) {
+          const agencies = getDriverJobInspectionBadges(job);
+          return {
+            nextStatus: 'UNDER_INSPECTION',
+            label: 'Under Inspection',
+            description:
+              agencies.length > 0
+                ? `Regulatory inspection required (${agencies.join(', ')}) — proceed to gate inspection`
+                : 'Container is undergoing port gate inspection',
+            color: '#7c3aed',
+          };
+        }
         return {
-          nextStatus: 'UNDER_INSPECTION',
-          label: 'Under Inspection',
-          description: 'Container is undergoing port gate inspection',
-          color: '#7c3aed',
+          nextStatus: 'CONTAINER_DROPPED',
+          label: 'Container Dropped',
+          description: 'No regulatory inspection flags — confirm empty container is dropped off at port terminal',
+          color: '#10b981',
+          canManualInspectOverride: true,
         };
       case 'UNDER_INSPECTION':
         return {
@@ -415,11 +463,24 @@ function getNextStep(job: DrayageAssignment): NextStepMeta | null {
       };
     case 'CONTAINER_PICKED':
     case 'AT_PORT':
+      if (doesDriverJobRequireInspection(job)) {
+        const agencies = getDriverJobInspectionBadges(job);
+        return {
+          nextStatus: 'UNDER_INSPECTION',
+          label: 'Under Inspection',
+          description:
+            agencies.length > 0
+              ? `Regulatory inspection required (${agencies.join(', ')}) — proceed to inspection bay (attach photos if required)`
+              : 'Container is under customs/port inspection (attach photos if required)',
+          color: '#7c3aed',
+        };
+      }
       return {
-        nextStatus: 'UNDER_INSPECTION',
-        label: 'Under Inspection',
-        description: 'Container is under customs/port inspection (attach photos if required)',
-        color: '#7c3aed',
+        nextStatus: 'EN_ROUTE_WAREHOUSE',
+        label: 'En Route to WareHouse',
+        description: 'No regulatory inspection flags — depart port directly en route to customer warehouse',
+        color: '#f59e0b',
+        canManualInspectOverride: true,
       };
     case 'UNDER_INSPECTION':
       return {
@@ -2385,6 +2446,14 @@ export default function DriverTodayPage() {
                 <div className="mt-1 inline-block bg-white text-blue-700 font-extrabold text-sm px-3.5 py-1 rounded-full shadow-sm">
                   {badge.label}
                 </div>
+                {doesDriverJobRequireInspection(selectedJob) && (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-purple-900/80 border border-purple-300/50 text-purple-100 font-extrabold text-[11px] px-2.5 py-1 rounded-lg shadow-sm">
+                    <span>
+                      🛃 Inspection Hold:{' '}
+                      {getDriverJobInspectionBadges(selectedJob).join(' + ') || 'Active'}
+                    </span>
+                  </div>
+                )}
               </div>
               {(selectedJob.tokenNumber || selectedJob.pcsTokenNumber) && (
                 <div className="text-right">
@@ -2543,6 +2612,23 @@ export default function DriverTodayPage() {
                     >
                       {submitting ? 'Updating…' : nextStep.label}
                     </button>
+
+                    {nextStep.canManualInspectOverride && (
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() =>
+                          handleActionWithEpodCheck(
+                            selectedJob,
+                            'UNDER_INSPECTION',
+                            'Under Inspection',
+                          )
+                        }
+                        className="w-full py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-300 text-purple-800 font-extrabold text-xs shadow-sm transition active:scale-95 disabled:opacity-50"
+                      >
+                        🛃 Held at Port Gate? Mark Under Inspection
+                      </button>
+                    )}
 
                     {!isL2Selected &&
                       ['PLACED_AT_RAMP', 'REASSIGN_PLACED_AT_RAMP'].includes(

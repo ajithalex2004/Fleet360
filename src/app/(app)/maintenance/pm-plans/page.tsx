@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useCallback, useEffect, useState } from 'react';
 import { PMTriggerType } from '@/types/maintenance';
@@ -216,19 +217,12 @@ export default function PMPlansPage() {
             </div>
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Total plans',    value: plans.length,                              color: 'text-[var(--text-main)]' },
-                    { label: 'Active',         value: plans.filter(p => p.isActive).length,      color: 'text-emerald-400' },
-                    { label: 'Inactive',       value: plans.filter(p => !p.isActive).length,     color: 'text-[var(--text-faint)]' },
-                    { label: 'Triggers total', value: totalTriggers,                              color: 'text-blue-400' },
-                ].map(kpi => (
-                    <div key={kpi.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-                        <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{kpi.label}</p>
-                        <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
-                    </div>
-                ))}
-            </div>
+            <StatGrid cols={4}>
+                <KpiCard label="Total plans" value={plans.length} accent="cyan" />
+                <KpiCard label="Active" value={plans.filter(p => p.isActive).length} accent="emerald" />
+                <KpiCard label="Inactive" value={plans.filter(p => !p.isActive).length} accent="slate" />
+                <KpiCard label="Triggers total" value={totalTriggers} accent="violet" />
+            </StatGrid>
 
             {error && (
                 <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>

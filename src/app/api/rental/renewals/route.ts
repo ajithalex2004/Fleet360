@@ -1,263 +1,299 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * RAC Renewals API — /api/rental/renewals
- * Manages rental agreement renewal requests with approval workflow
+ * RAC Renewals & Extensions API — /api/rental/renewals (1 Unified Extension Process)
+ *
+ * Delegates all reads, creation, conflict locking, master-tariff pricing, 5% UAE VAT,
+ * and lifecycle updates (`RentalAgreement` + `RentalBooking` + `RentalAdditionalCharge`)
+ * to `@/lib/rental/extension-service`.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { approvalGate, withApprovalStart, withdrawApproval } from '@/lib/workflow/approvals';
+import {
+  approvalGate,
+  approvalInProgress,
+  withApprovalStart,
+  withdrawApproval,
+} from '@/lib/workflow/approvals';
 import { prisma } from '@/lib/prisma';
+import { hasRentalPermission, requireRentalPermission } from '@/lib/rental/rbac';
+import { isRentalSecurityError } from '@/lib/rental/security-guards';
+import {
+  createUnifiedExtension,
+  decideUnifiedExtension,
+  ExtensionConflictError,
+  listUnifiedExtensions,
+} from '@/lib/rental/extension-service';
 
-type Row = Record<string, unknown>;
-
-async function nextNo(): Promise<string> {
-  const [r] = await prisma
-    .$queryRawUnsafe<{ count: string }[]>(
-      `SELECT COUNT(*)::text as count FROM rental_renewals`,
-    )
-    .catch(() => [{ count: '0' }]);
-  const seq = (parseInt(r?.count ?? '0') + 1).toString().padStart(4, '0');
-  const ym = new Date().toISOString().slice(0, 7).replace('-', '');
-  return `RRN-${ym}-${seq}`;
+function hasValue(v: unknown): boolean {
+  return v !== undefined && v !== null && v !== '';
 }
 
 /* ─── GET ─── */
 export async function GET(req: NextRequest) {
-
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
+  const permErr = await requireRentalPermission(
+    req.headers,
+    tenantId,
+    'view',
+    '*',
+    req.nextUrl.pathname,
+  );
+  if (permErr) return permErr;
+
   return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
       const sp = req.nextUrl.searchParams;
       const status = sp.get('status');
+      const agreementId = sp.get('agreementId');
+      const customerId = sp.get('customerId');
       const search = sp.get('search');
-      const page = Math.max(1, parseInt(sp.get('page') ?? '1'));
-      const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-      const offset = (page - 1) * limit;
+      const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10));
+      const limit = Math.min(200, Math.max(1, parseInt(sp.get('limit') ?? '50', 10)));
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      const result = await listUnifiedExtensions(tx, {
+        tenantId,
+        status,
+        agreementId,
+        customerId,
+        search,
+        page,
+        limit,
+      });
 
-      if (status && status !== 'ALL') {
-        where += ` AND status=$${pi++}`;
-        params.push(status);
-      }
-      if (search) {
-        where += ` AND (customer_name ILIKE $${pi} OR renewal_no ILIKE $${pi} OR agreement_no ILIKE $${pi} OR vehicle_no ILIKE $${pi})`;
-        params.push(`%${search}%`);
-        pi++;
-      }
-
-      const [rows, summary] = await Promise.all([
-        tx
-          .$queryRawUnsafe<Row[]>(
-            `SELECT * FROM rental_renewals ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
-            ...params,
-            limit,
-            offset,
-          )
-          .catch(() => []),
-        tx
-          .$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
-            `SELECT
-               status,
-               COUNT(*)::text as count,
-               COALESCE(SUM(total_amount),0)::text as total
-             FROM rental_renewals
-             WHERE deleted_at IS NULL
-             GROUP BY status`,
-          )
-          .catch(() => []),
-      ]);
-
-      // Build summary object
-      const counts: Record<string, number> = {};
-      const totals: Record<string, number> = {};
-      for (const s of summary) {
-        counts[s.status] = parseInt(s.count);
-        totals[s.status] = parseFloat(s.total);
-      }
-
-      // Month extensions
-      const thisMonthRows = await tx
-        .$queryRawUnsafe<{ cnt: string; avg_days: string }[]>(
-          `SELECT COUNT(*)::text as cnt, COALESCE(AVG(extension_days),0)::text as avg_days
-           FROM rental_renewals
-           WHERE deleted_at IS NULL
-             AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())`,
-        )
-        .catch(() => [{ cnt: '0', avg_days: '0' }]);
-
-      const kpis = {
-        pendingCount: counts['PENDING'] ?? 0,
-        approvedTotal: totals['APPROVED'] ?? 0,
-        thisMonthExtensions: parseInt(thisMonthRows[0]?.cnt ?? '0'),
-        avgExtensionDays: parseFloat(parseFloat(thisMonthRows[0]?.avg_days ?? '0').toFixed(1)),
-      };
-
-      return NextResponse.json({ data: rows, counts, kpis, page, limit });
+      const rows = result.data;
+      return NextResponse.json({
+        data: rows,
+        renewals: rows,
+        total: rows.length,
+        counts: result.counts,
+        kpis: result.kpis,
+        page: result.page,
+        limit: result.limit,
+      });
+    } catch (err) {
+      console.error('GET /api/rental/renewals error:', err);
+      return NextResponse.json({ error: 'Failed to load extensions' }, { status: 500 });
+    }
   });
 }
 
 /* ─── POST ─── */
 export async function POST(req: NextRequest) {
-
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  let createdId: string | null = null;
+  const createDenied = await requireRentalPermission(
+    req.headers,
+    tenantId,
+    'create',
+    'renewals',
+    req.nextUrl.pathname,
+  );
+  if (createDenied) return createDenied;
+
+  const bodyRaw = await req.json().catch(() => null);
+  const body = stripTenantOwnershipFields(
+    (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
+  );
+
+  // Enforce `rental:approve:rates` whenever ANY custom rate (`dailyRate` or `dailyRateOverride`) is supplied
+  const hasExplicitRateOverride =
+    hasValue(body.dailyRateOverride) ||
+    hasValue(body.dailyRate) ||
+    body.rateOverride === true;
+
+  if (hasExplicitRateOverride) {
+    const denied = await requireRentalPermission(
+      req.headers,
+      tenantId,
+      'approve',
+      'rates',
+      req.nextUrl.pathname,
+    );
+    if (denied) return denied;
+  }
+
+  const rawNewEnd = body.newEndDate ?? body.newDropoffDate;
+  const newEndDate = rawNewEnd ? new Date(String(rawNewEnd)) : null;
+  if (!newEndDate || Number.isNaN(newEndDate.getTime())) {
+    return NextResponse.json({ error: 'Valid newEndDate is required' }, { status: 400 });
+  }
+
+  const requestedDailyRate = hasValue(body.dailyRateOverride)
+    ? Number(body.dailyRateOverride)
+    : hasValue(body.dailyRate)
+      ? Number(body.dailyRate)
+      : null;
+
+  if (requestedDailyRate !== null && (!Number.isFinite(requestedDailyRate) || requestedDailyRate < 0)) {
+    return NextResponse.json({ error: 'Invalid dailyRate override' }, { status: 400 });
+  }
+
+  const depositTopUp = hasValue(body.depositTopUp) ? Number(body.depositTopUp) : 0;
+  if (!Number.isFinite(depositTopUp) || depositTopUp < 0) {
+    return NextResponse.json({ error: 'Invalid depositTopUp' }, { status: 400 });
+  }
+
+  const canAutoApprove = await hasRentalPermission(
+    req.headers,
+    tenantId,
+    'approve',
+    'renewals',
+  );
+  const allowCreditOverride = await hasRentalPermission(
+    req.headers,
+    tenantId,
+    'approve',
+    'customers',
+  );
+  const autoApprove = body.autoApprove !== false && canAutoApprove;
+  const actorUserId = (req.headers.get('x-user-id') ?? '').trim() || 'MANAGER';
+
+  let pendingId: string | null = null;
   const response = await withTenantRls(prisma, tenantId, async (tx) => {
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const renewalNo = await nextNo();
+    try {
+      const created = await createUnifiedExtension(tx, {
+        tenantId,
+        agreementId: body.agreementId ? String(body.agreementId) : null,
+        agreementNo: body.agreementNo ? String(body.agreementNo) : null,
+        bookingId: body.bookingId ? String(body.bookingId) : null,
+        newEndDate,
+        requestedDailyRate,
+        allowRateOverride: hasExplicitRateOverride,
+        allowCreditOverride,
+        depositTopUp,
+        reason: body.reason ? String(body.reason) : null,
+        notes: body.notes ? String(body.notes) : null,
+        autoApprove,
+        approvedBy: autoApprove ? actorUserId : null,
+      });
 
-      // Calculate extension days
-      const origEnd = body.originalEndDate ? new Date(body.originalEndDate) : null;
-      const newEnd = body.newEndDate ? new Date(body.newEndDate) : null;
-      const extensionDays =
-        origEnd && newEnd
-          ? Math.max(1, Math.ceil((newEnd.getTime() - origEnd.getTime()) / 86400000))
-          : (body.extensionDays ?? 0);
+      if (created.status === 'PENDING') {
+        pendingId = created.id;
+      }
 
-      const dailyRate = parseFloat(body.dailyRate ?? '0');
-      const renewalAmount = +(extensionDays * dailyRate).toFixed(2);
-      const vatAmount = +(renewalAmount * 0.05).toFixed(2);
-      const totalAmount = +(renewalAmount + vatAmount).toFixed(2);
-      const depositTopUp = parseFloat(body.depositTopUp ?? '0');
-
-      const [row] = await tx
-        .$queryRawUnsafe<Row[]>(
-          `INSERT INTO rental_renewals
-             (renewal_no, agreement_id, agreement_no, customer_name, vehicle_name, vehicle_no,
-              original_end_date, new_end_date, extension_days, daily_rate,
-              renewal_amount, vat_amount, total_amount, deposit_top_up, status, notes, tenant_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-           RETURNING *`,
-          renewalNo,
-          body.agreementId ?? null,
-          body.agreementNo ?? null,
-          body.customerName ?? null,
-          body.vehicleName ?? null,
-          body.vehicleNo ?? null,
-          body.originalEndDate ?? null,
-          body.newEndDate ?? null,
-          extensionDays,
-          dailyRate,
-          renewalAmount,
-          vatAmount,
-          totalAmount,
-          depositTopUp,
-          body.status ?? 'PENDING',
-          body.notes ?? null,
-          tenantId,
-        )
-        .catch(() => []);
-
-      if (!row) return NextResponse.json({ error: 'Failed to create renewal' }, { status: 500 });
-      createdId = String(row.id);
-      return NextResponse.json(row, { status: 201 });
+      return NextResponse.json(created, { status: 201 });
+    } catch (err) {
+      if (isRentalSecurityError(err)) {
+        return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+      }
+      if (err instanceof ExtensionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: err.statusCode });
+      }
+      console.error('POST /api/rental/renewals error:', err);
+      return NextResponse.json({ error: 'Failed to create extension' }, { status: 500 });
+    }
   });
-  // A company's renewal approval workflow (Admin > Workflows) starts for a
-  // renewal created pending approval.
-  return createdId
-    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'rental_renewal', referenceId: createdId })
+
+  return pendingId
+    ? withApprovalStart(response, {
+        headers: req.headers,
+        tenantId,
+        referenceType: 'rental_renewal',
+        referenceId: pendingId,
+      })
     : response;
 }
 
 /* ─── PATCH ─── */
 export async function PATCH(req: NextRequest) {
-
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const body = stripTenantOwnershipFields(await req.json());
-  const { id, status, approvedBy, notes, ...rest } = body;
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  // A company's renewal approval workflow (Admin > Workflows) decides pending
-  // renewals: approving / rejecting goes to the level that is waiting.
-  if (status === 'APPROVED' || status === 'REJECTED') {
-    const gated = await approvalGate({
-      headers: req.headers, tenantId, referenceType: 'rental_renewal', referenceId: String(id),
-      action: status === 'APPROVED' ? 'APPROVE' : 'REJECT', comments: typeof notes === 'string' ? notes : '',
-    });
-    if (gated) return gated;
+  // Enforce `rental:approve:renewals` before approving / rejecting / completing extensions
+  const denied = await requireRentalPermission(
+    req.headers,
+    tenantId,
+    'approve',
+    'renewals',
+    req.nextUrl.pathname,
+  );
+  if (denied) return denied;
+
+  const bodyRaw = await req.json().catch(() => null);
+  const body = stripTenantOwnershipFields(
+    (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
+  );
+  const id = body.id ? String(body.id).trim() : '';
+  const status = body.status ? String(body.status).trim().toUpperCase() : '';
+  const notes = typeof body.notes === 'string' ? body.notes : null;
+  // Audit actor strictly derived from authenticated session header
+  const approvedBy = (req.headers.get('x-user-id') ?? '').trim() || 'MANAGER';
+
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+  if (!['APPROVED', 'REJECTED', 'COMPLETED'].includes(status)) {
+    return NextResponse.json(
+      { error: 'status must be APPROVED, REJECTED, or COMPLETED' },
+      { status: 400 },
+    );
   }
 
+  if (status === 'APPROVED' || status === 'REJECTED') {
+    const gated = await approvalGate({
+      headers: req.headers,
+      tenantId,
+      referenceType: 'rental_renewal',
+      referenceId: id,
+      action: status === 'APPROVED' ? 'APPROVE' : 'REJECT',
+      comments: notes ?? '',
+    });
+    if (gated) return gated;
+  } else if (status === 'COMPLETED') {
+    if (await approvalInProgress(tenantId, 'rental_renewal', id)) {
+      return NextResponse.json(
+        { error: 'Cannot complete extension while approval workflow is in progress' },
+        { status: 409 },
+      );
+    }
+  }
+
+  const allowCreditOverride = await hasRentalPermission(
+    req.headers,
+    tenantId,
+    'approve',
+    'customers',
+  );
+
   const response = await withTenantRls(prisma, tenantId, async (tx) => {
-
-      const sets: string[] = [];
-      const params: unknown[] = [];
-      let pi = 1;
-
-      if (status) {
-        sets.push(`status=$${pi++}`);
-        params.push(status);
-
-        if (status === 'APPROVED' || status === 'REJECTED') {
-          sets.push(`approved_by=$${pi++}`, `approved_at=NOW()`);
-          params.push(approvedBy ?? 'SYSTEM');
-        }
+    try {
+      const updated = await decideUnifiedExtension(tx, {
+        tenantId,
+        extensionId: id,
+        status: status as 'APPROVED' | 'REJECTED' | 'COMPLETED',
+        approvedBy,
+        notes,
+        allowCreditOverride,
+      });
+      return NextResponse.json(updated);
+    } catch (err) {
+      if (isRentalSecurityError(err)) {
+        return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
       }
-
-      if (notes !== undefined) {
-        sets.push(`notes=$${pi++}`);
-        params.push(notes);
+      if (err instanceof ExtensionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: err.statusCode });
       }
-
-      // Allow updating other fields pre-approval
-      const fieldMap: Record<string, string> = {
-        agreementNo: 'agreement_no',
-        customerName: 'customer_name',
-        vehicleName: 'vehicle_name',
-        vehicleNo: 'vehicle_no',
-        originalEndDate: 'original_end_date',
-        newEndDate: 'new_end_date',
-        extensionDays: 'extension_days',
-        dailyRate: 'daily_rate',
-        renewalAmount: 'renewal_amount',
-        vatAmount: 'vat_amount',
-        totalAmount: 'total_amount',
-        depositTopUp: 'deposit_top_up',
-      };
-      const dateColumns = new Set(['original_end_date', 'new_end_date']);
-      for (const [k, col] of Object.entries(fieldMap)) {
-        if (k in rest) {
-          sets.push(`${col}=$${pi++}${dateColumns.has(col) ? '::date' : ''}`);
-          params.push(rest[k]);
-        }
-      }
-
-      if (!sets.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
-
-      sets.push(`updated_at=NOW()`);
-      params.push(id);
-
-      const [row] = await tx
-        .$queryRawUnsafe<Row[]>(
-          `UPDATE rental_renewals SET ${sets.join(',')} WHERE id::text=$${pi} RETURNING *`,
-          ...params,
-        )
-        .catch(() => []);
-
-      if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-      return NextResponse.json(row);
+      console.error('PATCH /api/rental/renewals error:', err);
+      return NextResponse.json({ error: 'Failed to update extension' }, { status: 500 });
+    }
   });
-  // Moved out of pending some other way (cancelled, …): no approval needed.
-  if (status && status !== 'PENDING' && response.ok) {
-    await withdrawApproval(tenantId, 'rental_renewal', String(id), `the renewal is now ${status}`);
+
+  if (status === 'REJECTED' && response.ok) {
+    await withdrawApproval(tenantId, 'rental_renewal', id, 'Extension rejected');
   }
   return response;
 }
-

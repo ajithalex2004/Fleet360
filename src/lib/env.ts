@@ -28,13 +28,15 @@ const serverSchema = z.object({
 
   THESYS_API_KEY: isProd ? z.string().min(1) : z.string().default('dev-thesys-key'),
   OPENAI_API_KEY: isProd ? z.string().min(1) : z.string().default('dev-openai-key'),
+  GEMINI_API_KEY: z.string().optional(),
+  GOOGLE_AI_API_KEY: z.string().optional(),
 
   SETUP_SECRET: z.string().optional(),
 
   // Upstash Redis — used for distributed rate limiting and session revocation.
   // Optional: when absent the app falls back to in-process rate limiting and
   // logout-only session invalidation (safe for dev, not recommended in prod).
-  UPSTASH_REDIS_REST_URL:   z.string().url().optional(),
+  UPSTASH_REDIS_REST_URL:   z.string().url().optional().or(z.literal('disabled')).or(z.literal('')),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 
   // Enterprise data-residency regional databases.
@@ -68,6 +70,39 @@ const serverSchema = z.object({
   OPERATIONS_PHONE: z.string().optional(),
   OPERATIONS_EMAIL: z.string().email().optional().or(z.literal('')),
 
+  // Rent-A-Car (RAC) Payment & Pre-Authorization Gateways (Telr / N-Genius / Stripe / Sandbox)
+  RAC_PAYMENT_PROVIDER: z.enum(['sandbox', 'telr', 'ngenius', 'stripe']).optional().or(z.literal('')),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  TELR_STORE_ID: z.string().optional(),
+  TELR_AUTH_KEY: z.string().optional(),
+  TELR_API_URL: z.string().url().optional().or(z.literal('')),
+  TELR_TEST_MODE: z.enum(['0', '1']).optional().or(z.literal('')),
+  NGENIUS_API_KEY: z.string().optional(),
+  NGENIUS_OUTLET_REF: z.string().optional(),
+  NGENIUS_ENV: z.enum(['sandbox', 'live']).optional().or(z.literal('')),
+  NGENIUS_API_BASE_URL: z.string().url().optional().or(z.literal('')),
+
+  // UAE Regulatory Renter Reporting (RTA Tarrashud / Dubai Police / Abu Dhabi ITC)
+  RTA_TARRASHUD_API_URL: z.string().url().optional().or(z.literal('')),
+  RTA_TARRASHUD_API_KEY: z.string().optional(),
+  DUBAI_POLICE_TARRASHUD_URL: z.string().url().optional().or(z.literal('')),
+  DUBAI_POLICE_TARRASHUD_KEY: z.string().optional(),
+  ABU_DHABI_ITC_API_URL: z.string().url().optional().or(z.literal('')),
+  ABU_DHABI_ITC_API_KEY: z.string().optional(),
+
+  // RAC OTA & Mobility Channel Webhook Master Secrets (fallback when per-tenant DB secret is unset)
+  RENTALCARS_COM_WEBHOOK_SECRET: z.string().optional(),
+  BOOKING_COM_WEBHOOK_SECRET: z.string().optional(),
+  CARRENTALS_COM_WEBHOOK_SECRET: z.string().optional(),
+  EXPEDIA_WEBHOOK_SECRET: z.string().optional(),
+  KAYAK_WEBHOOK_SECRET: z.string().optional(),
+  VIPCARS_WEBHOOK_SECRET: z.string().optional(),
+  YANGO_DRIVE_WEBHOOK_SECRET: z.string().optional(),
+  SELFDRIVE_AE_WEBHOOK_SECRET: z.string().optional(),
+  ONECLICKDRIVE_WEBHOOK_SECRET: z.string().optional(),
+  HALA_CAREEM_WEBHOOK_SECRET: z.string().optional(),
+  DIRECT_API_WEBHOOK_SECRET: z.string().optional(),
+
   // Sentry (server)
   SENTRY_DSN: z.string().url().optional().or(z.literal('')),
 });
@@ -89,6 +124,12 @@ function cleanRaw(raw: Record<string, unknown>): Record<string, unknown> {
         cleaned[k] = 'postgres://fleet360_app:dummy@localhost:5432/fleet360_test';
       } else if (k === 'SESSION_SECRET') {
         cleaned[k] = 'dummy-session-secret-for-build-and-prebuilt-packaging-minimum-32-chars';
+      } else if (k === 'RAC_PAYMENT_PROVIDER') {
+        cleaned[k] = 'sandbox';
+      } else if (k === 'TELR_TEST_MODE') {
+        cleaned[k] = '1';
+      } else if (k === 'NGENIUS_ENV') {
+        cleaned[k] = 'sandbox';
       } else if (k.includes('EMAIL')) {
         cleaned[k] = 'operations@fleet360.internal';
       } else if (k.includes('URL') || k.includes('DSN')) {
@@ -142,3 +183,20 @@ export const hasEmailTransport = Boolean(
 
 /** Whether OpenAI is configured (for AI features). */
 export const hasOpenAI = Boolean(env.OPENAI_API_KEY && env.OPENAI_API_KEY !== 'dev-openai-key');
+
+/** Whether Gemini Vision is configured (for multimodal KYC document scanning). */
+export const hasGemini = Boolean(env.GEMINI_API_KEY || env.GOOGLE_AI_API_KEY);
+
+/** Whether at least one live RAC card pre-authorization gateway is configured. */
+export const hasRacLivePaymentGateway = Boolean(
+  (env.TELR_STORE_ID && env.TELR_AUTH_KEY) ||
+    (env.NGENIUS_API_KEY && env.NGENIUS_OUTLET_REF) ||
+    env.STRIPE_SECRET_KEY,
+);
+
+/** Whether at least one live UAE regulatory renter reporting endpoint is configured. */
+export const hasUaeRegulatoryGateway = Boolean(
+  env.RTA_TARRASHUD_API_URL ||
+    env.DUBAI_POLICE_TARRASHUD_URL ||
+    env.ABU_DHABI_ITC_API_URL,
+);

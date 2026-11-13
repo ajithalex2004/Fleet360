@@ -18,6 +18,7 @@ import {
 import Link from 'next/link';
 import type { CsatAnalyticsSummary } from '@/lib/service-tickets/csat-analytics-engine';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 export default function ServiceTicketsCsatPage() {
   const [loading, setLoading] = useState(true);
@@ -77,49 +78,36 @@ export default function ServiceTicketsCsatPage() {
       </div>
 
       {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/40 to-slate-900/60 border border-amber-500/30">
-          <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Star className="w-4 h-4 fill-amber-400 text-amber-400" /> Average CSAT Score
-          </div>
-          <div className="text-3xl font-extrabold text-white mt-2">
-            {analytics?.averageCsatScore != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? analytics.averageCsatScore : '—'} <span className="text-sm text-slate-400 font-normal">/ 5.0</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">Based on {analytics?.totalFeedbackReceived ?? 0} driver reviews</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/20">
-          <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-            <UserCheck className="w-4 h-4" /> First-Contact Resolution (FCR)
-          </div>
-          <div className="text-3xl font-extrabold text-emerald-400 mt-2">
-            {analytics?.firstContactResolutionRate != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.firstContactResolutionRate}%` : '—'}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">Resolved without supervisor escalation</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-violet-500/20">
-          <div className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider flex items-center gap-1.5">
-            <ThumbsUp className="w-4 h-4" /> Net Promoter Score (NPS)
-          </div>
-          <div className="text-3xl font-extrabold text-violet-300 mt-2">
-            {analytics?.npsBreakdown && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.npsBreakdown.netPromoterScore > 0 ? '+' : ''}${analytics.npsBreakdown.netPromoterScore}` : '—'}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {analytics?.npsBreakdown.promoters ?? 0} Promoters · {analytics?.npsBreakdown.detractors ?? 0} Detractors
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            Total Resolved Tickets
-          </div>
-          <div className="text-3xl font-extrabold text-white mt-2">
-            {analytics?.totalResolvedTickets ?? 0}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">100% audit compliant</div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Average CSAT Score"
+          value={analytics?.averageCsatScore != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.averageCsatScore} / 5.0` : '— / 5.0'}
+          sub={`Based on ${analytics?.totalFeedbackReceived ?? 0} driver reviews`}
+          icon={Star}
+          accent="amber"
+        />
+        <KpiCard
+          label="First-Contact Resolution (FCR)"
+          value={analytics?.firstContactResolutionRate != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.firstContactResolutionRate}%` : '—'}
+          sub="Resolved without supervisor escalation"
+          icon={UserCheck}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Net Promoter Score (NPS)"
+          value={analytics?.npsBreakdown && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.npsBreakdown.netPromoterScore > 0 ? '+' : ''}${analytics.npsBreakdown.netPromoterScore}` : '—'}
+          sub={`${analytics?.npsBreakdown.promoters ?? 0} Promoters · ${analytics?.npsBreakdown.detractors ?? 0} Detractors`}
+          icon={ThumbsUp}
+          accent="violet"
+        />
+        <KpiCard
+          label="Total Resolved Tickets"
+          value={analytics?.totalResolvedTickets ?? 0}
+          sub="100% audit compliant"
+          icon={ShieldCheck}
+          accent="slate"
+        />
+      </StatGrid>
 
       {/* Two Columns: Star Distribution vs Live Feedback Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

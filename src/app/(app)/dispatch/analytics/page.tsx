@@ -4,6 +4,8 @@
  */
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ClipboardList, CheckCircle2, BarChart3, Repeat, Users, AlertTriangle, Car, UserCheck } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface JobStats {
   total: number;
@@ -189,16 +191,16 @@ export default function DispatchAnalyticsPage() {
       ) : (
         <>
           {/* KPI Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard icon="📋" label="Total Jobs"        value={jobStats.total}        color="text-blue-400"    sub="In selected period" />
-            <MetricCard icon="✅" label="Completed"         value={jobStats.completed}    color="text-emerald-400" sub={`${completionRate}% completion rate`} />
-            <MetricCard icon="📊" label="Acceptance Rate"   value={`${acceptanceRate}%`}  color={acceptanceRate >= 80 ? 'text-emerald-400' : 'text-amber-400'} sub="Jobs accepted by drivers" />
-            <MetricCard icon="🔁" label="Avg. Attempts"     value={jobStats.avgAttempts}  color={jobStats.avgAttempts > 2 ? 'text-red-400' : 'text-[var(--text-muted)]'} sub="Per job dispatched" />
-            <MetricCard icon="👤" label="Fleet Utilisation" value={`${utilizationRate}%`} color={utilizationRate >= 70 ? 'text-green-400' : 'text-yellow-400'} sub={`${driverStats.busy}/${driverStats.total} drivers`} />
-            <MetricCard icon="⚠️" label="Exceptions"        value={jobStats.failed + jobStats.escalated} color={jobStats.failed > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'} sub="Failed + Escalated" />
-            <MetricCard icon="🚗" label="In Progress"       value={jobStats.inProgress}   color="text-cyan-400"    sub="Currently en route" />
-            <MetricCard icon="🟢" label="Available Drivers" value={driverStats.available} color="text-green-400"   sub="Ready to be dispatched" />
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard label="Total Jobs" value={jobStats.total} sub="In selected period" icon={ClipboardList} accent="blue" />
+            <KpiCard label="Completed" value={jobStats.completed} sub={`${completionRate}% completion rate`} icon={CheckCircle2} accent="emerald" />
+            <KpiCard label="Acceptance Rate" value={`${acceptanceRate}%`} sub="Jobs accepted by drivers" icon={BarChart3} accent={acceptanceRate >= 80 ? 'emerald' : 'amber'} />
+            <KpiCard label="Avg. Attempts" value={jobStats.avgAttempts} sub="Per job dispatched" icon={Repeat} accent={jobStats.avgAttempts > 2 ? 'rose' : 'slate'} />
+            <KpiCard label="Fleet Utilisation" value={`${utilizationRate}%`} sub={`${driverStats.busy}/${driverStats.total} drivers`} icon={Users} accent={utilizationRate >= 70 ? 'emerald' : 'amber'} />
+            <KpiCard label="Exceptions" value={jobStats.failed + jobStats.escalated} sub="Failed + Escalated" icon={AlertTriangle} accent={jobStats.failed > 0 ? 'rose' : 'slate'} />
+            <KpiCard label="In Progress" value={jobStats.inProgress} sub="Currently en route" icon={Car} accent="cyan" />
+            <KpiCard label="Available Drivers" value={driverStats.available} sub="Ready to be dispatched" icon={UserCheck} accent="emerald" />
+          </StatGrid>
 
           {/* Main analytics row */}
           <div className="grid md:grid-cols-3 gap-6">

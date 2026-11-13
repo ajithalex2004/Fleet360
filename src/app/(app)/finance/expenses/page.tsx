@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { downloadXLSX } from '@/lib/exportUtils';
 import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
@@ -437,18 +438,21 @@ export default function ExpensesPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {STATUSES.filter(s => s !== 'ALL').map(s => {
+      <StatGrid cols={5}>
+        {STATUSES.filter(s => s !== 'ALL').map((s, idx) => {
           const d = summOf(s);
+          const accents: PageAccent[] = ['slate', 'cyan', 'emerald', 'violet', 'rose'];
           return (
-            <div key={s} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
-              <p className="text-xs text-[var(--text-faint)]">{s}</p>
-              <p className={`text-xl font-bold mt-0.5 ${STATUS_STYLE[s]?.split(' ')[1] ?? 'text-[var(--text-main)]'}`}>{d?.count ?? 0}</p>
-              <p className="text-xs text-[var(--text-faint)]">{fmtAED(d?.total ?? '0')}</p>
-            </div>
+            <KpiCard
+              key={s}
+              label={s}
+              value={d?.count ?? 0}
+              sub={fmtAED(d?.total ?? '0')}
+              accent={accents[idx % accents.length]}
+            />
           );
         })}
-      </div>
+      </StatGrid>
 
       {/* Approval Queue Banner */}
       {(parseInt(summOf('SUBMITTED')?.count ?? '0') > 0) && (

@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -24,42 +25,90 @@ interface AlertSummary {
 }
 
 type SeverityFilter = 'ALL' | 'CRITICAL' | 'WARNING' | 'NOTICE';
-type TypeFilter = 'ALL' | 'EMIRATES_ID' | 'DRIVING_LICENSE' | 'PASSPORT' | 'INSURANCE' | 'VISIT_VISA';
+type TypeFilter =
+  | 'ALL'
+  | 'VISA'
+  | 'VISIT_VISA'
+  | 'REGISTRATION'
+  | 'MULKIYA'
+  | 'TRADE_LICENSE'
+  | 'CONTRACT'
+  | 'EMIRATES_ID'
+  | 'PASSPORT'
+  | 'DRIVING_LICENSE'
+  | 'INSURANCE'
+  | 'OTHER';
+
+const FILTERABLE_DOC_TYPES: TypeFilter[] = [
+  'ALL',
+  'EMIRATES_ID',
+  'DRIVING_LICENSE',
+  'PASSPORT',
+  'VISA',
+  'VISIT_VISA',
+  'INSURANCE',
+  'REGISTRATION',
+  'MULKIYA',
+  'TRADE_LICENSE',
+  'CONTRACT',
+  'OTHER',
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const TYPE_ICONS: Record<string, string> = {
-  EMIRATES_ID:     '🪪',
-  DRIVING_LICENSE: '🚗',
-  PASSPORT:        '📘',
-  INSURANCE:       '🛡️',
-  VISIT_VISA:      '📄',
-  LEASING_LICENSE: '🚗',
-  DOCUMENT:        '📄',
+  EMIRATES_ID:       '🪪',
+  DRIVING_LICENSE:   '🚗',
+  PASSPORT:          '📘',
+  INSURANCE:         '🛡️',
+  VISA:              '🛂',
+  VISIT_VISA:        '📄',
+  REGISTRATION:      '🚘',
+  MULKIYA:           '📋',
+  TRADE_LICENSE:     '🏢',
+  CONTRACT:          '📝',
+  OTHER:             '📄',
+  LEASING_LICENSE:   '🚗',
+  CREDIT_ASSESSMENT: '💳',
+  DOCUMENT:          '📄',
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  EMIRATES_ID:     'Emirates ID',
-  DRIVING_LICENSE: 'Driving License',
-  PASSPORT:        'Passport',
-  INSURANCE:       'Insurance',
-  VISIT_VISA:      'Visit Visa',
-  LEASING_LICENSE: 'Driving License',
-  DOCUMENT:        'Document',
+  EMIRATES_ID:       'Emirates ID',
+  DRIVING_LICENSE:   'Driving License',
+  PASSPORT:          'Passport',
+  INSURANCE:         'Insurance',
+  VISA:              'Residence Visa',
+  VISIT_VISA:        'Visit Visa',
+  REGISTRATION:      'Vehicle Registration',
+  MULKIYA:           'Mulkiya',
+  TRADE_LICENSE:     'Trade License',
+  CONTRACT:          'Contract',
+  OTHER:             'Other Document',
+  LEASING_LICENSE:   'Driving License',
+  CREDIT_ASSESSMENT: 'Credit Assessment',
+  DOCUMENT:          'Document',
 };
 
+function severityStyle(days: number): 'critical' | 'warning' | 'notice' {
+  if (days < 0)   return 'critical';
+  if (days <= 30) return 'warning';
+  return 'notice';
+}
+
 function getSeverity(days: number): 'CRITICAL' | 'WARNING' | 'NOTICE' {
-  if (days < 0)  return 'CRITICAL';
-  if (days < 30) return 'WARNING';
+  const s = severityStyle(days);
+  if (s === 'critical') return 'CRITICAL';
+  if (s === 'warning')  return 'WARNING';
   return 'NOTICE';
 }
 
 function getDaysBadge(days: number): { label: string; cls: string } {
-  if (days < 0)  return { label: 'EXPIRED',          cls: 'bg-red-500/20 text-red-400 border-red-500/40' };
-  if (days < 7)  return { label: `${Math.ceil(days)}d`, cls: 'bg-red-500/20 text-red-400 border-red-500/40' };
-  if (days < 30) return { label: `${Math.ceil(days)}d`, cls: 'bg-amber-500/20 text-amber-400 border-amber-500/40' };
-  if (days < 60) return { label: `${Math.ceil(days)}d`, cls: 'bg-blue-500/20 text-blue-400 border-blue-500/40' };
+  if (days < 0)   return { label: 'EXPIRED',             cls: 'bg-red-500/20 text-red-400 border-red-500/40' };
+  if (days <= 7)  return { label: `${Math.ceil(days)}d`, cls: 'bg-red-500/20 text-red-400 border-red-500/40' };
+  if (days <= 30) return { label: `${Math.ceil(days)}d`, cls: 'bg-amber-500/20 text-amber-400 border-amber-500/40' };
+  if (days <= 60) return { label: `${Math.ceil(days)}d`, cls: 'bg-blue-500/20 text-blue-400 border-blue-500/40' };
   return { label: `${Math.ceil(days)}d`, cls: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40' };
 }
 
@@ -75,21 +124,27 @@ export default function RentalExpiryAlertsPage() {
   const [alerts, setAlerts]       = useState<ExpiryAlert[]>([]);
   const [summary, setSummary]     = useState<AlertSummary>({ critical: 0, warning: 0, notice: 0, total: 0 });
   const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [sevFilter, setSevFilter] = useState<SeverityFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/alerts/expiry?module=RENTAL');
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Failed to load alerts (${res.status})`);
+      }
       const data = await res.json();
       setAlerts(data.alerts || []);
       setSummary(data.summary || { critical: 0, warning: 0, notice: 0, total: 0 });
       setLastRefresh(new Date());
-    } catch {
+    } catch (e: unknown) {
       setAlerts([]);
+      setError(e instanceof Error ? e.message : 'Failed to load expiry alerts');
     } finally {
       setLoading(false);
     }
@@ -105,7 +160,13 @@ export default function RentalExpiryAlertsPage() {
   const visible = alerts.filter((a) => {
     const sev = getSeverity(a.days_remaining);
     if (sevFilter !== 'ALL' && sev !== sevFilter) return false;
-    if (typeFilter !== 'ALL' && a.type !== typeFilter) return false;
+    if (typeFilter !== 'ALL') {
+      const normalizedAlertType =
+        a.type === 'DOCUMENT' ? 'OTHER' : a.type;
+      if (normalizedAlertType !== typeFilter && a.document_type?.toUpperCase() !== typeFilter) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -128,45 +189,33 @@ export default function RentalExpiryAlertsPage() {
         </button>
       </div>
 
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400">
+          ⚠️ {error}
+        </div>
+      )}
+
       {/* ── Severity Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Critical */}
-        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🔴</span>
-            <div>
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider">CRITICAL</p>
-              <p className="text-xs text-[var(--text-faint)]">Expired</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-red-400">{summary.critical}</p>
-          <p className="text-xs text-red-400/70 mt-1">Requires immediate action</p>
-        </div>
-        {/* Warning */}
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🟡</span>
-            <div>
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">WARNING</p>
-              <p className="text-xs text-[var(--text-faint)]">Expires in 1–30 days</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-amber-400">{summary.warning}</p>
-          <p className="text-xs text-amber-400/70 mt-1">Action required soon</p>
-        </div>
-        {/* Notice */}
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">🔵</span>
-            <div>
-              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">NOTICE</p>
-              <p className="text-xs text-[var(--text-faint)]">Expires in 31–90 days</p>
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-blue-400">{summary.notice}</p>
-          <p className="text-xs text-blue-400/70 mt-1">Plan ahead</p>
-        </div>
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard
+          label="CRITICAL · Expired"
+          value={summary.critical}
+          sub="Requires immediate action"
+          accent="rose"
+        />
+        <KpiCard
+          label="WARNING · Expires in 0–30 days"
+          value={summary.warning}
+          sub="Action required soon"
+          accent="amber"
+        />
+        <KpiCard
+          label="NOTICE · Expires in 31–90 days"
+          value={summary.notice}
+          sub="Plan ahead"
+          accent="cyan"
+        />
+      </StatGrid>
 
       {/* ── Filters ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -178,7 +227,7 @@ export default function RentalExpiryAlertsPage() {
               onClick={() => setSevFilter(f)}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 sevFilter === f
-                  ? 'bg-teal-600 text-[var(--text-main)] shadow'
+                  ? 'bg-teal-600 text-white shadow'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
@@ -187,21 +236,23 @@ export default function RentalExpiryAlertsPage() {
           ))}
         </div>
 
-        {/* Type filter */}
-        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 flex-wrap">
-          {(['ALL', 'EMIRATES_ID', 'DRIVING_LICENSE', 'PASSPORT', 'INSURANCE', 'VISIT_VISA'] as TypeFilter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setTypeFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                typeFilter === f
-                  ? 'bg-teal-600/80 text-[var(--text-main)]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-              }`}
-            >
-              {f === 'ALL' ? 'All Types' : TYPE_LABELS[f] || f}
-            </button>
-          ))}
+        {/* Type filter <select> */}
+        <div className="flex items-center gap-2">
+          <label htmlFor="expiry-doc-type" className="text-xs text-[var(--text-muted)] font-medium">
+            Document Type:
+          </label>
+          <select
+            id="expiry-doc-type"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+            className="bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs font-medium text-[var(--text-main)] focus:outline-none focus:border-teal-500"
+          >
+            {FILTERABLE_DOC_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t === 'ALL' ? 'All Document Types' : TYPE_LABELS[t] || t}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -242,6 +293,18 @@ export default function RentalExpiryAlertsPage() {
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {visible.map((alert) => {
                   const badge = getDaysBadge(alert.days_remaining);
+                  const moduleLabel =
+                    alert.module === 'RENTAL'
+                      ? 'RAC'
+                      : alert.module === 'FLEET'
+                        ? 'FLEET'
+                        : 'LEASING';
+                  const moduleBadgeCls =
+                    alert.module === 'RENTAL'
+                      ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
+                      : alert.module === 'FLEET'
+                        ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                        : 'bg-violet-500/15 text-violet-400 border-violet-500/30';
                   return (
                     <tr key={alert.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-6 py-3.5 text-lg">
@@ -251,7 +314,7 @@ export default function RentalExpiryAlertsPage() {
                         {alert.name}
                       </td>
                       <td className="px-4 py-3.5 text-[var(--text-muted)]">
-                        {alert.document_type}
+                        {TYPE_LABELS[alert.document_type] || TYPE_LABELS[alert.type] || alert.document_type}
                       </td>
                       <td className="px-4 py-3.5 text-[var(--text-muted)] font-mono text-xs">
                         {formatDate(alert.expiry_date)}
@@ -262,12 +325,8 @@ export default function RentalExpiryAlertsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                          alert.module === 'RENTAL'
-                            ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
-                            : 'bg-violet-500/15 text-violet-400 border-violet-500/30'
-                        }`}>
-                          {alert.module === 'RENTAL' ? 'RAC' : 'LEASING'}
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${moduleBadgeCls}`}>
+                          {moduleLabel}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">

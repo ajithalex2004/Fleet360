@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
@@ -221,51 +222,36 @@ export default function FleetDiagnosticsPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-cyan-400 font-medium">Fleet Health Index</span>
-            <Activity className="w-4 h-4 text-cyan-400" />
-          </div>
-          <p className="text-2xl font-bold text-cyan-300">
-            {summary?.fleetAverageVhi != null ? `${summary.fleetAverageVhi}%` : '—'}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Fleet-wide mechanical health mean</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/40 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-rose-400 font-medium">Breakdown Hazards</span>
-            <AlertOctagon className="w-4 h-4 text-rose-400" />
-          </div>
-          <p className="text-2xl font-bold text-rose-300">
-            {summary?.criticalBreakdownRiskCount ?? criticalBreakdownVehicles.length}
-          </p>
-          <p className="text-[11px] text-rose-400/80">Critical engine/thermal faults</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-400 font-medium">Elevated Risk Assets</span>
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-2xl font-bold text-amber-300">
-            {summary?.elevatedRiskCount ?? 0}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Preventive workshop tickets advised</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-emerald-400 font-medium">Optimal Vehicles</span>
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-emerald-300">
-            {summary?.optimalCount ?? 0}
-          </p>
-          <p className="text-[11px] text-[var(--text-faint)]">Zero DTCs & optimal PIDs</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Fleet Health Index"
+          value={summary?.fleetAverageVhi != null ? `${summary.fleetAverageVhi}%` : '—'}
+          sub="Fleet-wide mechanical health mean"
+          icon={Activity}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Breakdown Hazards"
+          value={summary?.criticalBreakdownRiskCount ?? criticalBreakdownVehicles.length}
+          sub="Critical engine/thermal faults"
+          icon={AlertOctagon}
+          accent="rose"
+        />
+        <KpiCard
+          label="Elevated Risk Assets"
+          value={summary?.elevatedRiskCount ?? 0}
+          sub="Preventive workshop tickets advised"
+          icon={AlertTriangle}
+          accent="amber"
+        />
+        <KpiCard
+          label="Optimal Vehicles"
+          value={summary?.optimalCount ?? 0}
+          sub="Zero DTCs & optimal PIDs"
+          icon={ShieldCheck}
+          accent="emerald"
+        />
+      </StatGrid>
 
       {/* Breakdown Hazard Warning Banner */}
       {criticalBreakdownVehicles.length > 0 && (

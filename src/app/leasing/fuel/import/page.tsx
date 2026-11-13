@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface ImportSummary {
   detectedFormat: string;
@@ -110,12 +111,12 @@ export default function FuelImportPage() {
             <span className="px-2 py-0.5 rounded-full text-xs bg-violet-500/20 text-violet-300 border border-violet-500/40">{summary.detectedFormat}</span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Rows in file" value={summary.totalRows} />
-            <Stat label={wasDry ? 'Would import' : 'Imported'} value={summary.imported} accent="emerald" />
-            <Stat label="Duplicates skipped" value={summary.skippedDuplicate} accent="amber" />
-            <Stat label="Unmatched plates" value={summary.skippedUnmatchedPlate} accent="rose" />
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard label="Rows in file" value={summary.totalRows} accent="slate" />
+            <KpiCard label={wasDry ? 'Would import' : 'Imported'} value={summary.imported} accent="emerald" />
+            <KpiCard label="Duplicates skipped" value={summary.skippedDuplicate} accent="amber" />
+            <KpiCard label="Unmatched plates" value={summary.skippedUnmatchedPlate} accent="rose" />
+          </StatGrid>
 
           {summary.parseErrors.length > 0 && (
             <Errors title="Parse errors" rows={summary.parseErrors} />

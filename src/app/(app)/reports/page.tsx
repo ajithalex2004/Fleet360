@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BarChart3 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid } from '@/components/ui/page-theme';
 import Link from 'next/link';
 
 interface ScheduledReport {
@@ -109,19 +109,11 @@ export default function ReportsDashboard() {
       />
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[
-          { label: 'Reports Generated',      value: stats.generated,               sub: 'This month',     tone: 'from-blue-500 to-indigo-600' },
-          { label: 'Data Records Analyzed',  value: stats.analyzed.toLocaleString(), sub: 'Total records',  tone: 'from-cyan-500 to-blue-600' },
-          { label: 'Scheduled Reports',      value: stats.scheduled,               sub: 'Active schedules',tone: 'from-violet-500 to-purple-600' },
-        ].map(card => (
-          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-6 shadow-sm`}>
-            <p className="text-white/80 text-sm font-medium mb-2">{card.label}</p>
-            <p className="text-3xl font-bold text-white">{card.value}</p>
-            <p className="text-white/60 text-xs mt-2">{card.sub}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={3}>
+        <KpiCard label="Reports Generated"     value={stats.generated}               sub="This month"       accent="cyan" />
+        <KpiCard label="Data Records Analyzed" value={stats.analyzed.toLocaleString()} sub="Total records"    accent="emerald" />
+        <KpiCard label="Scheduled Reports"     value={stats.scheduled}               sub="Active schedules" accent="violet" />
+      </StatGrid>
 
       {/* Report Categories */}
       <div className="space-y-4">

@@ -107,7 +107,7 @@ export function normalizeLeafGlAccount(code: string, fallbackName: string): { co
     case '2200-LOG':
       return { code: '2110', name: 'Accounts Payable — Trade' };
     case '2210-LOG':
-      return { code: '2120', name: 'Accrued Liabilities' };
+      return { code: '2130', name: 'Accrued Expenses' };
     case '5100':
       return { code: '5120', name: 'Vehicle Maintenance & Repairs' };
     case '5145':
@@ -244,6 +244,7 @@ export async function postOperationalJournalEntry(
 
     const dt = params.entryDate ? new Date(params.entryDate) : new Date();
     const entryDateIso = (Number.isNaN(dt.getTime()) ? new Date() : dt).toISOString().slice(0, 10);
+    await assertPeriodOpen(tx, params.tenantId, entryDateIso);
     const dtObj = new Date(entryDateIso);
     const costCentre = params.costCentre ?? 'GENERAL';
     const currency = params.currency ?? 'AED';
@@ -305,7 +306,17 @@ export async function postOperationalJournalEntry(
 
     for (let i = 0; i < validLines.length; i++) {
       const l = validLines[i];
-      const normalBalance = l.debit >= l.credit ? 'DEBIT' : 'CREDIT';
+      // Determine account's natural normal_balance by CoA class (1xxx/5xxx = DEBIT except 1290 contra-asset; 2xxx/3xxx/4xxx = CREDIT)
+      const normalBalance =
+        l.code === '1290'
+          ? 'CREDIT'
+          : l.code.startsWith('1') || l.code.startsWith('5')
+            ? 'DEBIT'
+            : l.code.startsWith('2') || l.code.startsWith('3') || l.code.startsWith('4')
+              ? 'CREDIT'
+              : l.debit >= l.credit
+                ? 'DEBIT'
+                : 'CREDIT';
       await tx.$executeRawUnsafe(
         `INSERT INTO finance_journal_lines
            (journal_entry_id, line_number, account_code, account_name, description,

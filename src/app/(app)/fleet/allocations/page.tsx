@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
@@ -446,24 +447,12 @@ export default function AllocationsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-semibold text-[var(--text-muted)] mb-1">Total Active Allocations</p>
-          <p className="text-2xl font-bold text-amber-400">{stats.totalActive}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-semibold text-[var(--text-muted)] mb-1">Expected Returns Today</p>
-          <p className="text-2xl font-bold text-blue-400">{stats.returnsToday}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-semibold text-[var(--text-muted)] mb-1">Overdue Return Alerts</p>
-          <p className="text-2xl font-bold text-rose-400">{stats.overdue}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-semibold text-[var(--text-muted)] mb-1">Available Fleet Units</p>
-          <p className="text-2xl font-bold text-emerald-400">{stats.available}</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Active Allocations" value={stats.totalActive} accent="amber" />
+        <KpiCard label="Expected Returns Today" value={stats.returnsToday} accent="cyan" />
+        <KpiCard label="Overdue Return Alerts" value={stats.overdue} accent="rose" />
+        <KpiCard label="Available Fleet Units" value={stats.available} accent="emerald" />
+      </StatGrid>
 
       {/* Error Banner */}
       {error && (

@@ -1274,11 +1274,20 @@ model RentalCustomer {
   tenant           Tenant    @relation("RentalCustomerToTenant", fields: [tenantId], references: [id])
   fullName         String    @map("full_name")
   customerType     String?   @default("INDIVIDUAL") @map("customer_type") // INDIVIDUAL|CORPORATE|AIRLINE|INSURANCE
-  nationality      String?
-  passportNo       String?   @map("passport_no")
-  drivingLicenseNo String?   @map("driving_license_no")
-  licenseExpiry    DateTime? @map("license_expiry") @db.Timestamptz(6)
-  email            String?
+  nationality                String?
+  emiratesId                 String?   @map("emirates_id")
+  emiratesIdExpiry           DateTime? @map("emirates_id_expiry") @db.Timestamptz(6)
+  passportNo                 String?   @map("passport_no")
+  passportExpiry             DateTime? @map("passport_expiry") @db.Timestamptz(6)
+  visaType                   String?   @default("RESIDENT") @map("visa_type") // RESIDENT|TOURIST|GCC|DIPLOMAT
+  drivingLicenseNo           String?   @map("driving_license_no")
+  licenseIssuingCountry      String?   @map("license_issuing_country")
+  licenseIssueDate           DateTime? @map("license_issue_date") @db.Timestamptz(6)
+  licenseExpiry              DateTime? @map("license_expiry") @db.Timestamptz(6)
+  internationalPermitNo      String?   @map("international_permit_no")
+  internationalPermitExpiry  DateTime? @map("international_permit_expiry") @db.Timestamptz(6)
+  dateOfBirth                DateTime? @map("date_of_birth") @db.Timestamptz(6)
+  email                      String?
   phone            String?
   address          String?
   blacklisted      Boolean?  @default(false)
@@ -1328,9 +1337,11 @@ model RentalBooking {
   dailyRate       Decimal?            @map("daily_rate") @db.Decimal
   totalAmount     Decimal?            @map("total_amount") @db.Decimal
   currency        String?             @default("AED")
-  status          String?             @default("PENDING") // PENDING|CONFIRMED|ACTIVE|COMPLETED|CANCELLED
-  channel         String? // DIRECT|CORPORATE|AGENCY|ONLINE
-  notes           String?
+  status            String?             @default("PENDING") // PENDING|CONFIRMED|ACTIVE|COMPLETED|CANCELLED
+  channel           String? // DIRECT|CORPORATE|AGENCY|ONLINE
+  ancillaries       Json?               @default("[]")
+  additionalDrivers Json?               @default("[]") @map("additional_drivers")
+  notes             String?
   customer        RentalCustomer      @relation(fields: [customerId], references: [id])
   inspections     VehicleInspection[]
   damageClaims    DamageClaim[]
@@ -1349,18 +1360,23 @@ model RentalBooking {
 }
 
 model VehicleInspection {
-  id        String        @id @default(uuid())
-  createdAt DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId  String        @map("tenant_id")
-  tenant    Tenant        @relation("VehicleInspectionToTenant", fields: [tenantId], references: [id])
-  bookingId String        @map("booking_id")
-  type      String // checkin | checkout
-  mileage   Int?
-  fuelLevel Int?          @map("fuel_level") // 0-100
-  damages   String?
-  inspector String?
-  notes     String?
-  booking   RentalBooking @relation(fields: [bookingId], references: [id])
+  id             String        @id @default(uuid())
+  createdAt      DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId       String        @map("tenant_id")
+  tenant         Tenant        @relation("VehicleInspectionToTenant", fields: [tenantId], references: [id])
+  bookingId      String        @map("booking_id")
+  type           String // checkin | checkout
+  mileage        Int?
+  fuelLevel      Int?          @map("fuel_level") // 0-100
+  damages        String?
+  inspector      String?
+  notes          String?
+  photos         String?
+  damageMarkers  Json?         @default("[]") @map("damage_markers")
+  checklistItems Json?         @default("[]") @map("checklist_items")
+  signatureUrl   String?       @map("signature_url")
+  conditionGrade String?       @map("condition_grade")
+  booking        RentalBooking @relation(fields: [bookingId], references: [id])
 
   @@index([tenantId], map: "idx_vehicle_inspections_tenant_id")
   @@map("vehicle_inspections")
@@ -1490,6 +1506,7 @@ model RateEvent {
   isActive             Boolean?  @default(true)
   notes                String?
 
+  @@unique([tenantId, eventCode], map: "uq_rate_events_tenant_code")
   @@index([tenantId], map: "idx_rate_events_tenant_id")
   @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
   @@index([deletedAt], map: "idx_rate_events_deleted_at")
@@ -1530,30 +1547,49 @@ model RentalRateQuote {
 }
 
 model RentalAgreement {
-  id              String    @id @default(uuid())
-  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId        String    @map("tenant_id")
-  tenant          Tenant    @relation("RentalAgreementToTenant", fields: [tenantId], references: [id])
-  agreementNo     String?   @map("agreement_no")
-  bookingId       String    @unique @map("booking_id")
-  customerId      String    @map("customer_id")
-  vehicleId       String?   @map("vehicle_id")
-  startDate       DateTime  @map("start_date") @db.Timestamptz(6)
-  endDate         DateTime  @map("end_date") @db.Timestamptz(6)
-  dailyRate       Decimal?  @map("daily_rate") @db.Decimal
-  totalAmount     Decimal?  @map("total_amount") @db.Decimal
-  currency        String?   @default("AED")
-  securityDeposit Decimal?  @map("security_deposit") @db.Decimal
-  depositStatus   String?   @default("PENDING") @map("deposit_status") // PENDING|PAID|REFUNDED
-  mileageIn       Int?      @map("mileage_in")
-  mileageOut      Int?      @map("mileage_out")
-  fuelIn          Int?      @map("fuel_in")
-  fuelOut         Int?      @map("fuel_out")
-  terms           String?
-  status          String?   @default("DRAFT") // DRAFT|ACTIVE|COMPLETED|CANCELLED
-  signedAt        DateTime? @map("signed_at") @db.Timestamptz(6)
-  signedBy        String?   @map("signed_by")
+  id                  String    @id @default(uuid())
+  createdAt           DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId            String    @map("tenant_id")
+  tenant              Tenant    @relation("RentalAgreementToTenant", fields: [tenantId], references: [id])
+  agreementNo         String?   @map("agreement_no")
+  bookingId           String?   @unique @map("booking_id")
+  customerId          String    @map("customer_id")
+  customerName        String?   @map("customer_name")
+  vehicleId           String?   @map("vehicle_id")
+  startDate           DateTime  @map("start_date") @db.Timestamptz(6)
+  endDate             DateTime  @map("end_date") @db.Timestamptz(6)
+  actualReturnDate    DateTime? @map("actual_return_date") @db.Timestamptz(6)
+  dailyRate           Decimal?  @map("daily_rate") @db.Decimal
+  totalAmount         Decimal?  @map("total_amount") @db.Decimal
+  currency            String?   @default("AED")
+  securityDeposit     Decimal?  @map("security_deposit") @db.Decimal
+  depositStatus       String?   @default("PENDING") @map("deposit_status") // PENDING|PAID|REFUNDED|REFUND_REQUESTED
+  mileageIn           Int?      @map("mileage_in")
+  mileageOut          Int?      @map("mileage_out")
+  fuelIn              Int?      @map("fuel_in") // canonical 0-100%
+  fuelOut             Int?      @map("fuel_out") // canonical 0-100%
+  pickupOdometer      Int?      @map("pickup_odometer")
+  returnOdometer      Int?      @map("return_odometer")
+  pickupFuelLevel     Int?      @map("pickup_fuel_level") // canonical 0-100%
+  returnFuelLevel     Int?      @map("return_fuel_level") // canonical 0-100%
+  lateFee             Decimal?  @default(0) @map("late_fee") @db.Decimal
+  excessKmFee         Decimal?  @default(0) @map("excess_km_fee") @db.Decimal
+  fuelSurcharge       Decimal?  @default(0) @map("fuel_surcharge") @db.Decimal
+  closedBy            String?   @map("closed_by")
+  closingNotes        String?   @map("closing_notes")
+  pickupLocationCode  String?   @map("pickup_location_code")
+  dropoffLocationCode String?   @map("dropoff_location_code")
+  customerType        String?   @default("INDIVIDUAL") @map("customer_type")
+  channel             String?   @default("DIRECT")
+  promoCode           String?   @map("promo_code")
+  billingMode         String?   @default("SEPARATE") @map("billing_mode")
+  additionalCharges   String?   @map("additional_charges")
+  terms               String?
+  status              String?   @default("DRAFT") // DRAFT|ACTIVE|COMPLETED|CLOSED|CANCELLED
+  signedAt            DateTime? @map("signed_at") @db.Timestamptz(6)
+  signedBy            String?   @map("signed_by")
 
   // Branch tracking (open in one branch, close in another)
   openBranchId  String? @map("open_branch_id")
@@ -1577,7 +1613,7 @@ model RentalAgreement {
   notes    String?
   language String? @default("en") // en|ar
 
-  booking          RentalBooking            @relation(fields: [bookingId], references: [id])
+  booking          RentalBooking?           @relation(fields: [bookingId], references: [id])
   payments         RentalPayment[]
   extensions       RentalExtension[]
   charges          RentalAdditionalCharge[]
@@ -1597,22 +1633,31 @@ model RentalAgreement {
 
 // Mid-rental vehicle exchange
 model RentalVehicleExchange {
-  id                String          @id @default(uuid())
-  createdAt         DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId          String          @map("tenant_id")
-  tenant            Tenant          @relation("RentalVehicleExchangeToTenant", fields: [tenantId], references: [id])
-  agreementId       String          @map("agreement_id")
-  fromVehicleId     String          @map("from_vehicle_id")
-  toVehicleId       String          @map("to_vehicle_id")
-  exchangeDate      DateTime        @map("exchange_date") @db.Timestamptz(6)
-  reason            String? // BREAKDOWN|UPGRADE|CUSTOMER_REQUEST|OTHER
-  mileageAtExchange Int?            @map("mileage_at_exchange")
-  fuelAtExchange    Int?            @map("fuel_at_exchange")
-  rateDifference    Decimal?        @map("rate_difference") @db.Decimal
-  authorizedBy      String?         @map("authorized_by")
-  notes             String?
-  agreement         RentalAgreement @relation(fields: [agreementId], references: [id])
+  id                     String          @id @default(uuid())
+  createdAt              DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId               String          @map("tenant_id")
+  tenant                 Tenant          @relation("RentalVehicleExchangeToTenant", fields: [tenantId], references: [id])
+  exchangeNo             String?         @map("exchange_no")
+  agreementId            String          @map("agreement_id")
+  fromVehicleId          String          @map("from_vehicle_id")
+  toVehicleId            String          @map("to_vehicle_id")
+  exchangeDate           DateTime        @map("exchange_date") @db.Timestamptz(6)
+  reason                 String? // BREAKDOWN|UPGRADE|CUSTOMER_REQUEST|OTHER
+  mileageAtExchange      Int?            @map("mileage_at_exchange")
+  fuelAtExchange         Int?            @map("fuel_at_exchange")
+  fromMileageIn          Int?            @map("from_mileage_in")
+  fromFuelIn             Int?            @map("from_fuel_in")
+  toMileageOut           Int?            @map("to_mileage_out")
+  toFuelOut              Int?            @map("to_fuel_out")
+  fromVehicleStatusAfter String?         @default("MAINTENANCE") @map("from_vehicle_status_after")
+  inspectionOutId        String?         @map("inspection_out_id")
+  inspectionInId         String?         @map("inspection_in_id")
+  rateDifference         Decimal?        @map("rate_difference") @db.Decimal
+  authorizedBy           String?         @map("authorized_by")
+  notes                  String?
+  agreement              RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@unique([tenantId, exchangeNo], map: "uq_rental_vehicle_exchanges_tenant_no")
   @@index([tenantId], map: "idx_rental_vehicle_exchanges_tenant_id")
   @@index([agreementId], map: "idx_rental_vehicle_exchanges_agreement_id")
   @@map("rental_vehicle_exchanges")
@@ -1622,18 +1667,27 @@ model RentalVehicleExchange {
 model RentalExtension {
   id              String          @id @default(uuid())
   createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime?       @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId        String          @map("tenant_id")
   tenant          Tenant          @relation("RentalExtensionToTenant", fields: [tenantId], references: [id])
   agreementId     String          @map("agreement_id")
+  renewalNo       String?         @map("renewal_no")
   originalEndDate DateTime        @map("original_end_date") @db.Timestamptz(6)
   newEndDate      DateTime        @map("new_end_date") @db.Timestamptz(6)
   extraDays       Int             @map("extra_days")
+  dailyRate       Decimal?        @map("daily_rate") @db.Decimal
   extraAmount     Decimal?        @map("extra_amount") @db.Decimal
+  vatAmount       Decimal?        @default(0) @map("vat_amount") @db.Decimal
+  totalAmount     Decimal?        @map("total_amount") @db.Decimal
+  depositTopUp    Decimal?        @default(0) @map("deposit_top_up") @db.Decimal
   reason          String?
   approvedBy      String?         @map("approved_by")
+  approvedAt      DateTime?       @map("approved_at") @db.Timestamptz(6)
+  notes           String?
   status          String?         @default("PENDING") // PENDING|APPROVED|REJECTED
   agreement       RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@unique([tenantId, renewalNo], map: "uq_rental_extensions_tenant_renewal_no")
   @@index([tenantId], map: "idx_rental_extensions_tenant_id")
   @@map("rental_extensions")
   @@schema("public")
@@ -1683,6 +1737,7 @@ model RentalAncillary {
   sortOrder            Int?      @default(0)
   notes                String?
 
+  @@unique([tenantId, code], map: "uq_rental_ancillaries_tenant_code")
   @@index([tenantId], map: "idx_rental_ancillaries_tenant_id")
   @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
   @@index([tenantId])
@@ -1820,6 +1875,7 @@ model RentalInvoicePayment {
   referenceNo   String?       @map("reference_no")
   receiptNo     String?       @map("receipt_no")
   paidAt        DateTime      @map("paid_at") @db.Timestamptz(6)
+  paymentDate   DateTime?     @default(now()) @map("payment_date") @db.Timestamptz(6)
   receivedBy    String?       @map("received_by")
   notes         String?
   invoice       RentalInvoice @relation(fields: [invoiceId], references: [id])
@@ -1828,6 +1884,445 @@ model RentalInvoicePayment {
   @@index([tenantId], map: "idx_rental_invoice_payments_tenant_id")
   @@index([invoiceId], map: "idx_rental_invoice_payments_invoice_id")
   @@map("rental_invoice_payments")
+  @@schema("public")
+}
+
+// -- Consolidated RAC Operational, Sales Funnel & B2B Portal Models ------------
+
+model RentalBranch {
+  id              String    @id @default(uuid()) @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  branchCode      String    @map("branch_code")
+  branchName      String    @map("branch_name")
+  emirate         String
+  address         String?
+  phone           String?
+  email           String?
+  managerName     String?   @map("manager_name")
+  operatingHours  String    @default("8:00 AM - 8:00 PM") @map("operating_hours")
+  vehicleCapacity Int       @default(0) @map("vehicle_capacity")
+  status          String    @default("ACTIVE")
+  latitude        Decimal?  @db.Decimal(10, 7)
+  longitude       Decimal?  @db.Decimal(10, 7)
+  notes           String?
+
+  @@unique([tenantId, branchCode], map: "uq_rental_branches_tenant_code")
+  @@index([tenantId], map: "idx_rental_branches_tenant_id")
+  @@index([status], map: "idx_rb_status")
+  @@index([emirate], map: "idx_rb_emirate")
+  @@map("rental_branches")
+  @@schema("public")
+}
+
+model RentalDocument {
+  id               String    @id @default(uuid()) @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  docRef           String    @map("doc_ref")
+  customerId       String?   @map("customer_id")
+  customerName     String    @map("customer_name")
+  docType          String    @map("doc_type")
+  docNumber        String?   @map("doc_number")
+  issuingAuthority String?   @map("issuing_authority")
+  issueDate        DateTime? @map("issue_date") @db.Date
+  expiryDate       DateTime? @map("expiry_date") @db.Date
+  nationality      String?
+  status           String    @default("PENDING_VERIFICATION")
+  verifiedBy       String?   @map("verified_by")
+  verifiedAt       DateTime? @map("verified_at") @db.Timestamptz(6)
+  rejectionReason  String?   @map("rejection_reason")
+  fileUrl          String?   @map("file_url")
+  notes            String?
+
+  @@unique([tenantId, docRef], map: "uq_rental_documents_tenant_ref")
+  @@index([tenantId], map: "idx_rental_documents_tenant_id")
+  @@index([status], map: "idx_rdv_status")
+  @@index([docType], map: "idx_rdv_doc_type")
+  @@index([expiryDate], map: "idx_rdv_expiry")
+  @@index([customerId], map: "idx_rdv_customer")
+  @@map("rental_documents")
+  @@schema("public")
+}
+
+model RentalInsurancePolicy {
+  id             String    @id @default(uuid()) @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+  policyNo       String    @map("policy_no")
+  vehicleId      String?   @map("vehicle_id")
+  vehicleNo      String    @map("vehicle_no")
+  vehicleName    String?   @map("vehicle_name")
+  insurer        String
+  policyType     String    @default("COMPREHENSIVE") @map("policy_type")
+  coverageAmount Decimal?  @map("coverage_amount") @db.Decimal(15, 2)
+  excessAmount   Decimal   @default(0) @map("excess_amount") @db.Decimal(10, 2)
+  premiumAnnual  Decimal?  @map("premium_annual") @db.Decimal(10, 2)
+  startDate      DateTime  @map("start_date") @db.Date
+  endDate        DateTime  @map("end_date") @db.Date
+  status         String    @default("ACTIVE")
+  documentUrl    String?   @map("document_url")
+  notes          String?
+
+  @@unique([tenantId, policyNo], map: "uq_rental_insurance_policies_tenant_no")
+  @@index([tenantId], map: "idx_rental_insurance_policies_tenant_id")
+  @@index([status], map: "idx_rip_status")
+  @@index([vehicleNo], map: "idx_rip_vehicle_no")
+  @@index([endDate], map: "idx_rip_end_date")
+  @@map("rental_insurance_policies")
+  @@schema("public")
+}
+
+model RentalVehicleTransfer {
+  id              String    @id @default(uuid()) @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  transferNo      String    @map("transfer_no")
+  vehicleId       String?   @map("vehicle_id")
+  vehicleNo       String    @map("vehicle_no")
+  vehicleName     String?   @map("vehicle_name")
+  vehicleMake     String?   @map("vehicle_make")
+  vehicleModel    String?   @map("vehicle_model")
+  fromBranchId    String?   @map("from_branch_id")
+  fromBranchName  String    @map("from_branch_name")
+  fromEmirate     String?   @map("from_emirate")
+  toBranchId      String?   @map("to_branch_id")
+  toBranchName    String    @map("to_branch_name")
+  toEmirate       String?   @map("to_emirate")
+  transferDate    DateTime  @map("transfer_date") @db.Date
+  reason          String
+  fuelLevel       Int?      @map("fuel_level") // 0-100%
+  odometerReading Int?      @map("odometer_reading")
+  conditionNotes  String?   @map("condition_notes")
+  driverName      String?   @map("driver_name")
+  driverPhone     String?   @map("driver_phone")
+  status          String    @default("REQUESTED")
+  requestedBy     String?   @map("requested_by")
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at") @db.Timestamptz(6)
+  departedAt      DateTime? @map("departed_at") @db.Timestamptz(6)
+  arrivedAt       DateTime? @map("arrived_at") @db.Timestamptz(6)
+  cancelledReason String?   @map("cancelled_reason")
+  notes           String?
+
+  @@unique([tenantId, transferNo], map: "uq_rental_vehicle_transfers_tenant_no")
+  @@index([tenantId], map: "idx_rental_vehicle_transfers_tenant_id")
+  @@index([status], map: "idx_rvt_status")
+  @@index([fromBranchName], map: "idx_rvt_from_branch")
+  @@index([toBranchName], map: "idx_rvt_to_branch")
+  @@index([transferDate], map: "idx_rvt_transfer_date")
+  @@map("rental_vehicle_transfers")
+  @@schema("public")
+}
+
+model RentalInquiry {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  inquiryNo      String    @map("inquiry_no")
+  customerName   String    @map("customer_name")
+  email          String?
+  phone          String
+  vehicleType    String?   @map("vehicle_type")
+  pickupLocation String?   @map("pickup_location")
+  pickupDate     DateTime? @map("pickup_date") @db.Date
+  returnDate     DateTime? @map("return_date") @db.Date
+  rentalDays     Int?      @map("rental_days")
+  status         String?   @default("NEW")
+  source         String?   @default("WALK_IN")
+  assignedTo     String?   @map("assigned_to")
+  notes          String?
+  convertedTo    String?   @map("converted_to")
+
+  @@index([tenantId], map: "idx_rental_inquiries_tenant_id")
+  @@map("rental_inquiries")
+  @@schema("public")
+}
+
+model RentalQuotation {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id")
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  quoteNo       String    @map("quote_no")
+  inquiryId     String?   @map("inquiry_id") @db.Uuid
+  customerName  String    @map("customer_name")
+  email         String?
+  phone         String?
+  vehicleType   String?   @map("vehicle_type")
+  vehicleId     String?   @map("vehicle_id")
+  vehicleName   String?   @map("vehicle_name")
+  pickupDate    DateTime  @map("pickup_date") @db.Date
+  returnDate    DateTime  @map("return_date") @db.Date
+  rentalDays    Int       @map("rental_days")
+  dailyRate     Decimal   @map("daily_rate") @db.Decimal(10, 2)
+  subtotal      Decimal   @db.Decimal(12, 2)
+  vatAmount     Decimal   @map("vat_amount") @db.Decimal(12, 2)
+  grandTotal    Decimal   @map("grand_total") @db.Decimal(12, 2)
+  depositAmount Decimal?  @default(0) @map("deposit_amount") @db.Decimal(12, 2)
+  status        String?   @default("DRAFT")
+  validUntil    DateTime? @map("valid_until") @db.Date
+  notes         String?
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
+  acceptedAt    DateTime? @map("accepted_at") @db.Timestamptz(6)
+  rejectedAt    DateTime? @map("rejected_at") @db.Timestamptz(6)
+  convertedTo   String?   @map("converted_to")
+
+  @@unique([tenantId, quoteNo], map: "uq_rental_quotations_tenant_no")
+  @@index([tenantId], map: "idx_rental_quotations_tenant_id")
+  @@map("rental_quotations")
+  @@schema("public")
+}
+
+model RentalHandover {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id")
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  handoverNo        String    @map("handover_no")
+  agreementId       String?   @map("agreement_id")
+  agreementNo       String?   @map("agreement_no")
+  customerName      String?   @map("customer_name")
+  vehicleId         String?   @map("vehicle_id")
+  vehicleNo         String?   @map("vehicle_no")
+  vehicleName       String?   @map("vehicle_name")
+  handoverType      String    @default("PICKUP") @map("handover_type")
+  handoverDate      DateTime? @default(now()) @map("handover_date") @db.Timestamptz(6)
+  fuelLevel         Int?      @default(100) @map("fuel_level")
+  odometerReading   Int?      @default(0) @map("odometer_reading")
+  conditionScore    Int?      @default(3) @map("condition_score")
+  bodyCondition     String?   @default("Good") @map("body_condition")
+  interiorCondition String?   @default("Clean") @map("interior_condition")
+  tyresCondition    String?   @default("Good") @map("tyres_condition")
+  keysCount         Int?      @default(1) @map("keys_count")
+  spareKey          Boolean?  @default(false) @map("spare_key")
+  salikTag          Boolean?  @default(false) @map("salik_tag")
+  parkingCard       Boolean?  @default(false) @map("parking_card")
+  accessories       Json?     @default("[]")
+  checklistItems    Json?     @default("[]") @map("checklist_items")
+  notes             String?
+  signedBy          String?   @map("signed_by")
+  signedAt          DateTime? @map("signed_at") @db.Timestamptz(6)
+  status            String?   @default("PENDING")
+  branchId          String?   @map("branch_id")
+
+  @@index([tenantId], map: "idx_rental_handovers_tenant_id")
+  @@map("rental_handovers")
+  @@schema("public")
+}
+
+model RentalChannelConfig {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tenantId           String    @map("tenant_id")
+  channelKey         String    @map("channel_key")
+  webhookSecret      String    @map("webhook_secret")
+  isActive           Boolean   @default(true) @map("is_active")
+  commissionPct      Decimal?  @default(0) @map("commission_pct") @db.Decimal(6, 2)
+  defaultMarkupPct   Decimal?  @default(0) @map("default_markup_pct") @db.Decimal(6, 2)
+  autoConfirm        Boolean   @default(false) @map("auto_confirm")
+  outboundWebhookUrl String?   @map("outbound_webhook_url")
+  lastSyncAt         DateTime? @map("last_sync_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, channelKey], map: "uq_rental_channel_configs_tenant_channel")
+  @@index([tenantId], map: "idx_rental_channel_configs_tenant_id")
+  @@map("rental_channel_configs")
+  @@schema("public")
+}
+
+model RacPortalUser {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id")
+  customerId        String    @map("customer_id")
+  email             String
+  fullName          String?   @map("full_name")
+  phone             String?
+  passwordHash      String?   @map("password_hash")
+  isActive          Boolean   @default(true) @map("is_active")
+  role              String    @default("RAC_B2B_USER")
+  sessionVersion    Int       @default(1) @map("session_version")
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(6)
+  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([customerId], map: "idx_rac_portal_users_customer")
+  @@index([tenantId, email], map: "idx_rac_portal_users_tenant_email")
+  @@map("rac_portal_users")
+  @@schema("public")
+}
+
+model RacPortalInvitation {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id")
+  portalUserId    String    @map("portal_user_id") @db.Uuid
+  tokenHash       String    @map("token_hash")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  invitedByUserId String    @map("invited_by_user_id")
+  acceptedAt      DateTime? @map("accepted_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tokenHash], map: "idx_rac_portal_invites_token_hash")
+  @@index([portalUserId, createdAt], map: "idx_rac_portal_invites_user")
+  @@map("rac_portal_invitations")
+  @@schema("public")
+}
+
+model RacCardPreauth {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id")
+  customerId        String    @map("customer_id")
+  bookingId         String?   @map("booking_id")
+  agreementId       String?   @map("agreement_id")
+  invoiceId         String?   @map("invoice_id")
+  amount            Decimal   @db.Decimal
+  capturedAmount    Decimal   @default(0) @map("captured_amount") @db.Decimal
+  incrementalAmount Decimal?  @default(0) @map("incremental_amount") @db.Decimal
+  currency          String    @default("AED")
+  provider          String    @default("sandbox")
+  providerIntentId  String?   @map("provider_intent_id")
+  cardToken         String?   @map("card_token")
+  authorizationCode String    @map("authorization_code")
+  cardBrand         String?   @map("card_brand")
+  cardLast4         String?   @map("card_last4")
+  cardholderName    String?   @map("cardholder_name")
+  status            String    @default("AUTHORIZED")
+  expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
+  capturedAt        DateTime? @map("captured_at") @db.Timestamptz(6)
+  releasedAt        DateTime? @map("released_at") @db.Timestamptz(6)
+  initiatedBy       String    @default("PORTAL_USER") @map("initiated_by")
+  initiatedByUser   String?   @map("initiated_by_user")
+  gatewayMetadata   Json?     @default("{}") @map("gateway_metadata")
+  notes             String?
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, authorizationCode], map: "uq_rac_card_preauths_tenant_authcode")
+  @@index([tenantId, customerId, createdAt], map: "idx_rac_card_preauths_tenant_customer")
+  @@index([bookingId], map: "idx_rac_card_preauths_booking")
+  @@index([agreementId], map: "idx_rac_card_preauths_agreement")
+  @@map("rac_card_preauths")
+  @@schema("public")
+}
+
+model RentalAdditionalDriver {
+  id                        String    @id @default(uuid()) @db.Uuid
+  tenantId                  String    @map("tenant_id")
+  bookingId                 String?   @map("booking_id")
+  agreementId               String?   @map("agreement_id")
+  fullName                  String    @map("full_name")
+  nationality               String?
+  dateOfBirth               DateTime? @map("date_of_birth") @db.Timestamptz(6)
+  emiratesId                String?   @map("emirates_id")
+  passportNo                String?   @map("passport_no")
+  drivingLicenseNo          String    @map("driving_license_no")
+  licenseIssuingCountry     String?   @map("license_issuing_country")
+  licenseExpiry             DateTime  @map("license_expiry") @db.Timestamptz(6)
+  internationalPermitNo     String?   @map("international_permit_no")
+  internationalPermitExpiry DateTime? @map("international_permit_expiry") @db.Timestamptz(6)
+  dailyFee                  Decimal   @default(0) @map("daily_fee") @db.Decimal(10, 2)
+  totalFee                  Decimal   @default(0) @map("total_fee") @db.Decimal(10, 2)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId], map: "idx_rental_additional_drivers_tenant")
+  @@index([tenantId, bookingId], map: "idx_rental_additional_drivers_booking")
+  @@index([tenantId, agreementId], map: "idx_rental_additional_drivers_agreement")
+  @@map("rental_additional_drivers")
+  @@schema("public")
+}
+
+model RentalRegulatoryReport {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id")
+  agreementId     String    @map("agreement_id")
+  authority       String    @default("RTA_TARRASHUD")
+  eventType       String    @map("event_type")
+  status          String    @default("QUEUED")
+  externalRef     String?   @map("external_ref")
+  manifestPayload Json      @default("{}") @map("manifest_payload")
+  responsePayload Json?     @map("response_payload")
+  errorMessage    String?   @map("error_message")
+  submittedBy     String?   @map("submitted_by")
+  submittedAt     DateTime? @map("submitted_at") @db.Timestamptz(6)
+  acknowledgedAt  DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt], map: "idx_rental_regulatory_reports_tenant")
+  @@index([tenantId, agreementId, eventType], map: "idx_rental_regulatory_reports_agreement")
+  @@map("rental_regulatory_reports")
+  @@schema("public")
+}
+
+model RentalCrossBorderPermit {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @map("tenant_id")
+  permitNo            String    @map("permit_no")
+  bookingId           String?   @map("booking_id")
+  agreementId         String?   @map("agreement_id")
+  customerId          String    @map("customer_id")
+  vehicleId           String    @map("vehicle_id")
+  destinationCountry  String    @map("destination_country")
+  borderPost          String?   @map("border_post")
+  departureDate       DateTime  @map("departure_date") @db.Timestamptz(6)
+  returnDate          DateTime  @map("return_date") @db.Timestamptz(6)
+  orangeCardPolicyNo  String?   @map("orange_card_policy_no")
+  orangeCardFee       Decimal   @default(0) @map("orange_card_fee") @db.Decimal(10, 2)
+  permitFee           Decimal   @default(0) @map("permit_fee") @db.Decimal(10, 2)
+  totalFee            Decimal   @default(0) @map("total_fee") @db.Decimal(10, 2)
+  mulkiyaVerified     Boolean   @default(true) @map("mulkiya_verified")
+  insuranceVerified   Boolean   @default(true) @map("insurance_verified")
+  status              String    @default("ISSUED")
+  issuedBy            String?   @map("issued_by")
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
+  notes               String?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, permitNo])
+  @@index([tenantId, status], map: "idx_rental_cross_border_permits_tenant")
+  @@index([tenantId, vehicleId, departureDate, returnDate], map: "idx_rental_cross_border_permits_vehicle")
+  @@index([tenantId, agreementId], map: "idx_rental_cross_border_permits_agreement")
+  @@map("rental_cross_border_permits")
+  @@schema("public")
+}
+
+model RentalImmobilizerCommand {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @map("tenant_id")
+  vehicleId             String    @map("vehicle_id")
+  agreementId           String?   @map("agreement_id")
+  action                String
+  status                String    @default("PENDING_SAFE_STOP")
+  reason                String
+  speedAtRequestKmh     Decimal?  @default(0) @map("speed_at_request_kmh") @db.Decimal(8, 2)
+  ignitionAtRequest     Boolean?  @default(false) @map("ignition_at_request")
+  safetyInterlockPassed Boolean   @default(false) @map("safety_interlock_passed")
+  requestedBy           String    @map("requested_by")
+  approvedBy            String?   @map("approved_by")
+  providerCommandRef    String?   @map("provider_command_ref")
+  executedAt            DateTime? @map("executed_at") @db.Timestamptz(6)
+  restoredAt            DateTime? @map("restored_at") @db.Timestamptz(6)
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt], map: "idx_rental_immobilizer_commands_tenant")
+  @@index([tenantId, vehicleId, status], map: "idx_rental_immobilizer_commands_vehicle")
+  @@map("rental_immobilizer_commands")
   @@schema("public")
 }
 
@@ -2963,22 +3458,28 @@ model FuelCard {
 }
 
 model TrafficFine {
-  id          String    @id @default(uuid())
-  tenantId   String    @map("tenant_id")
-  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  vehicleId   String?   @map("vehicle_id")
-  driverId    String?   @map("driver_id")
-  fineDate    DateTime  @map("fine_date") @db.Timestamptz(6)
-  fineAmount  Float     @map("fine_amount")
-  authority   String? // RTA|POLICE|MUNICIPALITY
-  fineRef     String?   @map("fine_ref")
-  offenceType String?   @map("offence_type")
-  status      String?   @default("UNPAID") // UNPAID|PAID|DISPUTED|WAIVED
-  paidDate    DateTime? @map("paid_date") @db.Timestamptz(6)
-  assignedTo  String?   @map("assigned_to") // COMPANY|DRIVER
+  id                String    @id @default(uuid())
+  tenantId          String    @map("tenant_id")
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicleId         String?   @map("vehicle_id")
+  driverId          String?   @map("driver_id")
+  rentalAgreementId String?   @map("rental_agreement_id")
+  fineDate          DateTime  @map("fine_date") @db.Timestamptz(6)
+  fineAmount        Float     @map("fine_amount")
+  adminFee          Decimal?  @default(0) @map("admin_fee") @db.Decimal(10, 2)
+  knowledgeFee      Decimal?  @default(0) @map("knowledge_fee") @db.Decimal(10, 2)
+  authority         String? // RTA|POLICE|MUNICIPALITY
+  fineRef           String?   @map("fine_ref")
+  offenceType       String?   @map("offence_type")
+  status            String?   @default("UNPAID") // UNPAID|PAID|DISPUTED|WAIVED
+  paidDate           DateTime? @map("paid_date") @db.Timestamptz(6)
+  assignedTo         String?   @map("assigned_to") // COMPANY|DRIVER|RENTAL_CUSTOMER
+  isBilledToCustomer Boolean   @default(false) @map("is_billed_to_customer")
+  billedInvoiceId    String?   @map("billed_invoice_id")
 
   @@index([vehicleId], map: "idx_traffic_fines_vehicle_id")
   @@index([driverId], map: "idx_traffic_fines_driver_id")
+  @@index([rentalAgreementId], map: "idx_traffic_fines_rental_agreement_id")
   @@index([status], map: "idx_traffic_fines_status")
   @@map("traffic_fines")
   @@schema("public")
@@ -3224,13 +3725,16 @@ model InsurancePolicy {
 model SalikAccount {
   id             String    @id @default(uuid())
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  tagNumber      String    @unique @map("tag_number")
+  tenantId       String    @map("tenant_id")
+  tagNumber      String    @map("tag_number")
   vehicleId      String?   @map("vehicle_id")
   balance        Float?    @default(0)
   autoRecharge   Boolean?  @default(false) @map("auto_recharge")
   rechargeAmount Float?    @map("recharge_amount")
   isActive       Boolean?  @default(true) @map("is_active")
 
+  @@unique([tenantId, tagNumber], map: "uq_salik_accounts_tenant_tag")
+  @@index([tenantId], map: "idx_salik_accounts_tenant_id")
   @@map("salik_accounts")
   @@schema("public")
 }
@@ -6785,6 +7289,7 @@ model TollTransaction {
   tollGateName String   @map("toll_gate_name")
   tollProvider String   @default("SALIK") @map("toll_provider") // SALIK | DARB | OTHER
   tollAmount   Decimal  @map("toll_amount") @db.Decimal(10, 2)
+  adminFee     Decimal? @default(0) @map("admin_fee") @db.Decimal(10, 2)
   currency     String   @default("AED")
   occurredAt   DateTime @map("occurred_at") @db.Timestamptz(6)
 

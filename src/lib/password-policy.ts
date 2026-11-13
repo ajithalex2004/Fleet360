@@ -10,6 +10,9 @@
 
 import crypto from 'crypto';
 
+/** Hard cap on password input length to prevent multi-MB PBKDF2 event-loop DoS. */
+export const MAX_PASSWORD_LENGTH = 256;
+
 export interface PasswordPolicy {
   minLength: number;
   requireLetter?: boolean; // at least one alphabet letter (A-Z or a-z)
@@ -55,6 +58,9 @@ export function validatePassword(
   const errors: string[] = [];
   if (typeof pw !== 'string' || !pw) {
     return { ok: false, errors: ['Password is required'] };
+  }
+  if (pw.length > MAX_PASSWORD_LENGTH) {
+    return { ok: false, errors: [`Must not exceed ${MAX_PASSWORD_LENGTH} characters`] };
   }
   const minLen = policy.minLength ?? 8;
   if (pw.length < minLen) {
@@ -108,6 +114,9 @@ export function validatePasswordPolicy(pw: string): { ok: boolean; error?: strin
 
 /** Returns `salt:hash` hex matching the format /api/auth/login expects. */
 export function hashPassword(plaintext: string): string {
+  if (typeof plaintext !== 'string' || !plaintext || plaintext.length > MAX_PASSWORD_LENGTH) {
+    throw new Error(`Password must be between 1 and ${MAX_PASSWORD_LENGTH} characters`);
+  }
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
   return `${salt}:${hash}`;
@@ -115,6 +124,14 @@ export function hashPassword(plaintext: string): string {
 
 export function verifyPassword(plaintext: string, stored: string): boolean {
   try {
+    if (
+      typeof plaintext !== 'string' ||
+      typeof stored !== 'string' ||
+      !plaintext ||
+      plaintext.length > MAX_PASSWORD_LENGTH
+    ) {
+      return false;
+    }
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
     const derived = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');

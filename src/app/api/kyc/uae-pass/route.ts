@@ -2,16 +2,21 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { DEMO_UAE_PASS_USER, UaePassProfile } from '@/lib/digital-kyc-engine';
+import { DEMO_UAE_PASS_USER, type UaePassProfile } from '@/lib/digital-kyc-engine';
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json().catch(() => ({}));
-    const body = stripTenantOwnershipFields(rawBody);
-    const overrideName = body?.name;
+    const body = stripTenantOwnershipFields(
+      (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>,
+    ) as Record<string, unknown>;
+    const overrideName =
+      typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined;
 
     const profile: UaePassProfile = {
       ...DEMO_UAE_PASS_USER,

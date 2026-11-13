@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, RefreshCw, Truck, UserRound, X } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 type StageKey =
   | 'SUBMITTED'
@@ -203,12 +204,12 @@ export default function LogisticsDispatchPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="All" value={phaseCounts.ALL} icon={Truck} active={phase === 'ALL'} onClick={() => setPhase('ALL')} />
-        <Metric label="Pre-dispatch" value={phaseCounts.PRE} icon={Clock} active={phase === 'PRE'} onClick={() => setPhase('PRE')} />
-        <Metric label="In transit" value={phaseCounts.TRANSIT} icon={ArrowRight} active={phase === 'TRANSIT'} onClick={() => setPhase('TRANSIT')} />
-        <Metric label="Done" value={phaseCounts.DONE} icon={CheckCircle2} active={phase === 'DONE'} onClick={() => setPhase('DONE')} />
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="All" value={phaseCounts.ALL} icon={Truck} accent="slate" active={phase === 'ALL'} onClick={() => setPhase('ALL')} />
+        <KpiCard label="Pre-dispatch" value={phaseCounts.PRE} icon={Clock} accent="amber" active={phase === 'PRE'} onClick={() => setPhase('PRE')} />
+        <KpiCard label="In transit" value={phaseCounts.TRANSIT} icon={ArrowRight} accent="cyan" active={phase === 'TRANSIT'} onClick={() => setPhase('TRANSIT')} />
+        <KpiCard label="Done" value={phaseCounts.DONE} icon={CheckCircle2} accent="emerald" active={phase === 'DONE'} onClick={() => setPhase('DONE')} />
+      </StatGrid>
 
       {message && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
@@ -264,18 +265,6 @@ export default function LogisticsDispatchPage() {
         />
       )}
     </div>
-  );
-}
-
-function Metric({ label, value, icon: Icon, active, onClick }: { label: string; value: number; icon: React.ComponentType<{ className?: string }>; active: boolean; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={`rounded-xl border p-4 text-left transition-colors ${active ? 'border-amber-500/40 bg-amber-500/10' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 hover:bg-[var(--bg-surface-hover)]'}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span>
-        <Icon className="h-4 w-4 text-amber-300" />
-      </div>
-      <div className="mt-2 text-2xl font-bold text-[var(--text-main)]">{value}</div>
-    </button>
   );
 }
 

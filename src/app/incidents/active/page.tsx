@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { AlertCircle, Siren, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type IncStatus   = 'REPORTED' | 'OPEN' | 'UNDER_INVESTIGATION' | 'IN_PROGRESS' | 'ESCALATED' | 'RESOLVED' | 'CLOSED';
@@ -497,20 +499,13 @@ export default function ActiveIncidentsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: 'Active',       value: statCounts.active,       color: 'text-red-400',     icon: '🔴' },
-          { label: 'Escalated',    value: statCounts.escalated,    color: 'text-red-400',     icon: '🚨' },
-          { label: 'Investigating',value: statCounts.investigating, color: 'text-amber-400',   icon: '🔍' },
-          { label: 'Resolved',     value: statCounts.resolved,     color: 'text-emerald-400', icon: '✅' },
-          { label: 'Critical',     value: statCounts.critical,     color: 'text-red-300',     icon: '🔴' },
-        ].map(s => (
-          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 text-center">
-            <p className="text-xs text-[var(--text-faint)]">{s.icon} {s.label}</p>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Active" value={statCounts.active} icon={AlertCircle} accent="rose" />
+        <KpiCard label="Escalated" value={statCounts.escalated} icon={Siren} accent="rose" />
+        <KpiCard label="Investigating" value={statCounts.investigating} icon={Search} accent="amber" />
+        <KpiCard label="Resolved" value={statCounts.resolved} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Critical" value={statCounts.critical} icon={AlertTriangle} accent="rose" />
+      </StatGrid>
 
       {/* Critical / Escalated alert banner */}
       {(statCounts.critical > 0 || statCounts.escalated > 0) && (

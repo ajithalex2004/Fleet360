@@ -16,7 +16,7 @@ import {
   Download,
   Building2,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { PageHeader, KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { PassengerDriverChat } from '@/components/booking/PassengerDriverChat';
 import { SERVICE_MODULE_MAP } from '@/lib/booking-portal/service-module-map';
@@ -330,25 +330,16 @@ export default function BookingPortal() {
       )}
 
       {/* ── Summary tiles ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Bookings', value: bookings.length, color: 'text-zinc-950 dark:text-zinc-50', icon: CalendarCheck, iconColor: 'text-blue-500' },
-          { label: 'Pending Approval', value: pending, color: 'text-amber-500', icon: Clock, iconColor: 'text-amber-500' },
-          { label: 'Active Trips', value: active, color: 'text-emerald-500', icon: CheckCircle2, iconColor: 'text-emerald-500' },
-          { label: 'Completed', value: completed, color: 'text-zinc-500', icon: FileCheck, iconColor: 'text-zinc-400' },
-        ].map(t => {
-          const Icon = t.icon;
-          return (
-            <div key={t.label} className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-4 shadow-sm">
-              <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center mb-2.5">
-                <Icon className={`w-4 h-4 ${t.iconColor}`} />
-              </div>
-              <div className={`text-2xl font-bold font-mono ${t.color}`}>{t.value}</div>
-              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 uppercase font-semibold tracking-wider">{t.label}</div>
-            </div>
-          );
-        })}
-      </div>
+      <StatGrid cols={4}>
+        {([
+          { label: 'Total Bookings', value: bookings.length, accent: 'cyan' as PageAccent, icon: CalendarCheck },
+          { label: 'Pending Approval', value: pending, accent: 'amber' as PageAccent, icon: Clock },
+          { label: 'Active Trips', value: active, accent: 'emerald' as PageAccent, icon: CheckCircle2 },
+          { label: 'Completed', value: completed, accent: 'slate' as PageAccent, icon: FileCheck },
+        ]).map(t => (
+          <KpiCard key={t.label} label={t.label} value={t.value} icon={t.icon} accent={t.accent} />
+        ))}
+      </StatGrid>
 
       {/* ── Flagship Mobile & B2B Booking Consoles ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

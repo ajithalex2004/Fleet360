@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Detection {
@@ -189,23 +190,23 @@ export default function BLEDetectionsPage() {
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-4">
-        {kpis.map(k => (
-          <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-            {statsLoading ? (
-              <div className="space-y-2">
-                <div className="h-7 bg-[var(--bg-surface)] rounded animate-pulse w-16" />
-                <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
-              </div>
-            ) : (
-              <>
-                <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
-                <p className="text-[var(--text-muted)] text-xs mt-1">{k.label}</p>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+      {statsLoading ? (
+        <div className="grid grid-cols-4 gap-4">
+          {kpis.map(k => (
+            <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 space-y-2">
+              <div className="h-7 bg-[var(--bg-surface)] rounded animate-pulse w-16" />
+              <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <StatGrid cols={4}>
+          {kpis.map((k, idx) => {
+            const accents: PageAccent[] = ['cyan', 'emerald', 'amber', 'violet'];
+            return <KpiCard key={k.label} label={k.label} value={k.value} accent={accents[idx % accents.length]} />;
+          })}
+        </StatGrid>
+      )}
 
       {/* Filters */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">

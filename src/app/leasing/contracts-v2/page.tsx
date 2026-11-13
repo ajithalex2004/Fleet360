@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { addMonths, quotationToContract } from '@/lib/autoFill';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Vehicle {
   id: string;
@@ -291,19 +292,12 @@ export default function ContractsV2Page() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Active', value: stats.active, color: 'from-emerald-500 to-teal-600' },
-          { label: 'Draft / Pending', value: stats.draftPending, color: 'from-amber-500 to-orange-600' },
-          { label: 'Expiring This Month', value: stats.expiring, color: 'from-rose-500 to-pink-600' },
-          { label: 'Multi-Vehicle', value: stats.multiVehicle, color: 'from-purple-500 to-indigo-600' },
-        ].map((s, i) => (
-          <div key={i} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-[var(--text-muted)] text-xs font-medium mb-1">{s.label}</p>
-            <p className={`text-2xl font-bold bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Active" value={stats.active} accent="emerald" />
+        <KpiCard label="Draft / Pending" value={stats.draftPending} accent="amber" />
+        <KpiCard label="Expiring This Month" value={stats.expiring} accent="rose" />
+        <KpiCard label="Multi-Vehicle" value={stats.multiVehicle} accent="violet" />
+      </StatGrid>
 
       {/* Filters */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 flex gap-4 flex-wrap items-end">

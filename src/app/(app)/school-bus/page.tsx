@@ -3,9 +3,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   School, Map, Calendar, Users,
-  AlertTriangle, Siren,
+  AlertTriangle, Siren, Bus, Navigation, Wrench, GraduationCap,
 } from 'lucide-react';
-import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill, KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 
 interface SchoolBusStats {
@@ -74,24 +74,16 @@ export default function SchoolBusDashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'School buses',   value: stats?.totalVehicles ?? 0,     sub: 'Total fleet',         tone: 'from-amber-500 to-orange-600' },
-              { label: 'Available',      value: stats?.availableVehicles ?? 0, sub: 'Ready for trips',     tone: 'from-emerald-500 to-teal-600' },
-              { label: 'Active routes',  value: stats?.activeRoutes ?? 0,      sub: 'Bus routes',          tone: 'from-cyan-500 to-blue-600' },
-              { label: "Today's trips",  value: stats?.todaySchedules ?? 0,    sub: 'Scheduled today',     tone: 'from-blue-500 to-indigo-600' },
-              { label: 'In transit',     value: stats?.inTransit ?? 0,         sub: 'Currently on route',  tone: (stats?.inTransit ?? 0) > 0 ? 'from-amber-500 to-orange-600' : 'from-slate-500 to-slate-700' },
-              { label: 'In maintenance', value: stats?.inMaintenance ?? 0,     sub: 'Buses under service', tone: 'from-rose-500 to-pink-600' },
-              { label: 'Drivers',        value: stats?.drivers ?? 0,           sub: 'School bus drivers',  tone: 'from-violet-500 to-purple-600' },
-              { label: 'Students',       value: 0,                              sub: 'Registered students', tone: 'from-teal-500 to-cyan-600' },
-            ].map(card => (
-              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
-                <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
-                <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
-              </div>
-            ))}
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard label="School buses" value={stats?.totalVehicles ?? 0} sub="Total fleet" icon={School} accent="amber" />
+            <KpiCard label="Available" value={stats?.availableVehicles ?? 0} sub="Ready for trips" icon={Bus} accent="emerald" />
+            <KpiCard label="Active routes" value={stats?.activeRoutes ?? 0} sub="Bus routes" icon={Map} accent="cyan" />
+            <KpiCard label="Today's trips" value={stats?.todaySchedules ?? 0} sub="Scheduled today" icon={Calendar} accent="blue" />
+            <KpiCard label="In transit" value={stats?.inTransit ?? 0} sub="Currently on route" icon={Navigation} accent={(stats?.inTransit ?? 0) > 0 ? 'amber' : 'slate'} />
+            <KpiCard label="In maintenance" value={stats?.inMaintenance ?? 0} sub="Buses under service" icon={Wrench} accent="rose" />
+            <KpiCard label="Drivers" value={stats?.drivers ?? 0} sub="School bus drivers" icon={Users} accent="violet" />
+            <KpiCard label="Students" value={0} sub="Registered students" icon={GraduationCap} accent="cyan" />
+          </StatGrid>
 
           <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">

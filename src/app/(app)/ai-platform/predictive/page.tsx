@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Activity, CalendarClock, Gauge } from 'lucide-react';
 import type { MaintenanceRiskScore, RiskBand } from '@/types/maintenance';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 interface Forecast {
   id: string; vehicleId: string; licensePlate: string | null; make: string | null; model: string | null;
@@ -62,11 +63,11 @@ export default function AIPlatformPredictivePage() {
   const count = (b: RiskBand) => (scores ?? []).filter((s) => s.band === b).length;
   const dueIn30 = (forecasts ?? []).filter((f) => f.estimatedDaysToDue != null && f.estimatedDaysToDue <= 30).length;
 
-  const kpis = [
-    { label: 'Critical / high risk', value: scores ? `${count('CRITICAL')} / ${count('HIGH')}` : '—', icon: AlertTriangle, cls: 'text-red-400' },
-    { label: 'Medium risk', value: scores ? String(count('MEDIUM')) : '—', icon: Activity, cls: 'text-amber-400' },
-    { label: 'Vehicles scored', value: scores ? String(scores.length) : '—', icon: Gauge, cls: 'text-blue-400' },
-    { label: 'Services due ≤ 30 days', value: forecasts ? String(dueIn30) : '—', icon: CalendarClock, cls: 'text-purple-400' },
+  const kpis: Array<{ label: string; value: string; icon: typeof AlertTriangle; accent: PageAccent }> = [
+    { label: 'Critical / high risk', value: scores ? `${count('CRITICAL')} / ${count('HIGH')}` : '—', icon: AlertTriangle, accent: 'rose' },
+    { label: 'Medium risk', value: scores ? String(count('MEDIUM')) : '—', icon: Activity, accent: 'amber' },
+    { label: 'Vehicles scored', value: scores ? String(scores.length) : '—', icon: Gauge, accent: 'cyan' },
+    { label: 'Services due ≤ 30 days', value: forecasts ? String(dueIn30) : '—', icon: CalendarClock, accent: 'violet' },
   ];
 
   return (
@@ -84,15 +85,11 @@ export default function AIPlatformPredictivePage() {
         <div key={e} className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{e}</div>
       ))}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {kpis.map(({ label, value, icon: Icon, cls }) => (
-          <div key={label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-            <Icon className={`h-4 w-4 mb-2 ${cls}`} />
-            <p className="text-xs text-[var(--text-faint)]">{label}</p>
-            <p className={`text-2xl font-bold mt-0.5 ${value === '—' ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]'}`}>{value}</p>
-          </div>
+      <StatGrid cols={4}>
+        {kpis.map(({ label, value, icon, accent }) => (
+          <KpiCard key={label} label={label} value={value} icon={icon} accent={accent} />
         ))}
-      </div>
+      </StatGrid>
 
       {/* Risk ranking */}
       <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">

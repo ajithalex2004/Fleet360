@@ -11,6 +11,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withTenantRls, type TxClient } from '@/lib/rls';
+import { withSavepoint } from '@/lib/rental/locks';
 import { ensureLeaseContractTenantColumn } from '@/lib/leasing-governance';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { nextPayableNumber } from '@/lib/finance/payable-number';
@@ -21,7 +23,7 @@ type RawSqlDb = {
   $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
 };
 
-// ── Status mapping (Leasing → Finance) ────────────────────────────────────────
+// ── Status mapping (Leasing / Rental → Finance) ───────────────────────────────
 
 const LEASING_STATUS_MAP: Record<string, string> = {
   DRAFT:     'DRAFT',
@@ -30,6 +32,20 @@ const LEASING_STATUS_MAP: Record<string, string> = {
   OVERDUE:   'OVERDUE',
   CANCELLED: 'CANCELLED',
   VOID:      'CANCELLED',
+};
+
+const RENTAL_STATUS_MAP: Record<string, string> = {
+  DRAFT:          'DRAFT',
+  ISSUED:         'SENT',
+  SENT:           'SENT',
+  UNPAID:         'SENT',
+  PARTIALLY_PAID: 'PARTIAL',
+  PARTIAL:        'PARTIAL',
+  PAID:           'PAID',
+  CREDITED:       'PAID',
+  OVERDUE:        'OVERDUE',
+  VOID:           'CANCELLED',
+  CANCELLED:      'CANCELLED',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -266,7 +282,11 @@ export type ModuleLedgerResult = {
 
 // ── Core upsert (one SQL path for every module) ───────────────────────────────
 
-export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<ModuleLedgerResult> {
+export async function upsertFinanceInvoice(
+  p: ModuleLedgerParams,
+  txOverride?: Pick<TxClient, '$queryRawUnsafe' | '$executeRawUnsafe'>,
+): Promise<ModuleLedgerResult> {
+  const db                = txOverride ?? prisma;
   const lineItemsJson     = JSON.stringify(p.lineItems);
   const sourcePayloadJson = JSON.stringify(p.sourcePayload ?? {});
   const issueDate         = p.issueDate       ?? toDateOnly(new Date());
@@ -280,7 +300,7 @@ export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<Modul
 
   // Lookup keyed on (module_source, reference_type, reference_id, tenant_id).
   // Cast reference_id::text so comparison works whether the column is UUID or TEXT.
-  const [existing] = await prisma.$queryRawUnsafe<Row[]>(
+  const [existing] = await db.$queryRawUnsafe<Row[]>(
     `SELECT id, payment_status FROM finance_invoices
       WHERE deleted_at IS NULL
         AND module_source       = $1
@@ -297,10 +317,10 @@ export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<Modul
   if (existing?.id) {
     const existingStatus = String(existing.payment_status ?? '').toUpperCase();
     const effectivePaymentStatus =
-      p.paymentStatus === 'DRAFT' && ['SENT', 'PAID', 'PARTIALLY_PAID', 'POSTED'].includes(existingStatus)
+      p.paymentStatus === 'DRAFT' && ['SENT', 'PAID', 'PARTIALLY_PAID', 'PARTIAL', 'POSTED'].includes(existingStatus)
         ? existingStatus
         : p.paymentStatus;
-    await prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `UPDATE finance_invoices
           SET client_name          = $2,
               client_email         = $3,
@@ -348,36 +368,73 @@ export async function upsertFinanceInvoice(p: ModuleLedgerParams): Promise<Modul
     return { financeInvoiceId: existing.id, mode: 'updated' };
   }
 
-  const [inserted] = await prisma.$queryRawUnsafe<Row[]>(
-    `INSERT INTO finance_invoices
-       (invoice_number, client_name, client_email, client_phone,
-        service_type, module, module_source, description,
-        line_items, line_items_json, subtotal, discount_amount, vat_rate,
-        vat_amount, total_amount, paid_amount, currency,
-        issue_date, due_date, payment_status, notes,
-        reference_id, reference_type, created_by, tenant_id,
-        source_entity_type, source_entity_id, source_entity_no,
-        source_customer_id, source_customer_name, source_contract_ids, source_payload)
-     VALUES
-       ($1,$2,$3,$4,
-        $5,$5,$5,$6,
-        $7::jsonb,$7::jsonb,$8,$9,$10,
-        $11,$12,$13,$14,
-        $15::date,$16::date,$17,$18,
-        $19,$20,$21,$22,
-        $23,$24,$25,$26,$27,$28::text[],$29::jsonb)
-     RETURNING id`,
-    p.invoiceNumber, p.clientName, p.clientEmail ?? null, p.clientPhone ?? null,
-    p.moduleSource, p.description,
-    lineItemsJson, p.subtotal, discountAmount, vatRate,
-    p.vatAmount, p.totalAmount, paidAmount, currency,
-    issueDate, p.dueDate ?? null, p.paymentStatus, p.notes ?? null,
-    p.referenceId, p.referenceType, p.actor ?? 'system', p.tenantId,
-    p.sourceEntityType ?? null, p.sourceEntityId ?? null, p.sourceEntityNo ?? null,
-    p.sourceCustomerId ?? null, p.sourceCustomerName ?? null,
-    sourceContractIds,
-    sourcePayloadJson,
-  );
+  const insertRow = (invNumber: string) =>
+    db.$queryRawUnsafe<Row[]>(
+      `INSERT INTO finance_invoices
+         (invoice_number, client_name, client_email, client_phone,
+          service_type, module, module_source, description,
+          line_items, line_items_json, subtotal, discount_amount, vat_rate,
+          vat_amount, total_amount, paid_amount, currency,
+          issue_date, due_date, payment_status, notes,
+          reference_id, reference_type, created_by, tenant_id,
+          source_entity_type, source_entity_id, source_entity_no,
+          source_customer_id, source_customer_name, source_contract_ids, source_payload)
+       VALUES
+         ($1,$2,$3,$4,
+          $5,$5,$5,$6,
+          $7::jsonb,$7::jsonb,$8,$9,$10,
+          $11,$12,$13,$14,
+          $15::date,$16::date,$17,$18,
+          $19,$20,$21,$22,
+          $23,$24,$25,$26,$27,$28::text[],$29::jsonb)
+       RETURNING id`,
+      invNumber, p.clientName, p.clientEmail ?? null, p.clientPhone ?? null,
+      p.moduleSource, p.description,
+      lineItemsJson, p.subtotal, discountAmount, vatRate,
+      p.vatAmount, p.totalAmount, paidAmount, currency,
+      issueDate, p.dueDate ?? null, p.paymentStatus, p.notes ?? null,
+      p.referenceId, p.referenceType, p.actor ?? 'system', p.tenantId,
+      p.sourceEntityType ?? null, p.sourceEntityId ?? null, p.sourceEntityNo ?? null,
+      p.sourceCustomerId ?? null, p.sourceCustomerName ?? null,
+      sourceContractIds,
+      sourcePayloadJson,
+    );
+
+  const isUniqueCollision = (err: unknown): boolean => {
+    const code = (err as { code?: string; meta?: { code?: string } } | null)?.code
+      ?? (err as { meta?: { code?: string } } | null)?.meta?.code;
+    const msg = String((err as { message?: string } | null)?.message ?? err ?? '').toLowerCase();
+    return code === '23505' || msg.includes('23505') || msg.includes('duplicate key') || msg.includes('unique constraint') || msg.includes('invoice_number');
+  };
+
+  const buildFallbackNumber = (): string => {
+    const tenantSlug = String(p.tenantId || 'T').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase() || 'T';
+    const refSlug = String(p.referenceId || '').replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase() || Date.now().toString(36).slice(-4).toUpperCase();
+    return `${p.invoiceNumber}-${tenantSlug}-${refSlug}`;
+  };
+
+  let inserted: Row | undefined;
+  const canUseSavepoint = Boolean(txOverride && typeof txOverride.$executeRawUnsafe === 'function');
+
+  if (canUseSavepoint) {
+    await txOverride!.$executeRawUnsafe('SAVEPOINT sp_upsert_fin_inv');
+    try {
+      [inserted] = await insertRow(p.invoiceNumber);
+      await txOverride!.$executeRawUnsafe('RELEASE SAVEPOINT sp_upsert_fin_inv');
+    } catch (err) {
+      await txOverride!.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sp_upsert_fin_inv').catch(() => {});
+      await txOverride!.$executeRawUnsafe('RELEASE SAVEPOINT sp_upsert_fin_inv').catch(() => {});
+      if (!isUniqueCollision(err)) throw err;
+      [inserted] = await insertRow(buildFallbackNumber());
+    }
+  } else {
+    try {
+      [inserted] = await insertRow(p.invoiceNumber);
+    } catch (err) {
+      if (!isUniqueCollision(err)) throw err;
+      [inserted] = await insertRow(buildFallbackNumber());
+    }
+  }
 
   return { financeInvoiceId: inserted!.id, mode: 'created' };
 }
@@ -668,98 +725,277 @@ export async function mirrorMaintenanceToFinance(
 
 // ── Rental ─────────────────────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Mirror a rental invoice into finance_invoices.
  *
- * Call immediately after inserting a rental_invoice row in
- * /api/rental/agreements/:id/generate-invoice.
+ * Call after committing a rental_invoice mutation (create, payment, void,
+ * or generate-invoice), or pass `txOverride` for in-transaction execution.
  */
 export async function mirrorRentalInvoiceToFinance(
   rentalInvoiceId: string,
   tenantId: string,
   actor = 'system',
+  txOverride?: TxClient,
 ): Promise<{ mirrored: boolean; financeInvoiceId?: string; mode?: string; reason?: string }> {
   type RentalRow = {
     id: string; invoice_no: string; agreement_id: string;
-    customer_id: string | null; total_amount: string | number;
-    subtotal: string | number; tax_amount: string | number;
-    tax_rate: string | number; discount_amount: string | number;
+    customer_id: string | null; invoice_type?: string | null; parent_invoice_id?: string | null;
+    total_amount: string | number;
+    subtotal: string | number; taxable_amount: string | number | null;
+    tax_amount: string | number; tax_rate: string | number;
+    discount_amount: string | number; paid_amount: string | number | null;
     currency: string | null; status: string | null;
     invoice_date: string | null; due_date: string | null; notes: string | null;
   };
-  type CustomerRow = { id: string; name: string | null; email: string | null; phone: string | null };
+  type CustomerRow = { id: string; name: string | null; email: string | null; phone: string | null; trn?: string | null };
+  type LineItemRow = {
+    description: string | null;
+    quantity: string | number | null;
+    unit_price: string | number | null;
+    amount: string | number | null;
+    line_type: string | null;
+    taxable: boolean | null;
+  };
 
-  const [inv] = await prisma.$queryRawUnsafe<RentalRow[]>(
-    `SELECT id, invoice_no, agreement_id, customer_id, total_amount, subtotal,
-            tax_amount, tax_rate, discount_amount, currency, status,
-            invoice_date, due_date, notes
-       FROM rental_invoices WHERE id = $1 LIMIT 1`,
-    rentalInvoiceId,
-  );
-  if (!inv) return { mirrored: false, reason: 'rental_invoice_not_found' };
+  const runMirror = async (
+    tx: TxClient,
+  ): Promise<{ mirrored: boolean; financeInvoiceId?: string; mode?: string; reason?: string }> => {
+    if (!tx || typeof tx.$queryRawUnsafe !== 'function') {
+      return { mirrored: false, reason: 'db_unavailable' };
+    }
 
-  let customer: CustomerRow | undefined;
-  if (inv.customer_id) {
-    const [c] = await prisma.$queryRawUnsafe<CustomerRow[]>(
-      `SELECT id, name, email, phone FROM customers WHERE id = $1 LIMIT 1`,
-      inv.customer_id,
+    const [inv] = await tx.$queryRawUnsafe<RentalRow[]>(
+      `SELECT ri.id, ri.invoice_no, ri.agreement_id, ri.customer_id,
+              (to_jsonb(ri)->>'invoice_type') AS invoice_type,
+              (to_jsonb(ri)->>'parent_invoice_id') AS parent_invoice_id,
+              ri.total_amount, ri.subtotal,
+              ri.taxable_amount, ri.tax_amount, ri.tax_rate, ri.discount_amount, ri.paid_amount,
+              ri.currency, ri.status, ri.invoice_date, ri.due_date, ri.notes
+         FROM rental_invoices ri
+        WHERE ri.id = $1
+          AND (ri.tenant_id = $2 OR ri.tenant_id IS NULL)
+          AND ri.deleted_at IS NULL
+        LIMIT 1`,
+      rentalInvoiceId,
+      tenantId,
     );
-    customer = c;
+    if (!inv) return { mirrored: false, reason: 'rental_invoice_not_found' };
+
+    const rawStatus = String(inv.status ?? 'DRAFT').trim().toUpperCase();
+    const isCreditNote = String(inv.invoice_type ?? 'STANDARD').trim().toUpperCase() === 'CREDIT_NOTE';
+
+    let parentInvoiceNo: string | null = null;
+    if (inv.parent_invoice_id) {
+      const parentRows = await withSavepoint(
+        tx,
+        'mirror_rental_parent_inv',
+        () =>
+          tx.$queryRawUnsafe<Array<{ invoice_no: string | null }>>(
+            `SELECT invoice_no FROM rental_invoices WHERE id = $1 LIMIT 1`,
+            inv.parent_invoice_id,
+          ),
+        [],
+      );
+      parentInvoiceNo = parentRows[0]?.invoice_no ?? null;
+    }
+
+    let customer: CustomerRow | undefined;
+    if (inv.customer_id) {
+      const rcRows = await withSavepoint(
+        tx,
+        'mirror_rental_customer',
+        () =>
+          tx.$queryRawUnsafe<CustomerRow[]>(
+            `SELECT id,
+                    COALESCE(NULLIF(TRIM(company_name), ''), full_name) AS name,
+                    email,
+                    phone,
+                    (to_jsonb(rental_customers)->>'vat_number') AS trn
+               FROM rental_customers
+              WHERE id = $1
+              LIMIT 1`,
+            inv.customer_id,
+          ),
+        [],
+      );
+      customer = rcRows[0];
+
+      if (!customer) {
+        const cRows = await withSavepoint(
+          tx,
+          'mirror_core_customer',
+          () =>
+            tx.$queryRawUnsafe<CustomerRow[]>(
+              `SELECT id,
+                      COALESCE(to_jsonb(customers)->>'name_en', to_jsonb(customers)->>'name') AS name,
+                      email,
+                      COALESCE(to_jsonb(customers)->>'mobile_number', to_jsonb(customers)->>'contact_person_phone', to_jsonb(customers)->>'phone') AS phone,
+                      (to_jsonb(customers)->>'tax_registration_number') AS trn
+                 FROM customers
+                WHERE id = $1
+                LIMIT 1`,
+              inv.customer_id,
+            ),
+          [],
+        );
+        customer = cRows[0];
+      }
+    }
+
+    const total     = Number(inv.total_amount ?? 0);
+    const subtotal  = Number(inv.subtotal ?? 0);
+    const vatAmount = Number(inv.tax_amount ?? 0);
+    const vatRate   = Number(inv.tax_rate ?? 5);
+    const discount  = Number(inv.discount_amount ?? 0);
+    const paid      = isCreditNote
+      ? (rawStatus === 'DRAFT' || rawStatus === 'VOID' || rawStatus === 'CANCELLED' ? 0 : total)
+      : inv.paid_amount != null
+        ? Number(inv.paid_amount)
+        : rawStatus === 'PAID'
+          ? total
+          : 0;
+
+    const paymentStatus =
+      rawStatus === 'DRAFT'
+        ? 'DRAFT'
+        : isCreditNote
+          ? (rawStatus === 'VOID' || rawStatus === 'CANCELLED' ? 'CANCELLED' : 'PAID')
+          : RENTAL_STATUS_MAP[rawStatus] ??
+            (paid > 0 && paid < total && rawStatus !== 'VOID' && rawStatus !== 'CANCELLED'
+              ? 'PARTIAL'
+              : 'SENT');
+
+    const rawLines = await withSavepoint(
+      tx,
+      'mirror_rental_lines',
+      () =>
+        tx.$queryRawUnsafe<LineItemRow[]>(
+          `SELECT description, quantity, unit_price, amount, line_type, taxable
+             FROM rental_invoice_line_items
+            WHERE invoice_id = $1
+            ORDER BY sort_order ASC`,
+          inv.id,
+        ),
+      [],
+    );
+
+    const lineItems =
+      rawLines.length > 0
+        ? rawLines.map((li) => {
+            const lt = String(li.line_type ?? 'RENTAL').trim().toUpperCase();
+            const isStatutoryFine = lt === 'TRAFFIC_FINE' || lt === 'FINE' || lt === 'STATUTORY_FINE';
+            const isTaxable = isStatutoryFine ? false : li.taxable !== false && lt !== 'DISCOUNT';
+            return {
+              description:       String(li.description ?? `Vehicle Rental — ${inv.invoice_no}`),
+              qty:               Number(li.quantity ?? 1),
+              unitPrice:         Number(li.unit_price ?? 0),
+              amount:            Number(li.amount ?? 0),
+              lineType:          String(li.line_type ?? 'RENTAL'),
+              taxable:           isTaxable,
+              vatRatePercent:    isTaxable ? vatRate : 0,
+              taxCategoryCode:   isTaxable ? 'S' : 'O',
+              agreementId:       inv.agreement_id,
+              sourceModule:      'RENTAL',
+            };
+          })
+        : [
+            {
+              description:       `${isCreditNote ? 'Rental Credit Note' : 'Vehicle Rental'} — ${inv.invoice_no}`,
+              qty:               1,
+              unitPrice:         subtotal,
+              amount:            subtotal,
+              lineType:          isCreditNote ? 'CREDIT_NOTE' : 'RENTAL',
+              taxable:           vatAmount !== 0,
+              vatRatePercent:    vatAmount !== 0 ? vatRate : 0,
+              taxCategoryCode:   vatAmount !== 0 ? 'S' : 'O',
+              agreementId:       inv.agreement_id,
+              sourceModule:      'RENTAL',
+            },
+          ];
+
+    const clientName =
+      customer?.name?.trim() ||
+      (inv.customer_id && !UUID_RE.test(inv.customer_id)
+        ? inv.customer_id
+        : 'Rental Customer');
+
+    const financeInvoiceNo = isCreditNote
+      ? inv.invoice_no.startsWith('RCN-')
+        ? `RNT-CN-${inv.invoice_no.slice(4)}`
+        : `RNT-CN-${inv.invoice_no.replace(/^RINV-/, '')}`
+      : `RNT-${inv.invoice_no.replace(/^RINV-/, '')}`;
+
+    const description = isCreditNote
+      ? `Rental Tax Credit Note ${inv.invoice_no}${parentInvoiceNo ? ` (Ref ${parentInvoiceNo})` : ''}`
+      : `Rental Invoice ${inv.invoice_no}${inv.agreement_id ? ` — Agreement ${inv.agreement_id}` : ''}`;
+
+    const result = await upsertFinanceInvoice(
+      {
+        tenantId,
+        moduleSource:      'RENTAL',
+        referenceType:     'RENTAL_INVOICE',
+        referenceId:       inv.id,
+        invoiceNumber:     financeInvoiceNo,
+        clientName,
+        clientEmail:       customer?.email,
+        clientPhone:       customer?.phone,
+        serviceType:       'RENTAL',
+        description,
+        lineItems,
+        subtotal,
+        discountAmount:    discount,
+        vatRate,
+        vatAmount,
+        totalAmount:       total,
+        paidAmount:        paid,
+        currency:          inv.currency ?? 'AED',
+        issueDate:         toDateOnly(inv.invoice_date),
+        dueDate:           inv.due_date ? toDateOnly(inv.due_date) : null,
+        paymentStatus,
+        notes:             inv.notes,
+        sourceEntityType:   isCreditNote ? 'RENTAL_CREDIT_NOTE' : 'RENTAL_INVOICE',
+        sourceEntityId:     inv.id,
+        sourceEntityNo:     inv.invoice_no,
+        sourceCustomerId:   inv.customer_id,
+        sourceCustomerName: customer?.name?.trim() || null,
+        sourcePayload: {
+          rentalInvoiceId:    inv.id,
+          invoiceNo:          inv.invoice_no,
+          invoiceType:        isCreditNote ? 'CREDIT_NOTE' : (inv.invoice_type ?? 'STANDARD'),
+          invoiceTypeCode:    isCreditNote ? '381' : '380',
+          parentInvoiceId:    inv.parent_invoice_id ?? null,
+          billingReferenceNo: parentInvoiceNo ?? null,
+          customerTrn:        customer?.trn ?? null,
+          agreementId:        inv.agreement_id,
+          status:             inv.status,
+          paidAmount:         paid,
+          taxableAmount:      inv.taxable_amount != null ? Number(inv.taxable_amount) : subtotal,
+        },
+        actor,
+      },
+      tx,
+    );
+
+    return { mirrored: true, ...result };
+  };
+
+  if (txOverride) {
+    return runMirror(txOverride);
   }
 
-  const total     = Number(inv.total_amount ?? 0);
-  const subtotal  = Number(inv.subtotal ?? 0);
-  const vatAmount = Number(inv.tax_amount ?? 0);
-  const vatRate   = Number(inv.tax_rate ?? 5);
-  const discount  = Number(inv.discount_amount ?? 0);
-  const paid      = inv.status === 'PAID' ? total : 0;
-
-  const result = await upsertFinanceInvoice({
-    tenantId,
-    moduleSource:      'RENTAL',
-    referenceType:     'RENTAL_INVOICE',
-    referenceId:       inv.id,
-    invoiceNumber:     `RNT-${inv.invoice_no.replace(/^RINV-/, '')}`,
-    clientName:        customer?.name ?? inv.customer_id ?? 'Rental Customer',
-    clientEmail:       customer?.email,
-    clientPhone:       customer?.phone,
-    serviceType:       'RENTAL',
-    description:       `Rental Invoice ${inv.invoice_no} — Agreement ${inv.agreement_id}`,
-    lineItems: [{
-      description:  `Vehicle Rental — ${inv.invoice_no}`,
-      qty:          1,
-      unitPrice:    subtotal,
-      amount:       subtotal,
-      lineType:     'RENTAL',
-      agreementId:  inv.agreement_id,
-      sourceModule: 'RENTAL',
-    }],
-    subtotal,
-    discountAmount: discount,
-    vatRate,
-    vatAmount,
-    totalAmount:   total,
-    paidAmount:    paid,
-    currency:      inv.currency ?? 'AED',
-    issueDate:     toDateOnly(inv.invoice_date),
-    dueDate:       inv.due_date ? toDateOnly(inv.due_date) : null,
-    paymentStatus: inv.status ?? 'DRAFT',
-    notes:         inv.notes,
-    sourceEntityType:   'RENTAL_INVOICE',
-    sourceEntityId:     inv.id,
-    sourceEntityNo:     inv.invoice_no,
-    sourceCustomerId:   inv.customer_id,
-    sourceCustomerName: customer?.name ?? null,
-    sourcePayload: {
-      rentalInvoiceId: inv.id,
-      invoiceNo:       inv.invoice_no,
-      agreementId:     inv.agreement_id,
-      status:          inv.status,
-    },
-    actor,
-  });
-
-  return { mirrored: true, ...result };
+  try {
+    return await withTenantRls(prisma, tenantId, (tx) => runMirror(tx));
+  } catch (err) {
+    if (typeof (prisma as { $transaction?: unknown })?.$transaction !== 'function') {
+      if (typeof (prisma as { $queryRawUnsafe?: unknown })?.$queryRawUnsafe === 'function') {
+        return runMirror(prisma as unknown as TxClient);
+      }
+      return { mirrored: false, reason: 'mirror_unavailable' };
+    }
+    throw err;
+  }
 }
 
 // ── Logistics ──────────────────────────────────────────────────────────────────

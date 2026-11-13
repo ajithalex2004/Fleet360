@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface BudgetEntry {
   id: string;
@@ -210,30 +211,12 @@ export default function BudgetsPage() {
 
       {/* Summary strip */}
       {summary && (
-        <div className="grid grid-cols-4 gap-3">
-          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">Total Budget</p>
-            <p className="text-xl font-bold mt-1 text-[var(--text-main)]">{fmtAED(summary.totalBudget)}</p>
-          </div>
-          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">Total Actual</p>
-            <p className={`text-xl font-bold mt-1 ${summary.totalActual > summary.totalBudget ? 'text-red-400' : 'text-emerald-400'}`}>
-              {fmtAED(summary.totalActual)}
-            </p>
-          </div>
-          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">Variance</p>
-            <p className={`text-xl font-bold mt-1 ${summary.totalVariance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-              {summary.totalVariance > 0 ? '+' : ''}{fmtAED(Math.abs(summary.totalVariance))}
-            </p>
-          </div>
-          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">Over Budget</p>
-            <p className={`text-xl font-bold mt-1 ${summary.overBudgetCount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-              {summary.overBudgetCount} categories
-            </p>
-          </div>
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Budget" value={fmtAED(summary.totalBudget)} accent="cyan" />
+          <KpiCard label="Total Actual" value={fmtAED(summary.totalActual)} accent={summary.totalActual > summary.totalBudget ? 'rose' : 'emerald'} />
+          <KpiCard label="Variance" value={`${summary.totalVariance > 0 ? '+' : ''}${fmtAED(Math.abs(summary.totalVariance))}`} accent={summary.totalVariance > 0 ? 'rose' : 'emerald'} />
+          <KpiCard label="Over Budget" value={`${summary.overBudgetCount} categories`} accent={summary.overBudgetCount > 0 ? 'amber' : 'emerald'} />
+        </StatGrid>
       )}
 
       {/* Overall utilisation bar */}

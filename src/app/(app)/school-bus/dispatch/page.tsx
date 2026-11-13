@@ -16,6 +16,8 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { Navigation, Target, AlertTriangle, CheckCircle2, Users } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface SBRoute {
@@ -380,23 +382,13 @@ export default function SchoolBusDispatchBoard() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { icon:'🏃', label:'On Route',     value:active,        color:'text-cyan-400',    bg:'bg-cyan-500/10 border-cyan-500/20' },
-          { icon:'🎯', label:'Assigned',     value:assigned,      color:'text-blue-400',    bg:'bg-blue-500/10 border-blue-500/20' },
-          { icon:'⚠️', label:'Needs Setup',  value:unassigned,    color:'text-amber-400',   bg:'bg-amber-500/10 border-amber-500/20' },
-          { icon:'✅', label:'Completed',    value:completed,     color:'text-emerald-400', bg:'bg-emerald-500/10 border-emerald-500/20' },
-          { icon:'👧', label:'Total Students',value:totalStudents, color:'text-purple-400',  bg:'bg-purple-500/10 border-purple-500/20' },
-        ].map(k => (
-          <div key={k.label} className={`rounded-2xl border p-4 ${k.bg}`}>
-            <div className="flex items-start justify-between">
-              <span className="text-2xl">{k.icon}</span>
-              <span className={`text-3xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
-            </div>
-            <p className="text-[var(--text-muted)] text-xs font-medium mt-2">{k.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="On Route" value={loading ? '…' : active} icon={Navigation} accent="cyan" />
+        <KpiCard label="Assigned" value={loading ? '…' : assigned} icon={Target} accent="blue" />
+        <KpiCard label="Needs Setup" value={loading ? '…' : unassigned} icon={AlertTriangle} accent="amber" />
+        <KpiCard label="Completed" value={loading ? '…' : completed} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Total Students" value={loading ? '…' : totalStudents} icon={Users} accent="violet" />
+      </StatGrid>
 
       {/* Unassigned warning */}
       {unassigned > 0 && (

@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -152,24 +153,12 @@ export default function VehicleHistoryPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
-                    <p className="text-sm text-[var(--text-faint)]">Total Services</p>
-                    <p className="text-2xl font-bold text-[var(--text-main)]">{history.totalMaintenanceRequests}</p>
-                </div>
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
-                    <p className="text-sm text-[var(--text-faint)]">Total Cost</p>
-                    <p className="text-2xl font-bold text-[var(--text-main)]">${history.totalCost.toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
-                    <p className="text-sm text-[var(--text-faint)]">Avg Cost/Service</p>
-                    <p className="text-2xl font-bold text-[var(--text-main)]">${Math.round(history.averageCostPerService).toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
-                    <p className="text-sm text-[var(--text-faint)]">Total Downtime</p>
-                    <p className="text-2xl font-bold text-[var(--text-main)]">{Math.round(history.totalDowntimeDays)} days</p>
-                </div>
-            </div>
+            <StatGrid cols={4}>
+                <KpiCard label="Total Services" value={history.totalMaintenanceRequests} accent="cyan" />
+                <KpiCard label="Total Cost" value={`${history.totalCost.toLocaleString()}`} accent="amber" />
+                <KpiCard label="Avg Cost/Service" value={`${Math.round(history.averageCostPerService).toLocaleString()}`} accent="violet" />
+                <KpiCard label="Total Downtime" value={`${Math.round(history.totalDowntimeDays)} days`} accent="rose" />
+            </StatGrid>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Service History Timeline */}

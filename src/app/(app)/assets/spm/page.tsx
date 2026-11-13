@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1001,32 +1002,12 @@ export default function SpmDashboardPage() {
       </div>
 
       {/* ── KPI Strip ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Cycles */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Total Cycles</p>
-          <p className="text-3xl font-bold text-[var(--text-main)]">{s?.total_cycles ?? '—'}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.paused_cycles ?? 0} paused</p>
-        </div>
-        {/* Active */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Active</p>
-          <p className="text-3xl font-bold text-emerald-400">{s?.active_cycles ?? '—'}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.completed_this_month ?? 0} done this month</p>
-        </div>
-        {/* Due in 7 Days */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Due in 7 Days</p>
-          <p className="text-3xl font-bold text-amber-400">{s?.due_in_7_days ?? '—'}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.open_tickets ?? 0} open tickets</p>
-        </div>
-        {/* Overdue */}
-        <div className={`bg-[var(--bg-surface)] rounded-xl p-5 transition-all ${(s?.overdue ?? 0) > 0 ? 'border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-pulse-border' : 'border border-[var(--border-subtle)]'}`}>
-          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Overdue</p>
-          <p className={`text-3xl font-bold ${(s?.overdue ?? 0) > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>{s?.overdue ?? '—'}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">{(s?.overdue ?? 0) > 0 ? 'Action required' : 'All on schedule'}</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Cycles" value={s?.total_cycles ?? '—'} sub={`${s?.paused_cycles ?? 0} paused`} accent="slate" />
+        <KpiCard label="Active" value={s?.active_cycles ?? '—'} sub={`${s?.completed_this_month ?? 0} done this month`} accent="emerald" />
+        <KpiCard label="Due in 7 Days" value={s?.due_in_7_days ?? '—'} sub={`${s?.open_tickets ?? 0} open tickets`} accent="amber" />
+        <KpiCard label="Overdue" value={s?.overdue ?? '—'} sub={(s?.overdue ?? 0) > 0 ? 'Action required' : 'All on schedule'} accent={(s?.overdue ?? 0) > 0 ? 'rose' : 'slate'} />
+      </StatGrid>
 
       {/* ── Filters ── */}
       <div className="flex flex-wrap gap-3 items-center">

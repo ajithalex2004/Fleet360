@@ -9,7 +9,7 @@ import {
   Radio, ClipboardList, UserCheck,
   Shuffle, Siren, Bus, ArrowRight, ListChecks,
 } from 'lucide-react';
-import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill, KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { shortId } from '@/lib/ui/display-id';
 
 interface DispatchJob {
@@ -69,22 +69,14 @@ export default function DispatchOverview() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { label: 'Active jobs',       value: loading ? '…' : active,                sub: 'Pending + searching', tone: 'from-blue-500 to-indigo-600' },
-          { label: 'In progress',       value: loading ? '…' : inProgress,            sub: 'En route',            tone: 'from-cyan-500 to-blue-600' },
-          { label: 'Completed today',   value: loading ? '…' : completed,             sub: 'Delivered',           tone: 'from-emerald-500 to-teal-600' },
-          { label: 'Exceptions',        value: loading ? '…' : failed,                sub: 'Failed or escalated', tone: 'from-rose-500 to-pink-600' },
-          { label: 'Available drivers', value: loading ? '…' : available,             sub: 'Ready to dispatch',   tone: 'from-teal-500 to-emerald-600' },
-          { label: 'Acceptance rate',   value: loading ? '…' : `${acceptance}%`,      sub: 'Accepted / total',    tone: 'from-amber-500 to-orange-600' },
-        ].map(card => (
-          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
-            <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
-            <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-            <p className="text-xs text-white/60 mt-1">{card.sub}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={6}>
+        <KpiCard label="Active jobs" value={loading ? '…' : active} sub="Pending + searching" icon={ClipboardList} accent="blue" />
+        <KpiCard label="In progress" value={loading ? '…' : inProgress} sub="En route" icon={Radio} accent="cyan" />
+        <KpiCard label="Completed today" value={loading ? '…' : completed} sub="Delivered" icon={ListChecks} accent="emerald" />
+        <KpiCard label="Exceptions" value={loading ? '…' : failed} sub="Failed or escalated" icon={Siren} accent="rose" />
+        <KpiCard label="Available drivers" value={loading ? '…' : available} sub="Ready to dispatch" icon={UserCheck} accent="emerald" />
+        <KpiCard label="Acceptance rate" value={loading ? '…' : `${acceptance}%`} sub="Accepted / total" icon={Shuffle} accent="amber" />
+      </StatGrid>
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

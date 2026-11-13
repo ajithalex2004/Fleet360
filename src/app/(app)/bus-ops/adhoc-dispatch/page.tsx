@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { FulfillmentCandidate } from '@/lib/bus-ops/adhoc-dispatch';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface AdhocRequestItem {
   id: string;
@@ -238,43 +239,12 @@ export default function AdhocDispatchPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Pending Overtime Requests</span>
-            <Clock className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="text-2xl font-bold text-amber-400">{pendingCount}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Requires dispatcher matching</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Dispatched Today</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-400">{fulfilledCount}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Successful trip fulfillments</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Total Ad-Hoc Volume</span>
-            <Users className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">{requests.length}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Logged this period</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Avg Dispatch Time</span>
-            <Zap className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="text-2xl font-bold text-cyan-400">&lt; 2 min</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Automated solver response</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Pending Overtime Requests" value={pendingCount} sub="Requires dispatcher matching" icon={Clock} accent="amber" />
+        <KpiCard label="Dispatched Today" value={fulfilledCount} sub="Successful trip fulfillments" icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Total Ad-Hoc Volume" value={requests.length} sub="Logged this period" icon={Users} accent="blue" />
+        <KpiCard label="Avg Dispatch Time" value="< 2 min" sub="Automated solver response" icon={Zap} accent="cyan" />
+      </StatGrid>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-[var(--bg-surface)]/50 p-3 rounded-xl border border-[var(--border-subtle)]">

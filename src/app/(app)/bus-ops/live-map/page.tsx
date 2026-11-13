@@ -10,8 +10,9 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Satellite, RefreshCw } from 'lucide-react';
+import { Satellite, RefreshCw, Bus, Wifi, Navigation, MapPin, PauseCircle, WifiOff, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import type { VehiclePosition as MapVehiclePosition } from '@/components/shared/FleetLiveMap';
 
 const FleetLiveMap = dynamic(() => import('@/components/shared/FleetLiveMap'), { ssr: false });
@@ -233,22 +234,15 @@ export default function LiveFleetMapPage() {
 
       {/* KPI strip */}
       {summary && (
-        <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
-          {[
-            { label: 'Total',     val: summary.total,     color: 'text-[var(--text-main)]',       bg: 'bg-[var(--bg-surface)]/60' },
-            { label: 'Online',    val: summary.online,    color: 'text-green-400',   bg: 'bg-green-500/10' },
-            { label: 'En Route',  val: summary.enRoute,   color: 'text-green-400',   bg: 'bg-green-500/10' },
-            { label: 'At Stop',   val: summary.atStop,    color: 'text-blue-400',    bg: 'bg-blue-500/10' },
-            { label: 'Idle',      val: summary.idle,      color: 'text-[var(--text-muted)]',   bg: 'bg-[var(--bg-surface-hover)]/50' },
-            { label: 'Offline',   val: summary.offline,   color: 'text-[var(--text-faint)]',   bg: 'bg-[var(--bg-surface)]/50' },
-            { label: 'Breakdown', val: summary.breakdown, color: 'text-red-400',     bg: 'bg-red-500/10' },
-          ].map(k => (
-            <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center`}>
-              <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-              <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total" value={summary.total} icon={Bus} accent="slate" />
+          <KpiCard label="Online" value={summary.online} icon={Wifi} accent="emerald" />
+          <KpiCard label="En Route" value={summary.enRoute} icon={Navigation} accent="cyan" />
+          <KpiCard label="At Stop" value={summary.atStop} icon={MapPin} accent="blue" />
+          <KpiCard label="Idle" value={summary.idle} icon={PauseCircle} accent="amber" />
+          <KpiCard label="Offline" value={summary.offline} icon={WifiOff} accent="slate" />
+          <KpiCard label="Breakdown" value={summary.breakdown} icon={AlertTriangle} accent="rose" />
+        </StatGrid>
       )}
 
       {/* Breakdown alert */}

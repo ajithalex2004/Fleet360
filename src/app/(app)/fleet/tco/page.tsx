@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
@@ -272,42 +273,32 @@ export default function TcoDashboard() {
       ) : (
         <>
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
-              <p className="text-xs text-[var(--text-muted)] font-medium">Fleet Total TCO ({months}M)</p>
-              <p className="text-2xl font-bold text-[var(--text-main)]">{fmtCurrency(totals?.totalTco || 0)}</p>
-              <p className="text-[11px] text-[var(--text-faint)]">Across {data?.totalVehicles || 0} active assets</p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
-              <p className="text-xs text-cyan-400 font-medium">Fleet Average CPK</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-cyan-300">{(totals?.averageCpk || 0).toFixed(2)}</p>
-                <span className="text-xs text-[var(--text-muted)]">AED / km</span>
-              </div>
-              <p className="text-[11px] text-[var(--text-faint)]">
-                {fmt(totals?.totalDistanceKm || 0)} km traveled in period
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/20 space-y-1">
-              <p className="text-xs text-amber-400 font-medium">Fuel & Energy Spend</p>
-              <p className="text-2xl font-bold text-amber-300">{fmtCurrency(totals?.fuelCost || 0)}</p>
-              <p className="text-[11px] text-amber-500/80">
-                {fmt(totals?.totalFuelLiters || 0)} Liters consumed ({pillarsPct?.fuel || 0}% of TCO)
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/20 space-y-1">
-              <p className="text-xs text-rose-400 font-medium">Maintenance & Repairs</p>
-              <p className="text-2xl font-bold text-rose-300">
-                {fmtCurrency(totals?.maintenanceCost || 0)}
-              </p>
-              <p className="text-[11px] text-rose-500/80">
-                PM & corrective orders ({pillarsPct?.maintenance || 0}% of TCO)
-              </p>
-            </div>
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard
+              label={`Fleet Total TCO (${months}M)`}
+              value={fmtCurrency(totals?.totalTco || 0)}
+              sub={`Across ${data?.totalVehicles || 0} active assets`}
+              accent="slate"
+            />
+            <KpiCard
+              label="Fleet Average CPK"
+              value={`${(totals?.averageCpk || 0).toFixed(2)} AED / km`}
+              sub={`${fmt(totals?.totalDistanceKm || 0)} km traveled in period`}
+              accent="cyan"
+            />
+            <KpiCard
+              label="Fuel & Energy Spend"
+              value={fmtCurrency(totals?.fuelCost || 0)}
+              sub={`${fmt(totals?.totalFuelLiters || 0)} Liters consumed (${pillarsPct?.fuel || 0}% of TCO)`}
+              accent="amber"
+            />
+            <KpiCard
+              label="Maintenance & Repairs"
+              value={fmtCurrency(totals?.maintenanceCost || 0)}
+              sub={`PM & corrective orders (${pillarsPct?.maintenance || 0}% of TCO)`}
+              accent="rose"
+            />
+          </StatGrid>
 
           {/* 7-Pillar Cost Distribution Visualizer */}
           <div className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 space-y-3">

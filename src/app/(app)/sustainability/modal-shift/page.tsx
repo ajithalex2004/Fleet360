@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { Car, Users, Leaf, BarChart3 } from 'lucide-react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 interface DashData {
   modal_shift?: {
@@ -53,20 +55,16 @@ export default function ModalShiftPage() {
       ) : (
         <>
           {/* Hero stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { icon: '🚗', label: 'Cars Removed from Roads', value: totalCarsRemoved.toLocaleString(), sub: 'private car trips avoided', color: 'text-emerald-400' },
-              { icon: '👥', label: 'Passengers Moved', value: totalPassengers.toLocaleString(), sub: 'by fleet transport', color: 'text-blue-400' },
-              { icon: '🌿', label: 'CO₂ Avoided (Scope 3)', value: `${(totalCO2Avoided / 1000).toFixed(1)} t`, sub: 'modal shift benefit', color: 'text-emerald-400' },
-              { icon: '📊', label: 'Avg Bus Occupancy', value: `${Math.round(ms?.avg_occupancy_pct ?? 0)}%`, sub: 'vehicle fill rate', color: 'text-amber-400' },
-            ].map(k => (
-              <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
-                <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-                <p className="text-[var(--text-faint)] text-xs mt-1">{k.sub}</p>
-              </div>
+          <StatGrid cols={4}>
+            {([
+              { icon: Car, label: 'Cars Removed from Roads', value: totalCarsRemoved.toLocaleString(), sub: 'private car trips avoided', accent: 'emerald' as PageAccent },
+              { icon: Users, label: 'Passengers Moved', value: totalPassengers.toLocaleString(), sub: 'by fleet transport', accent: 'cyan' as PageAccent },
+              { icon: Leaf, label: 'CO₂ Avoided (Scope 3)', value: `${(totalCO2Avoided / 1000).toFixed(1)} t`, sub: 'modal shift benefit', accent: 'violet' as PageAccent },
+              { icon: BarChart3, label: 'Avg Bus Occupancy', value: `${Math.round(ms?.avg_occupancy_pct ?? 0)}%`, sub: 'vehicle fill rate', accent: 'amber' as PageAccent },
+            ]).map(k => (
+              <KpiCard key={k.label} label={k.label} value={k.value} sub={k.sub} icon={k.icon} accent={k.accent} />
             ))}
-          </div>
+          </StatGrid>
 
           {/* Methodology explanation */}
           <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-2xl p-6">

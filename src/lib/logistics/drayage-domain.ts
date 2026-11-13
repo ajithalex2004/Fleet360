@@ -2114,7 +2114,18 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
     pcsSlotStart: r.pcs_slot_start ? new Date(String(r.pcs_slot_start)).toISOString() : null,
     pcsSlotEnd: r.pcs_slot_end ? new Date(String(r.pcs_slot_end)).toISOString() : null,
     pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : (r.token_number ? 'BOOKED' : 'PENDING'),
-    inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
+    inspectionStatus: resolveDrayageInspectionStatus({
+      inspectionStatus: r.inspection_status ? String(r.inspection_status) : null,
+      customsInspection: Boolean(r.customs_inspection),
+      municipalityInspection: Boolean(r.municipality_inspection),
+      cpipInspection: Boolean(r.cpip_inspection),
+      mercInspection: Boolean(r.merc_inspection),
+      boxcareInspection: Boolean(r.boxcare_inspection),
+      status: String(r.status ?? 'PENDING'),
+      jobPhase: String(r.job_phase ?? 'L1'),
+      jobCode: String(r.job_code ?? ''),
+      trailerDetached: Boolean(r.trailer_detached),
+    }),
     doStatus: r.do_status ? String(r.do_status) : (r.do_expiry_date && new Date(String(r.do_expiry_date)).getTime() < Date.now() ? 'EXPIRED' : 'VALID'),
     };
   });
@@ -2201,7 +2212,16 @@ export async function getDrayageWorkspaceData(db: DrayageDbClient, tenantId: str
       pcsSlotStart: r.pcs_slot_start ? new Date(String(r.pcs_slot_start)).toISOString() : null,
       pcsSlotEnd: r.pcs_slot_end ? new Date(String(r.pcs_slot_end)).toISOString() : null,
       pcsTokenStatus: r.pcs_token_status ? String(r.pcs_token_status) : 'PENDING',
-      inspectionStatus: r.inspection_status ? String(r.inspection_status) : (Boolean(r.customs_inspection) || Boolean(r.municipality_inspection) ? 'HOLD_PENDING' : 'CLEARED'),
+      inspectionStatus: resolveDrayageInspectionStatus({
+        inspectionStatus: r.inspection_status ? String(r.inspection_status) : null,
+        customsInspection: Boolean(r.customs_inspection),
+        municipalityInspection: Boolean(r.municipality_inspection),
+        cpipInspection: Boolean(r.cpip_inspection),
+        mercInspection: Boolean(r.merc_inspection),
+        boxcareInspection: Boolean(r.boxcare_inspection),
+        status: cStatus,
+        inspectionClearedAt: r.inspection_cleared_at ? String(r.inspection_cleared_at) : null,
+      }),
       inspectionSealNumber: r.inspection_seal_number ? String(r.inspection_seal_number) : null,
       inspectionClearedBy: r.inspection_cleared_by ? String(r.inspection_cleared_by) : null,
       inspectionClearedAt: r.inspection_cleared_at ? new Date(String(r.inspection_cleared_at)).toISOString() : null,
@@ -3891,6 +3911,14 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
       item.driverAllowanceAed ?? input.driverAllowanceAed,
       150,
     );
+    const itemHasInspectionHold = hasAnyDrayageInspectionFlag({
+      customsInspection: Boolean(item.customsInspection),
+      municipalityInspection: Boolean(item.municipalityInspection),
+      cpipInspection: Boolean(item.cpipInspection),
+      mercInspection: Boolean(item.mercInspection),
+      boxcareInspection: Boolean(item.boxcareInspection),
+    });
+    const initialInspectionStatus = itemHasInspectionHold ? 'HOLD_PENDING' : 'CLEARED';
 
     if (existingCnt[0]?.id) {
       await db.$executeRawUnsafe(
@@ -3913,6 +3941,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
                 cpip_inspection = $18,
                 merc_inspection = $19,
                 boxcare_inspection = $20,
+                inspection_status = $21,
                 updated_at = NOW()
           WHERE id = $1 AND tenant_id = $2`,
         containerId,
@@ -3935,6 +3964,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         Boolean(item.cpipInspection),
         Boolean(item.mercInspection),
         Boolean(item.boxcareInspection),
+        initialInspectionStatus,
       );
     } else {
       await db.$executeRawUnsafe(
@@ -3942,10 +3972,11 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
           id, tenant_id, container_number, size, container_type, shipment_type, status,
           customer_id, customer_name, terminal_id, terminal_name, warehouse_id, warehouse_name,
           do_expiry_date, discharge_date, seal_number, weight_kg,
-          customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection
+          customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection,
+          inspection_status
         ) VALUES (
           $1,$2,$3,$4,$5,$6,'AT_PORT_DISCHARGED',$7,$8,$9,$10,$11,$12,
-          $13::timestamptz,$14::timestamptz,$15,$16,$17,$18,$19,$20,$21
+          $13::timestamptz,$14::timestamptz,$15,$16,$17,$18,$19,$20,$21,$22
         )`,
         containerId,
         input.tenantId,
@@ -3970,6 +4001,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         Boolean(item.cpipInspection),
         Boolean(item.mercInspection),
         Boolean(item.boxcareInspection),
+        initialInspectionStatus,
       );
     }
 
@@ -3980,10 +4012,11 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
         container_id, container_number, container_size, container_type, do_expiry_date,
         rate_amount_aed, driver_allowance_aed,
         customs_inspection, municipality_inspection, cpip_inspection, merc_inspection, boxcare_inspection,
+        inspection_status,
         current_lat, current_lng, notes
       ) VALUES (
         $1,$2,$3,'L1',$4,'PENDING',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz,
-        $17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+        $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
       )`,
       jobId,
       input.tenantId,
@@ -4008,6 +4041,7 @@ export async function createDrayageJobsBatch(db: DrayageDbClient, input: CreateD
       Boolean(item.cpipInspection),
       Boolean(item.mercInspection),
       Boolean(item.boxcareInspection),
+      initialInspectionStatus,
       startLat,
       startLng,
       input.notes ?? null,
@@ -4205,6 +4239,27 @@ export async function updateDrayageJobDetails(
   }
 
   // 1. Update main job row
+  const nextHasInspectionHold = hasAnyDrayageInspectionFlag({
+    customsInspection: nextCustomsInspection,
+    municipalityInspection: nextMunicipalityInspection,
+    cpipInspection: nextCpipInspection,
+    mercInspection: nextMercInspection,
+    boxcareInspection: nextBoxcareInspection,
+  });
+  const nextInspectionStatus = resolveDrayageInspectionStatus({
+    inspectionStatus: job.inspection_status ? String(job.inspection_status) : null,
+    customsInspection: nextCustomsInspection,
+    municipalityInspection: nextMunicipalityInspection,
+    cpipInspection: nextCpipInspection,
+    mercInspection: nextMercInspection,
+    boxcareInspection: nextBoxcareInspection,
+    status: String(job.status ?? 'PENDING'),
+    jobPhase: String(job.job_phase ?? 'L1'),
+    jobCode: String(job.job_code ?? ''),
+    trailerDetached: Boolean(job.trailer_detached),
+    forceClearWhenNoFlags: true,
+  });
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET container_number = $3,
@@ -4231,6 +4286,7 @@ export async function updateDrayageJobDetails(
             merc_inspection = $23,
             boxcare_inspection = $24,
             notes = $25,
+            inspection_status = $26,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     input.jobId,
@@ -4258,6 +4314,7 @@ export async function updateDrayageJobDetails(
     nextMercInspection,
     nextBoxcareInspection,
     nextNotes,
+    nextInspectionStatus,
   );
 
   // 2. Sync container / route metadata to any linked L1/L2 paired job
@@ -4319,6 +4376,7 @@ export async function updateDrayageJobDetails(
               cpip_inspection = $21,
               merc_inspection = $22,
               boxcare_inspection = $23,
+              inspection_status = $24,
               updated_at = NOW()
         WHERE tenant_id = $1
           AND ((id = $2 AND $2 IS NOT NULL) OR UPPER(container_number) = UPPER($3))`,
@@ -4345,6 +4403,7 @@ export async function updateDrayageJobDetails(
       nextCpipInspection,
       nextMercInspection,
       nextBoxcareInspection,
+      nextHasInspectionHold ? nextInspectionStatus : 'CLEARED',
     ).catch(() => {});
   }
 
@@ -4712,6 +4771,108 @@ export async function assignDrayageJob(
   };
 }
 
+export interface DrayageInspectionStateInput {
+  inspectionStatus?: string | null;
+  inspection_status?: unknown;
+  customsInspection?: boolean | null;
+  municipalityInspection?: boolean | null;
+  cpipInspection?: boolean | null;
+  mercInspection?: boolean | null;
+  boxcareInspection?: boolean | null;
+  customs_inspection?: unknown;
+  municipality_inspection?: unknown;
+  cpip_inspection?: unknown;
+  merc_inspection?: unknown;
+  boxcare_inspection?: unknown;
+  status?: string | null;
+  jobPhase?: string | null;
+  job_phase?: unknown;
+  jobCode?: string | null;
+  job_code?: unknown;
+  trailerDetached?: boolean | null;
+  trailer_detached?: unknown;
+  inspectionClearedAt?: string | null;
+  inspection_cleared_at?: unknown;
+  forceClearWhenNoFlags?: boolean;
+}
+
+export function hasAnyDrayageInspectionFlag(input: DrayageInspectionStateInput | null | undefined): boolean {
+  if (!input) return false;
+  return Boolean(
+    input.customsInspection ||
+      input.municipalityInspection ||
+      input.cpipInspection ||
+      input.mercInspection ||
+      input.boxcareInspection ||
+      input.customs_inspection ||
+      input.municipality_inspection ||
+      input.cpip_inspection ||
+      input.merc_inspection ||
+      input.boxcare_inspection,
+  );
+}
+
+/**
+ * Resolves the effective regulatory inspection status for a Drayage job or container.
+ * Crucially overrides the legacy SQL column default `'CLEARED'` whenever ANY of the 5
+ * Regulatory Inspection Clearance Flags (`customsInspection`, `municipalityInspection`,
+ * `cpipInspection`, `mercInspection`, `boxcareInspection`) is enabled and the container
+ * has not yet exited the port inspection stage.
+ */
+export function resolveDrayageInspectionStatus(input: DrayageInspectionStateInput | null | undefined): string {
+  if (!input) return 'CLEARED';
+  const raw = String(input.inspectionStatus ?? input.inspection_status ?? '')
+    .trim()
+    .toUpperCase();
+  const hasFlag = hasAnyDrayageInspectionFlag(input);
+
+  if (raw === 'INSPECTION_BOOKED' || raw === 'REJECTED') {
+    return raw;
+  }
+
+  if (hasFlag) {
+    const hasExplicitClearTimestamp = Boolean(input.inspectionClearedAt || input.inspection_cleared_at);
+    if (hasExplicitClearTimestamp && raw === 'CLEARED') {
+      return 'CLEARED';
+    }
+    const statusStr = String(input.status ?? '').trim().toUpperCase();
+    if (statusStr) {
+      const phaseStr = String(input.jobPhase ?? input.job_phase ?? '').trim().toUpperCase();
+      const codeStr = String(input.jobCode ?? input.job_code ?? '').trim().toUpperCase();
+      const isL2 = phaseStr === 'L2' || codeStr.includes('-L2');
+      const detached = Boolean(input.trailerDetached ?? input.trailer_detached);
+      const stage = getDrayageOperationalStageIndex(statusStr, detached, isL2);
+      const postInspectionStage = isL2 ? 5 : 4;
+      if (stage >= postInspectionStage) {
+        return 'CLEARED';
+      }
+      if (
+        ['IN_TRANSIT', 'EN_ROUTE_WAREHOUSE', 'WAITING_MT_RETURN', 'EMPTY_RETURNED', 'COMPLETED'].includes(statusStr) &&
+        !isL2
+      ) {
+        return 'CLEARED';
+      }
+    }
+    return 'HOLD_PENDING';
+  }
+
+  if (input.forceClearWhenNoFlags) {
+    return 'CLEARED';
+  }
+
+  if (raw === 'HOLD_PENDING') {
+    return 'HOLD_PENDING';
+  }
+
+  return 'CLEARED';
+}
+
+export function doesDrayageJobRequireInspection(input: DrayageInspectionStateInput | null | undefined): boolean {
+  if (!input) return false;
+  const resolved = resolveDrayageInspectionStatus(input);
+  return hasAnyDrayageInspectionFlag(input) || ['HOLD_PENDING', 'INSPECTION_BOOKED', 'REJECTED'].includes(resolved);
+}
+
 export function getDrayageOperationalStageIndex(
   status: string,
   trailerDetached?: boolean,
@@ -4847,14 +5008,25 @@ export async function updateDrayageJobExecutionStatus(
   const isL2Job =
     String(job.job_phase || '').toUpperCase() === 'L2' ||
     String(job.job_code || '').toUpperCase().includes('-L2');
+  const currentStage = getDrayageOperationalStageIndex(
+    currentStatus,
+    Boolean(job.trailer_detached),
+    isL2Job,
+  );
+  const targetStage = getDrayageOperationalStageIndex(args.status, detached, isL2Job);
+  const jobRequiresInspection = doesDrayageJobRequireInspection({
+    ...job,
+    status: currentStatus,
+    jobPhase: job.job_phase ? String(job.job_phase) : null,
+    jobCode: job.job_code ? String(job.job_code) : null,
+    trailerDetached: Boolean(job.trailer_detached),
+  });
+  const isGreenChannelInspectionBypass =
+    !jobRequiresInspection &&
+    ((!isL2Job && currentStage === 2 && targetStage === 4) ||
+      (isL2Job && currentStage === 3 && targetStage === 5));
 
   if (args.status !== currentStatus && !isReassignTransition && !args.operatorOverride) {
-    const currentStage = getDrayageOperationalStageIndex(
-      currentStatus,
-      Boolean(job.trailer_detached),
-      isL2Job,
-    );
-    const targetStage = getDrayageOperationalStageIndex(args.status, detached, isL2Job);
     if (currentStage >= 1 && targetStage >= 1) {
       if (targetStage < currentStage) {
         throw new Error(
@@ -4862,7 +5034,7 @@ export async function updateDrayageJobExecutionStatus(
         );
       }
       const isDispatchConsole = !args.actor || args.actor === 'Dispatch Console';
-      if (isDispatchConsole && targetStage > currentStage + 1) {
+      if (isDispatchConsole && targetStage > currentStage + 1 && !isGreenChannelInspectionBypass) {
         throw new Error(
           `Sequential stage progression required: cannot skip from Stage ${currentStage} (${currentStatus}) directly to Stage ${targetStage} (${args.status}).`,
         );
@@ -5026,6 +5198,9 @@ export async function updateDrayageJobExecutionStatus(
     lng = isL2Job ? 55.0612 : 55.0915;
   }
 
+  const isExitingInspectionStage =
+    currentStatusUpper === 'UNDER_INSPECTION' && targetStage >= (isL2Job ? 5 : 4);
+
   await db.$executeRawUnsafe(
     `UPDATE logistics_drayage_jobs
         SET status = $3,
@@ -5036,6 +5211,7 @@ export async function updateDrayageJobExecutionStatus(
             etc_time = $8::timestamptz,
             etc_alert_status = COALESCE($10, CASE WHEN $8 IS NOT NULL THEN 'NEW' ELSE etc_alert_status END),
             notes = CASE WHEN $9::text IS NOT NULL AND $9::text != '' THEN $9::text ELSE notes END,
+            inspection_status = CASE WHEN $11::boolean THEN 'CLEARED' ELSE inspection_status END,
             updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
     args.jobId,
@@ -5048,6 +5224,7 @@ export async function updateDrayageJobExecutionStatus(
     effectiveEtcTime,
     args.notes ? String(args.notes) : null,
     effectiveEtcAlertStatus,
+    isExitingInspectionStage,
   );
 
   if (hasLiveCoords && job.assigned_vehicle_id) {
@@ -5126,12 +5303,15 @@ export async function updateDrayageJobExecutionStatus(
           SET status = $3,
                empty_return_date = CASE WHEN $4::boolean THEN NOW() ELSE empty_return_date END,
                linked_trailer_plate = CASE WHEN $4::boolean THEN NULL ELSE linked_trailer_plate END,
+               inspection_status = CASE WHEN $5::boolean THEN 'CLEARED' ELSE inspection_status END,
+               inspection_cleared_at = CASE WHEN $5::boolean THEN COALESCE(inspection_cleared_at, NOW()) ELSE inspection_cleared_at END,
                updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2`,
       String(job.container_id),
       args.tenantId,
       cntStatus,
       isCompletedL2,
+      isExitingInspectionStage,
     );
   }
 
@@ -5189,6 +5369,25 @@ export async function updateDrayageJobExecutionStatus(
   ]
     .filter(Boolean)
     .join(' · ');
+
+  if (isGreenChannelInspectionBypass && currentStatusUpper !== 'UNDER_INSPECTION') {
+    const skipDetails = [
+      capturedLocation ? `[LOC:${capturedLocation}]` : '',
+      'Green Channel — No regulatory inspection clearance flags enabled; Under Inspection bypassed',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    await db.$executeRawUnsafe(
+      `INSERT INTO logistics_drayage_status_logs (id, tenant_id, job_id, job_code, status, notes, actor)
+       VALUES ($1, $2, $3, $4, 'INSPECTION_SKIPPED', $5, $6)`,
+      `log-${crypto.randomUUID().slice(0, 12)}`,
+      args.tenantId,
+      args.jobId,
+      String(job.job_code),
+      skipDetails,
+      logActor,
+    );
+  }
 
   if (requestedStatusUpper !== effectiveStatus && ['CONTAINER_DROPPED', 'EMPTY_DEPOSITED', 'CONTAINER_DELIVERED'].includes(requestedStatusUpper)) {
     await db.$executeRawUnsafe(
@@ -6233,6 +6432,8 @@ export async function activateL2EmptyReturnJob(
   }
 
   // Create L2 Empty Return Job (from Warehouse back to Target Return Terminal)
+  const l2BoxcareInspection = Boolean(l1.boxcare_inspection);
+  const l2InspectionStatus = l2BoxcareInspection ? 'HOLD_PENDING' : 'CLEARED';
   await db.$executeRawUnsafe(
     `INSERT INTO logistics_drayage_jobs (
       id, tenant_id, job_code, job_phase, parent_job_id, shipment_type, status, priority,
@@ -6240,6 +6441,7 @@ export async function activateL2EmptyReturnJob(
       container_id, container_number, container_size, container_type, do_expiry_date,
       assigned_trailer_id, assigned_trailer_plate,
       rate_amount_aed, driver_allowance_aed,
+      boxcare_inspection, inspection_status,
       current_lat, current_lng, notes
     ) VALUES (
       $1,$2,$3,'L2',$4,$5,'PENDING','HIGH',
@@ -6247,7 +6449,8 @@ export async function activateL2EmptyReturnJob(
       $12,$13,$14,$15,$16::timestamptz,
       $17,$18,
       950, 120,
-      $19,$20,$21
+      $19,$20,
+      $21,$22,$23
     )`,
     l2Id,
     args.tenantId,
@@ -6267,6 +6470,8 @@ export async function activateL2EmptyReturnJob(
     l1.do_expiry_date ? new Date(String(l1.do_expiry_date)).toISOString() : null,
     l1.assigned_trailer_id ? String(l1.assigned_trailer_id) : null,
     l1.assigned_trailer_plate ? String(l1.assigned_trailer_plate) : null,
+    l2BoxcareInspection,
+    l2InspectionStatus,
     rampLat,
     rampLng,
     targetReturnTerminalName !== String(l1.terminal_name)
@@ -8661,7 +8866,16 @@ export async function clearPortInspection(
               cpip_inspection = CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END,
               merc_inspection = CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END,
               boxcare_inspection = CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END,
-              inspection_status = 'CLEARED',
+              inspection_status = CASE
+                WHEN (
+                  (CASE WHEN $3 = 'CUSTOMS' OR $4 THEN false ELSE customs_inspection END) OR
+                  (CASE WHEN $3 = 'MUNICIPALITY' OR $4 THEN false ELSE municipality_inspection END) OR
+                  (CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END) OR
+                  (CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END) OR
+                  (CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END)
+                ) THEN 'HOLD_PENDING'
+                ELSE 'CLEARED'
+              END,
               inspection_seal_number = COALESCE($5, inspection_seal_number),
               seal_number = COALESCE($5, seal_number),
               inspection_cleared_by = $6,
@@ -8684,7 +8898,16 @@ export async function clearPortInspection(
               cpip_inspection = CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END,
               merc_inspection = CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END,
               boxcare_inspection = CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END,
-              inspection_status = 'CLEARED',
+              inspection_status = CASE
+                WHEN (
+                  (CASE WHEN $3 = 'CUSTOMS' OR $4 THEN false ELSE customs_inspection END) OR
+                  (CASE WHEN $3 = 'MUNICIPALITY' OR $4 THEN false ELSE municipality_inspection END) OR
+                  (CASE WHEN $3 = 'CPIP' OR $4 THEN false ELSE cpip_inspection END) OR
+                  (CASE WHEN $3 = 'MERC' OR $4 THEN false ELSE merc_inspection END) OR
+                  (CASE WHEN $3 = 'BOXCARE' OR $4 THEN false ELSE boxcare_inspection END)
+                ) THEN 'HOLD_PENDING'
+                ELSE 'CLEARED'
+              END,
               updated_at = NOW()
         WHERE container_number = $1 AND tenant_id = $2`,
       containerNumber,

@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Banknote, RefreshCw, X } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
+import { Banknote, CreditCard, DollarSign, RefreshCw, TrendingUp, Wrench, X } from 'lucide-react';
+import { KpiCard, PageHeader, StatGrid } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -144,47 +144,36 @@ export default function FinanceDashboard() {
       ) : s && (
         <>
           {/* P&L Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Total Revenue',
-                value: s.totalRevenue,
-                icon: '📈',
-                tone: 'from-emerald-500 to-teal-600',
-                sub: 'Rental + Leasing + General',
-              },
-              {
-                label: 'Vehicle Costs',
-                value: s.totalCosts,
-                icon: '🔧',
-                tone: 'from-amber-500 to-orange-600',
-                sub: 'Approved maintenance spend',
-              },
-              {
-                label: 'Gross Profit',
-                value: s.grossProfit,
-                icon: '💰',
-                tone: s.grossProfit >= 0 ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-rose-600',
-                sub: `${s.grossMarginPct}% ${tLabel('margin')}`,
-              },
-              {
-                label: 'Cash Received',
-                value: mods?.payments.total ?? 0,
-                icon: '💳',
-                tone: 'from-blue-500 to-indigo-600',
-                sub: `${mods?.payments.transactionCount ?? 0} ${tLabel('transactions')}`,
-              },
-            ].map(card => (
-              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-6 shadow-sm`}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-white/80 text-sm font-medium">{tLabel(card.label)}</p>
-                  <span className="text-2xl">{card.icon}</span>
-                </div>
-                <p className="text-3xl font-bold text-white">AED {fmt(card.value)}</p>
-                <p className="text-xs text-white/60 mt-1">{tLabel(card.sub)}</p>
-              </div>
-            ))}
-          </div>
+          <StatGrid cols={4}>
+            <KpiCard
+              label="Total Revenue"
+              value={`AED ${fmt(s.totalRevenue)}`}
+              icon={TrendingUp}
+              accent="emerald"
+              sub="Rental + Leasing + General"
+            />
+            <KpiCard
+              label="Vehicle Costs"
+              value={`AED ${fmt(s.totalCosts)}`}
+              icon={Wrench}
+              accent="amber"
+              sub="Approved maintenance spend"
+            />
+            <KpiCard
+              label="Gross Profit"
+              value={`AED ${fmt(s.grossProfit)}`}
+              icon={DollarSign}
+              accent={s.grossProfit >= 0 ? 'emerald' : 'rose'}
+              sub={`${s.grossMarginPct}% ${tLabel('margin')}`}
+            />
+            <KpiCard
+              label="Cash Received"
+              value={`AED ${fmt(mods?.payments.total ?? 0)}`}
+              icon={CreditCard}
+              accent="cyan"
+              sub={`${mods?.payments.transactionCount ?? 0} ${tLabel('transactions')}`}
+            />
+          </StatGrid>
 
           {/* Gross Margin Bar */}
           <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">

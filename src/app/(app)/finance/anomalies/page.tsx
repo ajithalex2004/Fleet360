@@ -1,5 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useState } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import Link from 'next/link';
 import { runAgentAndWait } from '@/lib/agents/run-client';
 
@@ -210,37 +211,32 @@ export default function FinanceAnomaliesPage() {
       </div>
 
       {/* KPI Overview Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-[var(--bg-surface)] border border-rose-500/20 rounded-2xl p-4 space-y-1">
-          <span className="text-xs text-rose-400 font-medium">Financial Exposure at Risk</span>
-          <p className="text-2xl font-extrabold text-rose-400 tabular-nums">
-            AED {totalExposure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <span className="text-[11px] text-[var(--text-muted)]">Identified overbilling & leakage</span>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-red-500/20 rounded-2xl p-4 space-y-1">
-          <span className="text-xs text-red-400 font-medium">Critical Issues</span>
-          <p className="text-2xl font-extrabold text-red-400 tabular-nums">
-            {openCounts.critical ?? 0}
-          </p>
-          <span className="text-[11px] text-[var(--text-muted)]">Immediate action required</span>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-2xl p-4 space-y-1">
-          <span className="text-xs text-amber-400 font-medium">High / Medium Alerts</span>
-          <p className="text-2xl font-extrabold text-amber-400 tabular-nums">
-            {(openCounts.high ?? 0) + (openCounts.medium ?? 0)}
-          </p>
-          <span className="text-[11px] text-[var(--text-muted)]">Under policy review</span>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 space-y-1">
-          <span className="text-xs text-[var(--text-muted)] font-medium">Total Open Anomalies</span>
-          <p className="text-2xl font-extrabold text-[var(--text-main)] tabular-nums">{total}</p>
-          <span className="text-[11px] text-[var(--text-muted)]">Across 8 operational streams</span>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Financial Exposure at Risk"
+          value={`AED ${totalExposure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          sub="Identified overbilling & leakage"
+          accent="rose"
+        />
+        <KpiCard
+          label="Critical Issues"
+          value={openCounts.critical ?? 0}
+          sub="Immediate action required"
+          accent="rose"
+        />
+        <KpiCard
+          label="High / Medium Alerts"
+          value={(openCounts.high ?? 0) + (openCounts.medium ?? 0)}
+          sub="Under policy review"
+          accent="amber"
+        />
+        <KpiCard
+          label="Total Open Anomalies"
+          value={total}
+          sub="Across 8 operational streams"
+          accent="slate"
+        />
+      </StatGrid>
 
       {/* 8-Stream Navigation Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">

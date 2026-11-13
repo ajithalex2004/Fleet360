@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { downloadXLSX } from '@/lib/exportUtils';
@@ -736,19 +737,12 @@ function FinanceInvoicesInner() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Total Invoices', value: Object.values(counts).reduce((a,b)=>a+b,0), color: 'text-[var(--text-main)]' },
-          { label: 'Outstanding', value: fmtAED(totalOutstanding), color: 'text-amber-400' },
-          { label: 'Overdue', value: counts['OVERDUE'] ?? 0, color: 'text-red-400' },
-          { label: 'Paid', value: counts['PAID'] ?? 0, color: 'text-emerald-400' },
-        ].map(k => (
-          <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
-            <p className={`text-xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Invoices" value={Object.values(counts).reduce((a,b)=>a+b,0)} accent="slate" />
+        <KpiCard label="Outstanding" value={fmtAED(totalOutstanding)} accent="amber" />
+        <KpiCard label="Overdue" value={counts['OVERDUE'] ?? 0} accent="rose" />
+        <KpiCard label="Paid" value={counts['PAID'] ?? 0} accent="emerald" />
+      </StatGrid>
 
       {/* UAE Peppol E-Invoicing Compliance Strip */}
       <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/5 to-transparent border border-violet-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

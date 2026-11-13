@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TransferStatus = 'REQUESTED' | 'APPROVED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
@@ -256,28 +257,12 @@ export default function LeasingTransfersPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Requested</p>
-          <p className="text-3xl font-bold text-amber-400 mt-1">{summary.requested}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Awaiting approval</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-blue-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">In Transit</p>
-          <p className="text-3xl font-bold text-blue-400 mt-1">{summary.inTransit}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">On the road now</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Completed This Month</p>
-          <p className="text-3xl font-bold text-emerald-400 mt-1">{summary.completedThisMonth}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Arrived at destination</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-red-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Cancelled</p>
-          <p className="text-3xl font-bold text-red-400 mt-1">{summary.cancelled}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">All time</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Requested" value={summary.requested} sub="Awaiting approval" accent="amber" />
+        <KpiCard label="In Transit" value={summary.inTransit} sub="On the road now" accent="cyan" />
+        <KpiCard label="Completed This Month" value={summary.completedThisMonth} sub="Arrived at destination" accent="emerald" />
+        <KpiCard label="Cancelled" value={summary.cancelled} sub="All time" accent="rose" />
+      </StatGrid>
 
       {/* Transfer Pipeline Visual */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">

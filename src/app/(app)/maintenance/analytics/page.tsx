@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 import { useEffect, useState } from 'react';
 import type { MaintenanceAnalytics } from '@/lib/maintenance/analytics';
@@ -81,15 +82,20 @@ export default function AnalyticsPage() {
                 <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
             )}
 
-            <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 ${loading ? 'opacity-60' : ''}`}>
-                {cards.map(c => (
-                    <div key={c.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
-                        <p className="text-sm text-[var(--text-faint)]">{c.label}</p>
-                        <p className={`text-3xl font-bold ${c.value === '—' ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]'}`}>{c.value}</p>
-                        {c.sub && <p className="text-xs text-[var(--text-faint)] mt-1">{c.sub}</p>}
-                    </div>
-                ))}
-            </div>
+            <StatGrid cols={4} className={loading ? 'opacity-60' : ''}>
+                {cards.map((c, idx) => {
+                    const accents: PageAccent[] = ['cyan', 'emerald', 'amber', 'violet'];
+                    return (
+                        <KpiCard
+                            key={c.label}
+                            label={c.label}
+                            value={c.value}
+                            sub={c.sub}
+                            accent={accents[idx % accents.length]}
+                        />
+                    );
+                })}
+            </StatGrid>
 
             <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${loading ? 'opacity-60' : ''}`}>
                 {/* Cost by month */}

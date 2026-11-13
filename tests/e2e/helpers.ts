@@ -81,46 +81,50 @@ export async function createE2ETenant(
   const code     = `E2E-${label.toUpperCase().replace(/\s+/g, '-').slice(0, 10)}-${uid}`;
 
   try {
-    await prisma.tenant.create({
-      data: { id: tenantId, name: `E2E ${label} ${uid}`, code, plan, isActive: true },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
 
-    const modulesToEnable = plan === 'TRIAL'
-      ? MODULES.filter((m) => m.subscription !== 'enterprise-only')
-      : MODULES;
-    await prisma.tenantModule.createMany({
-      data: modulesToEnable.map((m) => ({
-        id: crypto.randomUUID(),
-        tenantId,
-        module: m.key,
-        isEnabled: true,
-      })),
-      skipDuplicates: true,
-    });
-
-    await prisma.user.create({
-      data: {
-        id: userId, email, username: `e2e-${uid.toLowerCase()}`,
-        firstName: label, lastName: 'E2E', isActive: true, updatedAt: new Date(),
-      },
-    });
-
-    await prisma.$executeRawUnsafe(
-      `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
-      hashPassword(password), userId,
-    );
-
-    let platformRole = await prisma.role.findFirst({
-      where: { tenantId: null, code: 'TENANT_ADMIN' },
-    });
-    if (!platformRole) {
-      platformRole = await prisma.role.create({
-        data: { id: crypto.randomUUID(), tenantId: null, name: 'Tenant Admin', code: 'TENANT_ADMIN', isSystem: true },
+      await tx.tenant.create({
+        data: { id: tenantId, name: `E2E ${label} ${uid}`, code, plan, isActive: true },
       });
-    }
-    await prisma.userTenant.create({
-      data: { id: crypto.randomUUID(), userId, tenantId, roleId: platformRole.id, isActive: true },
-    });
+
+      const modulesToEnable = plan === 'TRIAL'
+        ? MODULES.filter((m) => m.subscription !== 'enterprise-only')
+        : MODULES;
+      await tx.tenantModule.createMany({
+        data: modulesToEnable.map((m) => ({
+          id: crypto.randomUUID(),
+          tenantId,
+          module: m.key,
+          isEnabled: true,
+        })),
+        skipDuplicates: true,
+      });
+
+      await tx.user.create({
+        data: {
+          id: userId, email, username: `e2e-${uid.toLowerCase()}`,
+          firstName: label, lastName: 'E2E', isActive: true, updatedAt: new Date(),
+        },
+      });
+
+      await tx.$executeRawUnsafe(
+        `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
+        hashPassword(password), userId,
+      );
+
+      let platformRole = await tx.role.findFirst({
+        where: { tenantId: null, code: 'TENANT_ADMIN' },
+      });
+      if (!platformRole) {
+        platformRole = await tx.role.create({
+          data: { id: crypto.randomUUID(), tenantId: null, name: 'Tenant Admin', code: 'TENANT_ADMIN', isSystem: true },
+        });
+      }
+      await tx.userTenant.create({
+        data: { id: crypto.randomUUID(), userId, tenantId, roleId: platformRole.id, isActive: true },
+      });
+    }, { timeout: 30_000 });
 
     return { tenantId, tenantCode: code, userId, email, password };
   } finally {
@@ -134,16 +138,22 @@ export async function cleanupE2ETenant(ctx: E2EContext | null): Promise<void> {
   const { PrismaClient } = await import('@prisma/client');
   const prisma = new PrismaClient();
   try {
-    // Raw rows created by tests (finance tables, etc.)
-    await prisma.$executeRawUnsafe(`DELETE FROM finance_invoices WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
-    await prisma.$executeRawUnsafe(`DELETE FROM finance_expenses WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
 
-    // Auth & module rows
-    await prisma.tenantModule.deleteMany({ where: { tenantId: ctx.tenantId } }).catch(() => {});
-    await prisma.userTenant.deleteMany({ where: { tenantId: ctx.tenantId } });
-    await prisma.role.deleteMany({ where: { tenantId: ctx.tenantId } });
-    await prisma.user.delete({ where: { id: ctx.userId } }).catch(() => {});
-    await prisma.tenant.delete({ where: { id: ctx.tenantId } }).catch(() => {});
+      // Raw rows created by tests (finance, rental, etc.)
+      await tx.$executeRawUnsafe(`DELETE FROM finance_invoices WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await tx.$executeRawUnsafe(`DELETE FROM finance_expenses WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await tx.$executeRawUnsafe(`DELETE FROM rental_quotations WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await tx.$executeRawUnsafe(`DELETE FROM rental_inquiries WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+
+      // Auth & module rows
+      await tx.tenantModule.deleteMany({ where: { tenantId: ctx.tenantId } }).catch(() => {});
+      await tx.userTenant.deleteMany({ where: { tenantId: ctx.tenantId } });
+      await tx.role.deleteMany({ where: { tenantId: ctx.tenantId } });
+      await tx.user.delete({ where: { id: ctx.userId } }).catch(() => {});
+      await tx.tenant.delete({ where: { id: ctx.tenantId } }).catch(() => {});
+    }, { timeout: 30_000 });
   } finally {
     await prisma.$disconnect();
   }
@@ -155,7 +165,7 @@ export async function cleanupE2ETenant(ctx: E2EContext | null): Promise<void> {
  *  LOGIN_TIMEOUT is 60 s to absorb Neon cold-starts after tenant creation. */
 const LOGIN_TIMEOUT = 60_000;
 export async function login(page: Page, email: string, password: string): Promise<void> {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await page.goto('/login', { waitUntil: 'load' });
   await page.fill('input[type="email"], input[name="email"]', email);
   await page.fill('input[type="password"], input[name="password"]', password);
   await page.click('button[type="submit"]');

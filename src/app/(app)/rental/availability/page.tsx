@@ -1,12 +1,21 @@
 'use client';
 import React, { useState, useCallback } from 'react';
+import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
+import {
+  RENTAL_VEHICLE_CATEGORIES,
+  formatRentalCategoryLabel,
+} from '@/lib/rental/categories';
 
 interface Vehicle {
   id: string;
   make: string;
   model: string;
   year?: number;
+  plateNumber?: string;
   plateNo?: string;
+  plate_no?: string;
+  vehicleType?: string;
   category?: string;
   color?: string;
   status?: string;
@@ -17,8 +26,6 @@ interface AvailabilityResult {
   booked: number;
   vehicles: Vehicle[];
 }
-
-const VEHICLE_CATEGORIES = ['', 'Economy','Sedan','SUV','Luxury','Van','Minibus','Truck'];
 
 export default function AvailabilityPage() {
   const [startDate, setStartDate]   = useState('');
@@ -33,8 +40,8 @@ export default function AvailabilityPage() {
       setError('Please select both start and end dates');
       return;
     }
-    if (new Date(endDate) <= new Date(startDate)) {
-      setError('End date must be after start date');
+    if (endDate < startDate) {
+      setError('Return date cannot be earlier than pickup date');
       return;
     }
     setLoading(true);
@@ -45,7 +52,18 @@ export default function AvailabilityPage() {
       const res = await fetch(`/api/rental/availability?${params}`);
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
-      setResult(data);
+      const vehicles: Vehicle[] = Array.isArray(data?.vehicles)
+        ? data.vehicles
+        : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+            ? data
+            : [];
+      setResult({
+        available: typeof data?.available === 'number' ? data.available : vehicles.length,
+        booked: typeof data?.booked === 'number' ? data.booked : 0,
+        vehicles,
+      });
     } catch {
       setError('Failed to check availability');
     } finally {
@@ -53,9 +71,13 @@ export default function AvailabilityPage() {
     }
   }, [startDate, endDate, category]);
 
-  const days = startDate && endDate
-    ? Math.max(0, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000))
-    : 0;
+  const days =
+    startDate && endDate && endDate >= startDate
+      ? Math.max(
+          1,
+          Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000)
+        )
+      : 0;
 
   return (
     <div className="space-y-8">
@@ -82,7 +104,21 @@ export default function AvailabilityPage() {
             <select value={category} onChange={e => setCategory(e.target.value)}
               className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none">
               <option value="">All Categories</option>
-              {VEHICLE_CATEGORIES.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+              {RENTAL_VEHICLE_CATEGORIES.map((cat) => {
+                const code =
+                  typeof (cat as unknown) === 'string'
+                    ? String(cat)
+                    : String(
+                        (cat as { value?: string; code?: string }).value ??
+                          (cat as { code?: string }).code ??
+                          ''
+                      );
+                return (
+                  <option key={code} value={code}>
+                    {formatRentalCategoryLabel(code)}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <button onClick={handleSearch} disabled={loading}
@@ -101,45 +137,51 @@ export default function AvailabilityPage() {
       {result !== null && (
         <>
           {/* Summary */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center">
-              <div className="text-5xl font-bold text-emerald-400">{result.available}</div>
-              <div className="text-sm text-[var(--text-muted)] mt-2">Available Vehicles</div>
-            </div>
-            <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-center">
-              <div className="text-5xl font-bold text-rose-400">{result.booked}</div>
-              <div className="text-sm text-[var(--text-muted)] mt-2">Booked / Unavailable</div>
-            </div>
-          </div>
+          <StatGrid cols={2}>
+            <KpiCard label="Available Vehicles" value={result.available} accent="emerald" />
+            <KpiCard label="Booked / Unavailable" value={result.booked} accent="rose" />
+          </StatGrid>
 
           {/* Vehicle List */}
           {result.vehicles.length === 0 ? (
             <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-muted)]">
-              No vehicles available for the selected period{category ? ` in the ${category} category` : ''}.
+              No vehicles available for the selected period{category ? ` in the ${formatRentalCategoryLabel(category)} category` : ''}.
             </div>
           ) : (
             <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
               <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">Available Vehicles</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {result.vehicles.map(v => (
-                  <div key={v.id} className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4 hover:border-emerald-500/50 transition-all">
-                    <div className="flex items-start justify-between mb-3">
+                {result.vehicles.map(v => {
+                  const vehCat = v.vehicleType ?? v.category ?? '';
+                  const plateLabel = v.plateNumber ?? v.plateNo ?? v.plate_no ?? 'No plate';
+                  return (
+                    <div key={v.id} className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4 hover:border-emerald-500/50 transition-all flex flex-col justify-between">
                       <div>
-                        <div className="font-semibold text-[var(--text-main)]">{v.make} {v.model}</div>
-                        <div className="text-sm text-[var(--text-muted)]">{v.year ?? ''} {v.color ? `· ${v.color}` : ''}</div>
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="font-semibold text-[var(--text-main)]">{v.make} {v.model}</div>
+                            <div className="text-sm text-[var(--text-muted)]">{v.year ?? ''} {v.color ? `· ${v.color}` : ''}</div>
+                          </div>
+                          {vehCat && (
+                            <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                              {formatRentalCategoryLabel(vehCat)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-[var(--text-muted)] font-mono">{plateLabel}</span>
+                          <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Available</span>
+                        </div>
                       </div>
-                      {v.category && (
-                        <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                          {v.category}
-                        </span>
-                      )}
+                      <Link
+                        href={`/rental/bookings?vehicleId=${encodeURIComponent(v.id)}&category=${encodeURIComponent(vehCat)}&pickupDate=${encodeURIComponent(startDate)}&dropoffDate=${encodeURIComponent(endDate)}`}
+                        className="mt-4 w-full inline-flex items-center justify-center px-3 py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-colors"
+                      >
+                        Book Vehicle →
+                      </Link>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-[var(--text-muted)] font-mono">{v.plateNo ?? 'No plate'}</span>
-                      <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Available</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

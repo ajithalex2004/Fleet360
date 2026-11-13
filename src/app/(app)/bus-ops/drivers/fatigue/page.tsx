@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { FatigueEvaluationResult } from '@/lib/bus-ops/driver-fatigue-guard';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface FatigueSummaryData {
   totalDrivers: number;
@@ -149,31 +150,12 @@ export default function DriverFatigueDashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
-          <div className="text-xs text-[var(--text-muted)] font-medium">Total Monitored Drivers</div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">{data?.totalDrivers ?? '—'}</div>
-          <div className="text-[11px] text-[var(--text-faint)]">Active roster drivers</div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/20 space-y-1">
-          <div className="text-xs text-emerald-400 font-medium">Fully Rested (Pass)</div>
-          <div className="text-2xl font-bold text-emerald-300">{data?.compliantCount ?? '—'}</div>
-          <div className="text-[11px] text-emerald-400/70">≥ 8 hours continuous rest</div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-1">
-          <div className="text-xs text-amber-400 font-medium">Tight Rest Buffer (Warn)</div>
-          <div className="text-2xl font-bold text-amber-300">{data?.warningCount ?? '—'}</div>
-          <div className="text-[11px] text-amber-400/70">8h–10h buffer or night-shift</div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/20 space-y-1">
-          <div className="text-xs text-rose-400 font-medium">Hard-Lockout (Blocked)</div>
-          <div className="text-2xl font-bold text-rose-300">{data?.blockedCount ?? '—'}</div>
-          <div className="text-[11px] text-rose-400/70">&lt; 8h rest or &gt;10h daily drive</div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Monitored Drivers" value={data?.totalDrivers ?? '—'} sub="Active roster drivers" icon={UserCheck} accent="slate" />
+        <KpiCard label="Fully Rested (Pass)" value={data?.compliantCount ?? '—'} sub="≥ 8 hours continuous rest" icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Tight Rest Buffer (Warn)" value={data?.warningCount ?? '—'} sub="8h–10h buffer or night-shift" icon={AlertTriangle} accent="amber" />
+        <KpiCard label="Hard-Lockout (Blocked)" value={data?.blockedCount ?? '—'} sub="< 8h rest or >10h daily drive" icon={XCircle} accent="rose" />
+      </StatGrid>
 
       {/* Simulator & Rest Matrix Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

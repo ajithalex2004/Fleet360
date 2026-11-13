@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface SlaEvaluationItem {
   ticketId: string;
@@ -160,44 +161,13 @@ export default function ServiceTicketsSlaControlTower() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            Total Open Tickets
-          </div>
-          <div className="text-2xl font-bold text-white mt-1">{summary?.totalOpen ?? 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/20">
-          <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" /> Tier 1 Normal
-          </div>
-          <div className="text-2xl font-bold text-emerald-400 mt-1">{summary?.tier1Normal ?? 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/20">
-          <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5" /> Tier 2 Escalated
-          </div>
-          <div className="text-2xl font-bold text-amber-400 mt-1">{summary?.tier2Escalated ?? 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/30">
-          <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Flame className="w-3.5 h-3.5 text-rose-500" /> Tier 3 Breached
-          </div>
-          <div className="text-2xl font-bold text-rose-400 mt-1">{summary?.tier3Breached ?? 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            On-Time Compliance
-          </div>
-          <div className="text-2xl font-bold text-emerald-400 mt-1">
-            {summary?.onTimeComplianceRate ?? 100}%
-          </div>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard label="Total Open Tickets" value={summary?.totalOpen ?? 0} icon={Clock} accent="slate" />
+        <KpiCard label="Tier 1 Normal" value={summary?.tier1Normal ?? 0} icon={ShieldCheck} accent="emerald" />
+        <KpiCard label="Tier 2 Escalated" value={summary?.tier2Escalated ?? 0} icon={AlertTriangle} accent="amber" />
+        <KpiCard label="Tier 3 Breached" value={summary?.tier3Breached ?? 0} icon={Flame} accent="rose" />
+        <KpiCard label="On-Time Compliance" value={`${summary?.onTimeComplianceRate ?? 100}%`} icon={ShieldCheck} accent="emerald" />
+      </StatGrid>
 
       {/* Escalation Policy Banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-900/50 border border-slate-800 text-xs text-slate-300 grid grid-cols-1 md:grid-cols-2 gap-4">

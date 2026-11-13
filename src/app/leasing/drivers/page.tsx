@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Users } from 'lucide-react';
 import StaffModal from '@/components/leasing/StaffModal';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Driver {
   id: string;
@@ -99,12 +100,12 @@ export default function LeasingDriversPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Drivers" value={stats.total} />
+      <StatGrid cols={4}>
+        <KpiCard label="Drivers" value={stats.total} accent="cyan" />
         <KpiCard label="Active Allocations" value={stats.activeAllocs} accent="emerald" />
         <KpiCard label="Licence Expiring (≤30d)" value={stats.licenseExpiring} accent="amber" />
         <KpiCard label="Licence EXPIRED" value={stats.licenseExpired} accent="rose" />
-      </div>
+      </StatGrid>
 
       {loading ? (
         <div className="text-[var(--text-faint)]">Loading…</div>
@@ -194,17 +195,3 @@ export default function LeasingDriversPage() {
   );
 }
 
-function KpiCard({ label, value, accent = 'slate' }: { label: string; value: number; accent?: string }) {
-  const accentClass: Record<string, string> = {
-    slate: 'text-[var(--text-main)]',
-    emerald: 'text-emerald-300',
-    amber: 'text-amber-300',
-    rose: 'text-rose-300',
-  };
-  return (
-    <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
-      <div className={`text-3xl font-bold ${accentClass[accent]}`}>{value}</div>
-      <div className="text-xs text-[var(--text-muted)] mt-1">{label}</div>
-    </div>
-  );
-}

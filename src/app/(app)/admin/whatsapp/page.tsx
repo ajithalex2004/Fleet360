@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { MessageSquare, Users, Bot, CheckCircle2 } from 'lucide-react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -984,11 +986,11 @@ function AnalyticsTab() {
     return { hour: i, count: parseInt(row?.count ?? '0', 10) };
   });
 
-  const kpiItems = [
-    { label: 'Messages Today', value: kpis.messagesToday, icon: '💬', color: 'from-green-500 to-emerald-600' },
-    { label: 'Total Conversations', value: kpis.totalConversations, icon: '👥', color: 'from-blue-500 to-blue-600' },
-    { label: 'Auto-replied', value: `${kpis.autoRepliedPct}%`, icon: '🤖', color: 'from-purple-500 to-purple-600' },
-    { label: 'Resolution Rate', value: `${kpis.resolutionRate}%`, icon: '✅', color: 'from-amber-500 to-amber-600' },
+  const kpiItems: Array<{ label: string; value: string | number; icon: typeof MessageSquare; accent: PageAccent }> = [
+    { label: 'Messages Today', value: kpis.messagesToday, icon: MessageSquare, accent: 'emerald' },
+    { label: 'Total Conversations', value: kpis.totalConversations, icon: Users, accent: 'cyan' },
+    { label: 'Auto-replied', value: `${kpis.autoRepliedPct}%`, icon: Bot, accent: 'violet' },
+    { label: 'Resolution Rate', value: `${kpis.resolutionRate}%`, icon: CheckCircle2, accent: 'amber' },
   ];
 
   const intentColorList = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-slate-500'];
@@ -997,17 +999,11 @@ function AnalyticsTab() {
   return (
     <div className="space-y-8">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatGrid cols={4}>
         {kpiItems.map(item => (
-          <div key={item.label} className="bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-xl p-5">
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-xl mb-3`}>
-              {item.icon}
-            </div>
-            <p className="text-2xl font-bold text-[var(--text-main)]">{item.value}</p>
-            <p className="text-[var(--text-muted)] text-xs mt-1">{item.label}</p>
-          </div>
+          <KpiCard key={item.label} label={item.label} value={item.value} icon={item.icon} accent={item.accent} />
         ))}
-      </div>
+      </StatGrid>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Intent Breakdown */}

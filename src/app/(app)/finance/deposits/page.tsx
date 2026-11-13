@@ -1,4 +1,6 @@
 'use client';
+import { AlertTriangle, Ban, ClipboardList, Lock, RotateCcw } from 'lucide-react';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useEffect, useState, useCallback } from 'react';
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -474,15 +476,21 @@ export default function DepositsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-8">
-        {kpiCards.map(c => (
-          <div key={c.label} className={`bg-gradient-to-br ${c.color} rounded-2xl p-4`}>
-            <p className="text-2xl mb-1">{c.icon}</p>
-            <p className="text-xl font-bold text-white">{c.value}</p>
-            <p className="text-white/70 text-xs mt-0.5">{c.label}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={5} className="mb-8">
+        {kpiCards.map((c, idx) => {
+          const accents: PageAccent[] = ['cyan', 'slate', 'emerald', 'rose', 'amber'];
+          const icons = [Lock, ClipboardList, RotateCcw, Ban, AlertTriangle];
+          return (
+            <KpiCard
+              key={c.label}
+              label={c.label}
+              value={c.value}
+              icon={icons[idx % icons.length]}
+              accent={accents[idx % accents.length]}
+            />
+          );
+        })}
+      </StatGrid>
 
       {/* Aging Alert */}
       {kpi && Number(kpi.overdue_count) > 0 && (

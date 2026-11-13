@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Shield, Plus, AlertTriangle, CheckCircle, Clock, X, Loader2 } from 'lucide-react';
@@ -261,22 +262,12 @@ export default function WarrantyPage() {
             )}
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Active warranties', value: activeCount,  icon: Shield,        cls: 'text-emerald-400' },
-                    { label: 'Expired / inactive',value: expiredCount, icon: AlertTriangle,  cls: 'text-amber-400' },
-                    { label: 'Total claims',       value: totalClaims, icon: CheckCircle,    cls: 'text-blue-400' },
-                    { label: 'Total paid (AED)',   value: totalPaid.toLocaleString(), icon: Clock, cls: 'text-purple-400' },
-                ].map(({ label, value, icon: Icon, cls }) => (
-                    <div key={label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Icon className={`h-4 w-4 ${cls}`} />
-                            <span className="text-xs text-[var(--text-faint)]">{label}</span>
-                        </div>
-                        <p className="text-2xl font-bold text-[var(--text-main)]">{value}</p>
-                    </div>
-                ))}
-            </div>
+            <StatGrid cols={4}>
+                <KpiCard label="Active warranties" value={activeCount} icon={Shield} accent="emerald" />
+                <KpiCard label="Expired / inactive" value={expiredCount} icon={AlertTriangle} accent="amber" />
+                <KpiCard label="Total claims" value={totalClaims} icon={CheckCircle} accent="cyan" />
+                <KpiCard label="Total paid (AED)" value={totalPaid.toLocaleString()} icon={Clock} accent="violet" />
+            </StatGrid>
 
             {/* Filter tabs */}
             <div className="flex gap-2 border-b border-[var(--border-subtle)] pb-0">

@@ -15,6 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import type { CostAllocationSummary, DepartmentUsage, RateConfig } from '@/lib/bus-ops/cost-allocation';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 function fmtAed(num: number | null | undefined): string {
   if (num == null) return 'AED 0.00';
@@ -266,55 +267,43 @@ export default function CostAllocationPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Fleet Operating Cost</span>
-            <DollarSign className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="text-xl font-bold text-[var(--text-main)]">{fmtAed(data?.totalFleetOperatingCost)}</div>
-          <div className="text-[11px] text-[var(--text-faint)] mt-2 flex justify-between">
-            <span>Fuel: {fmtAed(data?.totalFuelCost)}</span>
-            <span>Maint: {fmtAed(data?.totalMaintenanceCost)}</span>
-          </div>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Total Pax-Km</span>
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="text-xl font-bold text-[var(--text-main)]">{data ? data.totalPaxKm.toLocaleString('en-AE') : '—'}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Cumulative passenger distance</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Cost Per Pax-Km</span>
-            <Calculator className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="text-xl font-bold text-cyan-400">{data ? `AED ${data.costPerPaxKm.toFixed(3)}` : '—'}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">True transport efficiency</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Boarding Volume</span>
-            <Users className="w-4 h-4 text-violet-400" />
-          </div>
-          <div className="text-xl font-bold text-[var(--text-main)]">{data ? data.totalBoardings.toLocaleString('en-AE') : '—'}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">Avg {fmtAed(data?.costPerBoarding)} / scan</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Total Recharge Pool</span>
-            <PieChart className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="text-xl font-bold text-amber-400">{fmtAed(totalRechargeSum)}</div>
-          <p className="text-[11px] text-[var(--text-faint)] mt-2">{data?.departments.length || 0} cost centers billed</p>
-        </div>
-      </div>
+      <StatGrid cols={5}>
+        <KpiCard
+          label="Fleet Operating Cost"
+          value={fmtAed(data?.totalFleetOperatingCost)}
+          sub={`Fuel: ${fmtAed(data?.totalFuelCost)} · Maint: ${fmtAed(data?.totalMaintenanceCost)}`}
+          icon={DollarSign}
+          accent="emerald"
+        />
+        <KpiCard
+          label="Total Pax-Km"
+          value={data ? data.totalPaxKm.toLocaleString('en-AE') : '—'}
+          sub="Cumulative passenger distance"
+          icon={TrendingUp}
+          accent="blue"
+        />
+        <KpiCard
+          label="Cost Per Pax-Km"
+          value={data ? `AED ${data.costPerPaxKm.toFixed(3)}` : '—'}
+          sub="True transport efficiency"
+          icon={Calculator}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Boarding Volume"
+          value={data ? data.totalBoardings.toLocaleString('en-AE') : '—'}
+          sub={`Avg ${fmtAed(data?.costPerBoarding)} / scan`}
+          icon={Users}
+          accent="violet"
+        />
+        <KpiCard
+          label="Total Recharge Pool"
+          value={fmtAed(totalRechargeSum)}
+          sub={`${data?.departments.length || 0} cost centers billed`}
+          icon={PieChart}
+          accent="amber"
+        />
+      </StatGrid>
 
       {/* Visual Pax-Km Department Distribution Bar */}
       {data && data.departments.length > 0 && (

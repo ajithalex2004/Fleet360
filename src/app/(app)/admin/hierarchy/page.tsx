@@ -18,6 +18,7 @@ import {
   Trash2,
   RotateCcw,
 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 export interface HierarchyNode {
   id: string;
@@ -392,49 +393,17 @@ export default function OrganizationHierarchyMasterPage() {
       </div>
 
       {/* KPI Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[var(--text-muted)] font-medium block">Level 1: Regions</span>
-            <span className="text-2xl font-bold text-[var(--text-main)]">{stats.regionsCount}</span>
-          </div>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 flex-shrink-0">
-            <Building2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[var(--text-muted)] font-medium block">Level 2: Departments</span>
-            <span className="text-2xl font-bold text-[var(--text-main)]">{stats.departmentsCount}</span>
-          </div>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[var(--text-muted)] font-medium block">Level 3: Sections / Units</span>
-            <span className="text-2xl font-bold text-[var(--text-main)]">{stats.sectionsCount}</span>
-          </div>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center gap-3 shadow-sm">
-          <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400 flex-shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[var(--text-muted)] font-medium block">Active Coverage</span>
-            <span className="text-2xl font-bold text-orange-400">
-              {stats.totalCount > 0 ? `${Math.round((stats.activeCount / stats.totalCount) * 100)}%` : '100%'}
-            </span>
-          </div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Level 1: Regions" value={stats.regionsCount} icon={MapPin} accent="cyan" />
+        <KpiCard label="Level 2: Departments" value={stats.departmentsCount} icon={Building2} accent="violet" />
+        <KpiCard label="Level 3: Sections / Units" value={stats.sectionsCount} icon={Layers} accent="emerald" />
+        <KpiCard
+          label="Active Coverage"
+          value={stats.totalCount > 0 ? `${Math.round((stats.activeCount / stats.totalCount) * 100)}%` : '100%'}
+          icon={CheckCircle2}
+          accent="amber"
+        />
+      </StatGrid>
 
       {/* Navigation View Switcher (Tree vs Master Tables) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-2">

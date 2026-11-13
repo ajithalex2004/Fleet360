@@ -12,6 +12,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { shortId } from '@/lib/ui/display-id';
+import { ClipboardList, Activity, Car, CheckCircle2, AlertTriangle, BarChart3 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 /* ═══════════════════════════════ TYPES ════════════════════════════════════ */
 
@@ -82,26 +84,6 @@ function fmtDate(iso: string): string {
 }
 
 /* ═══════════════════════════════ SUB-COMPONENTS ═══════════════════════════ */
-
-function KPICard({
-  icon, label, value, sub, color = 'text-[var(--text-main)]',
-  href,
-}: {
-  icon: string; label: string; value: string | number;
-  sub?: string; color?: string; href?: string;
-}) {
-  const inner = (
-    <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 hover:border-[var(--border-strong)] transition-colors">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{icon}</span>
-        <span className={`text-3xl font-bold tabular-nums ${color}`}>{value}</span>
-      </div>
-      <p className="text-[var(--text-muted)] text-sm font-medium">{label}</p>
-      {sub && <p className="text-[var(--text-faint)] text-xs mt-0.5">{sub}</p>}
-    </div>
-  );
-  return href ? <Link href={href}>{inner}</Link> : inner;
-}
 
 function MiniBar({ pct, color }: { pct: number; color: string }) {
   return (
@@ -228,20 +210,20 @@ export default function AdminDispatchPage() {
       </div>
 
       {/* ── KPI Bar ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KPICard icon="📋" label="Total Jobs"       value={loading ? '…' : (s?.total ?? 0)}
-          sub={`Last ${days} days`} href="/dispatch/jobs" />
-        <KPICard icon="🔵" label="Active"           value={loading ? '…' : (s?.active ?? 0)}
-          color="text-blue-400"    sub="Pending / Searching" />
-        <KPICard icon="🚗" label="In Progress"      value={loading ? '…' : (s?.inProgress ?? 0)}
-          color="text-cyan-400"    sub="Currently en route" />
-        <KPICard icon="✅" label="Completed"        value={loading ? '…' : (s?.completed ?? 0)}
-          color="text-emerald-400" sub="Delivered / Resolved" />
-        <KPICard icon="⚠️" label="Exceptions"       value={loading ? '…' : (s?.failed ?? 0)}
-          color="text-red-400"     sub="Failed + Escalated" />
-        <KPICard icon="📊" label="Acceptance Rate"  value={loading ? '…' : `${s?.acceptanceRate ?? 0}%`}
-          color="text-yellow-400"  sub={`Avg ${s?.avgCompletionMin ?? 0} min / job`} />
-      </div>
+      <StatGrid cols={6}>
+        <KpiCard icon={ClipboardList} label="Total Jobs"      value={loading ? '…' : (s?.total ?? 0)}
+          accent="slate"   sub={`Last ${days} days`} href="/dispatch/jobs" />
+        <KpiCard icon={Activity}      label="Active"          value={loading ? '…' : (s?.active ?? 0)}
+          accent="cyan"    sub="Pending / Searching" />
+        <KpiCard icon={Car}           label="In Progress"     value={loading ? '…' : (s?.inProgress ?? 0)}
+          accent="violet"  sub="Currently en route" />
+        <KpiCard icon={CheckCircle2}  label="Completed"       value={loading ? '…' : (s?.completed ?? 0)}
+          accent="emerald" sub="Delivered / Resolved" />
+        <KpiCard icon={AlertTriangle} label="Exceptions"      value={loading ? '…' : (s?.failed ?? 0)}
+          accent="rose"    sub="Failed + Escalated" />
+        <KpiCard icon={BarChart3}     label="Acceptance Rate" value={loading ? '…' : `${s?.acceptanceRate ?? 0}%`}
+          accent="amber"   sub={`Avg ${s?.avgCompletionMin ?? 0} min / job`} />
+      </StatGrid>
 
       {/* ── Driver Pool + Service Mix ───────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -7,39 +7,46 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
+import { hasRentalPermission, requireRentalPermission } from '@/lib/rental/rbac';
+import {
+  assertRentalForeignKeysInTenant,
+  isRentalSecurityError,
+  validateSafeDocumentOrSignatureUrl,
+} from '@/lib/rental/security-guards';
 
 const CACHE_TAG = 'rental:damage-claims';
 
-// Runs inside unstable_cache (via cacheRead), which strips Next.js request
-// context - next/headers() is unavailable there, so the plain prisma client's
-// header-based auto-scoping middleware never engages and RLS (force-applied
-// to the runtime role regardless of the WHERE clause) filters out every row
-// for every tenant. withTenantRls sets app.tenant_id explicitly from the
-// argument instead of relying on headers.
 const getClaims = cacheRead(
   async (
     tenantId: string,
     status: string | null,
     bookingId: string | null,
-    take: number, skip: number, page: number, limit: number,
+    take: number,
+    skip: number,
+    page: number,
+    limit: number,
   ) => {
-    // DamageClaim has no deletedAt column (no soft-delete on this model) -
-    // a stale filter here always threw "Unknown argument `deletedAt`".
-    const where = { tenantId, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
-    // findMany + count share ONE connection (the tx), so they must run
-    // sequentially, not via Promise.all - concurrent queries on a single
-    // Prisma transaction client are unsupported and can interleave in ways
-    // that break RLS scoping. See runSequential in src/lib/rls.ts.
-    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
-      tx.damageClaim.findMany({
-        where,
-        include: { booking: { select: { bookingRef: true, customer: { select: { fullName: true } } } } },
-        orderBy: { createdAt: 'desc' },
-        take,
-        skip,
-      }),
-      tx.damageClaim.count({ where }),
-    ]));
+    const where = {
+      tenantId,
+      ...(status ? { status } : {}),
+      ...(bookingId ? { bookingId } : {}),
+    };
+    const [data, total] = await withTenantRls(prisma, tenantId, (tx) =>
+      runSequential([
+        tx.damageClaim.findMany({
+          where,
+          include: {
+            booking: {
+              select: { bookingRef: true, customer: { select: { fullName: true } } },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take,
+          skip,
+        }),
+        tx.damageClaim.count({ where }),
+      ]),
+    );
     return paginatedResponse(data, total, page, limit);
   },
   [CACHE_TAG],
@@ -52,6 +59,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await requireRentalPermission(
+    req.headers,
+    tenantId,
+    'view',
+    'damage_claims',
+    req.nextUrl.pathname,
+  );
+  if (denied) return denied;
+
   try {
     const sp = req.nextUrl.searchParams;
     const status = sp.get('status');
@@ -61,7 +78,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-    } catch (e) {
+  } catch (e) {
     console.error('Error fetching damage claims:', e);
     return NextResponse.json({ error: 'Failed to fetch damage claims' }, { status: 500 });
   }
@@ -73,19 +90,154 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const createDenied = await requireRentalPermission(
+    req.headers,
+    tenantId,
+    'create',
+    'damage',
+    req.nextUrl.pathname,
+  );
+  if (createDenied) return createDenied;
+
   try {
     const bodyRaw = await req.json();
-    // A new claim is always OPEN: its status changes through its actions.
-    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId, status: 'OPEN' };
-    // body is untyped JSON plus an explicit tenantId, which sharpens the
-    // inferred literal shape enough that it stops matching Prisma's
-    // Checked/Unchecked create-input union.
-    const damageClaim = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.damageClaim.create({ data: body as Prisma.DamageClaimUncheckedCreateInput }),
+    const cleaned = stripTenantOwnershipFields(
+      (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
     );
+
+    const bookingId =
+      typeof cleaned.bookingId === 'string'
+        ? cleaned.bookingId.trim()
+        : typeof cleaned.booking_id === 'string'
+          ? cleaned.booking_id.trim()
+          : '';
+    if (!bookingId) {
+      return NextResponse.json({ error: 'bookingId is required' }, { status: 400 });
+    }
+
+    const vehicleId =
+      typeof cleaned.vehicleId === 'string' && cleaned.vehicleId.trim()
+        ? cleaned.vehicleId.trim()
+        : typeof cleaned.vehicle_id === 'string' && cleaned.vehicle_id.trim()
+          ? cleaned.vehicle_id.trim()
+          : null;
+
+    const requestedStatusUpper =
+      cleaned.status !== undefined && cleaned.status !== null && String(cleaned.status).trim()
+        ? String(cleaned.status).trim().toUpperCase()
+        : 'OPEN';
+
+    const rawActualCost =
+      cleaned.actualCost !== undefined ? cleaned.actualCost : cleaned.actual_cost;
+    const hasActualCost =
+      rawActualCost !== undefined && rawActualCost !== null && rawActualCost !== '';
+
+    // Setting non-OPEN initial status or actualCost on creation requires `rental:approve:damage`
+    if (requestedStatusUpper !== 'OPEN' || hasActualCost) {
+      const approveDenied = await requireRentalPermission(
+        req.headers,
+        tenantId,
+        'approve',
+        'damage',
+        req.nextUrl.pathname,
+      );
+      if (approveDenied) return approveDenied;
+    }
+
+    if (!['OPEN', 'ASSESSED'].includes(requestedStatusUpper)) {
+      return NextResponse.json(
+        { error: 'New damage claims must start as OPEN or ASSESSED' },
+        { status: 400 },
+      );
+    }
+
+    let estimatedCost: number | null | undefined = undefined;
+    const rawEstimatedCost =
+      cleaned.estimatedCost !== undefined ? cleaned.estimatedCost : cleaned.estimated_cost;
+    if (rawEstimatedCost !== undefined && rawEstimatedCost !== null && rawEstimatedCost !== '') {
+      const parsedEst = Number(rawEstimatedCost);
+      if (!Number.isFinite(parsedEst) || parsedEst < 0) {
+        return NextResponse.json(
+          { error: 'estimatedCost must be zero or more' },
+          { status: 400 },
+        );
+      }
+      estimatedCost = parsedEst;
+    }
+
+    let actualCost: number | undefined = undefined;
+    if (hasActualCost) {
+      const parsedAct = Number(rawActualCost);
+      if (!Number.isFinite(parsedAct) || parsedAct < 0) {
+        return NextResponse.json({ error: 'actualCost must be zero or more' }, { status: 400 });
+      }
+      actualCost = parsedAct;
+    }
+
+    if (Array.isArray(cleaned.photos)) {
+      for (const photo of cleaned.photos) {
+        validateSafeDocumentOrSignatureUrl(photo, { fieldName: 'photos' });
+      }
+    }
+
+    const canApproveDamage = await hasRentalPermission(req.headers, tenantId, 'approve', 'damage');
+    const rawBilledToCustomer =
+      cleaned.billedToCustomer !== undefined
+        ? cleaned.billedToCustomer
+        : cleaned.billed_to_customer;
+    const billedToCustomer =
+      canApproveDamage && typeof rawBilledToCustomer === 'boolean'
+        ? rawBilledToCustomer
+        : false;
+
+    const baseDescription =
+      typeof cleaned.description === 'string' ? cleaned.description.trim() : '';
+    const extraMeta: string[] = [];
+    if (typeof cleaned.damageLocation === 'string' && cleaned.damageLocation.trim()) {
+      extraMeta.push(`Location: ${cleaned.damageLocation.trim()}`);
+    }
+    if (typeof cleaned.severity === 'string' && cleaned.severity.trim()) {
+      extraMeta.push(`Severity: ${cleaned.severity.trim()}`);
+    }
+    if (typeof cleaned.insuranceRef === 'string' && cleaned.insuranceRef.trim()) {
+      extraMeta.push(`Insurance Ref: ${cleaned.insuranceRef.trim()}`);
+    }
+    if (typeof cleaned.notes === 'string' && cleaned.notes.trim()) {
+      extraMeta.push(`Notes: ${cleaned.notes.trim()}`);
+    }
+    const description = [baseDescription, extraMeta.join(' | ')].filter(Boolean).join('\n');
+    if (!description) {
+      return NextResponse.json({ error: 'description is required' }, { status: 400 });
+    }
+
+    const createData: Prisma.DamageClaimUncheckedCreateInput = {
+      tenantId,
+      bookingId,
+      description,
+      status: requestedStatusUpper,
+      billedToCustomer,
+      ...(estimatedCost !== undefined ? { estimatedCost } : {}),
+      ...(actualCost !== undefined ? { actualCost } : {}),
+      ...(typeof cleaned.insuranceClaim === 'boolean'
+        ? { insuranceClaim: cleaned.insuranceClaim }
+        : {}),
+    };
+
+    const damageClaim = await withTenantRls(prisma, tenantId, async (tx) => {
+      await assertRentalForeignKeysInTenant(tx, tenantId, {
+        bookingId,
+        vehicleId,
+      });
+      return tx.damageClaim.create({ data: createData });
+    });
+
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(damageClaim, { status: 201 });
-    } catch (e) {
+  } catch (e) {
+    if (isRentalSecurityError(e)) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
     console.error('Error creating damage claim:', e);
     return NextResponse.json({ error: 'Failed to create damage claim' }, { status: 500 });
   }

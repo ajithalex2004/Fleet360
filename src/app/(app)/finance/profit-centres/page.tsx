@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { downloadXLSX } from '@/lib/exportUtils';
 
 interface ProfitCentreMaster {
@@ -310,20 +311,12 @@ export default function ProfitCentresPage() {
       </div>
 
       {/* Consolidated KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Revenue', value: fmtAED(totalRevenue), color: 'text-emerald-400', sub: `${enriched.length} active units` },
-          { label: 'Direct Costs',  value: fmtAED(totalCosts),   color: 'text-amber-400',   sub: 'Allocated GL + AP expenses' },
-          { label: 'Gross Profit',  value: fmtAED(totalProfit),  color: totalProfit >= 0 ? 'text-teal-400' : 'text-red-400', sub: `Period ${from} → ${to}` },
-          { label: 'Net Margin %',  value: `${totalMargin.toFixed(1)}%`, color: totalMargin >= 20 ? 'text-emerald-400' : 'text-amber-400', sub: 'Consolidated margin' },
-        ].map(k => (
-          <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-            <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.sub}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Revenue" value={fmtAED(totalRevenue)} sub={`${enriched.length} active units`} accent="emerald" />
+        <KpiCard label="Direct Costs" value={fmtAED(totalCosts)} sub="Allocated GL + AP expenses" accent="amber" />
+        <KpiCard label="Gross Profit" value={fmtAED(totalProfit)} sub={`Period ${from} → ${to}`} accent={totalProfit >= 0 ? 'cyan' : 'rose'} />
+        <KpiCard label="Net Margin %" value={`${totalMargin.toFixed(1)}%`} sub="Consolidated margin" accent={totalMargin >= 20 ? 'emerald' : 'amber'} />
+      </StatGrid>
 
       {/* Profit Centre Cards + Table */}
       {loading ? (

@@ -16,6 +16,7 @@ import {
   Bus,
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { runAgentAndWait } from '@/lib/agents/run-client';
 
 const SESSION_DEFAULT_TIME: Record<string, string> = {
@@ -301,45 +302,12 @@ export default function DemandForecastPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-          <div className="flex items-center justify-between text-[var(--text-muted)] mb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider">Segments Evaluated</span>
-            <Bus className="h-4 w-4 text-violet-400" />
-          </div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">{data?.rows.length ?? 0}</div>
-          <p className="mt-1 text-[11px] text-[var(--text-faint)]">{data?.weeksOfHistory ?? 4} weeks history trailing</p>
-        </div>
-
-        <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-4">
-          <div className="flex items-center justify-between text-rose-400 mb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider">Over-Capacity Risk</span>
-            <AlertTriangle className="h-4 w-4" />
-          </div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">{overCount}</div>
-          <p className="mt-1 text-[11px] text-rose-300">Requires supplemental trip</p>
-        </div>
-
-        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-          <div className="flex items-center justify-between text-amber-400 mb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider">Under-Utilized Runs</span>
-            <ArrowDownRight className="h-4 w-4" />
-          </div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">{underCount}</div>
-          <p className="mt-1 text-[11px] text-amber-300">Downsize vehicle eligible</p>
-        </div>
-
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4">
-          <div className="flex items-center justify-between text-emerald-400 mb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider">Potential Savings</span>
-            <Coins className="h-4 w-4" />
-          </div>
-          <div className="text-2xl font-bold text-[var(--text-main)]">
-            AED {potentialSavings.toLocaleString()}
-          </div>
-          <p className="mt-1 text-[11px] text-emerald-300">Avoided overtime & fuel waste</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Segments Evaluated" value={data?.rows.length ?? 0} sub={`${data?.weeksOfHistory ?? 4} weeks history trailing`} icon={Bus} accent="violet" />
+        <KpiCard label="Over-Capacity Risk" value={overCount} sub="Requires supplemental trip" icon={AlertTriangle} accent="rose" />
+        <KpiCard label="Under-Utilized Runs" value={underCount} sub="Downsize vehicle eligible" icon={ArrowDownRight} accent="amber" />
+        <KpiCard label="Potential Savings" value={`AED ${potentialSavings.toLocaleString()}`} sub="Avoided overtime & fuel waste" icon={Coins} accent="emerald" />
+      </StatGrid>
 
       {data?.warning && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-300 text-xs">

@@ -15,6 +15,10 @@ import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { toDriverTripStatus } from '@/lib/trip-state';
+import {
+  doesDrayageJobRequireInspection,
+  resolveDrayageInspectionStatus,
+} from '@/lib/logistics/drayage-domain';
 
 interface TripRow {
   id: string;
@@ -99,6 +103,10 @@ type DrayageJobRow = {
   pcsSlotStart?: Date | string | null;
   pcsSlotEnd?: Date | string | null;
   customsInspection?: boolean;
+  municipalityInspection?: boolean;
+  cpipInspection?: boolean;
+  mercInspection?: boolean;
+  boxcareInspection?: boolean;
   inspectionStatus?: string | null;
   doStatus?: string | null;
   warehouseId: string | null;
@@ -367,6 +375,10 @@ export async function GET(req: NextRequest) {
               pcs_slot_start AS "pcsSlotStart",
               pcs_slot_end AS "pcsSlotEnd",
               customs_inspection AS "customsInspection",
+              municipality_inspection AS "municipalityInspection",
+              cpip_inspection AS "cpipInspection",
+              merc_inspection AS "mercInspection",
+              boxcare_inspection AS "boxcareInspection",
               inspection_status AS "inspectionStatus",
               do_status AS "doStatus",
               warehouse_id AS "warehouseId",
@@ -628,9 +640,41 @@ export async function GET(req: NextRequest) {
             ? `${formatUaeSlotTime(resolvedSlotStartIso)} – ${formatUaeSlotTime(resolvedSlotEndIso)}`
             : null;
 
+        const resolvedInspectionStatus = resolveDrayageInspectionStatus({
+          inspectionStatus: j.inspectionStatus ?? null,
+          customsInspection: Boolean(j.customsInspection),
+          municipalityInspection: Boolean(j.municipalityInspection),
+          cpipInspection: Boolean(j.cpipInspection),
+          mercInspection: Boolean(j.mercInspection),
+          boxcareInspection: Boolean(j.boxcareInspection),
+          status: normalizedStatus,
+          jobPhase: j.jobPhase,
+          jobCode: j.jobCode,
+          trailerDetached: Boolean(j.trailerDetached),
+        });
+        const requiresInspection = doesDrayageJobRequireInspection({
+          inspectionStatus: resolvedInspectionStatus,
+          customsInspection: Boolean(j.customsInspection),
+          municipalityInspection: Boolean(j.municipalityInspection),
+          cpipInspection: Boolean(j.cpipInspection),
+          mercInspection: Boolean(j.mercInspection),
+          boxcareInspection: Boolean(j.boxcareInspection),
+          status: normalizedStatus,
+          jobPhase: j.jobPhase,
+          jobCode: j.jobCode,
+          trailerDetached: Boolean(j.trailerDetached),
+        });
+
         return {
           ...j,
           status: normalizedStatus,
+          customsInspection: Boolean(j.customsInspection),
+          municipalityInspection: Boolean(j.municipalityInspection),
+          cpipInspection: Boolean(j.cpipInspection),
+          mercInspection: Boolean(j.mercInspection),
+          boxcareInspection: Boolean(j.boxcareInspection),
+          inspectionStatus: resolvedInspectionStatus,
+          requiresInspection,
           tokenNumber: resolvedToken,
           pcsTokenNumber: resolvedToken,
           pcsSlotStart: resolvedSlotStartIso,

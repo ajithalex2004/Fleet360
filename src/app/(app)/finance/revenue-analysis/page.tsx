@@ -1,4 +1,6 @@
 'use client';
+import { BarChart3, CheckCircle2, Clock, DollarSign, TrendingDown, Wrench } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import React, { useEffect, useState, useCallback } from 'react';
 import { downloadXLSX } from '@/lib/exportUtils';
 
@@ -169,22 +171,14 @@ export default function RevenueAnalysisPage() {
             <>
               {/* Summary totals */}
               {totals && (
-                <div className="grid grid-cols-6 gap-3 mb-6">
-                  {[
-                    { label: 'Gross Revenue',  value: fmt(totals.gross_revenue), icon: '💰', color: 'from-emerald-600 to-teal-600' },
-                    { label: 'Collected',      value: fmt(totals.collected),     icon: '✅', color: 'from-blue-600 to-indigo-600' },
-                    { label: 'Outstanding',    value: fmt(totals.outstanding),   icon: '⏳', color: 'from-amber-600 to-orange-600' },
-                    { label: 'Maint Cost',     value: fmt(totals.maint_cost),    icon: '🔧', color: 'from-slate-600 to-slate-700' },
-                    { label: 'Depreciation',   value: fmt(totals.depreciation),  icon: '📉', color: 'from-slate-600 to-slate-700' },
-                    { label: 'Net Margin',     value: fmt(totals.net_margin),    icon: '📊', color: totals.net_margin >= 0 ? 'from-emerald-700 to-teal-700' : 'from-red-700 to-rose-700' },
-                  ].map(c => (
-                    <div key={c.label} className={`bg-gradient-to-br ${c.color} rounded-2xl p-4`}>
-                      <p className="text-xl mb-1">{c.icon}</p>
-                      <p className="text-base font-bold text-white leading-tight">{c.value}</p>
-                      <p className="text-white/70 text-xs mt-0.5">{c.label}</p>
-                    </div>
-                  ))}
-                </div>
+                <StatGrid cols={6} className="mb-6">
+                  <KpiCard label="Gross Revenue" value={fmt(totals.gross_revenue)} icon={DollarSign} accent="emerald" />
+                  <KpiCard label="Collected" value={fmt(totals.collected)} icon={CheckCircle2} accent="cyan" />
+                  <KpiCard label="Outstanding" value={fmt(totals.outstanding)} icon={Clock} accent="amber" />
+                  <KpiCard label="Maint Cost" value={fmt(totals.maint_cost)} icon={Wrench} accent="slate" />
+                  <KpiCard label="Depreciation" value={fmt(totals.depreciation)} icon={TrendingDown} accent="violet" />
+                  <KpiCard label="Net Margin" value={fmt(totals.net_margin)} icon={BarChart3} accent={totals.net_margin >= 0 ? 'emerald' : 'rose'} />
+                </StatGrid>
               )}
 
               <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">

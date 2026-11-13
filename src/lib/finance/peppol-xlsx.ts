@@ -22,11 +22,38 @@ export function buildPeppolWorkbook(
 ): Buffer {
   const wb = XLSX.utils.book_new();
 
-  const rawNetTotal = Number(invoice.lines.reduce((s, l) => s + l.netAmount, 0).toFixed(2));
+  const rawNetTotal = Number(invoice.lines.reduce((s, l) => s + Number(l.netAmount.toFixed(2)), 0).toFixed(2));
   const discountAmount = Math.max(0, Number((invoice.discountAmount ?? 0).toFixed(2)));
   const netTotal = Math.max(0, Number((rawNetTotal - discountAmount).toFixed(2)));
-  const vatTotal = Number(invoice.lines.reduce((s, l) => s + l.vatAmount, 0).toFixed(2));
+
+  const byCat = new Map<string, { code: PeppolTaxCategoryCode; rate: number; taxable: number; tax: number }>();
+  for (const l of invoice.lines) {
+    const code: PeppolTaxCategoryCode = l.taxCategoryCode || (l.vatRatePercent > 0 ? 'S' : 'Z');
+    const rate = Number(l.vatRatePercent ?? (code === 'S' ? 5 : 0));
+    const key = `${code}:${rate}`;
+    const cur = byCat.get(key) ?? { code, rate, taxable: 0, tax: 0 };
+    cur.taxable = Number((cur.taxable + Number(l.netAmount.toFixed(2))).toFixed(2));
+    cur.tax = Number((cur.tax + Number(l.vatAmount.toFixed(2))).toFixed(2));
+    byCat.set(key, cur);
+  }
+
+  if (discountAmount > 0) {
+    const discountCategory: PeppolTaxCategoryCode = invoice.discountTaxCategoryCode || 'S';
+    const discountRate = invoice.discountVatRatePercent ?? (discountCategory === 'S' ? 5 : 0);
+    const target =
+      byCat.get(`${discountCategory}:${discountRate}`) ||
+      Array.from(byCat.values()).find((g) => g.code === 'S') ||
+      byCat.values().next().value;
+    if (target) {
+      target.taxable = Math.max(0, Number((target.taxable - discountAmount).toFixed(2)));
+      target.tax = Number((target.taxable * (target.rate / 100)).toFixed(2));
+    }
+  }
+
+  const vatTotal = Number(Array.from(byCat.values()).reduce((s, g) => s + g.tax, 0).toFixed(2));
   const grossTotal = Number((netTotal + vatTotal).toFixed(2));
+  const prepaidAmount = Math.max(0, Number((invoice.prepaidAmount ?? 0).toFixed(2)));
+  const payableAmount = Math.max(0, Number((grossTotal - prepaidAmount).toFixed(2)));
 
   const headerRows: (string | number)[][] = [
     ['UAE Peppol E-Invoice (PINT-UAE / UBL 2.1)', ''],
@@ -87,7 +114,8 @@ export function buildPeppolWorkbook(
     ['Tax exclusive amount', netTotal],
     ['VAT amount', vatTotal],
     ['Total amount (incl. VAT)', grossTotal],
-    ['Payable amount', grossTotal],
+    ...(prepaidAmount > 0 ? [['Prepaid amount', prepaidAmount]] : []),
+    ['Payable amount', payableAmount],
     ['', ''],
     ['Validation Status', result.isValid ? 'VALID' : 'INVALID'],
     ['SHA-256 Digest', result.digestHash ?? ''],
@@ -118,14 +146,6 @@ export function buildPeppolWorkbook(
   wsLines['!cols'] = [{ wch: 8 }, { wch: 26 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 11 }, { wch: 14 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsLines, 'Lines');
 
-  const byCat = new Map<string, { code: PeppolTaxCategoryCode; rate: number; taxable: number; tax: number }>();
-  for (const l of invoice.lines) {
-    const key = `${l.taxCategoryCode}:${l.vatRatePercent}`;
-    const cur = byCat.get(key) ?? { code: l.taxCategoryCode, rate: l.vatRatePercent, taxable: 0, tax: 0 };
-    cur.taxable += l.netAmount;
-    cur.tax += l.vatAmount;
-    byCat.set(key, cur);
-  }
   const vatRows: (string | number)[][] = [
     ['Tax Category Code', 'Category Description', 'VAT Rate %', `Taxable Amount (${invoice.currency})`, `Tax Amount (${invoice.currency})`],
     ...Array.from(byCat.values()).map(g => [

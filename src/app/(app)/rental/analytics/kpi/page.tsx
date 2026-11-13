@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, RefreshCw, TrendingUp, Car, Sparkles } from 'lucide-react';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface CategoryKpis {
   category: string;
@@ -191,28 +192,31 @@ export default function RevpacDashboardPage() {
           </div>
 
           {/* KPI grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Kpi
+          <StatGrid cols={4}>
+            <KpiCard
               label="Fleet Utilization"
               value={`${data.fleetUtilizationPct}%`}
               sub={`${data.totalRentedCarDays.toLocaleString()} / ${data.totalAvailableCarDays.toLocaleString()} car-days`}
-              valueClass={utilizationTone(data.fleetUtilizationPct)}
+              accent={data.fleetUtilizationPct >= 75 ? 'emerald' : data.fleetUtilizationPct >= 50 ? 'amber' : 'rose'}
             />
-            <Kpi
+            <KpiCard
               label="Avg Daily Rate (ADR)"
               value={`AED ${data.averageDailyRate.toLocaleString()}`}
               sub="Revenue / rented car-days"
+              accent="cyan"
             />
-            <Kpi
+            <KpiCard
               label="Avg Length of Rental"
               value={`${data.averageLengthOfRental.toFixed(1)} days`}
+              accent="violet"
             />
-            <Kpi
+            <KpiCard
               label="Booking Conversion"
               value={`${data.conversionPct}%`}
-              sub={`${data.pendingBookings} pending · ${data.cancelledBookings} cancelled`}
+              sub={`${data.pendingBookings} pending ? ${data.cancelledBookings} cancelled`}
+              accent="amber"
             />
-          </div>
+          </StatGrid>
 
           {/* Booking funnel + Damage recovery */}
           <div className="grid md:grid-cols-2 gap-3">

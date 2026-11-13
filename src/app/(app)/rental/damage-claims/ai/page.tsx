@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import {
   Sparkles, ChevronLeft, AlertTriangle, CheckCircle2,
   ArrowRight, Image as ImageIcon, Camera,
@@ -41,7 +42,17 @@ interface Classification {
   billableEstimateMax: number;
   currency: string;
   warnings: string[];
+  overallSeverity?: string;
+  estimatedCostAed?: number;
+  summary?: string;
 }
+
+const SEVERITY_RANK: Record<string, number> = {
+  MINOR: 1,
+  MODERATE: 2,
+  MAJOR: 3,
+  TOTAL_LOSS: 4,
+};
 
 const SEVERITY_COLORS: Record<string, string> = {
   MINOR: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
@@ -61,6 +72,37 @@ const CONDITION_COLORS: Record<string, string> = {
   POOR: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
   NON_DRIVEABLE: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
 };
+
+function buildClaimHref(result: Classification): string {
+  const relevantDamages =
+    result.mode === 'DIFF'
+      ? result.damages.filter((d) => d.origin === 'NEW')
+      : result.damages;
+  const highestSeverity =
+    relevantDamages.length > 0
+      ? [...relevantDamages].sort(
+          (a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0),
+        )[0].severity
+      : result.damages.length > 0
+        ? [...result.damages].sort(
+            (a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0),
+          )[0].severity
+        : 'MINOR';
+
+  const overallSeverity = result.overallSeverity ?? highestSeverity;
+  const midpointCost = Math.round(
+    ((result.billableEstimateMin ?? 0) + (result.billableEstimateMax ?? 0)) / 2,
+  );
+  const estimatedCostAed =
+    result.estimatedCostAed !== undefined
+      ? result.estimatedCostAed
+      : midpointCost > 0
+        ? midpointCost
+        : '';
+  const summary = result.summary ?? result.summaryEn ?? '';
+
+  return `/rental/damage-claims?from=ai&severity=${encodeURIComponent(overallSeverity ?? '')}&estimatedCost=${encodeURIComponent(String(estimatedCostAed ?? ''))}&description=${encodeURIComponent(summary ?? '')}`;
+}
 
 export default function DamageAIPage() {
   const [mode, setMode] = useState<Mode>('single');
@@ -254,18 +296,19 @@ export default function DamageAIPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-              <Stat label="Damages found" value={result.damages.length.toString()} />
-              <Stat
+            <StatGrid cols={3} className="mb-4">
+              <KpiCard label="Damages found" value={result.damages.length.toString()} accent="cyan" />
+              <KpiCard
                 label={mode === 'diff' ? 'NEW damages' : 'All damages'}
                 value={result.damages.filter(d => mode === 'diff' ? d.origin === 'NEW' : true).length.toString()}
+                accent="amber"
               />
-              <Stat
+              <KpiCard
                 label="Billable estimate"
                 value={`AED ${result.billableEstimateMin.toLocaleString()}–${result.billableEstimateMax.toLocaleString()}`}
-                tone="rose"
+                accent="rose"
               />
-            </div>
+            </StatGrid>
 
             {/* Bilingual summary */}
             <div className="grid md:grid-cols-2 gap-3 text-sm">
@@ -358,7 +401,7 @@ export default function DamageAIPage() {
               Analyse another vehicle
             </button>
             <Link
-              href="/rental/damage-claims"
+              href={buildClaimHref(result)}
               className="px-6 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white text-sm font-medium hover:opacity-90 flex items-center gap-2"
             >
               Create Damage Claim <ArrowRight className="h-4 w-4" />

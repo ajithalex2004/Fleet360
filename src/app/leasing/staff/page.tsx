@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -252,19 +253,12 @@ export default function LeasingStaffPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Staff',      value: kpi.total,           color: 'text-[var(--text-main)]' },
-          { label: 'Active',           value: kpi.active,          color: 'text-emerald-400' },
-          { label: 'Branch Managers',  value: kpi.branch_managers, color: 'text-violet-400' },
-          { label: 'On Leave',         value: kpi.on_leave,        color: 'text-amber-400' },
-        ].map(card => (
-          <div key={card.label} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5">
-            <p className="text-xs text-[var(--text-faint)] font-medium mb-1">{card.label}</p>
-            <p className={`text-3xl font-bold ${card.color}`}>{card.value}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Staff" value={kpi.total} accent="slate" />
+        <KpiCard label="Active" value={kpi.active} accent="emerald" />
+        <KpiCard label="Branch Managers" value={kpi.branch_managers} accent="violet" />
+        <KpiCard label="On Leave" value={kpi.on_leave} accent="amber" />
+      </StatGrid>
 
       {/* ── Filters + View Toggle ── */}
       <div className="flex flex-wrap items-center gap-3">

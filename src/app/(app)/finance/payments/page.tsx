@@ -1,4 +1,5 @@
 'use client';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import React, { useState, useEffect, useCallback } from 'react';
 import { downloadXLSX } from '@/lib/exportUtils';
 
@@ -242,28 +243,24 @@ export default function FinancePaymentsPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-          <p className="text-xs text-[var(--text-faint)]">Total Payments</p>
-          <p className="text-xl font-bold mt-1 text-[var(--text-main)]">{total}</p>
-        </div>
-        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-          <p className="text-xs text-[var(--text-faint)]">Total Collected</p>
-          <p className="text-xl font-bold mt-1 text-emerald-400">{`AED ${Number(totalPaid).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`}</p>
-        </div>
-        {Object.entries(byMethod).slice(0, 2).map(([method, amount]) => (
-          <div key={method} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">{METHOD_ICON[method] ?? '💰'} {method.replace('_', ' ')}</p>
-            <p className="text-xl font-bold mt-1 text-[var(--text-main)]">{`AED ${Number(amount).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`}</p>
-          </div>
-        ))}
+      <StatGrid cols={4}>
+        <KpiCard label="Total Payments" value={total} accent="slate" />
+        <KpiCard label="Total Collected" value={`AED ${Number(totalPaid).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`} accent="emerald" />
+        {Object.entries(byMethod).slice(0, 2).map(([method, amount], idx) => {
+          const accents: PageAccent[] = ['cyan', 'violet'];
+          return (
+            <KpiCard
+              key={method}
+              label={method.replace('_', ' ')}
+              value={`AED ${Number(amount).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`}
+              accent={accents[idx % accents.length]}
+            />
+          );
+        })}
         {Object.entries(byMethod).length < 2 && (
-          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
-            <p className="text-xs text-[var(--text-faint)]">This Page</p>
-            <p className="text-xl font-bold mt-1 text-[var(--text-main)]">{payments.length}</p>
-          </div>
+          <KpiCard label="This Page" value={payments.length} accent="amber" />
         )}
-      </div>
+      </StatGrid>
 
       {/* Method breakdown pills */}
       {Object.keys(byMethod).length > 0 && (

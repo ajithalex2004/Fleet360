@@ -1,27 +1,9 @@
 /**
  * RAC Yield-Management Engine
  *
- * Wraps the base rate engine (lib/rental-rate-engine.ts) and applies six
- * yield layers on top, each producing a documented adjustment so the user
- * can see exactly how the final price was reached.
- *
- * Layers, in order:
- *   1. BASE         — pickBestRate() from the existing rate engine
- *   2. LOR          — length-of-rental discount (granular ladder vs the
- *                     simpler weekly/monthly auto-pick in the base engine)
- *   3. WEEKEND      — weekday vs weekend uplift
- *   4. LEAD_TIME    — early-bird / last-minute multiplier
- *   5. UTILIZATION  — fleet-utilization-based surge or discount
- *   6. EVENT        — date-tagged event multipliers (DSF, Eid, F1, etc.)
- *   7. CHANNEL      — final per-channel adjustment (DIRECT/CORPORATE/AGENCY/ONLINE)
- *
- * Each layer logs to the trace[] so the UI / audit can show step-by-step.
- *
- * Pure functions — no DB calls. The caller fetches:
- *   - active PricingRule rows
- *   - active RateEvent rows for the period
- *   - current category-utilization snapshot
- * and passes everything in.
+ * Applies dynamic yield layers (Length-of-Rental, UAE Fri/Sat Weekend proportion,
+ * Lead-Time, Fleet Utilization surge/discount, Event Calendar multipliers, and
+ * Channel adjustments) with a full step-by-step audit trace.
  */
 
 export interface YieldRequest {
@@ -42,6 +24,7 @@ export interface RateEventSnapshot {
   dateFrom: Date;
   dateTo: Date;
   multiplier: number;
+  flatSurcharge?: number | null;
   applicableCategories: string | null;
   applicableChannels: string | null;
   priority: number;
@@ -53,7 +36,10 @@ export interface YieldRule {
   name?: string | null;
   vehicleCategory: string;
   baseDailyRate: number;
+  weeklyRate?: number | null;
+  monthlyRate?: number | null;
   weekendDailyRate?: number | null;
+  priority?: number | null;
   isActive?: boolean | null;
 }
 
@@ -91,24 +77,72 @@ export interface YieldResult {
   asOf: string;
 }
 
+/* ── Category Normalization (shared across RAC UI & Engines) ─────────────── */
+
+const CATEGORY_SYNONYMS: Record<string, string> = {
+  ECONOMY: 'ECONOMY',
+  COMPACT: 'COMPACT',
+  SEDAN: 'MID_SIZE',
+  MID_SIZE: 'MID_SIZE',
+  MID_SIZE_SEDAN: 'MID_SIZE',
+  MIDSIZE: 'MID_SIZE',
+  STANDARD: 'FULL_SIZE',
+  FULL_SIZE: 'FULL_SIZE',
+  FULL_SIZE_SEDAN: 'FULL_SIZE',
+  FULLSIZE: 'FULL_SIZE',
+  COMPACT_SUV: 'COMPACT_SUV',
+  SUV: 'MID_SIZE_SUV',
+  SUV_4X4: 'MID_SIZE_SUV',
+  STANDARD_SUV: 'MID_SIZE_SUV',
+  MID_SIZE_SUV: 'MID_SIZE_SUV',
+  FULL_SIZE_SUV: 'FULL_SIZE_SUV',
+  LARGE_SUV: 'FULL_SIZE_SUV',
+  LUXURY: 'LUXURY',
+  LUXURY_SEDAN: 'LUXURY',
+  LUXURY_SUV: 'LUXURY',
+  EXECUTIVE: 'LUXURY',
+  PREMIUM: 'PREMIUM',
+  SPORTS: 'SPORTS',
+  VAN: 'VAN',
+  MINIVAN: 'VAN',
+  PICKUP: 'PICKUP',
+  COMMERCIAL: 'PICKUP',
+  TRUCK: 'PICKUP',
+  BUS: 'BUS',
+  MINI_BUS: 'BUS',
+  MINIBUS: 'BUS',
+  SPECIAL: 'SPECIAL',
+};
+
+export function normalizeRentalCategory(raw: string | null | undefined): string {
+  const cleaned = String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  return CATEGORY_SYNONYMS[cleaned] ?? cleaned;
+}
+
+export function categoriesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const rawA = a.trim().toUpperCase();
+  const rawB = b.trim().toUpperCase();
+  if (rawA === rawB) return true;
+  return normalizeRentalCategory(rawA) === normalizeRentalCategory(rawB);
+}
+
 /* ── Defaults (overridable) ─────────────────────────────────────────────── */
 
 export interface YieldPolicy {
-  // LoR ladder thresholds and discounts (positive = discount)
   lorDiscountSteps: { minDays: number; discountPct: number; label: string }[];
-  // Weekend uplift in %
   weekendUpliftPct: number;
-  // Lead-time
-  earlyBirdDays: number;       // book this many days ahead → discount
+  earlyBirdDays: number;
   earlyBirdDiscountPct: number;
-  lastMinuteHours: number;     // book within this many hours of pickup → uplift
+  lastMinuteHours: number;
   lastMinuteUpliftPct: number;
-  // Utilization surge
   utilizationHighThresholdPct: number;
-  utilizationHighSurgeMaxPct: number;  // max surge at 100% utilization
+  utilizationHighSurgeMaxPct: number;
   utilizationLowThresholdPct: number;
-  utilizationLowDiscountMaxPct: number; // max discount at 0% utilization
-  // Channel multipliers (1.0 = no change)
+  utilizationLowDiscountMaxPct: number;
   channelMultipliers: Record<string, number>;
 }
 
@@ -131,9 +165,9 @@ export const DEFAULT_YIELD_POLICY: YieldPolicy = {
   utilizationLowDiscountMaxPct: 12,
   channelMultipliers: {
     DIRECT: 1.0,
-    CORPORATE: 0.92,   // negotiated -8%
-    AGENCY: 0.85,      // -15% commission to OTAs absorbed
-    ONLINE: 0.95,      // -5% to incentivise direct online bookings
+    CORPORATE: 0.92,
+    AGENCY: 0.85,
+    ONLINE: 0.95,
   },
 };
 
@@ -144,15 +178,16 @@ function daysBetween(a: Date, b: Date): number {
   return Math.max(1, Math.ceil(ms / 86400000));
 }
 
-function spansWeekend(from: Date, to: Date): boolean {
-  // True if any day of the rental is Friday or Saturday (UAE weekend).
-  const start = new Date(from); start.setHours(0, 0, 0, 0);
-  const end = new Date(to); end.setHours(0, 0, 0, 0);
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay(); // 0=Sun, 5=Fri, 6=Sat
-    if (dow === 5 || dow === 6) return true;
+const UAE_TZ_OFFSET_MS = 4 * 3_600_000; // Asia/Dubai (UTC+4, no DST)
+
+export function countWeekendDays(from: Date, totalDays: number): number {
+  let count = 0;
+  const startMs = from.getTime();
+  for (let i = 0; i < totalDays; i++) {
+    const uaeDay = new Date(startMs + UAE_TZ_OFFSET_MS + i * 86_400_000).getUTCDay();
+    if (uaeDay === 5 || uaeDay === 6) count++; // 5 = Fri, 6 = Sat (UAE weekend)
   }
-  return false;
+  return count;
 }
 
 function findLorStep(days: number, policy: YieldPolicy) {
@@ -163,22 +198,28 @@ function findLorStep(days: number, policy: YieldPolicy) {
   return chosen;
 }
 
-function pickEvent(events: RateEventSnapshot[], req: YieldRequest): RateEventSnapshot | null {
+export function pickApplicableRateEvent(
+  events: RateEventSnapshot[],
+  req: { vehicleCategory: string; pickupDate: Date; dropoffDate?: Date; channel?: string },
+): RateEventSnapshot | null {
+  const dropoff = req.dropoffDate ?? req.pickupDate;
   const candidates = events.filter((e) => {
     if (e.isActive === false) return false;
-    if (req.pickupDate < e.dateFrom || req.pickupDate > e.dateTo) return false;
+    // Match any event overlapping [pickupDate, dropoffDate]
+    if (dropoff < e.dateFrom || req.pickupDate > e.dateTo) return false;
     if (e.applicableCategories) {
       const cats = e.applicableCategories.split(',').map((s) => s.trim());
-      if (!cats.includes('ALL') && !cats.includes(req.vehicleCategory)) return false;
+      if (!cats.includes('ALL') && !cats.some((c) => categoriesMatch(c, req.vehicleCategory))) {
+        return false;
+      }
     }
     if (e.applicableChannels && req.channel) {
-      const chans = e.applicableChannels.split(',').map((s) => s.trim());
-      if (!chans.includes('ALL') && !chans.includes(req.channel)) return false;
+      const chans = e.applicableChannels.split(',').map((s) => s.trim().toUpperCase());
+      if (!chans.includes('ALL') && !chans.includes(req.channel.toUpperCase())) return false;
     }
     return true;
   });
   if (candidates.length === 0) return null;
-  // Highest priority wins; tie-broken by greatest absolute multiplier delta from 1.
   candidates.sort((a, b) => {
     const pri = (b.priority ?? 0) - (a.priority ?? 0);
     if (pri !== 0) return pri;
@@ -188,7 +229,15 @@ function pickEvent(events: RateEventSnapshot[], req: YieldRequest): RateEventSna
 }
 
 function pickBaseRule(rules: YieldRule[], category: string): YieldRule | null {
-  return rules.find((r) => r.isActive !== false && r.vehicleCategory === category) ?? null;
+  const active = rules
+    .filter((r) => r.isActive !== false && categoriesMatch(r.vehicleCategory, category))
+    .sort((a, b) => {
+      const exactA = a.vehicleCategory.trim().toUpperCase() === category.trim().toUpperCase() ? 1 : 0;
+      const exactB = b.vehicleCategory.trim().toUpperCase() === category.trim().toUpperCase() ? 1 : 0;
+      if (exactB !== exactA) return exactB - exactA;
+      return (b.priority ?? 0) - (a.priority ?? 0);
+    });
+  return active[0] ?? null;
 }
 
 /* ── Engine ──────────────────────────────────────────────────────────────── */
@@ -224,41 +273,79 @@ export function calculateYieldRate(input: YieldEngineInput): YieldResult {
 
   const totalDays = daysBetween(req.pickupDate, req.dropoffDate);
 
-  // Layer 2 — LOR
-  const lorStep = findLorStep(totalDays, policy);
-  const lorMultiplier = 1 - lorStep.discountPct / 100;
-  const lorAfter = round2(dailyRate * lorMultiplier);
-  if (lorStep.discountPct !== 0) {
+  // Layer 2 — LOR (honors explicit monthly/weekly rule rates when configured, else policy step discounts)
+  if (rule && totalDays >= 28 && rule.monthlyRate && rule.monthlyRate > 0 && baseDailyRate > 0) {
+    const tierAfter = round2(rule.monthlyRate / 30);
+    const tierMult = Number((tierAfter / dailyRate).toFixed(4));
     trace.push({
       layer: 'LOR',
-      label: `Length-of-rental · ${lorStep.label}`,
-      multiplier: lorMultiplier,
+      label: `Monthly tariff tier (${totalDays}d)`,
+      multiplier: tierMult,
       dailyRateBefore: dailyRate,
-      dailyRateAfter: lorAfter,
-      rationale: `Rental duration is ${totalDays} day${totalDays === 1 ? '' : 's'}, qualifying for ${lorStep.label}.`,
-      metadata: { lorStep, totalDays },
+      dailyRateAfter: tierAfter,
+      rationale: `Applied rule monthly tariff (${rule.monthlyRate}/30d) for ${totalDays}-day rental.`,
+      metadata: { totalDays, monthlyRate: rule.monthlyRate },
     });
+    dailyRate = tierAfter;
+  } else if (rule && totalDays >= 7 && rule.weeklyRate && rule.weeklyRate > 0 && baseDailyRate > 0) {
+    const tierAfter = round2(rule.weeklyRate / 7);
+    const tierMult = Number((tierAfter / dailyRate).toFixed(4));
+    trace.push({
+      layer: 'LOR',
+      label: `Weekly tariff tier (${totalDays}d)`,
+      multiplier: tierMult,
+      dailyRateBefore: dailyRate,
+      dailyRateAfter: tierAfter,
+      rationale: `Applied rule weekly tariff (${rule.weeklyRate}/7d) for ${totalDays}-day rental.`,
+      metadata: { totalDays, weeklyRate: rule.weeklyRate },
+    });
+    dailyRate = tierAfter;
+  } else {
+    const lorStep = findLorStep(totalDays, policy);
+    const lorMultiplier = 1 - lorStep.discountPct / 100;
+    const lorAfter = round2(dailyRate * lorMultiplier);
+    if (lorStep.discountPct !== 0) {
+      trace.push({
+        layer: 'LOR',
+        label: `Length-of-rental · ${lorStep.label}`,
+        multiplier: lorMultiplier,
+        dailyRateBefore: dailyRate,
+        dailyRateAfter: lorAfter,
+        rationale: `Rental duration is ${totalDays} day${totalDays === 1 ? '' : 's'}, qualifying for ${lorStep.label}.`,
+        metadata: { lorStep, totalDays },
+      });
+    }
+    dailyRate = lorAfter;
   }
-  dailyRate = lorAfter;
 
-  // Layer 3 — WEEKEND
-  if (policy.weekendUpliftPct > 0 && spansWeekend(req.pickupDate, req.dropoffDate)) {
-    const m = 1 + policy.weekendUpliftPct / 100;
+  // Layer 3 — WEEKEND (strictly proportional to actual Fri/Sat days in [pickupDate, dropoffDate))
+  const weekendDays = countWeekendDays(req.pickupDate, totalDays);
+  const ruleWeekendUpliftPct =
+    rule?.weekendDailyRate != null &&
+    baseDailyRate > 0 &&
+    rule.weekendDailyRate > baseDailyRate
+      ? ((rule.weekendDailyRate - baseDailyRate) / baseDailyRate) * 100
+      : policy.weekendUpliftPct;
+
+  if (ruleWeekendUpliftPct > 0 && weekendDays > 0) {
+    const effectiveUpliftPct = (ruleWeekendUpliftPct * weekendDays) / totalDays;
+    const m = 1 + effectiveUpliftPct / 100;
     const after = round2(dailyRate * m);
     trace.push({
       layer: 'WEEKEND',
-      label: `Weekend uplift +${policy.weekendUpliftPct}%`,
+      label: `Weekend uplift +${effectiveUpliftPct.toFixed(1)}% (${weekendDays}/${totalDays}d)`,
       multiplier: m,
       dailyRateBefore: dailyRate,
       dailyRateAfter: after,
-      rationale: 'Rental period includes a Friday or Saturday (UAE weekend).',
+      rationale: `${weekendDays} of ${totalDays} rental day(s) fall on Fri/Sat (+${ruleWeekendUpliftPct.toFixed(1)}% on weekend days).`,
+      metadata: { weekendDays, totalDays, effectiveUpliftPct: round2(effectiveUpliftPct) },
     });
     dailyRate = after;
   }
 
   // Layer 4 — LEAD_TIME
   const hoursLead = (req.pickupDate.getTime() - asOf.getTime()) / 3_600_000;
-  if (hoursLead <= policy.lastMinuteHours && policy.lastMinuteUpliftPct > 0) {
+  if (hoursLead >= 0 && hoursLead <= policy.lastMinuteHours && policy.lastMinuteUpliftPct > 0) {
     const m = 1 + policy.lastMinuteUpliftPct / 100;
     const after = round2(dailyRate * m);
     trace.push({
@@ -290,7 +377,6 @@ export function calculateYieldRate(input: YieldEngineInput): YieldResult {
   if (req.fleetUtilizationPct != null) {
     const u = Math.min(100, Math.max(0, req.fleetUtilizationPct));
     if (u >= policy.utilizationHighThresholdPct) {
-      // Linearly interpolate surge: at threshold => 0%, at 100% => max
       const span = 100 - policy.utilizationHighThresholdPct;
       const surgePct = span > 0
         ? ((u - policy.utilizationHighThresholdPct) / span) * policy.utilizationHighSurgeMaxPct
@@ -332,7 +418,7 @@ export function calculateYieldRate(input: YieldEngineInput): YieldResult {
   }
 
   // Layer 6 — EVENT
-  const event = pickEvent(input.events, req);
+  const event = pickApplicableRateEvent(input.events, req);
   if (event && event.multiplier !== 1) {
     const after = round2(dailyRate * event.multiplier);
     const sign = event.multiplier > 1 ? '+' : '';
@@ -343,7 +429,7 @@ export function calculateYieldRate(input: YieldEngineInput): YieldResult {
       multiplier: event.multiplier,
       dailyRateBefore: dailyRate,
       dailyRateAfter: after,
-      rationale: `Pickup date falls within event "${event.eventCode}" (${event.name}).`,
+      rationale: `Rental period overlaps event "${event.eventCode}" (${event.name}).`,
       metadata: { eventId: event.id, eventCode: event.eventCode, dateFrom: event.dateFrom, dateTo: event.dateTo },
     });
     dailyRate = after;
@@ -369,7 +455,8 @@ export function calculateYieldRate(input: YieldEngineInput): YieldResult {
   }
 
   const finalDailyRate = round2(dailyRate);
-  const baseRentalCharge = round2(finalDailyRate * totalDays);
+  const eventFlatSurcharge = round2(Math.max(0, Number(event?.flatSurcharge ?? 0)));
+  const baseRentalCharge = round2(finalDailyRate * totalDays + eventFlatSurcharge);
   const totalAdjustmentPct = baseDailyRate > 0
     ? round2(((finalDailyRate - baseDailyRate) / baseDailyRate) * 100)
     : 0;
