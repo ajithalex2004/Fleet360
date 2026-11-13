@@ -7,6 +7,7 @@ import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import type { Lang } from '../theme';
 import { colors, spacing, typography, fontFor, dirFor, formatMoney, formatDate } from '../theme';
 import { t } from '../i18n';
+import { formatCanonicalFuelDisplay } from '@/lib/rental/fuel-odometer';
 
 export interface AgreementCharge {
   description: string;
@@ -61,9 +62,26 @@ export interface RentalAgreementPdfData {
   currency: string;
   mileageIn?: number | null;
   mileageOut?: number | null;
-  fuelIn?: number | null;
-  fuelOut?: number | null;
+  fuelIn?: number | string | null;
+  fuelOut?: number | string | null;
   notes?: string | null;
+}
+
+export function formatFuelLevel(val: number | string | null | undefined): string {
+  if (val == null) return '—';
+  const raw = String(val).trim();
+  if (!raw) return '—';
+  if (raw.includes('%') && raw.includes('/')) return raw;
+  const eighthsMatch = /^(\d+(?:\.\d+)?)\s*\/\s*8$/i.exec(raw);
+  if (eighthsMatch) {
+    const num = Number(eighthsMatch[1]);
+    if (Number.isFinite(num)) {
+      const pct = num > 8 ? Math.min(100, Math.round(num)) : Math.round((num / 8) * 100);
+      return formatCanonicalFuelDisplay(pct);
+    }
+  }
+  const formatted = formatCanonicalFuelDisplay(val);
+  return formatted === '—' ? raw : formatted;
 }
 
 const s = StyleSheet.create({
@@ -126,6 +144,7 @@ export function RentalAgreementPdf({ data, lang }: { data: RentalAgreementPdfDat
           <View style={s.brand}>
             <Text style={[s.brandName, { fontFamily: font }]}>{data.vendor.name}</Text>
             {data.vendor.address && <Text style={[s.brandContact, { fontFamily: font }]}>{data.vendor.address}</Text>}
+            {data.vendor.email && <Text style={[s.brandContact, { fontFamily: font }]}>{data.vendor.email}</Text>}
             {data.vendor.trn && <Text style={[s.brandContact, { fontFamily: font }]}>{t('trn', lang)}: {data.vendor.trn}</Text>}
           </View>
           <View style={s.docMeta}>
@@ -146,6 +165,7 @@ export function RentalAgreementPdf({ data, lang }: { data: RentalAgreementPdfDat
               <Text style={[s.partyLabel, { fontFamily: font }]}>{t('rentalCompany', lang)}</Text>
               <Text style={[s.partyName, { fontFamily: font }]}>{data.vendor.name}</Text>
               {data.vendor.address && <Text style={[s.partyMeta, { fontFamily: font }]}>{data.vendor.address}</Text>}
+              {(data.vendor.phone || data.vendor.email) && <Text style={[s.partyMeta, { fontFamily: font }]}>{[data.vendor.phone, data.vendor.email].filter(Boolean).join(' · ')}</Text>}
               {data.vendor.trn && <Text style={[s.partyMeta, { fontFamily: font }]}>{t('trn', lang)}: {data.vendor.trn}</Text>}
               {data.pickupBranch && <Text style={[s.partyMeta, { fontFamily: font }]}>{t('pickupBranch', lang)}: {data.pickupBranch}</Text>}
               {data.dropoffBranch && <Text style={[s.partyMeta, { fontFamily: font }]}>{t('dropoffBranch', lang)}: {data.dropoffBranch}</Text>}
@@ -175,10 +195,10 @@ export function RentalAgreementPdf({ data, lang }: { data: RentalAgreementPdfDat
               <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('licensePlate', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.vehicle.licensePlate ?? '—'}</Text></View>
               <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('vin', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.vehicle.vin ?? '—'}</Text></View>
               {data.vehicle.color && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>Color</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.vehicle.color}</Text></View>}
-              {data.mileageIn != null && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('mileageIn', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.mileageIn.toLocaleString()} km</Text></View>}
               {data.mileageOut != null && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('mileageOut', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.mileageOut.toLocaleString()} km</Text></View>}
-              {data.fuelIn != null && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('fuelIn', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.fuelIn}/8</Text></View>}
-              {data.fuelOut != null && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('fuelOut', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.fuelOut}/8</Text></View>}
+              {data.mileageIn != null && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('mileageIn', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{data.mileageIn.toLocaleString()} km</Text></View>}
+              {data.fuelOut != null && String(data.fuelOut).trim() !== '' && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('fuelOut', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{formatFuelLevel(data.fuelOut)}</Text></View>}
+              {data.fuelIn != null && String(data.fuelIn).trim() !== '' && <View style={s.vehItem}><Text style={[s.vehLabel, { fontFamily: font }]}>{t('fuelIn', lang)}</Text><Text style={[s.vehValue, { fontFamily: font }]}>{formatFuelLevel(data.fuelIn)}</Text></View>}
             </View>
           </View>
         </View>

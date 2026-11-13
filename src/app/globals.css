@@ -1,6 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "./light-contrast.css";
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 /* Binds Tailwind's dark: variant to the app's own html.dark toggle (set by
    ThemeProvider from localStorage) instead of Tailwind v4's default, which

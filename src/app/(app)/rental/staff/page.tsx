@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { ShieldAlert, Trash2 } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -115,6 +117,8 @@ export default function RentalStaffPage() {
   const [transferForm, setTransferForm]   = useState({ branch_name: '', emirate: '', reason: '' });
   const [saving, setSaving]               = useState(false);
   const [error, setError]                 = useState('');
+  const [rbacError, setRbacError]         = useState('');
+  const [modalError, setModalError]       = useState('');
 
   const fetchStaff = useCallback(async () => {
     setLoading(true);
@@ -126,10 +130,21 @@ export default function RentalStaffPage() {
       if (filterStatus) qs.set('status', filterStatus);
 
       const res  = await fetch(`/api/branch-staff?${qs}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setRbacError(String(data?.error ?? 'Requires permission to view branch staff.'));
+        setStaff([]);
+        return;
+      }
+      if (!res.ok) {
+        setError(String(data?.error ?? 'Failed to load branch staff'));
+        setStaff([]);
+        return;
+      }
       setStaff(data.data || []);
       setKpi(data.kpi  || { total: 0, active: 0, on_leave: 0, branch_managers: 0 });
     } catch {
+      setError('Failed to load branch staff');
       setStaff([]);
     } finally {
       setLoading(false);
@@ -142,6 +157,8 @@ export default function RentalStaffPage() {
 
   const handleSave = async () => {
     setError('');
+    setRbacError('');
+    setModalError('');
     setSaving(true);
     try {
       const isEdit = !!editTarget;
@@ -151,13 +168,25 @@ export default function RentalStaffPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        const msg = String(data?.error || 'Requires RAC Manager permission to manage staff.');
+        setRbacError(msg);
+        setModalError(`Access Denied (403): ${msg}`);
+        return;
+      }
+      if (!res.ok) {
+        const msg = String(data?.error || 'Failed to save staff assignment');
+        setModalError(msg);
+        setError(msg);
+        return;
+      }
       setShowAssign(false);
       setEditTarget(null);
       setForm({ ...EMPTY_FORM });
       fetchStaff();
     } catch {
+      setModalError('Network error');
       setError('Network error');
     } finally {
       setSaving(false);
@@ -165,17 +194,35 @@ export default function RentalStaffPage() {
   };
 
   const handleStatus = async (id: string, newStatus: string) => {
-    await fetch('/api/branch-staff', {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id, status: newStatus }),
-    });
-    fetchStaff();
+    setError('');
+    setRbacError('');
+    try {
+      const res = await fetch('/api/branch-staff', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ id, status: newStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setRbacError(String(data?.error ?? 'Requires RAC Manager permission to update staff status.'));
+        return;
+      }
+      if (!res.ok) {
+        setError(String(data?.error ?? `Failed to update status (${res.status})`));
+        return;
+      }
+      fetchStaff();
+    } catch {
+      setError('Failed to update staff status');
+    }
   };
 
   const handleTransfer = async () => {
     if (!transferTarget || !transferForm.branch_name) return;
     setSaving(true);
+    setError('');
+    setRbacError('');
+    setModalError('');
     try {
       const body = {
         id:          transferTarget.id,
@@ -186,22 +233,62 @@ export default function RentalStaffPage() {
           ? `Transferred: ${transferForm.reason} (${new Date().toLocaleDateString('en-GB')})`
           : transferTarget.notes,
       };
-      await fetch('/api/branch-staff', {
+      const res = await fetch('/api/branch-staff', {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        const msg = String(data?.error ?? 'Requires RAC Manager permission to transfer staff.');
+        setRbacError(msg);
+        setModalError(`Access Denied (403): ${msg}`);
+        return;
+      }
+      if (!res.ok) {
+        const msg = String(data?.error ?? 'Failed to transfer staff');
+        setModalError(msg);
+        setError(msg);
+        return;
+      }
       setShowTransfer(false);
       setTransferTarget(null);
       setTransferForm({ branch_name: '', emirate: '', reason: '' });
       fetchStaff();
+    } catch {
+      setModalError('Failed to transfer staff');
+      setError('Failed to transfer staff');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleRemove = async (s: StaffMember) => {
+    if (!confirm(`Remove "${s.full_name}" from branch staff assignments?`)) return;
+    setError('');
+    setRbacError('');
+    try {
+      const res = await fetch(`/api/branch-staff?id=${encodeURIComponent(s.id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setRbacError(String(data?.error ?? 'Requires RAC Manager permission to remove staff.'));
+        return;
+      }
+      if (!res.ok) {
+        setError(String(data?.error ?? `Failed to remove staff member (${res.status})`));
+        return;
+      }
+      fetchStaff();
+    } catch {
+      setError('Failed to remove staff member');
+    }
+  };
+
   const openEdit = (s: StaffMember) => {
     setEditTarget(s);
+    setModalError('');
     setForm({
       full_name:   s.full_name,
       phone:       s.phone,
@@ -228,27 +315,40 @@ export default function RentalStaffPage() {
           <p className="text-[var(--text-muted)] text-xs">Manage staff assignments across all Rent-A-Car branches</p>
         </div>
         <button
-          onClick={() => { setEditTarget(null); setForm({ ...EMPTY_FORM }); setShowAssign(true); }}
+          onClick={() => { setEditTarget(null); setModalError(''); setForm({ ...EMPTY_FORM }); setShowAssign(true); }}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg"
         >
           + Assign Staff
         </button>
       </div>
 
-      {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Staff',     value: kpi.total,           color: 'text-[var(--text-main)]' },
-          { label: 'Active',          value: kpi.active,          color: 'text-emerald-400' },
-          { label: 'Branch Managers', value: kpi.branch_managers, color: 'text-teal-400' },
-          { label: 'On Leave',        value: kpi.on_leave,        color: 'text-amber-400' },
-        ].map(card => (
-          <div key={card.label} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5">
-            <p className="text-xs text-[var(--text-faint)] font-medium mb-1">{card.label}</p>
-            <p className={`text-3xl font-bold ${card.color}`}>{card.value}</p>
+      {rbacError && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3.5 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Requires Permission (403)</p>
+              <p className="text-xs text-amber-200/80 mt-0.5">{rbacError}</p>
+            </div>
           </div>
-        ))}
-      </div>
+          <button onClick={() => setRbacError('')} className="text-amber-300/70 hover:text-amber-200 text-sm">✕</button>
+        </div>
+      )}
+
+      {error && !rbacError && (
+        <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-300 hover:text-red-200 text-xs">✕</button>
+        </div>
+      )}
+
+      {/* ── KPI Cards ── */}
+      <StatGrid cols={4}>
+        <KpiCard label="Total Staff" value={kpi.total} accent="slate" />
+        <KpiCard label="Active" value={kpi.active} accent="emerald" />
+        <KpiCard label="Branch Managers" value={kpi.branch_managers} accent="cyan" />
+        <KpiCard label="On Leave" value={kpi.on_leave} accent="amber" />
+      </StatGrid>
 
       {/* ── Filters + View Toggle ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -349,9 +449,16 @@ export default function RentalStaffPage() {
                   className="flex-1 px-3 py-1.5 rounded-lg bg-teal-600/20 border border-teal-500/30 text-teal-400 hover:bg-teal-600/40 text-xs font-medium transition-colors">
                   Edit
                 </button>
-                <button onClick={() => { setTransferTarget(s); setShowTransfer(true); }}
+                <button onClick={() => { setTransferTarget(s); setModalError(''); setShowTransfer(true); }}
                   className="flex-1 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/40 text-xs font-medium transition-colors">
                   Transfer
+                </button>
+                <button
+                  onClick={() => handleRemove(s)}
+                  title="Remove staff member"
+                  className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 text-xs font-medium transition-colors inline-flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
                 <div className="relative group/menu">
                   <button className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition-colors">
@@ -376,6 +483,10 @@ export default function RentalStaffPage() {
                         Deactivate
                       </button>
                     )}
+                    <button onClick={() => handleRemove(s)}
+                      className="w-full text-left px-3 py-1.5 text-xs text-rose-400 hover:bg-[var(--bg-surface-hover)] rounded-lg">
+                      Remove
+                    </button>
                   </div>
                 </div>
               </div>
@@ -435,9 +546,16 @@ export default function RentalStaffPage() {
                           className="px-2.5 py-1 rounded-lg bg-teal-600/20 border border-teal-500/30 text-teal-400 hover:bg-teal-600/40 text-xs font-medium transition-colors">
                           Edit
                         </button>
-                        <button onClick={() => { setTransferTarget(s); setShowTransfer(true); }}
+                        <button onClick={() => { setTransferTarget(s); setModalError(''); setShowTransfer(true); }}
                           className="px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/40 text-xs font-medium transition-colors">
                           Transfer
+                        </button>
+                        <button
+                          onClick={() => handleRemove(s)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 text-xs font-medium transition-colors inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Remove
                         </button>
                       </div>
                     </td>
@@ -455,12 +573,12 @@ export default function RentalStaffPage() {
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-7 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-[var(--text-main)]">{editTarget ? 'Edit Staff Member' : 'Assign Staff to Branch'}</h2>
-              <button onClick={() => { setShowAssign(false); setEditTarget(null); setError(''); }}
+              <button onClick={() => { setShowAssign(false); setEditTarget(null); setModalError(''); }}
                 className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">✕</button>
             </div>
 
-            {error && (
-              <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">{error}</div>
+            {modalError && (
+              <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">{modalError}</div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
@@ -541,7 +659,7 @@ export default function RentalStaffPage() {
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setShowAssign(false); setEditTarget(null); setError(''); }}
+              <button onClick={() => { setShowAssign(false); setEditTarget(null); setModalError(''); }}
                 className="flex-1 px-4 py-2.5 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors">
                 Cancel
               </button>
@@ -560,9 +678,16 @@ export default function RentalStaffPage() {
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-7 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-[var(--text-main)]">Transfer Staff</h2>
-              <button onClick={() => { setShowTransfer(false); setTransferTarget(null); }}
+              <button onClick={() => { setShowTransfer(false); setTransferTarget(null); setModalError(''); }}
                 className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">✕</button>
             </div>
+
+            {modalError && (
+              <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                {modalError}
+              </div>
+            )}
+
             <p className="text-[var(--text-muted)] text-sm mb-5">
               Transferring <span className="text-[var(--text-main)] font-medium">{transferTarget.full_name}</span> from{' '}
               <span className="text-teal-400">{transferTarget.branch_name}</span>
@@ -592,7 +717,7 @@ export default function RentalStaffPage() {
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setShowTransfer(false); setTransferTarget(null); }}
+              <button onClick={() => { setShowTransfer(false); setTransferTarget(null); setModalError(''); }}
                 className="flex-1 px-4 py-2.5 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors">
                 Cancel
               </button>

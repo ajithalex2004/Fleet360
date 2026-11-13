@@ -2,8 +2,15 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import AppRuntime from "@/components/AppRuntime";
+import PublicPortalRuntime from "@/components/PublicPortalRuntime";
 
 const PUBLIC_MARKETING_PATHS = new Set(["/", "/operations-review"]);
+const STANDALONE_PORTAL_PREFIXES = [
+  "/rac-portal",
+  "/leasing-portal",
+  "/carrier-portal",
+  "/sign/",
+];
 
 export const metadata: Metadata = {
   title: {
@@ -72,8 +79,17 @@ const SW_SCOPE_CLEANUP = `(function(){if(!('serviceWorker' in navigator))return;
 const LANG_NO_FLASH = `(function(){try{var l=localStorage.getItem('xlai_language')||'en';document.documentElement.lang=l;document.documentElement.dir=l==='ar'?'rtl':'ltr';}catch(_){document.documentElement.lang='en';document.documentElement.dir='ltr';}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = (await headers()).get("x-fleet-path");
-  const content = PUBLIC_MARKETING_PATHS.has(pathname ?? "") ? children : <AppRuntime>{children}</AppRuntime>;
+  const pathname = (await headers()).get("x-fleet-path") ?? "";
+  const isStandalonePortal = STANDALONE_PORTAL_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix),
+  );
+  const content = PUBLIC_MARKETING_PATHS.has(pathname) ? (
+    children
+  ) : isStandalonePortal ? (
+    <PublicPortalRuntime>{children}</PublicPortalRuntime>
+  ) : (
+    <AppRuntime>{children}</AppRuntime>
+  );
 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>

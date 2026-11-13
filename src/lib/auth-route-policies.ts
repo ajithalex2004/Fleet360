@@ -58,6 +58,7 @@ export const PUBLIC_EXACT: readonly string[] = [
   // and takes tenantId from the gateway row. Exact match only: the rest of
   // /api/assets/ble/ stays session-protected.
   '/api/assets/ble/ingest',
+  '/api/esign/verify',
   // /api/auth/me is NOT public — it must receive the injected headers
 ];
 
@@ -94,6 +95,8 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // before ever seeing the portal's own login page.
   '/leasing-portal',
   '/api/leasing-portal/',
+  '/rac-portal',
+  '/api/rac-portal/',
   // Carrier portal — token-authed (invite link), no operator session.
   '/carrier-portal/',
   '/api/carrier-portal/',
@@ -196,6 +199,7 @@ export const PROTECTED_UI_PREFIXES: readonly string[] = [
  */
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.includes(pathname)) return true;
+  if (/^\/api\/rental\/channels\/[^/]+\/webhook$/.test(pathname)) return true;
   return PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix));
 }
 

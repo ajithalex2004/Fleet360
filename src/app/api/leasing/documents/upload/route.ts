@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
  *
  * Multipart form-data:
  *   file:        the file to upload
- *   entityType:  CONTRACT | LESSEE | QUOTATION | VEHICLE
+ *   entityType:  CONTRACT | LESSEE | QUOTATION | VEHICLE | RENTAL_BOOKING | RENTAL_AGREEMENT | RENTAL_CUSTOMER
  *   entityId:    UUID of the entity this document belongs to
  *   docType:     TRADE_LICENSE | EMIRATES_ID | PASSPORT | MOA | SIGNED_AGREEMENT | INSURANCE | VEHICLE_PHOTO | OTHER
  *   docName:     human-readable name
@@ -15,21 +15,26 @@ export const dynamic = 'force-dynamic';
  *
  * Returns: the created LeaseDocument row + storage metadata.
  *
- * Tenant scoping: requires x-tenant-id. The created LeaseDocument row is
- * stamped with the same tenantId; if entityType=CONTRACT or entityType=LESSEE
- * the referenced row is verified to belong to the caller's tenant first.
+ * Tenant scoping: requires authorized tenant session (`withTenantRls`). Every
+ * referenced parent entity (`CONTRACT`, `LESSEE`, `QUOTATION`, `VEHICLE`, and
+ * `RENTAL_*`) is verified to belong to the caller's tenant under RLS BEFORE any
+ * file bytes are persisted to object storage.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { loadModuleAccess } from '@/lib/authz/module-access';
 import { getStorage } from '@/lib/storage';
 import { fileContentProblem } from '@/lib/storage/file-type';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import {
+  assertRentalForeignKeysInTenant,
+  isRentalSecurityError,
+} from '@/lib/rental/security-guards';
 
 export const runtime = 'nodejs';
 
@@ -43,8 +48,20 @@ const ALLOWED_MIME_PREFIXES = [
   'text/plain',
 ];
 
+const ENTITY_TYPES = [
+  'CONTRACT',
+  'LESSEE',
+  'QUOTATION',
+  'VEHICLE',
+  'RENTAL_BOOKING',
+  'RENTAL_AGREEMENT',
+  'RENTAL_CUSTOMER',
+] as const;
+
+type UploadEntityType = (typeof ENTITY_TYPES)[number];
+
 const metadataSchema = z.object({
-  entityType: z.enum(['CONTRACT', 'LESSEE', 'QUOTATION', 'VEHICLE']),
+  entityType: z.enum(ENTITY_TYPES),
   entityId: z.string().uuid('entityId must be a UUID'),
   docType: z.enum([
     'TRADE_LICENSE',
@@ -56,11 +73,87 @@ const metadataSchema = z.object({
     'VEHICLE_PHOTO',
     'OTHER',
   ]),
-  docName: z.string().min(1, 'docName is required'),
+  docName: z.string().trim().min(1, 'docName is required').max(255),
   issueDate: z.string().optional().or(z.literal('')),
   expiryDate: z.string().optional().or(z.literal('')),
   notes: z.string().optional(),
 });
+
+/**
+ * Verifies inside `withTenantRls` that `entityId` belongs to `tenantId` (and is not soft-deleted)
+ * for EVERY supported `entityType`.
+ */
+async function verifyParentEntityOwnership(
+  tx: TxClient,
+  tenantId: string,
+  entityType: UploadEntityType,
+  entityId: string,
+  docType: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  switch (entityType) {
+    case 'CONTRACT': {
+      const contract = await tx.leaseContract2.findFirst({
+        where: { id: entityId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (contract) return { ok: true };
+
+      // RAC Counter (`src/app/(app)/rental/counter/page.tsx`) reuses CONTRACT + VEHICLE_PHOTO
+      // with the active tenant's own `rentalBooking.id` or `rentalAgreement.id`.
+      if (docType === 'VEHICLE_PHOTO') {
+        const anyTx = tx as Record<string, unknown>;
+        if (typeof (anyTx.rentalBooking as { findFirst?: unknown })?.findFirst === 'function') {
+          const bk = await tx.rentalBooking.findFirst({
+            where: { id: entityId, tenantId, deletedAt: null },
+            select: { id: true },
+          });
+          if (bk) return { ok: true };
+        }
+        if (typeof (anyTx.rentalAgreement as { findFirst?: unknown })?.findFirst === 'function') {
+          const agr = await tx.rentalAgreement.findFirst({
+            where: { id: entityId, tenantId },
+            select: { id: true },
+          });
+          if (agr) return { ok: true };
+        }
+      }
+      return { ok: false, error: 'Contract not found' };
+    }
+    case 'LESSEE': {
+      const lessee = await tx.lessee.findFirst({
+        where: { id: entityId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      return lessee ? { ok: true } : { ok: false, error: 'Lessee not found' };
+    }
+    case 'QUOTATION': {
+      const quotation = await tx.leaseQuotation.findFirst({
+        where: { id: entityId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      return quotation ? { ok: true } : { ok: false, error: 'Quotation not found' };
+    }
+    case 'VEHICLE': {
+      const vehicle = await tx.vehicle.findFirst({
+        where: { id: entityId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      return vehicle ? { ok: true } : { ok: false, error: 'Vehicle not found' };
+    }
+    case 'RENTAL_BOOKING': {
+      await assertRentalForeignKeysInTenant(tx, tenantId, { bookingId: entityId });
+      return { ok: true };
+    }
+    case 'RENTAL_AGREEMENT': {
+      await assertRentalForeignKeysInTenant(tx, tenantId, { agreementId: entityId });
+      return { ok: true };
+    }
+    case 'RENTAL_CUSTOMER': {
+      await assertRentalForeignKeysInTenant(tx, tenantId, { customerId: entityId });
+      return { ok: true };
+    }
+  }
+}
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -68,10 +161,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
   // Shared by the leasing documents page and the RAC counter (see the
   // 'leasing/documents/upload' area in policy-matrix.ts).
-  const denied = (await loadModuleAccess(req.headers, tenantId))(['leasing', 'rental'], 'create', '/api/leasing/documents/upload');
+  const denied = (await loadModuleAccess(req.headers, tenantId))(
+    ['leasing', 'rental'],
+    'create',
+    '/api/leasing/documents/upload',
+  );
   if (denied) return denied;
+
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -80,6 +179,10 @@ export async function POST(req: NextRequest) {
         { error: 'No file uploaded. Send multipart form-data with a "file" field.' },
         { status: 400 },
       );
+    }
+
+    if (file.size <= 0) {
+      return NextResponse.json({ error: 'Uploaded file is empty.' }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_BYTES) {
@@ -121,30 +224,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify ownership of the parent entity for entity types that have
-    // tenant-scoped backing rows.
-    if (parsed.data.entityType === 'CONTRACT') {
-      const owned = await prisma.leaseContract2.findFirst({
-        where: { id: parsed.data.entityId, tenantId },
-        select: { id: true },
-      });
-      if (!owned) {
-        return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
-      }
-    } else if (parsed.data.entityType === 'LESSEE') {
-      const owned = await prisma.lessee.findFirst({
-        where: { id: parsed.data.entityId, tenantId },
-        select: { id: true },
-      });
-      if (!owned) {
-        return NextResponse.json({ error: 'Lessee not found' }, { status: 404 });
-      }
+    const expiry = parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null;
+    if (expiry && Number.isNaN(expiry.getTime())) {
+      return NextResponse.json({ error: 'Invalid expiryDate' }, { status: 400 });
+    }
+    const issue = parsed.data.issueDate ? new Date(parsed.data.issueDate) : null;
+    if (issue && Number.isNaN(issue.getTime())) {
+      return NextResponse.json({ error: 'Invalid issueDate' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    // The browser-reported type is the uploader's claim; check the bytes.
-    const contentProblem = fileContentProblem(file.name, buffer, ['pdf', 'png', 'jpeg', 'gif', 'webp', 'ooxml', 'ole', 'text']);
-    if (contentProblem) return NextResponse.json({ error: contentProblem }, { status: 415 });
+    // The browser-reported type is the uploader's claim; check magic bytes & extension match first.
+    const contentProblem = fileContentProblem(file.name, buffer, [
+      'pdf',
+      'png',
+      'jpeg',
+      'gif',
+      'webp',
+      'ooxml',
+      'ole',
+      'text',
+    ]);
+    if (contentProblem) {
+      return NextResponse.json({ error: contentProblem }, { status: 415 });
+    }
+
+    // Verify ownership of the parent entity inside `withTenantRls` BEFORE persisting bytes to storage.
+    const ownership = await withTenantRls(prisma, tenantId, (tx) =>
+      verifyParentEntityOwnership(
+        tx,
+        tenantId,
+        parsed.data.entityType,
+        parsed.data.entityId,
+        parsed.data.docType,
+      ),
+    );
+    if (!ownership.ok) {
+      return NextResponse.json({ error: ownership.error }, { status: 404 });
+    }
+
     const storage = getStorage();
     const stored = await storage.upload({
       buffer,
@@ -153,9 +271,6 @@ export async function POST(req: NextRequest) {
       prefix: `leasing/${parsed.data.entityType.toLowerCase()}/${parsed.data.entityId}`,
     });
 
-    const expiry = parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null;
-    const issue = parsed.data.issueDate ? new Date(parsed.data.issueDate) : null;
-
     let status = 'ACTIVE';
     if (expiry) {
       const days = Math.ceil((expiry.getTime() - Date.now()) / 86400000);
@@ -163,26 +278,32 @@ export async function POST(req: NextRequest) {
       else if (days <= 30) status = 'EXPIRING_SOON';
     }
 
-    const doc = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseDocument.create({
-      data: {
-        entityType: parsed.data.entityType,
-        entityId: parsed.data.entityId,
-        docType: parsed.data.docType,
-        docName: parsed.data.docName,
-        fileName: stored.originalName,
-        fileUrl: stored.url,
-        fileSize: stored.size,
-        mimeType: stored.mimeType,
-        issueDate: issue,
-        expiryDate: expiry,
-        status,
-        uploadedBy: req.headers.get('x-user-id') ?? null,
-        notes: parsed.data.notes ?? null,
-        tenantId,
-      },
-    }),
-    );
+    let doc;
+    try {
+      doc = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseDocument.create({
+          data: {
+            entityType: parsed.data.entityType,
+            entityId: parsed.data.entityId,
+            docType: parsed.data.docType,
+            docName: parsed.data.docName,
+            fileName: stored.originalName,
+            fileUrl: stored.url,
+            fileSize: stored.size,
+            mimeType: stored.mimeType,
+            issueDate: issue,
+            expiryDate: expiry,
+            status,
+            uploadedBy: req.headers.get('x-user-id') ?? null,
+            notes: parsed.data.notes ?? null,
+            tenantId,
+          },
+        }),
+      );
+    } catch (createErr) {
+      await storage.delete(stored.key).catch(() => {});
+      throw createErr;
+    }
 
     void logAudit({
       tenantId,
@@ -196,7 +317,10 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ document: doc, storage: stored }, { status: 201 });
-    } catch (err) {
+  } catch (err) {
+    if (isRentalSecurityError(err)) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     captureException(err, { context: 'leasing.documents.upload' });
     console.error('[documents upload] error:', err);
     return NextResponse.json({ error: 'Failed to upload document' }, { status: 500 });

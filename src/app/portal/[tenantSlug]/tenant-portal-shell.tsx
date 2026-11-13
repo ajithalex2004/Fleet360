@@ -43,39 +43,51 @@ const NAV_HOME = [
   { href: '', label: 'Dashboard', icon: '🏠', exact: true },
 ];
 
-const NAV_RAC = [
-  { href: '/rac',            label: 'Fleet',              icon: '🚗' },
+const NAV_RAC: Array<{ href: string; label: string; icon: string; exact?: boolean }> = [
+  { href: '/rac',            label: 'Fleet Overview',     icon: '🚗', exact: true },
+  { href: '/rac/fleet',      label: 'Fleet Vehicles',     icon: '🚘' },
   { href: '/rac/customers',  label: 'Customer Portal',    icon: '👥' },
   { href: '/rac/bookings',   label: 'Bookings',           icon: '📅' },
   { href: '/rac/agreements', label: 'Rental Agreements',  icon: '📋' },
   { href: '/rac/invoices',   label: 'Invoices',           icon: '🧾' },
 ];
 
-const NAV_SCHOOL_BUS = [
-  { href: '/school-bus', label: 'Routes', icon: '🗺️' },
-  { href: '/school-bus/students', label: 'Students', icon: '🎒' },
-  { href: '/school-bus/attendance', label: 'Attendance', icon: '✅' },
-  { href: '/school-bus/alerts', label: 'Parent Alerts', icon: '🔔' },
+const NAV_SCHOOL_BUS: Array<{ href: string; label: string; icon: string; exact?: boolean }> = [
+  { href: '/school-bus', label: 'Routes', icon: '🗺️', exact: true },
 ];
 
-const NAV_FINANCE = [
-  { href: '/finance', label: 'Dashboard', icon: '📊' },
-  { href: '/finance/my-invoices', label: 'My Invoices', icon: '🧾' },
-  { href: '/finance/customer-invoices', label: 'Customer Invoices', icon: '💳' },
-  { href: '/finance/pl-report', label: 'P&L Report', icon: '📈' },
-  { href: '/finance/bank-recon', label: 'Bank Recon', icon: '🏦' },
+const NAV_FINANCE: Array<{ href: string; label: string; icon: string; exact?: boolean }> = [
+  { href: '/finance', label: 'Dashboard', icon: '📊', exact: true },
 ];
 
-const NAV_LEASING = [
-  { href: '/leasing', label: 'Overview', icon: '📋' },
+const NAV_LEASING: Array<{ href: string; label: string; icon: string; exact?: boolean }> = [
+  { href: '/leasing', label: 'Overview', icon: '📋', exact: true },
   { href: '/leasing/contracts', label: 'My Contracts', icon: '📜' },
   { href: '/leasing/invoices', label: 'My Invoices', icon: '🧾' },
   { href: '/leasing/documents', label: 'My Documents', icon: '📄' },
 ];
 
-const NAV_SUPPORT = [
-  { href: '/support', label: 'Help', icon: '❓' },
-];
+function slugifyPortalTenant(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return null;
+  const slug = trimmed.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || null;
+}
+
+function matchesTenantSlug(
+  slugLower: string,
+  candidate: { id?: string | null; code?: string | null; name?: string | null },
+): boolean {
+  const options = [
+    candidate.code?.trim().toLowerCase(),
+    slugifyPortalTenant(candidate.code),
+    slugifyPortalTenant(candidate.name),
+    candidate.name?.trim().toLowerCase().replace(/\s+/g, '-'),
+    candidate.id?.trim().toLowerCase(),
+  ].filter((v): v is string => Boolean(v));
+  return options.includes(slugLower);
+}
 
 const PLAN_COLORS: Record<string, string> = {
   ENTERPRISE: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
@@ -89,8 +101,8 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
   const pathname = usePathname() ?? '';
   const base = `/portal/${slug}`;
 
-  const hasRAC = tenant?.modules.some(m => m.module === 'RAC' && m.isEnabled) ?? false;
-  const hasBus = tenant?.modules.some(m => ['SCHOOL_BUS', 'school_bus'].includes(m.module) && m.isEnabled) ?? false;
+  const hasRAC = tenant?.modules.some(m => ['RAC', 'rac', 'rental', 'RENTAL'].includes(m.module) && m.isEnabled) ?? false;
+  const hasBus = tenant?.modules.some(m => ['SCHOOL_BUS', 'school_bus', 'school-bus'].includes(m.module) && m.isEnabled) ?? false;
   const hasLeasing = tenant?.modules.some(m => ['LEASING', 'leasing'].includes(m.module) && m.isEnabled) ?? false;
 
   function isActive(href: string, exact = false) {
@@ -157,29 +169,38 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
 
         {hasRAC && (
           <NavGroup label="Rent-A-Car">
-            {NAV_RAC.map(n => <NavItem key={n.href} {...n} />)}
+            {NAV_RAC.map(n => <NavItem key={n.href} {...n} exact={n.exact} />)}
+            <a
+              href="/rac-portal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-2 px-3 py-2 mt-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/20 transition-all"
+            >
+              <span className="flex items-center gap-2 truncate">
+                <span>🏢</span>
+                <span className="truncate">Customer B2B Portal ↗</span>
+              </span>
+            </a>
           </NavGroup>
         )}
 
         {hasBus && (
           <NavGroup label="School Bus">
-            {NAV_SCHOOL_BUS.map(n => <NavItem key={n.href} {...n} />)}
+            {NAV_SCHOOL_BUS.map(n => <NavItem key={n.href} {...n} exact={n.exact} />)}
           </NavGroup>
         )}
 
         {hasLeasing && (
           <NavGroup label="Vehicle Leasing">
-            {NAV_LEASING.map(n => <NavItem key={n.href} {...n} />)}
+            {NAV_LEASING.map(n => <NavItem key={n.href} {...n} exact={n.exact} />)}
           </NavGroup>
         )}
 
-        <NavGroup label="Finance">
-          {NAV_FINANCE.map(n => <NavItem key={n.href} {...n} />)}
-        </NavGroup>
-
-        <NavGroup label="Support">
-          {NAV_SUPPORT.map(n => <NavItem key={n.href} {...n} />)}
-        </NavGroup>
+        {tenant && (
+          <NavGroup label="Finance">
+            {NAV_FINANCE.map(n => <NavItem key={n.href} {...n} exact={n.exact} />)}
+          </NavGroup>
+        )}
       </nav>
 
       {/* Footer */}
@@ -210,29 +231,108 @@ export default function TenantPortalShell({ children }: { children: React.ReactN
 
   const [tenant, setTenant] = useState<TenantData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [matchedUserSlug, setMatchedUserSlug] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tenantSlug) return;
+    let cancelled = false;
+    const slugLower = tenantSlug.trim().toLowerCase();
+    if (!slugLower) {
+      setTenant(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setMatchedUserSlug(null);
+
     (async () => {
       try {
-        const res = await fetch('/api/admin/tenants');
-        if (!res.ok) throw new Error('Failed to fetch tenants');
-        const all: TenantData[] = await res.json();
-        const found = all.find(
-          t => t.code?.toLowerCase() === tenantSlug.toLowerCase() ||
-               t.name?.toLowerCase().replace(/\s+/g, '-') === tenantSlug.toLowerCase()
-        );
-        setTenant(found ?? null);
+        const res = await fetch('/api/admin/tenants', { cache: 'no-store' });
+        if (res.ok) {
+          const raw = await res.json();
+          const all: TenantData[] = Array.isArray(raw) ? raw : (raw?.tenants ?? raw?.data ?? []);
+          const found = all.find(t => matchesTenantSlug(slugLower, t));
+          if (!cancelled) {
+            setTenant(found ?? null);
+          }
+          return;
+        }
+
+        // Fallback for non-admin staff roles (e.g. 403 on /api/admin/tenants):
+        // resolve the authenticated user's own tenant via /api/admin/session + /api/auth/me.
+        const [sessionRes, meRes] = await Promise.all([
+          fetch('/api/admin/session', { cache: 'no-store' }).catch(() => null),
+          fetch('/api/auth/me', { cache: 'no-store' }).catch(() => null),
+        ]);
+
+        const sessionData = sessionRes?.ok ? await sessionRes.json() : null;
+        const meData = meRes?.ok ? await meRes.json() : null;
+
+        const id: string | null = sessionData?.tenant?.id ?? meData?.tenantId ?? null;
+        const name: string = sessionData?.tenant?.name ?? meData?.tenantName ?? '';
+        const code: string = sessionData?.tenant?.code ?? meData?.tenantCode ?? '';
+        const plan: string = sessionData?.tenant?.plan ?? meData?.plan ?? 'STANDARD';
+        const enabledModules: string[] = Array.isArray(sessionData?.tenant?.enabledModules)
+          ? sessionData.tenant.enabledModules
+          : Array.isArray(meData?.enabledModules)
+          ? meData.enabledModules
+          : [];
+
+        if (!id) {
+          if (!cancelled) setTenant(null);
+          return;
+        }
+
+        const expectedSlug =
+          code?.trim().toLowerCase() ||
+          slugifyPortalTenant(code) ||
+          slugifyPortalTenant(name) ||
+          id.toLowerCase();
+
+        if (!matchesTenantSlug(slugLower, { id, code, name })) {
+          if (!cancelled) {
+            setMatchedUserSlug(expectedSlug);
+            setTenant(null);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setTenant({
+            id,
+            name: name || code || id,
+            code: code || slugLower.toUpperCase(),
+            plan,
+            modules: enabledModules.map((mod, idx) => ({
+              id: `${id}-${mod}-${idx}`,
+              module: mod,
+              isEnabled: true,
+            })),
+          });
+        }
       } catch (err) {
         console.error('[TenantPortal] fetch tenant:', err);
+        if (!cancelled) setTenant(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [tenantSlug]);
 
-  const hasModule = (mod: string) =>
-    tenant?.modules.some(m => m.module.toLowerCase() === mod.toLowerCase() && m.isEnabled) ?? false;
+  const hasModule = (mod: string) => {
+    const needle = mod.toLowerCase();
+    const aliases =
+      needle === 'rental' || needle === 'rac'
+        ? ['rac', 'rental']
+        : needle === 'school-bus' || needle === 'school_bus'
+        ? ['school-bus', 'school_bus']
+        : [needle];
+    return tenant?.modules.some(m => aliases.includes(m.module.toLowerCase()) && m.isEnabled) ?? false;
+  };
 
   return (
     <TenantContext.Provider value={{ tenant, tenantSlug, loading, hasModule }}>
@@ -244,6 +344,32 @@ export default function TenantPortalShell({ children }: { children: React.ReactN
               <div className="text-center space-y-3">
                 <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-slate-500 text-sm">Loading tenant portal…</p>
+              </div>
+            </div>
+          ) : !tenant ? (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="max-w-md w-full rounded-2xl border border-rose-500/30 bg-slate-900/80 p-6 text-center space-y-4">
+                <div className="text-3xl">🔒</div>
+                <h2 className="text-lg font-bold text-white">Tenant not found or unauthorized</h2>
+                <p className="text-sm text-slate-400">
+                  You do not have access to tenant portal <span className="font-mono text-slate-200">{tenantSlug || '—'}</span>, or this tenant does not exist.
+                </p>
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  {matchedUserSlug && (
+                    <Link
+                      href={`/portal/${matchedUserSlug}`}
+                      className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 text-xs font-bold hover:bg-cyan-400 transition-colors"
+                    >
+                      Open My Tenant Portal →
+                    </Link>
+                  )}
+                  <Link
+                    href="/platform"
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 border border-white/10 text-xs font-semibold hover:bg-slate-700 transition-colors"
+                  >
+                    Back to Platform
+                  </Link>
+                </div>
               </div>
             </div>
           ) : (

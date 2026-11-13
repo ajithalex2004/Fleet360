@@ -1,6 +1,6 @@
 {
- "policyVersion": "2026-10-13.1",
- "catalogueVersion": "0ac7ad93",
+ "policyVersion": "2026-11-11.3",
+ "catalogueVersion": "6da8dd3a",
  "catalogue": [
   "leasing:view:*",
   "leasing:create:inquiries",
@@ -255,7 +255,77 @@
   "drayage:edit:*",
   "drayage:delete:*",
   "drayage:approve:*",
-  "drayage:export:*"
+  "drayage:export:*",
+  "rental:create:pricing",
+  "rental:delete:pricing",
+  "rental:create:rates",
+  "rental:edit:rates",
+  "rental:delete:rates",
+  "rental:approve:rates",
+  "rental:create:rate_events",
+  "rental:edit:rate_events",
+  "rental:delete:rate_events",
+  "rental:create:ancillaries",
+  "rental:edit:ancillaries",
+  "rental:delete:ancillaries",
+  "rental:create:branches",
+  "rental:edit:branches",
+  "rental:delete:branches",
+  "rental:create:channels",
+  "rental:edit:channels",
+  "rental:delete:channels",
+  "rental:create:insurance",
+  "rental:edit:insurance",
+  "rental:delete:insurance",
+  "rental:delete:customers",
+  "rental:approve:customers",
+  "rental:approve:deposits",
+  "rental:approve:invoices",
+  "rental:approve:renewals",
+  "rental:create:invoices",
+  "rental:edit:invoices",
+  "rental:delete:invoices",
+  "rental:create:renewals",
+  "rental:edit:renewals",
+  "rental:delete:renewals",
+  "rental:create:agreements",
+  "rental:edit:agreements",
+  "rental:delete:agreements",
+  "rental:approve:agreements",
+  "rental:create:counter",
+  "rental:edit:counter",
+  "rental:delete:counter",
+  "rental:edit:damage",
+  "rental:delete:damage",
+  "rental:create:damage_claims",
+  "rental:edit:damage_claims",
+  "rental:delete:damage_claims",
+  "rental:approve:damage_claims",
+  "rental:create:documents",
+  "rental:edit:documents",
+  "rental:delete:documents",
+  "rental:approve:documents",
+  "rental:create:transfers",
+  "rental:edit:transfers",
+  "rental:delete:transfers",
+  "rental:approve:transfers",
+  "rental:create:quotations",
+  "rental:edit:quotations",
+  "rental:delete:quotations",
+  "rental:approve:quotations",
+  "rental:create:inquiries",
+  "rental:edit:inquiries",
+  "rental:delete:inquiries",
+  "rental:create:inspections",
+  "rental:edit:inspections",
+  "rental:delete:inspections",
+  "rental:create:handover",
+  "rental:edit:handover",
+  "rental:delete:handover",
+  "rental:create:preauth",
+  "rental:edit:preauth",
+  "rental:delete:preauth",
+  "rental:approve:preauth"
  ],
  "moduleAliases": {
   "rental": [
@@ -659,6 +729,15 @@
    }
   },
   {
+   "prefix": "esign/verify",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
    "prefix": "exchange",
    "read": {
     "kind": "partner"
@@ -953,6 +1032,15 @@
    }
   },
   {
+   "prefix": "rac-portal",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
    "prefix": "readyz",
    "read": {
     "kind": "external"
@@ -979,6 +1067,54 @@
    "write": {
     "kind": "module",
     "module": "rental"
+   }
+  },
+  {
+   "prefix": "rental/bookings/copilot",
+   "read": {
+    "kind": "module",
+    "module": "rental"
+   },
+   "write": {
+    "kind": "module",
+    "module": "rental",
+    "action": "view"
+   }
+  },
+  {
+   "prefix": "rental/damage-claims/classify",
+   "read": {
+    "kind": "module",
+    "module": "rental"
+   },
+   "write": {
+    "kind": "module",
+    "module": "rental",
+    "action": "view"
+   }
+  },
+  {
+   "prefix": "rental/rates/calculate",
+   "read": {
+    "kind": "module",
+    "module": "rental"
+   },
+   "write": {
+    "kind": "module",
+    "module": "rental",
+    "action": "view"
+   }
+  },
+  {
+   "prefix": "rental/rates/yield",
+   "read": {
+    "kind": "module",
+    "module": "rental"
+   },
+   "write": {
+    "kind": "module",
+    "module": "rental",
+    "action": "view"
    }
   },
   {

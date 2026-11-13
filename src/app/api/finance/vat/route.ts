@@ -61,80 +61,109 @@ export async function GET(req: NextRequest) {
     type RevRow = { total: number | null };
     const zero = () => Promise.resolve([{ total: 0 }] as RevRow[]);
 
-    const [
-      logisticsRev, racRev, leasingRev, financeInvRev,
-      logisticsTax, racTax, leasingTax, financeInvTax,
-      invoiceRows,
-      payableRows,
-      expenseRows,
-    ] = await Promise.all([
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(customer_rate_amount),0) AS total FROM logistics_shipment_orders
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(total_amount),0) AS total FROM rental_agreements
-         WHERE tenant_id = $3 AND status IN ('ACTIVE','COMPLETED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_contracts_v2
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(total_amount - vat_amount),0) AS total FROM finance_invoices
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-           AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
-      ).catch(zero),
+    const logisticsRev = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(customer_rate_amount),0) AS total FROM logistics_shipment_orders
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
+         AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const racRev = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(
+                SUM(
+                  COALESCE(
+                    ri.taxable_amount,
+                    CASE
+                      WHEN COALESCE(ri.invoice_type, 'STANDARD') = 'CREDIT_NOTE' THEN ri.subtotal
+                      ELSE ri.subtotal - COALESCE(ri.discount_amount, 0)
+                    END
+                  )
+                ),
+                0
+              ) AS total
+         FROM rental_invoices ri
+        WHERE ri.tenant_id::text = $3
+          AND ri.deleted_at IS NULL
+          AND (
+            UPPER(COALESCE(ri.status, '')) NOT IN ('DRAFT', 'VOID', 'CANCELLED')
+            OR EXISTS (
+              SELECT 1 FROM rental_invoices cn
+               WHERE cn.parent_invoice_id = ri.id
+                 AND cn.tenant_id::text = ri.tenant_id::text
+                 AND cn.deleted_at IS NULL
+                 AND cn.invoice_type = 'CREDIT_NOTE'
+                 AND UPPER(COALESCE(cn.status, '')) NOT IN ('DRAFT', 'VOID', 'CANCELLED')
+            )
+          )
+          AND ri.invoice_date::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const leasingRev = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_contracts_v2
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
+         AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const financeInvRev = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(total_amount - vat_amount),0) AS total FROM finance_invoices
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+         AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
+    ).catch(zero);
 
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0) AS total FROM logistics_shipment_orders
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0) AS total FROM rental_agreements
-         WHERE tenant_id = $3 AND status IN ('ACTIVE','COMPLETED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(monthly_rate * 0.05),0) AS total FROM lease_contracts_v2
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-           AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<RevRow[]>(
-        `SELECT COALESCE(SUM(vat_amount),0) AS total FROM finance_invoices
-         WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-           AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
-      ).catch(zero),
-      tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-        `SELECT invoice_number, client_name, client_address, subtotal, discount_amount,
-                vat_rate, vat_amount, currency, issue_date, branch, source_payload
-           FROM finance_invoices
-          WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-            AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}
-          ORDER BY issue_date ASC`,
-        start, end, tenantId
-      ).catch(() => [] as Array<Record<string, unknown>>),
-      tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-        `SELECT payable_number, vendor_name, subtotal, vat_amount, total_amount, currency, issue_date, description
-           FROM finance_payables
-          WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED', 'POSTED')
-            AND issue_date BETWEEN $1::date AND $2::date
-          ORDER BY issue_date ASC`,
-        start, end, tenantId
-      ).catch(() => [] as Array<Record<string, unknown>>),
-      tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-        `SELECT expense_number, vendor_name, amount, vat_amount, total_amount, currency, expense_date, description
-           FROM finance_expenses
-          WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED', 'PAID') AND COALESCE(vat_amount, 0) > 0
-            AND expense_date BETWEEN $1::date AND $2::date
-          ORDER BY expense_date ASC`,
-        start, end, tenantId
-      ).catch(() => [] as Array<Record<string, unknown>>),
-    ]);
+    const logisticsTax = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0) AS total FROM logistics_shipment_orders
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
+         AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const racTax = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(ri.tax_amount), 0) AS total
+         FROM rental_invoices ri
+        WHERE ri.tenant_id::text = $3
+          AND ri.deleted_at IS NULL
+          AND (
+            UPPER(COALESCE(ri.status, '')) NOT IN ('DRAFT', 'VOID', 'CANCELLED')
+            OR EXISTS (
+              SELECT 1 FROM rental_invoices cn
+               WHERE cn.parent_invoice_id = ri.id
+                 AND cn.tenant_id::text = ri.tenant_id::text
+                 AND cn.deleted_at IS NULL
+                 AND cn.invoice_type = 'CREDIT_NOTE'
+                 AND UPPER(COALESCE(cn.status, '')) NOT IN ('DRAFT', 'VOID', 'CANCELLED')
+            )
+          )
+          AND ri.invoice_date::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const leasingTax = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(monthly_rate * 0.05),0) AS total FROM lease_contracts_v2
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
+         AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
+    ).catch(zero);
+    const financeInvTax = await tx.$queryRawUnsafe<RevRow[]>(
+      `SELECT COALESCE(SUM(vat_amount),0) AS total FROM finance_invoices
+       WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+         AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}`, start, end, tenantId
+    ).catch(zero);
+    const invoiceRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT invoice_number, client_name, client_address, subtotal, discount_amount,
+              vat_rate, vat_amount, currency, issue_date, branch, source_payload
+         FROM finance_invoices
+        WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+          AND issue_date BETWEEN $1::date AND $2::date${VAT_NOT_MIRRORED}
+        ORDER BY issue_date ASC`,
+      start, end, tenantId
+    ).catch(() => [] as Array<Record<string, unknown>>);
+    const payableRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT payable_number, vendor_name, subtotal, vat_amount, total_amount, currency, issue_date, description
+         FROM finance_payables
+        WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED', 'POSTED')
+          AND issue_date BETWEEN $1::date AND $2::date
+        ORDER BY issue_date ASC`,
+      start, end, tenantId
+    ).catch(() => [] as Array<Record<string, unknown>>);
+    const expenseRows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT expense_number, vendor_name, amount, vat_amount, total_amount, currency, expense_date, description
+         FROM finance_expenses
+        WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED', 'PAID') AND COALESCE(vat_amount, 0) > 0
+          AND expense_date BETWEEN $1::date AND $2::date
+        ORDER BY expense_date ASC`,
+      start, end, tenantId
+    ).catch(() => [] as Array<Record<string, unknown>>);
 
     const logRevVal = Math.round(Number(logisticsRev[0]?.total ?? 0) * 100) / 100;
     const racRevVal = Math.round(Number(racRev[0]?.total ?? 0) * 100) / 100;
@@ -198,7 +227,7 @@ export async function GET(req: NextRequest) {
         taxCode: 'SR',
       });
     }
-    if (racRevVal > 0) {
+    if (racRevVal !== 0 || racVatVal !== 0) {
       fafSupplies.push({
         invoiceNo: `RAC-Q${quarter}-${year}`,
         invoiceDate: end,

@@ -396,30 +396,43 @@ export const MODULES: ModuleDef[] = [
     href: '/rental',
     icon: Car,
     subPages: [
-      { label: 'Dashboard',     href: '/rental',               icon: LayoutDashboard },
-      { label: 'Counter',       href: '/rental/counter',       icon: Smartphone },
-      { label: 'Inquiries',     href: '/rental/inquiries',     icon: MessageCircle },
-      { label: 'Quotations',    href: '/rental/quotations',    icon: FileText },
-      { label: 'Bookings',      href: '/rental/bookings',      icon: Calendar },
-      { label: 'Agreements',    href: '/rental/agreements',    icon: FileText },
-      { label: 'E-signing console', href: '/admin/esign',      icon: Eye, navKey: 'esign' },
-      { label: 'Handover',      href: '/rental/handover',      icon: Send },
-      { label: 'Renewals',      href: '/rental/renewals',      icon: RefreshCw },
-      { label: 'Damage claims', href: '/rental/damage-claims', icon: AlertTriangle },
-      { label: 'Invoices',      href: '/rental/invoices',      icon: Receipt },
-      { label: 'Ancillaries',   href: '/rental/ancillaries',   icon: Tag },
-      { label: 'Pricing',       href: '/rental/pricing',       icon: DollarSign },
-      { label: 'Rates',         href: '/rental/rates',         icon: Tag },
-      { label: 'Availability',  href: '/rental/availability',  icon: Calendar },
-      { label: 'Channels',      href: '/rental/channels',      icon: Network },
-      { label: 'Customers',     href: '/rental/customers',     icon: Users },
-      { label: 'Documents',     href: '/rental/documents',     icon: FileText },
-      { label: 'Insurance',     href: '/rental/insurance',     icon: Shield },
-      { label: 'Branches',      href: '/rental/branches',      icon: Building2 },
-      { label: 'Staff',         href: '/rental/staff',         icon: Users },
-      { label: 'Transfers',     href: '/rental/transfers',     icon: ArrowLeftRight },
-      { label: 'Alerts',        href: '/rental/alerts',        icon: Bell },
-      { label: 'Analytics',     href: '/rental/analytics',     icon: BarChart3 },
+      { label: 'Dashboard',                 href: '/rental',                  icon: LayoutDashboard },
+
+      // Counter & Operations
+      { label: 'Counter (Pick-Up & Return)', href: '/rental/counter',         icon: FileCheck,       group: 'Counter & Operations' },
+      { label: 'Availability Calendar',     href: '/rental/availability',     icon: Calendar,        group: 'Counter & Operations' },
+      { label: 'Extensions & Renewals',     href: '/rental/renewals',         icon: RefreshCw,       group: 'Counter & Operations' },
+      { label: 'Inter-Branch Transfers',    href: '/rental/transfers',        icon: ArrowLeftRight,  group: 'Counter & Operations' },
+
+      // Reservations & Sales
+      { label: 'Bookings',                  href: '/rental/bookings',         icon: CalendarCheck2,  group: 'Reservations & Sales' },
+      { label: 'AI Booking Copilot',        href: '/rental/bookings/copilot', icon: Sparkles,        group: 'Reservations & Sales' },
+      { label: 'Inquiries',                 href: '/rental/inquiries',        icon: MessageCircle,   group: 'Reservations & Sales' },
+      { label: 'Quotations',                href: '/rental/quotations',       icon: FileText,        group: 'Reservations & Sales' },
+      { label: 'Agreements',                href: '/rental/agreements',       icon: FileText,        group: 'Reservations & Sales' },
+      { label: 'E-signing console',         href: '/admin/esign',             icon: Eye,             group: 'Reservations & Sales', navKey: 'esign' },
+      { label: 'Customers & B2B',           href: '/rental/customers',        icon: Users,           group: 'Reservations & Sales' },
+
+      // Master Price List & Yield
+      { label: 'Master Price List',         href: '/rental/rates',            icon: Tag,             group: 'Master Price List & Yield' },
+      { label: 'Event Surge Calendar',      href: '/rental/rates/events',     icon: Calendar,        group: 'Master Price List & Yield' },
+      { label: 'Yield Simulator',           href: '/rental/rates/yield',      icon: TrendingUp,      group: 'Master Price List & Yield' },
+      { label: 'Ancillaries & Add-Ons',     href: '/rental/ancillaries',      icon: Package,         group: 'Master Price List & Yield' },
+
+      // Billing & Claims
+      { label: 'Invoices & Pre-Auths',      href: '/rental/invoices',         icon: Receipt,         group: 'Billing & Claims' },
+      { label: 'Damage Claims',             href: '/rental/damage-claims',    icon: AlertTriangle,   group: 'Billing & Claims' },
+      { label: 'AI Damage Triage',          href: '/rental/damage-claims/ai', icon: Sparkles,        group: 'Billing & Claims' },
+      { label: 'Documents',                 href: '/rental/documents',        icon: Paperclip,       group: 'Billing & Claims' },
+
+      // Network & Analytics
+      { label: 'Branches',                  href: '/rental/branches',         icon: Building2,       group: 'Network & Analytics' },
+      { label: 'Branch Staff',              href: '/rental/staff',            icon: UserCog,         group: 'Network & Analytics' },
+      { label: 'OTA Channels',              href: '/rental/channels',         icon: Network,         group: 'Network & Analytics' },
+      { label: 'Insurance Policies',        href: '/rental/insurance',        icon: Shield,          group: 'Network & Analytics' },
+      { label: 'Expiry Alerts',             href: '/rental/alerts',           icon: Bell,            group: 'Network & Analytics' },
+      { label: 'KPI & Analytics',           href: '/rental/analytics/kpi',    icon: BarChart3,       group: 'Network & Analytics' },
+      { label: 'Branch Analytics',          href: '/rental/analytics',        icon: PieChart,        group: 'Network & Analytics' },
     ],
   },
 

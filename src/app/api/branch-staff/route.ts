@@ -12,15 +12,20 @@ import { loadModuleAccess, branchStaffModules } from '@/lib/authz/module-access'
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Auto-generate staff number: STF-YYYYMM-XXXX
 // ─────────────────────────────────────────────────────────────────────────────
-async function generateStaffNo(): Promise<string> {
+async function generateStaffNo(
+  tx: { $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T> },
+  tenantId: string,
+): Promise<string> {
   const now   = new Date();
   const ym    = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const rows  = await prisma.$queryRawUnsafe<{ cnt: string }[]>(
-    `SELECT COUNT(*)::text AS cnt FROM branch_staff_assignments WHERE staff_no LIKE $1`,
-    `STF-${ym}-%`
+  const rows  = await tx.$queryRawUnsafe<{ cnt: string }[]>(
+    `SELECT COUNT(*)::text AS cnt FROM branch_staff_assignments WHERE tenant_id::text = $1 AND staff_no LIKE $2`,
+    tenantId,
+    `STF-${ym}-%`,
   );
   const seq = (parseInt(rows[0]?.cnt || '0') + 1).toString().padStart(4, '0');
   return `STF-${ym}-${seq}`;
@@ -55,8 +60,8 @@ export async function GET(req: NextRequest) {
         const offset      = (page - 1) * limit;
 
         // Build WHERE clauses dynamically
-        const conditions: string[] = ['deleted_at IS NULL'];
-        const params: unknown[]    = [];
+        const conditions: string[] = ['tenant_id::text = $1', 'deleted_at IS NULL'];
+        const params: unknown[]    = [tenantId];
 
         if (moduleParam) {
           params.push(moduleParam);
@@ -89,26 +94,37 @@ export async function GET(req: NextRequest) {
         const total = parseInt(countRows[0]?.cnt || '0');
 
         // Data
-        params.push(limit, offset);
-        const staff = await tx.$queryRawUnsafe<any[]>(
-          `SELECT * FROM branch_staff_assignments ${where} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-          ...params
+        const listParams = [...params, limit, offset];
+        const staff = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM branch_staff_assignments ${where} ORDER BY created_at DESC LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
+          ...listParams
         );
 
-        // Summary counts by role
+        // Module-scoped KPI & role summary conditions
+        const kpiConditions: string[] = ['tenant_id::text = $1', 'deleted_at IS NULL'];
+        const kpiParams: unknown[]    = [tenantId];
+        if (moduleParam) {
+          kpiParams.push(moduleParam);
+          kpiConditions.push(`(module = $${kpiParams.length} OR module = 'BOTH')`);
+        }
+        const kpiWhere = `WHERE ${kpiConditions.join(' AND ')}`;
+
+        // Summary counts by role (scoped to module if provided)
         const roleSummary = await tx.$queryRawUnsafe<{ role: string; cnt: string }[]>(
-          `SELECT role, COUNT(*)::text AS cnt FROM branch_staff_assignments WHERE deleted_at IS NULL AND status = 'ACTIVE' GROUP BY role`
+          `SELECT role, COUNT(*)::text AS cnt FROM branch_staff_assignments ${kpiWhere} AND status = 'ACTIVE' GROUP BY role`,
+          ...kpiParams,
         );
 
-        // KPI totals
-        const kpiRows = await tx.$queryRawUnsafe<any[]>(
+        // KPI totals (scoped to module if provided)
+        const kpiRows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           `SELECT
              COUNT(*)::int                                                              AS total,
              COUNT(*) FILTER (WHERE status = 'ACTIVE')::int                           AS active,
              COUNT(*) FILTER (WHERE status = 'ON_LEAVE')::int                         AS on_leave,
              COUNT(*) FILTER (WHERE role = 'BRANCH_MANAGER' AND status = 'ACTIVE')::int AS branch_managers
            FROM branch_staff_assignments
-           WHERE deleted_at IS NULL`
+           ${kpiWhere}`,
+          ...kpiParams,
         );
 
         return NextResponse.json({
@@ -153,16 +169,16 @@ export async function POST(req: NextRequest) {
           emirate, start_date, end_date, status = 'ACTIVE',
           employee_id, nationality, notes,
         } = body;
-        const denied = access(branchStaffModules(module), 'create', '/api/branch-staff');
+        const denied = access(branchStaffModules(String(module ?? '')), 'create', '/api/branch-staff');
         if (denied) return denied;
 
         if (!full_name || !phone || !role || !module || !branch_name || !start_date) {
           return NextResponse.json({ error: 'Missing required fields: full_name, phone, role, module, branch_name, start_date' }, { status: 400 });
         }
 
-        const staff_no = await generateStaffNo();
+        const staff_no = await generateStaffNo(tx, tenantId);
 
-        const rows = await tx.$queryRawUnsafe<any[]>(
+        const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           `INSERT INTO branch_staff_assignments
              (tenant_id, staff_no, full_name, email, phone, role, module, branch_id, branch_name, emirate, start_date, end_date, status, employee_id, nationality, notes)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
@@ -205,11 +221,13 @@ export async function PATCH(req: NextRequest) {
         // The record's module decides who may change it (and the new one,
         // when the change moves it to another module).
         const [current] = await tx.$queryRawUnsafe<Array<{ module: string }>>(
-          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND deleted_at IS NULL`, String(id),
+          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL`,
+          String(id),
+          tenantId,
         );
         if (!current) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
         const denied = access(branchStaffModules(current.module), 'edit', '/api/branch-staff')
-          ?? ('module' in fields ? access(branchStaffModules(fields.module), 'edit', '/api/branch-staff') : null);
+          ?? ('module' in fields ? access(branchStaffModules(String(fields.module ?? '')), 'edit', '/api/branch-staff') : null);
         if (denied) return denied;
 
         // Build SET clause dynamically
@@ -229,9 +247,9 @@ export async function PATCH(req: NextRequest) {
           return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 });
         }
 
-        params.push(id);
-        const rows = await tx.$queryRawUnsafe<any[]>(
-          `UPDATE branch_staff_assignments SET ${setClauses.join(', ')} WHERE id = $${params.length} AND deleted_at IS NULL RETURNING *`,
+        params.push(String(id), tenantId);
+        const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `UPDATE branch_staff_assignments SET ${setClauses.join(', ')} WHERE id::text = $${params.length - 1} AND tenant_id::text = $${params.length} AND deleted_at IS NULL RETURNING *`,
           ...params
         );
 
@@ -265,15 +283,18 @@ export async function DELETE(req: NextRequest) {
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
         const [current] = await tx.$queryRawUnsafe<Array<{ module: string }>>(
-          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND deleted_at IS NULL`, id,
+          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL`,
+          id,
+          tenantId,
         );
         if (!current) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
         const denied = access(branchStaffModules(current.module), 'delete', '/api/branch-staff');
         if (denied) return denied;
 
         await tx.$executeRawUnsafe(
-          `UPDATE branch_staff_assignments SET deleted_at = NOW(), status = 'INACTIVE', updated_at = NOW() WHERE id = $1`,
-          id
+          `UPDATE branch_staff_assignments SET deleted_at = NOW(), status = 'INACTIVE', updated_at = NOW() WHERE id::text = $1 AND tenant_id::text = $2`,
+          id,
+          tenantId,
         );
         return NextResponse.json({ success: true });
         } catch (err) {
@@ -282,4 +303,3 @@ export async function DELETE(req: NextRequest) {
       }
   });
 }
-

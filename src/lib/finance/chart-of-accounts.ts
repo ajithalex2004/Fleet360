@@ -35,7 +35,10 @@ export async function ensureTenantChartOfAccounts(tx: TxClient, tenantId: string
      SELECT $1, t.account_code, t.account_name, t.account_type, t.account_subtype, t.parent_code,
             t.description, t.is_header, t.is_active, t.is_system, t.normal_balance, t.currency, t.sort_order
        FROM finance.finance_coa_template t
-      WHERE NOT EXISTS (SELECT 1 FROM finance.finance_chart_of_accounts c WHERE c.tenant_id = $1)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM finance.finance_chart_of_accounts c
+         WHERE c.tenant_id = $1 AND c.account_code = t.account_code
+      )
      ON CONFLICT (tenant_id, account_code) DO NOTHING`,
     tenantId,
   );

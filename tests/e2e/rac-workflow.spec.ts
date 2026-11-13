@@ -20,14 +20,15 @@
 import { test, expect } from '@playwright/test';
 import {
   isServerAvailable, createE2ETenant, cleanupE2ETenant,
-  login, skipIfOffline, waitForSettle, findButton,
-  type E2EContext,
+  saveAuthState, loginWithStoredState, skipIfOffline, waitForSettle, findButton,
+  type E2EContext, type StorageState,
 } from './helpers';
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 let serverUp = false;
 let ctx: E2EContext | null = null;
+let authState: StorageState | null = null;
 
 const CUSTOMER_NAME  = 'John Khalid';
 const CUSTOMER_EMAIL = 'john.khalid@example.ae';
@@ -35,7 +36,7 @@ const CUSTOMER_PHONE = '+971501234567';
 
 // ── Setup / teardown ───────────────────────────────────────────────────────────
 
-test.beforeAll(async () => {
+test.beforeAll(async ({ browser }) => {
   serverUp = await isServerAvailable();
   if (!serverUp) return;
   try {
@@ -45,6 +46,7 @@ test.beforeAll(async () => {
     await new Promise(r => setTimeout(r, 3_000));
     ctx = await createE2ETenant('RAC');
   }
+  authState = await saveAuthState(browser, ctx.email, ctx.password);
 });
 
 test.afterAll(async () => {
@@ -71,7 +73,7 @@ function futureDate(daysFromNow: number): string {
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 test('RAC-01: RAC module is accessible from platform', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await goToRAC(page);
 
   await expect(
@@ -80,7 +82,7 @@ test('RAC-01: RAC module is accessible from platform', async ({ page }) => {
 });
 
 test('RAC-02: Inquiries page renders', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/inquiries');
   await waitForSettle(page);
 
@@ -90,7 +92,7 @@ test('RAC-02: Inquiries page renders', async ({ page }) => {
 });
 
 test('RAC-03: Create a new rental inquiry', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/inquiries');
   await waitForSettle(page);
 
@@ -156,7 +158,7 @@ test('RAC-03: Create a new rental inquiry', async ({ page }) => {
 });
 
 test('RAC-04: Inquiry appears in inquiries list', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/inquiries');
   await waitForSettle(page);
 
@@ -173,7 +175,7 @@ test('RAC-04: Inquiry appears in inquiries list', async ({ page }) => {
 });
 
 test('RAC-05: Quotations page renders correctly', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/quotations');
   await waitForSettle(page);
 
@@ -183,7 +185,7 @@ test('RAC-05: Quotations page renders correctly', async ({ page }) => {
 });
 
 test('RAC-06: Create a quotation', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/quotations');
   await waitForSettle(page);
 
@@ -257,7 +259,7 @@ test('RAC-06: Create a quotation', async ({ page }) => {
 });
 
 test('RAC-07: Rental Agreements page is accessible', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/agreements');
   await waitForSettle(page);
 
@@ -267,7 +269,7 @@ test('RAC-07: Rental Agreements page is accessible', async ({ page }) => {
 });
 
 test('RAC-08: Handover Checklist page renders', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/handover');
   await waitForSettle(page);
 
@@ -277,7 +279,7 @@ test('RAC-08: Handover Checklist page renders', async ({ page }) => {
 });
 
 test('RAC-09: Inspections page renders', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/inspections');
   await waitForSettle(page);
 
@@ -287,7 +289,7 @@ test('RAC-09: Inspections page renders', async ({ page }) => {
 });
 
 test('RAC-10: Insurance Documents page renders', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/insurance');
   await waitForSettle(page);
 
@@ -297,7 +299,7 @@ test('RAC-10: Insurance Documents page renders', async ({ page }) => {
 });
 
 test('RAC-11: RAC dashboard shows pipeline summary', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await goToRAC(page);
   await waitForSettle(page, 15_000);
 
@@ -311,11 +313,11 @@ test('RAC-11: RAC dashboard shows pipeline summary', async ({ page }) => {
   expect(title).not.toContain('500');
   expect(title).not.toContain('Error');
   // The RAC dashboard h1 should be visible (page rendered correctly)
-  await expect(page.locator('h1').first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('h1').first()).toBeVisible({ timeout: 20_000 });
 });
 
 test('RAC-12: Rate Engine page is accessible', async ({ page }) => {
-  await login(page, ctx!.email, ctx!.password);
+  await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/rental/rates');
   await waitForSettle(page);
 

@@ -4,9 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls, type TxClient } from '@/lib/rls';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { withSavepoint } from '@/lib/rental/locks';
 import {
   generatePeppolUaeInvoiceXml,
   isValidUaeTrn,
+  type PeppolBillingReference,
   type PeppolInvoiceData,
   type PeppolInvoiceLine,
   type PeppolInvoiceTypeCode,
@@ -29,12 +31,14 @@ export const dynamic = 'force-dynamic';
  * POST /api/finance/invoices/:id/peppol-xml  — Validate, generate FTA TLV QR & SHA-256 digest, and transmit to PEPPOL ASP
  *
  * Renders a UAE Peppol PINT-UAE e-invoice for one of the tenant's invoices
- * (finance_invoices, lease_invoices, finance_credit_notes, or finance_debit_notes).
+ * (finance_invoices, rental_invoices [380 / 381], lease_invoices, finance_credit_notes, or finance_debit_notes).
  */
 
 const SAMPLE_INVOICE_ID = 'INV-DEMO-001';
 
 const DEFAULT_NOTE = 'UAE Tax Invoice pursuant to Federal Decree-Law No. 8 of 2017 & Peppol PINT-UAE specifications.';
+const DEFAULT_CREDIT_NOTE = 'UAE VAT Tax Credit Note pursuant to Federal Decree-Law No. 8 of 2017 Article 61 & Peppol PINT-UAE specifications.';
+const STATUTORY_FINE_EXEMPTION_REASON = 'Statutory authority fine outside scope of UAE VAT (FTA VATP006/VATP040)';
 
 function isoDate(v: unknown): string | undefined {
   if (!v) return undefined;
@@ -58,6 +62,26 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function mapUnitCode(unitLabel: unknown): string {
+  const raw = String(unitLabel || '').trim();
+  if (!raw) return 'C62';
+  const upper = raw.toUpperCase();
+  if (['C62', 'DAY', 'KMT', 'HUR', 'MON', 'LTR'].includes(upper)) return upper;
+  const lower = raw.toLowerCase();
+  if (lower === 'day' || lower === 'days') return 'DAY';
+  if (lower === 'km' || lower === 'kms' || lower === 'kilometer' || lower === 'kilometre') return 'KMT';
+  if (lower === 'hour' || lower === 'hours' || lower === 'hr' || lower === 'hrs') return 'HUR';
+  if (lower === 'month' || lower === 'months') return 'MON';
+  return 'C62';
+}
+
+function isOutOfScopeFineItem(itemType: unknown, taxable: unknown, taxCategoryCode?: unknown): boolean {
+  if (String(taxCategoryCode || '').toUpperCase() === 'O') return true;
+  if (taxable === false) return true;
+  const upperType = String(itemType || '').trim().toUpperCase();
+  return upperType === 'FINE' || upperType === 'TRAFFIC_FINE' || upperType === 'STATUTORY_FINE';
+}
+
 function line(
   id: number,
   name: string,
@@ -69,15 +93,16 @@ function line(
   unitCode?: string,
   taxExemptionReason?: string,
 ): PeppolInvoiceLine {
+  const safeQty = qty > 0 ? qty : 1;
   const safePrice = Math.max(0, unitPrice);
-  const net = round2(qty * safePrice);
+  const net = round2(safeQty * safePrice);
   const resolvedCategory: PeppolTaxCategoryCode = taxCategoryCode || (vatPct > 0 ? 'S' : 'Z');
   const resolvedRate = resolvedCategory === 'S' ? (vatPct > 0 ? vatPct : 5) : 0;
   return {
     id,
     name,
     description,
-    quantity: qty,
+    quantity: safeQty,
     unitCode: unitCode || 'C62',
     unitPrice: safePrice,
     netAmount: net,
@@ -125,34 +150,30 @@ async function tenantSeller(
   const t = await tx.tenant.findUnique({ where: { id: tenantId } }).catch(() => null);
   if (!t) return null;
 
-  let branchLicense: string | null = null;
-  let branchAddress: string | null = null;
-  let branchCity: string | null = null;
-  let branchEmirate: string | null = null;
+  const branches = await withSavepoint(
+    tx,
+    'peppol_tenant_branches',
+    () =>
+      tx.$queryRawUnsafe<Array<{
+        trade_license_no: string | null;
+        billing_address: string | null;
+        billing_city: string | null;
+        emirate: string | null;
+      }>>(
+        `SELECT trade_license_no, billing_address, billing_city, emirate
+           FROM tenant_branches
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND is_active = TRUE
+          ORDER BY is_default DESC, created_at ASC
+          LIMIT 1`,
+        tenantId,
+      ),
+    [],
+  );
 
-  try {
-    const branches = await tx.$queryRawUnsafe<Array<{
-      trade_license_no: string | null;
-      billing_address: string | null;
-      billing_city: string | null;
-      emirate: string | null;
-    }>>(
-      `SELECT trade_license_no, billing_address, billing_city, emirate
-         FROM tenant_branches
-        WHERE tenant_id = $1 AND deleted_at IS NULL AND is_active = TRUE
-        ORDER BY is_default DESC, created_at ASC
-        LIMIT 1`,
-      tenantId,
-    );
-    if (branches[0]) {
-      branchLicense = branches[0].trade_license_no;
-      branchAddress = branches[0].billing_address;
-      branchCity = branches[0].billing_city;
-      branchEmirate = branches[0].emirate;
-    }
-  } catch {
-    // Non-fatal fallback
-  }
+  const branchLicense = branches[0]?.trade_license_no ?? null;
+  const branchAddress = branches[0]?.billing_address ?? null;
+  const branchCity = branches[0]?.billing_city ?? null;
+  const branchEmirate = branches[0]?.emirate ?? null;
 
   const meta = extractTenantTaxMetadata({
     localizedName: t.localizedName,
@@ -198,36 +219,39 @@ async function lookupCustomerTaxInfo(
   clientEmail?: string | null,
 ): Promise<{ trn: string; crn?: string; address?: string; city?: string }> {
   if (!clientName && !clientEmail) return { trn: '' };
-  try {
-    const rows = await tx.$queryRawUnsafe<Array<{
-      tax_registration_number: string | null;
-      trade_license_no: string | null;
-      address: string | null;
-      city: string | null;
-    }>>(
-      `SELECT tax_registration_number, trade_license_no, address, city
-         FROM customers
-        WHERE tenant_id = $1 AND deleted_at IS NULL
-          AND (
-            ($2::text IS NOT NULL AND (LOWER(name) = LOWER($2) OR LOWER(company_name) = LOWER($2)))
-            OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
-          )
-        ORDER BY updated_at DESC
-        LIMIT 1`,
-      tenantId,
-      clientName || null,
-      clientEmail || null,
-    );
-    if (rows[0]) {
-      return {
-        trn: normalizeTrn(rows[0].tax_registration_number),
-        crn: rows[0].trade_license_no ?? undefined,
-        address: rows[0].address ?? undefined,
-        city: rows[0].city ?? undefined,
-      };
-    }
-  } catch {
-    // Optional customer lookup
+  const rows = await withSavepoint(
+    tx,
+    'peppol_customer_tax',
+    () =>
+      tx.$queryRawUnsafe<Array<{
+        tax_registration_number: string | null;
+        trade_license_no: string | null;
+        address: string | null;
+        city: string | null;
+      }>>(
+        `SELECT tax_registration_number, trade_license_no, address, city
+           FROM customers
+          WHERE tenant_id = $1 AND deleted_at IS NULL
+            AND (
+              ($2::text IS NOT NULL AND (LOWER(name) = LOWER($2) OR LOWER(company_name) = LOWER($2)))
+              OR ($3::text IS NOT NULL AND LOWER(email) = LOWER($3))
+            )
+          ORDER BY updated_at DESC
+          LIMIT 1`,
+        tenantId,
+        clientName || null,
+        clientEmail || null,
+      ),
+    [],
+  );
+
+  if (rows[0]) {
+    return {
+      trn: normalizeTrn(rows[0].tax_registration_number),
+      crn: rows[0].trade_license_no ?? undefined,
+      address: rows[0].address ?? undefined,
+      city: rows[0].city ?? undefined,
+    };
   }
   return { trn: '' };
 }
@@ -240,10 +264,17 @@ async function loadInvoice(
   id: string,
   sellerMeta: TenantTaxAndPeppolMetadata,
 ): Promise<{ invoice: Omit<PeppolInvoiceData, 'seller'>; sourceTable: string; rawId: string } | null> {
-  // 1. Finance module invoices, by id or invoice number.
+  // 1. Finance module invoices (including mirrored RENTAL invoices), by id, invoice_number, or RENTAL reference.
   const [fi] = await tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
     `SELECT * FROM finance_invoices
-      WHERE tenant_id = $1 AND deleted_at IS NULL AND (id::text = $2 OR invoice_number = $2)
+      WHERE tenant_id = $1
+        AND deleted_at IS NULL
+        AND (
+          id::text = $2
+          OR invoice_number = $2
+          OR (module_source = 'RENTAL' AND (reference_id::text = $2 OR source_entity_no = $2))
+        )
+      ORDER BY created_at DESC
       LIMIT 1`,
     tenantId,
     id,
@@ -255,27 +286,120 @@ async function loadInvoice(
     const firstItemMeta = (items[0] && typeof items[0]._peppolMeta === 'object' ? items[0]._peppolMeta : {}) as Record<string, unknown>;
     const meta = { ...firstItemMeta, ...payload };
 
-    const lines = items.map((it, i) =>
-      line(
-        i + 1,
-        String(it.description || fi.description || 'Services'),
-        Number(it.qty ?? it.quantity ?? 1),
-        Number(it.unitPrice ?? it.unit_price ?? 0),
-        it.vatRatePercent !== undefined ? Number(it.vatRatePercent) : vatPct,
-        it.description ? String(it.description) : undefined,
-        (it.taxCategoryCode as PeppolTaxCategoryCode | undefined) || (vatPct > 0 ? 'S' : 'Z'),
-        it.unitCode ? String(it.unitCode) : 'C62',
-        it.taxExemptionReason ? String(it.taxExemptionReason) : undefined,
-      ),
-    );
+    const invNumUpper = String(fi.invoice_number || '').toUpperCase();
+    const isCreditNote =
+      meta.invoiceTypeCode === '381' ||
+      String(meta.rentalInvoiceType || '').toUpperCase() === 'CREDIT_NOTE' ||
+      invNumUpper.startsWith('RNT-CN-') ||
+      invNumUpper.startsWith('RCN-') ||
+      Number(fi.total_amount ?? 0) < 0;
+
+    const resolvedInvoiceTypeCode: PeppolInvoiceTypeCode =
+      (meta.invoiceTypeCode as PeppolInvoiceTypeCode | undefined) || (isCreditNote ? '381' : '380');
+
+    let extractedDiscountTotal = 0;
+    const lines: PeppolInvoiceLine[] = [];
+
+    for (const it of items) {
+      const rawType = String(it.itemType ?? it.item_type ?? '').trim().toUpperCase();
+      const rawQty = Number(it.qty ?? it.quantity ?? 1);
+      const rawUnitPrice = Number(it.unitPrice ?? it.unit_price ?? 0);
+      const rawAmount = it.amount !== undefined ? Number(it.amount) : rawQty * rawUnitPrice;
+
+      if (rawType === 'DISCOUNT' || (!isCreditNote && rawUnitPrice < 0 && rawAmount < 0)) {
+        extractedDiscountTotal += Math.abs(rawAmount);
+        continue;
+      }
+
+      const qty = (isCreditNote ? Math.abs(rawQty) : rawQty) || 1;
+      const absAmt = Math.abs(rawAmount);
+      let unitPrice = isCreditNote ? Math.abs(rawUnitPrice) : rawUnitPrice;
+      if (unitPrice < 0) unitPrice = Math.abs(unitPrice);
+      if (absAmt > 0 && Math.abs(round2(qty * unitPrice) - round2(absAmt)) > 0.05) {
+        unitPrice = round2(absAmt / qty);
+      }
+
+      const outOfScope = isOutOfScopeFineItem(rawType, it.taxable, it.taxCategoryCode);
+      const lineCategory: PeppolTaxCategoryCode = outOfScope
+        ? 'O'
+        : ((it.taxCategoryCode as PeppolTaxCategoryCode | undefined) || (vatPct > 0 ? 'S' : 'Z'));
+      const lineVatPct = outOfScope
+        ? 0
+        : it.vatRatePercent !== undefined
+          ? Number(it.vatRatePercent)
+          : lineCategory === 'S'
+            ? (vatPct > 0 ? vatPct : 5)
+            : 0;
+      const lineExemptionReason = outOfScope
+        ? String(it.taxExemptionReason || STATUTORY_FINE_EXEMPTION_REASON)
+        : it.taxExemptionReason
+          ? String(it.taxExemptionReason)
+          : undefined;
+
+      lines.push(
+        line(
+          lines.length + 1,
+          String(it.description || fi.description || 'Services'),
+          qty,
+          unitPrice,
+          lineVatPct,
+          it.description ? String(it.description) : undefined,
+          lineCategory,
+          mapUnitCode(it.unitCode ?? it.unit_label),
+          lineExemptionReason,
+        ),
+      );
+    }
+
     if (lines.length === 0) {
-      lines.push(line(1, String(fi.description || fi.service_type || 'Services'), 1, Number(fi.subtotal ?? 0), vatPct));
+      lines.push(
+        line(
+          1,
+          String(fi.description || fi.service_type || 'Services'),
+          1,
+          Math.abs(Number(fi.subtotal ?? 0)),
+          vatPct,
+        ),
+      );
     }
 
     // Document-level discount (BG-20 AllowanceCharge) — never emit negative unitPrice line (IBR-046)
-    const discount = Math.max(0, Number(fi.discount_amount ?? 0));
+    const headerDiscount = Math.abs(Number(fi.discount_amount ?? 0));
+    const discount = round2(headerDiscount > 0 ? headerDiscount : extractedDiscountTotal);
 
-    const clientNameStr = String(fi.client_name || '');
+    let billingReference: PeppolBillingReference | undefined;
+    if (meta.billingReferenceNo || meta.parentInvoiceId || resolvedInvoiceTypeCode === '381') {
+      let refNo = meta.billingReferenceNo ? String(meta.billingReferenceNo) : undefined;
+      let refDate = meta.billingReferenceIssueDate ? isoDate(meta.billingReferenceIssueDate) : undefined;
+      if (meta.parentInvoiceId && (!refNo || !refDate)) {
+        const parentRows = await withSavepoint(
+          tx,
+          'peppol_fi_parent_rinv',
+          () =>
+            tx.$queryRawUnsafe<Array<{ invoice_no: string | null; invoice_date: Date | string | null }>>(
+              `SELECT invoice_no, invoice_date
+                 FROM rental_invoices
+                WHERE id::text = $1 AND tenant_id::text = $2
+                LIMIT 1`,
+              String(meta.parentInvoiceId),
+              tenantId,
+            ),
+          [],
+        );
+        if (parentRows[0]) {
+          refNo = refNo || (parentRows[0].invoice_no ?? undefined);
+          refDate = refDate || isoDate(parentRows[0].invoice_date);
+        }
+      }
+      if (refNo || resolvedInvoiceTypeCode === '381') {
+        billingReference = {
+          invoiceNumber: refNo || (fi.source_entity_no ? String(fi.source_entity_no) : 'ORIG-INV'),
+          issueDate: refDate,
+        };
+      }
+    }
+
+    const clientNameStr = String(fi.client_name || 'Customer');
     const clientEmailStr = fi.client_email ? String(fi.client_email) : undefined;
     const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, clientNameStr, clientEmailStr);
     const buyerTrn = normalizeTrn(
@@ -292,7 +416,7 @@ async function loadInvoice(
         issueDate: issueDateStr,
         supplyDate: meta.supplyDate ? String(meta.supplyDate) : issueDateStr,
         dueDate: isoDate(fi.due_date),
-        invoiceTypeCode: (meta.invoiceTypeCode as PeppolInvoiceTypeCode | undefined) || '380',
+        invoiceTypeCode: resolvedInvoiceTypeCode,
         currency: String(fi.currency || 'AED'),
         exchangeRate: meta.exchangeRate ? Number(meta.exchangeRate) : undefined,
         buyerReference: meta.buyerReference
@@ -301,11 +425,11 @@ async function loadInvoice(
             ? String(fi.source_entity_no)
             : String(fi.invoice_number),
         orderReference: meta.orderReference ? String(meta.orderReference) : undefined,
-        billingReference: meta.billingReferenceNo
-          ? { invoiceNumber: String(meta.billingReferenceNo) }
-          : undefined,
+        billingReference,
         discountAmount: discount > 0 ? discount : undefined,
         discountReason: discount > 0 ? 'Commercial Discount' : undefined,
+        discountTaxCategoryCode: discount > 0 ? 'S' : undefined,
+        discountVatRatePercent: discount > 0 ? (vatPct > 0 ? vatPct : 5) : undefined,
         buyer: {
           name: clientNameStr,
           trn: buyerTrn,
@@ -330,122 +454,338 @@ async function loadInvoice(
         paymentAccountName: sellerMeta.payeeAccountName || undefined,
         paymentFinancialInstitutionBic: sellerMeta.payeeBankBic || undefined,
         referenceContractNo: fi.source_entity_no ? String(fi.source_entity_no) : undefined,
-        notes: fi.notes ? String(fi.notes) : DEFAULT_NOTE,
+        notes: fi.notes ? String(fi.notes) : (resolvedInvoiceTypeCode === '381' ? DEFAULT_CREDIT_NOTE : DEFAULT_NOTE),
       },
     };
   }
 
   // 2. Credit Notes (finance_credit_notes -> InvoiceTypeCode 381)
-  try {
-    const [cn] = await tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
-      `SELECT cn.id::text, cn.cn_number, cn.original_invoice_id::text, cn.original_invoice_no,
-              cn.client_name, cn.client_trn, cn.reason_code, cn.reason_detail, cn.line_items,
-              cn.subtotal, cn.vat_amount, cn.total_amount, cn.currency, cn.issue_date, cn.created_at,
-              fi.invoice_number AS orig_invoice_number, fi.issue_date AS orig_issue_date,
-              fi.client_name AS orig_client_name, fi.client_email AS orig_client_email, fi.client_address AS orig_client_address
-         FROM finance_credit_notes cn
-         LEFT JOIN finance_invoices fi ON fi.id::text = cn.original_invoice_id::text AND fi.tenant_id = cn.tenant_id
-        WHERE cn.tenant_id = $2 AND (cn.id::text = $1 OR cn.cn_number = $1)
-        LIMIT 1`,
-      id,
-      tenantId,
-    );
-    if (cn) {
-      const net = Number(cn.subtotal ?? cn.total_amount ?? 0);
-      const vatAmt = Number(cn.vat_amount ?? 0);
-      const vatPct = net > 0 ? Math.round((vatAmt / net) * 100) : 5;
-      const clientNameStr = String(cn.client_name || cn.orig_client_name || 'Customer');
-      const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, clientNameStr, cn.orig_client_email ? String(cn.orig_client_email) : undefined);
-      const buyerTrn = cn.client_trn ? String(cn.client_trn) : customerFallback.trn;
-      const issueDateStr = isoDate(cn.issue_date || cn.created_at) ?? new Date().toISOString().slice(0, 10);
-      const reasonDesc = String(cn.reason_detail || cn.reason_code || 'Credit Note Adjustment');
+  const cnRows = await withSavepoint(
+    tx,
+    'peppol_fin_cn',
+    () =>
+      tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
+        `SELECT cn.id::text, cn.cn_number, cn.original_invoice_id::text, cn.original_invoice_no,
+                cn.client_name, cn.client_trn, cn.reason_code, cn.reason_detail, cn.line_items,
+                cn.subtotal, cn.vat_amount, cn.total_amount, cn.currency, cn.issue_date, cn.created_at,
+                fi.invoice_number AS orig_invoice_number, fi.issue_date AS orig_issue_date,
+                fi.client_name AS orig_client_name, fi.client_email AS orig_client_email, fi.client_address AS orig_client_address
+           FROM finance_credit_notes cn
+           LEFT JOIN finance_invoices fi ON fi.id::text = cn.original_invoice_id::text AND fi.tenant_id = cn.tenant_id
+          WHERE cn.tenant_id = $2 AND (cn.id::text = $1 OR cn.cn_number = $1)
+          LIMIT 1`,
+        id,
+        tenantId,
+      ),
+    [],
+  );
+  if (cnRows[0]) {
+    const cn = cnRows[0];
+    const net = Math.abs(Number(cn.subtotal ?? cn.total_amount ?? 0));
+    const vatAmt = Math.abs(Number(cn.vat_amount ?? 0));
+    const vatPct = net > 0 ? Math.round((vatAmt / net) * 100) : 5;
+    const clientNameStr = String(cn.client_name || cn.orig_client_name || 'Customer');
+    const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, clientNameStr, cn.orig_client_email ? String(cn.orig_client_email) : undefined);
+    const buyerTrn = normalizeTrn(cn.client_trn ? String(cn.client_trn) : customerFallback.trn);
+    const issueDateStr = isoDate(cn.issue_date || cn.created_at) ?? new Date().toISOString().slice(0, 10);
+    const reasonDesc = String(cn.reason_detail || cn.reason_code || 'Credit Note Adjustment');
 
-      return {
-        sourceTable: 'CREDIT_NOTE',
-        rawId: String(cn.id),
-        invoice: {
-          invoiceNumber: String(cn.cn_number || cn.id),
-          issueDate: issueDateStr,
-          supplyDate: issueDateStr,
-          invoiceTypeCode: '381',
-          currency: String(cn.currency || 'AED'),
-          billingReference: {
-            invoiceNumber: String(cn.original_invoice_no || cn.orig_invoice_number || cn.original_invoice_id || 'ORIG-INV'),
-            issueDate: isoDate(cn.orig_issue_date),
-          },
-          buyer: {
-            name: clientNameStr,
-            trn: buyerTrn,
-            crn: customerFallback.crn,
-            endpointId: buyerTrn || customerFallback.crn,
-            endpointSchemeId: '0235',
-            address: address(cn.orig_client_address || customerFallback.address, customerFallback.city),
-          },
-          lines: [line(1, reasonDesc, 1, net, vatPct)],
-          paymentMeansCode: sellerMeta.paymentMeansCode || '30',
-          paymentIban: sellerMeta.payeeIban || undefined,
-          notes: reasonDesc || 'UAE VAT Tax Credit Note pursuant to Article 61.',
+    return {
+      sourceTable: 'CREDIT_NOTE',
+      rawId: String(cn.id),
+      invoice: {
+        invoiceNumber: String(cn.cn_number || cn.id),
+        issueDate: issueDateStr,
+        supplyDate: issueDateStr,
+        invoiceTypeCode: '381',
+        currency: String(cn.currency || 'AED'),
+        billingReference: {
+          invoiceNumber: String(cn.original_invoice_no || cn.orig_invoice_number || cn.original_invoice_id || 'ORIG-INV'),
+          issueDate: isoDate(cn.orig_issue_date),
         },
-      };
-    }
-  } catch {
-    // Optional table lookup
+        buyer: {
+          name: clientNameStr,
+          trn: buyerTrn,
+          crn: customerFallback.crn,
+          endpointId: buyerTrn || customerFallback.crn,
+          endpointSchemeId: '0235',
+          address: address(cn.orig_client_address || customerFallback.address, customerFallback.city),
+        },
+        lines: [line(1, reasonDesc, 1, net, vatPct, undefined, vatPct > 0 ? 'S' : 'O', 'C62', vatPct === 0 ? STATUTORY_FINE_EXEMPTION_REASON : undefined)],
+        paymentMeansCode: sellerMeta.paymentMeansCode || '30',
+        paymentIban: sellerMeta.payeeIban || undefined,
+        notes: reasonDesc || DEFAULT_CREDIT_NOTE,
+      },
+    };
   }
 
   // 3. Debit Notes (finance_debit_notes -> InvoiceTypeCode 383)
-  try {
-    const [dn] = await tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
-      `SELECT dn.id::text, dn.dn_number, dn.original_invoice_id::text, dn.original_invoice_no,
-              dn.vendor_name, dn.reason_code, dn.reason_detail, dn.line_items,
-              dn.subtotal, dn.vat_amount, dn.total_amount, dn.currency, dn.issue_date, dn.created_at,
-              fi.invoice_number AS orig_invoice_number, fi.issue_date AS orig_issue_date,
-              fi.client_name AS orig_client_name, fi.client_email AS orig_client_email, fi.client_address AS orig_client_address
-         FROM finance_debit_notes dn
-         LEFT JOIN finance_invoices fi ON fi.id::text = dn.original_invoice_id::text AND fi.tenant_id = dn.tenant_id
-        WHERE dn.tenant_id = $2 AND (dn.id::text = $1 OR dn.dn_number = $1)
-        LIMIT 1`,
-      id,
-      tenantId,
-    );
-    if (dn) {
-      const net = Number(dn.subtotal ?? dn.total_amount ?? 0);
-      const vatAmt = Number(dn.vat_amount ?? 0);
-      const vatPct = net > 0 ? Math.round((vatAmt / net) * 100) : 5;
-      const clientNameStr = String(dn.orig_client_name || dn.vendor_name || 'Customer');
-      const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, clientNameStr, dn.orig_client_email ? String(dn.orig_client_email) : undefined);
-      const issueDateStr = isoDate(dn.issue_date || dn.created_at) ?? new Date().toISOString().slice(0, 10);
-      const reasonDesc = String(dn.reason_detail || dn.reason_code || 'Debit Note Adjustment');
+  const dnRows = await withSavepoint(
+    tx,
+    'peppol_fin_dn',
+    () =>
+      tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
+        `SELECT dn.id::text, dn.dn_number, dn.original_invoice_id::text, dn.original_invoice_no,
+                dn.vendor_name, dn.reason_code, dn.reason_detail, dn.line_items,
+                dn.subtotal, dn.vat_amount, dn.total_amount, dn.currency, dn.issue_date, dn.created_at,
+                fi.invoice_number AS orig_invoice_number, fi.issue_date AS orig_issue_date,
+                fi.client_name AS orig_client_name, fi.client_email AS orig_client_email, fi.client_address AS orig_client_address
+           FROM finance_debit_notes dn
+           LEFT JOIN finance_invoices fi ON fi.id::text = dn.original_invoice_id::text AND fi.tenant_id = dn.tenant_id
+          WHERE dn.tenant_id = $2 AND (dn.id::text = $1 OR dn.dn_number = $1)
+          LIMIT 1`,
+        id,
+        tenantId,
+      ),
+    [],
+  );
+  if (dnRows[0]) {
+    const dn = dnRows[0];
+    const net = Math.abs(Number(dn.subtotal ?? dn.total_amount ?? 0));
+    const vatAmt = Math.abs(Number(dn.vat_amount ?? 0));
+    const vatPct = net > 0 ? Math.round((vatAmt / net) * 100) : 5;
+    const clientNameStr = String(dn.orig_client_name || dn.vendor_name || 'Customer');
+    const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, clientNameStr, dn.orig_client_email ? String(dn.orig_client_email) : undefined);
+    const issueDateStr = isoDate(dn.issue_date || dn.created_at) ?? new Date().toISOString().slice(0, 10);
+    const reasonDesc = String(dn.reason_detail || dn.reason_code || 'Debit Note Adjustment');
 
-      return {
-        sourceTable: 'DEBIT_NOTE',
-        rawId: String(dn.id),
-        invoice: {
-          invoiceNumber: String(dn.dn_number || dn.id),
-          issueDate: issueDateStr,
-          supplyDate: issueDateStr,
-          invoiceTypeCode: '383',
-          currency: String(dn.currency || 'AED'),
-          billingReference: {
-            invoiceNumber: String(dn.original_invoice_no || dn.orig_invoice_number || dn.original_invoice_id || 'ORIG-INV'),
-            issueDate: isoDate(dn.orig_issue_date),
-          },
-          buyer: {
-            name: clientNameStr,
-            trn: customerFallback.trn,
-            crn: customerFallback.crn,
-            endpointId: customerFallback.trn || customerFallback.crn,
-            endpointSchemeId: '0235',
-            address: address(dn.orig_client_address || customerFallback.address, customerFallback.city),
-          },
-          lines: [line(1, reasonDesc, 1, net, vatPct)],
-          paymentMeansCode: sellerMeta.paymentMeansCode || '30',
-          paymentIban: sellerMeta.payeeIban || undefined,
-          notes: reasonDesc || 'UAE VAT Tax Debit Note.',
+    return {
+      sourceTable: 'DEBIT_NOTE',
+      rawId: String(dn.id),
+      invoice: {
+        invoiceNumber: String(dn.dn_number || dn.id),
+        issueDate: issueDateStr,
+        supplyDate: issueDateStr,
+        invoiceTypeCode: '383',
+        currency: String(dn.currency || 'AED'),
+        billingReference: {
+          invoiceNumber: String(dn.original_invoice_no || dn.orig_invoice_number || dn.original_invoice_id || 'ORIG-INV'),
+          issueDate: isoDate(dn.orig_issue_date),
         },
-      };
+        buyer: {
+          name: clientNameStr,
+          trn: customerFallback.trn,
+          crn: customerFallback.crn,
+          endpointId: customerFallback.trn || customerFallback.crn,
+          endpointSchemeId: '0235',
+          address: address(dn.orig_client_address || customerFallback.address, customerFallback.city),
+        },
+        lines: [line(1, reasonDesc, 1, net, vatPct)],
+        paymentMeansCode: sellerMeta.paymentMeansCode || '30',
+        paymentIban: sellerMeta.payeeIban || undefined,
+        notes: reasonDesc || 'UAE VAT Tax Debit Note.',
+      },
+    };
+  }
+
+  // 3b. Rent-A-Car (RAC) invoices & Tax Credit Notes (rental_invoices: RINV-* -> 380, RCN-* -> 381)
+  const racRows = await withSavepoint(
+    tx,
+    'peppol_rental_inv',
+    () =>
+      tx.$queryRawUnsafe<FinanceInvoiceRow[]>(
+        `SELECT ri.*,
+                rc.full_name AS rc_full_name,
+                rc.company_name AS rc_company_name,
+                rc.customer_type AS rc_customer_type,
+                rc.vat_number AS rc_vat_number,
+                rc.trade_license AS rc_trade_license,
+                rc.email AS rc_email,
+                rc.phone AS rc_phone,
+                rc.address AS rc_address,
+                rc.city AS rc_city,
+                ra.agreement_no AS ra_agreement_no,
+                ra.pickup_at AS ra_pickup_at,
+                ra.actual_return_at AS ra_actual_return_at,
+                parent.invoice_no AS parent_invoice_no,
+                parent.invoice_date AS parent_invoice_date
+           FROM rental_invoices ri
+           LEFT JOIN rental_customers rc ON rc.id = ri.customer_id AND rc.tenant_id::text = ri.tenant_id::text
+           LEFT JOIN rental_agreements ra ON ra.id = ri.agreement_id AND ra.tenant_id::text = ri.tenant_id::text
+           LEFT JOIN rental_invoices parent ON parent.id = ri.parent_invoice_id AND parent.tenant_id::text = ri.tenant_id::text
+          WHERE ri.tenant_id::text = $1
+            AND ri.deleted_at IS NULL
+            AND (ri.id::text = $2 OR ri.invoice_no = $2)
+          LIMIT 1`,
+        tenantId,
+        id,
+      ),
+    [],
+  );
+  if (racRows[0]) {
+    const ri = racRows[0];
+    const racLineRows = await withSavepoint(
+      tx,
+      'peppol_rental_inv_lines',
+      () =>
+        tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT id::text, description, item_type, quantity, unit_label, unit_price, amount, taxable
+             FROM rental_invoice_line_items
+            WHERE invoice_id = $1::uuid AND tenant_id::text = $2
+            ORDER BY sort_order ASC, created_at ASC`,
+          String(ri.id),
+          tenantId,
+        ),
+      [],
+    );
+
+    const invNoStr = String(ri.invoice_no || ri.id);
+    const isCreditNote =
+      String(ri.invoice_type ?? '').toUpperCase() === 'CREDIT_NOTE' ||
+      invNoStr.toUpperCase().startsWith('RCN-') ||
+      Number(ri.total_amount ?? 0) < 0;
+    const invoiceTypeCode: PeppolInvoiceTypeCode = isCreditNote ? '381' : '380';
+    const defaultVatPct = Number(ri.tax_rate ?? 5);
+
+    let extractedDiscountTotal = 0;
+    const lines: PeppolInvoiceLine[] = [];
+
+    for (const li of racLineRows) {
+      const itemType = String(li.item_type ?? '').trim().toUpperCase();
+      const rawQty = Number(li.quantity ?? 1);
+      const rawUnit = Number(li.unit_price ?? 0);
+      const rawAmt = li.amount !== undefined ? Number(li.amount) : rawQty * rawUnit;
+
+      if (itemType === 'DISCOUNT' || (!isCreditNote && rawAmt < 0)) {
+        extractedDiscountTotal += Math.abs(rawAmt);
+        continue;
+      }
+
+      const qty = Math.abs(rawQty) > 0 ? Math.abs(rawQty) : 1;
+      const absAmt = Math.abs(rawAmt);
+      let unitPrice = Math.abs(rawUnit);
+      if (absAmt > 0 && Math.abs(round2(qty * unitPrice) - round2(absAmt)) > 0.05) {
+        unitPrice = round2(absAmt / qty);
+      }
+
+      const outOfScope = isOutOfScopeFineItem(itemType, li.taxable);
+      const taxCat: PeppolTaxCategoryCode = outOfScope ? 'O' : defaultVatPct > 0 ? 'S' : 'Z';
+      const lineVatPct = outOfScope ? 0 : defaultVatPct;
+      const desc = String(li.description || (isCreditNote ? 'Rental Credit Adjustment' : 'Car Rental Services'));
+
+      lines.push(
+        line(
+          lines.length + 1,
+          desc,
+          qty,
+          unitPrice,
+          lineVatPct,
+          desc,
+          taxCat,
+          mapUnitCode(li.unit_label),
+          outOfScope ? STATUTORY_FINE_EXEMPTION_REASON : undefined,
+        ),
+      );
     }
-  } catch {
-    // Optional table lookup
+
+    const headerDiscount = Math.abs(Number(ri.discount_amount ?? 0));
+    const discount = round2(headerDiscount > 0 ? headerDiscount : extractedDiscountTotal);
+
+    if (lines.length === 0) {
+      const taxableMag = Math.abs(Number(ri.taxable_amount ?? 0));
+      const subtotalMag = Math.abs(Number(ri.subtotal ?? 0));
+      const grossTaxableBeforeDiscount = round2(taxableMag + discount);
+      const nonTaxableMag = Math.max(0, round2(subtotalMag - grossTaxableBeforeDiscount));
+
+      if (grossTaxableBeforeDiscount > 0 || nonTaxableMag === 0) {
+        lines.push(
+          line(
+            1,
+            isCreditNote ? 'Rental Tax Credit Adjustment' : 'Car Rental & Mobility Services',
+            1,
+            grossTaxableBeforeDiscount > 0 ? grossTaxableBeforeDiscount : subtotalMag,
+            defaultVatPct,
+            ri.ra_agreement_no ? `Agreement ${String(ri.ra_agreement_no)}` : undefined,
+            defaultVatPct > 0 ? 'S' : 'Z',
+            'DAY',
+          ),
+        );
+      }
+      if (nonTaxableMag > 0.01) {
+        lines.push(
+          line(
+            lines.length + 1,
+            'Statutory Traffic Fine Recovery (Out of Scope)',
+            1,
+            nonTaxableMag,
+            0,
+            'Disbursement recovery outside UAE VAT scope (FTA VATP006/VATP040)',
+            'O',
+            'C62',
+            STATUTORY_FINE_EXEMPTION_REASON,
+          ),
+        );
+      }
+    }
+
+    const isCorp = String(ri.rc_customer_type ?? '').toUpperCase() === 'CORPORATE';
+    const buyerName = String(
+      (isCorp && ri.rc_company_name ? ri.rc_company_name : null) ||
+        ri.rc_company_name ||
+        ri.rc_full_name ||
+        'Walk-in Customer',
+    );
+    const buyerEmail = ri.rc_email ? String(ri.rc_email) : undefined;
+    const customerFallback = await lookupCustomerTaxInfo(tx, tenantId, buyerName, buyerEmail);
+    const buyerTrn = normalizeTrn(String(ri.rc_vat_number || customerFallback.trn || ''));
+    const buyerCrn = String(ri.rc_trade_license || customerFallback.crn || '').trim() || undefined;
+    const issueDateStr = isoDate(ri.invoice_date || ri.created_at) ?? new Date().toISOString().slice(0, 10);
+    const supplyDateStr = isoDate(ri.ra_actual_return_at || ri.ra_pickup_at || ri.invoice_date) ?? issueDateStr;
+    const agreementNoStr = ri.ra_agreement_no ? String(ri.ra_agreement_no) : undefined;
+    const amountPaidNum = !isCreditNote ? Math.max(0, round2(Number(ri.amount_paid ?? 0))) : 0;
+
+    return {
+      sourceTable: isCreditNote ? 'RENTAL_CREDIT_NOTE' : 'RENTAL_INVOICE',
+      rawId: String(ri.id),
+      invoice: {
+        invoiceNumber: invNoStr,
+        issueDate: issueDateStr,
+        supplyDate: supplyDateStr,
+        dueDate: isoDate(ri.due_date),
+        invoiceTypeCode,
+        currency: String(ri.currency || 'AED'),
+        buyerReference: agreementNoStr || invNoStr,
+        billingReference:
+          isCreditNote || ri.parent_invoice_no
+            ? {
+                invoiceNumber: String(ri.parent_invoice_no || agreementNoStr || 'ORIG-INV'),
+                issueDate: isoDate(ri.parent_invoice_date),
+              }
+            : undefined,
+        discountAmount: discount > 0 ? discount : undefined,
+        discountReason: discount > 0 ? 'Rental Commercial Discount' : undefined,
+        discountTaxCategoryCode: discount > 0 ? 'S' : undefined,
+        discountVatRatePercent: discount > 0 ? (defaultVatPct > 0 ? defaultVatPct : 5) : undefined,
+        prepaidAmount: amountPaidNum > 0 ? amountPaidNum : undefined,
+        buyer: {
+          name: buyerName,
+          trn: buyerTrn,
+          crn: buyerCrn,
+          endpointId: buyerTrn || buyerCrn,
+          endpointSchemeId: '0235',
+          address: address(
+            ri.rc_address || customerFallback.address,
+            ri.rc_city ? String(ri.rc_city) : customerFallback.city,
+          ),
+          contact: {
+            name: ri.rc_full_name ? String(ri.rc_full_name) : undefined,
+            email: buyerEmail,
+            phone: ri.rc_phone ? String(ri.rc_phone) : undefined,
+          },
+        },
+        lines,
+        paymentMeansCode: sellerMeta.paymentMeansCode || '30',
+        paymentIban: sellerMeta.payeeIban || undefined,
+        paymentAccountName: sellerMeta.payeeAccountName || undefined,
+        paymentFinancialInstitutionBic: sellerMeta.payeeBankBic || undefined,
+        referenceContractNo: agreementNoStr,
+        notes: ri.notes
+          ? String(ri.notes)
+          : isCreditNote
+            ? DEFAULT_CREDIT_NOTE
+            : DEFAULT_NOTE,
+      },
+    };
   }
 
   // 4. Leasing invoices (ids are uuids; anything else cannot match).
@@ -599,126 +939,175 @@ async function handlePOST(
     const { tenantId, userId } = authz;
     const { id } = await params;
 
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    // Phase 1: Load tenant seller & invoice data inside RLS transaction (no network I/O)
+    const phase1 = await withTenantRls(prisma, tenantId, async (tx) => {
       const sellerInfo = await tenantSeller(tx, tenantId);
       if (!sellerInfo || !isValidUaeTrn(sellerInfo.seller.trn)) {
-        return NextResponse.json(
-          {
-            error: 'Your company TRN is missing or invalid. Configure your 15-digit UAE TRN in Admin → Company Profile before transmitting to PEPPOL.',
-            fixUrl: '/admin/company-profile',
-          },
-          { status: 422 },
-        );
+        return { kind: 'missing_trn' as const };
       }
-
       const loaded = await loadInvoice(tx, tenantId, id, sellerInfo.meta);
       if (!loaded) {
-        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+        return { kind: 'not_found' as const };
       }
+      return { kind: 'ready' as const, sellerInfo, loaded };
+    });
 
-      const invoiceData: PeppolInvoiceData = { ...loaded.invoice, seller: sellerInfo.seller };
-      const result = generatePeppolUaeInvoiceXml(invoiceData);
-      if (!result.isValid || !result.xml) {
-        return NextResponse.json(
-          {
-            error: 'Peppol PINT-UAE validation failed',
-            details: result.errors,
-            warnings: result.warnings,
+    if (phase1.kind === 'missing_trn') {
+      return NextResponse.json(
+        {
+          error: 'Your company TRN is missing or invalid. Configure your 15-digit UAE TRN in Admin → Company Profile before transmitting to PEPPOL.',
+          fixUrl: '/admin/company-profile',
+        },
+        { status: 422 },
+      );
+    }
+
+    if (phase1.kind === 'not_found') {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    }
+
+    const { sellerInfo, loaded } = phase1;
+    const invoiceData: PeppolInvoiceData = { ...loaded.invoice, seller: sellerInfo.seller };
+    const result = generatePeppolUaeInvoiceXml(invoiceData);
+    if (!result.isValid || !result.xml) {
+      return NextResponse.json(
+        {
+          error: 'Peppol PINT-UAE validation failed',
+          details: result.errors,
+          warnings: result.warnings,
+        },
+        { status: 422 },
+      );
+    }
+
+    // Phase 2: Transmit to external PEPPOL ASP gateway OUTSIDE withTenantRls
+    const submissionId = `PEPPOL-AE-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const transmittedAt = new Date().toISOString();
+    let peppolStatus: 'ACKNOWLEDGED' | 'TRANSMITTED' = 'ACKNOWLEDGED';
+    let gatewayResponseNote = `Cleared via ${sellerInfo.meta.aspProvider} (${sellerInfo.meta.aspEnvironment}) — Profile urn:peppol:pint:billing-1@ae-1`;
+
+    if (sellerInfo.meta.aspEndpointUrl && sellerInfo.meta.aspEnvironment === 'PRODUCTION') {
+      try {
+        const aspRes = await fetch(sellerInfo.meta.aspEndpointUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/xml; charset=utf-8',
+            'X-Peppol-Profile': 'urn:peppol:pint:billing-1@ae-1',
+            'X-Peppol-Sender-ID': `${invoiceData.seller.endpointSchemeId || '0235'}:${invoiceData.seller.endpointId}`,
+            'X-Peppol-Receiver-ID': `${invoiceData.buyer.endpointSchemeId || '0235'}:${invoiceData.buyer.endpointId || 'B2C'}`,
+            'X-Invoice-Digest-SHA256': result.digestHash || '',
+            ...(sellerInfo.meta.aspClientId ? { 'X-ASP-Client-Id': sellerInfo.meta.aspClientId } : {}),
+            ...(sellerInfo.meta.aspApiKey ? { Authorization: `Bearer ${sellerInfo.meta.aspApiKey}` } : {}),
           },
-          { status: 422 },
+          body: result.xml,
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (aspRes.ok) {
+          peppolStatus = 'ACKNOWLEDGED';
+          gatewayResponseNote = `Accepted by ${sellerInfo.meta.aspProvider} (${aspRes.status})`;
+        } else {
+          peppolStatus = 'TRANSMITTED';
+          gatewayResponseNote = `Queued for AS4 retry on ${sellerInfo.meta.aspProvider} (HTTP ${aspRes.status})`;
+        }
+      } catch (netErr: unknown) {
+        peppolStatus = 'TRANSMITTED';
+        const msg = netErr instanceof Error ? netErr.message : 'ASP unreachable';
+        gatewayResponseNote = `Signed & queued in local outbox (${msg})`;
+      }
+    }
+
+    const receiptPayload = JSON.stringify({
+      peppolStatus,
+      peppolSubmissionId: submissionId,
+      peppolDigestHash: result.digestHash,
+      qrCodeBase64: result.qrCodeBase64,
+      peppolTransmittedAt: transmittedAt,
+      aspProvider: sellerInfo.meta.aspProvider,
+    });
+
+    // Phase 3: Persist clearance receipt & immutable VAT/PEPPOL audit entry inside RLS with savepoints
+    await withTenantRls(prisma, tenantId, async (tx) => {
+      if (loaded.sourceTable === 'FINANCE_INVOICE') {
+        await withSavepoint(
+          tx,
+          'peppol_persist_fi',
+          () =>
+            tx.$executeRawUnsafe(
+              `UPDATE finance_invoices
+                  SET source_payload = COALESCE(source_payload, '{}'::jsonb) || $3::jsonb,
+                      updated_at = NOW()
+                WHERE id = $1::uuid AND tenant_id = $2`,
+              loaded.rawId,
+              tenantId,
+              receiptPayload,
+            ),
+          0,
+        );
+      } else if (loaded.sourceTable === 'RENTAL_INVOICE' || loaded.sourceTable === 'RENTAL_CREDIT_NOTE') {
+        await withSavepoint(
+          tx,
+          'peppol_persist_mirrored_rac',
+          () =>
+            tx.$executeRawUnsafe(
+              `UPDATE finance_invoices
+                  SET source_payload = COALESCE(source_payload, '{}'::jsonb) || $3::jsonb,
+                      updated_at = NOW()
+                WHERE tenant_id = $2
+                  AND module_source = 'RENTAL'
+                  AND reference_id::text = $1
+                  AND deleted_at IS NULL`,
+              loaded.rawId,
+              tenantId,
+              receiptPayload,
+            ),
+          0,
         );
       }
 
-      const submissionId = `PEPPOL-AE-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
-      const transmittedAt = new Date().toISOString();
-      let peppolStatus: 'ACKNOWLEDGED' | 'TRANSMITTED' = 'ACKNOWLEDGED';
-      let gatewayResponseNote = `Cleared via ${sellerInfo.meta.aspProvider} (${sellerInfo.meta.aspEnvironment}) — Profile urn:peppol:pint:billing-1@ae-1`;
+      await withSavepoint(
+        tx,
+        'peppol_vat_audit_log',
+        () =>
+          tx.$executeRawUnsafe(
+            `INSERT INTO finance_vat_audit_logs (
+              id, tenant_id, action, entity_type, entity_id, details, performed_by, created_at
+            ) VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, NOW())`,
+            randomUUID(),
+            tenantId,
+            'PEPPOL_TRANSMIT',
+            loaded.sourceTable,
+            loaded.rawId,
+            JSON.stringify({
+              invoiceNumber: invoiceData.invoiceNumber,
+              invoiceTypeCode: invoiceData.invoiceTypeCode || '380',
+              submissionId,
+              peppolStatus,
+              aspProvider: sellerInfo.meta.aspProvider,
+              aspEnvironment: sellerInfo.meta.aspEnvironment,
+              digestHash: result.digestHash,
+              qrCodeBase64: result.qrCodeBase64,
+              gatewayResponseNote,
+              transmittedAt,
+            }),
+            userId || 'system',
+          ),
+        0,
+      );
+    });
 
-      if (sellerInfo.meta.aspEndpointUrl && sellerInfo.meta.aspEnvironment === 'PRODUCTION') {
-        try {
-          const aspRes = await fetch(sellerInfo.meta.aspEndpointUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/xml; charset=utf-8',
-              'X-Peppol-Profile': 'urn:peppol:pint:billing-1@ae-1',
-              'X-Peppol-Sender-ID': `${invoiceData.seller.endpointSchemeId || '0235'}:${invoiceData.seller.endpointId}`,
-              'X-Peppol-Receiver-ID': `${invoiceData.buyer.endpointSchemeId || '0235'}:${invoiceData.buyer.endpointId || 'B2C'}`,
-              'X-Invoice-Digest-SHA256': result.digestHash || '',
-              ...(sellerInfo.meta.aspClientId ? { 'X-ASP-Client-Id': sellerInfo.meta.aspClientId } : {}),
-              ...(sellerInfo.meta.aspApiKey ? { Authorization: `Bearer ${sellerInfo.meta.aspApiKey}` } : {}),
-            },
-            body: result.xml,
-          });
-          if (aspRes.ok) {
-            peppolStatus = 'ACKNOWLEDGED';
-            gatewayResponseNote = `Accepted by ${sellerInfo.meta.aspProvider} (${aspRes.status})`;
-          } else {
-            peppolStatus = 'TRANSMITTED';
-            gatewayResponseNote = `Queued for AS4 retry on ${sellerInfo.meta.aspProvider} (HTTP ${aspRes.status})`;
-          }
-        } catch (netErr: any) {
-          peppolStatus = 'TRANSMITTED';
-          gatewayResponseNote = `Signed & queued in local outbox (${netErr?.message || 'ASP unreachable'})`;
-        }
-      }
-
-      // Persist PEPPOL clearance receipt in finance_invoices.source_payload JSONB
-      if (loaded.sourceTable === 'FINANCE_INVOICE') {
-        await tx.$executeRawUnsafe(
-          `UPDATE finance_invoices
-              SET source_payload = COALESCE(source_payload, '{}'::jsonb) || $3::jsonb,
-                  updated_at = NOW()
-            WHERE id = $1::uuid AND tenant_id = $2`,
-          loaded.rawId,
-          tenantId,
-          JSON.stringify({
-            peppolStatus,
-            peppolSubmissionId: submissionId,
-            peppolDigestHash: result.digestHash,
-            qrCodeBase64: result.qrCodeBase64,
-            peppolTransmittedAt: transmittedAt,
-            aspProvider: sellerInfo.meta.aspProvider,
-          }),
-        ).catch(() => {});
-      }
-
-      // Record immutable VAT/PEPPOL audit entry
-      await tx.$executeRawUnsafe(
-        `INSERT INTO finance_vat_audit_logs (
-          id, tenant_id, action, entity_type, entity_id, details, performed_by, created_at
-        ) VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, NOW())`,
-        randomUUID(),
-        tenantId,
-        'PEPPOL_TRANSMIT',
-        loaded.sourceTable,
-        loaded.rawId,
-        JSON.stringify({
-          invoiceNumber: invoiceData.invoiceNumber,
-          submissionId,
-          peppolStatus,
-          aspProvider: sellerInfo.meta.aspProvider,
-          aspEnvironment: sellerInfo.meta.aspEnvironment,
-          digestHash: result.digestHash,
-          qrCodeBase64: result.qrCodeBase64,
-          gatewayResponseNote,
-          transmittedAt,
-        }),
-        userId || 'system',
-      ).catch(() => {});
-
-      return NextResponse.json({
-        ok: true,
-        invoiceNumber: invoiceData.invoiceNumber,
-        submissionId,
-        peppolStatus,
-        aspProvider: sellerInfo.meta.aspProvider,
-        aspEnvironment: sellerInfo.meta.aspEnvironment,
-        digestHash: result.digestHash,
-        qrCodeBase64: result.qrCodeBase64,
-        warnings: result.warnings,
-        gatewayResponseNote,
-        transmittedAt,
-      });
+    return NextResponse.json({
+      ok: true,
+      invoiceNumber: invoiceData.invoiceNumber,
+      invoiceTypeCode: invoiceData.invoiceTypeCode || '380',
+      submissionId,
+      peppolStatus,
+      aspProvider: sellerInfo.meta.aspProvider,
+      aspEnvironment: sellerInfo.meta.aspEnvironment,
+      digestHash: result.digestHash,
+      qrCodeBase64: result.qrCodeBase64,
+      warnings: result.warnings,
+      gatewayResponseNote,
+      transmittedAt,
     });
   } catch (error: unknown) {
     console.error('Error transmitting Peppol e-invoice:', error);

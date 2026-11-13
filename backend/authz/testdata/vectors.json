@@ -9,8 +9,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   },
@@ -267,11 +267,81 @@
     "drayage:edit:*",
     "drayage:delete:*",
     "drayage:approve:*",
-    "drayage:export:*"
+    "drayage:export:*",
+    "rental:create:pricing",
+    "rental:delete:pricing",
+    "rental:create:rates",
+    "rental:edit:rates",
+    "rental:delete:rates",
+    "rental:approve:rates",
+    "rental:create:rate_events",
+    "rental:edit:rate_events",
+    "rental:delete:rate_events",
+    "rental:create:ancillaries",
+    "rental:edit:ancillaries",
+    "rental:delete:ancillaries",
+    "rental:create:branches",
+    "rental:edit:branches",
+    "rental:delete:branches",
+    "rental:create:channels",
+    "rental:edit:channels",
+    "rental:delete:channels",
+    "rental:create:insurance",
+    "rental:edit:insurance",
+    "rental:delete:insurance",
+    "rental:delete:customers",
+    "rental:approve:customers",
+    "rental:approve:deposits",
+    "rental:approve:invoices",
+    "rental:approve:renewals",
+    "rental:create:invoices",
+    "rental:edit:invoices",
+    "rental:delete:invoices",
+    "rental:create:renewals",
+    "rental:edit:renewals",
+    "rental:delete:renewals",
+    "rental:create:agreements",
+    "rental:edit:agreements",
+    "rental:delete:agreements",
+    "rental:approve:agreements",
+    "rental:create:counter",
+    "rental:edit:counter",
+    "rental:delete:counter",
+    "rental:edit:damage",
+    "rental:delete:damage",
+    "rental:create:damage_claims",
+    "rental:edit:damage_claims",
+    "rental:delete:damage_claims",
+    "rental:approve:damage_claims",
+    "rental:create:documents",
+    "rental:edit:documents",
+    "rental:delete:documents",
+    "rental:approve:documents",
+    "rental:create:transfers",
+    "rental:edit:transfers",
+    "rental:delete:transfers",
+    "rental:approve:transfers",
+    "rental:create:quotations",
+    "rental:edit:quotations",
+    "rental:delete:quotations",
+    "rental:approve:quotations",
+    "rental:create:inquiries",
+    "rental:edit:inquiries",
+    "rental:delete:inquiries",
+    "rental:create:inspections",
+    "rental:edit:inspections",
+    "rental:delete:inspections",
+    "rental:create:handover",
+    "rental:edit:handover",
+    "rental:delete:handover",
+    "rental:create:preauth",
+    "rental:edit:preauth",
+    "rental:delete:preauth",
+    "rental:approve:preauth"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "________________________A8D______________z8"
+    "v": "6da8dd3a",
+    "b": "________________________A8D__________________________w8"
    }
   },
   {
@@ -520,11 +590,81 @@
     "drayage:edit:*",
     "drayage:delete:*",
     "drayage:approve:*",
-    "drayage:export:*"
+    "drayage:export:*",
+    "rental:create:pricing",
+    "rental:delete:pricing",
+    "rental:create:rates",
+    "rental:edit:rates",
+    "rental:delete:rates",
+    "rental:approve:rates",
+    "rental:create:rate_events",
+    "rental:edit:rate_events",
+    "rental:delete:rate_events",
+    "rental:create:ancillaries",
+    "rental:edit:ancillaries",
+    "rental:delete:ancillaries",
+    "rental:create:branches",
+    "rental:edit:branches",
+    "rental:delete:branches",
+    "rental:create:channels",
+    "rental:edit:channels",
+    "rental:delete:channels",
+    "rental:create:insurance",
+    "rental:edit:insurance",
+    "rental:delete:insurance",
+    "rental:delete:customers",
+    "rental:approve:customers",
+    "rental:approve:deposits",
+    "rental:approve:invoices",
+    "rental:approve:renewals",
+    "rental:create:invoices",
+    "rental:edit:invoices",
+    "rental:delete:invoices",
+    "rental:create:renewals",
+    "rental:edit:renewals",
+    "rental:delete:renewals",
+    "rental:create:agreements",
+    "rental:edit:agreements",
+    "rental:delete:agreements",
+    "rental:approve:agreements",
+    "rental:create:counter",
+    "rental:edit:counter",
+    "rental:delete:counter",
+    "rental:edit:damage",
+    "rental:delete:damage",
+    "rental:create:damage_claims",
+    "rental:edit:damage_claims",
+    "rental:delete:damage_claims",
+    "rental:approve:damage_claims",
+    "rental:create:documents",
+    "rental:edit:documents",
+    "rental:delete:documents",
+    "rental:approve:documents",
+    "rental:create:transfers",
+    "rental:edit:transfers",
+    "rental:delete:transfers",
+    "rental:approve:transfers",
+    "rental:create:quotations",
+    "rental:edit:quotations",
+    "rental:delete:quotations",
+    "rental:approve:quotations",
+    "rental:create:inquiries",
+    "rental:edit:inquiries",
+    "rental:delete:inquiries",
+    "rental:create:inspections",
+    "rental:edit:inspections",
+    "rental:delete:inspections",
+    "rental:create:handover",
+    "rental:edit:handover",
+    "rental:delete:handover",
+    "rental:create:preauth",
+    "rental:edit:preauth",
+    "rental:delete:preauth",
+    "rental:approve:preauth"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "________________________A8D______________z8"
+    "v": "6da8dd3a",
+    "b": "________________________A8D__________________________w8"
    }
   },
   {
@@ -563,8 +703,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgAAAAAA"
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -578,11 +718,36 @@
     "rental:create:customers",
     "rental:edit:customers",
     "rental:create:damage",
-    "rental:edit:pricing"
+    "rental:create:invoices",
+    "rental:edit:invoices",
+    "rental:create:renewals",
+    "rental:edit:renewals",
+    "rental:create:agreements",
+    "rental:edit:agreements",
+    "rental:create:counter",
+    "rental:edit:counter",
+    "rental:edit:damage",
+    "rental:create:damage_claims",
+    "rental:edit:damage_claims",
+    "rental:create:documents",
+    "rental:edit:documents",
+    "rental:create:transfers",
+    "rental:edit:transfers",
+    "rental:create:quotations",
+    "rental:edit:quotations",
+    "rental:create:inquiries",
+    "rental:edit:inquiries",
+    "rental:create:inspections",
+    "rental:edit:inspections",
+    "rental:create:handover",
+    "rental:edit:handover",
+    "rental:create:preauth",
+    "rental:edit:preauth",
+    "fleet:view:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "6da8dd3a",
+    "b": "AAAAAM4BAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAADbrJmZbQM"
    }
   },
   {
@@ -644,8 +809,8 @@
     "drayage:view:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAEEQBAE"
+    "v": "6da8dd3a",
+    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAEEQBAEAAAAAAAAAAAA"
    }
   },
   {
@@ -658,8 +823,8 @@
     "custom:thing:x"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "custom:thing:x",
      "fleet:view:vehicles",
@@ -677,8 +842,8 @@
     "maintenance:view:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "logistics:create:shipments"
     ]
@@ -690,8 +855,8 @@
    "plan": "PRO",
    "permissions": [],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -716,8 +881,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "0ac7ad93",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "6da8dd3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   }
@@ -1203,8 +1368,8 @@
   [
    0,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:vehicles"
   ],
@@ -1307,8 +1472,8 @@
   [
    1,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:vehicles"
   ],
@@ -1723,8 +1888,8 @@
   [
    5,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:*"
   ],
@@ -1827,8 +1992,8 @@
   [
    6,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:*"
   ],
@@ -1931,8 +2096,8 @@
   [
    7,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:*"
   ],
@@ -9211,8 +9376,8 @@
   [
    77,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:*"
   ],
@@ -10147,8 +10312,8 @@
   [
    86,
    5,
-   false,
-   "missing-permission",
+   true,
+   "granted",
    "fleet",
    "fleet:view:vehicles"
   ],

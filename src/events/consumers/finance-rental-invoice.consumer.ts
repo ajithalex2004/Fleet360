@@ -10,11 +10,11 @@
  *   - mirrorRentalInvoiceToFinance() is idempotent internally (source_type+source_id)
  */
 
-import { BaseEventConsumer }                from '@/events/consumer-base';
-import type { DomainEventEnvelope }         from '@/events/event-envelope';
-import { RENTAL_INVOICE_GENERATED }         from '@/events/registry';
+import { BaseEventConsumer }                  from '@/events/consumer-base';
+import type { DomainEventEnvelope }           from '@/events/event-envelope';
+import { RENTAL_INVOICE_GENERATED }           from '@/events/registry';
 import type { RentalInvoiceGeneratedPayload } from '@/events/contracts/rental-invoice.events';
-import { mirrorRentalInvoiceToFinance }     from '@/lib/finance/module-ledger';
+import { mirrorRentalInvoiceToFinance }       from '@/lib/finance/module-ledger';
 
 export class FinanceRentalInvoiceConsumer extends BaseEventConsumer<RentalInvoiceGeneratedPayload> {
   readonly consumerName = 'finance-rental-invoice';
@@ -24,6 +24,9 @@ export class FinanceRentalInvoiceConsumer extends BaseEventConsumer<RentalInvoic
     envelope: DomainEventEnvelope<RentalInvoiceGeneratedPayload>,
   ): Promise<void> {
     const { data, tenantId } = envelope;
+    if (!data?.rentalInvoiceId || !tenantId) {
+      return;
+    }
 
     const result = await mirrorRentalInvoiceToFinance(
       data.rentalInvoiceId,
@@ -31,9 +34,9 @@ export class FinanceRentalInvoiceConsumer extends BaseEventConsumer<RentalInvoic
       envelope.actor ?? 'system',
     );
 
-    if (!result) {
+    if (!result || !result.mirrored) {
       console.log(
-        `[finance-rental-invoice] invoice ${data.rentalInvoiceId} — no result from mirror`,
+        `[finance-rental-invoice] invoice ${data.rentalInvoiceId} — skipped (${result?.reason ?? 'no result'})`,
       );
       return;
     }

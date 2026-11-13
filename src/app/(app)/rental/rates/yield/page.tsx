@@ -11,6 +11,11 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Sparkles, ArrowDown, AlertTriangle } from 'lucide-react';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
+import {
+  RENTAL_VEHICLE_CATEGORIES,
+  formatRentalCategoryLabel,
+  normalizeRentalCategory,
+} from '@/lib/rental/categories';
 
 type Channel = 'DIRECT' | 'CORPORATE' | 'AGENCY' | 'ONLINE';
 
@@ -45,11 +50,18 @@ interface Diagnostics {
   utilizationAuto: boolean;
 }
 
-const CATEGORIES = [
-  'ECONOMY', 'COMPACT', 'MID_SIZE_SEDAN', 'FULL_SIZE_SEDAN',
-  'COMPACT_SUV', 'STANDARD_SUV', 'FULL_SIZE_SUV', 'LUXURY_SEDAN', 'LUXURY_SUV',
-  'VAN', 'PICKUP', 'MINI_BUS',
-];
+type CategoryItem = string | { value?: string; code?: string; label?: string };
+const CATEGORY_OPTIONS = (RENTAL_VEHICLE_CATEGORIES as readonly CategoryItem[]).map((item) => {
+  const value = typeof item === 'string' ? item : String(item.value ?? item.code ?? '');
+  const label =
+    typeof item === 'string'
+      ? formatRentalCategoryLabel(value)
+      : item.label ?? formatRentalCategoryLabel(value);
+  return { value, label };
+});
+
+const DEFAULT_CATEGORY =
+  normalizeRentalCategory('MID_SIZE_SUV') || CATEGORY_OPTIONS[0]?.value || 'ECONOMY';
 
 const LAYER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   BASE:        { bg: 'bg-[var(--bg-surface-hover)]/40',   border: 'border-[var(--border-strong)]',     text: 'text-[var(--text-main)]' },
@@ -68,7 +80,7 @@ function todayPlus(days: number): string {
 }
 
 export default function YieldAnalyzerPage() {
-  const [category, setCategory] = useState('STANDARD_SUV');
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [pickupDate, setPickupDate] = useState(todayPlus(7));
   const [dropoffDate, setDropoffDate] = useState(todayPlus(14));
   const [channel, setChannel] = useState<Channel>('DIRECT');
@@ -82,7 +94,7 @@ export default function YieldAnalyzerPage() {
     setBusy(true);
     setError(null);
     try {
-      const body: any = {
+      const body: Record<string, unknown> = {
         vehicleCategory: category,
         pickupDate: new Date(pickupDate).toISOString(),
         dropoffDate: new Date(dropoffDate).toISOString(),
@@ -97,7 +109,7 @@ export default function YieldAnalyzerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? `Server returned ${res.status}`);
         return;
@@ -137,7 +149,11 @@ export default function YieldAnalyzerPage() {
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
             >
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -232,6 +248,8 @@ export default function YieldAnalyzerPage() {
               </div>
             </div>
             <div className="mt-3 flex gap-3 text-xs text-[var(--text-muted)] flex-wrap">
+              <span>Category: <strong className="text-[var(--text-main)]">{formatRentalCategoryLabel(result.vehicleCategory)}</strong></span>
+              <span>·</span>
               <span>Rule: <strong className="text-[var(--text-main)]">{result.ruleName}</strong></span>
               <span>·</span>
               <span>Channel: <strong className="text-[var(--text-main)]">{result.channel}</strong></span>

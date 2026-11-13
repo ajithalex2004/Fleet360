@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
  *
  * Response:
  * {
- *   userId, tenantId, plan, role,
+ *   userId, tenantId, tenantName, tenantCode, plan, role,
  *   navPermissions: Record<navKey, boolean>,  // only relevant for TENANT_ADMIN
  *   isSuperAdmin: boolean,
  *   isReadOnly: boolean,  // true when plan=TRIAL and not fleet
@@ -73,14 +73,15 @@ export async function GET(request: NextRequest) {
         ).then(rows => tenantModulesFor(rows.map(r => r.module), plan))
         .catch(() => [] as string[]),
 
-    // 3. Tenant display name & default language
-    tx.$queryRawUnsafe<{ name: string; default_language: string | null }[]>(
-      `SELECT name, default_language FROM tenants WHERE id = $1 LIMIT 1`,
+    // 3. Tenant display name, code & default language
+    tx.$queryRawUnsafe<{ name: string; code: string | null; default_language: string | null }[]>(
+      `SELECT name, code, default_language FROM tenants WHERE id = $1 LIMIT 1`,
       tenantId,
     ).then(rows => ({
       tenantName: rows[0]?.name ?? '',
+      tenantCode: rows[0]?.code ?? null,
       defaultLanguage: rows[0]?.default_language ?? 'en',
-    })).catch(() => ({ tenantName: '', defaultLanguage: 'en' })),
+    })).catch(() => ({ tenantName: '', tenantCode: null as string | null, defaultLanguage: 'en' })),
 
     // 4. White-label branding (best-effort). Uses its own client rather than
     //    tx, so it is not covered by this scope — see note in the PR.
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
       userId,
       tenantId,
       tenantName: tenantInfo.tenantName,
+      tenantCode: tenantInfo.tenantCode,
       defaultLanguage: tenantInfo.defaultLanguage,
       plan,
       role,

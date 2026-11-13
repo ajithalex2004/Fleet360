@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Overview {
@@ -107,13 +108,12 @@ function StarRating({ score, max = 5 }: { score: number; max?: number }) {
 }
 
 function FuelBar({ level }: { level: number }) {
-  // level is 0–8 (fuel notches) or could be 0–100
-  const pct = level > 10 ? level : level * 12.5; // normalize
+  const pct = Math.min(100, Math.max(0, Number(level) || 0));
   const color = pct >= 60 ? 'bg-green-500' : pct >= 30 ? 'bg-amber-500' : 'bg-red-500';
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 bg-[var(--bg-surface-hover)] rounded-full h-2 overflow-hidden">
-        <div className={`h-2 rounded-full ${color} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div className={`h-2 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs text-[var(--text-muted)] w-8 text-right">{Math.round(pct)}%</span>
     </div>
@@ -150,7 +150,10 @@ export default function RentalAnalyticsPage() {
       const res = await fetch(
         `/api/rental/analytics?startDate=${startDate}&endDate=${endDate}`,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `HTTP ${res.status}`);
+      }
       const json = await res.json();
       setData(json);
     } catch (e: unknown) {
@@ -214,36 +217,32 @@ export default function RentalAnalyticsPage() {
       )}
 
       {/* ── Section 1: Overview KPIs ───────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Revenue */}
-        <div className="bg-gradient-to-br from-teal-900/50 to-teal-950 border border-teal-500/20 rounded-2xl p-5">
-          <div className="text-2xl mb-2">💰</div>
-          <p className="text-xs text-teal-400 font-medium uppercase tracking-wide">Total Revenue</p>
-          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmtAED(ov.total_revenue)}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Across all branches</p>
-        </div>
-        {/* Bookings */}
-        <div className="bg-gradient-to-br from-blue-900/50 to-blue-950 border border-blue-500/20 rounded-2xl p-5">
-          <div className="text-2xl mb-2">📅</div>
-          <p className="text-xs text-blue-400 font-medium uppercase tracking-wide">Total Bookings</p>
-          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmt(ov.total_bookings)}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Avg {ov.avg_rental_days} days/rental</p>
-        </div>
-        {/* Conversion */}
-        <div className="bg-gradient-to-br from-emerald-900/50 to-emerald-950 border border-emerald-500/20 rounded-2xl p-5">
-          <div className="text-2xl mb-2">📊</div>
-          <p className="text-xs text-emerald-400 font-medium uppercase tracking-wide">Quote Conversion</p>
-          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{ov.quote_conversion_rate}%</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">{fmt(ov.accepted_quotes)} / {fmt(ov.total_quotes)} quotes</p>
-        </div>
-        {/* Inquiries */}
-        <div className="bg-gradient-to-br from-amber-900/50 to-amber-950 border border-amber-500/20 rounded-2xl p-5">
-          <div className="text-2xl mb-2">🔍</div>
-          <p className="text-xs text-amber-400 font-medium uppercase tracking-wide">Total Inquiries</p>
-          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmt(ov.total_inquiries)}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Lead pipeline entries</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard
+          label="Total Revenue"
+          value={fmtAED(ov.total_revenue)}
+          sub="Across all branches"
+          accent="emerald"
+        />
+        <KpiCard
+          label="Total Bookings"
+          value={fmt(ov.total_bookings)}
+          sub={`Avg ${ov.avg_rental_days} days/rental`}
+          accent="cyan"
+        />
+        <KpiCard
+          label="Quote Conversion"
+          value={`${ov.quote_conversion_rate}%`}
+          sub={`${fmt(ov.accepted_quotes)} / ${fmt(ov.total_quotes)} quotes`}
+          accent="violet"
+        />
+        <KpiCard
+          label="Total Inquiries"
+          value={fmt(ov.total_inquiries)}
+          sub="Lead pipeline entries"
+          accent="amber"
+        />
+      </StatGrid>
 
       {/* ── Section 2: Revenue by Branch ──────────────────────────────── */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
@@ -464,7 +463,7 @@ export default function RentalAnalyticsPage() {
             <div className="text-2xl mb-1">⛽</div>
             <p className="text-xs text-[var(--text-muted)] mb-2">Avg Fuel at Return</p>
             <p className="text-xl font-bold text-[var(--text-main)] mb-2">
-              {(data?.handover_stats.avg_fuel_at_return ?? 0).toFixed(1)} / 8
+              {`${(data?.handover_stats.avg_fuel_at_return ?? 0).toFixed(0)}%`}
             </p>
             <FuelBar level={data?.handover_stats.avg_fuel_at_return ?? 0} />
           </div>

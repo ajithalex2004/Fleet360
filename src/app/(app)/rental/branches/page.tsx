@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { ShieldAlert } from 'lucide-react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 interface Branch {
   id: string;
@@ -50,6 +52,8 @@ export default function BranchesPage() {
   const [viewMode, setViewMode]   = useState<'grid' | 'table'>('grid');
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
+  const [rbacError, setRbacError] = useState('');
+  const [modalError, setModalError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editBranch, setEditBranch] = useState<Branch | null>(null);
   const [saving, setSaving]       = useState(false);
@@ -65,7 +69,17 @@ export default function BranchesPage() {
       if (emirateFilter !== 'ALL') params.set('emirate', emirateFilter);
       if (search)                  params.set('search', search);
       const res  = await fetch(`/api/rental/branches?${params}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setRbacError(String(data?.error ?? 'Requires permission to view branches.'));
+        setBranches([]);
+        return;
+      }
+      if (!res.ok) {
+        setError(String(data?.error ?? 'Failed to load branches'));
+        setBranches([]);
+        return;
+      }
       setBranches(data.branches ?? []);
       setStats(data.stats ?? null);
     } catch {
@@ -79,12 +93,14 @@ export default function BranchesPage() {
 
   const openNew = () => {
     setEditBranch(null);
+    setModalError('');
     setFormData(emptyForm);
     setShowModal(true);
   };
 
   const openEdit = (b: Branch) => {
     setEditBranch(b);
+    setModalError('');
     setFormData({
       branchName:     b.branchName,
       emirate:        b.emirate,
@@ -102,6 +118,9 @@ export default function BranchesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setError('');
+    setRbacError('');
+    setModalError('');
     try {
       const payload = {
         branchName:     formData.branchName,
@@ -127,14 +146,25 @@ export default function BranchesPage() {
           body: JSON.stringify(payload),
         });
       }
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        const msg = String(d?.error ?? 'Requires RAC Manager permission to manage branches.');
+        setRbacError(msg);
+        setModalError(`Requires RAC Manager Permission (403): ${msg}`);
+        return;
+      }
       if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Failed to save');
+        const msg = String(d?.error || 'Failed to save branch');
+        setModalError(msg);
+        setError(msg);
+        return;
       }
       setShowModal(false);
       load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save branch');
+      const msg = err instanceof Error ? err.message : 'Failed to save branch';
+      setModalError(msg);
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -143,11 +173,24 @@ export default function BranchesPage() {
   const handleToggleStatus = async (b: Branch) => {
     const newStatus = b.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     if (!confirm(`Set branch "${b.branchName}" to ${newStatus}?`)) return;
+    setError('');
+    setRbacError('');
     try {
-      await fetch('/api/rental/branches', {
+      const res = await fetch('/api/rental/branches', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: b.id, status: newStatus }),
       });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setRbacError(
+          String(d?.error ?? 'Requires RAC Manager permission to activate or deactivate branches.'),
+        );
+        return;
+      }
+      if (!res.ok) {
+        setError(String(d?.error ?? `Failed to update branch status (${res.status})`));
+        return;
+      }
       load();
     } catch {
       setError('Failed to update branch status');
@@ -173,32 +216,34 @@ export default function BranchesPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">
-          {error}
+      {rbacError && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3.5 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Requires RAC Manager Permission (403)</p>
+              <p className="text-xs text-amber-200/80 mt-0.5">{rbacError}</p>
+            </div>
+          </div>
+          <button onClick={() => setRbacError('')} className="text-amber-300/70 hover:text-amber-200 text-sm">✕</button>
+        </div>
+      )}
+
+      {error && !rbacError && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-rose-300 hover:text-rose-200 text-xs">✕</button>
         </div>
       )}
 
       {/* KPI Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Branches',     value: stats.total,           color: 'text-[var(--text-main)]',       icon: '🏢' },
-            { label: 'Active Branches',    value: stats.active,          color: 'text-emerald-400', icon: '✅' },
-            { label: 'Emirates Covered',   value: stats.emiratesCovered, color: 'text-teal-400',    icon: '🗺️' },
-            { label: 'Total Capacity',     value: `${stats.totalCapacity} vehicles`, color: 'text-cyan-400', icon: '🚗', raw: true },
-          ].map(({ label, value, color, icon, raw }) => (
-            <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">{icon}</span>
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
-              </div>
-              <p className={`text-3xl font-bold ${color}`}>
-                {raw ? value : value}
-              </p>
-            </div>
-          ))}
-        </div>
+        <StatGrid cols={4}>
+          <KpiCard label="Total Branches" value={stats.total} accent="slate" />
+          <KpiCard label="Active Branches" value={stats.active} accent="emerald" />
+          <KpiCard label="Emirates Covered" value={stats.emiratesCovered} accent="cyan" />
+          <KpiCard label="Total Capacity" value={`${stats.totalCapacity} vehicles`} accent="violet" />
+        </StatGrid>
       )}
 
       {/* Controls */}
@@ -416,6 +461,12 @@ export default function BranchesPage() {
               </h2>
               <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
+
+            {modalError && (
+              <div className="mb-4 bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-xs">
+                {modalError}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

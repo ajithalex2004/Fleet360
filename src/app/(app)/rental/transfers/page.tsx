@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TransferStatus = 'REQUESTED' | 'APPROVED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
@@ -148,12 +149,15 @@ export default function RentalTransfersPage() {
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (search) params.set('search', search);
       const res = await fetch(`/api/rental/transfers?${params}`);
-      if (!res.ok) throw new Error('Failed to fetch');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Failed to load transfers (${res.status})`);
+      }
       const json: ApiResponse = await res.json();
       setTransfers(json.data);
       setSummary(json.summary);
-    } catch {
-      /* ignore */
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load transfers');
     } finally {
       setLoading(false);
     }
@@ -165,6 +169,13 @@ export default function RentalTransfersPage() {
     if (!form.vehicleNo.trim() || !form.fromBranchName.trim() || !form.toBranchName.trim() || !form.transferDate || !form.reason) {
       setError('Vehicle No, From Branch, To Branch, Transfer Date and Reason are required.');
       return;
+    }
+    if (form.fuelLevel !== '') {
+      const fl = Number(form.fuelLevel);
+      if (!Number.isFinite(fl) || fl < 0 || fl > 100) {
+        setError('Fuel Level must be between 0% and 100%.');
+        return;
+      }
     }
     setSaving(true); setError('');
     try {
@@ -183,6 +194,7 @@ export default function RentalTransfersPage() {
           transferDate:    form.transferDate,
           reason:          form.reason,
           fuelLevel:       form.fuelLevel !== '' ? Number(form.fuelLevel) : undefined,
+          fuelUnit:        form.fuelLevel !== '' ? 'PCT' : undefined,
           odometerReading: form.odometerReading !== '' ? Number(form.odometerReading) : undefined,
           conditionNotes:  form.conditionNotes || undefined,
           driverName:      form.driverName || undefined,
@@ -192,8 +204,8 @@ export default function RentalTransfersPage() {
         }),
       });
       if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? 'Failed to create');
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error ?? `Failed to create transfer (${res.status})`);
       }
       setShowCreate(false);
       setForm(emptyForm());
@@ -214,8 +226,8 @@ export default function RentalTransfersPage() {
         body: JSON.stringify({ action, ...extra }),
       });
       if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? 'Failed to update');
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error ?? `Failed to update transfer (${res.status})`);
       }
       setShowApprove(null);
       setShowCancel(null);
@@ -256,28 +268,12 @@ export default function RentalTransfersPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Requested</p>
-          <p className="text-3xl font-bold text-amber-400 mt-1">{summary.requested}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Awaiting approval</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-cyan-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">In Transit</p>
-          <p className="text-3xl font-bold text-cyan-400 mt-1">{summary.inTransit}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">On the road now</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Completed This Month</p>
-          <p className="text-3xl font-bold text-emerald-400 mt-1">{summary.completedThisMonth}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">Arrived at destination</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-red-500/20 rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Cancelled</p>
-          <p className="text-3xl font-bold text-red-400 mt-1">{summary.cancelled}</p>
-          <p className="text-xs text-[var(--text-faint)] mt-1">All time</p>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Requested" value={summary.requested} sub="Awaiting approval" accent="amber" />
+        <KpiCard label="In Transit" value={summary.inTransit} sub="On the road now" accent="cyan" />
+        <KpiCard label="Completed This Month" value={summary.completedThisMonth} sub="Arrived at destination" accent="emerald" />
+        <KpiCard label="Cancelled" value={summary.cancelled} sub="All time" accent="rose" />
+      </StatGrid>
 
       {/* Transfer Pipeline Visual */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
@@ -334,6 +330,20 @@ export default function RentalTransfersPage() {
         />
       </div>
 
+      {/* Top-level Error Banner */}
+      {error && !showCreate && !showApprove && !showCancel && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-400 flex items-center justify-between gap-3">
+          <span>⚠️ {error}</span>
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="text-red-300 hover:text-[var(--text-main)] text-xs font-medium px-2 py-0.5 rounded"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -347,6 +357,7 @@ export default function RentalTransfersPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">To Branch</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Transfer Date</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Reason</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Fuel / Odo</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Driver</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
@@ -355,11 +366,11 @@ export default function RentalTransfersPage() {
             <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-[var(--text-faint)]">Loading transfers…</td>
+                  <td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">Loading transfers…</td>
                 </tr>
               ) : transfers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-[var(--text-faint)]">No transfers found</td>
+                  <td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">No transfers found</td>
                 </tr>
               ) : transfers.map(t => (
                 <tr key={t.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
@@ -405,6 +416,11 @@ export default function RentalTransfersPage() {
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${REASON_COLORS[t.reason]}`}>
                       {REASONS.find(r => r.value === t.reason)?.label ?? t.reason}
                     </span>
+                  </td>
+                  {/* Fuel / Odometer */}
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <p className="font-medium text-[var(--text-main)]">{`${t.fuelLevel ?? 0}%`}</p>
+                    <p className="text-[var(--text-faint)] mt-0.5">{`${(t.odometerReading ?? 0).toLocaleString()} km`}</p>
                   </td>
                   {/* Driver */}
                   <td className="px-4 py-3">
@@ -582,8 +598,8 @@ export default function RentalTransfersPage() {
                 <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Vehicle Condition</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>Fuel Level (0–8)</label>
-                    <input type="number" min="0" max="8" className={inputCls} placeholder="0–8" value={form.fuelLevel}
+                    <label className={labelCls}>Fuel Level (%)</label>
+                    <input type="number" min="0" max="100" className={inputCls} placeholder="0–100%" value={form.fuelLevel}
                       onChange={e => setForm(p => ({ ...p, fuelLevel: e.target.value }))} />
                   </div>
                   <div>

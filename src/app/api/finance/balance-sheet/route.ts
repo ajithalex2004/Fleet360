@@ -138,9 +138,11 @@ export async function GET(req: NextRequest) {
         asOf, tenantId
       ).catch(()=>[{t:'0'}]);
       const [secDep]  = await tx.$queryRawUnsafe<{t:string}[]>(
-        `SELECT COALESCE(SUM(amount - COALESCE(refunded_amount, 0) - COALESCE(forfeited_amount, 0)),0)::text as t
+        `SELECT COALESCE(SUM(collected_amount - COALESCE(refunded_amount, 0) - COALESCE(total_deducted, 0)), 0)::text as t
            FROM finance_security_deposits
-          WHERE tenant_id = $1 AND status IN ('HELD','PARTIALLY_REFUNDED')`,
+          WHERE tenant_id = $1
+            AND status IN ('HELD', 'PARTIALLY_REFUNDED', 'DEDUCTED', 'PARTIALLY_DEDUCTED')
+            AND (collected_amount - COALESCE(refunded_amount, 0) - COALESCE(total_deducted, 0)) > 0`,
         tenantId
       ).catch(()=>[{t:'0'}]);
       const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(
@@ -157,10 +159,10 @@ export async function GET(req: NextRequest) {
       return {
         current: [
           { code: '2110', label: 'Accounts Payable (AP)',      amount: toN(apPay?.t)   },
-          { code: '2120', label: 'Accrued Expenses Payable',   amount: toN(expPay?.t)  },
-          { code: '2130', label: 'VAT Payable (FTA)',          amount: netVatPayable   },
+          { code: '2120', label: 'VAT Payable (FTA)',          amount: netVatPayable   },
+          { code: '2130', label: 'Accrued Expenses Payable',   amount: toN(expPay?.t)  },
+          { code: '2140', label: 'PDC Cheques Payable',        amount: toN(pdcOut?.t)  },
           { code: '2150', label: 'Customer Security Deposits', amount: toN(secDep?.t)  },
-          { code: '2160', label: 'PDC Cheques Payable',        amount: toN(pdcOut?.t)  },
         ].filter(r => r.amount !== 0),
         nonCurrent: [],
       };
@@ -203,8 +205,9 @@ export async function GET(req: NextRequest) {
       ].filter(r => r.amount !== 0);
     }
 
-    const [{ current: currentAssets, fixed: fixedAssets, other: otherAssets }, { current: currentLiabilities, nonCurrent: ncLiabilities }, equityLines] =
-      await Promise.all([getAssets(), getLiabilities(), getEquity()]);
+    const { current: currentAssets, fixed: fixedAssets, other: otherAssets } = await getAssets();
+    const { current: currentLiabilities, nonCurrent: ncLiabilities } = await getLiabilities();
+    const equityLines = await getEquity();
 
     const totalCurrentAssets  = currentAssets.reduce((s, r) => s + r.amount, 0);
     const totalFixedAssets    = fixedAssets.reduce((s, r) => s + r.amount, 0);

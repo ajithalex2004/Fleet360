@@ -3,8 +3,8 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-10-13.1`
-- Permission catalogue version: `0ac7ad93` (254 permissions)
+- Policy version: `2026-11-11.3`
+- Permission catalogue version: `6da8dd3a` (324 permissions)
 
 ## API areas
 
@@ -46,7 +46,8 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `driver` | 1 | module `logistics` | module `logistics` |
 | `driver-app` | 33 | external | external |
 | `drivers` | 9 | module `driver-mgmt` | module `driver-mgmt` |
-| `esign` | 3 | module `leasing` | module `leasing` |
+| `esign` | 2 | module `leasing` | module `leasing` |
+| `esign/verify` | 1 | external | external |
 | `exchange` | 17 | partner | partner |
 | `files` | 1 | self | self |
 | `finance` | 47 | module `finance` | module `finance` |
@@ -77,9 +78,14 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `push` | 3 | self | self |
 | `push/run-scheduler` | 1 | external | external |
 | `quotations` | 2 | module `booking-portal` | module `booking-portal` |
+| `rac-portal` | 15 | external | external |
 | `readyz` | 1 | external | external |
 | `realtime` | 1 | self | self |
-| `rental` | 53 | module `rental` | module `rental` |
+| `rental` | 62 | module `rental` | module `rental` |
+| `rental/bookings/copilot` | 1 | module `rental` | module `rental` |
+| `rental/damage-claims/classify` | 1 | module `rental` | module `rental` |
+| `rental/rates/calculate` | 1 | module `rental` | module `rental` |
+| `rental/rates/yield` | 1 | module `rental` | module `rental` |
 | `reports` | 5 | module `reports` | module `reports` |
 | `route-optimizer` | 2 | module `bus-ops` | module `bus-ops` |
 | `school-bus` | 35 | module `school-bus` | module `school-bus` |
@@ -116,8 +122,8 @@ V view · C create · E edit · D delete · A approve · X export · `*` all res
 | TENANT_ADMIN | — | V C E D A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr Ar X Mr | V C A X | V C E D A X | V C E D A X | V C E D A X | V C E D A X | V Cr Er Dr X | V Cr E D Ar X | V Cr Er Dr X | V C E D A X | V Cr Er Dr Ar X | V C E D A X | V Cr Er Ar X | V C E D A X | V Cr Er Dr Ar X | V C X | V C E D A X | V C E D A X | V C E D A X | V C E D A X |
 | LEASING_MANAGER | — | — | — | — | — | — | — | — | — | — | — | — | V | — | — | V Cr Er Dr Ar X | — | — | — | — | V C X | — | — | — | — |
 | LEASING_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — | — | — | — | — |
-| RAC_MANAGER | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er Dr Ar X | V | — | — | — | — |
-| RAC_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | V Cr Er | — | — | — | — | — |
+| RAC_MANAGER | — | — | — | — | — | — | V | — | — | — | — | — | V | V | — | — | — | — | — | V Cr Er Dr Ar X | V X | — | — | — | — |
+| RAC_OPERATOR | — | — | — | — | — | — | — | — | — | — | — | — | — | V | — | — | — | — | — | V Cr Er | — | — | — | — | — |
 | TRANSPORT_MANAGER | — | — | — | — | — | V Cr Er Dr Ar X Mr | — | — | — | V C E D A X | — | V | — | V | — | — | — | — | — | — | V | V C E D A X | — | — | — |
 | TRANSPORT_OPERATOR | — | — | — | — | — | V Cr Er Ar Mr | — | — | — | V C E A | — | V | — | V | — | — | — | — | — | — | — | V C E A | — | — | — |
 | FLEET_MANAGER | — | — | — | V C E D A X | — | — | V C | — | — | — | — | V Cr Er Dr X | — | V Cr Er Dr X | — | — | — | V Cr Er Ar X | — | — | V C X | — | — | — | — |

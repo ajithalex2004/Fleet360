@@ -1,5 +1,13 @@
 'use client';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
+import {
+  RENTAL_VEHICLE_CATEGORIES,
+  formatRentalCategoryLabel,
+  normalizeRentalCategory,
+} from '@/lib/rental/categories';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Quotation {
@@ -7,14 +15,19 @@ interface Quotation {
   quote_no: string;
   inquiry_id?: string;
   customer_name: string;
+  customerName?: string;
   email?: string;
   phone?: string;
   vehicle_type?: string;
+  vehicleCategory?: string;
   vehicle_name?: string;
   pickup_date: string;
+  pickupDate?: string;
   return_date: string;
+  returnDate?: string;
   rental_days: number;
   daily_rate: number | string;
+  dailyRate?: number | string;
   subtotal: number | string;
   vat_amount: number | string;
   grand_total: number | string;
@@ -26,6 +39,7 @@ interface Quotation {
   accepted_at?: string;
   rejected_at?: string;
   converted_to?: string;
+  convertedTo?: string;
   created_at: string;
 }
 
@@ -36,28 +50,39 @@ interface SummaryEntry {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const STATUS_TABS = ['ALL', 'DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'];
+const STATUS_TABS = ['ALL', 'DRAFT', 'SENT', 'ACCEPTED', 'CONVERTED', 'REJECTED', 'EXPIRED'];
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT:    'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]/40',
-  SENT:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  ACCEPTED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
-  EXPIRED:  'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  DRAFT:     'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]/40',
+  SENT:      'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  ACCEPTED:  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  CONVERTED: 'bg-teal-500/20 text-teal-300 border-teal-500/35',
+  REJECTED:  'bg-red-500/20 text-red-400 border-red-500/30',
+  EXPIRED:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
 };
 
 const STATUS_ACTION: Record<string, { next: string; label: string; color: string }[]> = {
-  DRAFT:    [{ next: 'SENT',     label: 'Send Quote', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30' }],
-  SENT:     [
+  DRAFT:     [{ next: 'SENT',     label: 'Send Quote', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30' }],
+  SENT:      [
     { next: 'ACCEPTED', label: 'Accept',     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30' },
     { next: 'REJECTED', label: 'Reject',     color: 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30' },
   ],
-  ACCEPTED: [],
-  REJECTED: [],
-  EXPIRED:  [],
+  ACCEPTED:  [],
+  CONVERTED: [],
+  REJECTED:  [],
+  EXPIRED:   [],
 };
 
-const VEHICLE_TYPES = ['Economy', 'Sedan', 'SUV', 'Luxury', 'Van', 'Bus'];
+type CategoryItem = string | { value?: string; code?: string; label?: string };
+const VEHICLE_TYPE_OPTIONS = (RENTAL_VEHICLE_CATEGORIES as readonly CategoryItem[]).map((item) => {
+  const value = typeof item === 'string' ? item : String(item.value ?? item.code ?? '');
+  const label =
+    typeof item === 'string'
+      ? formatRentalCategoryLabel(value)
+      : item.label ?? formatRentalCategoryLabel(value);
+  return { value, label };
+});
+
 const VAT_RATE = 0.05;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,8 +108,26 @@ const isExpired = (q: Quotation): boolean => {
   return new Date(q.valid_until) < new Date(new Date().toDateString());
 };
 
+function buildBookingHref(q: Quotation): string {
+  const cName = q.customerName ?? q.customer_name ?? '';
+  const rawCat = q.vehicleCategory ?? q.vehicle_type ?? '';
+  const cat = rawCat ? normalizeRentalCategory(rawCat) || rawCat : '';
+  const pickup = (q.pickupDate ?? q.pickup_date ?? '').slice(0, 10);
+  const dropoff = (q.returnDate ?? q.return_date ?? '').slice(0, 10);
+  const rate = String(q.dailyRate ?? q.daily_rate ?? '');
+  return (
+    `/rental/bookings?quoteId=${encodeURIComponent(q.id)}` +
+    `&customerName=${encodeURIComponent(cName)}` +
+    `&category=${encodeURIComponent(cat)}` +
+    `&pickupDate=${encodeURIComponent(pickup)}` +
+    `&dropoffDate=${encodeURIComponent(dropoff)}` +
+    `&dailyRate=${encodeURIComponent(rate)}`
+  );
+}
+
 // ── Empty form ────────────────────────────────────────────────────────────────
 const emptyForm = {
+  inquiryId: '',
   customerName: '',
   phone: '',
   email: '',
@@ -98,7 +141,10 @@ const emptyForm = {
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function QuotationsPage() {
+function QuotationsPageInner() {
+  const searchParams = useSearchParams();
+  const autoOpenedInquiryRef = useRef<string | null>(null);
+
   const [quotations, setQuotations]   = useState<Quotation[]>([]);
   const [summary, setSummary]         = useState<SummaryEntry[]>([]);
   const [activeTab, setActiveTab]     = useState('ALL');
@@ -106,9 +152,33 @@ export default function QuotationsPage() {
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
+  const [notice, setNotice]           = useState('');
   const [showModal, setShowModal]     = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [convertingId, setConvertingId]   = useState<string | null>(null);
   const [formData, setFormData]       = useState({ ...emptyForm });
+
+  // ── Pre-open New Quotation modal when ?inquiryId= is present ──────────────
+  useEffect(() => {
+    const inquiryId = searchParams.get('inquiryId');
+    if (!inquiryId || autoOpenedInquiryRef.current === inquiryId) return;
+    autoOpenedInquiryRef.current = inquiryId;
+
+    const rawCat = searchParams.get('category') ?? searchParams.get('vehicleType') ?? '';
+    const normCat = rawCat ? normalizeRentalCategory(rawCat) || rawCat : '';
+
+    setFormData({
+      ...emptyForm,
+      inquiryId,
+      customerName: searchParams.get('customerName') ?? '',
+      phone: searchParams.get('customerPhone') ?? searchParams.get('phone') ?? '',
+      email: searchParams.get('customerEmail') ?? searchParams.get('email') ?? '',
+      vehicleType: normCat,
+      pickupDate: (searchParams.get('pickupDate') ?? '').slice(0, 10),
+      returnDate: (searchParams.get('returnDate') ?? '').slice(0, 10),
+    });
+    setShowModal(true);
+  }, [searchParams]);
 
   // ── Live calculation ──────────────────────────────────────────────────────
   const liveDays     = calcDays(formData.pickupDate, formData.returnDate);
@@ -120,11 +190,11 @@ export default function QuotationsPage() {
   // ── Derived summary KPIs ──────────────────────────────────────────────────
   const kpi = useMemo(() => {
     const total = summary.reduce((a, s) => a + parseInt(s.count ?? '0'), 0);
-    const acceptedEntry  = summary.find(s => s.status === 'ACCEPTED');
+    const wonEntries     = summary.filter(s => ['ACCEPTED', 'CONVERTED'].includes(s.status));
     const pendingEntries = summary.filter(s => ['DRAFT', 'SENT'].includes(s.status));
-    const acceptedVal    = toNum(acceptedEntry?.total);
+    const acceptedVal    = wonEntries.reduce((a, s) => a + toNum(s.total), 0);
     const pendingVal     = pendingEntries.reduce((a, s) => a + toNum(s.total), 0);
-    const acceptedCount  = parseInt(acceptedEntry?.count ?? '0');
+    const acceptedCount  = wonEntries.reduce((a, s) => a + parseInt(s.count ?? '0'), 0);
     const convRate       = total > 0 ? ((acceptedCount / total) * 100).toFixed(1) : '0.0';
     return { total, acceptedVal, pendingVal, convRate };
   }, [summary]);
@@ -138,7 +208,12 @@ export default function QuotationsPage() {
       if (activeTab !== 'ALL') sp.set('status', activeTab);
       if (search) sp.set('search', search);
       const res = await fetch('/api/rental/quotations?' + sp.toString());
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? 'Failed to load quotations'));
+        setQuotations([]);
+        return;
+      }
       setQuotations(json.data ?? []);
       setSummary(json.summary ?? []);
     } catch {
@@ -170,14 +245,18 @@ export default function QuotationsPage() {
     setSaving(true);
     setError('');
     try {
+      const normalizedType = formData.vehicleType
+        ? normalizeRentalCategory(formData.vehicleType) || formData.vehicleType
+        : null;
       const res = await fetch('/api/rental/quotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(formData.inquiryId ? { inquiryId: formData.inquiryId } : {}),
           customerName:  formData.customerName,
           phone:         formData.phone || null,
           email:         formData.email || null,
-          vehicleType:   formData.vehicleType || null,
+          vehicleType:   normalizedType,
           vehicleName:   formData.vehicleName || null,
           pickupDate:    formData.pickupDate,
           returnDate:    formData.returnDate,
@@ -186,8 +265,10 @@ export default function QuotationsPage() {
           notes:         formData.notes || null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to create');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(String(json?.error ?? 'Failed to create quotation'));
       setShowModal(false);
+      setFormData({ ...emptyForm });
       loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save quotation');
@@ -199,18 +280,51 @@ export default function QuotationsPage() {
   // ── Status action ─────────────────────────────────────────────────────────
   const handleStatusAction = async (q: Quotation, newStatus: string) => {
     setActionLoading(q.id + newStatus);
+    setError('');
     try {
       const res = await fetch('/api/rental/quotations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: q.id, status: newStatus }),
       });
-      if (!res.ok) throw new Error('Failed');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? 'Failed to update quote status'));
+        return;
+      }
       loadData();
     } catch {
       setError('Failed to update quote status');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // ── 1-Click Convert Quotation → Booking ───────────────────────────────────
+  const handleOneClickConvertToBooking = async (q: Quotation) => {
+    setConvertingId(q.id);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch(`/api/rental/quotations/${encodeURIComponent(q.id)}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? `Failed to convert quote (${res.status})`));
+        return;
+      }
+      const bRef = json?.booking?.bookingRef ?? json?.convertedTo ?? '';
+      setNotice(
+        `Quotation ${q.quote_no} converted to Booking${bRef ? ` (${bRef})` : ''}.`,
+      );
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Quote conversion failed');
+    } finally {
+      setConvertingId(null);
     }
   };
 
@@ -248,36 +362,21 @@ export default function QuotationsPage() {
         </div>
       )}
 
+      {/* Conversion Notice */}
+      {notice && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-300 text-sm flex items-center justify-between">
+          <span>✅ {notice}</span>
+          <button onClick={() => setNotice('')} className="text-emerald-300 hover:text-emerald-100 ml-4">✕</button>
+        </div>
+      )}
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Quotes */}
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
-          <div className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-2">Total Quotes</div>
-          <div className="text-3xl font-bold text-[var(--text-main)]">{kpi.total}</div>
-          <div className="text-[var(--text-faint)] text-xs mt-1">all time</div>
-        </div>
-
-        {/* Accepted Value */}
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5">
-          <div className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">Accepted Value</div>
-          <div className="text-2xl font-bold text-emerald-300 truncate">{fmtAED(kpi.acceptedVal)}</div>
-          <div className="text-[var(--text-faint)] text-xs mt-1">confirmed revenue</div>
-        </div>
-
-        {/* Pending Value */}
-        <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5">
-          <div className="text-blue-400 text-xs font-semibold uppercase tracking-wider mb-2">Pending Value</div>
-          <div className="text-2xl font-bold text-blue-300 truncate">{fmtAED(kpi.pendingVal)}</div>
-          <div className="text-[var(--text-faint)] text-xs mt-1">draft + sent</div>
-        </div>
-
-        {/* Conversion Rate */}
-        <div className="bg-violet-500/5 border border-violet-500/20 rounded-2xl p-5">
-          <div className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-2">Conversion Rate</div>
-          <div className="text-3xl font-bold text-violet-300">{kpi.convRate}%</div>
-          <div className="text-[var(--text-faint)] text-xs mt-1">accepted / total</div>
-        </div>
-      </div>
+      <StatGrid cols={4}>
+        <KpiCard label="Total Quotes" value={kpi.total} sub="all time" accent="slate" />
+        <KpiCard label="Accepted Value" value={fmtAED(kpi.acceptedVal)} sub="confirmed revenue" accent="emerald" />
+        <KpiCard label="Pending Value" value={fmtAED(kpi.pendingVal)} sub="draft + sent" accent="cyan" />
+        <KpiCard label="Conversion Rate" value={`${kpi.convRate}%`} sub="accepted / total" accent="violet" />
+      </StatGrid>
 
       {/* Filter Tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
@@ -341,8 +440,14 @@ export default function QuotationsPage() {
               <tbody>
                 {quotations.map((q, i) => {
                   const expired = isExpired(q);
-                  const displayStatus = expired && q.status !== 'ACCEPTED' && q.status !== 'REJECTED' ? 'EXPIRED' : q.status;
-                  const actions = STATUS_ACTION[q.status] ?? [];
+                  const dStatus =
+                    expired && !['ACCEPTED', 'CONVERTED', 'REJECTED'].includes(q.status)
+                      ? 'EXPIRED'
+                      : q.status;
+                  const actions = STATUS_ACTION[dStatus] ?? [];
+                  const rawCat = q.vehicleCategory ?? q.vehicle_type;
+                  const convertedRef = q.converted_to ?? q.convertedTo ?? '';
+                  const canOneClickConvert = ['DRAFT', 'SENT', 'ACCEPTED'].includes(dStatus);
                   return (
                     <tr
                       key={q.id}
@@ -355,20 +460,22 @@ export default function QuotationsPage() {
 
                       {/* Customer */}
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-[var(--text-main)]">{q.customer_name}</div>
+                        <div className="text-sm font-medium text-[var(--text-main)]">{q.customerName ?? q.customer_name}</div>
                         {q.phone && <div className="text-xs text-[var(--text-muted)] mt-0.5">{q.phone}</div>}
                       </td>
 
                       {/* Vehicle */}
                       <td className="px-4 py-3">
-                        <div className="text-sm text-[var(--text-main)]">{q.vehicle_type ?? '—'}</div>
+                        <div className="text-sm text-[var(--text-main)]">
+                          {rawCat ? formatRentalCategoryLabel(rawCat) : '—'}
+                        </div>
                         {q.vehicle_name && <div className="text-xs text-[var(--text-faint)] mt-0.5">{q.vehicle_name}</div>}
                       </td>
 
                       {/* Dates */}
                       <td className="px-4 py-3">
-                        <div className="text-xs text-[var(--text-muted)]">{fmtDate(q.pickup_date)}</div>
-                        <div className="text-xs text-[var(--text-faint)]">→ {fmtDate(q.return_date)}</div>
+                        <div className="text-xs text-[var(--text-muted)]">{fmtDate(q.pickupDate ?? q.pickup_date)}</div>
+                        <div className="text-xs text-[var(--text-faint)]">→ {fmtDate(q.returnDate ?? q.return_date)}</div>
                       </td>
 
                       {/* Days */}
@@ -378,7 +485,7 @@ export default function QuotationsPage() {
 
                       {/* Daily Rate */}
                       <td className="px-4 py-3 text-right">
-                        <span className="text-sm text-[var(--text-main)]">{fmtAED(q.daily_rate)}</span>
+                        <span className="text-sm text-[var(--text-main)]">{fmtAED(q.dailyRate ?? q.daily_rate)}</span>
                       </td>
 
                       {/* Grand Total */}
@@ -397,9 +504,19 @@ export default function QuotationsPage() {
 
                       {/* Status */}
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[displayStatus] ?? STATUS_COLORS.DRAFT}`}>
-                          {displayStatus}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[dStatus] ?? STATUS_COLORS.DRAFT}`}>
+                            {dStatus}
+                          </span>
+                          {convertedRef && (
+                            <Link
+                              href={`/rental/bookings?id=${encodeURIComponent(convertedRef)}`}
+                              className="font-mono text-[11px] px-2 py-0.5 rounded bg-teal-500/15 border border-teal-500/30 text-teal-300 hover:bg-teal-500/25"
+                            >
+                              ↳ {convertedRef}
+                            </Link>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}
@@ -415,7 +532,34 @@ export default function QuotationsPage() {
                               {actionLoading === q.id + act.next ? '...' : act.label}
                             </button>
                           ))}
-                          {actions.length === 0 && (
+                          {canOneClickConvert && (
+                            <button
+                              type="button"
+                              disabled={convertingId === q.id}
+                              onClick={() => handleOneClickConvertToBooking(q)}
+                              className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 hover:bg-emerald-500/30 font-semibold whitespace-nowrap transition-colors disabled:opacity-50"
+                              title="1-Click atomic conversion to Rental Booking"
+                            >
+                              {convertingId === q.id ? 'Converting…' : 'Convert to Booking'}
+                            </button>
+                          )}
+                          {dStatus === 'ACCEPTED' && (
+                            <Link
+                              href={buildBookingHref(q)}
+                              className="text-xs px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 font-medium whitespace-nowrap transition-colors"
+                            >
+                              Draft Booking ↗
+                            </Link>
+                          )}
+                          {dStatus === 'CONVERTED' && convertedRef && (
+                            <Link
+                              href={`/rental/bookings?id=${encodeURIComponent(convertedRef)}`}
+                              className="text-xs px-2.5 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/35 hover:bg-teal-500/30 font-medium whitespace-nowrap transition-colors"
+                            >
+                              View Booking →
+                            </Link>
+                          )}
+                          {actions.length === 0 && !canOneClickConvert && dStatus !== 'CONVERTED' && (
                             <span className="text-xs text-[var(--text-faint)] italic">—</span>
                           )}
                         </div>
@@ -437,7 +581,11 @@ export default function QuotationsPage() {
             <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 py-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-[var(--text-main)]">New Rental Quotation</h2>
-                <p className="text-[var(--text-muted)] text-xs mt-0.5">Quote will be valid for 7 days from creation</p>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">
+                  {formData.inquiryId
+                    ? 'Creating quotation from linked customer inquiry · valid for 7 days'
+                    : 'Quote will be valid for 7 days from creation'}
+                </p>
               </div>
               <button
                 onClick={() => setShowModal(false)}
@@ -474,13 +622,15 @@ export default function QuotationsPage() {
                 </div>
               </div>
 
-              {/* Vehicle Type + Vehicle Name/Plate */}
+              {/* Vehicle Category + Vehicle Name/Plate */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Type</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Category</label>
                   <select className={inputCls} {...field('vehicleType')}>
-                    <option value="">Select type</option>
-                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                    <option value="">Select category</option>
+                    {VEHICLE_TYPE_OPTIONS.map(v => (
+                      <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -595,5 +745,19 @@ export default function QuotationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function QuotationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm animate-pulse">
+          Loading quotations...
+        </div>
+      }
+    >
+      <QuotationsPageInner />
+    </Suspense>
   );
 }

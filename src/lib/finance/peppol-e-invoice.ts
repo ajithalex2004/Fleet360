@@ -282,11 +282,18 @@ export function generatePeppolUaeInvoiceXml(data: PeppolInvoiceData): PeppolVali
   const discountAmount = Math.max(0, Number((data.discountAmount ?? 0).toFixed(2)));
   const discountCategory: PeppolTaxCategoryCode = data.discountTaxCategoryCode || 'S';
   const discountRate = data.discountVatRatePercent ?? (discountCategory === 'S' ? 5 : 0);
+  let effectiveDiscountCategory: PeppolTaxCategoryCode = discountCategory;
+  let effectiveDiscountRate = discountRate;
 
   if (discountAmount > 0) {
     const discountKey = `${discountCategory}:${discountRate}`;
-    const targetGroup = taxGroupMap.get(discountKey) || taxGroupMap.values().next().value;
+    const targetGroup =
+      taxGroupMap.get(discountKey) ||
+      Array.from(taxGroupMap.values()).find((g) => g.categoryCode === 'S') ||
+      taxGroupMap.values().next().value;
     if (targetGroup) {
+      effectiveDiscountCategory = targetGroup.categoryCode;
+      effectiveDiscountRate = targetGroup.ratePercent;
       targetGroup.taxableAmount = Math.max(0, Number((targetGroup.taxableAmount - discountAmount).toFixed(2)));
       targetGroup.taxAmount = Number((targetGroup.taxableAmount * (targetGroup.ratePercent / 100)).toFixed(2));
     }
@@ -514,8 +521,8 @@ export function generatePeppolUaeInvoiceXml(data: PeppolInvoiceData): PeppolVali
     <cbc:AllowanceChargeReason>${escapeXml(data.discountReason || 'Commercial Discount')}</cbc:AllowanceChargeReason>
     <cbc:Amount currencyID="${escapeXml(data.currency)}">${discountAmount.toFixed(2)}</cbc:Amount>
     <cac:TaxCategory>
-      <cbc:ID>${escapeXml(discountCategory)}</cbc:ID>
-      <cbc:Percent>${discountRate}</cbc:Percent>
+      <cbc:ID>${escapeXml(effectiveDiscountCategory)}</cbc:ID>
+      <cbc:Percent>${effectiveDiscountRate}</cbc:Percent>
       <cac:TaxScheme>
         <cbc:ID>VAT</cbc:ID>
       </cac:TaxScheme>

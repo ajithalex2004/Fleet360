@@ -6,6 +6,100 @@
 
 export type TollSystem = 'SALIK' | 'DARB';
 
+export type UaeTollTariffBand = 'PEAK' | 'OFF_PEAK' | 'NIGHT_FREE';
+
+export interface UaeTollTariffQuote {
+  tollSystem: TollSystem;
+  tariffBand: UaeTollTariffBand;
+  tollAmountAed: number;
+  adminFeeAed: number;
+  vatRatePct: 5;
+  uaeLocalHour: number;
+  uaeDayOfWeek: number; // 0 = Sunday .. 6 = Saturday
+}
+
+/**
+ * Computes 2025/2026 UAE dynamic toll tariffs in UAE Gulf Standard Time (UTC+4):
+ *   - Dubai `SALIK`:
+ *       - `01:00` – `05:59` daily: `AED 0` (`NIGHT_FREE`)
+ *       - Mon–Sat `06:00` – `09:59` & `16:00` – `19:59`: `AED 6` (`PEAK`)
+ *       - Mon–Sat `10:00` – `15:59` & `20:00` – `00:59`, and Sunday `06:00` – `00:59`: `AED 4` (`OFF_PEAK`)
+ *   - Abu Dhabi `DARB`:
+ *       - Mon–Sat Peak (`07:00` – `08:59` & `17:00` – `18:59`): `AED 4` (`PEAK`)
+ *       - Off-peak: `AED 0` when `strictDarbWindow` is enabled, or `AED 4` when ingesting billed Darb gate events
+ */
+export function calculateUaeTollTariff(opts: {
+  tollSystem: TollSystem;
+  occurredAt: Date | string;
+  explicitTollAmountAed?: number | null;
+  defaultAdminFeeAed?: number;
+  strictDarbWindow?: boolean;
+}): UaeTollTariffQuote {
+  const dt = new Date(opts.occurredAt);
+  const validDt = Number.isNaN(dt.getTime()) ? new Date() : dt;
+
+  // UAE GST is permanently UTC+4 (no DST)
+  const uaeMs = validDt.getTime() + 4 * 3600_000;
+  const uaeDate = new Date(uaeMs);
+  const uaeDayOfWeek = uaeDate.getUTCDay(); // 0 = Sun, 1 = Mon .. 6 = Sat
+  const uaeLocalHour = uaeDate.getUTCHours();
+
+  const defaultAdmin =
+    opts.defaultAdminFeeAed !== undefined && Number.isFinite(Number(opts.defaultAdminFeeAed))
+      ? Math.max(0, Math.round(Number(opts.defaultAdminFeeAed) * 100) / 100)
+      : 1;
+
+  let tariffBand: UaeTollTariffBand = 'OFF_PEAK';
+  let computedToll = 4;
+
+  if (opts.tollSystem === 'SALIK') {
+    if (uaeLocalHour >= 1 && uaeLocalHour < 6) {
+      tariffBand = 'NIGHT_FREE';
+      computedToll = 0;
+    } else if (
+      uaeDayOfWeek !== 0 &&
+      ((uaeLocalHour >= 6 && uaeLocalHour < 10) || (uaeLocalHour >= 16 && uaeLocalHour < 20))
+    ) {
+      tariffBand = 'PEAK';
+      computedToll = 6;
+    } else {
+      tariffBand = 'OFF_PEAK';
+      computedToll = 4;
+    }
+  } else {
+    const isDarbPeak =
+      uaeDayOfWeek !== 0 &&
+      ((uaeLocalHour >= 7 && uaeLocalHour < 9) || (uaeLocalHour >= 17 && uaeLocalHour < 19));
+    if (isDarbPeak) {
+      tariffBand = 'PEAK';
+      computedToll = 4;
+    } else if (opts.strictDarbWindow) {
+      tariffBand = 'NIGHT_FREE';
+      computedToll = 0;
+    } else {
+      tariffBand = 'PEAK';
+      computedToll = 4;
+    }
+  }
+
+  const finalToll =
+    opts.explicitTollAmountAed !== undefined &&
+    opts.explicitTollAmountAed !== null &&
+    Number.isFinite(Number(opts.explicitTollAmountAed))
+      ? Math.max(0, Math.round(Number(opts.explicitTollAmountAed) * 100) / 100)
+      : computedToll;
+
+  return {
+    tollSystem: opts.tollSystem,
+    tariffBand,
+    tollAmountAed: finalToll,
+    adminFeeAed: finalToll > 0 ? defaultAdmin : 0,
+    vatRatePct: 5,
+    uaeLocalHour,
+    uaeDayOfWeek,
+  };
+}
+
 export interface TollCrossingEvent {
   id: string;
   tollSystem: TollSystem;

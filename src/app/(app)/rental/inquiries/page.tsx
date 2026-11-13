@@ -1,23 +1,37 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { KpiCard, StatGrid } from '@/components/ui/page-theme';
+import {
+  RENTAL_VEHICLE_CATEGORIES,
+  formatRentalCategoryLabel,
+  normalizeRentalCategory,
+} from '@/lib/rental/categories';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Inquiry {
   id: string;
   inquiry_no: string;
   customer_name: string;
+  customerName?: string;
   email?: string;
+  customerEmail?: string;
   phone: string;
+  customerPhone?: string;
   vehicle_type?: string;
+  vehicleCategory?: string;
   pickup_location?: string;
   pickup_date?: string;
+  pickupDate?: string;
   return_date?: string;
+  returnDate?: string;
   rental_days?: number;
   status: string;
   source: string;
   assigned_to?: string;
   notes?: string;
   converted_to?: string;
+  convertedTo?: string;
   created_at: string;
 }
 
@@ -45,7 +59,16 @@ const STATUS_SUMMARY_COLORS: Record<string, { bg: string; text: string; border: 
   LOST:      { bg: 'bg-red-500/10',     text: 'text-red-400',     border: 'border-red-500/20',     icon: '❌' },
 };
 
-const VEHICLE_TYPES = ['Economy', 'Sedan', 'SUV', 'Luxury', 'Van', 'Bus'];
+type CategoryItem = string | { value?: string; code?: string; label?: string };
+const VEHICLE_TYPE_OPTIONS = (RENTAL_VEHICLE_CATEGORIES as readonly CategoryItem[]).map((item) => {
+  const value = typeof item === 'string' ? item : String(item.value ?? item.code ?? '');
+  const label =
+    typeof item === 'string'
+      ? formatRentalCategoryLabel(value)
+      : item.label ?? formatRentalCategoryLabel(value);
+  return { value, label };
+});
+
 const SOURCES = ['WALK_IN', 'PHONE', 'WEBSITE', 'WHATSAPP', 'REFERRAL'];
 const STATUSES = ['NEW', 'CONTACTED', 'QUOTED', 'CONVERTED', 'LOST'];
 
@@ -58,6 +81,26 @@ const calcDays = (pickup?: string, ret?: string): number | null => {
   const diff = Math.ceil((new Date(ret).getTime() - new Date(pickup).getTime()) / 86400000);
   return diff > 0 ? diff : null;
 };
+
+function buildQuoteHref(inq: Inquiry): string {
+  const cName = inq.customerName ?? inq.customer_name ?? '';
+  const cPhone = inq.customerPhone ?? inq.phone ?? '';
+  const cEmail = inq.customerEmail ?? inq.email ?? '';
+  const rawCat = inq.vehicleCategory ?? inq.vehicle_type ?? '';
+  const cat = rawCat ? normalizeRentalCategory(rawCat) || rawCat : '';
+  const pickup = (inq.pickupDate ?? inq.pickup_date ?? '').slice(0, 10);
+  const ret = (inq.returnDate ?? inq.return_date ?? '').slice(0, 10);
+
+  let href =
+    `/rental/quotations?inquiryId=${encodeURIComponent(inq.id)}` +
+    `&customerName=${encodeURIComponent(cName)}` +
+    `&customerPhone=${encodeURIComponent(cPhone)}` +
+    `&customerEmail=${encodeURIComponent(cEmail)}` +
+    `&category=${encodeURIComponent(cat)}`;
+  if (pickup) href += `&pickupDate=${encodeURIComponent(pickup)}`;
+  if (ret) href += `&returnDate=${encodeURIComponent(ret)}`;
+  return href;
+}
 
 // ── Empty form ────────────────────────────────────────────────────────────────
 const emptyForm = {
@@ -83,9 +126,11 @@ export default function InquiriesPage() {
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
+  const [notice, setNotice]           = useState('');
   const [showModal, setShowModal]     = useState(false);
   const [editItem, setEditItem]       = useState<Inquiry | null>(null);
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
+  const [convertingKey, setConvertingKey] = useState<string | null>(null);
   const [formData, setFormData]       = useState({ ...emptyForm });
 
   // Derived: rental days from form dates
@@ -100,7 +145,12 @@ export default function InquiriesPage() {
       if (activeTab !== 'ALL') sp.set('status', activeTab);
       if (search) sp.set('search', search);
       const res = await fetch('/api/rental/inquiries?' + sp.toString());
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? 'Failed to load inquiries'));
+        setInquiries([]);
+        return;
+      }
       setInquiries(json.data ?? []);
       setCounts(json.counts ?? []);
     } catch {
@@ -126,15 +176,16 @@ export default function InquiriesPage() {
   };
 
   const openEdit = (item: Inquiry) => {
+    const rawCat = item.vehicleCategory ?? item.vehicle_type ?? '';
     setEditItem(item);
     setFormData({
-      customerName:   item.customer_name,
-      phone:          item.phone,
-      email:          item.email ?? '',
-      vehicleType:    item.vehicle_type ?? '',
+      customerName:   item.customerName ?? item.customer_name,
+      phone:          item.customerPhone ?? item.phone,
+      email:          item.customerEmail ?? item.email ?? '',
+      vehicleType:    rawCat ? normalizeRentalCategory(rawCat) || rawCat : '',
       pickupLocation: item.pickup_location ?? '',
-      pickupDate:     item.pickup_date ? item.pickup_date.slice(0, 10) : '',
-      returnDate:     item.return_date ? item.return_date.slice(0, 10) : '',
+      pickupDate:     (item.pickupDate ?? item.pickup_date ?? '').slice(0, 10),
+      returnDate:     (item.returnDate ?? item.return_date ?? '').slice(0, 10),
       source:         item.source ?? 'WALK_IN',
       assignedTo:     item.assigned_to ?? '',
       notes:          item.notes ?? '',
@@ -149,11 +200,14 @@ export default function InquiriesPage() {
     setSaving(true);
     setError('');
     try {
+      const normalizedType = formData.vehicleType
+        ? normalizeRentalCategory(formData.vehicleType) || formData.vehicleType
+        : null;
       const payload = {
         customerName:   formData.customerName,
         phone:          formData.phone,
         email:          formData.email || null,
-        vehicleType:    formData.vehicleType || null,
+        vehicleType:    normalizedType,
         pickupLocation: formData.pickupLocation || null,
         pickupDate:     formData.pickupDate || null,
         returnDate:     formData.returnDate || null,
@@ -163,20 +217,14 @@ export default function InquiriesPage() {
         status:         formData.status,
       };
 
-      if (editItem) {
-        const res = await fetch('/api/rental/inquiries', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editItem.id, ...payload }),
-        });
-        if (!res.ok) throw new Error('Failed to update');
-      } else {
-        const res = await fetch('/api/rental/inquiries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('Failed to create');
+      const res = await fetch('/api/rental/inquiries', {
+        method: editItem ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editItem ? { id: editItem.id, ...payload } : payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(json?.error ?? (editItem ? 'Failed to update inquiry' : 'Failed to create inquiry')));
       }
       setShowModal(false);
       loadData();
@@ -191,17 +239,59 @@ export default function InquiriesPage() {
   const handleStatusChange = async (item: Inquiry, newStatus: string) => {
     if (newStatus === item.status) return;
     setStatusLoading(item.id);
+    setError('');
     try {
-      await fetch('/api/rental/inquiries', {
+      const res = await fetch('/api/rental/inquiries', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id, status: newStatus }),
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? `Failed to update status (${res.status})`));
+        return;
+      }
       loadData();
     } catch {
       setError('Failed to update status');
     } finally {
       setStatusLoading(null);
+    }
+  };
+
+  // ── 1-Click Convert Inquiry → Quotation or Booking ────────────────────────
+  const handleOneClickConvert = async (item: Inquiry, target: 'QUOTATION' | 'BOOKING') => {
+    const key = `${item.id}:${target}`;
+    setConvertingKey(key);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch(`/api/rental/inquiries/${encodeURIComponent(item.id)}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(String(json?.error ?? `Failed to convert inquiry (${res.status})`));
+        return;
+      }
+      const ref =
+        json?.convertedTo ??
+        json?.quotation?.quote_no ??
+        json?.quotation?.quoteNo ??
+        json?.booking?.bookingRef ??
+        '';
+      setNotice(
+        `Inquiry ${item.inquiry_no} converted to ${target === 'QUOTATION' ? 'Quotation' : 'Booking'}${
+          ref ? ` (${ref})` : ''
+        }.`,
+      );
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversion failed');
+    } finally {
+      setConvertingKey(null);
     }
   };
 
@@ -233,29 +323,37 @@ export default function InquiriesPage() {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
-          {error}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-300 hover:text-red-200 text-xs">✕</button>
+        </div>
+      )}
+
+      {/* Conversion Notice */}
+      {notice && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-300 text-sm flex items-center justify-between gap-3">
+          <span>✅ {notice}</span>
+          <button onClick={() => setNotice('')} className="text-emerald-300 hover:text-emerald-100 text-xs">✕</button>
         </div>
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {['NEW', 'CONTACTED', 'QUOTED', 'CONVERTED', 'LOST'].map(s => {
-          const c = STATUS_SUMMARY_COLORS[s];
+      <StatGrid cols={5}>
+        {(['NEW', 'CONTACTED', 'QUOTED', 'CONVERTED', 'LOST'] as const).map((s, idx) => {
+          const accents = ['cyan', 'violet', 'amber', 'emerald', 'rose'] as const;
           const cnt = getCount(s);
           return (
-            <button
+            <KpiCard
               key={s}
+              label={s}
+              value={cnt}
+              accent={accents[idx % accents.length]}
+              active={activeTab === s}
               onClick={() => setActiveTab(s)}
-              className={`${c.bg} border ${c.border} rounded-2xl p-4 text-left hover:brightness-110 transition-all ${activeTab === s ? 'ring-2 ring-offset-2 ring-offset-slate-950 ring-teal-500' : ''}`}
-            >
-              <div className="text-2xl mb-1">{c.icon}</div>
-              <div className={`text-2xl font-bold ${c.text}`}>{cnt}</div>
-              <div className="text-[var(--text-muted)] text-xs font-medium mt-0.5">{s}</div>
-            </button>
+            />
           );
         })}
-      </div>
+      </StatGrid>
 
       {/* Filter tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
@@ -308,13 +406,13 @@ export default function InquiriesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
+            <table className="w-full min-w-[1050px]">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Inquiry No</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Customer</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Phone / Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle Category</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Pickup Location</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Dates</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Days</th>
@@ -324,94 +422,145 @@ export default function InquiriesPage() {
                 </tr>
               </thead>
               <tbody>
-                {inquiries.map((inq, i) => (
-                  <tr
-                    key={inq.id}
-                    className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${i % 2 === 0 ? '' : 'bg-[var(--bg-surface)]/10'}`}
-                  >
-                    {/* Inquiry No */}
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-teal-400 font-semibold">{inq.inquiry_no}</span>
-                    </td>
+                {inquiries.map((inq, i) => {
+                  const rawCat = inq.vehicleCategory ?? inq.vehicle_type;
+                  return (
+                    <tr
+                      key={inq.id}
+                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${i % 2 === 0 ? '' : 'bg-[var(--bg-surface)]/10'}`}
+                    >
+                      {/* Inquiry No */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-teal-400 font-semibold">{inq.inquiry_no}</span>
+                      </td>
 
-                    {/* Customer */}
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-[var(--text-main)]">{inq.customer_name}</div>
-                      {inq.assigned_to && (
-                        <div className="text-xs text-[var(--text-faint)] mt-0.5">→ {inq.assigned_to}</div>
-                      )}
-                    </td>
+                      {/* Customer */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-[var(--text-main)]">{inq.customerName ?? inq.customer_name}</div>
+                        {inq.assigned_to && (
+                          <div className="text-xs text-[var(--text-faint)] mt-0.5">→ {inq.assigned_to}</div>
+                        )}
+                      </td>
 
-                    {/* Phone / Email */}
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-[var(--text-main)]">{inq.phone}</div>
-                      {inq.email && <div className="text-xs text-[var(--text-muted)] mt-0.5">{inq.email}</div>}
-                    </td>
+                      {/* Phone / Email */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-[var(--text-main)]">{inq.customerPhone ?? inq.phone}</div>
+                        {(inq.customerEmail ?? inq.email) && (
+                          <div className="text-xs text-[var(--text-muted)] mt-0.5">{inq.customerEmail ?? inq.email}</div>
+                        )}
+                      </td>
 
-                    {/* Vehicle Type */}
-                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">
-                      {inq.vehicle_type ?? '—'}
-                    </td>
+                      {/* Vehicle Category */}
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)]">
+                        {rawCat ? formatRentalCategoryLabel(rawCat) : '—'}
+                      </td>
 
-                    {/* Pickup Location */}
-                    <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[140px] truncate">
-                      {inq.pickup_location ?? '—'}
-                    </td>
+                      {/* Pickup Location */}
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[140px] truncate">
+                        {inq.pickup_location ?? '—'}
+                      </td>
 
-                    {/* Dates */}
-                    <td className="px-4 py-3">
-                      {inq.pickup_date || inq.return_date ? (
-                        <div className="text-xs text-[var(--text-muted)] space-y-0.5">
-                          <div>{fmtDate(inq.pickup_date)}</div>
-                          <div className="text-[var(--text-faint)]">→ {fmtDate(inq.return_date)}</div>
+                      {/* Dates */}
+                      <td className="px-4 py-3">
+                        {inq.pickup_date || inq.return_date ? (
+                          <div className="text-xs text-[var(--text-muted)] space-y-0.5">
+                            <div>{fmtDate(inq.pickup_date)}</div>
+                            <div className="text-[var(--text-faint)]">→ {fmtDate(inq.return_date)}</div>
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-faint)] text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Rental Days */}
+                      <td className="px-4 py-3">
+                        {inq.rental_days ? (
+                          <span className="text-sm font-semibold text-[var(--text-main)]">{inq.rental_days}d</span>
+                        ) : '—'}
+                      </td>
+
+                      {/* Status Badge + Converted Ref */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[inq.status] ?? 'bg-[var(--bg-surface-hover)]/20 text-[var(--text-muted)] border-[var(--border-strong)]/30'}`}>
+                            {inq.status}
+                          </span>
+                          {(inq.converted_to || inq.convertedTo) && (() => {
+                            const ref = String(inq.converted_to ?? inq.convertedTo ?? '');
+                            const isQuoteRef = ref.toUpperCase().startsWith('RQT-');
+                            return (
+                              <Link
+                                href={
+                                  isQuoteRef
+                                    ? `/rental/quotations`
+                                    : `/rental/bookings?id=${encodeURIComponent(ref)}`
+                                }
+                                className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25"
+                              >
+                                ↳ {ref}
+                              </Link>
+                            );
+                          })()}
                         </div>
-                      ) : (
-                        <span className="text-[var(--text-faint)] text-xs">—</span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Rental Days */}
-                    <td className="px-4 py-3">
-                      {inq.rental_days ? (
-                        <span className="text-sm font-semibold text-[var(--text-main)]">{inq.rental_days}d</span>
-                      ) : '—'}
-                    </td>
+                      {/* Source */}
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/40 px-2 py-1 rounded-md">
+                          {inq.source?.replace('_', ' ')}
+                        </span>
+                      </td>
 
-                    {/* Status Badge */}
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[inq.status] ?? 'bg-[var(--bg-surface-hover)]/20 text-[var(--text-muted)] border-[var(--border-strong)]/30'}`}>
-                        {inq.status}
-                      </span>
-                    </td>
-
-                    {/* Source */}
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/40 px-2 py-1 rounded-md">
-                        {inq.source?.replace('_', ' ')}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEdit(inq)}
-                          className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <select
-                          value={inq.status}
-                          disabled={statusLoading === inq.id}
-                          onChange={e => handleStatusChange(inq, e.target.value)}
-                          className="text-xs px-2 py-1.5 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-teal-500/50 focus:outline-none focus:border-teal-500 cursor-pointer disabled:opacity-50 transition-colors"
-                        >
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      {/* Actions */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {inq.status !== 'CONVERTED' && inq.status !== 'LOST' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={convertingKey === `${inq.id}:QUOTATION` || convertingKey === `${inq.id}:BOOKING`}
+                                onClick={() => handleOneClickConvert(inq, 'QUOTATION')}
+                                className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/35 hover:bg-violet-500/30 font-semibold whitespace-nowrap transition-colors disabled:opacity-50"
+                                title="1-Click instant Quotation creation"
+                              >
+                                {convertingKey === `${inq.id}:QUOTATION` ? 'Quoting…' : 'Convert to Quote'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={convertingKey === `${inq.id}:QUOTATION` || convertingKey === `${inq.id}:BOOKING`}
+                                onClick={() => handleOneClickConvert(inq, 'BOOKING')}
+                                className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 hover:bg-emerald-500/30 font-semibold whitespace-nowrap transition-colors disabled:opacity-50"
+                                title="1-Click instant Booking creation"
+                              >
+                                {convertingKey === `${inq.id}:BOOKING` ? 'Booking…' : 'Convert to Booking'}
+                              </button>
+                            </>
+                          )}
+                          <Link
+                            href={buildQuoteHref(inq)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 font-medium whitespace-nowrap transition-colors"
+                          >
+                            Draft Quote ↗
+                          </Link>
+                          <button
+                            onClick={() => openEdit(inq)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <select
+                            value={inq.status}
+                            disabled={statusLoading === inq.id}
+                            onChange={e => handleStatusChange(inq, e.target.value)}
+                            className="text-xs px-2 py-1.5 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-teal-500/50 focus:outline-none focus:border-teal-500 cursor-pointer disabled:opacity-50 transition-colors"
+                          >
+                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -470,7 +619,7 @@ export default function InquiriesPage() {
                 </div>
               </div>
 
-              {/* Email + Vehicle Type */}
+              {/* Email + Vehicle Category */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Email</label>
@@ -482,10 +631,12 @@ export default function InquiriesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Type</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Category</label>
                   <select className={inputCls} {...field('vehicleType')}>
-                    <option value="">Select vehicle type</option>
-                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                    <option value="">Select vehicle category</option>
+                    {VEHICLE_TYPE_OPTIONS.map(v => (
+                      <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

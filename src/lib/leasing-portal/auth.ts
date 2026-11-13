@@ -32,12 +32,26 @@ const COOKIE_NAME = 'leasing-portal-session';
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function getSecret(): string {
-  const s = process.env.LEASING_PORTAL_SESSION_SECRET
-    ?? process.env.SESSION_SECRET
-    ?? process.env.AUTH_SECRET;
+  const portalSecret =
+    process.env.LEASING_PORTAL_SECRET ??
+    process.env.LEASING_PORTAL_SESSION_SECRET;
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const legacySecret = process.env.SESSION_SECRET ?? process.env.AUTH_SECRET;
+
+  if (process.env.NODE_ENV === 'production') {
+    const candidate = portalSecret ?? nextAuthSecret;
+    if (!candidate || candidate.length < 32) {
+      throw new Error(
+        '[leasing-portal/auth] Fatal: LEASING_PORTAL_SECRET or NEXTAUTH_SECRET (>= 32 chars) must be configured in production.',
+      );
+    }
+    return candidate;
+  }
+
+  const s = portalSecret ?? nextAuthSecret ?? legacySecret;
   if (!s) {
     console.warn(
-      '[leasing-portal/auth] No LEASING_PORTAL_SESSION_SECRET / SESSION_SECRET set — ' +
+      '[leasing-portal/auth] No LEASING_PORTAL_SECRET / LEASING_PORTAL_SESSION_SECRET / NEXTAUTH_SECRET set — ' +
       'using insecure dev fallback. Set this env var before production.',
     );
     return 'dev-leasing-portal-insecure-fallback-do-not-use-in-prod';
@@ -110,7 +124,9 @@ export function buildSessionCookie(token: string): string {
 }
 
 export function buildClearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+  const attrs = [`${COOKIE_NAME}=`, 'Path=/', 'Max-Age=0', 'HttpOnly', 'SameSite=Lax'];
+  if (process.env.NODE_ENV === 'production') attrs.push('Secure');
+  return attrs.join('; ');
 }
 
 export function readSessionFromRequest(req: NextRequest): PortalSessionPayload | null {

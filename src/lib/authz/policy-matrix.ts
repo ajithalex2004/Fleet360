@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-10-13.1';
+export const POLICY_VERSION = '2026-11-11.3';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -90,6 +90,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   // ── Own credential (portals, devices, schedulers, webhooks, public) ──
   'driver-app': EXTERNAL,
   'leasing-portal': EXTERNAL,
+  'rac-portal': EXTERNAL,
   'carrier-portal': EXTERNAL,
   'shipper-portal': EXTERNAL,
   public: EXTERNAL,
@@ -114,6 +115,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'assets/ble/ingest': EXTERNAL,
   'push/run-scheduler': EXTERNAL,
   'documents/intelligence/cron': EXTERNAL,
+  'esign/verify': EXTERNAL,
 
   // ── Modules ───────────────────────────────────────────────────────────
   leasing: m('leasing'),
@@ -122,6 +124,10 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'leasing/documents/upload': { read: m('leasing'), write: SELF },
   esign: m('leasing'),
   rental: m('rental'),
+  'rental/rates/calculate': { read: m('rental'), write: { kind: 'module', module: 'rental', action: 'view' } },
+  'rental/rates/yield': { read: m('rental'), write: { kind: 'module', module: 'rental', action: 'view' } },
+  'rental/bookings/copilot': { read: m('rental'), write: { kind: 'module', module: 'rental', action: 'view' } },
+  'rental/damage-claims/classify': { read: m('rental'), write: { kind: 'module', module: 'rental', action: 'view' } },
   'bus-ops': m('bus-ops'),
   // Leasing and rental branch staff (module LEASING | RENTAL | BOTH). The
   // module is in the query or body, so the handler checks it
