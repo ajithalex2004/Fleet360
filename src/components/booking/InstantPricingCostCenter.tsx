@@ -100,7 +100,7 @@ export function InstantPricingCostCenter({
   return (
     <div className="space-y-4">
       {/* ── Live Itemized Fare Receipt Card ── */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/40 border border-violet-500/30 rounded-2xl p-5 shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3 mb-4">
           <div className="flex items-center gap-2">
             <Receipt className="w-4 h-4 text-violet-400" />

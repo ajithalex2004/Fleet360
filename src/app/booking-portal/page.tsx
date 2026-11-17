@@ -448,7 +448,7 @@ export default function BookingPortal() {
 
       {/* ── Bookings table ── */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--bg-surface-hover)]">
           <div>
             <h2 className="text-base font-bold text-[var(--text-main)]">All Bookings & Manifests</h2>
             <p className="text-[var(--text-muted)] text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>

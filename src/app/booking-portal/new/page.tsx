@@ -817,7 +817,7 @@ function FormSection({
   return (
     <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/30 rounded-xl overflow-hidden shadow-sm transition-all">
       {/* Section header */}
-      <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
             {getSectionVectorIcon(section.title)}
