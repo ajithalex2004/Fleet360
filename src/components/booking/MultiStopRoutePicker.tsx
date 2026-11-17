@@ -144,12 +144,12 @@ export function MultiStopRoutePicker({
   };
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <div className="flex items-center gap-2">
           <Route className="w-4 h-4 text-orange-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Multi-Stop Waypoints & LTL Route Optimizer
           </span>
         </div>
@@ -167,12 +167,12 @@ export function MultiStopRoutePicker({
       {/* Waypoints Sequence List */}
       <div className="space-y-3">
         {/* 1. Origin Pickup */}
-        <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3.5 space-y-2">
+        <div className="bg-[var(--bg-surface-hover)] border border-emerald-500/30 rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-emerald-400 flex items-center gap-1.5">
               <Warehouse className="w-3.5 h-3.5" /> Stop 1 · Origin Pickup
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">
               Gate: {originNode.dockGate} · {originNode.pallets} Pallets ({originNode.weightTons}T)
             </span>
           </div>
@@ -180,7 +180,7 @@ export function MultiStopRoutePicker({
             type="text"
             value={originNode.address}
             onChange={(e) => setOriginNode({ ...originNode, address: e.target.value })}
-            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white"
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-main)]"
           />
         </div>
 
@@ -188,20 +188,20 @@ export function MultiStopRoutePicker({
         {intermediateNodes.map((stop, idx) => (
           <div
             key={stop.id}
-            className="bg-slate-950/40 border border-white/10 rounded-xl p-3.5 space-y-2 ml-3 border-l-2 border-l-orange-500"
+            className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-2 ml-3 border-l-2 border-l-orange-500"
           >
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-orange-300 flex items-center gap-1.5">
                 📍 Stop {idx + 2} · Intermediate Dropoff
               </span>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-[10px] text-[var(--text-muted)] font-mono">
                   {stop.pallets} Pallets ({stop.weightTons}T)
                 </span>
                 <button
                   type="button"
                   onClick={() => handleRemoveStop(stop.id)}
-                  className="text-slate-500 hover:text-rose-400 text-xs"
+                  className="text-[var(--text-faint)] hover:text-rose-400 text-xs"
                   title="Remove Stop"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -216,7 +216,7 @@ export function MultiStopRoutePicker({
                 next[idx].address = e.target.value;
                 setIntermediateNodes(next);
               }}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-main)]"
             />
           </div>
         ))}
@@ -225,18 +225,18 @@ export function MultiStopRoutePicker({
         <button
           type="button"
           onClick={handleAddStop}
-          className="w-full py-2 border border-dashed border-white/20 hover:border-orange-500/50 rounded-xl text-xs text-slate-300 hover:text-orange-400 flex items-center justify-center gap-1.5 transition-colors"
+          className="w-full py-2 border border-dashed border-[var(--border-subtle)] hover:border-orange-500/50 rounded-xl text-xs text-[var(--text-muted)] hover:text-orange-400 flex items-center justify-center gap-1.5 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" /> + Add Intermediate Warehouse / Dock Stop
         </button>
 
         {/* 3. Final Destination Dropoff */}
-        <div className="bg-slate-950/60 border border-blue-500/30 rounded-xl p-3.5 space-y-2">
+        <div className="bg-[var(--bg-surface-hover)] border border-blue-500/30 rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-blue-400 flex items-center gap-1.5">
               🏁 Final Stop · Destination Dropoff
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">
               Gate: {destinationNode.dockGate} · {destinationNode.pallets} Pallets
             </span>
           </div>
@@ -244,28 +244,28 @@ export function MultiStopRoutePicker({
             type="text"
             value={destinationNode.address}
             onChange={(e) => setDestinationNode({ ...destinationNode, address: e.target.value })}
-            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white"
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-main)]"
           />
         </div>
       </div>
 
       {/* Multi-Leg Trip Metrics */}
       {routeResult && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/10 text-xs">
-          <div className="bg-slate-950 p-2.5 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 uppercase block">Total Route Distance</span>
-            <span className="font-mono font-bold text-white text-sm">{routeResult.totalDistanceKm} km</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--border-subtle)] text-xs">
+          <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl text-center">
+            <span className="text-[10px] text-[var(--text-faint)] uppercase block">Total Route Distance</span>
+            <span className="font-mono font-bold text-[var(--text-main)] text-sm">{routeResult.totalDistanceKm} km</span>
           </div>
-          <div className="bg-slate-950 p-2.5 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 uppercase block">Total Driving Time</span>
-            <span className="font-mono font-bold text-white text-sm">{routeResult.totalDurationMins} mins</span>
+          <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl text-center">
+            <span className="text-[10px] text-[var(--text-faint)] uppercase block">Total Driving Time</span>
+            <span className="font-mono font-bold text-[var(--text-main)] text-sm">{routeResult.totalDurationMins} mins</span>
           </div>
-          <div className="bg-slate-950 p-2.5 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 uppercase block">Total Salik Tolls</span>
+          <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl text-center">
+            <span className="text-[10px] text-[var(--text-faint)] uppercase block">Total Salik Tolls</span>
             <span className="font-mono font-bold text-amber-400 text-sm">AED {routeResult.totalSalikTollsAed}</span>
           </div>
-          <div className="bg-slate-950 p-2.5 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 uppercase block">Total Pallets / Load</span>
+          <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl text-center">
+            <span className="text-[10px] text-[var(--text-faint)] uppercase block">Total Pallets / Load</span>
             <span className="font-mono font-bold text-cyan-400 text-sm">
               {routeResult.totalPallets} Pallets ({routeResult.totalWeightTons}T)
             </span>
@@ -279,7 +279,7 @@ export function MultiStopRoutePicker({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Leaf className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-white">
+              <span className="text-xs font-bold text-[var(--text-main)]">
                 LTL Load Sharing & Green Fleet Consolidation
               </span>
             </div>
@@ -289,14 +289,14 @@ export function MultiStopRoutePicker({
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-slate-950/60 p-2.5 rounded-xl">
-              <span className="text-[10px] text-slate-400 block mb-0.5">Shared Corridor Pool:</span>
+            <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl">
+              <span className="text-[10px] text-[var(--text-muted)] block mb-0.5">Shared Corridor Pool:</span>
               <span className="font-mono text-emerald-300 font-semibold">
                 {routeResult.ltlConsolidation.poolId}
               </span>
             </div>
-            <div className="bg-slate-950/60 p-2.5 rounded-xl">
-              <span className="text-[10px] text-slate-400 block mb-0.5">Carbon Reduction:</span>
+            <div className="bg-[var(--bg-surface-hover)] p-2.5 rounded-xl">
+              <span className="text-[10px] text-[var(--text-muted)] block mb-0.5">Carbon Reduction:</span>
               <span className="font-mono text-emerald-400 font-bold">
                 🌱 -{routeResult.ltlConsolidation.co2SavedKg} kg CO₂ Saved
               </span>
@@ -304,14 +304,14 @@ export function MultiStopRoutePicker({
           </div>
 
           <label className="flex items-center justify-between cursor-pointer pt-1">
-            <span className="text-xs text-slate-300">
+            <span className="text-xs text-[var(--text-muted)]">
               Apply LTL Consolidation Discount (Save <strong>AED {routeResult.ltlConsolidation.discountAmountAed}</strong> on this run):
             </span>
             <input
               type="checkbox"
               checked={enableLtlConsolidation}
               onChange={(e) => setEnableLtlConsolidation(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded bg-slate-900 border-white/20"
+              className="w-4 h-4 text-emerald-600 rounded bg-[var(--bg-surface)] border-[var(--border-subtle)]"
             />
           </label>
         </div>
