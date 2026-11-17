@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
         const expiredDocs = (p.complianceDocuments || []).filter(
           (d) => d.expiryDate && new Date(d.expiryDate) <= now,
         );
-        const sc = p.scorecard as Record<string, any> | null;
+        const sc = p.scorecard as Record<string, unknown> | null;
         return {
           ...p,
           relationshipId: rel.id,
@@ -205,12 +205,12 @@ export async function GET(req: NextRequest) {
 
       // Phase 19: Compute Executive Outsource Spend, Commission & 3-Way Match Analytics
       const domains = ['PASSENGER_TRANSPORT', 'FREIGHT', 'LIMOUSINE', 'RECOVERY'] as const;
-      const totalAwardedSpendAed = awards.reduce((sum: number, a: any) => sum + Number(a.totalAwarded || 0), 0);
+      const totalAwardedSpendAed = awards.reduce((sum: number, a) => sum + Number(a.totalAwarded || 0), 0);
 
       const verticalBreakdown = domains.map((dom) => {
-        const domRequests = requests.filter((r: any) => (r.domain || 'PASSENGER_TRANSPORT') === dom);
-        const domAwards = awards.filter((a: any) => (a.request?.domain || 'PASSENGER_TRANSPORT') === dom);
-        const spendAed = domAwards.reduce((sum: number, a: any) => sum + Number(a.totalAwarded || 0), 0);
+        const domRequests = requests.filter((r) => (r.domain || 'PASSENGER_TRANSPORT') === dom);
+        const domAwards = awards.filter((a) => (a.request?.domain || 'PASSENGER_TRANSPORT') === dom);
+        const spendAed = domAwards.reduce((sum: number, a) => sum + Number(a.totalAwarded || 0), 0);
         return {
           domain: dom,
           requestCount: domRequests.length,
@@ -227,10 +227,10 @@ export async function GET(req: NextRequest) {
       let principalGrossMarginAed = 0;
       let netPartnerPayoutAed = 0;
 
-      for (const a of awards as any[]) {
-        const snap = (a.commercialSnapshot || {}) as Record<string, any>;
+      for (const a of awards) {
+        const snap = (a.commercialSnapshot || {}) as Record<string, unknown>;
         const model = snap.commercialModel === 'PRINCIPAL' ? 'PRINCIPAL' : 'AGENCY';
-        const baseAwarded = Number(a.awardedPrice ?? a.awardedAmount ?? Number(a.totalAwarded || 0) / 1.05);
+        const baseAwarded = Number(a.awardedPrice ?? Number(a.totalAwarded || 0) / 1.05);
         if (model === 'PRINCIPAL') {
           principalAwardCount += 1;
           const buyerPrice = Number(snap.buyerAgreedPrice ?? baseAwarded * 1.12);
@@ -250,20 +250,20 @@ export async function GET(req: NextRequest) {
 
       const totalInvoices = invoices.length;
       const autoMatchedCount = invoices.filter(
-        (inv: any) =>
+        (inv) =>
           inv.verificationStatus === 'MATCHED' ||
           (!inv.verificationStatus && (inv.status === 'APPROVED' || inv.status === 'PAID')),
       ).length;
       const varianceHoldCount = invoices.filter(
-        (inv: any) => inv.verificationStatus === 'VARIANCE_DETECTED' || inv.status === 'DISPUTED',
+        (inv) => inv.verificationStatus === 'VARIANCE_DETECTED' || inv.status === 'DISPUTED',
       ).length;
-      const totalInvoicedAed = invoices.reduce((sum: number, inv: any) => sum + Number(inv.totalAmount || 0), 0);
+      const totalInvoicedAed = invoices.reduce((sum: number, inv) => sum + Number(inv.totalAmount || 0), 0);
       const totalApprovedAed = invoices.reduce(
-        (sum: number, inv: any) => sum + Number(inv.approvedAmount ?? inv.totalAmount ?? 0),
+        (sum: number, inv) => sum + Number(inv.approvedAmount ?? inv.totalAmount ?? 0),
         0,
       );
       const statementDeductionsAed = statements.reduce(
-        (sum: number, s: any) => sum + Number(s.totalDeductions || 0),
+        (sum: number, s) => sum + Number(s.totalDeductions || 0),
         0,
       );
       const varianceSavingsAed =
@@ -373,9 +373,10 @@ export async function PUT(req: NextRequest) {
         await tx.partnerServiceArea.deleteMany({
           where: { partnerId: auth.ctx.partnerId },
         });
-        const cleanAreas = body.serviceAreas
-          .filter((sa: any) => sa && typeof sa.emirate === 'string' && sa.emirate.trim())
-          .map((sa: any) => ({
+        const cleanAreas = (body.serviceAreas as unknown[])
+          .filter((sa): sa is { emirate: string; zones?: unknown } =>
+            !!sa && typeof (sa as { emirate?: unknown }).emirate === 'string' && !!(sa as { emirate: string }).emirate.trim())
+          .map((sa) => ({
             partnerId: auth.ctx.partnerId,
             emirate: String(sa.emirate).trim(),
             zones: Array.isArray(sa.zones) ? sa.zones.map(String) : [],

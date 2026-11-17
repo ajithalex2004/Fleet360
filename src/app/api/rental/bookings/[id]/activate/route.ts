@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { Prisma } from '@prisma/client';
+import { Prisma, type RentalAgreement } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
@@ -26,6 +26,11 @@ import {
 } from '@/lib/rental/uae-regulatory-reporting';
 import { resolveInputFuelPct } from '@/lib/rental/fuel-odometer';
 import { recordRacSecurityDepositCollected } from '@/lib/finance/rac-gl-posting';
+
+/** True when the transaction client exposes `name` (unit-test doubles may not). */
+function hasTxMethod(tx: unknown, name: string): boolean {
+  return typeof (tx as Record<string, unknown>)[name] === 'function';
+}
 
 function coerceCanonicalAgreementFuel(
   fuelPct: number | null,
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const bodyRaw = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(
       (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
-    ) as Record<string, any>;
+    ) as Record<string, unknown>;
 
     const rawMileageInput =
       body.mileageOut ?? body.pickupOdometer ?? body.odometerReading ?? body.mileage;
@@ -161,7 +166,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       });
 
       const runUnderLock = async () => {
-        if (targetVehicleId && typeof (tx as any).$queryRawUnsafe === 'function') {
+        if (targetVehicleId && hasTxMethod(tx, '$queryRawUnsafe')) {
           const vehRows = await withSavepoint<Array<{ status: string | null }>>(
             tx,
             'activate_chk_veh_status',
@@ -241,7 +246,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           body.securityDeposit != null && body.securityDeposit !== ''
             ? Math.round(Number(body.securityDeposit) * 100) / 100
             : undefined;
-        let agreement: any = null;
+        let agreement: RentalAgreement | null = null;
 
         if (booking.agreement) {
           const nextRemarks = customerSignerNote
@@ -254,7 +259,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             data: {
               ...(targetVehicleId ? { vehicleId: targetVehicleId } : {}),
               ...(mileageInt != null ? { mileageOut: mileageInt } : {}),
-              ...(agreementFuel != null ? { fuelOut: agreementFuel as any } : {}),
+              ...(agreementFuel != null ? { fuelOut: agreementFuel as number } : {}),
               ...(explicitSecurityDeposit !== undefined
                 ? { securityDeposit: explicitSecurityDeposit }
                 : {}),
@@ -267,7 +272,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         } else {
           // Auto-create RentalAgreement so an ACTIVE booking is never stranded with agreement = null
           const agreementNo =
-            typeof (tx as any).$executeRawUnsafe === 'function'
+            hasTxMethod(tx, '$executeRawUnsafe')
               ? await nextRentalSerial(tx, {
                   tenantId,
                   series: 'RA',
@@ -301,7 +306,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                   : {}),
                 currency: booking.currency ?? 'AED',
                 mileageOut: mileageInt,
-                fuelOut: agreementFuel as any,
+                fuelOut: agreementFuel as number, // a string only on legacy schemas (see coerceCanonicalAgreementFuel)
                 status: 'ACTIVE',
                 signedAt: signedAtVal,
                 signedBy: actorUserId,
@@ -340,7 +345,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             tx,
             'activate_release_prior_veh',
             async () => {
-              if (typeof (tx as any).$queryRawUnsafe === 'function' && typeof tx.vehicle?.updateMany === 'function') {
+              if (hasTxMethod(tx, '$queryRawUnsafe') && typeof tx.vehicle?.updateMany === 'function') {
                 const { status: safeOldStatus } = await computeSafePostRentalVehicleStatus(tx, {
                   tenantId,
                   vehicleId: priorVehicleId,
@@ -372,7 +377,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                     ...(pickupFuelPct != null ? { fuelLevel: pickupFuelPct } : {}),
                   },
                 });
-              } else if (typeof (tx as any).$executeRawUnsafe === 'function') {
+              } else if (hasTxMethod(tx, '$executeRawUnsafe')) {
                 await tx.$executeRawUnsafe(
                   `UPDATE vehicles SET status = 'RENTED' WHERE id = $1 AND tenant_id::text = $2`,
                   targetVehicleId,
@@ -385,7 +390,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         }
 
         // Link any pre-booked additional drivers to the activated agreement
-        if (agreement?.id && typeof (tx as any).$executeRawUnsafe === 'function') {
+        if (agreement?.id && hasTxMethod(tx, '$executeRawUnsafe')) {
           await withSavepoint(
             tx,
             'activate_link_add_drivers',
@@ -409,7 +414,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           explicitSecurityDeposit ?? agreement?.securityDeposit ?? booking.agreement?.securityDeposit ?? 0,
         );
         const effectiveDepositStatus = String(
-          body.depositStatus ?? (agreement as any)?.depositStatus ?? '',
+          body.depositStatus ?? agreement?.depositStatus ?? '',
         ).toUpperCase();
         if (agreement?.id && effectiveDeposit > 0 && effectiveDepositStatus === 'PAID') {
           await recordRacSecurityDepositCollected(tx, {
@@ -432,7 +437,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         // Queue UAE Tarrashud / ITC regulatory manifest inside transaction
         let regulatoryReport: UaeRegulatoryReportRecord | null = null;
-        if (agreement?.id && typeof (tx as any).$queryRawUnsafe === 'function') {
+        if (agreement?.id && hasTxMethod(tx, '$queryRawUnsafe')) {
           regulatoryReport = await withSavepoint<UaeRegulatoryReportRecord | null>(
             tx,
             'activate_reg_report',
@@ -450,7 +455,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return { updatedBooking, agreement, booking, regulatoryReport };
       };
 
-      if (typeof (tx as any).$executeRawUnsafe === 'function') {
+      if (hasTxMethod(tx, '$executeRawUnsafe')) {
         return await withRentalLock(
           tx,
           tenantId,

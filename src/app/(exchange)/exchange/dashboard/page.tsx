@@ -27,15 +27,16 @@ import {
 import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 import { usePartnerMembership } from '@/components/exchange/PartnerMembershipContext';
 import { PartnerTierBadge } from '@/components/exchange/PartnerTierBadge';
+import type { OutsourceAwardRow, OutsourceRequestRow, PartnerComplianceDocRow, PartnerDriverRow, PartnerExceptionRow, PartnerScorecardRow, PartnerVehicleRow } from '@/lib/exchange/client-types';
 
 export default function ExchangeDashboardPage() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [awards, setAwards] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [docs, setDocs] = useState<any[]>([]);
-  const [scorecard, setScorecard] = useState<any | null>(null);
-  const [exceptions, setExceptions] = useState<any[]>([]);
+  const [requests, setRequests] = useState<OutsourceRequestRow[]>([]);
+  const [awards, setAwards] = useState<OutsourceAwardRow[]>([]);
+  const [vehicles, setVehicles] = useState<PartnerVehicleRow[]>([]);
+  const [drivers, setDrivers] = useState<PartnerDriverRow[]>([]);
+  const [docs, setDocs] = useState<PartnerComplianceDocRow[]>([]);
+  const [scorecard, setScorecard] = useState<PartnerScorecardRow | null>(null);
+  const [exceptions, setExceptions] = useState<PartnerExceptionRow[]>([]);
   const [recalculatingScorecard, setRecalculatingScorecard] = useState(false);
   const [invoices, setInvoices] = useState<Array<{ totalAmount: string | number; status: string }> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +54,7 @@ export default function ExchangeDashboardPage() {
       if (postRes.ok) {
         const postJson = await postRes.json();
         if (postJson?.evaluation) {
-          setScorecard((prev: any) => ({ ...(prev || {}), ...postJson.evaluation }));
+          setScorecard((prev) => ({ ...(prev || {}), ...postJson.evaluation }));
         }
       }
       const getRes = await fetch('/api/exchange/scorecard');
@@ -172,7 +173,7 @@ export default function ExchangeDashboardPage() {
             <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
               Transport Partner Dashboard
             </span>
-            {scorecard?.tier && <PartnerTierBadge tier={scorecard.tier} score={scorecard.compositeScore} />}
+            {scorecard?.tier && <PartnerTierBadge tier={scorecard.tier} score={scorecard.compositeScore ?? undefined} />}
           </div>
           <h1 className="text-2xl font-black text-white mt-1">
             {partnerName ? `Welcome back, ${partnerName}` : 'Welcome back'}
@@ -306,7 +307,7 @@ export default function ExchangeDashboardPage() {
                 Partner Trust Scorecard & 5-Factor SLA Breakdown
               </h2>
               {scorecard?.tier && (
-                <PartnerTierBadge tier={scorecard.tier} score={scorecard.compositeScore} />
+                <PartnerTierBadge tier={scorecard.tier} score={scorecard.compositeScore ?? undefined} />
               )}
               <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-semibold">
                 {Number(scorecard?.completedTrips ?? 0)} / {Number(scorecard?.totalAwardedTrips ?? awards.length)} trips completed
@@ -431,7 +432,7 @@ export default function ExchangeDashboardPage() {
 
           {exceptions.length > 0 ? (
             <div className="space-y-2">
-              {exceptions.slice(0, 4).map((ex: any) => (
+              {exceptions.slice(0, 4).map((ex) => (
                 <div
                   key={ex.id}
                   className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs"

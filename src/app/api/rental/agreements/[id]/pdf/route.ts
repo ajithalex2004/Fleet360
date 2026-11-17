@@ -203,11 +203,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Exclude non-billable audit lines and EXTENSION records (extension days & amount
       // are already reflected in `a.endDate` and `a.totalAmount`).
       const billableChargeRows = (a.charges ?? []).filter(
-        (c: any) =>
+        (c) =>
           c.billedToCustomer !== false &&
           String(c.chargeType ?? '').toUpperCase() !== 'EXTENSION',
       );
-      const charges = billableChargeRows.map((c: any) => ({
+      const charges = billableChargeRows.map((c) => ({
         description: c.description ?? c.chargeType,
         quantity: c.quantity ?? 1,
         unitPrice: Number(c.amount ?? 0),

@@ -17,6 +17,7 @@ import {
   Save,
   X,
 } from 'lucide-react';
+import type { PartnerProfileRow } from '@/lib/exchange/client-types';
 
 const NOT_SET = '—';
 
@@ -68,7 +69,7 @@ const UAE_EMIRATES_AND_ZONES: Array<{ emirate: string; zones: string[] }> = [
 ];
 
 export default function ExchangeProfilePage() {
-  const [partner, setPartner] = useState<any | null>(null);
+  const [partner, setPartner] = useState<PartnerProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export default function ExchangeProfilePage() {
   const [sharingConsents, setSharingConsents] = useState<Record<string, boolean>>({});
   const [savingConsentId, setSavingConsentId] = useState<string | null>(null);
 
-  const syncFormFromPartner = (p: any) => {
+  const syncFormFromPartner = (p: PartnerProfileRow | null | undefined) => {
     if (!p) return;
     setLegalName(p.legalName || '');
     setTradeName(p.tradeName || '');

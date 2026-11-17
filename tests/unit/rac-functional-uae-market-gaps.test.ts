@@ -42,7 +42,7 @@ vi.mock('@/lib/rls', async () => {
   const actual = await vi.importActual<typeof import('@/lib/rls')>('@/lib/rls');
   return {
     ...actual,
-    withTenantRls: vi.fn(async (_prisma: unknown, _tenantId: string, fn: (tx: any) => unknown) =>
+    withTenantRls: vi.fn(async (_prisma: unknown, _tenantId: string, fn: (tx: unknown) => unknown) =>
       fn(mockTxState.currentTx),
     ),
   };

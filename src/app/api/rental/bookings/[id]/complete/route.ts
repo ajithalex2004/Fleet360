@@ -17,6 +17,11 @@ import {
   resolveStoredOdometerKm,
 } from '@/lib/rental/fuel-odometer';
 
+/** True when the transaction client exposes `name` (unit-test doubles may not). */
+function hasTxMethod(tx: unknown, name: string): boolean {
+  return typeof (tx as Record<string, unknown>)[name] === 'function';
+}
+
 function coerceCanonicalAgreementFuel(
   fuelPct: number | null,
 ): string | number | null {
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       const bodyRaw = await req.json().catch(() => ({}));
       const body = stripTenantOwnershipFields(
         (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
-      ) as Record<string, any>;
+      ) as Record<string, unknown>;
 
       const rawMileageInput =
         body.mileageIn ?? body.returnOdometer ?? body.odometerReading ?? body.mileage;
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       const mileageInt = Number.isFinite(parsedMileage) ? Math.round(parsedMileage) : null;
 
       let storedPickupOdo = resolveStoredOdometerKm(booking.agreement?.mileageOut);
-      if (booking.agreement?.id && typeof (tx as any).$queryRawUnsafe === 'function') {
+      if (booking.agreement?.id && hasTxMethod(tx, '$queryRawUnsafe')) {
         const odoRows = await withSavepoint<
           Array<{ pickup_odometer: number | null; mileage_out: number | null }>
         >(
@@ -167,7 +172,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           }
           await tx.rentalAgreement.update({
             where: { id: booking.agreement.id, tenantId },
-            data: updateData as any,
+            data: updateData as Prisma.RentalAgreementUpdateInput,
           });
 
           if (mileageInt != null || returnFuelPct != null) {
@@ -213,7 +218,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             tx,
             'complete_release_vehicle',
             async () => {
-              if (typeof (tx as any).$queryRawUnsafe === 'function') {
+              if (hasTxMethod(tx, '$queryRawUnsafe')) {
                 const { status: safeStatus } = await computeSafePostRentalVehicleStatus(tx, {
                   tenantId,
                   vehicleId: vehicleIdToRelease,
@@ -229,7 +234,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                     },
                     data: { status: safeStatus },
                   });
-                } else if (typeof (tx as any).$executeRawUnsafe === 'function') {
+                } else if (hasTxMethod(tx, '$executeRawUnsafe')) {
                   await tx.$executeRawUnsafe(
                     `UPDATE vehicles
                         SET status = $3
@@ -272,7 +277,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return NextResponse.json({ booking: updatedBooking });
       };
 
-      if (typeof (tx as any).$executeRawUnsafe === 'function') {
+      if (hasTxMethod(tx, '$executeRawUnsafe')) {
         return await withRentalLock(
           tx,
           tenantId,
