@@ -28,12 +28,13 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
       const sp      = req.nextUrl.searchParams;
       const status  = sp.get('status');
       const moduleParam = sp.get('module');
-      const page    = Math.max(1, parseInt(sp.get('page')  ?? '1'));
-      const limit   = Math.min(100, parseInt(sp.get('limit') ?? '50'));
+      const page    = Math.max(1, parseInt(sp.get('page')  ?? '1') || 1);
+      const limit   = Math.min(100, Math.max(1, parseInt(sp.get('limit') ?? '50') || 50));
       const offset  = (page - 1) * limit;
 
       let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
@@ -42,20 +43,22 @@ export async function GET(req: NextRequest) {
       if (status) { where += ` AND status = $${pi++}`;  params.push(status); }
       if (moduleParam) { where += ` AND module = $${pi++}`;  params.push(moduleParam); }
 
-      const [rows, counts] = await Promise.all([
-        tx.$queryRawUnsafe<CnRow[]>(
-          `SELECT * FROM finance_credit_notes ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi+1}`,
-          ...params, limit, offset
-        ).catch(() => []),
-        tx.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
-          `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
-             FROM finance_credit_notes WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
-          tenantId,
-        ).catch(() => []),
-      ]);
+      const rows = await tx.$queryRawUnsafe<CnRow[]>(
+        `SELECT * FROM finance_credit_notes ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi+1}`,
+        ...params, limit, offset
+      );
+      const counts = await tx.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
+        `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
+           FROM finance_credit_notes WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
+        tenantId,
+      );
 
       return NextResponse.json({ data: rows, counts, page, limit });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/credit-notes GET]', err);
+    return NextResponse.json({ error: 'Failed to fetch credit notes' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -102,12 +105,25 @@ export async function POST(req: NextRequest) {
         total      = Number((subtotal + vatAmount).toFixed(2));
       }
 
-      // Validate linked invoice existence and available balance
-      const [linkedInv] = await tx.$queryRawUnsafe<any[]>(
+      if (!Number.isFinite(total) || total <= 0) {
+        return NextResponse.json({ error: 'Credit note amount must be positive' }, { status: 400 });
+      }
+
+      // Statement 1: Lock linked invoice row FOR UPDATE to serialize concurrent credit notes
+      const [linkedInv] = await tx.$queryRawUnsafe<Array<{
+        id: string;
+        invoice_number: string;
+        total_amount: unknown;
+        paid_amount: unknown;
+        client_name: string | null;
+      }>>(
         `SELECT id, invoice_number, total_amount, paid_amount, client_name
            FROM finance_invoices
-          WHERE (id::text = $1 OR invoice_number = $1) AND tenant_id = $2 AND deleted_at IS NULL
-          LIMIT 1`,
+          WHERE (id::text = $1 OR invoice_number = $1)
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+          LIMIT 1
+            FOR UPDATE`,
         String(targetInvoiceId),
         tenantId,
       );
@@ -116,12 +132,25 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Linked invoice not found' }, { status: 404 });
       }
 
+      // Statement 2: Read fresh committed credit note sum (2nd statement avoids PG17 EPQ stale subplan snapshot)
+      const cnRows = await tx.$queryRawUnsafe<Array<{ credited: string | number | null }>>(
+        `SELECT COALESCE(SUM(total_amount), 0)::numeric AS credited
+           FROM finance_credit_notes
+          WHERE original_invoice_id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND UPPER(COALESCE(status, 'DRAFT')) NOT IN ('VOID', 'VOIDED', 'CANCELLED')`,
+        String(linkedInv.id),
+        tenantId,
+      );
+
       const invTotal = Number(linkedInv.total_amount ?? 0);
       const invPaid = Number(linkedInv.paid_amount ?? 0);
-      const invBalance = Number((invTotal - invPaid).toFixed(2));
-      if (total > invBalance + 0.05) {
+      const existingCredited = Number(cnRows?.[0]?.credited ?? 0);
+      const remainingCreditable = Math.max(0, Number((invTotal - invPaid - existingCredited).toFixed(2)));
+      if (remainingCreditable <= 0 || total > remainingCreditable + 0.005) {
         return NextResponse.json({
-          error: `Credit note amount (${total}) exceeds original invoice balance (${invBalance})`,
+          error: `Credit note amount (${total}) exceeds original invoice balance (${remainingCreditable})`,
         }, { status: 422 });
       }
 

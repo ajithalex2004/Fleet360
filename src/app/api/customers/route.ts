@@ -14,9 +14,15 @@ function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 function errorCode(e: unknown): string | undefined {
-  if (typeof e === 'object' && e !== null && 'code' in e) {
-    const code = (e as { code?: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
+  if (typeof e === 'object' && e !== null) {
+    if ('meta' in e && typeof (e as { meta?: unknown }).meta === 'object' && (e as { meta?: { code?: unknown } }).meta !== null) {
+      const metaCode = (e as { meta: { code?: unknown } }).meta.code;
+      if (typeof metaCode === 'string') return metaCode;
+    }
+    if ('code' in e) {
+      const code = (e as { code?: unknown }).code;
+      return typeof code === 'string' ? code : undefined;
+    }
   }
   return undefined;
 }
@@ -29,18 +35,12 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
         const { searchParams } = new URL(req.url);
         const status       = searchParams.get('status');
         const customerType = searchParams.get('customerType');
         const search       = searchParams.get('search');
-
-        // Clean up any legacy Drayage Client rows (`cli-%`) that were previously mirrored into `customers`
-        await tx.$executeRawUnsafe(
-          `DELETE FROM customers WHERE tenant_id = $1 AND id LIKE 'cli-%'`,
-          tenantId,
-        ).catch(() => {});
 
         const whereClauses: string[] = [
           `c.tenant_id = $1`,
@@ -135,11 +135,11 @@ export async function GET(req: NextRequest) {
           unit:       c.unit_name       ? { id: c.unit_id,    name: c.unit_name    } : null,
         }));
         return NextResponse.json(shaped);
-      } catch (e) {
-        console.error('GET /api/customers error:', e);
-        return NextResponse.json({ error: errorMessage(e, 'Failed to fetch customers') }, { status: 500 });
-      }
-  });
+    });
+  } catch (e) {
+    console.error('GET /api/customers error:', e);
+    return NextResponse.json({ error: errorMessage(e, 'Failed to fetch customers') }, { status: 500 });
+  }
 }
 
 
@@ -151,18 +151,18 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-        const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
+  try {
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
 
-        if (!body.nameEn?.trim()) {
-          return NextResponse.json({ error: 'Customer name (English) is required' }, { status: 400 });
-        }
-        if (!body.customerType) {
-          return NextResponse.json({ error: 'Customer type is required' }, { status: 400 });
-        }
+    if (!body.nameEn?.trim()) {
+      return NextResponse.json({ error: 'Customer name (English) is required' }, { status: 400 });
+    }
+    if (!body.customerType) {
+      return NextResponse.json({ error: 'Customer type is required' }, { status: 400 });
+    }
 
+    return await withTenantRls(prisma, tenantId, async (tx) => {
         const id = randomUUID();
 
         // customer_code is unique per tenant: migration
@@ -174,10 +174,11 @@ export async function POST(req: NextRequest) {
                          body.customerType === 'CORPORATE' ? 'CORP' :
                          body.customerType === 'VIP'       ? 'VIP' :
                          body.customerType === 'WALK_IN'   ? 'WLK' : 'CUST';
-          const existingCodes = await prisma.$queryRawUnsafe<Array<{ customer_code: string | null }>>(
-            `SELECT customer_code FROM customers WHERE customer_code LIKE $1`,
+          const existingCodes = await tx.$queryRawUnsafe<Array<{ customer_code: string | null }>>(
+            `SELECT customer_code FROM customers WHERE tenant_id = $1 AND customer_code LIKE $2`,
+            tenantId,
             `${prefix}%`,
-          ).catch(() => []);
+          );
           const usedSet = new Set(
             existingCodes.map((r) => String(r.customer_code ?? '').trim().toUpperCase()).filter(Boolean)
           );
@@ -196,7 +197,7 @@ export async function POST(req: NextRequest) {
           body.customerCode = candidate;
         }
 
-        const now = new Date().toISOString();
+        const now = new Date();
 
         // Validate hierarchy foreign keys (regionId, departmentId, unitId) before INSERT so 23503 FK errors never happen
         const cleanRegionId = typeof body.regionId === 'string' && body.regionId.trim() ? body.regionId.trim() : null;
@@ -206,9 +207,10 @@ export async function POST(req: NextRequest) {
         const validHIds = new Set<string>();
         if (candidateHIds.length > 0) {
           const hRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-            `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[])`,
+            `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[]) AND tenant_id = $2`,
             candidateHIds,
-          ).catch(() => []);
+            tenantId,
+          );
           for (const r of hRows) validHIds.add(r.id);
         }
         const resolvedRegionId = cleanRegionId && validHIds.has(cleanRegionId) ? cleanRegionId : null;
@@ -253,7 +255,7 @@ export async function POST(req: NextRequest) {
           body.marketingCommunications === true, body.bookingNotifications !== false,
           body.status ?? 'ACTIVE',
         ];
-        const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(', ');
+        const placeholders = insertVals.map((v, i) => (v instanceof Date ? `$${i + 1}::timestamptz` : `$${i + 1}`)).join(', ');
 
         await tx.$executeRawUnsafe(
           `INSERT INTO customers (${insertCols.join(', ')}) VALUES (${placeholders})`,
@@ -267,7 +269,7 @@ export async function POST(req: NextRequest) {
             const lesseeId = randomUUID();
             await tx.$executeRawUnsafe(`
               INSERT INTO lessees (id, tenant_id, created_at, updated_at, name, type, trade_license, contact_person, email, phone, customer_id)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5, $6, $7, $8, $9, $10, $11)
               ON CONFLICT DO NOTHING
             `,
               lesseeId,
@@ -285,19 +287,21 @@ export async function POST(req: NextRequest) {
             await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_create_lessee`);
           } catch (e) {
             await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_create_lessee`).catch(() => {});
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_create_lessee`).catch(() => {});
             console.warn('Could not auto-create lessee:', e);
           }
         }
 
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = $1 AND tenant_id = $2`, id, tenantId);
         return NextResponse.json((rows as any[])[0], { status: 201 });
-        } catch (e) {
-        console.error('POST /api/customers error:', e);
-        if (errorMessage(e, '').includes('unique') || errorCode(e) === '23505') {
-          return NextResponse.json({ error: 'Customer code already exists' }, { status: 409 });
-        }
-        return NextResponse.json({ error: errorMessage(e, 'Failed to create customer') }, { status: 500 });
-      }
-  });
+    });
+  } catch (e) {
+    console.error('POST /api/customers error:', e);
+    const code = errorCode(e);
+    if (errorMessage(e, '').includes('unique') || code === '23505' || code === 'P2002') {
+      return NextResponse.json({ error: 'Customer code already exists' }, { status: 409 });
+    }
+    return NextResponse.json({ error: errorMessage(e, 'Failed to create customer') }, { status: 500 });
+  }
 }
 

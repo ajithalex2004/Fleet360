@@ -5359,7 +5359,7 @@ model Customer {
   interactions CustomerInteraction[]
   lessee       Lessee?
 
-  @@unique([tenantId, customerCode], map: "uq_customers_tenant_code")
+  @@unique([tenantId, customerCode], map: "idx_customers_tenant_customer_code")
   @@index([tenantId])
   @@map("customers")
   @@schema("public")
@@ -6169,7 +6169,7 @@ model FinancePayment {
   invoiceId String?         @map("invoice_id") @db.Uuid
   invoice   FinanceInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
-  tenantId String? @map("tenant_id")
+  tenantId String @map("tenant_id")
 
   amount        Decimal  @db.Decimal(14, 2)
   paymentDate   DateTime @default(now()) @map("payment_date") @db.Date

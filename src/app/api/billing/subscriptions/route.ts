@@ -10,36 +10,36 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
       // Query subscriptions for tenant
-      const subscriptions = await tx.$queryRawUnsafe<any[]>(
+      const subscriptions = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
         `SELECT id, tenant_id, module_code, plan_tier, billing_cycle,
                 base_price, currency, status, next_billing_date
            FROM tenant_module_subscriptions
           WHERE tenant_id = $1
           ORDER BY created_at DESC`,
         tenantId,
-      ).catch(() => []);
+      );
 
       // Query isolated platform invoices (SUB-*)
-      const platformInvoices = await tx.$queryRawUnsafe<any[]>(
+      const platformInvoices = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
         `SELECT id, invoice_number, subtotal, vat_amount, total_amount,
                 currency, payment_status, issue_date, due_date
            FROM platform_subscription_invoices
           WHERE tenant_id = $1
           ORDER BY created_at DESC`,
         tenantId,
-      ).catch(() => []);
+      );
 
       return NextResponse.json({
         ok: true,
         subscriptions,
         platformInvoices,
       });
-    } catch (e) {
-      console.error('[billing/subscriptions]', e);
-      return NextResponse.json({ error: 'Failed to fetch subscriptions' }, { status: 500 });
-    }
-  });
+    });
+  } catch (e) {
+    console.error('[billing/subscriptions]', e);
+    return NextResponse.json({ error: 'Failed to fetch subscriptions' }, { status: 500 });
+  }
 }

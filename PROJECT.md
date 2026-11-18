@@ -60,6 +60,7 @@
 | M3 | Tier 2 Operational Silos, Stubbed Workflows & Mobile Driver App | F23 to F31: Maintenance workflow transitions, grounded vehicle enforcement, fuel/expense bridging, multi-vertical fine matching, mobile offline sync engine, CORS, photo sync | M1 | DONE |
 | M4 | Tier 3 AI Governance, Go Backend Parity, Schema Drift & DevOps Hygiene | F32 to F39: AI gateway metering, prompt injection defense, readyz decoupling, Go parity, Railway deploy migration, schema validator, TS build error checking, git hygiene | M1 | DONE |
 | M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | F40: Phase 1 (100% pass of Tiers 1-4) + Phase 2 (Tier 5 adversarial hardening) + M5-R6 Gate Squad Iteration 2 PASS (442 pages built, 420/420 Playwright, 4,282 Vitest passed, 6/6 static, Go 17/17, Auditor CLEAN) | M0, M1, M2, M3, M4 | DONE |
+| M5-R7 | Critical Database Isolation & Financial Integrity Remediation | WP1–WP2: PG17 RLS & tenant unique index remediation (377/377 tables, `verify-db-identity` & `check-rls-effective` exit 0); WP3: Financial transaction integrity (`withTenantRls` routes/libs); WP4: Adversarial PG17 testing (27/27 + 3/3 VAT); WP5: Independent Gate Squad PASS (Audit CLEAN); WP6: Regression verified (442/442 Next build, 420/420 Playwright, Go 17/17, 362/362 runnable Vitest incl. 13/13 live :3000 HTTP) | M5 | DONE |
 
 ## Interface Contracts
 

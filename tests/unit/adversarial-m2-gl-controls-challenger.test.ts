@@ -941,12 +941,12 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
   // 6. Credit Note Allocations & Integrity
   // ==========================================================================
   describe('6. Credit Note Allocations & Subledger Integrity', () => {
-    it('CH-06-A: PATCH /api/finance/credit-notes/[id] (action: apply) records allocation in finance_payment_allocations without corrupting paid_amount', async () => {
+    it('CH-06-A: PATCH /api/finance/credit-notes/[id] (action: apply) updates invoice payment_status without touching finance_payment_allocations or paid_amount and rejects re-apply (409)', async () => {
       const targetInvoiceId = 'b0000000-0000-0000-0000-000000000001';
       const cnId = 'c0000000-0000-0000-0000-000000000002';
 
       mockTx.$queryRawUnsafe
-        // 1. Fetch current credit note
+        // 1. Lock credit note FOR UPDATE
         .mockResolvedValueOnce([
           {
             id: cnId,
@@ -957,12 +957,25 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
             tenant_id: 't-alpha',
           },
         ])
-        // 2. Update credit note status to APPLIED
+        // 2. Lock target invoice FOR UPDATE
+        .mockResolvedValueOnce([
+          {
+            id: targetInvoiceId,
+            invoice_number: 'INV-2026-001',
+            total_amount: '1000.00',
+            paid_amount: '0.00',
+            payment_status: 'SENT',
+          },
+        ])
+        // 3. Sum already-applied credit notes
+        .mockResolvedValueOnce([{ applied_credits: '0' }])
+        // 4. Update credit note status to APPLIED
         .mockResolvedValueOnce([
           {
             id: cnId,
             status: 'APPLIED',
             applied_amount: '500.00',
+            original_invoice_id: targetInvoiceId,
           },
         ]);
 
@@ -983,16 +996,13 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
       const res = await creditNotesPatch(req, { params: Promise.resolve({ id: cnId }) });
       expect(res.status).toBe(200);
 
-      // Verify that finance_payment_allocations was inserted into
+      // Verify that finance_payment_allocations is NEVER inserted into by credit notes
       const allocInsert = mockTx.$executeRawUnsafe.mock.calls.find((call) =>
         String(call[0]).includes('INSERT INTO finance_payment_allocations'),
       );
-      expect(allocInsert).toBeDefined();
-      expect(allocInsert?.[0]).toContain("'CREDIT_NOTE'");
-      expect(allocInsert?.[2]).toBe(targetInvoiceId);
-      expect(allocInsert?.[4]).toBe(500.0);
+      expect(allocInsert).toBeUndefined();
 
-      // CRITICAL AUDIT CHECK: Verify finance_invoices SQL does NOT overwrite paid_amount
+      // CRITICAL AUDIT CHECK: Verify finance_invoices SQL updates payment_status without mutating paid_amount
       const invoiceUpdate = mockTx.$executeRawUnsafe.mock.calls.find((call) =>
         String(call[0]).includes('UPDATE finance_invoices'),
       );
@@ -1000,9 +1010,38 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
       const sql = String(invoiceUpdate?.[0]);
       // Must NOT contain "paid_amount = ..." in the SET clause!
       expect(sql).not.toMatch(/SET\s+[^]*paid_amount\s*=\s*(?:paid_amount|\$)/i);
-      // Must only update payment_status based on calculation
       expect(sql).toContain('payment_status = CASE');
+      expect(sql).toContain("'PARTIAL'");
+      expect(sql).not.toContain("'PARTIALLY_PAID'");
       expect(sql).toContain('updated_at = NOW()');
+
+      // Re-applying an already APPLIED credit note must return 409 Conflict
+      mockTx.$queryRawUnsafe.mockResolvedValueOnce([
+        {
+          id: cnId,
+          cn_number: 'CN-202611-0001',
+          status: 'APPLIED',
+          total_amount: '500.00',
+          original_invoice_id: targetInvoiceId,
+          tenant_id: 't-alpha',
+        },
+      ]);
+
+      const replayReq = new NextRequest(`http://localhost:3000/api/finance/credit-notes/${cnId}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-tenant-id': 't-alpha',
+          'x-user-id': 'finance_alice',
+        },
+        body: JSON.stringify({
+          action: 'apply',
+          appliedAmount: 500.0,
+          appliedToInvoiceId: targetInvoiceId,
+        }),
+      });
+      const replayRes = await creditNotesPatch(replayReq, { params: Promise.resolve({ id: cnId }) });
+      expect(replayRes.status).toBe(409);
     });
 
     it('CH-06-B: POST /api/finance/credit-notes rejects whitespace-only reason with HTTP 400', async () => {
@@ -1049,15 +1088,19 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
     });
 
     it('CH-06-D: POST /api/finance/credit-notes rejects credit amount exceeding invoice balance with HTTP 422', async () => {
-      mockTx.$queryRawUnsafe.mockResolvedValueOnce([
-        {
-          id: 'inv-300',
-          invoice_number: 'INV-2026-300',
-          total_amount: 1000.0,
-          paid_amount: 800.0, // Remaining balance = 200.00
-          client_name: 'Acme Logistics',
-        },
-      ]);
+      mockTx.$queryRawUnsafe
+        // 1. Linked invoice lookup (FOR UPDATE)
+        .mockResolvedValueOnce([
+          {
+            id: 'inv-300',
+            invoice_number: 'INV-2026-300',
+            total_amount: 1000.0,
+            paid_amount: 800.0, // Remaining balance = 200.00
+            client_name: 'Acme Logistics',
+          },
+        ])
+        // 2. Existing credit notes sum
+        .mockResolvedValueOnce([{ credited: '0' }]);
 
       const req = new NextRequest('http://localhost:3000/api/finance/credit-notes', {
         method: 'POST',
@@ -1105,7 +1148,7 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
     it('CH-06-F: POST /api/finance/credit-notes posts balanced double-entry GL reversing entries on issuance', async () => {
       const invId = 'inv-400';
       mockTx.$queryRawUnsafe
-        // 1. Linked invoice lookup
+        // 1. Linked invoice lookup (FOR UPDATE)
         .mockResolvedValueOnce([
           {
             id: invId,
@@ -1115,9 +1158,11 @@ describe('Adversarial Challenge M2: GL & Accounting Controls Integrity', () => {
             client_name: 'Gulf Express',
           },
         ])
-        // 2. nextDocumentNumber for CN
+        // 2. Existing credit notes sum
+        .mockResolvedValueOnce([{ credited: '0' }])
+        // 3. nextDocumentNumber for CN
         .mockResolvedValueOnce([{ next_val: 1 }])
-        // 3. Insert credit note
+        // 4. Insert credit note
         .mockResolvedValueOnce([
           {
             id: 'cn-400',

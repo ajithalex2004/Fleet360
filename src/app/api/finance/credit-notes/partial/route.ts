@@ -23,11 +23,21 @@ export async function POST(req: NextRequest) {
     }
 
     return await withTenantRls(prisma, tenantId, async (tx) => {
-      const [invoice] = await tx.$queryRawUnsafe<any[]>(
-        `SELECT id, invoice_number, total_amount, paid_amount
+      // Statement 1: Lock invoice row FOR UPDATE to serialize concurrent partial credit notes
+      const [invoice] = await tx.$queryRawUnsafe<Array<{
+        id: string;
+        invoice_number: string;
+        total_amount: unknown;
+        paid_amount: unknown;
+        client_name: string | null;
+      }>>(
+        `SELECT id, invoice_number, total_amount, paid_amount, client_name
            FROM finance_invoices
-          WHERE (id::text = $1 OR invoice_number = $1) AND tenant_id = $2 AND deleted_at IS NULL
-          LIMIT 1`,
+          WHERE (id::text = $1 OR invoice_number = $1)
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+          LIMIT 1
+            FOR UPDATE`,
         invoiceId,
         tenantId,
       );
@@ -36,13 +46,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
       }
 
+      // Statement 2: Fresh committed sum of existing credit notes (2nd statement avoids PG17 EPQ stale subplan snapshot)
+      const cnRows = await tx.$queryRawUnsafe<Array<{ credited: string | number | null }>>(
+        `SELECT COALESCE(SUM(total_amount), 0)::numeric AS credited
+           FROM finance_credit_notes
+          WHERE original_invoice_id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND UPPER(COALESCE(status, 'DRAFT')) NOT IN ('VOID', 'VOIDED', 'CANCELLED')`,
+        String(invoice.id),
+        tenantId,
+      );
+
       const invTotal = Number(invoice.total_amount ?? 0);
       const invPaid = Number(invoice.paid_amount ?? 0);
-      const outstanding = Number((invTotal - invPaid).toFixed(2));
+      const existingCredited = Number(cnRows?.[0]?.credited ?? 0);
+      const remainingCreditable = Math.max(0, Number((invTotal - invPaid - existingCredited).toFixed(2)));
 
-      if (amount > outstanding + 0.05) {
+      if (remainingCreditable <= 0 || amount > remainingCreditable + 0.005) {
         return NextResponse.json({
-          error: `Partial credit note amount (${amount}) exceeds invoice outstanding balance (${outstanding})`,
+          error: `Partial credit note amount (${amount}) exceeds invoice outstanding balance (${remainingCreditable})`,
         }, { status: 422 });
       }
 
@@ -64,7 +87,7 @@ export async function POST(req: NextRequest) {
       const subtotal = Number((amount / 1.05).toFixed(2));
       const vatAmount = Number((amount - subtotal).toFixed(2));
 
-      const [cnRow] = await tx.$queryRawUnsafe<any[]>(
+      const [cnRow] = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `INSERT INTO finance_credit_notes
            (cn_number, original_invoice_id, original_invoice_no, client_name,
             reason_code, reason_detail, subtotal, vat_amount, total_amount,
@@ -86,7 +109,7 @@ export async function POST(req: NextRequest) {
         throw new Error('Failed to insert partial credit note');
       }
 
-      const newOutstanding = Math.max(0, Number((outstanding - amount).toFixed(2)));
+      const newOutstanding = Math.max(0, Number((remainingCreditable - amount).toFixed(2)));
 
       // Post GL reversing entry isolated inside an explicit PostgreSQL SAVEPOINT
       let glEntry: { id: string; number: string; created: boolean } | null = null;
@@ -130,7 +153,7 @@ export async function POST(req: NextRequest) {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoice_number,
         creditedAmount: amount,
-        previousOutstanding: outstanding,
+        previousOutstanding: remainingCreditable,
         newOutstanding,
         glPosted: Boolean(glEntry),
         glEntry,

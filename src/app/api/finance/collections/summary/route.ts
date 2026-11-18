@@ -10,19 +10,21 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-      // Sum genuine cash payments (excluding credit note allocations)
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      // Sum genuine cash payments and applied credit notes separately
       const [sumRow] = await tx.$queryRawUnsafe<Array<{ total_cash: string | null; total_credit_notes: string | null }>>(
         `SELECT
            COALESCE(SUM(paid_amount), 0)::text AS total_cash,
-           (SELECT COALESCE(SUM(allocated_amount), 0)::text
-              FROM finance_payment_allocations
-             WHERE tenant_id = $1 AND source_type = 'CREDIT_NOTE') AS total_credit_notes
+           (SELECT COALESCE(SUM(COALESCE(applied_amount, total_amount)), 0)::text
+              FROM finance_credit_notes
+             WHERE tenant_id = $1
+               AND deleted_at IS NULL
+               AND status = 'APPLIED') AS total_credit_notes
          FROM finance_invoices
         WHERE tenant_id = $1 AND deleted_at IS NULL`,
         tenantId,
-      ).catch(() => [{ total_cash: '0', total_credit_notes: '0' }]);
+      );
 
       const cashCollected = Number(sumRow?.total_cash || 0);
       const creditNotesApplied = Number(sumRow?.total_credit_notes || 0);
@@ -33,9 +35,9 @@ export async function GET(req: NextRequest) {
         creditNotesApplied,
         totalSettlement: cashCollected + creditNotesApplied,
       });
-    } catch (e) {
-      console.error('[finance/collections/summary]', e);
-      return NextResponse.json({ error: 'Failed to compute collection summary' }, { status: 500 });
-    }
-  });
+    });
+  } catch (e) {
+    console.error('[finance/collections/summary]', e);
+    return NextResponse.json({ error: 'Failed to compute collection summary' }, { status: 500 });
+  }
 }

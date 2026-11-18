@@ -161,74 +161,89 @@ export async function resetInvoiceDunningOnSettlement(
   actor = 'system',
 ): Promise<void> {
   const db = tx ?? prisma;
-  try {
-    if (db.leaseInvoice?.findFirst) {
-      const inv = await db.leaseInvoice.findFirst({
-        where: { id: invoiceId, tenantId },
-        select: { id: true, currentDunningStage: true, currentDunningCycleId: true },
-      });
-      if (inv && inv.currentDunningStage && inv.currentDunningStage !== 'SETTLED') {
-        const now = new Date();
-        if (db.leaseDunningStageTransition?.create && inv.currentDunningCycleId) {
-          await db.leaseDunningStageTransition.create({
-            data: {
-              tenantId,
-              invoiceId: inv.id,
-              dunningCycleId: inv.currentDunningCycleId,
-              previousStage: inv.currentDunningStage,
-              newStage: 'SETTLED',
-              reason: 'settled',
-              transitionedBy: actor,
-              transitionedAt: now,
-              effectiveDaysPastDue: 0,
-              effectiveBalanceMinor: BigInt(0),
-            },
-          }).catch(() => {});
-        }
-        await db.leaseInvoice.update({
-          where: { id: inv.id },
+  const inTx = Boolean(tx && typeof tx.$executeRawUnsafe === 'function');
+
+  const runLeaseDunningReset = async () => {
+    if (!db.leaseInvoice?.findFirst) return;
+    const inv = await db.leaseInvoice.findFirst({
+      where: { id: invoiceId, tenantId },
+      select: { id: true, currentDunningStage: true, dunningCollectionCycle: true },
+    });
+    if (inv && inv.currentDunningStage && inv.currentDunningStage !== 'SETTLED') {
+      const now = new Date();
+      if (db.leaseDunningStageTransition?.create && inv.dunningCollectionCycle != null) {
+        await db.leaseDunningStageTransition.create({
           data: {
-            currentDunningStage: 'SETTLED',
-            dunningStageUpdatedAt: now,
+            tenantId,
+            invoiceId: inv.id,
+            collectionCycle: inv.dunningCollectionCycle,
+            previousStage: inv.currentDunningStage,
+            newStage: 'SETTLED',
+            reason: 'settled',
+            transitionedBy: actor,
+            transitionedAt: now,
           },
-        }).catch(() => {});
-        if (db.leaseDunningNotice?.updateMany && inv.currentDunningCycleId) {
-          await db.leaseDunningNotice.updateMany({
-            where: {
-              tenantId,
-              invoiceId: inv.id,
-              dunningCycleId: inv.currentDunningCycleId,
-              dispatchStatus: { in: ['PENDING', 'FAILED'] },
-            },
-            data: {
-              dispatchStatus: 'SUPPRESSED',
-              suppressedReason: 'SETTLED',
-            },
-          }).catch(() => {});
-        }
+        });
+      }
+      await db.leaseInvoice.update({
+        where: { id: inv.id },
+        data: {
+          currentDunningStage: 'SETTLED',
+          dunningStageUpdatedAt: now,
+        },
+      });
+      if (db.leaseDunningNotice?.updateMany && inv.dunningCollectionCycle != null) {
+        await db.leaseDunningNotice.updateMany({
+          where: {
+            tenantId,
+            invoiceId: inv.id,
+            collectionCycle: inv.dunningCollectionCycle,
+            dispatchStatus: { in: ['PENDING', 'FAILED'] },
+          },
+          data: {
+            dispatchStatus: 'SUPPRESSED',
+            suppressedReason: 'SETTLED',
+          },
+        });
       }
     }
-  } catch {
-    // Best-effort
+  };
+
+  if (inTx) {
+    await withSavepoint(tx, 'reset_dunning_lease', runLeaseDunningReset, undefined);
+  } else {
+    try {
+      await runLeaseDunningReset();
+    } catch (err) {
+      console.warn('[resetInvoiceDunningOnSettlement] lease dunning reset warning:', err);
+    }
   }
 
-  try {
-    if (typeof db.$executeRawUnsafe === 'function') {
-      await db.$executeRawUnsafe(
-        `UPDATE finance_collection_cases
-            SET status = 'RESOLVED',
-                stage = 'SETTLED',
-                resolved_at = NOW(),
-                updated_at = NOW()
-          WHERE invoice_id::text = $1
-            AND tenant_id = $2
-            AND status NOT IN ('RESOLVED', 'CLOSED')`,
-        invoiceId,
-        tenantId,
-      ).catch(() => {});
+  const runCollectionCasesReset = async () => {
+    if (typeof db.$executeRawUnsafe !== 'function') return;
+    await db.$executeRawUnsafe(
+      `UPDATE finance_collection_cases
+          SET status = 'SETTLED',
+              dunning_stage = 'SETTLED',
+              outstanding_amount = 0,
+              updated_at = NOW()
+        WHERE invoice_id::text = $1
+          AND tenant_id = $2
+          AND deleted_at IS NULL
+          AND status NOT IN ('SETTLED', 'WRITTEN_OFF', 'CLOSED')`,
+      invoiceId,
+      tenantId,
+    );
+  };
+
+  if (inTx) {
+    await withSavepoint(tx, 'reset_dunning_cases', runCollectionCasesReset, undefined);
+  } else {
+    try {
+      await runCollectionCasesReset();
+    } catch (err) {
+      console.warn('[resetInvoiceDunningOnSettlement] collection cases reset warning:', err);
     }
-  } catch {
-    // Best-effort
   }
 }
 

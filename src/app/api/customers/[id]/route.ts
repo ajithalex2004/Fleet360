@@ -19,8 +19,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
         const rows = await tx.$queryRawUnsafe(`
           SELECT c.*,
             r.name as region_name, d.name as dept_name, u.name as unit_name
@@ -44,10 +44,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
           unit:       c.unit_name   ? { id: c.unit_id,       name: c.unit_name   } : null,
           documents: docs,
         });
-        } catch (e) {
-        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
-      }
-  });
+    });
+  } catch (e) {
+    return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
+  }
 }
 
 
@@ -60,14 +60,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
+  try {
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+
+    return await withTenantRls(prisma, tenantId, async (tx) => {
       const { region, department, unit, documents, ...data } = body;
-      const now = new Date().toISOString();
+      const now = new Date();
       const updateParams: unknown[] = [now];
-      const sets: string[] = [`updated_at = $1`];
+      const sets: string[] = [`updated_at = $1::timestamptz`];
 
       const allowed = [
         'customer_code', 'customer_type', 'priority', 'account_code', 'trade_license',
@@ -103,9 +104,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         .filter(Boolean);
       if (candidateFkIds.length > 0) {
         const existingH = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-          `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[])`,
+          `SELECT id FROM customer_hierarchy WHERE id = ANY($1::text[]) AND tenant_id = $2`,
           candidateFkIds,
-        ).catch(() => []);
+          tenantId,
+        );
         for (const r of existingH) validHierarchyIds.add(r.id);
       }
 
@@ -175,10 +177,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         tenantId,
       );
       return NextResponse.json((rows as any[])[0]);
-    } catch (e) {
-      return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
-    }
-  });
+    });
+  } catch (e) {
+    return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
+  }
 }
 
 
@@ -191,13 +193,17 @@ export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: s
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(
-      `UPDATE customers SET deleted_at = NOW(), status = 'INACTIVE' WHERE id = $1 AND tenant_id = $2`,
-      params.id,
-      tenantId,
-    );
-    return NextResponse.json({ success: true });
-  });
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `UPDATE customers SET deleted_at = NOW(), status = 'INACTIVE' WHERE id = $1 AND tenant_id = $2`,
+        params.id,
+        tenantId,
+      );
+      return NextResponse.json({ success: true });
+    });
+  } catch (e) {
+    return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
+  }
 }
 
