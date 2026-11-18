@@ -23,6 +23,7 @@ import {
   getChannel,
   validateOutboundWebhookUrl,
 } from '@/lib/rental-channels';
+import { getPublicOrigin } from '@/lib/public-origin';
 import { requireRentalPermission } from '@/lib/rental/rbac';
 import { withSavepoint } from '@/lib/rental/locks';
 import { logAudit } from '@/lib/audit';
@@ -79,8 +80,7 @@ export async function GET(req: NextRequest) {
   );
   if (denied) return denied;
 
-  const baseOrigin =
-    req.nextUrl?.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://app.fleet360.ae';
+  const baseOrigin = getPublicOrigin(req);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -473,8 +473,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = stripTenantOwnershipFields(bodyRaw as Record<string, unknown>);
-  const baseOrigin =
-    req.nextUrl?.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://app.fleet360.ae';
+  const baseOrigin = getPublicOrigin(req);
 
   try {
     const outcome = await withTenantRls(prisma, tenantId, async (tx) => {
@@ -546,8 +545,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = stripTenantOwnershipFields(bodyRaw as Record<string, unknown>);
-  const baseOrigin =
-    req.nextUrl?.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://app.fleet360.ae';
+  const baseOrigin = getPublicOrigin(req);
 
   try {
     const outcome = await withTenantRls(prisma, tenantId, async (tx) => {

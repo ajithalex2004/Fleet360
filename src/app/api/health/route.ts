@@ -113,17 +113,9 @@ export async function GET() {
     dbPoolData?.status === 'critical' ||
     securityData?.status === 'critical';
 
-  const status =
-    missing.length > 0 ||
-    schema.status === 'incomplete' ||
-    !storage.durable ||
-    !storage.ok ||
-    jobsDegraded
-      ? 'degraded'
-      : 'ok';
-
-  // Optional Go backend readiness probe
+  // Optional Go backend readiness probe: surface connectivity as degraded when unreachable
   let backendInfo: { status: string; version?: string; error?: string } | undefined;
+  let goBackendServiceStatus: 'ok' | 'degraded' = 'ok';
   const goBackendUrl = process.env.GO_BACKEND_URL;
   if (goBackendUrl) {
     try {
@@ -131,16 +123,30 @@ export async function GET() {
         cache: 'no-store',
         signal: AbortSignal.timeout(2000),
       });
-      const bData = await bRes.json();
+      const bData = await bRes.json().catch(() => null) as Record<string, unknown> | null;
       backendInfo = {
-        status: bData.status ?? (bRes.ok ? 'ready' : 'not_ready'),
-        version: bData.version,
+        status: (bData?.status as string) ?? (bRes.ok ? 'ready' : 'not_ready'),
+        version: bData?.version as string | undefined,
       };
+      if (!bRes.ok || bData?.status !== 'ready') {
+        goBackendServiceStatus = 'degraded';
+      }
     } catch (bErr) {
       console.error('[api/health] backend readiness check failed:', bErr);
       backendInfo = { status: 'unreachable' };
+      goBackendServiceStatus = 'degraded';
     }
   }
+
+  const status =
+    missing.length > 0 ||
+    schema.status === 'incomplete' ||
+    !storage.durable ||
+    !storage.ok ||
+    jobsDegraded ||
+    goBackendServiceStatus === 'degraded'
+      ? 'degraded'
+      : 'ok';
 
   return NextResponse.json({
     status,
@@ -150,6 +156,9 @@ export async function GET() {
     schema: { status: schema.status, missing: schema.missingCount },
     storage: { backend: storage.backend, durable: storage.durable, ok: storage.ok },
     release: RELEASE,
+    services: {
+      goBackend: goBackendServiceStatus,
+    },
     backend: backendInfo,
     jobs: jobsAndOutbox
       ? {

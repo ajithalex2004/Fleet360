@@ -11,11 +11,10 @@ import { logAudit } from '@/lib/audit';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/twilio-client';
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 function resolveAppOrigin(req: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim();
-  const base = configured || req.nextUrl.origin;
-  return base.replace(/\/$/, '');
+  return getPublicOrigin(req);
 }
 
 async function dispatchEsignOtp(args: {

@@ -38,6 +38,7 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/approval-link/': 'signed per-approver decision token',
   '/shipper-portal': 'shipper-portal-session cookie (requireShipperPortal)',
   '/leasing-portal': 'leasing-portal-session cookie (requireLeasingPortal)',
+  '/rac-portal': 'rac-portal-session cookie (requireRacPortal)',
   '/carrier-portal/': 'carrier invite token',
 
   // APIs
@@ -64,10 +65,12 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/api/health/db-role': 'x-deployment-health-secret header',
   '/api/version': 'none — build info',
   '/api/assets/ble/ingest': 'X-Gateway-Key (SHA-256 lookup)',
+  '/api/esign/verify': 'per-request signingToken capability token + OTP verification (lookupEsignByToken)',
   '/api/approval-link/': 'signed per-approver decision token',
   '/api/setup/': 'SETUP_SECRET',
   '/api/shipper-portal/': 'shipper-portal-session cookie (requireShipperPortal)',
   '/api/leasing-portal/': 'leasing-portal-session cookie (requireLeasingPortal)',
+  '/api/rac-portal/': 'rac-portal-session cookie (requireRacPortal / requireRacPortalRole)',
   '/api/carrier-portal/': 'carrier invite token',
   '/api/public/partner-driver/': 'per-trip SHA-256 hashed driver capability token (withPartnerTokenTenant)',
   '/api/driver-app/': 'driver-app device session (verified in middleware) / WebAuthn',

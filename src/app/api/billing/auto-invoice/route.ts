@@ -68,12 +68,14 @@ async function nextInvoiceNumber(tx: TxClient, tenantId: string): Promise<string
   type SeqRow = { last_seq: bigint | null };
   const [seqRow] = await tx.$queryRawUnsafe<SeqRow[]>(
     `SELECT MAX(CAST(SPLIT_PART(invoice_number, '-', 3) AS INTEGER)) AS last_seq
-       FROM finance_invoices
+       FROM platform_subscription_invoices
       WHERE invoice_number LIKE $1
         AND tenant_id = $2`,
     `${prefix}-%`,
     tenantId,
-  ).catch(() => [{ last_seq: null }]);
+  ).catch(async () => {
+    return [{ last_seq: null }];
+  });
 
   const seq = (Number(seqRow?.last_seq ?? 0) + 1).toString().padStart(4, '0');
   return `${prefix}-${seq}`;
@@ -237,6 +239,11 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
+  const isSuperAdmin = (authz as any).role === 'SUPER_ADMIN' || req.headers.get('x-user-role') === 'SUPER_ADMIN';
+  if (!isSuperAdmin) {
+    return NextResponse.json({ error: 'SUPER_ADMIN role required for platform auto-invoicing' }, { status: 403 });
+  }
+
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
@@ -339,34 +346,35 @@ async function handlePOST(req: NextRequest) {
           })();
 
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_invoices
-               (invoice_number, client_name, client_email, module_source,
-                issue_date, due_date,
-                subtotal, vat_amount, total_amount,
-                payment_status, notes, line_items_json, tenant_id,
-                currency, vat_rate, discount_amount, paid_amount,
-                service_type, module, line_items)
-             VALUES ($1, $2, $3, $4,
-                     $5::date, $6::date,
-                     $7, $8, $9,
-                     'SENT', $10, $11::jsonb, $12,
-                     $13, 5, 0, 0,
-                     'SUBSCRIPTION', $14, $15::jsonb)`,
+            `INSERT INTO platform_subscription_invoices
+               (invoice_number, client_name, client_email, module_code, plan_tier, billing_cycle,
+                issue_date, due_date, subtotal, vat_amount, total_amount,
+                payment_status, notes, line_items_json, tenant_id, currency, vat_rate, paid_amount)
+             VALUES ($1, $2, $3, $4, $5, $6,
+                     $7::date, $8::date,
+                     $9, $10, $11,
+                     'SENT', $12, $13::jsonb, $14, $15, 5.00, 0.00)
+             ON CONFLICT (invoice_number) DO UPDATE
+                SET subtotal = EXCLUDED.subtotal,
+                    vat_amount = EXCLUDED.vat_amount,
+                    total_amount = EXCLUDED.total_amount,
+                    line_items_json = EXCLUDED.line_items_json,
+                    updated_at = NOW()`,
             invoiceNumber,
             tenantName,
             tenantEmail,
             sub.module_code,
+            sub.plan_tier,
+            sub.billing_cycle,
             issueDate,
             dueDate,
             subtotal,
             vatAmount,
             total,
-            `Auto-generated subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
+            `Auto-generated platform subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
             JSON.stringify(lineItems),
             sub.tenant_id,
-            sub.currency,
-            sub.module_code,
-            JSON.stringify(lineItems)
+            sub.currency ?? 'AED',
           );
 
           // 3e. Update subscription: next_billing_date + last_billed_date

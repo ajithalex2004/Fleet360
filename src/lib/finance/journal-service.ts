@@ -135,34 +135,16 @@ export async function assertPeriodOpen(
       : new Date(dateStr).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
 
-  let rows: Array<{ status?: string; period_name?: string }> = [];
-  try {
-    rows = await tx.$queryRawUnsafe(
-      `SELECT status, period_name
-         FROM finance_periods
-        WHERE tenant_id = $1
-          AND $2::date BETWEEN start_date AND end_date
-          AND status IN ('LOCKED', 'YEAR_END')
-        LIMIT 1`,
-      tenantId,
-      d,
-    );
-  } catch {
-    try {
-      rows = await tx.$queryRawUnsafe(
-        `SELECT status, period_name
-           FROM finance_periods
-          WHERE tenant_id = $1
-            AND $2::date BETWEEN period_from AND period_to
-            AND status IN ('LOCKED', 'YEAR_END')
-          LIMIT 1`,
-        tenantId,
-        d,
-      );
-    } catch {
-      rows = [];
-    }
-  }
+  const rows = (await tx.$queryRawUnsafe(
+    `SELECT status, period_name
+       FROM finance_periods
+      WHERE tenant_id = $1
+        AND $2::date BETWEEN period_from AND period_to
+        AND status IN ('LOCKED', 'YEAR_END')
+      LIMIT 1`,
+    tenantId,
+    d,
+  )) as Array<{ status?: string; period_name?: string }>;
 
   const locked = rows?.[0];
   if (locked && (locked.status === 'LOCKED' || locked.status === 'YEAR_END')) {

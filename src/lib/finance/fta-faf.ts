@@ -22,6 +22,35 @@ export interface FafCompanyInfo {
   defaultEmirate?: Emirate;
 }
 
+export interface FafGeneralLedgerRecord {
+  transactionDate: string; // YYYY-MM-DD
+  accountCode: string;
+  accountName: string;
+  transactionDescription: string;
+  transactionId: string;
+  debit: number;
+  credit: number;
+  balance?: number;
+}
+
+export interface FafCustomerRecord {
+  customerName: string;
+  customerId: string;
+  customerTrn?: string;
+  country?: string;
+  address?: string;
+  contactPerson?: string;
+}
+
+export interface FafSupplierRecord {
+  supplierName: string;
+  supplierId: string;
+  supplierTrn?: string;
+  country?: string;
+  address?: string;
+  contactPerson?: string;
+}
+
 export interface FafSupplyRecord {
   invoiceNo: string;
   invoiceDate: string; // YYYY-MM-DD
@@ -80,6 +109,9 @@ export interface FtaFafReport {
     box13RecoverableTax: number;
     box14NetVatPayableOrRefundable: number;
   };
+  generalLedger: FafGeneralLedgerRecord[];
+  customers: FafCustomerRecord[];
+  suppliers: FafSupplierRecord[];
   customerSupplies: FafSupplyRecord[];
   supplierPurchases: FafPurchaseRecord[];
 }
@@ -110,6 +142,9 @@ export function buildFtaFafReport(
   compInfo: FafCompanyInfo,
   supplies: FafSupplyRecord[],
   purchases: FafPurchaseRecord[],
+  generalLedger: FafGeneralLedgerRecord[] = [],
+  customers?: FafCustomerRecord[],
+  suppliers?: FafSupplierRecord[],
 ): FtaFafReport {
   const defaultEmirate = compInfo.defaultEmirate || 'Dubai';
   const emirateTotals = new Map<Emirate, { amount: number; vat: number }>();
@@ -185,12 +220,52 @@ export function buildFtaFafReport(
   const totalRecoverableVat = Number(normalizedPurchases.reduce((s, p) => s + p.vatValueAed, 0).toFixed(2));
   const netVat = Number((totalOutputVat - totalRecoverableVat).toFixed(2));
 
+  // Derive master customer directory if not supplied
+  const resolvedCustomers: FafCustomerRecord[] = customers && customers.length > 0
+    ? customers
+    : Array.from(
+        new Map(
+          normalizedSupplies.map(s => [
+            s.customerId || s.customerName,
+            {
+              customerName: s.customerName,
+              customerId: s.customerId || s.customerName,
+              customerTrn: s.customerTrn,
+              country: s.country || 'AE',
+              address: s.emirate || 'United Arab Emirates',
+              contactPerson: '',
+            },
+          ]),
+        ).values(),
+      );
+
+  // Derive master supplier directory if not supplied
+  const resolvedSuppliers: FafSupplierRecord[] = suppliers && suppliers.length > 0
+    ? suppliers
+    : Array.from(
+        new Map(
+          normalizedPurchases.map(p => [
+            p.supplierId || p.supplierName,
+            {
+              supplierName: p.supplierName,
+              supplierId: p.supplierId || p.supplierName,
+              supplierTrn: p.supplierTrn,
+              country: p.country || 'AE',
+              address: 'United Arab Emirates',
+              contactPerson: '',
+            },
+          ]),
+        ).values(),
+      );
+
+  const cleanTrn = normalizeTrn(compInfo.trn);
+
   return {
     fafVersion: 'FAF v1.0.0',
     creationDate: new Date().toISOString().slice(0, 10),
     compInfo: {
       ...compInfo,
-      trn: normalizeTrn(compInfo.trn) || '100000000000003',
+      trn: cleanTrn,
     },
     vat201Boxes: {
       box1StandardRatedByEmirate,
@@ -203,6 +278,9 @@ export function buildFtaFafReport(
       box13RecoverableTax: totalRecoverableVat,
       box14NetVatPayableOrRefundable: netVat,
     },
+    generalLedger,
+    customers: resolvedCustomers,
+    suppliers: resolvedSuppliers,
     customerSupplies: normalizedSupplies,
     supplierPurchases: normalizedPurchases,
   };
@@ -211,6 +289,14 @@ export function buildFtaFafReport(
 /**
  * Serializes the FTA Audit File (FAF v1.0.0) into the official multi-section CSV format
  * accepted by the UAE Federal Tax Authority EmaraTax portal.
+ *
+ * Mandatory Sections (FAF v1.0.0):
+ *   1. CompInfo
+ *   2. GeneralLedger
+ *   3. Customer
+ *   4. Supplier
+ *   5. CustomerSupply
+ *   6. SupplierPurchase
  */
 export function serializeFtaFafCsv(report: FtaFafReport): string {
   const lines: string[] = [];
@@ -235,7 +321,62 @@ export function serializeFtaFafCsv(report: FtaFafReport): string {
   lines.push('CompInfoEnd');
   lines.push('');
 
-  // Section 2: UAE Form VAT 201 Summary (Box 1a - 14)
+  // Section 2: GeneralLedger
+  lines.push('GeneralLedgerStart');
+  lines.push('TransactionDate,AccountID,AccountDescription,TransactionDescription,TransactionID,Debit,Credit,Balance');
+  let runningGlBalance = 0;
+  for (const gl of report.generalLedger || []) {
+    const d = Number(gl.debit || 0);
+    const c = Number(gl.credit || 0);
+    runningGlBalance = Number((runningGlBalance + d - c).toFixed(2));
+    const bal = gl.balance != null ? Number(gl.balance).toFixed(2) : runningGlBalance.toFixed(2);
+    lines.push([
+      csvCell(gl.transactionDate),
+      csvCell(gl.accountCode),
+      csvCell(gl.accountName),
+      csvCell(gl.transactionDescription),
+      csvCell(gl.transactionId),
+      csvCell(d.toFixed(2)),
+      csvCell(c.toFixed(2)),
+      csvCell(bal),
+    ].join(','));
+  }
+  lines.push('GeneralLedgerEnd');
+  lines.push('');
+
+  // Section 3: Customer Master Directory
+  lines.push('CustomerStart');
+  lines.push('CustomerName,CustomerID,CustomerTRN,Country,Address,ContactPerson');
+  for (const c of report.customers || []) {
+    lines.push([
+      csvCell(c.customerName),
+      csvCell(c.customerId),
+      csvCell(c.customerTrn || ''),
+      csvCell(c.country || 'AE'),
+      csvCell(c.address || ''),
+      csvCell(c.contactPerson || ''),
+    ].join(','));
+  }
+  lines.push('CustomerEnd');
+  lines.push('');
+
+  // Section 4: Supplier Master Directory
+  lines.push('SupplierStart');
+  lines.push('SupplierName,SupplierID,SupplierTRN,Country,Address,ContactPerson');
+  for (const s of report.suppliers || []) {
+    lines.push([
+      csvCell(s.supplierName),
+      csvCell(s.supplierId),
+      csvCell(s.supplierTrn || ''),
+      csvCell(s.country || 'AE'),
+      csvCell(s.address || ''),
+      csvCell(s.contactPerson || ''),
+    ].join(','));
+  }
+  lines.push('SupplierEnd');
+  lines.push('');
+
+  // Section 5: UAE Form VAT 201 Summary (Box 1a - 14)
   lines.push('VAT201SummaryStart');
   lines.push('Box,Description,Emirate,AmountAED,VATAmountAED,AdjustmentAED');
   for (const b of report.vat201Boxes.box1StandardRatedByEmirate) {
@@ -257,7 +398,7 @@ export function serializeFtaFafCsv(report: FtaFafReport): string {
   lines.push('VAT201SummaryEnd');
   lines.push('');
 
-  // Section 3: CustomerSupply
+  // Section 6: CustomerSupply
   lines.push('CustomerSupplyStart');
   lines.push('CustomerName,CustomerID,Country,TRN,InvoiceDate,InvoiceNo,LineNo,ProductDescription,SupplyValueAED,VATValueAED,TaxCode,FCYCode,SupplyFCY,VATFCY,Emirate');
   for (const s of report.customerSupplies) {
@@ -282,7 +423,7 @@ export function serializeFtaFafCsv(report: FtaFafReport): string {
   lines.push('CustomerSupplyEnd');
   lines.push('');
 
-  // Section 4: SupplierPurchase
+  // Section 7: SupplierPurchase
   lines.push('SupplierPurchaseStart');
   lines.push('SupplierName,SupplierID,Country,TRN,InvoiceDate,InvoiceNo,LineNo,ProductDescription,PurchaseValueAED,VATValueAED,TaxCode,FCYCode,PurchaseFCY,VATFCY');
   for (const p of report.supplierPurchases) {

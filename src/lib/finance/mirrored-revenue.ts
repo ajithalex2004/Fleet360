@@ -28,3 +28,14 @@ export function excludeMirrored(modules: readonly MirroredModule[], alias = ''):
   const col = alias ? `${alias}.module_source` : 'module_source';
   return ` AND COALESCE(${col}, '') NOT IN (${modules.map((m) => `'${m}'`).join(', ')})`;
 }
+
+/**
+ * Matches Freight Exchange commission invoices stored in `finance_invoices`
+ * using only real columns on `finance_invoices` (note: `finance_invoices` has
+ * no `source_type` column). Used by VAT endpoints to partition Exchange
+ * commission rows out of general `financeInv*` sums so they are counted once.
+ */
+export function exchangeCommissionSqlPredicate(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `(COALESCE(${p}module_source, '') = 'EXCHANGE' OR COALESCE(${p}module, '') = 'EXCHANGE' OR COALESCE(${p}service_type, '') = 'EXCHANGE_COMMISSION' OR COALESCE(${p}reference_type, '') = 'EXCHANGE_COMMISSION' OR COALESCE(${p}source_entity_type, '') = 'EXCHANGE_COMMISSION' OR ${p}invoice_number LIKE 'COMM-%')`;
+}

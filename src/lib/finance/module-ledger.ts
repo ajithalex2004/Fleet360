@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls, type TxClient } from '@/lib/rls';
 import { withSavepoint } from '@/lib/rental/locks';
 import { ensureLeaseContractTenantColumn } from '@/lib/leasing-governance';
-import { createDraftJournalEntry } from '@/lib/finance/journal-service';
+import { createDraftJournalEntry, postOperationalJournalEntry } from '@/lib/finance/journal-service';
 import { nextPayableNumber } from '@/lib/finance/payable-number';
 
 // ── Status mapping (Leasing / Rental → Finance) ───────────────────────────────
@@ -686,26 +686,29 @@ export async function mirrorMaintenanceToFinance(
     req.id,
   );
 
-  let journalEntryId = existingJE?.id;
-  let journalEntryNo = existingJE?.je_number;
+  let journalEntryId: string | undefined = existingJE?.id;
+  let journalEntryNo: string | undefined = existingJE?.je_number;
 
   if (!journalEntryId) {
-    const je = await createDraftJournalEntry({
+    const je = await postOperationalJournalEntry(prisma, {
       tenantId,
+      entryDate:   issueDate,
       narration:   description,
       reference:   workOrderNo,
       sourceType:  'MAINTENANCE_REQUEST',
       sourceId:    req.id,
-      amount:      cost,
       currency:    'AED',
       preparedBy:  actor,
       costCentre:  'PC-MAINTENANCE',
-      notes:       `Auto-generated on MR ${workOrderNo} completion. Vehicle: ${vehicleRef}`,
-      debit:  { code: '5120', name: 'Vehicle Maintenance & Repairs', description },
-      credit: { code: '2110', name: 'Accounts Payable — Trade',      description: `Accrual: ${workOrderNo}` },
+      idempotencyKey: `MAINTENANCE_REQUEST:${req.id}`,
+      lines: [
+        { code: '5120', name: 'Vehicle Maintenance & Repairs', description, debit: cost, credit: 0 },
+        { code: '1140', name: 'UAE Input VAT Recoverable (5%)', description: 'Input VAT on maintenance', debit: vatAmount, credit: 0 },
+        { code: '2110', name: 'Accounts Payable — Trade', description: `Accrual: ${workOrderNo}`, debit: 0, credit: total },
+      ],
     });
-    journalEntryId = je.id;
-    journalEntryNo = je.number;
+    journalEntryId = je?.id;
+    journalEntryNo = je?.number;
   }
 
   return {

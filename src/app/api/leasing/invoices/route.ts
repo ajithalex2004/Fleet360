@@ -8,6 +8,7 @@ import { withAudit } from '@/lib/with-audit';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 import type { Prisma } from '@prisma/client';
 import { mirrorLeaseInvoiceToFinance } from '@/lib/finance/module-ledger';
+import { postLeaseInvoiceToGl } from '@/lib/leasing/leasing-gl-posting';
 
 /**
  * Lease invoice list (GET) + issue (POST).
@@ -156,7 +157,7 @@ export const POST = withAudit(
         const count = await tx.leaseInvoice.count({ where: { tenantId } });
         const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
 
-        return tx.leaseInvoice.create({
+        const createdInvoice = await tx.leaseInvoice.create({
           data: {
             ...invoiceData,
             tenantId,
@@ -179,6 +180,33 @@ export const POST = withAudit(
           } as Prisma.LeaseInvoiceUncheckedCreateInput,
           include: { lines: true, lessee: { select: { name: true } } },
         });
+
+        if ((invoiceData.status || 'ISSUED') !== 'DRAFT') {
+          await tx.$executeRawUnsafe('SAVEPOINT sp_lease_inv_gl');
+          try {
+            const glEntry = await postLeaseInvoiceToGl(tx as any, {
+              invoiceId: createdInvoice.id,
+              tenantId,
+              preparedBy: req.headers.get('x-user-id') ?? 'leasing-api',
+            });
+            if (!glEntry) {
+              await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sp_lease_inv_gl');
+              await tx.$executeRawUnsafe('RELEASE SAVEPOINT sp_lease_inv_gl').catch(() => {});
+              console.warn('[leasing/invoices] postLeaseInvoiceToGl returned null; rolled back to savepoint', {
+                invoiceId: createdInvoice.id,
+                tenantId,
+              });
+            } else {
+              await tx.$executeRawUnsafe('RELEASE SAVEPOINT sp_lease_inv_gl');
+            }
+          } catch (err) {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sp_lease_inv_gl').catch(() => {});
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT sp_lease_inv_gl').catch(() => {});
+            console.warn('[leasing/invoices] postLeaseInvoiceToGl warning (rolled back to savepoint):', err);
+          }
+        }
+
+        return createdInvoice;
       });
 
       await mirrorLeaseInvoiceToFinance(invoice.id, tenantId, 'leasing-api').catch((err) =>

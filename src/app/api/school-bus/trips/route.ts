@@ -27,6 +27,13 @@ function serialize(rows: Row[]): Row[] {
   });
 }
 
+function isValidCalendarDate(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === dateStr;
+}
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -39,11 +46,14 @@ export async function GET(req: NextRequest) {
     try {
         const sp       = new URL(req.url).searchParams;
         const date     = sp.get('date')     ?? new Date().toISOString().slice(0, 10);
+        if (sp.has('date') && !isValidCalendarDate(date)) {
+          return NextResponse.json({ error: 'Invalid date parameter (expected valid YYYY-MM-DD)' }, { status: 400 });
+        }
         const status   = sp.get('status')   ?? '';
         const routeId  = sp.get('routeId')  ?? '';
         const search   = sp.get('search')   ?? '';
 
-        const conds: string[] = ['t.tenant_id = $1', 't.scheduled_date = $2'];
+        const conds: string[] = ['t.tenant_id = $1', 't.scheduled_date = $2::date'];
         const vals: unknown[] = [tenantId, date];
         const add = (c: string, v: unknown) => { vals.push(v); conds.push(`${c} = $${vals.length}`); };
 
@@ -64,7 +74,7 @@ export async function GET(req: NextRequest) {
           WHERE ${conds.join(' AND ')}
           GROUP BY t.id
           ORDER BY t.scheduled_start ASC NULLS LAST, t.created_at ASC
-        `, ...vals).catch(() => [] as Row[]);
+        `, ...vals);
 
         const data = serialize(rows);
         const summary = {
@@ -79,7 +89,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ trips: data, summary, date });
         } catch (err) {
         console.error('[school-bus/trips GET]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to fetch school bus trips' }, { status: 500 });
       }
   });
 }
@@ -108,11 +118,21 @@ export async function POST(req: NextRequest) {
 
         // Auto trip code
         const today = scheduledDate ?? new Date().toISOString().slice(0, 10);
+        if (scheduledDate !== undefined && scheduledDate !== null && !isValidCalendarDate(String(today))) {
+          return NextResponse.json({ error: 'Invalid scheduledDate (expected valid YYYY-MM-DD)' }, { status: 400 });
+        }
+        if (
+          scheduledStart !== undefined &&
+          scheduledStart !== null &&
+          (typeof scheduledStart !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(scheduledStart))
+        ) {
+          return NextResponse.json({ error: 'Invalid scheduledStart (expected HH:MM or HH:MM:SS)' }, { status: 400 });
+        }
         const [countRow] = await tx.$queryRawUnsafe<{ cnt: bigint }[]>(
-          `SELECT COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = $1 AND scheduled_date = $2`, tenantId, today,
+          `SELECT COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = $1 AND scheduled_date = $2::date`, tenantId, today,
         );
         const seq = String(Number(countRow?.cnt ?? 0) + 1).padStart(3, '0');
-        const tripCode = `TRIP-${today.replace(/-/g, '')}-${seq}`;
+        const tripCode = `TRIP-${String(today).replace(/-/g, '')}-${seq}`;
 
         const [row] = await tx.$queryRawUnsafe<Row[]>(`
           INSERT INTO school_bus_trips
@@ -120,7 +140,7 @@ export async function POST(req: NextRequest) {
              vehicle_id, vehicle_plate, driver_id, driver_name, attendant_id, attendant_name,
              direction, session, scheduled_date, scheduled_start,
              students_total, stops_total, status, notes)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::date,$15::time,$16,$17,$18,$19)
           RETURNING *
         `,
           tenantId, tripCode,
@@ -135,7 +155,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, trip: serialize([row])[0] }, { status: 201 });
         } catch (err) {
         console.error('[school-bus/trips POST]', err);
-        return NextResponse.json({ error: String(err) }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to create school bus trip' }, { status: 500 });
       }
   });
 }

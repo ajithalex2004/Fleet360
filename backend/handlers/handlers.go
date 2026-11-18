@@ -751,7 +751,7 @@ func GetPredictiveMaintenance(c *gin.Context) {
 				PredictedFailureDate: "2025-01-20",
 				Confidence:           85,
 				RecommendedAction:    "Inspect and replace brake pads",
-				EstimatedCost:        450.00,
+				EstimatedCost:        models.FromFils(45000),
 				RiskLevel:            "High",
 			})
 		}
@@ -766,7 +766,7 @@ func GetPredictiveMaintenance(c *gin.Context) {
 				PredictedFailureDate: "2025-03-15",
 				Confidence:           70,
 				RecommendedAction:    "Check tire tread depth",
-				EstimatedCost:        800.00,
+				EstimatedCost:        models.FromFils(80000),
 				RiskLevel:            "Medium",
 			})
 		}
@@ -781,7 +781,7 @@ func GetPredictiveMaintenance(c *gin.Context) {
 				PredictedFailureDate: "2025-02-10",
 				Confidence:           90,
 				RecommendedAction:    "Test battery health",
-				EstimatedCost:        250.00,
+				EstimatedCost:        models.FromFils(25000),
 				RiskLevel:            "High",
 			})
 		}
@@ -853,16 +853,16 @@ func GetPredictiveMaintenance(c *gin.Context) {
 			daysUntil := int(t.Sub(now).Hours() / 24)
 
 			if daysUntil <= 30 {
-				cost.CurrentMonth += p.EstimatedCost
+				cost.CurrentMonth = cost.CurrentMonth.Add(p.EstimatedCost)
 			}
 			if daysUntil > 30 && daysUntil <= 60 {
-				cost.NextMonth += p.EstimatedCost
+				cost.NextMonth = cost.NextMonth.Add(p.EstimatedCost)
 			}
 			if daysUntil <= 90 {
-				cost.Next3Months += p.EstimatedCost
+				cost.Next3Months = cost.Next3Months.Add(p.EstimatedCost)
 			}
 			if daysUntil <= 180 {
-				cost.Next6Months += p.EstimatedCost
+				cost.Next6Months = cost.Next6Months.Add(p.EstimatedCost)
 			}
 		}
 	}
@@ -877,9 +877,9 @@ func GetPredictiveMaintenance(c *gin.Context) {
 	}
 
 	// Simple Trend Logic
-	if cost.NextMonth > cost.CurrentMonth {
+	if cost.NextMonth.Cmp(cost.CurrentMonth) > 0 {
 		cost.Trend = "increasing"
-	} else if cost.NextMonth < cost.CurrentMonth {
+	} else if cost.NextMonth.Cmp(cost.CurrentMonth) < 0 {
 		cost.Trend = "decreasing"
 	}
 

@@ -116,9 +116,8 @@ function analyzeRouteFile(filePath) {
 
     if (match) {
       const handlerBody = match[1];
-      // Comments don't count: a note like "No requireAuthorizedTenant(): …"
-      // explaining why a handler is public used to pass as a call.
-      const hasAuthzCall = /requireAuthorizedTenant\s*\(/.test(stripComments(handlerBody));
+      const stripped = stripComments(handlerBody);
+      const hasAuthzCall = /requireAuthorizedTenant\s*\(/.test(stripped);
 
       if (!hasAuthzCall) {
         const exemption = ruleExemptionFor(relativePath, method);
@@ -139,6 +138,63 @@ function analyzeRouteFile(filePath) {
             message: `${method} handler missing requireAuthorizedTenant() call`,
             hasManualCheck,
           });
+        }
+      } else {
+        // Enforce that requireAuthorizedTenant result is verified via !auth.ok, never `instanceof NextResponse`
+        const hasInvalidInstanceof = /\b(?:auth|authz)\s+instanceof\s+NextResponse/.test(stripped);
+        if (hasInvalidInstanceof) {
+          unexemptedCount++;
+          violations.push({
+            type: 'invalid_auth_check',
+            method,
+            message: `${method} handler checks requireAuthorizedTenant result with 'instanceof NextResponse' (must check '!auth.ok')`,
+          });
+        } else {
+          // Verify that the requireAuthorizedTenant return value is actually checked via `.ok`
+          const assignMatch = stripped.match(/(?:const|let)\s+([a-zA-Z_$][\w$]*)\s*=\s*[^;\n]*requireAuthorizedTenant\s*\(/);
+          const inlinePassedToHelper = /\w+\s*\([^)]*requireAuthorizedTenant\s*\(/.test(stripped);
+          if (!assignMatch && !inlinePassedToHelper) {
+            unexemptedCount++;
+            violations.push({
+              type: 'unchecked_auth_result',
+              method,
+              message: `${method} handler calls requireAuthorizedTenant() without assigning or checking its result`,
+            });
+          } else if (assignMatch) {
+            const varName = assignMatch[1];
+            const okCheckRe = new RegExp(`!\\s*${varName}\\.ok\\b|\\b${varName}\\.ok\\s*(?:\\?|&&|\\|\\||===|!==)|if\\s*\\(\\s*${varName}\\.ok\\b`);
+            const passedToLocalHelper = new RegExp(`\\b([a-zA-Z_$][\\w$]*)\\s*\\([^)]*\\b${varName}\\b`, 'g');
+            let helperChecksOk = false;
+            let callMatch;
+            while ((callMatch = passedToLocalHelper.exec(stripped)) !== null) {
+              const helperName = callMatch[1];
+              const helperRe = new RegExp(`(?:async\\s+)?function\\s+${helperName}\\s*\\(([^)]*)\\)[^{]*\\{([\\s\\S]*?)\\n\\}`, 'm');
+              const hm = stripComments(content).match(helperRe);
+              if (hm && /\.ok\b/.test(hm[2])) {
+                helperChecksOk = true;
+                break;
+              }
+            }
+            if (!okCheckRe.test(stripped) && !helperChecksOk) {
+              unexemptedCount++;
+              violations.push({
+                type: 'unchecked_auth_result',
+                method,
+                message: `${method} handler assigns requireAuthorizedTenant() to '${varName}' but never checks '${varName}.ok'`,
+              });
+            } else {
+              // Ensure an `if (!varName.ok) { ... }` block actually returns or throws
+              const negGuard = new RegExp(`if\\s*\\(\\s*!\\s*${varName}\\.ok\\s*\\)\\s*\\{([^}]*)\\}`).exec(stripped);
+              if (negGuard && !/\b(return|throw)\b/.test(negGuard[1])) {
+                unexemptedCount++;
+                violations.push({
+                  type: 'unchecked_auth_result',
+                  method,
+                  message: `${method} handler checks '!${varName}.ok' without returning or throwing`,
+                });
+              }
+            }
+          }
         }
       }
     }
@@ -174,6 +230,12 @@ function formatViolations(filePath, analysis) {
       if (violation.hasManualCheck) {
         lines.push(`     Found manual x-tenant-id check (anti-pattern)`);
       }
+    } else if (violation.type === 'invalid_auth_check') {
+      lines.push(`   - ${violation.method} handler uses dead 'instanceof NextResponse' check on requireAuthorizedTenant result`);
+      lines.push(`     Fix: if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });`);
+    } else if (violation.type === 'unchecked_auth_result') {
+      lines.push(`   - ${violation.message}`);
+      lines.push(`     Fix: if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });`);
     }
   }
 

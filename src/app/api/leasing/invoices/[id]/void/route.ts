@@ -19,6 +19,8 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { logAudit } from '@/lib/audit';
+import { mirrorLeaseInvoiceToFinance } from '@/lib/finance/module-ledger';
+import { postLeaseInvoiceReversalToGl } from '@/lib/leasing/leasing-gl-posting';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -51,6 +53,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           status: 'CANCELLED',
           notes: `${invoice.notes ? invoice.notes + '\n' : ''}[${timestamp}] Voided by ${actor}${body.reason ? `: ${body.reason}` : ''}`,
         },
+      });
+
+      // Mirror void status to finance_invoices
+      await mirrorLeaseInvoiceToFinance(invoice.id, tenantId, 'leasing-void').catch((err) => {
+        console.warn('[leasing/void] mirrorLeaseInvoiceToFinance warning:', err);
+      });
+
+      // Post double-entry reversal to General Ledger
+      await postLeaseInvoiceReversalToGl(tx as any, {
+        invoiceId: invoice.id,
+        tenantId,
+        preparedBy: actor,
+        reason: body.reason,
+      }).catch((err) => {
+        console.warn('[leasing/void] postLeaseInvoiceReversalToGl warning:', err);
       });
 
       void logAudit({

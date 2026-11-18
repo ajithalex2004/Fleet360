@@ -5,12 +5,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { POST as trackingPOST } from '@/app/api/logistics/shipments/[id]/tracking/route';
 import { GET as etaGET } from '@/app/api/logistics/shipments/[id]/eta/route';
 
-const prisma = new PrismaClient();
 const TENANT = randomUUID();
 const SHIP = randomUUID();
 const DEST = { lat: 25.3600, lng: 55.3100 };
@@ -30,24 +30,27 @@ function getReq(id: string, tenant: string | null = TENANT): NextRequest {
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeAll(async () => {
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_orders
-       (id, tenant_id, shipment_no, status, currency, destination_name, delivery_window_to, created_at, updated_at)
-     VALUES ($1,$2,$3,'DISPATCHED','AED','Dubai WH','2026-06-22T12:00:00Z'::timestamptz, NOW(), NOW())`,
-    SHIP, TENANT, `ETAAPI-${SHIP.slice(0, 6)}`,
-  );
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_stops (tenant_id, shipment_order_id, sequence_no, stop_type, latitude, longitude, created_at, updated_at)
-     VALUES ($1,$2,2,'DELIVERY',$3,$4,NOW(),NOW())`,
-    TENANT, SHIP, DEST.lat, DEST.lng,
-  );
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_orders
+         (id, tenant_id, shipment_no, status, currency, destination_name, delivery_window_to, created_at, updated_at)
+       VALUES ($1,$2,$3,'DISPATCHED','AED','Dubai WH','2026-06-22T12:00:00Z'::timestamptz, NOW(), NOW())`,
+      SHIP, TENANT, `ETAAPI-${SHIP.slice(0, 6)}`,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_stops (tenant_id, shipment_order_id, sequence_no, stop_type, latitude, longitude, created_at, updated_at)
+       VALUES ($1,$2,2,'DELIVERY',$3,$4,NOW(),NOW())`,
+      TENANT, SHIP, DEST.lat, DEST.lng,
+    );
+  });
 }, 60_000);
 
 afterAll(async () => {
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_tracking_events WHERE tenant_id = $1`, TENANT).catch(() => {});
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = $1`, SHIP).catch(() => {});
-  await prisma.$disconnect();
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_tracking_events WHERE tenant_id = $1`, TENANT).catch(() => {});
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = $1`, SHIP).catch(() => {});
+  });
 });
 
 describe('GPS ingest + ETA API', () => {

@@ -15,12 +15,14 @@
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
-import { cleanupTenant, createTestRole, createTestTenant, createTestUser, createTestUserTenant, isServerRunning, makeRequest } from '../setup';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, createTestRole, createTestTenant, createTestUser, createTestUserTenant, isServerRunning, makeRequest } from '../setup';
 
 let serverUp = false;
-const testTenantId: string | null = null;
-const testUserId: string | null = null;
-const testRoleId: string | null = null;
+let testTenantId: string | null = null;
+let testUserId: string | null = null;
+let testRoleId: string | null = null;
+let createdPlatformRole = false;
 
 beforeAll(async () => {
   serverUp = await isServerRunning();
@@ -29,23 +31,52 @@ beforeAll(async () => {
     return;
   }
 
-  // Create a dedicated test tenant for the platform admin to log into,
-  // and seed a user on the platform SUPER_ADMIN role. We need an admin
-  // session, so we'll log in as the existing platform admin and probe
-  // their response.
+  // Ensure a platform SUPER_ADMIN exists in the local test database so login succeeds cleanly.
+  const existing = await withPlatformAdmin(basePrisma, (tx) =>
+    tx.user.findUnique({ where: { email: 'admin@xl-mobility.com' }, select: { id: true } }),
+  );
+  if (!existing) {
+    const tenant = await createTestTenant({ plan: 'ENTERPRISE' });
+    let role = await withPlatformAdmin(basePrisma, (tx) =>
+      tx.role.findFirst({ where: { tenantId: null, code: 'SUPER_ADMIN' } }),
+    );
+    if (!role) {
+      role = await withPlatformAdmin(basePrisma, (tx) =>
+        tx.role.create({
+          data: {
+            tenantId: null,
+            code: 'SUPER_ADMIN',
+            name: 'Platform Super Admin',
+            description: 'Platform-wide super administrator',
+            isSystem: true,
+          },
+        }),
+      );
+      createdPlatformRole = true;
+    }
+    const user = await createTestUser({
+      email: 'admin@xl-mobility.com',
+      password: 'TestAdmin123!',
+    });
+    await createTestUserTenant(user.id, tenant.id, role.id);
+    testTenantId = tenant.id;
+    testUserId = user.id;
+    testRoleId = role.id;
+  }
 });
 
 afterAll(async () => {
-  if (testRoleId) {
-    await basePrisma.rolePermission.deleteMany({ where: { roleId: testRoleId } });
-    await basePrisma.role.delete({ where: { id: testRoleId } }).catch(() => {});
-  }
   if (testUserId) {
-    await basePrisma.userTenant.deleteMany({ where: { userId: testUserId } });
-    await basePrisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+    await cleanupUser(testUserId);
   }
   if (testTenantId) {
     await cleanupTenant(testTenantId);
+  }
+  if (createdPlatformRole && testRoleId) {
+    await withPlatformAdmin(basePrisma, async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId: testRoleId! } });
+      await tx.role.delete({ where: { id: testRoleId! } }).catch(() => {});
+    });
   }
 });
 

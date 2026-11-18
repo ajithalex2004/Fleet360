@@ -21,6 +21,7 @@ import {
   ALL_RAC_PORTAL_ROLES,
   requireRacPortalRole,
 } from '../_helpers';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,9 +47,7 @@ const PatchMemberSchema = z.object({
 });
 
 function resolveAppOrigin(req: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim();
-  const base = configured || req.nextUrl.origin;
-  return base.replace(/\/$/, '');
+  return getPublicOrigin(req);
 }
 
 async function dispatchB2bOnboardingEmail(args: {

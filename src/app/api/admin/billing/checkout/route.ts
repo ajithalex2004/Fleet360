@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getStripe, getOrCreateCustomer, getPriceId, isStripeConfigured } from '@/lib/billing';
+import { getPublicOrigin } from '@/lib/public-origin';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { withAuditedAction } from '@/lib/audited-action';
@@ -59,7 +60,7 @@ async function handlePOST(req: NextRequest) {
     const customerId = await getOrCreateCustomer(tenantId);
     const stripe = getStripe();
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const baseUrl = getPublicOrigin(req);
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,

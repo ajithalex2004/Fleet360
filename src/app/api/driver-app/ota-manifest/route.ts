@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ const DRIVER_MIN_NATIVE_APK_VERSION =
 export async function GET(req: NextRequest) {
   const clientVersion = req.nextUrl.searchParams.get('version') || 'unknown';
   const platform = req.nextUrl.searchParams.get('platform') || 'web';
-  const origin = req.nextUrl.origin;
+  const origin = getPublicOrigin(req);
 
   const updateAvailable =
     clientVersion !== 'unknown' && clientVersion !== DRIVER_OTA_BUNDLE_VERSION;

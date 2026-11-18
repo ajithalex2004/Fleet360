@@ -13,7 +13,8 @@ import type { JobContext, JobResult } from '@/lib/jobs/registry';
 // check CRON_SECRET or x-tenant-id, so we forward both.
 
 async function forwardToRoute(path: string, ctx: JobContext, opts: { secretEnvVar?: string } = {}): Promise<JobResult> {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const port = process.env.PORT || '3000';
+  const base = process.env.INTERNAL_API_URL ?? `http://127.0.0.1:${port}`;
   const params = new URLSearchParams(ctx.searchParams);
   if (ctx.tenantId) params.set('tenantId', ctx.tenantId);
   else params.delete('tenantId');

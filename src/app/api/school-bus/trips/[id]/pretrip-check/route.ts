@@ -88,6 +88,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           },
         });
 
+        if (!assessment.overallPass && tripRows[0].vehicle_id) {
+          await tx.vehicle.update({
+            where: { id: tripRows[0].vehicle_id },
+            data: {
+              status: 'GROUNDED',
+              isActive: false,
+            },
+          }).catch(async () => {
+            await tx.$executeRawUnsafe(
+              `UPDATE vehicles SET status = 'GROUNDED', is_active = false, updated_at = NOW() WHERE id = $1`,
+              tripRows[0].vehicle_id,
+            ).catch(() => {});
+          });
+        }
+
         void logAudit({
           userId: req.headers.get('x-user-id') ?? 'system',
           userRole: req.headers.get('x-user-role') ?? 'DRIVER',

@@ -21,24 +21,25 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession, requireDriverSessionForTenant } from '@/lib/driver-session';
 import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app-actor';
+import { postOperationalJournalEntry } from '@/lib/finance/journal-service';
+import crypto from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   shiftId: z.string().uuid().optional(),
   // Optional — expenses may be unattributable to a specific trip
   // (e.g. a parking ticket before the trip roster was loaded, or
   // a meal between trips). If provided, we validate the driver is
   // actually assigned to it.
   tripId: z.string().uuid().optional(),
-  // TOLLS | PARKING | MEALS | FINES | OTHER. The CHECK constraint on
-  // expense_entries.category enforces these.
-  category: z.enum(['TOLLS', 'PARKING', 'MEALS', 'FINES', 'OTHER']),
-  // Minor currency units (fils for AED, paise for INR).
-  amountMinor: z.number().int().positive(),
+  category: z.string(),
+  amount: z.number().positive().optional(),
+  amountMinor: z.number().int().positive().optional(),
   currency: z.string().length(3).default('AED'),
   description: z.string().max(1000).optional(),
-  incurredAt: z.string().datetime().optional(),
+  receiptUrl: z.string().optional(),
+  incurredAt: z.string().optional(),
   notes: z.string().max(2000).optional(),
   billPhoto: z.object({
     id: z.string().uuid(),
@@ -120,8 +121,9 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = (await requireDriverSessionForTenant(req, tenantId));
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const ctx = (await requireDriverSessionForTenant(req, tenantId));
       if (ctx instanceof NextResponse) return ctx;
 
       const jsonRaw = await req.json().catch(() => null);
@@ -138,16 +140,64 @@ export async function POST(req: NextRequest) {
         ?? (await authorizeDriverReferences(tx, ctx, { shiftId: body.shiftId, tripId: body.tripId }));
       if (denied) return denied;
 
+      const entryId = body.id ?? crypto.randomUUID();
+      const amountMinor = body.amountMinor ?? (body.amount != null ? Math.round(body.amount * 100) : 0);
+      if (amountMinor <= 0) {
+        return NextResponse.json({ error: 'Amount must be greater than zero' }, { status: 400 });
+      }
+      const totalAmount = body.amount ?? (amountMinor / 100);
+
+      const incurredDate = body.incurredAt ? new Date(body.incurredAt) : new Date();
+      if (Number.isNaN(incurredDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid incurredAt timestamp' }, { status: 400 });
+      }
+      const incurredIso = incurredDate.toISOString();
+      const incurredDateStr = incurredIso.slice(0, 10);
+
+      // Clean category and map to DB enum
+      const rawCat = (body.category || 'OTHER').toUpperCase().trim();
+      let dbCategory: 'TOLLS' | 'PARKING' | 'MEALS' | 'FINES' | 'OTHER' = 'OTHER';
+      let glCode = '5160';
+      let glName = 'Operating Expenses - Other';
+
+      if (rawCat.includes('TOLL') || rawCat.includes('SALIK')) {
+        dbCategory = 'TOLLS';
+        glCode = '5130';
+        glName = 'Operating Expenses - Tolls & Salik';
+      } else if (rawCat.includes('PARK')) {
+        dbCategory = 'PARKING';
+        glCode = '5140';
+        glName = 'Operating Expenses - Parking';
+      } else if (rawCat.includes('MEAL') || rawCat.includes('FOOD')) {
+        dbCategory = 'MEALS';
+        glCode = '5160';
+        glName = 'Operating Expenses - Driver Meals & Incidentals';
+      } else if (rawCat.includes('FINE')) {
+        dbCategory = 'FINES';
+        glCode = '5170';
+        glName = 'Operating Expenses - Traffic Fines';
+      } else if (rawCat.includes('WASH') || rawCat.includes('CLEAN')) {
+        dbCategory = 'OTHER';
+        glCode = '5150';
+        glName = 'Operating Expenses - Cleaning & Washing';
+      } else if (rawCat.includes('REPAIR') || rawCat.includes('MAINT')) {
+        dbCategory = 'OTHER';
+        glCode = '5110';
+        glName = 'Maintenance & Repairs - Vehicle';
+      }
+
+      const expenseStatus = totalAmount > 500 ? 'PENDING_APPROVAL' : 'SUBMITTED';
+
       // Idempotency
       const existing = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM expense_entries
-        WHERE id = ${body.id}::uuid
+        WHERE id = ${entryId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid
           AND driver_id = ${ctx.userId}::uuid
         LIMIT 1
       `;
       if (existing.length > 0) {
-        return NextResponse.json({ ok: true, entryId: existing[0].id, idempotent: true });
+        return NextResponse.json({ ok: true, id: existing[0].id, entryId: existing[0].id, status: expenseStatus, idempotent: true });
       }
 
       // Validate trip ownership — only if a tripId was provided. The
@@ -188,17 +238,17 @@ export async function POST(req: NextRequest) {
           category, amount_minor, currency, description,
           bill_photo_id, incurred_at, notes, created_at, updated_at
         ) VALUES (
-          ${body.id}::uuid,
+          ${entryId}::uuid,
           ${ctx.tenantId}::uuid,
           ${shiftId}::uuid,
           ${resolvedTripId}::uuid,
           ${ctx.userId}::uuid,
-          ${body.category},
-          ${body.amountMinor},
+          ${dbCategory},
+          ${amountMinor},
           ${body.currency},
           ${body.description ?? null},
           ${null}::uuid,
-          ${body.incurredAt ?? new Date().toISOString()}::timestamptz,
+          ${incurredIso}::timestamptz,
           ${body.notes ?? null},
           NOW(),
           NOW()
@@ -211,7 +261,7 @@ export async function POST(req: NextRequest) {
           INSERT INTO expense_entry_photos (id, expense_entry_id, tenant_id, mime, size, data, taken_at, created_at)
           VALUES (
             ${body.billPhoto.id}::uuid,
-            ${body.id}::uuid,
+            ${entryId}::uuid,
             ${ctx.tenantId}::uuid,
             ${body.billPhoto.mime},
             ${body.billPhoto.size},
@@ -222,16 +272,82 @@ export async function POST(req: NextRequest) {
         `;
         await tx.$executeRaw`
           UPDATE expense_entries SET bill_photo_id = ${body.billPhoto.id}::uuid, updated_at = NOW()
-          WHERE id = ${body.id}::uuid
+          WHERE id = ${entryId}::uuid
         `;
+      }
+
+      // Bridge to finance.finance_expenses atomically inside withTenantRls
+      const expenseNo = `EXP-${entryId.slice(0, 8).toUpperCase()}`;
+      await tx.$executeRawUnsafe(
+        `INSERT INTO finance_expenses (
+           id, expense_no, category, description,
+           amount, currency, vat_amount, total_amount,
+           expense_date, status, driver_id,
+           reference_no, tenant_id, created_at, updated_at
+         ) VALUES (
+           $1, $2, $3, $4,
+           $5, $6, $7, $8,
+           $9::date, $10, $11,
+           $12, $13, NOW(), NOW()
+         ) ON CONFLICT DO NOTHING`,
+        entryId,
+        expenseNo,
+        rawCat,
+        body.description ?? `${rawCat} expense`,
+        totalAmount,
+        body.currency,
+        0,
+        totalAmount,
+        incurredDateStr,
+        expenseStatus,
+        ctx.userId ?? null,
+        entryId,
+        ctx.tenantId,
+      );
+
+      // Post General Ledger lines atomically inside withTenantRls
+      const glEntry = await postOperationalJournalEntry(tx as any, {
+        tenantId: ctx.tenantId,
+        entryDate: incurredDateStr,
+        narration: `Driver expense: ${rawCat} - ${body.description || 'Driver submitted expense'}`,
+        reference: expenseNo,
+        sourceType: 'DRIVER_EXPENSE',
+        sourceId: entryId,
+        currency: body.currency,
+        preparedBy: ctx.userId ?? 'system',
+        lines: [
+          {
+            code: glCode,
+            name: glName,
+            description: body.description ?? `${rawCat} expense`,
+            debit: totalAmount,
+            credit: 0,
+          },
+          {
+            code: '2100',
+            name: 'Driver Reimbursement Payable',
+            description: `Reimbursement payable for ${entryId.slice(0, 8)}`,
+            debit: 0,
+            credit: totalAmount,
+          },
+        ],
+      });
+      if (!glEntry) {
+        throw new Error('Failed to post GL journal entry for driver expense');
       }
 
       return NextResponse.json({
         ok: true,
-        entryId: body.id,
+        id: entryId,
+        entryId,
         shiftId,
-        hasBillPhoto: !!body.billPhoto,
+        status: expenseStatus,
+        hasBillPhoto: !!body.billPhoto || !!body.receiptUrl,
       }, { status: 201 });
-  });
+    });
+  } catch (err) {
+    console.error('[driver-app/expenses POST]', err);
+    return NextResponse.json({ error: 'Failed to record driver expense' }, { status: 500 });
+  }
 }
 

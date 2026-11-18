@@ -41,6 +41,8 @@ interface JwtPayload {
   permissions?: readonly string[] | null;
   /** The tenant's plan (TRIAL is read-only outside trial-free modules). */
   plan?: string | null;
+  /** Real user ID if the current session is an impersonation session. */
+  impersonatedBy?: string | null;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function signJwtForBackend(payload: JwtPayload): Promise<string> {
     exp: now + JWT_TTL_SECONDS,
     ...(payload.permissions ? { perms: encodePermissionClaim(payload.permissions) } : {}),
     ...(payload.plan ? { plan: payload.plan } : {}),
+    ...(payload.impersonatedBy ? { impersonated_by: payload.impersonatedBy } : {}),
   };
 
   const encodedHeader = base64UrlEncodeString(JSON.stringify(header));

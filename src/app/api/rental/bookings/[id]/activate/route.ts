@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
+import { requireApproved } from '@/lib/workflow/approvals';
 import {
   withRentalLock,
   nextRentalSerial,
@@ -60,6 +61,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     req.nextUrl.pathname,
   );
   if (permErr) return permErr;
+
+  // With a Booking Approval workflow, only an approved booking is activated.
+  const gate = await requireApproved({
+    headers: req.headers,
+    tenantId,
+    referenceType: 'rental_booking',
+    referenceId: params.id,
+  });
+  if (gate) return gate;
 
   const allowCreditOverride = await hasRentalPermission(
     req.headers,

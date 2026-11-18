@@ -14,6 +14,7 @@ import * as oidc from 'openid-client';
 import { findSsoConfigByEmail } from '@/lib/sso';
 import { signSsoState } from '@/lib/sso-state';
 import { captureException } from '@/lib/sentry';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 
@@ -45,8 +46,8 @@ export async function GET(req: NextRequest) {
     const state         = oidc.randomState();
     const nonce         = oidc.randomNonce();
 
-    const baseUrl    = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/auth/sso/callback`;
+    const baseUrl    = getPublicOrigin(req);
+    const redirectUri = `${baseUrl}/api/auth/sso/callback`;
 
     const authUrl = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
@@ -81,8 +82,6 @@ export async function GET(req: NextRequest) {
 }
 
 function redirectTo(req: NextRequest, path: string): NextResponse {
-  const url = new URL(req.url);
-  url.pathname = path.split('?')[0];
-  url.search   = path.includes('?') ? '?' + path.split('?')[1] : '';
+  const url = new URL(path, getPublicOrigin(req));
   return NextResponse.redirect(url);
 }

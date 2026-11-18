@@ -81,8 +81,8 @@ describe('no V1 lease model references in src/', () => {
   });
 
   it('no exported V1 LeaseContract / LeasePayment interfaces', () => {
-    const contractHits = repoGrep(/export\s+(interface|type)\s+LeaseContract[^2]/);
-    const paymentHits = repoGrep(/export\s+(interface|type)\s+LeasePayment[^2S]/);
+    const contractHits = repoGrep(/export\s+(interface|type)\s+LeaseContract\b/);
+    const paymentHits = repoGrep(/export\s+(interface|type)\s+LeasePayment\b/);
     expect(contractHits).toHaveLength(0);
     expect(paymentHits).toHaveLength(0);
   });

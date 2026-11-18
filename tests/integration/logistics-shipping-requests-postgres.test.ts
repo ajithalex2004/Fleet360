@@ -16,6 +16,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 import {
   createShippingRequest,
   listShippingRequests,
@@ -39,7 +41,7 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
         code: `shipreq-test-${suffix}`,
       },
     });
-    await prisma.$executeRawUnsafe(
+    await withTenantRls(prisma, tenantId, (tx) => tx.$executeRawUnsafe(
       `INSERT INTO customers (id, tenant_id, customer_type, name_en, email, mobile_number)
        VALUES ($1, $2, 'CORPORATE', $3, $4, $5)`,
       shipperId,
@@ -47,22 +49,23 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
       `Shipping Request Test Shipper ${suffix}`,
       `shipper-${suffix}@example.test`,
       '+971500000000',
-    );
+    ));
   });
 
   afterAll(async () => {
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_document_sequences WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_tracking_events WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_cargo_lines WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipping_requests WHERE tenant_id = $1`, tenantId);
-    await prisma.$executeRawUnsafe(`DELETE FROM customers WHERE tenant_id = $1`, tenantId);
+    await withTenantRls(prisma, tenantId, async (tx) => {
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_document_sequences WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_tracking_events WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_cargo_lines WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM logistics_shipping_requests WHERE tenant_id = $1`, tenantId);
+      await tx.$executeRawUnsafe(`DELETE FROM customers WHERE tenant_id = $1`, tenantId);
+    });
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
-    await prisma.$disconnect();
   });
 
-  it('creates a shipping request scoped to the tenant/shipper', async () => {
+  it('creates a shipping request scoped to the tenant/shipper', () => runAsTenant(tenantId, async () => {
     const req = await createShippingRequest({
       tenantId,
       shipperId,
@@ -77,15 +80,15 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     expect(req!.shipperId).toBe(shipperId);
     expect(req!.status).toBe('SUBMITTED');
     expect(req!.requestNo).toMatch(/^SR-\d{2}\d{5}$/);
-  });
+  }));
 
-  it('rejects a shipper that does not belong to the tenant', async () => {
+  it('rejects a shipper that does not belong to the tenant', () => runAsTenant(tenantId, async () => {
     await expect(
       createShippingRequest({ tenantId, shipperId: crypto.randomUUID(), source: 'OPERATOR' }),
     ).rejects.toBeInstanceOf(LogisticsValidationError);
-  });
+  }));
 
-  it('lists and fetches the created request', async () => {
+  it('lists and fetches the created request', () => runAsTenant(tenantId, async () => {
     const list = await listShippingRequests({ tenantId, limit: 10 });
     expect(list.length).toBeGreaterThanOrEqual(1);
     const found = list.find(r => r.shipperId === shipperId);
@@ -95,9 +98,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     expect(fetched).not.toBeNull();
     expect(fetched!.id).toBe(found!.id);
     expect(fetched!.shipperName).toContain('Shipping Request Test Shipper');
-  });
+  }));
 
-  it('refuses to convert a request directly from SUBMITTED state without being ACCEPTED', async () => {
+  it('refuses to convert a request directly from SUBMITTED state without being ACCEPTED', () => runAsTenant(tenantId, async () => {
     const req = await createShippingRequest({
       tenantId,
       shipperId,
@@ -111,9 +114,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     await expect(
       convertShippingRequest({ tenantId, requestId: req!.id }),
     ).rejects.toThrowError(/Only ACCEPTED shipping requests can be converted/);
-  });
+  }));
 
-  it('advances status to ACCEPTED then converts into a shipment order with full database state assertions', async () => {
+  it('advances status to ACCEPTED then converts into a shipment order with full database state assertions', () => runAsTenant(tenantId, async () => {
     const target = await createShippingRequest({
       tenantId,
       shipperId,
@@ -182,9 +185,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
       result.shipmentOrderId,
     );
     expect(trackingRows).toHaveLength(1);
-  });
+  }));
 
-  it('refuses to convert an already-converted request', async () => {
+  it('refuses to convert an already-converted request', () => runAsTenant(tenantId, async () => {
     const list = await listShippingRequests({ tenantId, status: 'CONVERTED', limit: 10 });
     const converted = list[0];
     expect(converted).toBeDefined();
@@ -192,9 +195,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     await expect(
       convertShippingRequest({ tenantId, requestId: converted.id }),
     ).rejects.toBeInstanceOf(LogisticsValidationError);
-  });
+  }));
 
-  it('guarantees atomic conversion and blocks concurrent duplicate conversions of the same request', async () => {
+  it('guarantees atomic conversion and blocks concurrent duplicate conversions of the same request', () => runAsTenant(tenantId, async () => {
     const req = await createShippingRequest({
       tenantId,
       shipperId,
@@ -238,9 +241,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
       freshReq!.shipmentOrderId,
     );
     expect(shipmentRows).toHaveLength(1);
-  });
+  }));
 
-  it('produces strictly unique sequential numbers during concurrent creation of different requests', async () => {
+  it('produces strictly unique sequential numbers during concurrent creation of different requests', () => runAsTenant(tenantId, async () => {
     // Fire 5 concurrent createShippingRequest calls for different requests
     const creations = await Promise.all(
       Array.from({ length: 5 }, (_, i) =>
@@ -262,9 +265,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     for (const no of requestNos) {
       expect(no).toMatch(/^SR-\d{7}$/);
     }
-  });
+  }));
 
-  it('produces strictly unique sequential shipment numbers during concurrent conversion of different accepted requests', async () => {
+  it('produces strictly unique sequential shipment numbers during concurrent conversion of different accepted requests', () => runAsTenant(tenantId, async () => {
     // 1. Create 3 distinct shipping requests
     const createdRequests = await Promise.all(
       Array.from({ length: 3 }, (_, i) =>
@@ -308,9 +311,9 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     for (const no of shipmentNos) {
       expect(no).toMatch(/^SHP-LOG-\d{7}$/);
     }
-  });
+  }));
 
-  it('rolls back entire transaction on forced failure during child record creation', async () => {
+  it('rolls back entire transaction on forced failure during child record creation', () => runAsTenant(tenantId, async () => {
     const goodsDescription = `Rollback Test Goods ${Date.now()}`;
     const req = await createShippingRequest({
       tenantId,
@@ -360,23 +363,23 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
       tenantId,
     );
     expect(cargoLines).toHaveLength(0);
-  });
+  }));
 
-  it('refuses to convert a rejected request', async () => {
+  it('refuses to convert a rejected request', () => runAsTenant(tenantId, async () => {
     const req = await createShippingRequest({ tenantId, shipperId, source: 'OPERATOR' });
     await updateShippingRequestStatus({ tenantId, requestId: req!.id, status: 'REJECTED', reviewNotes: 'No capacity' });
 
     await expect(
       convertShippingRequest({ tenantId, requestId: req!.id }),
     ).rejects.toBeInstanceOf(LogisticsValidationError);
-  });
+  }));
 
   it('does not leak requests across tenants', async () => {
     const otherTenantId = crypto.randomUUID();
-    const otherList = await listShippingRequests({ tenantId: otherTenantId, limit: 10 });
+    const otherList = await runAsTenant(otherTenantId, () => listShippingRequests({ tenantId: otherTenantId, limit: 10 }));
     expect(otherList).toHaveLength(0);
 
-    const list = await listShippingRequests({ tenantId, limit: 50 });
+    const list = await runAsTenant(tenantId, () => listShippingRequests({ tenantId, limit: 50 }));
     for (const r of list) {
       expect(r.tenantId).toBe(tenantId);
     }

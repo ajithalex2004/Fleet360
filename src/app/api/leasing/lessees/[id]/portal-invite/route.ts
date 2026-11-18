@@ -24,6 +24,7 @@ import {
   listPortalUsersByLessee,
 } from '@/lib/leasing-portal/portal-users-store';
 import { createInvitation, sendInvitationEmail } from '@/lib/leasing-portal/invitations';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       invitedByUserId,
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const baseUrl = getPublicOrigin(req);
     const emailResult = await sendInvitationEmail({
       tenantId,
       recipientEmail: email,

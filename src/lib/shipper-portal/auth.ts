@@ -32,6 +32,9 @@ function getSecret(): string {
     ?? process.env.SESSION_SECRET
     ?? process.env.AUTH_SECRET;
   if (!s) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SHIPPER_PORTAL_SESSION_SECRET must be configured in production');
+    }
     // Dev fallback only — log loudly so it's noticed before production.
     console.warn(
       '[shipper-portal/auth] No SHIPPER_PORTAL_SESSION_SECRET / SESSION_SECRET set — ' +

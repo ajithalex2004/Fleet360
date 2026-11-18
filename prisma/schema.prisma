@@ -63,8 +63,8 @@ model PartUsage {
   id           String     @id
   partName     String
   quantityUsed Int
-  unitCost     Float
-  totalCost    Float
+  unitCost     Decimal    @map("unit_cost") @db.Decimal(15, 2)
+  totalCost    Decimal    @map("total_cost") @db.Decimal(15, 2)
   source       PartSource
   workOrderId  String
   WorkOrder    WorkOrder  @relation(fields: [workOrderId], references: [id])
@@ -528,7 +528,8 @@ model Invoice {
   createdAt        DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6)
-  invoiceNumber    String?           @unique(map: "idx_invoices_invoice_number") @map("invoice_number")
+  tenantId         String?           @map("tenant_id")
+  invoiceNumber    String?           @map("invoice_number")
   requestId        String?           @map("request_id")
   garageId         String?           @map("garage_id")
   invoiceDate      DateTime?         @map("invoice_date") @db.Timestamptz(6)
@@ -539,6 +540,8 @@ model Invoice {
   invoiceLineItems InvoiceLineItem[]
   attachments      Attachment[]
 
+  @@unique([tenantId, invoiceNumber], map: "idx_invoices_tenant_invoice_number")
+  @@index([tenantId], map: "idx_invoices_tenant_id")
   @@index([deletedAt], map: "idx_invoices_deleted_at")
   @@index([garageId], map: "idx_invoices_garage_id")
   @@index([paymentStatus], map: "idx_invoices_payment_status")
@@ -773,8 +776,8 @@ model Vehicle {
   model        String?
   type         String?
   year         BigInt?
-  licensePlate String? @unique(map: "idx_vehicles_license_plate") @map("license_plate")
-  vin          String? @unique(map: "idx_vehicles_vin")
+  licensePlate String? @map("license_plate")
+  vin          String?
   color        String?
   fuelType     String? @map("fuel_type")
 
@@ -850,6 +853,8 @@ model Vehicle {
   @@index([tenantId], map: "idx_vehicles_tenant_id")
   @@index([homeDepotId], map: "idx_vehicles_home_depot")
   @@index([tenantId])
+  @@unique([tenantId, licensePlate], map: "idx_vehicles_tenant_license_plate")
+  @@unique([tenantId, vin], map: "idx_vehicles_tenant_vin")
   @@map("vehicles")
   @@schema("public")
 }
@@ -3426,8 +3431,8 @@ model FuelLog {
   driverId     String?   @map("driver_id")
   fuelDate     DateTime  @map("fuel_date") @db.Timestamptz(6)
   liters       Float
-  costPerLiter Float?    @map("cost_per_liter")
-  totalCost    Float?    @map("total_cost")
+  costPerLiter Decimal?  @map("cost_per_liter") @db.Decimal(15, 4)
+  totalCost    Decimal?  @map("total_cost") @db.Decimal(15, 2)
   mileage      Int?
   station      String?
   fuelCardId   String?   @map("fuel_card_id")
@@ -3444,14 +3449,15 @@ model FuelLog {
 model FuelCard {
   id             String    @id @default(uuid())
   tenantId   String    @map("tenant_id")
-  cardNumber     String    @unique @map("card_number")
+  cardNumber     String    @map("card_number")
   vehicleId      String?   @map("vehicle_id")
   driverId       String?   @map("driver_id")
-  monthlyLimit   Float?    @map("monthly_limit")
-  currentBalance Float?    @map("current_balance")
+  monthlyLimit   Decimal?  @map("monthly_limit") @db.Decimal(15, 2)
+  currentBalance Decimal?  @map("current_balance") @db.Decimal(15, 2)
   isActive       Boolean?  @default(true) @map("is_active")
   expiryDate     DateTime? @map("expiry_date") @db.Timestamptz(6)
 
+  @@unique([tenantId, cardNumber], map: "idx_fuel_cards_tenant_card_number")
   @@map("fuel_cards")
   @@schema("public")
   @@index([tenantId])
@@ -3465,7 +3471,7 @@ model TrafficFine {
   driverId          String?   @map("driver_id")
   rentalAgreementId String?   @map("rental_agreement_id")
   fineDate          DateTime  @map("fine_date") @db.Timestamptz(6)
-  fineAmount        Float     @map("fine_amount")
+  fineAmount        Decimal   @map("fine_amount") @db.Decimal(15, 2)
   adminFee          Decimal?  @default(0) @map("admin_fee") @db.Decimal(10, 2)
   knowledgeFee      Decimal?  @default(0) @map("knowledge_fee") @db.Decimal(10, 2)
   authority         String? // RTA|POLICE|MUNICIPALITY
@@ -3728,14 +3734,45 @@ model SalikAccount {
   tenantId       String    @map("tenant_id")
   tagNumber      String    @map("tag_number")
   vehicleId      String?   @map("vehicle_id")
-  balance        Float?    @default(0)
+  balance        Decimal?  @default(0) @db.Decimal(15, 2)
   autoRecharge   Boolean?  @default(false) @map("auto_recharge")
-  rechargeAmount Float?    @map("recharge_amount")
+  rechargeAmount Decimal?  @map("recharge_amount") @db.Decimal(15, 2)
   isActive       Boolean?  @default(true) @map("is_active")
 
   @@unique([tenantId, tagNumber], map: "uq_salik_accounts_tenant_tag")
   @@index([tenantId], map: "idx_salik_accounts_tenant_id")
   @@map("salik_accounts")
+  @@schema("public")
+}
+
+model PlatformSubscriptionInvoice {
+  id            String    @id @default(uuid())
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId      String    @map("tenant_id")
+  invoiceNumber String    @map("invoice_number")
+  clientName    String?   @map("client_name")
+  clientEmail   String?   @map("client_email")
+  moduleCode    String?   @map("module_code")
+  planTier      String?   @map("plan_tier")
+  billingCycle  String?   @map("billing_cycle")
+  issueDate     DateTime  @map("issue_date") @db.Date
+  dueDate       DateTime  @map("due_date") @db.Date
+  subtotal      Decimal   @db.Decimal(15, 2)
+  vatRate       Decimal   @default(5.00) @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount     Decimal   @default(0.00) @map("vat_amount") @db.Decimal(15, 2)
+  totalAmount   Decimal   @map("total_amount") @db.Decimal(15, 2)
+  currency      String    @default("AED")
+  paymentStatus String    @default("SENT") @map("payment_status")
+  paidAmount    Decimal   @default(0.00) @map("paid_amount") @db.Decimal(15, 2)
+  notes         String?
+  lineItemsJson Json?     @map("line_items_json")
+
+  @@unique([tenantId, invoiceNumber], map: "idx_platform_subscription_invoices_tenant_no")
+  @@index([tenantId], map: "idx_platform_subscription_invoices_tenant_id")
+  @@index([paymentStatus], map: "idx_platform_subscription_invoices_status")
+  @@map("platform_subscription_invoices")
   @@schema("public")
 }
 
@@ -3745,6 +3782,7 @@ model SalikAccount {
 
 model ReportSchedule {
   id         String    @id @default(uuid())
+  tenantId   String    @default("default") @map("tenant_id")
   createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   reportName String    @map("report_name")
   reportType String    @map("report_type") // FLEET_UTILIZATION|REVENUE|MAINTENANCE_COST|DRIVER_PERFORMANCE
@@ -3755,6 +3793,7 @@ model ReportSchedule {
   nextRunAt  DateTime? @map("next_run_at") @db.Timestamptz(6)
   isActive   Boolean?  @default(true) @map("is_active")
 
+  @@index([tenantId], map: "idx_report_schedules_tenant")
   @@map("report_schedules")
   @@schema("public")
 }
@@ -4821,7 +4860,7 @@ model LeaseInvoice {
   updatedAt     DateTime?          @updatedAt @map("updated_at") @db.Timestamptz(6)
   // Tenant scope — added by Layer 2.5 leasing migration 20260627000001.
   tenantId      String             @map("tenant_id")
-  invoiceNo     String?            @unique @map("invoice_no")
+  invoiceNo     String?            @map("invoice_no")
   lesseeId      String             @map("lessee_id")
   billingPeriod String?            @map("billing_period")
   issueDate     DateTime           @map("issue_date") @db.Timestamptz(6)
@@ -4848,6 +4887,7 @@ model LeaseInvoice {
   dunningCollectionCycle Int      @default(1) @map("dunning_collection_cycle")
 
   @@unique([tenantId, id], map: "uq_lease_invoices_tenant_id")
+  @@unique([tenantId, invoiceNo], map: "uq_lease_invoices_tenant_no")
   @@index([tenantId], map: "idx_lease_invoices_tenant_id")
   @@map("lease_invoices")
   @@schema("public")
@@ -5243,7 +5283,7 @@ model Customer {
   tenantId  String?   @map("tenant_id")
 
   // Basic Info
-  customerCode          String? @unique @map("customer_code")
+  customerCode          String? @map("customer_code")
   customerType          String  @map("customer_type") // INTERNAL|CORPORATE|INDIVIDUAL|WALK_IN|VIP
   priority              String? // LOW|MEDIUM|HIGH|VIP
   accountCode           String? @map("account_code")
@@ -5319,6 +5359,7 @@ model Customer {
   interactions CustomerInteraction[]
   lessee       Lessee?
 
+  @@unique([tenantId, customerCode], map: "uq_customers_tenant_code")
   @@index([tenantId])
   @@map("customers")
   @@schema("public")
@@ -5410,7 +5451,7 @@ model FinanceExpense {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  expenseNo   String   @unique @map("expense_no")
+  expenseNo   String   @map("expense_no")
   category    String // FUEL|TOLL|MAINTENANCE|INSURANCE|DRIVER_ALLOWANCE|OFFICE|REPAIRS|OTHER
   subCategory String?  @map("sub_category")
   description String
@@ -5447,6 +5488,8 @@ model FinanceExpense {
   // ownership is enforced at the application/RPC layer, not the DB).
   tenantId String? @map("tenant_id")
 
+  @@unique([tenantId, expenseNo], map: "uq_finance_expenses_tenant_no")
+  @@index([tenantId], map: "idx_finance_expenses_tenant_id")
   @@map("finance_expenses")
   @@schema("finance")
 }
@@ -5970,7 +6013,7 @@ model FinanceInvoice {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  invoiceNumber      String    @unique @map("invoice_number")
+  invoiceNumber      String    @map("invoice_number")
   clientName         String    @map("client_name")
   clientEmail        String?   @map("client_email")
   clientPhone        String?   @map("client_phone")
@@ -6026,6 +6069,7 @@ model FinanceInvoice {
   payments     FinancePayment[]
   allocations  FinancePaymentAllocation[]
 
+  @@unique([tenantId, invoiceNumber], map: "idx_finance_invoices_tenant_no")
   @@index([moduleSource, referenceType, referenceId], map: "idx_finance_invoices_source")
   @@index([sourceEntityType, sourceEntityId], map: "idx_finance_invoices_source_entity")
   @@index([tenantId], map: "idx_finance_invoices_tenant_id")

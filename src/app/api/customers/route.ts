@@ -42,13 +42,28 @@ export async function GET(req: NextRequest) {
           tenantId,
         ).catch(() => {});
 
-        let whereClause = `WHERE c.deleted_at IS NULL AND c.id NOT LIKE 'cli-%'`;
-        if (status)       whereClause += ` AND c.status = '${status.replace(/'/g,"''")}'`;
-        if (customerType) whereClause += ` AND c.customer_type = '${customerType.replace(/'/g,"''")}'`;
-        if (search) {
-          const s = search.replace(/'/g, "''");
-          whereClause += ` AND (c.name_en ILIKE '%${s}%' OR c.customer_code ILIKE '%${s}%' OR c.email ILIKE '%${s}%' OR c.mobile_number ILIKE '%${s}%' OR c.account_code ILIKE '%${s}%')`;
+        const whereClauses: string[] = [
+          `c.tenant_id = $1`,
+          `c.deleted_at IS NULL`,
+          `c.id NOT LIKE 'cli-%'`,
+        ];
+        const params: unknown[] = [tenantId];
+
+        if (status) {
+          params.push(status);
+          whereClauses.push(`c.status = $${params.length}`);
         }
+        if (customerType) {
+          params.push(customerType);
+          whereClauses.push(`c.customer_type = $${params.length}`);
+        }
+        if (search) {
+          params.push(`%${search}%`);
+          const sIdx = params.length;
+          whereClauses.push(`(c.name_en ILIKE $${sIdx} OR c.customer_code ILIKE $${sIdx} OR c.email ILIKE $${sIdx} OR c.mobile_number ILIKE $${sIdx} OR c.account_code ILIKE $${sIdx})`);
+        }
+
+        const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
 
         const customers = await tx.$queryRawUnsafe(`
           SELECT c.*,
@@ -59,9 +74,9 @@ export async function GET(req: NextRequest) {
           LEFT JOIN customer_hierarchy r ON c.region_id     = r.id
           LEFT JOIN customer_hierarchy d ON c.department_id = d.id
           LEFT JOIN customer_hierarchy u ON c.unit_id       = u.id
-          ${whereClause}
+          ${whereSql}
           ORDER BY c.created_at DESC
-        `);
+        `, ...params);
 
         // Shape the response to match the frontend 'Customer' interface (camelCase)
         const shaped = (customers as any[]).map(c => ({
@@ -182,7 +197,6 @@ export async function POST(req: NextRequest) {
         }
 
         const now = new Date().toISOString();
-        const safeTenantId = tenantId.replace(/'/g, "''");
 
         // Validate hierarchy foreign keys (regionId, departmentId, unitId) before INSERT so 23503 FK errors never happen
         const cleanRegionId = typeof body.regionId === 'string' && body.regionId.trim() ? body.regionId.trim() : null;
@@ -197,79 +211,54 @@ export async function POST(req: NextRequest) {
           ).catch(() => []);
           for (const r of hRows) validHIds.add(r.id);
         }
-        const safeRegionId = cleanRegionId && validHIds.has(cleanRegionId) ? `'${cleanRegionId.replace(/'/g, "''")}'` : 'NULL';
-        const safeDepartmentId = cleanDepartmentId && validHIds.has(cleanDepartmentId) ? `'${cleanDepartmentId.replace(/'/g, "''")}'` : 'NULL';
-        const safeUnitId = cleanUnitId && validHIds.has(cleanUnitId) ? `'${cleanUnitId.replace(/'/g, "''")}'` : 'NULL';
+        const resolvedRegionId = cleanRegionId && validHIds.has(cleanRegionId) ? cleanRegionId : null;
+        const resolvedDepartmentId = cleanDepartmentId && validHIds.has(cleanDepartmentId) ? cleanDepartmentId : null;
+        const resolvedUnitId = cleanUnitId && validHIds.has(cleanUnitId) ? cleanUnitId : null;
 
-        await tx.$executeRawUnsafe(`
-          INSERT INTO customers (
-            id, tenant_id, created_at, updated_at, customer_code, customer_type, priority,
-            account_code, trade_license, name_en, name_ar, description_en, description_ar,
-            email, mobile_number, mobile_country_code, communication_language,
-            region_id, department_id, unit_id,
-            contact_person, contact_person_phone, contact_person_email,
-            address_line1, address_line2, city, state, country, po_box,
-            tax_registration_number, tax_applicable, toll_exempt,
-            credit_limit, credit_days, allowed_payment_methods, default_payment_method,
-            billing_cycle, invoice_frequency, invoice_delivery_method,
-            payment_reminder_days, late_fee_percentage, auto_invoice,
-            allowed_waiting_time_min, cancellation_allowed_min, allowed_booking_modifications,
-            skip_approval, preferred_channel, notification_email,
-            notification_sms_code, notification_sms,
-            marketing_communications, booking_notifications, status
-          ) VALUES (
-            '${id}', '${safeTenantId}', '${now}', '${now}',
-            ${body.customerCode ? `'${body.customerCode.replace(/'/g,"''")}'` : 'NULL'},
-            '${body.customerType}',
-            ${body.priority ? `'${body.priority}'` : 'NULL'},
-            ${body.accountCode ? `'${body.accountCode.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.tradeLicense ? `'${body.tradeLicense.replace(/'/g,"''")}'` : 'NULL'},
-            '${body.nameEn.replace(/'/g,"''")}',
-            ${body.nameAr ? `'${body.nameAr.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.descriptionEn ? `'${body.descriptionEn.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.descriptionAr ? `'${body.descriptionAr.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.email ? `'${body.email.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.mobileNumber ? `'${body.mobileNumber.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.mobileCountryCode ? `'${body.mobileCountryCode}'` : "'+971'"},
-            ${body.communicationLanguage ? `'${body.communicationLanguage}'` : "'en'"},
-            ${safeRegionId},
-            ${safeDepartmentId},
-            ${safeUnitId},
-            ${body.contactPerson ? `'${body.contactPerson.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.contactPersonPhone ? `'${body.contactPersonPhone.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.contactPersonEmail ? `'${body.contactPersonEmail.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.addressLine1 ? `'${body.addressLine1.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.addressLine2 ? `'${body.addressLine2.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.city ? `'${body.city.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.state ? `'${body.state.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.country ? `'${body.country.replace(/'/g,"''")}'` : "'UAE'"},
-            ${body.poBox ? `'${body.poBox.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.taxRegistrationNumber ? `'${body.taxRegistrationNumber.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.taxApplicable !== false ? 'true' : 'false'},
-            ${body.tollExempt === true ? 'true' : 'false'},
-            ${body.creditLimit != null ? Number(body.creditLimit) : 'NULL'},
-            ${body.creditDays != null ? Number(body.creditDays) : 'NULL'},
-            ${body.allowedPaymentMethods ? `'${body.allowedPaymentMethods.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.defaultPaymentMethod ? `'${body.defaultPaymentMethod}'` : 'NULL'},
-            ${body.billingCycle ? `'${body.billingCycle}'` : 'NULL'},
-            ${body.invoiceFrequency ? `'${body.invoiceFrequency}'` : 'NULL'},
-            ${body.invoiceDeliveryMethod ? `'${body.invoiceDeliveryMethod}'` : 'NULL'},
-            ${body.paymentReminderDays != null ? Number(body.paymentReminderDays) : 'NULL'},
-            ${body.lateFeePercentage != null ? Number(body.lateFeePercentage) : 'NULL'},
-            ${body.autoInvoice === true ? 'true' : 'false'},
-            ${body.allowedWaitingTimeMin != null ? Number(body.allowedWaitingTimeMin) : 'NULL'},
-            ${body.cancellationAllowedMin != null ? Number(body.cancellationAllowedMin) : 'NULL'},
-            ${body.allowedBookingModifications != null ? Number(body.allowedBookingModifications) : 'NULL'},
-            ${body.skipApproval === true ? 'true' : 'false'},
-            ${body.preferredChannel ? `'${body.preferredChannel}'` : 'NULL'},
-            ${body.notificationEmail ? `'${body.notificationEmail.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.notificationSmsCode ? `'${body.notificationSmsCode}'` : "'+971'"},
-            ${body.notificationSms ? `'${body.notificationSms.replace(/'/g,"''")}'` : 'NULL'},
-            ${body.marketingCommunications === true ? 'true' : 'false'},
-            ${body.bookingNotifications !== false ? 'true' : 'false'},
-            '${body.status ?? 'ACTIVE'}'
-          )
-        `);
+        const insertCols = [
+          'id', 'tenant_id', 'created_at', 'updated_at', 'customer_code', 'customer_type', 'priority',
+          'account_code', 'trade_license', 'name_en', 'name_ar', 'description_en', 'description_ar',
+          'email', 'mobile_number', 'mobile_country_code', 'communication_language',
+          'region_id', 'department_id', 'unit_id',
+          'contact_person', 'contact_person_phone', 'contact_person_email',
+          'address_line1', 'address_line2', 'city', 'state', 'country', 'po_box',
+          'tax_registration_number', 'tax_applicable', 'toll_exempt',
+          'credit_limit', 'credit_days', 'allowed_payment_methods', 'default_payment_method',
+          'billing_cycle', 'invoice_frequency', 'invoice_delivery_method',
+          'payment_reminder_days', 'late_fee_percentage', 'auto_invoice',
+          'allowed_waiting_time_min', 'cancellation_allowed_min', 'allowed_booking_modifications',
+          'skip_approval', 'preferred_channel', 'notification_email',
+          'notification_sms_code', 'notification_sms',
+          'marketing_communications', 'booking_notifications', 'status'
+        ];
+        const insertVals = [
+          id, tenantId, now, now, body.customerCode ?? null, body.customerType, body.priority ?? null,
+          body.accountCode ?? null, body.tradeLicense ?? null, body.nameEn, body.nameAr ?? null, body.descriptionEn ?? null, body.descriptionAr ?? null,
+          body.email ?? null, body.mobileNumber ?? null, body.mobileCountryCode ?? '+971', body.communicationLanguage ?? 'en',
+          resolvedRegionId, resolvedDepartmentId, resolvedUnitId,
+          body.contactPerson ?? null, body.contactPersonPhone ?? null, body.contactPersonEmail ?? null,
+          body.addressLine1 ?? null, body.addressLine2 ?? null, body.city ?? null, body.state ?? null, body.country ?? 'UAE', body.poBox ?? null,
+          body.taxRegistrationNumber ?? null, body.taxApplicable !== false, body.tollExempt === true,
+          body.creditLimit != null ? Number(body.creditLimit) : null, body.creditDays != null ? Number(body.creditDays) : null,
+          body.allowedPaymentMethods ?? null, body.defaultPaymentMethod ?? null,
+          body.billingCycle ?? null, body.invoiceFrequency ?? null, body.invoiceDeliveryMethod ?? null,
+          body.paymentReminderDays != null ? Number(body.paymentReminderDays) : null,
+          body.lateFeePercentage != null ? Number(body.lateFeePercentage) : null,
+          body.autoInvoice === true,
+          body.allowedWaitingTimeMin != null ? Number(body.allowedWaitingTimeMin) : null,
+          body.cancellationAllowedMin != null ? Number(body.cancellationAllowedMin) : null,
+          body.allowedBookingModifications != null ? Number(body.allowedBookingModifications) : null,
+          body.skipApproval === true, body.preferredChannel ?? null, body.notificationEmail ?? null,
+          body.notificationSmsCode ?? '+971', body.notificationSms ?? null,
+          body.marketingCommunications === true, body.bookingNotifications !== false,
+          body.status ?? 'ACTIVE',
+        ];
+        const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(', ');
+
+        await tx.$executeRawUnsafe(
+          `INSERT INTO customers (${insertCols.join(', ')}) VALUES (${placeholders})`,
+          ...insertVals,
+        );
 
         // Also auto-create a linked Lessee if type is CORPORATE or INDIVIDUAL (wrapped in SAVEPOINT so tx never aborts)
         if (['CORPORATE','INDIVIDUAL','VIP'].includes(body.customerType)) {
@@ -278,18 +267,21 @@ export async function POST(req: NextRequest) {
             const lesseeId = randomUUID();
             await tx.$executeRawUnsafe(`
               INSERT INTO lessees (id, tenant_id, created_at, updated_at, name, type, trade_license, contact_person, email, phone, customer_id)
-              VALUES (
-                '${lesseeId}', '${safeTenantId}', '${now}', '${now}',
-                '${body.nameEn.replace(/'/g,"''")}',
-                '${body.customerType === 'INDIVIDUAL' ? 'individual' : 'corporate'}',
-                ${body.tradeLicense ? `'${body.tradeLicense.replace(/'/g,"''")}'` : 'NULL'},
-                ${body.contactPerson ? `'${body.contactPerson.replace(/'/g,"''")}'` : 'NULL'},
-                ${body.email ? `'${body.email.replace(/'/g,"''")}'` : 'NULL'},
-                ${body.mobileNumber ? `'${body.mobileNumber.replace(/'/g,"''")}'` : 'NULL'},
-                '${id}'
-              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
               ON CONFLICT DO NOTHING
-            `);
+            `,
+              lesseeId,
+              tenantId,
+              now,
+              now,
+              body.nameEn,
+              body.customerType === 'INDIVIDUAL' ? 'individual' : 'corporate',
+              body.tradeLicense ?? null,
+              body.contactPerson ?? null,
+              body.email ?? null,
+              body.mobileNumber ?? null,
+              id,
+            );
             await tx.$executeRawUnsafe(`RELEASE SAVEPOINT sp_create_lessee`);
           } catch (e) {
             await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT sp_create_lessee`).catch(() => {});
@@ -297,7 +289,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${id}'`);
+        const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = $1 AND tenant_id = $2`, id, tenantId);
         return NextResponse.json((rows as any[])[0], { status: 201 });
         } catch (e) {
         console.error('POST /api/customers error:', e);

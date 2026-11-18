@@ -6,7 +6,7 @@
   //   • Finance API routes            src/app/api/finance/**
   //   • Billing API routes            src/app/api/billing/**
   //   • Tenant-branches API routes    src/app/api/tenant-branches/**
-  //   • Finance UI pages              src/app/(dashboard)/finance/**
+  //   • Finance UI pages              src/app/(app)/finance/**
   //   • Domain-level lib helpers      src/lib/finance*.ts  (if added later)
   //
   // Files outside this list are excluded so Finance type errors are not
@@ -36,8 +36,8 @@
     "src/app/api/tenant-branches/**/*.tsx",
 
     // Finance UI pages
-    "src/app/(dashboard)/finance/**/*.ts",
-    "src/app/(dashboard)/finance/**/*.tsx",
+    "src/app/(app)/finance/**/*.ts",
+    "src/app/(app)/finance/**/*.tsx",
 
     // Shared lib files pulled in by Finance routes
     // (prisma client, rls helpers, audit, redis — needed for type resolution)

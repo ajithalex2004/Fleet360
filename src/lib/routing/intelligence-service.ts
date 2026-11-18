@@ -14,6 +14,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 import {
   CanonicalLocation,
   DistanceMatrixResult,
@@ -550,7 +551,7 @@ export class RoutingIntelligenceService {
       }
 
       // Asynchronously persist to PostgreSQL route_matrix_cache
-      this.persistCacheEntries(rowsToInsert, tier, expiresAt).catch((err) =>
+      runOutsideRlsScope(() => this.persistCacheEntries(rowsToInsert, tier, expiresAt)).catch((err) =>
         console.warn('[routing-cache] Failed to persist matrix cache:', err),
       );
     }

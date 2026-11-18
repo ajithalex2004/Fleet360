@@ -21,7 +21,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const body = stripTenantOwnershipFields(rawBody);
   const editedRoutes = Array.isArray(body.editedRoutes)
     ? (body.editedRoutes as Array<{ vehicleId: string; stopOrder: string[] }>)
-    : [];
+    : Array.isArray(body.routes)
+      ? (body.routes as Array<{ vehicleId: string; stopOrder: string[] }>)
+      : [];
   const unassign = Array.isArray(body.unassign) ? body.unassign.map(String) : undefined;
 
   try {

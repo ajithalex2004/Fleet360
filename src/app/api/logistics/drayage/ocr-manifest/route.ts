@@ -745,156 +745,115 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         })
         .filter((c) => c.containerNumber.length >= 4);
 
+    const effectiveMime = isPdf
+      ? 'application/pdf'
+      : mimeType.startsWith('image/')
+        ? mimeType
+        : 'image/jpeg';
+    const dataUri = `data:${effectiveMime};base64,${fileBuffer.toString('base64')}`;
+    const fullPrompt =
+      extractedPdfText.length > 20
+        ? `${strictPrompt}\n\nVerbatim Digital Text Layer from PDF:\n${extractedPdfText.slice(0, 30000)}`
+        : strictPrompt;
+
     if (geminiKey) {
-      const effectiveMime = isPdf
-        ? 'application/pdf'
-        : mimeType.startsWith('image/')
-          ? mimeType
-          : 'image/jpeg';
-
-      for (const modelName of ['gemini-2.0-flash', 'gemini-flash-latest']) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
-          const parts: Array<Record<string, unknown>> = [{ text: strictPrompt }];
-          if (extractedPdfText.length > 20) {
-            parts.push({ text: `\nVerbatim Digital Text Layer from PDF:\n${extractedPdfText.slice(0, 30000)}` });
-          }
-          parts.push({
-            inline_data: {
-              mime_type: effectiveMime,
-              data: fileBuffer.toString('base64'),
-            },
-          });
-
-          const geminiRes = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts }],
-              generationConfig: {
-                temperature: 0,
-                maxOutputTokens: 4096,
-                responseMimeType: 'application/json',
-                responseSchema: GEMINI_MANIFEST_SCHEMA,
-              },
-            }),
-            signal: AbortSignal.timeout(30000),
-          });
-
-          if (geminiRes.ok) {
-            const data = (await geminiRes.json()) as {
-              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-            };
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-            const parsed = cleanJsonResponse(text);
-            if (parsed && Array.isArray(parsed.containers) && parsed.containers.length > 0) {
-              const containers = mapParsedContainers(parsed.containers as Array<Record<string, unknown>>);
-              if (containers.length > 0) {
-                const result: ExtractedManifestResult = {
-                  blOrDoNumber: String(parsed.blOrDoNumber || '').trim(),
-                  shippingLine: String(parsed.shippingLine || '').trim(),
-                  vesselVoyage: String(parsed.vesselVoyage || '').trim(),
-                  customerName: String(parsed.customerName || '').trim(),
-                  terminalName: String(parsed.terminalName || '').trim(),
-                  warehouseName: String(parsed.warehouseName || '').trim(),
-                  shipmentType: String(parsed.shipmentType || '').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT',
-                  notes: String(parsed.notes || '').trim(),
-                  containers,
-                  provider: 'gemini-vision',
-                  fileName,
-                  confidencePct: Number(parsed.confidencePct || 99),
-                };
-                return NextResponse.json({ ok: true, manifest: result });
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(`[ocr-manifest] Gemini (${modelName}) extraction error:`, err);
-        }
-      }
-    }
-
-    // 4. OpenAI High-Accuracy Vision (supports both PDFs via file part and images via image_url)
-    if (openAiKey) {
       try {
-        const userContent: Array<Record<string, unknown>> = [{ type: 'text', text: strictPrompt }];
-        if (extractedPdfText.length > 20) {
-          userContent.push({
-            type: 'text',
-            text: `\nVerbatim Digital Text Layer from PDF:\n${extractedPdfText.slice(0, 25000)}`,
-          });
-        }
-        if (isPdf) {
-          userContent.push({
-            type: 'file',
-            file: {
-              filename: fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`,
-              file_data: `data:application/pdf;base64,${fileBuffer.toString('base64')}`,
-            },
-          });
-        } else {
-          const imgMime = mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
-          userContent.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${imgMime};base64,${fileBuffer.toString('base64')}`,
-              detail: 'high',
-            },
-          });
-        }
-
-        const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${openAiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o',
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are a deterministic UAE port manifest & Delivery Order OCR engine. Return ONLY valid JSON matching the requested schema. Never invent values not present in the document.',
-              },
-              { role: 'user', content: userContent },
-            ],
-            response_format: { type: 'json_object' },
-            max_tokens: 4000,
-            temperature: 0,
-          }),
-          signal: AbortSignal.timeout(35000),
+        const { aiGateway } = await import('@/lib/agents/gateway');
+        const visionRes = await aiGateway.vision([dataUri], fullPrompt, {
+          tenantId: authz.tenantId,
+          agentId: 'drayage-ocr-manifest',
+          eventType: 'DRAYAGE_MANIFEST_OCR',
+          capabilityAlias: 'VISION_FAST',
+          preferredProvider: 'gemini',
+          modelOverride: 'gemini-flash-latest',
+          maxTokens: 4096,
+          temperature: 0,
+          timeoutMs: 30_000,
+          responseFormat: 'json',
+          responseSchema: GEMINI_MANIFEST_SCHEMA,
         });
 
-        if (oaRes.ok) {
-          const oaData = (await oaRes.json()) as {
-            choices?: Array<{ message?: { content?: string } }>;
-          };
-          const text = oaData.choices?.[0]?.message?.content ?? '';
-          const parsed = cleanJsonResponse(text);
-          if (parsed && Array.isArray(parsed.containers) && parsed.containers.length > 0) {
-            const containers = mapParsedContainers(parsed.containers as Array<Record<string, unknown>>);
-            if (containers.length > 0) {
-              const result: ExtractedManifestResult = {
-                blOrDoNumber: String(parsed.blOrDoNumber || '').trim(),
-                shippingLine: String(parsed.shippingLine || '').trim(),
-                vesselVoyage: String(parsed.vesselVoyage || '').trim(),
-                customerName: String(parsed.customerName || '').trim(),
-                terminalName: String(parsed.terminalName || '').trim(),
-                warehouseName: String(parsed.warehouseName || '').trim(),
-                shipmentType: String(parsed.shipmentType || '').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT',
-                notes: String(parsed.notes || '').trim(),
-                containers,
-                provider: 'openai-vision',
-                fileName,
-                confidencePct: Number(parsed.confidencePct || 98),
-              };
-              return NextResponse.json({ ok: true, manifest: result });
-            }
+        const parsed = cleanJsonResponse(visionRes.content);
+        if (parsed && Array.isArray(parsed.containers) && parsed.containers.length > 0) {
+          const containers = mapParsedContainers(parsed.containers as Array<Record<string, unknown>>);
+          if (containers.length > 0) {
+            const result: ExtractedManifestResult = {
+              blOrDoNumber: String(parsed.blOrDoNumber || '').trim(),
+              shippingLine: String(parsed.shippingLine || '').trim(),
+              vesselVoyage: String(parsed.vesselVoyage || '').trim(),
+              customerName: String(parsed.customerName || '').trim(),
+              terminalName: String(parsed.terminalName || '').trim(),
+              warehouseName: String(parsed.warehouseName || '').trim(),
+              shipmentType: String(parsed.shipmentType || '').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT',
+              notes: String(parsed.notes || '').trim(),
+              containers,
+              provider: 'gemini-vision',
+              fileName,
+              confidencePct: Number(parsed.confidencePct || 99),
+            };
+            return NextResponse.json({ ok: true, manifest: result });
           }
         }
       } catch (err) {
-        console.warn('[ocr-manifest] OpenAI vision error:', err);
+        if (err instanceof Error && /rate limit/i.test(err.message)) {
+          return NextResponse.json({ error: err.message }, { status: 429 });
+        }
+        if (err instanceof Error && /budget|quota|circuit breaker/i.test(err.message)) {
+          return NextResponse.json({ error: err.message }, { status: 402 });
+        }
+        console.warn('[ocr-manifest] Gemini extraction via aiGateway failed:', err);
+      }
+    }
+
+    // 4. OpenAI High-Accuracy Vision via AI Gateway (supports both PDFs via file part and images via image_url)
+    if (openAiKey) {
+      try {
+        const { aiGateway } = await import('@/lib/agents/gateway');
+        const visionRes = await aiGateway.vision([dataUri], fullPrompt, {
+          tenantId: authz.tenantId,
+          agentId: 'drayage-ocr-manifest',
+          eventType: 'DRAYAGE_MANIFEST_OCR',
+          capabilityAlias: 'VISION_HIGH_ACCURACY',
+          preferredProvider: 'openai',
+          modelOverride: 'gpt-4o',
+          systemPrompt:
+            'You are a deterministic UAE port manifest & Delivery Order OCR engine. Return ONLY valid JSON matching the requested schema. Never invent values not present in the document.',
+          detail: 'high',
+          maxTokens: 4000,
+          temperature: 0,
+          timeoutMs: 35_000,
+          responseFormat: 'json',
+        });
+
+        const parsed = cleanJsonResponse(visionRes.content);
+        if (parsed && Array.isArray(parsed.containers) && parsed.containers.length > 0) {
+          const containers = mapParsedContainers(parsed.containers as Array<Record<string, unknown>>);
+          if (containers.length > 0) {
+            const result: ExtractedManifestResult = {
+              blOrDoNumber: String(parsed.blOrDoNumber || '').trim(),
+              shippingLine: String(parsed.shippingLine || '').trim(),
+              vesselVoyage: String(parsed.vesselVoyage || '').trim(),
+              customerName: String(parsed.customerName || '').trim(),
+              terminalName: String(parsed.terminalName || '').trim(),
+              warehouseName: String(parsed.warehouseName || '').trim(),
+              shipmentType: String(parsed.shipmentType || '').toUpperCase() === 'EXPORT' ? 'EXPORT' : 'IMPORT',
+              notes: String(parsed.notes || '').trim(),
+              containers,
+              provider: 'openai-vision',
+              fileName,
+              confidencePct: Number(parsed.confidencePct || 98),
+            };
+            return NextResponse.json({ ok: true, manifest: result });
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && /rate limit/i.test(err.message)) {
+          return NextResponse.json({ error: err.message }, { status: 429 });
+        }
+        if (err instanceof Error && /budget|quota|circuit breaker/i.test(err.message)) {
+          return NextResponse.json({ error: err.message }, { status: 402 });
+        }
+        console.warn('[ocr-manifest] OpenAI vision via aiGateway failed:', err);
       }
     }
 

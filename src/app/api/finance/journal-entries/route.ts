@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
-import { nextJournalNumber } from '@/lib/finance/journal-service';
+import { nextJournalNumber, assertPeriodOpen } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type JeRow   = Record<string, unknown>;
@@ -150,20 +150,51 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Resolve account names from Chart of Accounts.
+      const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
+      try {
+        await assertPeriodOpen(tx, tenantId, entryDate);
+      } catch (periodErr: any) {
+        return NextResponse.json(
+          { error: periodErr.message || 'Cannot post to locked accounting period' },
+          { status: periodErr.statusCode || 422 },
+        );
+      }
+
+      // Resolve account names from Chart of Accounts and validate controls.
       const accountCodes = lines.map(l => l.accountCode);
       const accounts = await tx.$queryRawUnsafe<
-        { account_code: string; account_name: string; normal_balance: string }[]
+        { account_code: string; account_name: string; normal_balance: string; is_header?: boolean; is_active?: boolean }[]
       >(
-        `SELECT account_code, account_name, normal_balance
+        `SELECT account_code, account_name, normal_balance, is_header, is_active
            FROM finance_chart_of_accounts
           WHERE account_code = ANY($1::text[]) AND tenant_id = $2`,
         accountCodes, tenantId,
       );
       const accMap = new Map(accounts.map(a => [a.account_code, a]));
 
+      for (const code of accountCodes) {
+        const acc = accMap.get(code);
+        if (!acc) {
+          return NextResponse.json(
+            { error: `Account code "${code}" does not exist in chart of accounts` },
+            { status: 422 },
+          );
+        }
+        if (acc.is_header) {
+          return NextResponse.json(
+            { error: `Account code "${code}" is a summary header account and cannot accept journal postings` },
+            { status: 422 },
+          );
+        }
+        if (acc.is_active === false) {
+          return NextResponse.json(
+            { error: `Account code "${code}" is inactive and cannot accept journal postings` },
+            { status: 422 },
+          );
+        }
+      }
+
       const jeNumber  = await nextJournalNumber(tx, tenantId);
-      const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
       const d         = new Date(entryDate);
 
       const [je] = await tx.$queryRawUnsafe<JeRow[]>(

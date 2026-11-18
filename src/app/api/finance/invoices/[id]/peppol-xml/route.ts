@@ -23,6 +23,7 @@ import {
   toEmirateIsoCode,
   type TenantTaxAndPeppolMetadata,
 } from '@/lib/finance/uae';
+import { validateOutboundWebhookUrl } from '@/lib/rental-channels';
 
 export const dynamic = 'force-dynamic';
 
@@ -804,7 +805,23 @@ async function loadInvoice(
   if (!inv) return null;
   const vatPct = Number(inv.vatPct ?? 5);
   const lines = inv.lines.length > 0
-    ? inv.lines.map((l, i) => line(i + 1, l.description || 'Fleet leasing services', Number(l.quantity ?? 1), Number(l.unitAmount), vatPct))
+    ? inv.lines.map((l, i) => {
+        const outOfScope = isOutOfScopeFineItem(l.lineType, false, (l as { taxCategory?: unknown }).taxCategory);
+        const lineCategory: PeppolTaxCategoryCode = outOfScope ? 'O' : vatPct > 0 ? 'S' : 'Z';
+        const lineVatPct = outOfScope ? 0 : vatPct;
+        const lineExemptionReason = outOfScope ? STATUTORY_FINE_EXEMPTION_REASON : undefined;
+        return line(
+          i + 1,
+          l.description || 'Fleet leasing services',
+          Number(l.quantity ?? 1),
+          Number(l.unitAmount),
+          lineVatPct,
+          l.description || undefined,
+          lineCategory,
+          undefined,
+          lineExemptionReason,
+        );
+      })
     : [line(1, 'Fleet Leasing & Mobility Services', 1, Number(inv.subTotal ?? 0), vatPct, `Billing period: ${inv.billingPeriod || '—'}`)];
 
   const buyerTrn = normalizeTrn(inv.lessee?.customer?.taxRegistrationNumber || '');
@@ -988,7 +1005,11 @@ async function handlePOST(
 
     if (sellerInfo.meta.aspEndpointUrl && sellerInfo.meta.aspEnvironment === 'PRODUCTION') {
       try {
-        const aspRes = await fetch(sellerInfo.meta.aspEndpointUrl, {
+        const safeAspEndpoint = validateOutboundWebhookUrl(sellerInfo.meta.aspEndpointUrl);
+        if (!safeAspEndpoint) {
+          throw new Error('Invalid or disallowed ASP endpoint URL');
+        }
+        const aspRes = await fetch(safeAspEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/xml; charset=utf-8',

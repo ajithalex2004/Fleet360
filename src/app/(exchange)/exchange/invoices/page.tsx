@@ -252,7 +252,6 @@ function CreateInvoiceModal({
     const items: any[] = [
       {
         description: 'Base Contracted / Awarded Trip Service',
-        varianceReason: 'BASE_RATE',
         quantity: 1,
         unitPrice: baseNum,
       },
@@ -260,7 +259,7 @@ function CreateInvoiceModal({
     if (fuelNum > 0) {
       items.push({
         description: `Contracted Fuel Surcharge Indexation (${contractedFuelPct}% index allowance)`,
-        varianceReason: 'FUEL_SURCHARGE',
+        varianceReason: 'OTHER',
         quantity: 1,
         unitPrice: fuelNum,
       });
@@ -276,7 +275,7 @@ function CreateInvoiceModal({
     if (tollNum > 0) {
       items.push({
         description: 'Verified Salik / Darb Toll & Parking Charges',
-        varianceReason: 'TOLL_PARKING',
+        varianceReason: 'TOLL',
         quantity: 1,
         unitPrice: tollNum,
       });
@@ -284,7 +283,7 @@ function CreateInvoiceModal({
     if (extraKmNum > 0) {
       items.push({
         description: 'Extra Route Kilometres / Diversion',
-        varianceReason: 'EXTRA_KM',
+        varianceReason: 'EXTRA_DISTANCE',
         quantity: 1,
         unitPrice: extraKmNum,
       });
@@ -292,11 +291,12 @@ function CreateInvoiceModal({
 
     setSubmitting(true);
     try {
+      const realPartnerId = membership.status === 'ok' ? membership.partner.partnerId : undefined;
       const res = await fetch('/api/exchange/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          partnerId: 'dummy-partner-id',
+          partnerId: realPartnerId,
           awardId,
           invoiceNumber,
           subtotalAmount: subtotal,

@@ -31,7 +31,7 @@ function mapPayableToSelfBill(r: PayableRow) {
     selfBillNumber: String(r.payable_number ?? `SB-${String(r.id).slice(0, 8)}`),
     carrierId: String(r.vendor_id ?? 'CARRIER-001'),
     carrierName: String(r.vendor_name ?? 'Carrier'),
-    carrierTrn: String(r.vendor_trn ?? firstItem.carrierTrn ?? '100000000000003'),
+    carrierTrn: String(r.vendor_trn ?? firstItem.carrierTrn ?? ''),
     billingPeriodStart: periodStart,
     billingPeriodEnd: periodEnd,
     issueDate,
@@ -66,11 +66,29 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(rawBody);
 
       const supplierName = String(
-        body.carrierName ?? body.supplier?.supplierName ?? 'Al Baraka Commercial Transporters LLC'
-      );
+        body.carrierName ?? body.supplier?.supplierName ?? ''
+      ).trim();
       const supplierTrn = String(
-        body.carrierTrn ?? body.supplier?.supplierTrn ?? '100554433221100'
-      );
+        body.carrierTrn ?? body.supplier?.supplierTrn ?? ''
+      ).trim();
+      const hasItems = Array.isArray(body.items) && body.items.length > 0;
+      const hasTrips = Array.isArray(body.trips) && body.trips.length > 0;
+
+      const missing: string[] = [];
+      if (!supplierName) missing.push('carrierName is required');
+      if (!supplierTrn) missing.push('valid 15-digit carrierTrn is required');
+      if (!hasItems && !hasTrips) missing.push('at least one line item or trip must be specified');
+
+      if (missing.length > 0) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Unprocessable Entity',
+          message: 'Missing required self-billing fields',
+          details: missing,
+          missingFields: missing,
+        }, { status: 422 });
+      }
+
       const carrierId = String(body.carrierId ?? body.vendorId ?? 'CARRIER-001');
       const today = new Date().toISOString().slice(0, 10);
       const billingPeriodStart = String(body.billingPeriodStart ?? today);
@@ -85,28 +103,17 @@ export async function POST(req: NextRequest) {
         contactPhone: body.contactPhone ?? '+971 50 123 4567',
       };
 
-      const rawItems = Array.isArray(body.items) && body.items.length > 0
+      const rawItems = hasItems
         ? body.items
-        : Array.isArray(body.trips) && body.trips.length > 0
-          ? body.trips.map((t: Record<string, unknown>, idx: number) => ({
-              tripId: String(t.tripId ?? t.id ?? `TRIP-${idx + 1}`),
-              tripNumber: String(t.tripNumber ?? t.tripNo ?? `TRIP-2026-${8810 + idx}`),
-              description: String(t.description ?? `Carrier Freight Trip #${idx + 1}`),
-              serviceDate: String(t.serviceDate ?? t.date ?? billingPeriodEnd),
-              quantity: Number(t.quantity ?? 1),
-              ratePerUnit: Number(t.ratePerUnit ?? t.amount ?? 500),
-              vatRatePct: Number(t.vatRatePct ?? 5),
-            }))
-          : [
-              {
-                tripNumber: 'TRIP-2026-8810',
-                description: 'Staff Bus Route 14: Deira to Dubai Silicon Oasis (Round Trip)',
-                serviceDate: billingPeriodEnd,
-                quantity: 22,
-                ratePerUnit: Number(body.subTotal ?? 350),
-                vatRatePct: 5,
-              },
-            ];
+        : body.trips.map((t: Record<string, unknown>, idx: number) => ({
+            tripId: String(t.tripId ?? t.id ?? `TRIP-${idx + 1}`),
+            tripNumber: String(t.tripNumber ?? t.tripNo ?? `TRIP-2026-${8810 + idx}`),
+            description: String(t.description ?? `Carrier Freight Trip #${idx + 1}`),
+            serviceDate: String(t.serviceDate ?? t.date ?? billingPeriodEnd),
+            quantity: Number(t.quantity ?? 1),
+            ratePerUnit: Number(t.ratePerUnit ?? t.amount ?? 500),
+            vatRatePct: Number(t.vatRatePct ?? 5),
+          }));
 
       const selfBillNumber =
         body.selfBillNumber ??
@@ -205,6 +212,17 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  const sp = req.nextUrl.searchParams;
+  const requestedTenantId = sp.get('tenantId');
+  if (requestedTenantId && requestedTenantId !== tenantId) {
+    return NextResponse.json({
+      ok: false,
+      error: 'Tenant self-billing agreement not found',
+      message: 'No self-billing configuration or records found for tenant',
+      missingFields: ['carrier_self_billing_agreement', 'records'],
+    }, { status: 422 });
+  }
+
   return withTenantRls(prisma, tenantId, async (tx) => {
     const rows = await tx.$queryRawUnsafe<PayableRow[]>(
       `SELECT *
@@ -216,6 +234,15 @@ export async function GET(req: NextRequest) {
         LIMIT 50`,
       tenantId,
     ).catch(() => [] as PayableRow[]);
+
+    if (rows.length === 0) {
+      return NextResponse.json({
+        ok: false,
+        error: 'No self-billing configuration or records found for tenant',
+        message: 'No self-billing payables found for tenant',
+        missingFields: ['records'],
+      }, { status: 422 });
+    }
 
     const invoices = rows.map(mapPayableToSelfBill);
 
