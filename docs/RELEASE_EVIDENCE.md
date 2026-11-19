@@ -19,17 +19,22 @@
 ### B. Priority 1 — Neon Pre-Release Recovery Branch & Snapshot Ledger
 
 > [!IMPORTANT]
-> **Retention / TTL Action Required (Neon Console):** Recovery branch `pre-af837401-20261119` was created with an expiration indicator (TTL). Local tooling does not hold `neonctl` / `NEON_API_KEY`, so retention could not be extended programmatically from this workstation. Extend or remove the branch TTL in the Neon Console (`https://console.neon.tech`) before expiry and backfill the Neon Branch ID, snapshot creation timestamp, and confirmed `expires_at` value in the table below.
+> **Retention / TTL & Parent-Branch Reconciliation Required (Neon Console — BLOCKS RECOVERY SIGN-OFF):**
+> 1. Recovery branch `pre-af837401-20261119` was created with an expiration indicator (TTL) that has **not** yet been confirmed or extended (local tooling lacks `neonctl` / `NEON_API_KEY`).
+> 2. **Parent-branch metadata discrepancy to reconcile:** an earlier deployment record described the snapshot's parent as `production`, whereas the 2026-09-10 baseline ledger listed `main` (`br-long-pine-a1b7tq46`). Confirm the actual Neon branch identity and parent in the Neon Console (`https://console.neon.tech`) rather than assuming either name.
+> 3. **Do not consider this recovery safeguard complete** until retention is extended/removed, all fields below are backfilled from Neon Console, and post-change branch availability is verified.
 
 | Field | Recorded Value | Verification / Notes |
 | :--- | :--- | :--- |
 | **Recovery Branch Name** | `pre-af837401-20261119` | Pre-M5-R7 production recovery branch |
-| **Original WAL LSN** | `0/69A21EF0` | Preserved pre-migration WAL point on production `main` |
-| **Source Production Branch** | `main` (`br-long-pine-a1b7tq46`) | Neon endpoint `ep-calm-heart-a15voo2a` (`ap-southeast-1.aws.neon.tech`, DB `neondb`) |
+| **Actual Neon Branch ID** | *Pending Neon Console capture* | Backfill exact `br-...` ID from Neon Console |
+| **Parent Branch Name & ID** | **RECONCILIATION REQUIRED** (`production` vs 2026-09-10 `main` / `br-long-pine-a1b7tq46`) | Confirm exact parent branch name and ID in Neon Console |
+| **Live Production Neon Endpoint** | `ep-calm-heart-a15voo2a` (`ap-southeast-1.aws.neon.tech`, DB `neondb`, role `fleet360_app`) | Verified `2026-11-19` via production `DATABASE_URL` & `RUNTIME_DIRECT_DATABASE_URL` hostnames |
+| **Original WAL LSN** | `0/69A21EF0` *(confirm against Neon branch parent LSN)* | Reported pre-migration WAL point prior to M5-R7 migrations |
 | **Subsequent Migrations Applied** | `20261118100000_m5_r7_rls_and_index_integrity`, `20261118120000_drop_legacy_customers_code_key` | `241` total local migration directories in `prisma/migrations/` |
-| **Neon Branch ID** | *Pending Neon Console capture* | Backfill `br-...` ID when extending TTL |
-| **Snapshot / Branch Created At (UTC)** | *Pending Neon Console capture* | Backfill exact Neon timestamp |
-| **Retention / `expires_at` Status** | **TTL ACTIVE — OPERATOR EXTENSION REQUIRED** | Update to `none` (or extended UTC date) after clearing TTL in Neon Console |
+| **Branch Created At (UTC)** | *Pending Neon Console capture* | Backfill exact Neon creation timestamp |
+| **Updated `expires_at` / Retention** | **TTL UNCONFIRMED — OPERATOR ACTION REQUIRED** | Extend or remove TTL in Neon Console; record confirmed `none` or extended UTC timestamp |
+| **Post-Change Availability Check** | *Pending Neon Console verification* | Confirm branch remains active and queryable/restorable after TTL update |
 
 ### C. Live Railway Production Runtime Verification (`2026-11-19`)
 
@@ -50,9 +55,31 @@
 
 | Priority | Initiative | Status | Evidence / Guardrail |
 | :--- | :--- | :--- | :--- |
-| **Priority 1** *(High)* | Preserve Neon branch `pre-af837401-20261119` & WAL LSN `0/69A21EF0` | **Ledger Updated / Console TTL Pending** | Recorded in §B above; operator must clear/extend branch expiration TTL in Neon Console and backfill branch ID & timestamp. |
-| **Priority 2** *(Before Dec 1)* | Railway IaC migration (`.railway/railway.ts`) | **Staging Verified / Production Pending Cutover** | Isolated branch `chore/railway-iac-migration` migrated `railway.json` → `.railway/railway.ts` (0 destructive changes in both environments). Applied pinned plan to `staging` (`909ab1b4-55e8-4089-bdc3-29dd89ae4991`): `fleet360-app` deployment `3d880519-2c46-4d56-994d-c15af0a92e97` (`SUCCESS`, `startCommand: "npm start"`, Railpack `V3`) and `fleet360-backend` deployment `53246304-b7e6-499b-8661-89c222537560` (`SUCCESS`, Dockerfile `/backend/Dockerfile`, `/healthz`); post-apply `railway config plan --detailed-exit-code` on `staging` exited `0` (zero drift). Production plan previewed read-only (`0 to add, 2 to change, 0 to destroy`); production cutover held pending merge approval. |
-| **Priority 3** *(Planned)* | Optional integrations (`stripe`, `sendgrid`, `sentry`) | **Planned / Guardrail Verified** | Zero placeholder credentials added; production `/api/health` explicitly reports `status: "degraded"` with `missingConfig: ["stripe", "sendgrid", "sentry"]` until genuinely configured and tested. |
+| **Priority 1** *(Immediate)* | Preserve Neon branch `pre-af837401-20261119`, reconcile parent branch & WAL LSN `0/69A21EF0` | **OPEN — Neon Console Action Required** | Recorded in §B above with explicit parent-branch reconciliation flag (`production` vs `main`). Do not mark complete until TTL is extended/removed and post-change branch availability is verified in Neon Console. |
+| **Priority 2** *(Before Dec 1)* | Railway IaC migration (`.railway/railway.ts`) via controlled PR | **Staging Verified / Production Cutover Held Pending Approval** | Isolated branch `chore/railway-iac-migration` (`package.json` + `package-lock.json` updated with `railway@3.17.0` devDependency and `@prisma/client` lockfile alignment; `railway.json` removed; `38/38` parity/governance unit tests passing). Staging (`909ab1b4-55e8-4089-bdc3-29dd89ae4991`) applied & deployed (`fleet360-app` `3d880519-2c46-4d56-994d-c15af0a92e97`, `fleet360-backend` `53246304-b7e6-499b-8661-89c222537560`, both `SUCCESS`; post-apply drift exit `0`). Verbatim production plan retained in §E below. |
+| **Priority 3** *(Planned)* | Optional integrations (`stripe`, `sendgrid`, `sentry`) | **Planned / Failure Isolation Audited (Workflow Acceptance Pending)** | Zero placeholder credentials; `/api/health` explicitly reports `status: "degraded"` (`missingConfig: ["stripe", "sendgrid", "sentry"]`). Code audit confirms `/api/readyz` and core dispatch/fleet/finance routes do not require them (`src/lib/sentry.ts` no-ops/swallows on 2 s timeout; `src/lib/email.ts` falls back to platform SMTP or returns non-throwing `EmailSendResult`; `src/lib/billing.ts` is lazy-init with explicit `503`/`402` route guards). End-to-end workflow impact testing + Sentry prioritization remain tracked separately. |
+
+### E. Retained Pre-Cutover Production IaC Plan Evidence (`2026-11-19`, Read-Only)
+
+Captured via `railway config plan --verbose` against `production` (`7dd6e11e-dae2-46c1-b4c6-6ee24441de4d`) on branch `chore/railway-iac-migration` (no changes applied to production; CLI immediately re-linked to `staging`):
+
+```text
+Railway configuration
+Using \\?\C:\Dev\Fleet360\.railway\railway.ts
+Project fleet360-railway
+Environment production
+Project ID ac5b8297-816b-44d3-bb61-41f079e92faa
+
+Plan: 0 to add, 2 to change, 0 to destroy
+  ~ Update fleet360-app deploy.startCommand
+    └ deploy.startCommand (null → "npm start")
+  ~ Update fleet360-backend build.builder, build.dockerfilePath
+    └ build.builder (null → "DOCKERFILE")
+    └ build.dockerfilePath (null → "/backend/Dockerfile")
+```
+
+> [!WARNING]
+> **Production Cutover Ordering (GitHub Auto-Deploy):** Both Railway `production` services track `ajithalex2004/Fleet360` branch `main`, so merging a PR to `main` automatically triggers production deployments. Do **not** merge `chore/railway-iac-migration` until the authorized production maintenance window; inside that window, apply the pinned production IaC plan (`railway config plan --out prod-plan.json` → `railway config apply --plan prod-plan.json`) immediately before merging so `fleet360-app.deploy.startCommand` and `fleet360-backend.build.dockerfilePath` are already persisted before `railway.json` is removed from `main`.
 
 ---
 
