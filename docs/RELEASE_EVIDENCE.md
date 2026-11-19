@@ -1,5 +1,63 @@
 # Fleet360 Production Release Evidence Document
 
+---
+
+## Latest Release Entry — 2026-11-19 (M5-R7 Production Release & Operational Follow-Ups)
+
+**Ledger Updated:** 2026-11-19  
+**Certification Scope:** Milestone M5-R7 (`af837401239a1d36cb3149e2f1ebc3a353b4d556`) — **VICTORY CONFIRMED (GO FOR PRODUCTION)** *(closed; operational follow-ups below do not reopen M5-R7 certification)*  
+**Verification Method:** Live introspection of Railway `production` & `staging` environments (`railway status --json`, `railway environment config`), Git commit history, and live HTTP probes (`/api/health`, `/api/readyz`).
+
+### A. Commit Chain & Live Production Alignment
+
+| Role | Commit SHA | Timestamp (+04:00) | Subject |
+| :--- | :--- | :--- | :--- |
+| **M5-R7 Certified Baseline** | `af837401239a1d36cb3149e2f1ebc3a353b4d556` | `2026-11-18T16:02:46+04:00` | `fix(security,finance): remediate PG17 RLS/index isolation and financial transaction integrity (M5-R7)` |
+| **Release Config Fix 1** | `9a825d801a4a88b2025219b96601b06b50f6203e` | `2026-11-19T05:12:12+04:00` | `chore(release): separate railway web startCommand from controlled prisma migrations` |
+| **Live Production Release** | `b52e6060c7b49869769200ea5241089a23870bcd` | `2026-11-19T05:39:04+04:00` | `chore(release): use RAILPACK builder in railway.json for NODE_ENV=production builds` |
+
+### B. Priority 1 — Neon Pre-Release Recovery Branch & Snapshot Ledger
+
+> [!IMPORTANT]
+> **Retention / TTL Action Required (Neon Console):** Recovery branch `pre-af837401-20261119` was created with an expiration indicator (TTL). Local tooling does not hold `neonctl` / `NEON_API_KEY`, so retention could not be extended programmatically from this workstation. Extend or remove the branch TTL in the Neon Console (`https://console.neon.tech`) before expiry and backfill the Neon Branch ID, snapshot creation timestamp, and confirmed `expires_at` value in the table below.
+
+| Field | Recorded Value | Verification / Notes |
+| :--- | :--- | :--- |
+| **Recovery Branch Name** | `pre-af837401-20261119` | Pre-M5-R7 production recovery branch |
+| **Original WAL LSN** | `0/69A21EF0` | Preserved pre-migration WAL point on production `main` |
+| **Source Production Branch** | `main` (`br-long-pine-a1b7tq46`) | Neon endpoint `ep-calm-heart-a15voo2a` (`ap-southeast-1.aws.neon.tech`, DB `neondb`) |
+| **Subsequent Migrations Applied** | `20261118100000_m5_r7_rls_and_index_integrity`, `20261118120000_drop_legacy_customers_code_key` | `241` total local migration directories in `prisma/migrations/` |
+| **Neon Branch ID** | *Pending Neon Console capture* | Backfill `br-...` ID when extending TTL |
+| **Snapshot / Branch Created At (UTC)** | *Pending Neon Console capture* | Backfill exact Neon timestamp |
+| **Retention / `expires_at` Status** | **TTL ACTIVE — OPERATOR EXTENSION REQUIRED** | Update to `none` (or extended UTC date) after clearing TTL in Neon Console |
+
+### C. Live Railway Production Runtime Verification (`2026-11-19`)
+
+- **Railway Project:** `fleet360-railway` (`ac5b8297-816b-44d3-bb61-41f079e92faa`)
+- **Production Environment:** `production` (`7dd6e11e-dae2-46c1-b4c6-6ee24441de4d`, region `asia-southeast1-eqsg3a`)
+- **`fleet360-app` (`40e64e58-f468-4ebe-9412-99cd5af910aa`):**
+  - Active Deployment: `fdf2b1bd-22c1-45a3-a9d9-4a0f13395f12` (`SUCCESS`, `2026-11-19T01:39:15.030Z`, commit `b52e6060c7b49869769200ea5241089a23870bcd`)
+  - Image Digest: `sha256:2dfdf07f4ed9de44e559c32f1e315ac427f877511c04cbae84a5d76dd6231a38` (Railpack `0.43.0`, Node `22.23.4`)
+  - Owner Credential Boundary: **CLOSED / PASS** — `DIRECT_URL`, `DIRECT_DATABASE_URL`, and `MIGRATION_DATABASE_URL` verified absent from production `fleet360-app` environment variables (runtime uses restricted `fleet360_app` role via `DATABASE_URL` / `RUNTIME_DIRECT_DATABASE_URL`).
+- **`fleet360-backend` (`6b454bef-fec5-4840-acc5-edd8473c8f03`):**
+  - Active Deployment: `0d5c07fd-c18f-4495-8a1c-f0515d724837` (`SUCCESS`, `2026-11-19T01:39:15.030Z`, commit `b52e6060c7b49869769200ea5241089a23870bcd`)
+  - Image Digest: `sha256:1c3922dab4dfc123f78ccaf5ccd3a3b30956b312f8254c6e4f9a84c8a0a7c417` (Dockerfile `/backend/Dockerfile`, healthcheck `/healthz`)
+- **Live Production Probes (`2026-11-19T09:08–09:32Z`):**
+  - `GET https://fleet360-app-production.up.railway.app/api/readyz` → **`200 OK`** (`status: "ready"`, `version: "b52e6060c7b49869769200ea5241089a23870bcd"`).
+  - `GET https://fleet360-app-production.up.railway.app/api/health` → **`200 OK`** (`status: "degraded"`, `db: { status: "connected" }`, `schema: { status: "ok", missing: 0 }`, `storage: { backend: "s3", durable: true, ok: true }`, `services: { goBackend: "ok" }`, `backend: { status: "ready", version: "b52e6060c7b49869769200ea5241089a23870bcd" }`, `missingConfig: ["stripe", "sendgrid", "sentry"]`).
+
+### D. Operational Follow-Up Track (Post-M5-R7)
+
+| Priority | Initiative | Status | Evidence / Guardrail |
+| :--- | :--- | :--- | :--- |
+| **Priority 1** *(High)* | Preserve Neon branch `pre-af837401-20261119` & WAL LSN `0/69A21EF0` | **Ledger Updated / Console TTL Pending** | Recorded in §B above; operator must clear/extend branch expiration TTL in Neon Console and backfill branch ID & timestamp. |
+| **Priority 2** *(Before Dec 1)* | Railway IaC migration (`.railway/railway.ts`) | **Staging Verified / Production Pending Cutover** | Isolated branch `chore/railway-iac-migration` migrated `railway.json` → `.railway/railway.ts` (0 destructive changes in both environments). Applied pinned plan to `staging` (`909ab1b4-55e8-4089-bdc3-29dd89ae4991`): `fleet360-app` deployment `3d880519-2c46-4d56-994d-c15af0a92e97` (`SUCCESS`, `startCommand: "npm start"`, Railpack `V3`) and `fleet360-backend` deployment `53246304-b7e6-499b-8661-89c222537560` (`SUCCESS`, Dockerfile `/backend/Dockerfile`, `/healthz`); post-apply `railway config plan --detailed-exit-code` on `staging` exited `0` (zero drift). Production plan previewed read-only (`0 to add, 2 to change, 0 to destroy`); production cutover held pending merge approval. |
+| **Priority 3** *(Planned)* | Optional integrations (`stripe`, `sendgrid`, `sentry`) | **Planned / Guardrail Verified** | Zero placeholder credentials added; production `/api/health` explicitly reports `status: "degraded"` with `missingConfig: ["stripe", "sendgrid", "sentry"]` until genuinely configured and tested. |
+
+---
+
+## Historical Baseline — 2026-09-10
+
 **Execution Date:** 2026-09-10  
 **Generated By:** Antigravity Production Gate Engine  
 **Verification Method:** Live introspection of Railway production runtime, GitHub repository API/CLI, Neon PostgreSQL direct/pooled connections, and GitHub Actions telemetry. *(No Markdown status logs relied upon).*
