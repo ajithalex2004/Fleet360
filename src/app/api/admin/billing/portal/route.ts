@@ -16,6 +16,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { getStripe, getTenantBilling, isStripeConfigured } from '@/lib/billing';
 import { captureException } from '@/lib/sentry';
 import { withAuditedAction } from '@/lib/audited-action';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 
@@ -44,7 +45,7 @@ async function handlePOST(req: NextRequest) {
 
   try {
     const stripe = getStripe();
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const baseUrl = getPublicOrigin(req);
     const session = await stripe.billingPortal.sessions.create({
       customer:   billing.stripeCustomerId,
       return_url: `${baseUrl}/admin/subscription`,

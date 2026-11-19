@@ -89,6 +89,34 @@ export async function POST(
     const body = stripTenantOwnershipFields(rawBody);
     const action = body.action ? String(body.action) : 'STATUS_UPDATE';
 
+    // Verify driver assignment if caller is a driver
+    if (authz.role === 'DRIVER') {
+      const jobRows = await prisma.$queryRawUnsafe<Array<{ assigned_driver_id: string | null }>>(
+        `SELECT assigned_driver_id FROM logistics_drayage_jobs WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        jobId,
+        tenantId,
+      ).catch(() => []);
+
+      if (jobRows.length > 0 && jobRows[0].assigned_driver_id) {
+        const assignedId = jobRows[0].assigned_driver_id;
+        const callerId = authz.userId;
+        const isAssigned = callerId === assignedId || (await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id FROM drivers
+           WHERE (id::text = $1 OR user_id::text = $1)
+             AND (id::text = $2 OR user_id::text = $2)
+             AND tenant_id = $3
+           LIMIT 1`,
+          assignedId,
+          callerId,
+          tenantId,
+        ).catch(() => [])).length > 0;
+
+        if (!isAssigned) {
+          return NextResponse.json({ error: 'Driver is not assigned to this job' }, { status: 403 });
+        }
+      }
+    }
+
     // 1. In-App Dispatch <-> Driver Chat
     if (action === 'CHAT') {
       const msg = String(body.message ?? '').trim();

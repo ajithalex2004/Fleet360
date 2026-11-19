@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { addTrackingEvent } from '@/lib/logistics/domain';
 import { recomputeShipmentEta } from '@/lib/logistics/eta-notifier';
@@ -57,44 +58,46 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    // addTrackingEvent persists the ping (and writes its own audit trail).
-    await addTrackingEvent({
-      tenantId,
-      shipmentOrderId: id,
-      eventType: body.eventType ?? 'GPS_PING',
-      status: body.status ?? null,
-      latitude: body.latitude,
-      longitude: body.longitude,
-      source: body.source ?? 'gps',
-      occurredAt: body.occurredAt ?? new Date().toISOString(),
-      notes: body.notes ?? null,
+    return await withTenantRls(prisma, tenantId, async () => {
+      // addTrackingEvent persists the ping (and writes its own audit trail).
+      await addTrackingEvent({
+        tenantId,
+        shipmentOrderId: id,
+        eventType: body.eventType ?? 'GPS_PING',
+        status: body.status ?? null,
+        latitude: body.latitude!,
+        longitude: body.longitude!,
+        source: body.source ?? 'gps',
+        occurredAt: body.occurredAt ?? new Date().toISOString(),
+        notes: body.notes ?? null,
+      });
+
+      // Recompute the ETA + notify on material change. Best-effort — never
+      // fails the ingest.
+      let etaResult: Awaited<ReturnType<typeof recomputeShipmentEta>> | null = null;
+      try {
+        etaResult = await recomputeShipmentEta({ tenantId, shipmentOrderId: id });
+      } catch (e) {
+        console.error('[tracking ingest] ETA recompute failed', e);
+      }
+
+      // Evaluate geofences (arrival/departure/route-deviation). Best-effort.
+      let geofence: Awaited<ReturnType<typeof evaluateShipmentGeofences>> | null = null;
+      try {
+        geofence = await evaluateShipmentGeofences({ tenantId, shipmentOrderId: id });
+      } catch (e) {
+        console.error('[tracking ingest] geofence eval failed', e);
+      }
+
+      return NextResponse.json({
+        ingested: true,
+        eta: etaResult?.prediction ?? null,
+        notified: etaResult?.notified ?? false,
+        notifyReason: etaResult?.notifyDecision?.reason ?? null,
+        geofenceEvents: geofence?.events ?? [],
+        alertsRaised: geofence?.raised ?? 0,
+      }, { status: 201 });
     });
-
-    // Recompute the ETA + notify on material change. Best-effort — never
-    // fails the ingest.
-    let etaResult: Awaited<ReturnType<typeof recomputeShipmentEta>> | null = null;
-    try {
-      etaResult = await recomputeShipmentEta({ tenantId, shipmentOrderId: id });
-      } catch (e) {
-      console.error('[tracking ingest] ETA recompute failed', e);
-    }
-
-    // Evaluate geofences (arrival/departure/route-deviation). Best-effort.
-    let geofence: Awaited<ReturnType<typeof evaluateShipmentGeofences>> | null = null;
-    try {
-      geofence = await evaluateShipmentGeofences({ tenantId, shipmentOrderId: id });
-      } catch (e) {
-      console.error('[tracking ingest] geofence eval failed', e);
-    }
-
-    return NextResponse.json({
-      ingested: true,
-      eta: etaResult?.prediction ?? null,
-      notified: etaResult?.notified ?? false,
-      notifyReason: etaResult?.notifyDecision?.reason ?? null,
-      geofenceEvents: geofence?.events ?? [],
-      alertsRaised: geofence?.raised ?? 0,
-    }, { status: 201 });
   } catch (e) {
     console.error('[tracking ingest]', e);
     return NextResponse.json(

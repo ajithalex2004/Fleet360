@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -36,8 +37,8 @@ func Connect() {
 	if err != nil {
 		log.Fatal("database pool unavailable", zap.Error(err))
 	}
-	sqlDB.SetMaxOpenConns(envInt("DB_MAX_OPEN_CONNS", 5))
-	sqlDB.SetMaxIdleConns(envInt("DB_MAX_IDLE_CONNS", 2))
+	sqlDB.SetMaxOpenConns(envInt("DB_MAX_OPEN_CONNS", 25))
+	sqlDB.SetMaxIdleConns(envInt("DB_MAX_IDLE_CONNS", 10))
 	sqlDB.SetConnMaxIdleTime(time.Duration(envInt("DB_CONN_MAX_IDLE_SECONDS", 60)) * time.Second)
 	sqlDB.SetConnMaxLifetime(time.Duration(envInt("DB_CONN_MAX_LIFETIME_SECONDS", 300)) * time.Second)
 	if err := sqlDB.Ping(); err != nil {
@@ -97,4 +98,26 @@ func UsePlatformSessionForSeed() error {
 	sqlDB.SetConnMaxLifetime(0)
 	sqlDB.SetConnMaxIdleTime(0)
 	return DB.Exec(`SELECT set_config('app.tenant_id', '*', false)`).Error
+}
+
+// WithTenantTx runs fn inside a transaction with transaction-local
+// app.tenant_id set via set_config(..., true) so PostgreSQL FORCE ROW LEVEL
+// SECURITY policies scope all queries to tenantID. Fails closed if tenantID is empty.
+func WithTenantTx(ctx context.Context, tenantID string, fn func(tx *gorm.DB) error) error {
+	if tenantID == "" {
+		return gorm.ErrInvalidData
+	}
+	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tenantID).Error; err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+// WithPlatformTx runs fn inside a transaction with app.tenant_id = '*' for
+// pre-authentication lookups (e.g., SCIM token hash resolution, Stripe webhook
+// subscription matching) before a single tenantID is known.
+func WithPlatformTx(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return WithTenantTx(ctx, "*", fn)
 }

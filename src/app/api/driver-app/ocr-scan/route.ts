@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
  *
  * POST /api/driver-app/ocr-scan
  *
- * Uses Google Gemini Vision (gemini-2.0-flash / gemini-flash-latest) with OpenAI Vision fallback
+ * Uses Google Gemini Vision (gemini-flash-latest) with OpenAI Vision fallback
  * and deterministic ISO 6346 / UAE Port EIR fallback to automatically extract and verify:
  *  - Container Number (ISO 6346 format, e.g. MSCU8492014)
  *  - Customs Bolt Seal Number (e.g. SEAL-DXB-884120)
@@ -17,10 +17,10 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { getDriverTenantContext } from '@/lib/driver-session';
 
 interface OcrExtractionResult {
-  containerNumber: string;
-  sealNumber: string;
-  eirNumber: string;
-  isoSizeType: string;
+  containerNumber: string | null;
+  sealNumber: string | null;
+  eirNumber: string | null;
+  isoSizeType: string | null;
   gateStatus: string;
   confidencePct: number;
   matchesExpectedContainer: boolean;
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const prompt = `You are a UAE Port & Container Drayage OCR Vision Inspector for DP World (Dubai Trade) and AD Ports (Maqta Gateway).
 Analyze the attached photo taken by a heavy-truck driver at stage "${scanStage}".
 Extract the EXACT characters visible on the container door, customs bolt seal, or printed Equipment Interchange Receipt (EIR) gate slip so we can verify whether they match the assigned job (Assigned Container: "${expectedContainer}", Assigned Seal: "${expectedSeal || 'N/A'}", Terminal: "${terminalName}", Gate Token: "${expectedToken || 'N/A'}").
-Only if the image is a blank/generic test photo with no readable alphanumeric characters, use the assigned container/seal context.
+If the image does not contain clearly readable characters for the container or seal, return confidencePct as 0 and null for the unreadable fields. Do NOT guess or substitute assigned context for unreadable text.
 
 Return ONLY a valid raw JSON object with these exact keys:
 {
@@ -101,134 +101,31 @@ Return ONLY a valid raw JSON object with these exact keys:
   "confidencePct": 98
 }`;
 
-    // 1. Primary: Google Gemini Vision (gemini-2.0-flash / gemini-flash-latest)
+    const tenantId = (authz.ok ? authz.tenantId : driverCtx?.tenantId) || undefined;
+
+    // 1. Primary: Google Gemini Vision (gemini-flash-latest) via AI Gateway
     if (geminiKey && parsedImage) {
-      for (const modelName of ['gemini-2.0-flash', 'gemini-flash-latest']) {
+      const dataUri = `data:${parsedImage.mimeType};base64,${parsedImage.base64Data}`;
+      for (const modelName of ['gemini-flash-latest']) {
         try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
-          const geminiRes = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    { text: prompt },
-                    {
-                      inline_data: {
-                        mime_type: parsedImage.mimeType,
-                        data: parsedImage.base64Data,
-                      },
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 400,
-              },
-            }),
-            signal: AbortSignal.timeout(18000),
-          });
+          const { aiGateway } = await import('@/lib/agents/gateway');
+          const visionRes = await aiGateway.vision(
+            [dataUri],
+            prompt,
+            {
+              tenantId,
+              agentId: 'driver-ocr-scan',
+              preferredProvider: 'gemini',
+              modelOverride: modelName,
+              responseFormat: 'json',
+            },
+          );
 
-          if (geminiRes.ok) {
-            const data = (await geminiRes.json()) as {
-              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-            };
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-            const parsed = cleanJsonResponse(text);
-            if (parsed && parsed.containerNumber) {
-              const containerNumber = String(parsed.containerNumber).trim().toUpperCase();
-              const sealNumber = String(
-                parsed.sealNumber || expectedSeal || `SEAL-DXB-${containerNumber.slice(-6)}`,
-              )
-                .trim()
-                .toUpperCase();
-              const eirNumber = String(
-                parsed.eirNumber || `EIR-DPW-${Math.floor(100000 + Math.random() * 900000)}`,
-              )
-                .trim()
-                .toUpperCase();
-              const result: OcrExtractionResult = {
-                containerNumber,
-                sealNumber,
-                eirNumber,
-                isoSizeType: String(parsed.isoSizeType || '45G1 · 40HC'),
-                gateStatus: String(
-                  parsed.gateStatus ||
-                    (scanStage.includes('MT') || scanStage.includes('DROP')
-                      ? 'GATE_IN_EMPTY_MT_DEPOSITED'
-                      : 'GATE_OUT_FULL_VERIFIED'),
-                ),
-                confidencePct: Number(parsed.confidencePct || 98),
-                matchesExpectedContainer:
-                  !expectedContainer || containerNumber === expectedContainer,
-                matchesExpectedSeal:
-                  !expectedSeal || sealNumber === expectedSeal,
-                provider: 'gemini-vision',
-                model: modelName,
-                verifiedAt: new Date().toISOString(),
-              };
-              return NextResponse.json({ ok: true, ocr: result });
-            }
-          }
-        } catch (err) {
-          console.warn(`[driver-app/ocr-scan] Gemini (${modelName}) vision call failed:`, err);
-        }
-      }
-    }
-
-    // 2. Secondary Fallback: OpenAI Vision (gpt-4o-mini)
-    if (openAiKey && parsedImage) {
-      try {
-        const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${openAiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: prompt },
-                  {
-                    type: 'image_url',
-                    image_url: {
-                      url: `data:${parsedImage.mimeType};base64,${parsedImage.base64Data}`,
-                      detail: 'low',
-                    },
-                  },
-                ],
-              },
-            ],
-            max_tokens: 350,
-            temperature: 0.1,
-          }),
-          signal: AbortSignal.timeout(18000),
-        });
-
-        if (oaRes.ok) {
-          const oaData = (await oaRes.json()) as {
-            choices?: Array<{ message?: { content?: string } }>;
-          };
-          const text = oaData.choices?.[0]?.message?.content ?? '';
-          const parsed = cleanJsonResponse(text);
+          const parsed = cleanJsonResponse(visionRes.content);
           if (parsed && parsed.containerNumber) {
             const containerNumber = String(parsed.containerNumber).trim().toUpperCase();
-            const sealNumber = String(
-              parsed.sealNumber || expectedSeal || `SEAL-DXB-${containerNumber.slice(-6)}`,
-            )
-              .trim()
-              .toUpperCase();
-            const eirNumber = String(
-              parsed.eirNumber || `EIR-DPW-${Math.floor(100000 + Math.random() * 900000)}`,
-            )
-              .trim()
-              .toUpperCase();
+            const sealNumber = parsed.sealNumber ? String(parsed.sealNumber).trim().toUpperCase() : null;
+            const eirNumber = parsed.eirNumber ? String(parsed.eirNumber).trim().toUpperCase() : null;
             const result: OcrExtractionResult = {
               containerNumber,
               sealNumber,
@@ -240,48 +137,89 @@ Return ONLY a valid raw JSON object with these exact keys:
                     ? 'GATE_IN_EMPTY_MT_DEPOSITED'
                     : 'GATE_OUT_FULL_VERIFIED'),
               ),
-              confidencePct: Number(parsed.confidencePct || 97),
+              confidencePct: Number(parsed.confidencePct || 98),
               matchesExpectedContainer:
                 !expectedContainer || containerNumber === expectedContainer,
-              matchesExpectedSeal:
-                !expectedSeal || sealNumber === expectedSeal,
-              provider: 'openai-vision',
-              model: 'gpt-4o-mini',
+              matchesExpectedSeal: Boolean(expectedSeal && sealNumber && sealNumber === expectedSeal),
+              provider: 'gemini-vision',
+              model: modelName,
               verifiedAt: new Date().toISOString(),
             };
             return NextResponse.json({ ok: true, ocr: result });
           }
+        } catch (err) {
+          console.warn(`[driver-app/ocr-scan] Gemini (${modelName}) vision call failed:`, err);
+        }
+      }
+    }
+
+    // 2. Secondary Fallback: OpenAI Vision (gpt-4o-mini) via AI Gateway
+    if (openAiKey && parsedImage) {
+      try {
+        const dataUri = `data:${parsedImage.mimeType};base64,${parsedImage.base64Data}`;
+        const { aiGateway } = await import('@/lib/agents/gateway');
+        const visionRes = await aiGateway.vision(
+          [dataUri],
+          prompt,
+          {
+            tenantId,
+            agentId: 'driver-ocr-scan',
+            preferredProvider: 'openai',
+            modelOverride: 'gpt-4o-mini',
+            responseFormat: 'json',
+          },
+        );
+
+        const parsed = cleanJsonResponse(visionRes.content);
+        if (parsed && parsed.containerNumber) {
+          const containerNumber = String(parsed.containerNumber).trim().toUpperCase();
+          const sealNumber = parsed.sealNumber ? String(parsed.sealNumber).trim().toUpperCase() : null;
+          const eirNumber = parsed.eirNumber ? String(parsed.eirNumber).trim().toUpperCase() : null;
+          const result: OcrExtractionResult = {
+            containerNumber,
+            sealNumber,
+            eirNumber,
+            isoSizeType: String(parsed.isoSizeType || '45G1 · 40HC'),
+            gateStatus: String(
+              parsed.gateStatus ||
+                (scanStage.includes('MT') || scanStage.includes('DROP')
+                  ? 'GATE_IN_EMPTY_MT_DEPOSITED'
+                  : 'GATE_OUT_FULL_VERIFIED'),
+            ),
+            confidencePct: Number(parsed.confidencePct || 97),
+            matchesExpectedContainer:
+              !expectedContainer || containerNumber === expectedContainer,
+            matchesExpectedSeal: Boolean(expectedSeal && sealNumber && sealNumber === expectedSeal),
+            provider: 'openai-vision',
+            model: 'gpt-4o-mini',
+            verifiedAt: new Date().toISOString(),
+          };
+          return NextResponse.json({ ok: true, ocr: result });
         }
       } catch (err) {
         console.warn('[driver-app/ocr-scan] OpenAI vision fallback failed:', err);
       }
     }
 
-    // 3. Deterministic ISO 6346 & Port EIR Vision Fallback (Zero-Downtime Gate Guarantee)
-    const fallbackContainer = expectedContainer || 'MSCU8492014';
-    const suffix = fallbackContainer.replace(/[^0-9]/g, '').slice(-6) || '849201';
-    const isKhalifa = terminalName.toUpperCase().includes('KHALIFA') || terminalName.toUpperCase().includes('AD PORTS');
-    const portPrefix = isKhalifa ? 'ATLP' : 'DPW';
-    const isMtDeposit =
-      scanStage.toUpperCase().includes('MT') ||
-      scanStage.toUpperCase().includes('DROP') ||
-      scanStage.toUpperCase().includes('EMPTY');
-
-    const fallbackResult: OcrExtractionResult = {
-      containerNumber: fallbackContainer,
-      sealNumber: expectedSeal || (isMtDeposit ? `MT-CLEAN-${suffix}` : `SEAL-${portPrefix}-${suffix}`),
-      eirNumber: `EIR-${portPrefix}-${suffix}`,
-      isoSizeType: '45G1 · ISO 6346 Verified',
-      gateStatus: isMtDeposit ? 'GATE_IN_EMPTY_MT_DEPOSITED' : 'GATE_OUT_FULL_VERIFIED',
-      confidencePct: 99,
-      matchesExpectedContainer: true,
-      matchesExpectedSeal: true,
-      provider: 'gemini-vision',
-      model: 'gemini-2.0-flash',
-      verifiedAt: new Date().toISOString(),
-    };
-
-    return NextResponse.json({ ok: true, ocr: fallbackResult });
+    // Fail closed: OCR cannot verify container or seal without valid visual proof
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'OCR vision pipeline could not verify container or seal from provided image',
+        ocr: {
+          containerNumber: null,
+          sealNumber: null,
+          eirNumber: null,
+          isoSizeType: null,
+          gateStatus: 'REJECTED_UNVERIFIED',
+          confidencePct: 0,
+          matchesExpectedContainer: false,
+          matchesExpectedSeal: false,
+          verifiedAt: new Date().toISOString(),
+        },
+      },
+      { status: 422 },
+    );
   } catch (error) {
     console.error('[api/driver-app/ocr-scan POST]', error);
     return NextResponse.json(

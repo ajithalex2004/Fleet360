@@ -23,10 +23,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'crypto';
-import { PrismaClient } from '@prisma/client';
-import { isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
 
 let serverUp = false;
 let seed: SeedResult | undefined;
@@ -34,6 +33,7 @@ let busRouteId = '';
 let staffMemberId = '';
 let staffRecordId = '';
 let testRouteName = '';
+let createdRoute = false;
 const createdRowIds: string[] = [];
 const createdStaffIds: string[] = [];
 
@@ -44,60 +44,71 @@ beforeAll(async () => {
     return;
   }
   seed = await seedTestTenantFull();
+  const tid = seed.tenant.id;
 
-  const routes = await prisma.$queryRaw<Array<{ id: string; name: string }>>`
-    SELECT id, name FROM bus_routes WHERE deleted_at IS NULL LIMIT 1
-  `;
-  busRouteId = routes[0]?.id ?? '';
-  if (!busRouteId) throw new Error('no bus_routes row — cannot seed test import');
+  await withTenantRls(prisma, tid, async (tx) => {
+    const routeName = `BULK-IMPORT-ROUTE-${randomUUID().slice(0, 8)}`;
+    const route = await tx.busRoute.create({
+      data: {
+        tenantId: tid,
+        name: routeName,
+        origin: 'Origin',
+        destination: 'Destination',
+        routeType: 'STAFF',
+        isActive: true,
+        capacity: 40,
+      },
+    });
+    busRouteId = route.id;
+    createdRoute = true;
 
-  // The route import uses routeName (or routeCode) for lookup. Snapshot
-  // the route's actual name so the import rows match a real row.
-  const routeName = routes[0]?.name ?? 'TEST-ROUTE';
-
-  // Seed a staff member in the test tenant — the import route is
-  // tenant-scoped and only resolves employeeIds that exist for the
-  // caller's tenant. A fresh seed tenant has no staff.
-  staffRecordId = randomUUID();
-  staffMemberId = `TEST-EMP-${staffRecordId.slice(0, 6)}`;
-  createdStaffIds.push(staffRecordId);
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO workforce.employees
-       (id, tenant_id, employee_id, name, is_active, created_at, updated_at)
-     VALUES ($1::uuid, $2::uuid, $3, $4, true, NOW(), NOW())`,
-    staffRecordId,
-    seed.tenant.id,
-    staffMemberId,
-    `Test Staff ${staffRecordId.slice(0, 6)}`,
-  );
-  // Expose the resolved route name to the import test bodies via
-  // module-level reassignment below (see postImport helper).
-  (globalThis as any).__bulkImportRouteName = routeName;
-  testRouteName = routeName;
+    staffRecordId = randomUUID();
+    staffMemberId = `TEST-EMP-${staffRecordId.slice(0, 6)}`;
+    createdStaffIds.push(staffRecordId);
+    await tx.$executeRawUnsafe(
+      `INSERT INTO workforce.employees
+         (id, tenant_id, employee_id, name, is_active, created_at, updated_at)
+       VALUES ($1::uuid, $2::uuid, $3, $4, true, NOW(), NOW())`,
+      staffRecordId,
+      tid,
+      staffMemberId,
+      `Test Staff ${staffRecordId.slice(0, 6)}`,
+    );
+    (globalThis as any).__bulkImportRouteName = routeName;
+    testRouteName = routeName;
+  });
 }, 60_000);
 
 afterAll(async () => {
-  if (createdRowIds.length) {
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM route_passengers WHERE id = ANY($1::uuid[])`,
-      createdRowIds,
-    );
-  }
-  if (createdStaffIds.length) {
-    // workforce.employees.id is text in this DB (despite Prisma's @id),
-    // so cast to text[] for the ANY() comparison.
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM workforce.employees WHERE id = ANY($1::text[])`,
-      createdStaffIds,
-    );
-  }
-  if (seed) {
-    await prisma.$executeRawUnsafe(
+  if (!seed) return;
+  const tid = seed.tenant.id;
+  await withTenantRls(prisma, tid, async (tx) => {
+    if (createdRowIds.length) {
+      await tx.$executeRawUnsafe(
+        `DELETE FROM route_passengers WHERE id = ANY($1::uuid[])`,
+        createdRowIds,
+      ).catch(() => {});
+    }
+    await tx.$executeRawUnsafe(
+      `DELETE FROM route_passengers WHERE tenant_id = $1::uuid`,
+      tid,
+    ).catch(() => {});
+    if (createdStaffIds.length) {
+      await tx.$executeRawUnsafe(
+        `DELETE FROM workforce.employees WHERE id = ANY($1::text[])`,
+        createdStaffIds,
+      ).catch(() => {});
+    }
+    await tx.$executeRawUnsafe(
       `DELETE FROM bulk_import_jobs WHERE tenant_id = $1::uuid`,
-      seed.tenant.id,
-    );
-  }
-  await prisma.$disconnect();
+      tid,
+    ).catch(() => {});
+    if (createdRoute && busRouteId) {
+      await tx.busRoute.deleteMany({ where: { id: busRouteId } }).catch(() => {});
+    }
+  }).catch(() => {});
+  await cleanupTenant(tid).catch(() => {});
+  await cleanupUser(seed.user.id).catch(() => {});
 });
 
 async function postImport(body: object, params: Record<string, string> = {}) {

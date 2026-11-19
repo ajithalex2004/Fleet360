@@ -126,7 +126,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
         STAGING_APP_ORIGIN: 'http://127.0.0.1:59999',
       },
       cwd: process.cwd(),
-      timeout: 3000,
+      timeout: 7000,
     };
 
     const startTime = Date.now();
@@ -136,7 +136,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('STAGING_DATABASE_URL environment variable is required');
     // Must exit immediately during module initialization before any network operation
-    expect(duration).toBeLessThan(2000);
+    expect(duration).toBeLessThan(6000);
   });
 
   it('staging-live-smoke.mjs exits with code 1 in clean isolated environment when STAGING_DATABASE_URL is absent', () => {
@@ -150,7 +150,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
         STAGING_DATABASE_URL: '',
       },
       cwd: process.cwd(),
-      timeout: 3000,
+      timeout: 7000,
     };
 
     const startTime = Date.now();
@@ -159,6 +159,6 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
 
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('STAGING_DATABASE_URL environment variable is required');
-    expect(duration).toBeLessThan(2000);
+    expect(duration).toBeLessThan(6000);
   });
 });

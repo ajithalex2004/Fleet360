@@ -10,11 +10,13 @@ export const dynamic = 'force-dynamic';
  *  3. Ingestion into Central Hopper: runs 2-tier NLP parser and provisions ticket into OPERATIONS_TRIAGE.
  */
 
+import crypto from 'crypto';
 import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { verifyTwilioSignature, twilioWebhookUrl } from '@/lib/whatsapp/twilio-signature';
 import {
   parseInboundMessage,
   createTicketFromParsedIntent,
@@ -22,6 +24,66 @@ import {
 } from '@/lib/service-tickets/whatsapp-nlp-engine';
 
 export const runtime = 'nodejs';
+
+function verifyMetaHubSignature(rawBody: string, signatureHeader: string | null, secret: string | undefined): boolean {
+  if (!signatureHeader || !secret) return false;
+  const parts = signatureHeader.split('=');
+  if (parts.length !== 2 || parts[0] !== 'sha256') return false;
+  const signatureHex = parts[1];
+
+  const expectedHex = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+  const expectedBuf = Buffer.from(expectedHex, 'utf8');
+  const actualBuf = Buffer.from(signatureHex, 'utf8');
+  if (expectedBuf.length !== actualBuf.length) return false;
+  try {
+    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  } catch {
+    return false;
+  }
+}
+
+async function resolveInboundTenant(fromNumber: string, phoneNumberId?: string | null): Promise<string> {
+  const cleanNumber = fromNumber.replace(/^whatsapp:/, '').trim();
+
+  if (phoneNumberId) {
+    try {
+      const match = await withPlatformAdmin(prisma, (tx) =>
+        tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+          `SELECT tenant_id FROM tenants WHERE id = $1 OR custom_domain = $1 LIMIT 1`,
+          phoneNumberId
+        )
+      ).catch(() => []);
+      if (match[0]?.tenant_id) return match[0].tenant_id;
+    } catch { /* ignore */ }
+  }
+
+  if (cleanNumber) {
+    try {
+      const rows = await withPlatformAdmin(prisma, (tx) =>
+        tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+          `SELECT tenant_id FROM whatsapp_messages
+           WHERE direction = 'OUTBOUND' AND to_number = $1 AND tenant_id <> 'default'
+           ORDER BY created_at DESC LIMIT 1`,
+          cleanNumber
+        )
+      ).catch(() => []);
+      if (rows[0]?.tenant_id) return rows[0].tenant_id;
+
+      const custRows = await withPlatformAdmin(prisma, (tx) =>
+        tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+          `SELECT tenant_id FROM customers
+           WHERE (mobile_number = $1 OR contact_person_phone = $1 OR phone = $1)
+             AND tenant_id IS NOT NULL AND tenant_id <> 'default'
+           ORDER BY created_at DESC LIMIT 1`,
+          cleanNumber
+        )
+      ).catch(() => []);
+      if (custRows[0]?.tenant_id) return custRows[0].tenant_id;
+    } catch { /* ignore */ }
+  }
+
+  return 'default';
+}
 
 /**
  * GET /api/service-tickets/whatsapp-webhook
@@ -33,8 +95,13 @@ export async function GET(req: NextRequest) {
   const token = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
 
-  const verifyToken =
-    process.env.WHATSAPP_VERIFY_TOKEN || 'fleet360_whatsapp_verify_token';
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  if (!verifyToken) {
+    return NextResponse.json(
+      { error: 'WhatsApp webhook verification token is not configured' },
+      { status: 503 }
+    );
+  }
 
   if (mode === 'subscribe' && secretsEqual(token, verifyToken)) {
     return new NextResponse(challenge, {
@@ -56,18 +123,41 @@ export async function POST(req: NextRequest) {
     let fromNumber = '';
     let customerName: string | null = null;
     let mediaUrl: string | null = null;
+    let phoneNumberId: string | null = null;
 
     const contentType = req.headers.get('content-type') || '';
 
-    // 1. Parse Meta Cloud API or Twilio payload
+    // 1. Authenticate and parse Meta Cloud API or Twilio payload
     if (contentType.includes('application/json')) {
-      const rawPayload = await req.json();
+      const appSecret = process.env.WHATSAPP_APP_SECRET;
+      if (!appSecret) {
+        return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+      }
+
+      const hubSignature = req.headers.get('x-hub-signature-256');
+      if (!hubSignature) {
+        return NextResponse.json({ error: 'Missing X-Hub-Signature-256' }, { status: 401 });
+      }
+
+      const rawBody = await req.text();
+      if (!verifyMetaHubSignature(rawBody, hubSignature, appSecret)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+      }
+
+      let rawPayload: any;
+      try {
+        rawPayload = JSON.parse(rawBody);
+      } catch {
+        return NextResponse.json({ error: 'Malformed JSON payload' }, { status: 400 });
+      }
+
       const payload = stripTenantOwnershipFields(rawPayload) as Record<string, any>;
 
       // Meta WhatsApp Cloud API Format
       if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {
         const entry = payload.entry[0];
         const change = entry?.changes?.[0]?.value;
+        phoneNumberId = change?.metadata?.phone_number_id || null;
         const contact = change?.contacts?.[0];
         const message = change?.messages?.[0];
 
@@ -93,12 +183,29 @@ export async function POST(req: NextRequest) {
         mediaUrl = payload.mediaUrl || payload.MediaUrl0 || null;
       }
     } else if (contentType.includes('application/x-www-form-urlencoded')) {
-      // Standard Twilio Form Post
-      const formData = await req.formData();
-      messageText = String(formData.get('Body') ?? '');
-      fromNumber = String(formData.get('From') ?? '');
-      customerName = (formData.get('ProfileName') as string) || null;
-      mediaUrl = (formData.get('MediaUrl0') as string) || null;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (!authToken) {
+        return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+      }
+
+      const signature = req.headers.get('x-twilio-signature');
+      if (!signature) {
+        return NextResponse.json({ error: 'Missing X-Twilio-Signature' }, { status: 401 });
+      }
+
+      const rawBody = await req.text();
+      const form = new URLSearchParams(rawBody);
+      const url = twilioWebhookUrl(req, '/api/service-tickets/whatsapp-webhook');
+      if (!verifyTwilioSignature(url, form, signature, authToken)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+      }
+
+      messageText = String(form.get('Body') ?? '');
+      fromNumber = String(form.get('From') ?? '');
+      customerName = (form.get('ProfileName') as string) || null;
+      mediaUrl = (form.get('MediaUrl0') as string) || null;
+    } else {
+      return NextResponse.json({ error: 'Unsupported media type' }, { status: 415 });
     }
 
     if (!messageText) {
@@ -106,17 +213,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ignored_or_no_text' }, { status: 200 });
     }
 
-    // 2. Resolve Tenant Context
-    let tenantId = req.nextUrl.searchParams.get('tenantId') || req.headers.get('x-tenant-id');
-    if (!tenantId) {
-      // Query default active tenant under withPlatformAdmin
-      const defaultTenant = await withPlatformAdmin(prisma, (tx) =>
-        tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
-          `SELECT DISTINCT tenant_id FROM service_tickets WHERE deleted_at IS NULL LIMIT 1`
-        )
-      ).catch(() => []);
-      tenantId = defaultTenant[0]?.tenant_id || 'default-tenant';
-    }
+    // 2. Resolve Tenant Context securely from sender/phone metadata (never untrusted query/header)
+    const tenantId = await resolveInboundTenant(fromNumber, phoneNumberId);
 
     // 3. Process Inbound Message with 2-Tier NLP
     return withTenantRls(prisma, tenantId, async () => {
@@ -125,11 +223,11 @@ export async function POST(req: NextRequest) {
         body: messageText,
         customerName,
         mediaUrl,
-        tenantId: tenantId!,
+        tenantId,
       };
 
       const intent = await parseInboundMessage(inboundParams);
-      const ticketResult = await createTicketFromParsedIntent(intent, inboundParams, tenantId!);
+      const ticketResult = await createTicketFromParsedIntent(intent, inboundParams, tenantId);
 
       // Also ensure trackingToken is attached in customFields
       const trackingToken = crypto.randomUUID().replace(/-/g, '');
@@ -160,7 +258,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('POST /api/service-tickets/whatsapp-webhook error:', err);
-    // Return 200 or 500 with diagnostic message
     return NextResponse.json(
       { error: 'Failed to process WhatsApp webhook', details: String(err) },
       { status: 500 }

@@ -12,6 +12,7 @@ import { tenantBootstrapHandler } from '@/lib/handlers/tenant-bootstrap-handler'
 import dns from 'dns';
 import { promisify } from 'util';
 import { prisma } from '@/lib/prisma';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 const resolveTxt = promisify(dns.resolveTxt);
 
@@ -84,10 +85,20 @@ export async function POST(request: NextRequest) {
 // ── GET — DNS TXT record verification ────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  if (authz.role !== 'TENANT_ADMIN' && authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Forbidden', message: 'TENANT_ADMIN role required' }, { status: 403 });
+  }
+  const callerTenantId = authz.tenantId;
+
   return tenantBootstrapHandler(request, 'verify_tenant_domain', async ({ tx }) => {
     try {
         const { searchParams } = request.nextUrl;
-        const tenantId = searchParams.get('tenantId');
+        const requestedTenantId = searchParams.get('tenantId') || callerTenantId;
+        const tenantId = authz.role === 'SUPER_ADMIN' ? requestedTenantId : callerTenantId;
 
         if (!tenantId) {
           return NextResponse.json(
@@ -170,8 +181,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           verified,
           method: verified ? ('DNS_TXT' as const) : null,
-          txtRecord: foundRecord,
-          expectedRecord,
+          txtRecord: verified ? foundRecord : null,
         });
         } catch (err) {
         console.error('[verify-domain GET]', err);

@@ -53,12 +53,51 @@ const db = vi.hoisted(() => ({
 
 const fakeTx = {
   driver: {
-    findFirst: async ({ where }: { where: { id: string; tenantId: string } }) => {
-      const d = db.drivers.find((x) => x.id === where.id && x.tenantId === where.tenantId);
-      return d ? { status: d.status } : null;
+    findFirst: async ({ where }: { where: { id?: string; tenantId: string; OR?: Array<{ id?: string; userId?: string }> } }) => {
+      const d = db.drivers.find((x) =>
+        x.tenantId === where.tenantId &&
+        (where.id
+          ? x.id === where.id
+          : where.OR
+            ? where.OR.some((c) => (c.id && x.id === c.id) || (c.userId && x.id === c.userId))
+            : false),
+      );
+      return d ? { id: d.id, name: null, firstName: null, lastName: null, status: d.status } : null;
     },
   },
+  vehicle: {
+    findFirst: async ({ where }: { where: { id: string; tenantId?: string } }) => {
+      const v = db.vehicles.find((x) => x.id === where.id && (!where.tenantId || x.tenant === where.tenantId));
+      return v ? { id: v.id, odometerReading: null } : null;
+    },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const v = db.vehicles.find((x) => x.id === where.id);
+      return v ? { id: v.id, odometerReading: null } : null;
+    },
+    update: async () => ({}),
+  },
+  fuelLog: {
+    create: async () => { db.bodyReached += 1; return {}; },
+  },
   $queryRawUnsafe: async (sql: string, ...p: string[]) => {
+    if (sql.includes('FROM drivers') && sql.includes('user_id = $2')) {
+      return [];
+    }
+    if (sql.includes('FROM trip_schedules ts') && !sql.includes('FROM vehicles v') && sql.includes("status = 'IN_PROGRESS'")) {
+      const [tenantId, userId, driverId] = p;
+      const t = db.trips.find((x) => x.tenant === tenantId && (x.driver === userId || x.driver === driverId) && x.status === 'IN_PROGRESS');
+      return t ? [{ id: t.id, vehicle_id: t.vehicle, plate: null }] : [];
+    }
+    if (sql.includes('FROM shifts s') && !sql.includes('FROM vehicles v') && sql.includes("status = 'ACTIVE'")) {
+      const [tenantId, userId, driverId] = p;
+      const s = db.shifts.find((x) => x.tenant === tenantId && (x.driver === userId || x.driver === driverId) && x.status === 'ACTIVE');
+      return s ? [{ vehicle_id: s.vehicle, plate: null }] : [];
+    }
+    if (sql.includes('FROM vehicles v') && !sql.includes('v.id::text = $1') && sql.includes('v.assigned_driver_id IN')) {
+      const [tenantId, userId, driverId] = p;
+      const v = db.vehicles.find((x) => x.tenant === tenantId && (x.assignedDriver === userId || x.assignedDriver === driverId));
+      return v ? [{ vehicle_id: v.id, plate: null }] : [];
+    }
     if (sql.includes('FROM shifts') && sql.includes('WHERE id::text = $1')) {
       const s = db.shifts.find((x) => x.id === p[0] && x.tenant === p[1] && x.driver === p[2]);
       return s ? [{ vehicle_id: s.vehicle }] : [];

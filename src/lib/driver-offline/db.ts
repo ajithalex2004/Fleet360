@@ -431,6 +431,20 @@ export async function dequeueSync(id: string): Promise<void> {
   await db.delete('sync_queue', id);
 }
 
+export async function quarantineSyncItem(id: string, reason: string): Promise<void> {
+  const db = await getDB();
+  const item = await db.get('sync_queue', id);
+  if (!item) return;
+  await db.delete('sync_queue', id);
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const list = JSON.parse(localStorage.getItem('fleet360_quarantined_sync') || '[]');
+      list.push({ ...item, quarantinedAt: Date.now(), quarantineReason: reason });
+      localStorage.setItem('fleet360_quarantined_sync', JSON.stringify(list.slice(-50)));
+    } catch {}
+  }
+}
+
 // ── Maintenance ─────────────────────────────────────────────────
 
 /**

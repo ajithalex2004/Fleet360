@@ -153,6 +153,14 @@ vi.mock('@/lib/finance/journal-service', () => ({
       idempotencyKey: input.idempotencyKey,
     };
   }),
+  postOperationalJournalEntry: vi.fn(async (_tx: unknown, input: Record<string, unknown>) => {
+    mockDb.draftJournals.push(input);
+    return {
+      id: 'je-op-1',
+      number: 'JE-OP-0001',
+      created: true,
+    };
+  }),
 }));
 
 import { PreDispatchComplianceGuard } from '@/lib/exchange/compliance-guard';
@@ -720,8 +728,8 @@ describe('Phase 2.2 & 2.3 — 3-Way Financial Reconciliation, Invoice GL Approva
     expect(approval.isRetry).toBe(false);
     expect(approval.economics?.platformFeeExclVat).toBe(270);
     expect(approval.economics?.isBalanced).toBe(true);
-    expect(approval.glEntries?.length).toBeGreaterThanOrEqual(2);
-    expect(mockDb.draftJournals).toHaveLength(2);
+    expect(approval.glEntries?.length).toBeGreaterThanOrEqual(1);
+    expect(mockDb.draftJournals).toHaveLength(1);
 
     // Now generate settlement statement with platform commission deduction
     mockDb.partner = {

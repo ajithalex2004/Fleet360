@@ -13,14 +13,13 @@
  * Run: npx vitest run tests/integration/staff-transport-continuous-driving.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
 import { DEFAULT_CBA_RULES, type CbaRules } from '@/lib/cba/types';
 
 let seed: SeedResult | undefined;
 let createdRuleSetId: string | null = null;
-
-const prisma = new PrismaClient();
 
 /** Platform default for the continuous-driving limit (hours). */
 const PLATFORM_DEFAULT_HOURS =
@@ -35,52 +34,58 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Clean slate: delete any default rule set the previous test left
-  // behind. We use ONE rule set and update it in place, because the
-  // partial unique index `idx_cba_default_per_tenant` only allows
-  // one default per tenant.
-  if (createdRuleSetId) {
-    await prisma.cbaRuleSet.delete({ where: { id: createdRuleSetId } }).catch(() => undefined);
-    createdRuleSetId = null;
-  }
-  await prisma.cbaRuleSet.deleteMany({
-    where: { tenantId: seed!.tenant.id, isDefault: true },
+  if (!seed) return;
+  await withTenantRls(prisma, seed.tenant.id, async (tx) => {
+    if (createdRuleSetId) {
+      await tx.cbaRuleSet.delete({ where: { id: createdRuleSetId } }).catch(() => undefined);
+      createdRuleSetId = null;
+    }
+    await tx.cbaRuleSet.deleteMany({
+      where: { tenantId: seed!.tenant.id, isDefault: true },
+    });
   });
 });
 
 afterAll(async () => {
-  if (createdRuleSetId) {
-    await prisma.cbaRuleSet.delete({ where: { id: createdRuleSetId } }).catch(() => undefined);
+  if (seed) {
+    if (createdRuleSetId) {
+      await withTenantRls(prisma, seed.tenant.id, (tx) =>
+        tx.cbaRuleSet.delete({ where: { id: createdRuleSetId! } }).catch(() => undefined),
+      );
+    }
+    await cleanupTenant(seed.tenant.id).catch(() => {});
+    await cleanupUser(seed.user.id).catch(() => {});
   }
-  await prisma.$disconnect();
 });
 
 /** Helper — create (or update) the tenant's default CBA rule set. */
 async function setDefaultRuleSet(name: string, rules: CbaRules) {
-  // Delete any existing default first (the partial unique index
-  // would reject a second one in the same tenant).
-  await prisma.cbaRuleSet.deleteMany({
-    where: { tenantId: seed!.tenant.id, isDefault: true },
+  return withTenantRls(prisma, seed!.tenant.id, async (tx) => {
+    await tx.cbaRuleSet.deleteMany({
+      where: { tenantId: seed!.tenant.id, isDefault: true },
+    });
+    const created = await tx.cbaRuleSet.create({
+      data: {
+        tenantId: seed!.tenant.id,
+        name,
+        jurisdiction: 'AE',
+        isDefault: true,
+        isSystem: false,
+        schemaVersion: 1,
+        rulesJson: rules as unknown as object,
+      },
+    });
+    createdRuleSetId = created.id;
+    return created;
   });
-  const created = await prisma.cbaRuleSet.create({
-    data: {
-      tenantId: seed!.tenant.id,
-      name,
-      jurisdiction: 'AE',
-      isDefault: true,
-      isSystem: false,
-      schemaVersion: 1,
-      rulesJson: rules as unknown as object,
-    },
-  });
-  createdRuleSetId = created.id;
-  return created;
 }
 
 async function clearDefaultRuleSet() {
-  await prisma.cbaRuleSet.deleteMany({
-    where: { tenantId: seed!.tenant.id, isDefault: true },
-  });
+  await withTenantRls(prisma, seed!.tenant.id, (tx) =>
+    tx.cbaRuleSet.deleteMany({
+      where: { tenantId: seed!.tenant.id, isDefault: true },
+    }),
+  );
   createdRuleSetId = null;
 }
 
@@ -206,17 +211,19 @@ describe('Driver CBA — continuous-driving limit', () => {
         },
       ],
     };
-    const created = await prisma.cbaRuleSet.create({
-      data: {
-        tenantId: seed!.tenant.id,
-        name: 'Non-default rule set (should be ignored)',
-        jurisdiction: 'AE',
-        isDefault: false, // <-- not the default
-        isSystem: false,
-        schemaVersion: 1,
-        rulesJson: custom as unknown as object,
-      },
-    });
+    const created = await withTenantRls(prisma, seed!.tenant.id, (tx) =>
+      tx.cbaRuleSet.create({
+        data: {
+          tenantId: seed!.tenant.id,
+          name: 'Non-default rule set (should be ignored)',
+          jurisdiction: 'AE',
+          isDefault: false, // <-- not the default
+          isSystem: false,
+          schemaVersion: 1,
+          rulesJson: custom as unknown as object,
+        },
+      }),
+    );
     createdRuleSetId = created.id;
 
     const r = await makeRequest('GET', '/api/driver-app/cba/continuous-driving-limit', undefined, seed!.headers);

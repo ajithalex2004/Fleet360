@@ -20,7 +20,6 @@
 import https from 'https';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
 
 dotenv.config({ path: '.env.production' });
 dotenv.config();
@@ -32,6 +31,8 @@ if (!DATABASE_URL) {
   console.error('STAGING_DATABASE_URL environment variable is required. There is no built-in default connection string.');
   process.exit(1);
 }
+
+const { PrismaClient } = await import('@prisma/client');
 
 function toBase64Url(str) {
   return Buffer.from(str, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');

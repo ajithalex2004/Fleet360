@@ -17,11 +17,8 @@ export async function GET(req: NextRequest) {
       const now = new Date();
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-      // ReportSchedule has no tenant_id column in the schema — it's a
-      // platform-global table, not per-tenant. Read it as-is rather than
-      // filtering by a field that doesn't exist.
       const [schedules, vehicleCount, maintenanceCount, rentalInvoiceCount, leaseInvoiceCount] = await Promise.all([
-        tx.reportSchedule.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }),
+        tx.reportSchedule.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 20 }),
         tx.vehicle.count({ where: { tenantId, deletedAt: null } }),
         tx.maintenanceRequest.count({ where: { tenantId, deletedAt: null } }),
         tx.rentalInvoice.count({ where: { tenantId } }),

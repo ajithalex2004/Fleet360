@@ -1,85 +1,67 @@
 import { NextResponse } from 'next/server';
+import { prisma, ensureDbConnected } from '@/lib/prisma';
+import { withPlatformAdmin, type TxClient } from '@/lib/rls';
 import { schemaReport } from '@/lib/db/schema-registry';
-import { goBackendConfigured } from '@/lib/go-routes';
 
 export const dynamic = 'force-dynamic';
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
 
 export async function GET() {
-  // Forwarding to Go (src/lib/go-routes.ts) needs a configured backend: in
-  // production a missing GO_BACKEND_URL would only surface per request.
-  if (!goBackendConfigured()) {
-    console.error('[api/readyz] Go forwarding is on but GO_BACKEND_URL is not set');
+  // 1. Database connectivity check: Next.js readiness requires active DB connectivity
+  try {
+    await ensureDbConnected({ force: true, retries: 2, timeoutMs: 2_500 });
+    await withPlatformAdmin(prisma, async (tx: TxClient) => {
+      await tx.$queryRaw`SELECT 1`;
+    });
+  } catch (err) {
+    console.error('[api/readyz] database check failed:', err);
     return NextResponse.json(
-      { status: 'not_ready', error: 'Go backend forwarding is on but GO_BACKEND_URL is not set' },
+      { status: 'not_ready', error: 'database unreachable' },
       { status: 503 },
     );
   }
+
+  // 2. Database schema completeness check: pending migrations make Next.js not ready
+  const schema = await schemaReport({ fresh: true });
+  if (schema.status === 'incomplete') {
+    console.error('[api/readyz] schema incomplete:', JSON.stringify(schema.missing));
+    return NextResponse.json(
+      { status: 'not_ready', error: 'database schema incomplete — apply pending migrations', missingObjects: schema.missingCount },
+      { status: 503 },
+    );
+  }
+
+  // 3. Optional Go backend version discovery: decoupled from readiness
+  // (unreachability or degraded Go service does NOT cause 503)
+  let version: string | undefined;
   try {
     const upstreamUrl = new URL('/readyz', GO_BACKEND_URL);
     const res = await fetch(upstreamUrl, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(1500),
       headers: {
         Accept: 'application/json',
       },
     });
 
-    // Any non-2xx upstream status (even if returning valid JSON with diagnostics)
-    // MUST return a generic safe 503 without echoing upstream error fields or hostnames.
-    if (!res.ok) {
-      return NextResponse.json(
-        { status: 'not_ready', error: 'service unavailable' },
-        { status: 503 },
-      );
+    if (res.ok) {
+      const data = await res.json().catch(() => null) as Record<string, unknown> | null;
+      if (typeof data?.version === 'string') {
+        version = data.version;
+      }
     }
-
-    let data: unknown;
-    try {
-      data = await res.json();
-    } catch {
-      // Upstream returned non-JSON body
-      return NextResponse.json(
-        { status: 'not_ready', error: 'upstream service unavailable' },
-        { status: 503 },
-      );
-    }
-
-    // Strictly allowlist fields returned to public callers — never reflect arbitrary upstream JSON
-    const payload = data as Record<string, unknown> | null;
-    const version = typeof payload?.version === 'string' ? payload.version : undefined;
-
-    // Every table/column the app checks at runtime must exist (audit A9):
-    // a deploy whose migrations were not applied is not ready. Only the count
-    // is public; Admin > Schema status lists the objects.
-    const schema = await schemaReport({ fresh: true });
-    if (schema.status === 'incomplete') {
-      console.error('[api/readyz] schema incomplete:', JSON.stringify(schema.missing));
-      return NextResponse.json(
-        { status: 'not_ready', error: 'database schema incomplete — apply pending migrations', missingObjects: schema.missingCount },
-        { status: 503 },
-      );
-    }
-
-    return NextResponse.json(
-      {
-        status: 'ready',
-        ...(version ? { version } : {}),
-        timestamp: new Date().toISOString(),
-      },
-      { status: 200 },
-    );
   } catch (err) {
-    // Log the real error server-side only — never expose upstream URLs, DSNs,
-    // hostnames, or connection errors to an unauthenticated caller.
-    console.error('[api/readyz] upstream check failed:', err);
-    return NextResponse.json(
-      {
-        status: 'not_ready',
-        error: 'service unavailable',
-      },
-      { status: 503 },
-    );
+    // Upstream Go check failure is logged server-side only. Next.js readiness is decoupled.
+    console.warn('[api/readyz] optional Go backend probe skipped/unreachable:', err);
   }
+
+  return NextResponse.json(
+    {
+      status: 'ready',
+      ...(version ? { version } : {}),
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200 },
+  );
 }

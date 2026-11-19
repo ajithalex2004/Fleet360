@@ -47,6 +47,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // Token represents a SCIM bearer token. The TokenHash is what's stored;
@@ -77,11 +78,13 @@ func CreateToken(ctx context.Context, tenantID uuid.UUID, label string, createdB
 	expires := time.Now().UTC().Add(ttl)
 
 	t = Token{TenantID: tenantID, Label: label, CreatedBy: &createdBy, ExpiresAt: &expires}
-	err = database.DB.WithContext(ctx).Raw(`
-		INSERT INTO scim_tokens (tenant_id, token_hash, label, created_by, expires_at)
-		VALUES (?, ?, ?, ?, ?)
-		RETURNING id, created_at
-	`, tenantID, hash, label, createdBy, expires).Row().Scan(&t.ID, &t.CreatedAt)
+	err = database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			INSERT INTO scim_tokens (tenant_id, token_hash, label, created_by, expires_at)
+			VALUES (?, ?, ?, ?, ?)
+			RETURNING id, created_at
+		`, tenantID, hash, label, createdBy, expires).Row().Scan(&t.ID, &t.CreatedAt)
+	})
 	if err != nil {
 		return "", Token{}, fmt.Errorf("scim: insert token: %w", err)
 	}
@@ -97,10 +100,12 @@ func CreateToken(ctx context.Context, tenantID uuid.UUID, label string, createdB
 
 // RevokeToken marks a SCIM token as revoked. Idempotent.
 func RevokeToken(ctx context.Context, tenantID, tokenID, actorUserID uuid.UUID) error {
-	err := database.DB.WithContext(ctx).Exec(`
-		UPDATE scim_tokens SET revoked_at = NOW(), updated_at = NOW()
-		WHERE id = ? AND tenant_id = ? AND revoked_at IS NULL
-	`, tokenID, tenantID).Error
+	err := database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			UPDATE scim_tokens SET revoked_at = NOW(), updated_at = NOW()
+			WHERE id = ? AND tenant_id = ? AND revoked_at IS NULL
+		`, tokenID, tenantID).Error
+	})
 	if err != nil {
 		return err
 	}
@@ -116,12 +121,14 @@ func RevokeToken(ctx context.Context, tenantID, tokenID, actorUserID uuid.UUID) 
 // IdP integration shouldn't need this — it's for the admin UI.
 func ListTokens(ctx context.Context, tenantID uuid.UUID) ([]Token, error) {
 	var out []Token
-	err := database.DB.WithContext(ctx).Raw(`
-		SELECT id, tenant_id, COALESCE(label, ''), created_by, created_at,
-		       last_used_at, expires_at, revoked_at
-		FROM scim_tokens WHERE tenant_id = ?
-		ORDER BY created_at DESC
-	`, tenantID).Scan(&out).Error
+	err := database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT id, tenant_id, COALESCE(label, ''), created_by, created_at,
+			       last_used_at, expires_at, revoked_at
+			FROM scim_tokens WHERE tenant_id = ?
+			ORDER BY created_at DESC
+		`, tenantID).Scan(&out).Error
+	})
 	return out, err
 }
 
@@ -143,10 +150,12 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		var tenantID uuid.UUID
 		var revokedAt, expiresAt *time.Time
-		err := database.DB.WithContext(c.Request.Context()).Raw(`
-			SELECT tenant_id, revoked_at, expires_at FROM scim_tokens
-			WHERE token_hash = ?
-		`, hash).Row().Scan(&tenantID, &revokedAt, &expiresAt)
+		err := database.WithPlatformTx(c.Request.Context(), func(tx *gorm.DB) error {
+			return tx.Raw(`
+				SELECT tenant_id, revoked_at, expires_at FROM scim_tokens
+				WHERE token_hash = ?
+			`, hash).Row().Scan(&tenantID, &revokedAt, &expiresAt)
+		})
 		if err != nil || tenantID == uuid.Nil {
 			scimError(c, http.StatusUnauthorized, "invalidToken", "unknown token")
 			return
@@ -162,9 +171,11 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Last-used update is fire-and-forget — not worth failing the
 		// request if the write fails.
-		go func(t string) {
-			_ = database.DB.Exec(`UPDATE scim_tokens SET last_used_at = NOW() WHERE token_hash = ?`, t).Error
-		}(hash)
+		go func(tid uuid.UUID, t string) {
+			_ = database.WithTenantTx(context.Background(), tid.String(), func(tx *gorm.DB) error {
+				return tx.Exec(`UPDATE scim_tokens SET last_used_at = NOW() WHERE token_hash = ? AND tenant_id = ?`, t, tid).Error
+			})
+		}(tenantID, hash)
 
 		c.Set("scim.tenant_id", tenantID)
 		c.Next()

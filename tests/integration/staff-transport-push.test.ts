@@ -1,62 +1,62 @@
 /**
  * tests/integration/staff-transport-push.test.ts
  *
- * Integration tests for the Push notification APIs (Phase 1 follow-up).
+ * Integration tests for the Push notification APIs:
  *
- *   - GET  /api/push/public-key — VAPID public key
- *   - POST /api/push/subscribe  — register a device
- *   - DELETE /api/push/subscribe — unregister
- *   - POST /api/push/test        — send a test push
- *
- * Note: /api/push/subscribe identifies the staff member by employeeId, not
- * an admin session, so it works without seedTestTenantFull().
+ *   - GET    /api/push/public-key — VAPID public key
+ *   - POST   /api/push/subscribe  — register a device (requires xl-session + linked StaffMember)
+ *   - DELETE /api/push/subscribe  — unregister
+ *   - POST   /api/push/test       — send a test push
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
-import { isServerRunning, makeRequest } from '../setup';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
 
 let serverUp = false;
+let seed: SeedResult | null = null;
 let testStaffId: string | null = null;
-const testEmployeeId = 'E2E-PUSH-STAFF';
-const testEndpoint = 'https://fcm.googleapis.com/fcm/send/E2E-PUSH-ENDPOINT';
+const testEmployeeId = `E2E-PUSH-${crypto.randomUUID().slice(0, 8)}`;
+const testEndpoint = `https://fcm.googleapis.com/fcm/send/E2E-PUSH-ENDPOINT-${crypto.randomUUID().slice(0, 8)}`;
 
 beforeAll(async () => {
   serverUp = await isServerRunning();
   if (!serverUp) {
-    console.warn('[push integration] Dev server not reachable — skipping');
-    return;
+    throw new Error('dev server must be running on :3000 — start with `npm run dev`');
   }
-  // Need a staff member to subscribe
-  const existing = await basePrisma.staffMember.findFirst({ where: { employeeId: testEmployeeId } });
-  if (existing) {
-    testStaffId = existing.id;
-  } else {
-    // We don't have a tenant here — use the platform tenant from the seed
-    const platform = await basePrisma.tenant.findFirst({ where: { isActive: true } });
-    if (!platform) {
-      console.warn('[push integration] No tenant found — skipping');
-      serverUp = false;
-      return;
-    }
-    const s = await basePrisma.staffMember.create({
+  seed = await seedTestTenantFull();
+  await withPlatformAdmin(basePrisma, async (tx) => {
+    await tx.user.update({
+      where: { id: seed!.user.id },
+      data: { employeeId: testEmployeeId },
+    });
+  });
+  const s = await withTenantRls(basePrisma, seed.tenant.id, (tx) =>
+    tx.staffMember.create({
       data: {
-        tenantId: platform.id,
+        tenantId: seed!.tenant.id,
         employeeId: testEmployeeId,
         name: 'E2E Push Staff',
         department: 'QA',
         isActive: true,
         transportType: 'BUS',
       },
-    });
-    testStaffId = s.id;
-  }
+    }),
+  );
+  testStaffId = s.id;
 });
 
 afterAll(async () => {
-  if (testStaffId) {
-    await basePrisma.pushSubscription.deleteMany({ where: { staffMemberId: testStaffId, endpoint: testEndpoint } });
-    // Don't delete the staff member in case other tests use it
+  if (seed) {
+    if (testStaffId) {
+      await withTenantRls(basePrisma, seed.tenant.id, async (tx) => {
+        await tx.pushSubscription.deleteMany({ where: { staffMemberId: testStaffId!, endpoint: testEndpoint } }).catch(() => {});
+        await tx.staffMember.deleteMany({ where: { id: testStaffId! } }).catch(() => {});
+      }).catch(() => {});
+    }
+    await cleanupTenant(seed.tenant.id).catch(() => {});
+    await cleanupUser(seed.user.id).catch(() => {});
   }
 });
 
@@ -67,22 +67,26 @@ describe('Push /api/push/*', () => {
     const body = await r.json();
     expect(typeof body.publicKey).toBe('string');
     expect(body.publicKey.length).toBeGreaterThan(50);
-    // VAPID public keys are base64url-encoded
     expect(body.publicKey).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  it('POST /subscribe with missing fields returns 400', async () => {
+  it('POST /subscribe without session returns 401', async () => {
     const r = await makeRequest('POST', '/api/push/subscribe', {});
+    expect(r.status).toBe(401);
+  });
+
+  it('POST /subscribe with missing fields returns 400', async () => {
+    const r = await makeRequest('POST', '/api/push/subscribe', {}, seed!.headers);
     expect(r.status).toBe(400);
   });
 
-  it('POST /subscribe with unknown employeeId returns 404', async () => {
+  it('POST /subscribe with mismatched employeeId returns 403', async () => {
     const r = await makeRequest('POST', '/api/push/subscribe', {
       endpoint: testEndpoint,
       keys: { p256dh: 'a', auth: 'b' },
       employeeId: 'EMP-DOES-NOT-EXIST-9999',
-    });
-    expect(r.status).toBe(404);
+    }, seed!.headers);
+    expect(r.status).toBe(403);
   });
 
   it('POST /subscribe with valid input creates a subscription', async () => {
@@ -94,30 +98,31 @@ describe('Push /api/push/*', () => {
       },
       userAgent: 'E2E-test',
       employeeId: testEmployeeId,
-    });
+    }, seed!.headers);
     expect(r.status).toBe(201);
 
-    // Verify in DB
-    const found = await basePrisma.pushSubscription.findFirst({ where: { endpoint: testEndpoint } });
+    const found = await withTenantRls(basePrisma, seed!.tenant.id, (tx) =>
+      tx.pushSubscription.findFirst({ where: { endpoint: testEndpoint } }),
+    );
     expect(found).not.toBeNull();
     expect(found?.staffMemberId).toBe(testStaffId);
   });
 
   it('POST /test sends a push and prunes the fake endpoint (410)', async () => {
-    const r = await makeRequest('POST', '/api/push/test', { employeeId: testEmployeeId });
+    const r = await makeRequest('POST', '/api/push/test', { employeeId: testEmployeeId }, seed!.headers);
     expect(r.status).toBe(200);
     const body = await r.json();
-    // Either it sent and got an error back, or it pruned the dead endpoint
     expect(body.sent + body.pruned).toBeGreaterThanOrEqual(1);
 
-    // Verify the endpoint is now revoked
-    const found = await basePrisma.pushSubscription.findFirst({ where: { endpoint: testEndpoint } });
+    const found = await withTenantRls(basePrisma, seed!.tenant.id, (tx) =>
+      tx.pushSubscription.findFirst({ where: { endpoint: testEndpoint } }),
+    );
     expect(found?.revokedAt).not.toBeNull();
     expect(found?.lastErrorCode).toBe(410);
   });
 
   it('DELETE /subscribe (without endpoint) returns 400', async () => {
-    const r = await makeRequest('DELETE', '/api/push/subscribe');
+    const r = await makeRequest('DELETE', '/api/push/subscribe', undefined, seed!.headers);
     expect(r.status).toBe(400);
   });
 });

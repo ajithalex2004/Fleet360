@@ -99,6 +99,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             where: { id: params.id },
             data: { notes: [schedule.notes, warning].filter(Boolean).join('\n') },
           });
+          if (schedule.vehicleId) {
+            await tx.vehicle.update({
+              where: { id: schedule.vehicleId },
+              data: {
+                status: 'GROUNDED',
+                isActive: false,
+              },
+            }).catch(async () => {
+              await tx.$executeRawUnsafe(
+                `UPDATE vehicles SET status = 'GROUNDED', is_active = false, updated_at = NOW() WHERE id = $1`,
+                schedule.vehicleId,
+              ).catch(() => {});
+            });
+          }
         }
 
         await writeRequiredAudit({

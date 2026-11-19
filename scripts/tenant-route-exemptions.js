@@ -12,6 +12,22 @@
 
 const RULE_EXEMPTIONS = [
   {
+    file: 'src/app/api/driver-app/auth/biometric/status/route.ts', method: 'GET', type: 'missing_auth',
+    reason: 'Pre-login driver app launcher boot probe; returns hasSession=false when unauthenticated without touching tenant tables, and scopes DB lookup via withTenantRls when a session is present.',
+    authMechanism: 'Optional verified session via getTenantContextOrNull(req); DB queried only when session is valid under withTenantRls(ctx.tenantId)',
+    dataScope: 'Authenticated user credential status only; anonymous callers receive static false metadata',
+    owner: 'Mobile App Team',
+    test: 'tests/integration/staff-transport-biometric.test.ts',
+  },
+  {
+    file: 'src/app/api/driver-app/auth/biometric/login/start/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Pre-login WebAuthn authentication challenge initiation; driver has no session yet and resolves credential challenge by username/email before signing in.',
+    authMechanism: 'WebAuthn challenge generation scoped to requested user and short-lived TTL challenge row under withPlatformAdmin',
+    dataScope: 'Single driver account and registered public-key credential IDs for WebAuthn assertion challenge',
+    owner: 'Mobile App Team',
+    test: 'tests/integration/staff-transport-biometric.test.ts',
+  },
+  {
     file: 'src/app/api/bus-ops/schedules/[id]/en-route/route.ts', method: 'POST', type: 'missing_sanitization',
     reason: 'This command accepts only an empty object through a strict Zod schema. Every body field, including tenant ownership and direct status fields, is rejected before any database transaction; no body data reaches a write.',
     authMechanism: 'requireBusOpsRequest + requireAuthorizedTenant',
@@ -173,16 +189,6 @@ const RULE_EXEMPTIONS = [
     dataScope: 'New tenant organization, user, and module records',
     owner: 'Growth / Self-Service Onboarding Team',
     test: 'tests/tenants/provision.test.ts',
-  },
-  {
-    file: 'src/app/api/tenants/verify-domain/route.ts',
-    method: 'GET',
-    type: 'missing_auth',
-    reason: 'Public DNS TXT record check verifying custom domain ownership for a tenant. Executed inside tenantBootstrapHandler boundary.',
-    authMechanism: 'DNS TXT record resolution via system DNS resolver',
-    dataScope: 'Tenant domain verification status',
-    owner: 'Identity & Security Engineering',
-    test: 'tests/tenants/verify-domain.test.ts',
   },
   {
     file: 'src/app/api/tenants/verify-domain/route.ts',

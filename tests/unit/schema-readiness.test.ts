@@ -17,7 +17,23 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRawUnsafe: async () => { db.queries++; return [{ missing: db.missing }]; },
     $executeRawUnsafe: async () => 0,
+    $queryRaw: async () => [{ '?column?': 1 }],
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $queryRawUnsafe: async () => { db.queries++; return [{ missing: db.missing }]; },
+        $executeRawUnsafe: async () => 0,
+        $queryRaw: async () => [{ '?column?': 1 }],
+      }),
   },
+  ensureDbConnected: vi.fn(async () => undefined),
+}));
+vi.mock('@/lib/rls', () => ({
+  withPlatformAdmin: async (_p: unknown, fn: (tx: unknown) => unknown) =>
+    fn({
+      $queryRawUnsafe: async () => { db.queries++; return [{ missing: db.missing }]; },
+      $executeRawUnsafe: async () => 0,
+      $queryRaw: async () => [{ '?column?': 1 }],
+    }),
 }));
 vi.mock('@/lib/rls-scope', () => ({ runOutsideRlsScope: (fn: () => unknown) => fn() }));
 

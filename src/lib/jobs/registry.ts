@@ -29,7 +29,7 @@ export interface JobContext {
   /** Raw query params passed to the dispatcher — jobs can read ?dryRun, etc. */
   searchParams: URLSearchParams;
   /** Original request — use sparingly; prefer structured context fields. */
-  request: NextRequest;
+  request?: NextRequest;
 }
 
 export interface JobResult {

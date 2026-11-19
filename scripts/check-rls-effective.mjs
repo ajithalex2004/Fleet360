@@ -164,6 +164,31 @@ const GLOBAL_NULL_ALLOWLIST = [
       'they can still be RECORDED. Removing that would trade an information ' +
       'leak for a security-telemetry gap. See 20260910000003.',
   },
+  {
+    table: 'email_templates',
+    reason:
+      'Platform default email templates (tenant_id IS NULL) are shared ' +
+      'read-only fallbacks across all tenants (src/lib/email-templates/index.ts); ' +
+      'tenants read defaults via SELECT while INSERT/UPDATE/DELETE require ' +
+      "matching tenant_id or platform admin ('*').",
+  },
+  {
+    table: 'vehicle_types',
+    reason:
+      'Shared baseline vehicle type catalog rows (tenant_id IS NULL) are ' +
+      'readable by every tenant via SELECT while tenant-specific overrides ' +
+      'and all INSERT/UPDATE/DELETE writes require matching tenant_id or ' +
+      "platform admin ('*').",
+  },
+  {
+    table: 'session_revocations',
+    reason:
+      'User-wide session revocations (user_id NOT NULL, tenant_id IS NULL; ' +
+      'enforced by session_revocations_scope CHECK) must be readable on SELECT ' +
+      'under any tenant RLS context (backend/auth/revocation.go); writes ' +
+      "(INSERT/UPDATE) are strictly restricted to platform admin ('*') via " +
+      'AS RESTRICTIVE policies and DELETE is explicitly denied.',
+  },
 ];
 
 // Which policy commands apply to which statement. '*' (ALL) applies to all four.

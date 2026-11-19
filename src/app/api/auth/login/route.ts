@@ -23,22 +23,81 @@ import { logAudit } from '@/lib/audit';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
-function verifySinglePassword(plaintext: string, stored: string): boolean {
+interface LoginRateLimitRecord {
+  attempts: number;
+  firstAttempt: number;
+  lockedUntil?: number;
+}
+const LOGIN_RATE_LIMITS = new Map<string, LoginRateLimitRecord>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+function checkLoginRateLimit(key: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = LOGIN_RATE_LIMITS.get(key);
+  if (!record) return { allowed: true };
+
+  if (record.lockedUntil && now < record.lockedUntil) {
+    return { allowed: false, retryAfter: Math.ceil((record.lockedUntil - now) / 1000) };
+  }
+
+  if (now - record.firstAttempt > LOGIN_WINDOW_MS) {
+    LOGIN_RATE_LIMITS.delete(key);
+    return { allowed: true };
+  }
+
+  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
+    record.lockedUntil = now + LOGIN_LOCKOUT_MS;
+    return { allowed: false, retryAfter: Math.ceil(LOGIN_LOCKOUT_MS / 1000) };
+  }
+
+  return { allowed: true };
+}
+
+function recordLoginFailure(key: string) {
+  const now = Date.now();
+  const record = LOGIN_RATE_LIMITS.get(key);
+  if (!record || (now - record.firstAttempt > LOGIN_WINDOW_MS)) {
+    LOGIN_RATE_LIMITS.set(key, { attempts: 1, firstAttempt: now });
+  } else {
+    record.attempts += 1;
+    if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
+      record.lockedUntil = now + LOGIN_LOCKOUT_MS;
+    }
+  }
+}
+
+function recordLoginSuccess(key: string) {
+  LOGIN_RATE_LIMITS.delete(key);
+}
+
+async function verifySinglePassword(plaintext: string, stored: string): Promise<boolean> {
   try {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
-    const derived = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
-    const a = Buffer.from(derived, 'hex');
-    const b = Buffer.from(hash,    'hex');
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
+    const derivedBuf = await new Promise<Buffer>((resolve, reject) => {
+      crypto.pbkdf2(plaintext, salt, 100_000, 64, 'sha512', (err, key) => {
+        if (err) reject(err);
+        else resolve(key);
+      });
+    });
+    const b = Buffer.from(hash, 'hex');
+    if (derivedBuf.length !== b.length) return false;
+    return crypto.timingSafeEqual(derivedBuf, b);
   } catch {
     return false;
   }
 }
 
-function verifyPassword(plaintext: string, stored: string): boolean {
-  return stored.split('|').some((candidate) => verifySinglePassword(plaintext, candidate.trim()));
+async function verifyPassword(plaintext: string, stored: string): Promise<boolean> {
+  const candidates = stored.split('|');
+  for (const candidate of candidates) {
+    if (await verifySinglePassword(plaintext, candidate.trim())) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const COOKIE_NAME = 'xl-session';
@@ -64,6 +123,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof password === 'string' && password.length > 128) {
+      return NextResponse.json(
+        { error: 'Bad Request', message: 'Password is too long' },
+        { status: 400 },
+      );
+    }
+
+    const rateKey = `${ipAddress}:${email.toLowerCase().trim()}`;
+    const rateCheck = checkLoginRateLimit(rateKey);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Too Many Requests', message: `Too many failed login attempts. Please retry after ${rateCheck.retryAfter}s.` },
+        { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } }
+      );
+    }
+
     // 1. Find the user by email, username, employeeId, or driver email prefix
     const normalizedIdent = email.toLowerCase().trim();
     let user = await prisma.user.findUnique({ where: { email: normalizedIdent } });
@@ -82,6 +157,7 @@ export async function POST(request: NextRequest) {
       });
     }
     if (!user) {
+      recordLoginFailure(rateKey);
       void logAudit({
         entityType: 'User',
         action: 'LOGIN_FAILED',
@@ -139,7 +215,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!verifyPassword(password, passwordHash)) {
+    if (!(await verifyPassword(password, passwordHash))) {
+      recordLoginFailure(rateKey);
       void logAudit({
         entityType: 'User',
         entityId: user.id,
@@ -440,6 +517,7 @@ export async function POST(request: NextRequest) {
       path:     '/',
     });
 
+    recordLoginSuccess(rateKey);
     return response;
   } catch (err) {
     console.error('[auth/login]', err);

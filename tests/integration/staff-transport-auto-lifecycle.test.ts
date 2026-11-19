@@ -12,8 +12,9 @@
  * Run: npx vitest run tests/integration/staff-transport-auto-lifecycle.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
 import {
   createAutoLifecycle,
   haversineMeters,
@@ -23,6 +24,7 @@ import {
 let seed: SeedResult | undefined;
 let tripId = '';
 let routeId = '';
+let createdRoute = false;
 let geofences: {
   origin: LatLng & { radiusM: number };
   destination: LatLng & { radiusM: number };
@@ -33,45 +35,72 @@ beforeAll(async () => {
     throw new Error('dev server must be running on :3000 — start with `npm run dev`');
   }
   seed = await seedTestTenantFull();
-  const prisma = new PrismaClient();
-  try {
-    // Find a route with 2+ geocoded stops
-    const routeRows = await prisma.$queryRaw<Array<{ route_id: string }>>`
-      SELECT route_id FROM route_stops
-      WHERE gps_lat IS NOT NULL AND gps_lng IS NOT NULL
-      GROUP BY route_id HAVING COUNT(*) >= 2
-      ORDER BY COUNT(*) DESC LIMIT 1
-    `;
-    routeId = routeRows[0]?.route_id ?? '';
-    if (!routeId) throw new Error('no route with 2+ geocoded stops');
+  const tid = seed.tenant.id;
+  await withTenantRls(prisma, tid, async (tx) => {
+    await tx.driver.create({
+      data: {
+        id: seed!.user.id,
+        tenantId: tid,
+        name: `${seed!.user.firstName} ${seed!.user.lastName}`,
+        firstName: seed!.user.firstName,
+        lastName: seed!.user.lastName,
+        licenseNumber: `DL-${seed!.user.id.slice(0, 8)}`,
+        status: 'ACTIVE',
+      },
+    });
+
+    const route = await tx.busRoute.create({
+      data: {
+        tenantId: tid,
+        name: `AUTO-LIFECYCLE-ROUTE-${crypto.randomUUID().slice(0, 8)}`,
+        origin: 'Origin Stop',
+        destination: 'Dest Stop',
+        routeType: 'STAFF',
+        isActive: true,
+        capacity: 30,
+      },
+    });
+    routeId = route.id;
+    createdRoute = true;
+
+    await tx.routeStop.createMany({
+      data: [
+        { tenantId: tid, routeId, stopName: 'Stop 1', sequence: 1, gpsLat: 25.1972, gpsLng: 55.2744, geofenceRadiusM: 100 },
+        { tenantId: tid, routeId, stopName: 'Stop 2', sequence: 2, gpsLat: 25.2582, gpsLng: 55.3047, geofenceRadiusM: 100 },
+      ],
+    });
 
     tripId = crypto.randomUUID();
-    await prisma.$executeRaw`
+    await tx.$executeRaw`
       INSERT INTO trip_schedules (
         id, tenant_id, driver_id, vehicle_id, route_id,
         departure_time, arrival_time, status, direction,
         trip_number, capacity, created_at, updated_at
       ) VALUES (
-        ${tripId}, ${seed.tenant.id}::uuid, ${seed.user.id}::text, '', ${routeId},
+        ${tripId}, ${tid}::uuid, ${seed!.user.id}::text, '', ${routeId},
         NOW() - INTERVAL '2 minutes', NOW() + INTERVAL '40 minutes',
         'SCHEDULED', 'OUTBOUND', 'AUTO-LIFECYCLE-IT', 30, NOW(), NOW()
       )
     `;
-  } finally {
-    await prisma.$disconnect();
-  }
+  });
 });
 
 afterAll(async () => {
-  const prisma = new PrismaClient();
-  try {
+  if (!seed) return;
+  const tid = seed.tenant.id;
+  await withTenantRls(prisma, tid, async (tx) => {
     if (tripId) {
-      await prisma.$executeRaw`DELETE FROM trip_state_transitions WHERE trip_id = ${tripId}`;
-      await prisma.$executeRaw`DELETE FROM trip_schedules WHERE id = ${tripId}`;
+      await tx.$executeRaw`DELETE FROM trip_state_transitions WHERE trip_id = ${tripId}`;
+      await tx.$executeRaw`DELETE FROM trip_schedules WHERE id = ${tripId}`;
     }
-  } finally {
-    await prisma.$disconnect();
-  }
+    if (createdRoute && routeId) {
+      await tx.routeStop.deleteMany({ where: { routeId } });
+      await tx.busRoute.deleteMany({ where: { id: routeId } });
+    }
+    await tx.driver.deleteMany({ where: { id: seed!.user.id } });
+  }).catch(() => {});
+  await cleanupTenant(tid).catch(() => {});
+  await cleanupUser(seed.user.id).catch(() => {});
 });
 
 describe('Auto-lifecycle (driver-controlled trip + geofences)', () => {
@@ -196,16 +225,13 @@ describe('Auto-lifecycle (driver-controlled trip + geofences)', () => {
   });
 
   it('persisted both transitions (STARTED + COMPLETED) for the auto-driven trip', async () => {
-    const prisma = new PrismaClient();
-    try {
-      const rows = await prisma.$queryRaw<Array<{ transition: string; source: string }>>`
+    const rows = await withTenantRls(prisma, seed!.tenant.id, (tx) =>
+      tx.$queryRaw<Array<{ transition: string; source: string }>>`
         SELECT transition, source FROM trip_state_transitions
         WHERE trip_id = ${tripId} ORDER BY at
-      `;
-      expect(rows.map((r) => r.transition)).toEqual(['STARTED', 'COMPLETED']);
-      expect(rows.every((r) => r.source === 'DRIVER_APP')).toBe(true);
-    } finally {
-      await prisma.$disconnect();
-    }
+      `,
+    );
+    expect(rows.map((r) => r.transition)).toEqual(['STARTED', 'COMPLETED']);
+    expect(rows.every((r) => r.source === 'DRIVER_APP')).toBe(true);
   });
 });

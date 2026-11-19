@@ -16,6 +16,7 @@ import { withTenantRls } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { logAudit } from '@/lib/audit';
 import { requireRentalPermission } from '@/lib/rental/rbac';
+import { getPublicOrigin } from '@/lib/public-origin';
 import {
   createRacPortalUser,
   deleteRacPortalUser,
@@ -60,9 +61,7 @@ async function verifyTenantCustomer(tenantId: string, customerId: string) {
 }
 
 function resolveAppOrigin(req: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim();
-  const base = configured || req.nextUrl.origin;
-  return base.replace(/\/$/, '');
+  return getPublicOrigin(req);
 }
 
 /**

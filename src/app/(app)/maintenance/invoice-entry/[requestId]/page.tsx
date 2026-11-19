@@ -187,9 +187,31 @@ export default function InvoiceEntryPage() {
             createdBy: 'operations-user'
         };
 
-        // TODO: Save to backend
-        alert('Invoice submitted successfully!');
-        router.push(`/maintenance/requests/${request!.id}`);
+        try {
+            const res = await fetch(`/api/maintenance-requests/${request!.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'INVOICE_SUBMITTED',
+                    actualCost: totals.grandTotal,
+                    actualPartsCost: totals.partsTotal,
+                    actualLaborCost: totals.laborTotal,
+                    actualOtherCost: totals.otherCharges,
+                    completionDate: new Date().toISOString(),
+                    historyNote: `Invoice ${invoiceNumber} submitted for AED ${totals.grandTotal.toFixed(2)}`,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.error || 'Failed to submit invoice');
+                return;
+            }
+            alert('Invoice submitted successfully!');
+            router.push(`/maintenance/requests/${request!.id}`);
+        } catch (err) {
+            console.error('Failed to submit invoice:', err);
+            alert('Failed to submit invoice');
+        }
     };
 
     if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;

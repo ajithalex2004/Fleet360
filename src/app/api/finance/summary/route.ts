@@ -5,14 +5,13 @@ export const dynamic = 'force-dynamic';
  *
  * READ-ONLY aggregation endpoint.
  * Consolidates financial data from all operational modules.
- * Every query has a .catch() fallback — the dashboard NEVER hard-errors.
  *
  * Query params:
  *   from  — ISO date string (optional)
  *   to    — ISO date string (optional)
  *
- * Performance: parallel raw SQL queries + JS aggregation. The whole
- * pipeline is wrapped in cacheRead so the finance dashboard doesn't
+ * Performance: sequential raw SQL queries in a single RLS tx + JS aggregation.
+ * The whole pipeline is wrapped in cacheRead so the finance dashboard doesn't
  * re-pay that cost on every page load. 60s server cache, 300s browser
  * stale-while-revalidate. The (tenantId, fromIso, toIso) cache key
  * keeps the response isolated per tenant and per date window.
@@ -41,9 +40,6 @@ function toNum(val: unknown): number {
 type AggRow   = { total: unknown; count: unknown };
 type MonthRow = { month: string; total: unknown; count: unknown };
 
-const zeroAgg   = () => Promise.resolve([{ total: 0, count: 0 }] as AggRow[]);
-const zeroMonth = () => Promise.resolve([] as MonthRow[]);
-
 const getFinanceSummary = cacheRead(
   async (tenantId: string, fromIso: string | null, toIso: string | null) => {
     const from = fromIso ? new Date(fromIso) : null;
@@ -65,12 +61,12 @@ const getFinanceSummary = cacheRead(
       financeInvByMonth,
     ] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       tx.$queryRawUnsafe<AggRow[]>(
-        `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
+        `SELECT COALESCE(SUM(COALESCE(grand_total, total_cost, 0)),0) as total, COUNT(*) as count
            FROM quotations
           WHERE tenant_id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
             AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
@@ -78,7 +74,7 @@ const getFinanceSummary = cacheRead(
           WHERE tenant_id = $1 AND deleted_at IS NULL AND status != 'VOID'
             AND issue_date BETWEEN $2::date AND $3::date`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
@@ -86,7 +82,7 @@ const getFinanceSummary = cacheRead(
           WHERE tenant_id = $1 AND deleted_at IS NULL
             AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
@@ -94,15 +90,16 @@ const getFinanceSummary = cacheRead(
           WHERE tenant_id = $1
             AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
-        `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
-           FROM invoices
-          WHERE tenant_id = $1 AND deleted_at IS NULL
-            AND created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
+        `SELECT COALESCE(SUM(i.total_amount),0) as total, COUNT(*) as count
+           FROM invoices i
+           JOIN maintenance_requests mr ON mr.id = i.request_id
+          WHERE mr.tenant_id = $1 AND mr.deleted_at IS NULL AND i.deleted_at IS NULL
+            AND i.created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
@@ -111,17 +108,18 @@ const getFinanceSummary = cacheRead(
             AND payment_status NOT IN ('DRAFT','CANCELLED')
             AND issue_date BETWEEN $2::date AND $3::date${SUMMARY_NOT_MIRRORED}`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(pt.amount),0) as total, COUNT(*) as count
            FROM payment_transactions pt
            JOIN invoices i ON i.id = pt.invoice_id
-          WHERE i.tenant_id = $1
-            AND pt.deleted_at IS NULL AND pt.status = 'COMPLETED'
+           JOIN maintenance_requests mr ON mr.id = i.request_id
+          WHERE mr.tenant_id = $1 AND mr.deleted_at IS NULL AND i.deleted_at IS NULL
+            AND pt.status = 'COMPLETED'
             AND pt.created_at BETWEEN $2::timestamptz AND $3::timestamptz`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
@@ -129,17 +127,17 @@ const getFinanceSummary = cacheRead(
           WHERE tenant_id = $1
             AND payment_date BETWEEN $2::date AND $3::date`,
         tenantId, fromTs, toTs,
-      ).catch(zeroAgg),
+      ),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
-                COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
+                COALESCE(SUM(COALESCE(grand_total, total_cost, 0)),0) as total, COUNT(*) as count
            FROM quotations
           WHERE tenant_id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
             AND created_at BETWEEN $2::timestamptz AND $3::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
         tenantId, fromTs, toTs,
-      ).catch(zeroMonth),
+      ),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
@@ -149,7 +147,7 @@ const getFinanceSummary = cacheRead(
             AND created_at BETWEEN $2::timestamptz AND $3::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
         tenantId, fromTs, toTs,
-      ).catch(zeroMonth),
+      ),
 
       tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', issue_date), 'YYYY-MM') as month,
@@ -159,7 +157,7 @@ const getFinanceSummary = cacheRead(
             AND issue_date BETWEEN $2::date AND $3::date${SUMMARY_NOT_MIRRORED}
           GROUP BY DATE_TRUNC('month', issue_date) ORDER BY month`,
         tenantId, fromTs, toTs,
-      ).catch(zeroMonth),
+      ),
     ]));
 
     const mc  = {

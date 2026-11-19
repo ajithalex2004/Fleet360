@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sendEmail } from '@/lib/email';
 import { RateLimiter } from '@/lib/rate-limiter';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,8 @@ function getClientIp(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== request.nextUrl.origin) {
+  const publicOrigin = getPublicOrigin(request);
+  if (origin && origin !== publicOrigin && origin !== request.nextUrl.origin) {
     return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
   }
 

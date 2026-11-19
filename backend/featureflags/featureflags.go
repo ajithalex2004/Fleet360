@@ -29,6 +29,7 @@ package featureflags
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // Feature key — kebab-case, closed vocabulary. Add new keys here.
@@ -120,35 +122,44 @@ func (r *Resolver) IsEnabled(ctx context.Context, tenantID uuid.UUID, f Feature)
 // resolveFromDB implements the three-source lookup. Each source is a
 // separate query — that's intentional. The cache absorbs the cost.
 func (r *Resolver) resolveFromDB(ctx context.Context, tenantID uuid.UUID, f Feature) bool {
-	// Source 1: explicit override.
-	var override struct {
-		IsEnabled    bool
-		EnabledFrom  *time.Time
-		EnabledUntil *time.Time
-	}
-	err := database.DB.WithContext(ctx).Raw(`
-		SELECT is_enabled, enabled_from, enabled_until
-		FROM tenant_feature_overrides
-		WHERE tenant_id = ? AND feature_key = ?
-	`, tenantID, string(f)).Scan(&override).Error
-	if err == nil && (override.EnabledFrom == nil || time.Now().UTC().After(*override.EnabledFrom)) &&
-		(override.EnabledUntil == nil || time.Now().UTC().Before(*override.EnabledUntil)) {
-		return override.IsEnabled
-	}
+	result := defaultEnabled[f]
+	_ = database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		// Source 1: explicit override (Row().Scan detects sql.ErrNoRows cleanly).
+		var isEnabled bool
+		var enabledFrom, enabledUntil sql.NullTime
+		err := tx.Raw(`
+			SELECT is_enabled, enabled_from, enabled_until
+			FROM tenant_feature_overrides
+			WHERE tenant_id = ? AND feature_key = ?
+			LIMIT 1
+		`, tenantID, string(f)).Row().Scan(&isEnabled, &enabledFrom, &enabledUntil)
+		if err == nil {
+			now := time.Now().UTC()
+			afterFrom := !enabledFrom.Valid || now.After(enabledFrom.Time)
+			beforeUntil := !enabledUntil.Valid || now.Before(enabledUntil.Time)
+			if afterFrom && beforeUntil {
+				result = isEnabled
+				return nil
+			}
+		}
 
-	// Source 2: tenant_modules (only meaningful for module-level flags).
-	var isEnabled bool
-	err = database.DB.WithContext(ctx).Raw(`
-		SELECT COALESCE(is_enabled, false)
-		FROM tenant_modules
-		WHERE tenant_id = ? AND module = ?
-	`, tenantID, string(f)).Scan(&isEnabled).Error
-	if err == nil {
-		return isEnabled
-	}
+		// Source 2: tenant_modules (only meaningful for module-level flags).
+		var modEnabled bool
+		err = tx.Raw(`
+			SELECT COALESCE(is_enabled, false)
+			FROM tenant_modules
+			WHERE tenant_id = ? AND module = ?
+			LIMIT 1
+		`, tenantID, string(f)).Row().Scan(&modEnabled)
+		if err == nil {
+			result = modEnabled
+			return nil
+		}
+		return nil
+	})
 
-	// Source 3: static default.
-	return defaultEnabled[f]
+	// Source 3: static default (if neither override nor module row matched).
+	return result
 }
 
 // Invalidate drops the cache entries for a tenant. Call from tenant CRUD

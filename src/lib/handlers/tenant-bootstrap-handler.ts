@@ -199,7 +199,7 @@ export async function tenantBootstrapHandler<T>(
   req: NextRequest,
   operation: BootstrapOperation,
   fn: BootstrapHandlerFn<T>,
-): Promise<NextResponse> {
+): Promise<NextResponse | Response> {
   // 1. Verify capability allowlist
   if (!BOOTSTRAP_ALLOWED_OPERATIONS.has(operation)) {
     return NextResponse.json(
@@ -247,7 +247,7 @@ export async function tenantBootstrapHandler<T>(
       });
     });
 
-    if (result instanceof NextResponse) {
+    if (result instanceof Response || result instanceof NextResponse) {
       return result;
     }
 

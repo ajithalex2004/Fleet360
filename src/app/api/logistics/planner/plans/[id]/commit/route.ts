@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const result = await withTenantRls(prisma, authz.tenantId, () =>
       commitPlan(authz.tenantId, id, actorUserId),
     );
-    return NextResponse.json({ id, status: 'COMMITTED', ...result });
+    return NextResponse.json({ ok: true, id, status: 'COMMITTED', ...result });
   } catch (err) {
     console.error('[api/logistics/planner/plans/[id]/commit POST]', err);
     const message = err instanceof Error ? err.message : 'Failed to commit route plan';

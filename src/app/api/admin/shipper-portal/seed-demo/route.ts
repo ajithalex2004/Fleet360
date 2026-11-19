@@ -23,6 +23,7 @@ import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { createPortalUser } from '@/lib/shipper-portal/portal-users-store';
 import { createInvitation } from '@/lib/shipper-portal/invitations';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
@@ -73,9 +74,7 @@ async function handlePOST(req: NextRequest) {
     const invitation = await createInvitation({
       tenantId, portalUserId: portalUser.id, invitedByUserId: userId,
     });
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-      ?? req.headers.get('origin')
-      ?? `http://localhost:3000`;
+    const baseUrl = getPublicOrigin(req);
     const setupUrl = `${baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(invitation.rawToken)}`;
 
     // 3. Create a few shipments at varying statuses.

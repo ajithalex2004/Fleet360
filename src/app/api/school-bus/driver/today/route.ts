@@ -81,7 +81,10 @@ export async function GET(req: NextRequest) {
            AND (t.driver_id::text = $2 OR t.driver_name = $2)
          ORDER BY t.scheduled_start ASC NULLS LAST, t.created_at ASC`,
         todayDate, driverCode,
-      ).catch(() => [] as TripRow[]);
+      ).catch((err) => {
+        console.error('[school-bus/driver/today] trip query error:', err);
+        return [] as TripRow[];
+      });
 
       if (trips.length === 0) {
         return NextResponse.json({ driverCode, trips: [], date: todayDate });

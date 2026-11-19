@@ -14,7 +14,7 @@
 
 /** Scheduled departure as local ISO text (`2026-09-26T06:45:00`), NULL when no start time is set. */
 export function scheduledDepartureSql(alias: string): string {
-  return `to_char(${alias}.scheduled_date + ${alias}.scheduled_start, 'YYYY-MM-DD"T"HH24:MI:SS')`;
+  return `CASE WHEN ${alias}.scheduled_date IS NOT NULL AND ${alias}.scheduled_start IS NOT NULL THEN to_char(${alias}.scheduled_date + (${alias}.scheduled_start)::time, 'YYYY-MM-DD"T"HH24:MI:SS') ELSE NULL END`;
 }
 
 /** Trip columns under the API's field names: session_type, scheduled_departure, actual_departure, actual_arrival. */

@@ -8,12 +8,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureRouteOptimizerSchema } from '@/lib/logistics/route-optimizer-schema';
 import { GET as inputsGET } from '@/app/api/logistics/planner/inputs/route';
 
-const prisma = new PrismaClient();
 const TENANT = `pin-${randomUUID().slice(0, 8)}`;
 const cleanup = { vehicles: [] as string[], shipments: [] as string[] };
 
@@ -23,13 +23,21 @@ function req(type: string, tenant: string | null = TENANT): NextRequest {
   return new NextRequest(`http://localhost/api/logistics/planner/inputs?type=${type}`, { headers });
 }
 
-beforeAll(async () => { await ensureRouteOptimizerSchema(); }, 60_000);
+beforeAll(async () => {
+  await ensureRouteOptimizerSchema();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO tenants (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+    TENANT, `Planner Inputs Test ${TENANT}`,
+  );
+}, 60_000);
 
 afterAll(async () => {
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
-  if (cleanup.shipments.length) await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, cleanup.shipments).catch(() => {});
-  if (cleanup.vehicles.length) await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, cleanup.vehicles).catch(() => {});
-  await prisma.$disconnect();
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
+    if (cleanup.shipments.length) await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, cleanup.shipments).catch(() => {});
+    if (cleanup.vehicles.length) await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, cleanup.vehicles).catch(() => {});
+  });
+  await prisma.$executeRawUnsafe(`DELETE FROM tenants WHERE id = $1`, TENANT).catch(() => {});
 });
 
 describe('planner inputs endpoint', () => {
@@ -41,18 +49,20 @@ describe('planner inputs endpoint', () => {
   it('returns only vehicles with payload capacity AND depot', async () => {
     // Eligible vehicle
     const good = randomUUID();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO vehicles (id, license_plate, vehicle_usage, payload_capacity_kg, depot_latitude, depot_longitude, created_at, updated_at)
-       VALUES ($1, 'GOOD-1', 'LOGISTICS', 2000, 25.2, 55.3, NOW(), NOW())`,
-      good,
-    );
-    // Ineligible: has capacity but no depot
     const noDepot = randomUUID();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO vehicles (id, license_plate, vehicle_usage, payload_capacity_kg, created_at, updated_at)
-       VALUES ($1, 'NODEPOT-1', 'LOGISTICS', 2000, NOW(), NOW())`,
-      noDepot,
-    );
+    await withTenantRls(prisma, TENANT, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO vehicles (id, tenant_id, license_plate, vehicle_usage, payload_capacity_kg, depot_latitude, depot_longitude, created_at, updated_at)
+         VALUES ($1, $2, 'GOOD-1', 'LOGISTICS', 2000, 25.2, 55.3, NOW(), NOW())`,
+        good, TENANT,
+      );
+      // Ineligible: has capacity but no depot
+      await tx.$executeRawUnsafe(
+        `INSERT INTO vehicles (id, tenant_id, license_plate, vehicle_usage, payload_capacity_kg, created_at, updated_at)
+         VALUES ($1, $2, 'NODEPOT-1', 'LOGISTICS', 2000, NOW(), NOW())`,
+        noDepot, TENANT,
+      );
+    });
     cleanup.vehicles.push(good, noDepot);
 
     const res = await inputsGET(req('vehicles'));
@@ -66,28 +76,30 @@ describe('planner inputs endpoint', () => {
   it('returns only shipments that have both pickup and delivery stops', async () => {
     // Complete shipment
     const complete = randomUUID();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, created_at, updated_at)
-       VALUES ($1, $2, 'COMPLETE-1', 'PENDING', 'AED', NOW(), NOW())`,
-      complete, TENANT,
-    );
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, created_at, updated_at)
-       VALUES ($1,$2,$3,1,'PICKUP',NOW(),NOW()), ($4,$2,$3,2,'DELIVERY',NOW(),NOW())`,
-      randomUUID(), TENANT, complete, randomUUID(),
-    );
-    // Pickup-only shipment (incomplete)
     const pickupOnly = randomUUID();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, created_at, updated_at)
-       VALUES ($1, $2, 'INCOMPLETE-1', 'PENDING', 'AED', NOW(), NOW())`,
-      pickupOnly, TENANT,
-    );
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, created_at, updated_at)
-       VALUES ($1,$2,$3,1,'PICKUP',NOW(),NOW())`,
-      randomUUID(), TENANT, pickupOnly,
-    );
+    await withTenantRls(prisma, TENANT, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, created_at, updated_at)
+         VALUES ($1, $2, 'COMPLETE-1', 'PENDING', 'AED', NOW(), NOW())`,
+        complete, TENANT,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, created_at, updated_at)
+         VALUES ($1,$2,$3,1,'PICKUP',NOW(),NOW()), ($4,$2,$3,2,'DELIVERY',NOW(),NOW())`,
+        randomUUID(), TENANT, complete, randomUUID(),
+      );
+      // Pickup-only shipment (incomplete)
+      await tx.$executeRawUnsafe(
+        `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, created_at, updated_at)
+         VALUES ($1, $2, 'INCOMPLETE-1', 'PENDING', 'AED', NOW(), NOW())`,
+        pickupOnly, TENANT,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, created_at, updated_at)
+         VALUES ($1,$2,$3,1,'PICKUP',NOW(),NOW())`,
+        randomUUID(), TENANT, pickupOnly,
+      );
+    });
     cleanup.shipments.push(complete, pickupOnly);
 
     const res = await inputsGET(req('shipments'));

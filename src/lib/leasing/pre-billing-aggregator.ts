@@ -39,11 +39,14 @@ export interface AggregateResult {
   baseRent: number;
   fuelCharges: number;
   fineCharges: number;
+  finePrincipalCharges?: number;
+  fineAdminCharges?: number;
   maintenanceCharges: number;
   overageCharges: number;
   otherCharges: number;
 
   subTotal: number;
+  taxableSubTotal?: number;
   vatPct: number;
   vatAmount: number;
   totalAmount: number;
@@ -134,10 +137,16 @@ export async function aggregatePreBilling(input: AggregateInput): Promise<Aggreg
   const maintenanceCharges = input.maintenanceCharges ?? 0;
   const otherCharges = input.otherCharges ?? 0;
 
-  const subTotal =
-    baseRent + fuelCharges + fineCharges + maintenanceCharges + overageCharges + otherCharges;
+  const finePrincipalCharges = fineCharges;
+  const fineAdminCharges = 0;
+
+  // UAE FTA VATP006 / VATP040: Statutory fine principal is 0% VAT (outside scope).
+  // Standard leasing rent, fuel, overages, and admin fees are taxable at standard 5% VAT.
+  const taxableSubTotal =
+    baseRent + fuelCharges + fineAdminCharges + maintenanceCharges + overageCharges + otherCharges;
   const vatPct = input.vatPct ?? 5;
-  const vatAmount = (subTotal * vatPct) / 100;
+  const vatAmount = (taxableSubTotal * vatPct) / 100;
+  const subTotal = taxableSubTotal + finePrincipalCharges;
   const totalAmount = subTotal + vatAmount;
 
   return {
@@ -149,14 +158,55 @@ export async function aggregatePreBilling(input: AggregateInput): Promise<Aggreg
     baseRent,
     fuelCharges,
     fineCharges,
+    finePrincipalCharges,
+    fineAdminCharges,
     maintenanceCharges,
     overageCharges,
     otherCharges,
     subTotal,
+    taxableSubTotal,
     vatPct,
     vatAmount,
     totalAmount,
     currency,
     sources: [...fuelSources, ...fineSources, ...overageSources],
+  };
+}
+
+/**
+ * Splits a traffic fine billing line into statutory fine principal (0% VAT, Category O)
+ * and administrative surcharge (5% VAT, Category S) per UAE FTA VATP006 / VATP040.
+ */
+export function splitFineBillingLine(params: {
+  fineAmount: number;
+  adminFee: number;
+  fineNumber?: string;
+  description?: string;
+}) {
+  const vatRate = 0.05;
+  const adminVat = Math.round(params.adminFee * vatRate * 100) / 100;
+  return {
+    statutoryFine: {
+      lineType: 'STATUTORY_FINE' as const,
+      description: params.description || `Statutory Fine ${params.fineNumber || ''}`,
+      amount: params.fineAmount,
+      taxable: false,
+      taxCategory: 'O' as const,
+      vatRatePct: 0,
+      vatAmount: 0,
+      glAccount: '2160',
+    },
+    adminSurcharge: {
+      lineType: 'ADMIN_FEE' as const,
+      description: `Fine Admin Surcharge ${params.fineNumber || ''}`,
+      amount: params.adminFee,
+      taxable: true,
+      taxCategory: 'S' as const,
+      vatRatePct: 5,
+      vatAmount: adminVat,
+      glAccount: '4140',
+    },
+    totalVat: adminVat,
+    grossPayable: params.fineAmount + params.adminFee + adminVat,
   };
 }

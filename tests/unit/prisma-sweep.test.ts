@@ -49,20 +49,26 @@ describe('prisma-sweep connection and role validation', () => {
   });
 
   it('rejects direct connection and alarms if role holds BYPASSRLS', async () => {
-    if (!process.env.MIGRATION_DATABASE_URL && !process.env.DIRECT_URL) return;
-    process.env.RUNTIME_DIRECT_DATABASE_URL = process.env.MIGRATION_DATABASE_URL || process.env.DIRECT_URL;
+    process.env.RUNTIME_DIRECT_DATABASE_URL = 'postgresql://neondb_owner:pass@127.0.0.1:5433/fleet360_e2e_test';
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { client, concurrency } = await getVerifiedSweepPrisma();
+    const querySpy = vi
+      .spyOn(PrismaClient.prototype, '$queryRawUnsafe')
+      .mockResolvedValueOnce([{ current_user: 'neondb_owner', rolcanlogin: true, rolbypassrls: true, rolsuper: false }]);
 
-    // Must reject the bypass role and fall back to safe pooled prisma
-    expect(client === prisma).toBe(true);
-    expect(concurrency).toBe(1);
-    expect(getSweepPrisma() === prisma).toBe(true);
+    try {
+      const { client, concurrency } = await getVerifiedSweepPrisma();
 
-    errorSpy.mockRestore();
-    warnSpy.mockRestore();
+      // Must reject the bypass role and fall back to safe pooled prisma
+      expect(client === prisma).toBe(true);
+      expect(concurrency).toBe(1);
+      expect(getSweepPrisma() === prisma).toBe(true);
+    } finally {
+      querySpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 
   // ── Advisory Lock Hashing & Concurrency Overlap Tests ───────────────────────

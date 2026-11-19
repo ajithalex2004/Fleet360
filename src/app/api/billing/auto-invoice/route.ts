@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls, type TxClient } from '@/lib/rls';
+import { withTenantRls, withPlatformAdmin, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -68,12 +68,12 @@ async function nextInvoiceNumber(tx: TxClient, tenantId: string): Promise<string
   type SeqRow = { last_seq: bigint | null };
   const [seqRow] = await tx.$queryRawUnsafe<SeqRow[]>(
     `SELECT MAX(CAST(SPLIT_PART(invoice_number, '-', 3) AS INTEGER)) AS last_seq
-       FROM finance_invoices
+       FROM platform_subscription_invoices
       WHERE invoice_number LIKE $1
         AND tenant_id = $2`,
     `${prefix}-%`,
     tenantId,
-  ).catch(() => [{ last_seq: null }]);
+  );
 
   const seq = (Number(seqRow?.last_seq ?? 0) + 1).toString().padStart(4, '0');
   return `${prefix}-${seq}`;
@@ -107,7 +107,7 @@ async function computeBilling(tx: TxClient, sub: Subscription, _tenantName: stri
   const [vcRow] = await tx.$queryRawUnsafe<CountRow[]>(
     `SELECT COUNT(*) AS cnt FROM vehicles WHERE tenant_id = $1 AND deleted_at IS NULL`,
     sub.tenant_id
-  ).catch(() => [{ cnt: BigInt(0) }]);
+  );
 
   const vehicleCount   = Number(vcRow?.cnt ?? 0);
   const vehicleOverage = Math.max(0, vehicleCount - maxVehicles);
@@ -125,7 +125,7 @@ async function computeBilling(tx: TxClient, sub: Subscription, _tenantName: stri
   const [ucRow] = await tx.$queryRawUnsafe<CountRow[]>(
     `SELECT COUNT(*) AS cnt FROM user_tenants WHERE tenant_id = $1 AND is_active = TRUE`,
     sub.tenant_id
-  ).catch(() => [{ cnt: BigInt(0) }]);
+  );
 
   const userCount   = Number(ucRow?.cnt ?? 0);
   const userOverage = Math.max(0, userCount - maxUsers);
@@ -143,7 +143,7 @@ async function computeBilling(tx: TxClient, sub: Subscription, _tenantName: stri
     const [scRow] = await tx.$queryRawUnsafe<CountRow[]>(
       `SELECT COUNT(*) AS cnt FROM students WHERE tenant_id = $1 AND deleted_at IS NULL`,
       sub.tenant_id
-    ).catch(() => [{ cnt: BigInt(0) }]);
+    );
 
     const studentCount   = Number(scRow?.cnt ?? 0);
     const studentOverage = Math.max(0, studentCount - maxStudents);
@@ -178,49 +178,54 @@ export async function GET(_req: NextRequest) {
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    type RunRow = {
-      id: string;
-      created_at: Date;
-      run_date: Date;
-      status: string;
-      total_tenants: number | bigint;
-      invoices_created: number | bigint;
-      total_amount: string | number;
-      errors: unknown;
-      completed_at: Date | null;
-    };
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      type RunRow = {
+        id: string;
+        created_at: Date;
+        run_date: Date;
+        status: string;
+        total_tenants: number | bigint;
+        invoices_created: number | bigint;
+        total_amount: string | number;
+        errors: unknown;
+        completed_at: Date | null;
+      };
 
-    const runs = await tx.$queryRawUnsafe<RunRow[]>(
-      `SELECT * FROM billing_runs ORDER BY created_at DESC LIMIT 20`
-    ).catch(() => [] as RunRow[]);
+      const runs = await tx.$queryRawUnsafe<RunRow[]>(
+        `SELECT * FROM billing_runs ORDER BY created_at DESC LIMIT 20`
+      );
 
-    const serializedRuns = runs.map(r => ({
-      ...r,
-      total_tenants:    Number(r.total_tenants),
-      invoices_created: Number(r.invoices_created),
-      total_amount:     Number(r.total_amount),
-      run_date:         (r.run_date as Date)?.toISOString?.().split('T')[0] ?? r.run_date,
-      created_at:       (r.created_at as Date)?.toISOString?.() ?? r.created_at,
-      completed_at:     r.completed_at ? (r.completed_at as Date)?.toISOString?.() ?? r.completed_at : null,
-    }));
+      const serializedRuns = runs.map(r => ({
+        ...r,
+        total_tenants:    Number(r.total_tenants),
+        invoices_created: Number(r.invoices_created),
+        total_amount:     Number(r.total_amount),
+        run_date:         (r.run_date as Date)?.toISOString?.().split('T')[0] ?? r.run_date,
+        created_at:       (r.created_at as Date)?.toISOString?.() ?? r.created_at,
+        completed_at:     r.completed_at ? (r.completed_at as Date)?.toISOString?.() ?? r.completed_at : null,
+      }));
 
-    const lastRun = serializedRuns[0] ?? null;
+      const lastRun = serializedRuns[0] ?? null;
 
-    // Pending subscriptions count (due today or overdue, still active)
-    type PendingRow = { cnt: bigint };
-    const [pendingRow] = await tx.$queryRawUnsafe<PendingRow[]>(
-      `SELECT COUNT(*) AS cnt FROM tenant_module_subscriptions
-        WHERE status = 'ACTIVE' AND next_billing_date <= CURRENT_DATE`
-    ).catch(() => [{ cnt: BigInt(0) }]);
+      // Pending subscriptions count (due today or overdue, still active)
+      type PendingRow = { cnt: bigint };
+      const [pendingRow] = await tx.$queryRawUnsafe<PendingRow[]>(
+        `SELECT COUNT(*) AS cnt FROM tenant_module_subscriptions
+          WHERE status = 'ACTIVE' AND next_billing_date <= CURRENT_DATE`
+      );
 
-    return NextResponse.json({
-      runs:              serializedRuns,
-      last_run:          lastRun,
-      pending_to_bill:   Number(pendingRow?.cnt ?? 0),
-      total_runs:        serializedRuns.length,
+      return NextResponse.json({
+        runs:              serializedRuns,
+        last_run:          lastRun,
+        pending_to_bill:   Number(pendingRow?.cnt ?? 0),
+        total_runs:        serializedRuns.length,
+      });
     });
-  });
+  } catch (err) {
+    console.error('[auto-invoice GET]', err);
+    return NextResponse.json({ error: 'Failed to load billing runs', detail: String(err) }, { status: 500 });
+  }
 }
 
 
@@ -237,18 +242,21 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
-  const { tenantId } = authz;
+  const isSuperAdmin = (authz as any).role === 'SUPER_ADMIN' || req.headers.get('x-user-role') === 'SUPER_ADMIN';
+  if (!isSuperAdmin) {
+    return NextResponse.json({ error: 'SUPER_ADMIN role required for platform auto-invoicing' }, { status: 403 });
+  }
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const action = body.action ?? 'run_billing';
+  try {
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const action = body.action ?? 'run_billing';
 
-      if (action !== 'run_billing' && action !== 'preview') {
-        return NextResponse.json({ error: 'action must be run_billing or preview' }, { status: 400 });
-      }
+    if (action !== 'run_billing' && action !== 'preview') {
+      return NextResponse.json({ error: 'action must be run_billing or preview' }, { status: 400 });
+    }
 
+    return await withPlatformAdmin(prisma, async (tx) => {
       const today   = new Date().toISOString().split('T')[0];
       const isDryRun = action === 'preview';
 
@@ -271,7 +279,7 @@ async function handlePOST(req: NextRequest) {
           WHERE s.status = 'ACTIVE'
             AND s.next_billing_date <= CURRENT_DATE
           ORDER BY s.tenant_id, s.module_code`
-      ).catch(() => [] as Subscription[]);
+      );
 
       // ── 3. Process each subscription ──────────────────────────────────────
       const previews:     BillingPreview[] = [];
@@ -280,7 +288,11 @@ async function handlePOST(req: NextRequest) {
       let   totalAmount     = 0;
       const tenantsSeen     = new Set<string>();
 
-      for (const sub of subscriptions) {
+      for (let i = 0; i < subscriptions.length; i++) {
+        const sub = subscriptions[i];
+        const savepointName = `sp_sub_${i}`;
+        await tx.$executeRawUnsafe(`SAVEPOINT ${savepointName}`);
+
         try {
           tenantsSeen.add(sub.tenant_id);
 
@@ -289,7 +301,7 @@ async function handlePOST(req: NextRequest) {
           const [tenant] = await tx.$queryRawUnsafe<TenantRow[]>(
             `SELECT name, contact_email FROM tenants WHERE id = $1`,
             sub.tenant_id
-          ).catch(() => [] as TenantRow[]);
+          );
 
           const tenantName  = tenant?.name  ?? `Tenant ${sub.tenant_id}`;
           const tenantEmail = tenant?.contact_email ?? null;
@@ -305,8 +317,6 @@ async function handlePOST(req: NextRequest) {
           const nextNbd = sub.billing_cycle === 'ANNUAL'
             ? (() => { const d = new Date(currentNbd); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0]; })()
             : (() => { const d = new Date(currentNbd); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]; })();
-
-          totalAmount += total;
 
           if (isDryRun) {
             // Preview only — generate a mock invoice number
@@ -325,11 +335,13 @@ async function handlePOST(req: NextRequest) {
               billing_cycle:     sub.billing_cycle,
               next_billing_date: nextNbd,
             });
+            totalAmount += total;
             invoicesCreated++;
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${savepointName}`);
             continue;
           }
 
-          // 3c/3d. Generate invoice number and INSERT into finance_invoices
+          // 3c/3d. Generate invoice number and INSERT into platform_subscription_invoices
           const invoiceNumber = await nextInvoiceNumber(tx, sub.tenant_id);
           const issueDate     = today;
           const dueDate       = (() => {
@@ -339,34 +351,35 @@ async function handlePOST(req: NextRequest) {
           })();
 
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_invoices
-               (invoice_number, client_name, client_email, module_source,
-                issue_date, due_date,
-                subtotal, vat_amount, total_amount,
-                payment_status, notes, line_items_json, tenant_id,
-                currency, vat_rate, discount_amount, paid_amount,
-                service_type, module, line_items)
-             VALUES ($1, $2, $3, $4,
-                     $5::date, $6::date,
-                     $7, $8, $9,
-                     'SENT', $10, $11::jsonb, $12,
-                     $13, 5, 0, 0,
-                     'SUBSCRIPTION', $14, $15::jsonb)`,
+            `INSERT INTO platform_subscription_invoices
+               (invoice_number, client_name, client_email, module_code, plan_tier, billing_cycle,
+                issue_date, due_date, subtotal, vat_amount, total_amount,
+                payment_status, notes, line_items_json, tenant_id, currency, vat_rate, paid_amount)
+             VALUES ($1, $2, $3, $4, $5, $6,
+                     $7::date, $8::date,
+                     $9, $10, $11,
+                     'SENT', $12, $13::jsonb, $14, $15, 5.00, 0.00)
+             ON CONFLICT (tenant_id, invoice_number) DO UPDATE
+                SET subtotal = EXCLUDED.subtotal,
+                    vat_amount = EXCLUDED.vat_amount,
+                    total_amount = EXCLUDED.total_amount,
+                    line_items_json = EXCLUDED.line_items_json,
+                    updated_at = NOW()`,
             invoiceNumber,
             tenantName,
             tenantEmail,
             sub.module_code,
+            sub.plan_tier,
+            sub.billing_cycle,
             issueDate,
             dueDate,
             subtotal,
             vatAmount,
             total,
-            `Auto-generated subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
+            `Auto-generated platform subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
             JSON.stringify(lineItems),
             sub.tenant_id,
-            sub.currency,
-            sub.module_code,
-            JSON.stringify(lineItems)
+            sub.currency ?? 'AED',
           );
 
           // 3e. Update subscription: next_billing_date + last_billed_date
@@ -375,13 +388,17 @@ async function handlePOST(req: NextRequest) {
                 SET next_billing_date = $1::date,
                     last_billed_date  = $2::date,
                     updated_at        = NOW()
-              WHERE id = $3`,
+              WHERE id = $3::uuid`,
             nextNbd, today, sub.id
           );
 
+          totalAmount += total;
           invoicesCreated++;
+          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${savepointName}`);
 
         } catch (e) {
+          await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+          await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${savepointName}`);
           console.error(`[auto-invoice] Sub ${sub.id} failed:`, e);
           errors.push({ subscription_id: sub.id, error: String(e) });
         }
@@ -397,7 +414,7 @@ async function handlePOST(req: NextRequest) {
                   total_amount     = $4,
                   errors           = $5::jsonb,
                   completed_at     = NOW()
-            WHERE id = $6`,
+            WHERE id = $6::uuid`,
           errors.length > 0 ? 'FAILED' : 'COMPLETED',
           tenantsSeen.size,
           invoicesCreated,
@@ -427,11 +444,11 @@ async function handlePOST(req: NextRequest) {
         total_amount:     Math.round(totalAmount * 100) / 100,
         errors,
       });
-    } catch (err) {
-      console.error('[auto-invoice POST]', err);
-      return NextResponse.json({ error: 'Billing run failed', detail: String(err) }, { status: 500 });
-    }
-  });
+    });
+  } catch (err) {
+    console.error('[auto-invoice POST]', err);
+    return NextResponse.json({ error: 'Billing run failed', detail: String(err) }, { status: 500 });
+  }
 }
 
 

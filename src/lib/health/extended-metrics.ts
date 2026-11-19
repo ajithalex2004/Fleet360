@@ -622,8 +622,8 @@ export async function getAiHealthAndSpendingMetrics(): Promise<AiHealthAndSpendi
   // Build model catalogs with LIVE production values
   const models: AiModelMetric[] = [
     {
-      modelId: 'gemini-2.0-flash',
-      modelName: 'Google Gemini 2.0 Flash (Latest)',
+      modelId: 'gemini-flash-latest',
+      modelName: 'Google Gemini Flash (Latest)',
       provider: 'Google Gemini',
       tier: 'Fast Multimodal & High-Throughput OCR',
       status: hasGemini ? 'active' : 'standby',
@@ -639,8 +639,8 @@ export async function getAiHealthAndSpendingMetrics(): Promise<AiHealthAndSpendi
       capabilities: ['Rapid KYC OCR', 'Live Telematics Classification', 'Rider ETA Notifications', 'Smart Dispatch Matching'],
     },
     {
-      modelId: 'gemini-1.5-pro',
-      modelName: 'Google Gemini 1.5 Pro (Deep Multimodal)',
+      modelId: 'gemini-pro-latest',
+      modelName: 'Google Gemini Pro (Deep Multimodal)',
       provider: 'Google Gemini',
       tier: 'Deep Reasoning, Complex Maintenance & Root-Cause',
       status: hasGemini ? 'active' : 'standby',
@@ -673,8 +673,8 @@ export async function getAiHealthAndSpendingMetrics(): Promise<AiHealthAndSpendi
       capabilities: ['JSON Schema Validation', 'Driver License Field Extraction', 'Fuel Receipt Tokenization'],
     },
     {
-      modelId: 'claude-3-5-sonnet',
-      modelName: 'Anthropic Claude 3.5 Sonnet',
+      modelId: 'claude-sonnet-5-5',
+      modelName: 'Anthropic Claude Sonnet 5.5',
       provider: 'Anthropic',
       tier: 'Enterprise Bridge ERP Reconciliation & Governance',
       status: hasAnthropic ? 'active' : 'standby',

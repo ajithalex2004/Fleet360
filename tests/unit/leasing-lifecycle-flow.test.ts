@@ -137,7 +137,10 @@ vi.mock('@/lib/prisma', () => {
                 (pi) => pi.invoiceId === invoiceId && pi.status === 'RECEIVED'
               );
               const totalPaid = paidIntents.reduce((sum, pi) => sum + Number(pi.amount), 0);
-              return [{ total_paid: totalPaid > 0 ? String(totalPaid) : null }];
+              return [{ total: totalPaid > 0 ? String(totalPaid) : '0' }];
+            }
+            if (query.includes('FROM lease_deposit_applications') && query.includes('SUM(applied_amount)')) {
+              return [{ total: '0' }];
             }
             if (query.includes('SELECT id::text FROM lease_payment_intents')) {
               const invoiceId = args[1];

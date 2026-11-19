@@ -26,6 +26,7 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { pickProvisioningRole } from '@/lib/sso-provisioning';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 
@@ -188,7 +189,7 @@ export async function GET(req: NextRequest) {
       ...(await residencyClaimForTenant(tenant.id)),
     });
 
-    const r = NextResponse.redirect(new URL(safeReturnPath(state.returnTo), new URL(req.url).origin));
+    const r = NextResponse.redirect(new URL(safeReturnPath(state.returnTo), getPublicOrigin(req)));
     r.cookies.set(COOKIE_NAME, sessionToken, {
       httpOnly: true, sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -203,9 +204,7 @@ export async function GET(req: NextRequest) {
 }
 
 function redirect(req: NextRequest, path: string): NextResponse {
-  const url = new URL(req.url);
-  url.pathname = path.split('?')[0];
-  url.search   = path.includes('?') ? '?' + path.split('?')[1] : '';
+  const url = new URL(path, getPublicOrigin(req));
   return NextResponse.redirect(url);
 }
 function redirectAndClear(req: NextRequest, path: string): NextResponse {

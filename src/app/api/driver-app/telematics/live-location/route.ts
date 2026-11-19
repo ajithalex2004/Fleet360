@@ -116,7 +116,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const vehicle = actor.activeTrip?.vehicle ?? null;
+      const vehicle = actor.activeTrip?.vehicle
+        ?? (body.vehicleId && actor.shiftVehicle?.id === body.vehicleId ? actor.shiftVehicle : null);
       const foreign = rejectForeignIdentifiers(actor, body, vehicle);
       if (foreign) return withCorsHeaders(foreign, origin);
 

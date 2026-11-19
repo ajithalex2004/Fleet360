@@ -22,15 +22,31 @@ export async function proxyToGoBackend(
   headersOverride?: Headers,
   permissions?: readonly string[] | null,
 ): Promise<ProxyResult> {
+  const source = headersOverride ?? request.headers;
+  const { pathname, search } = request.nextUrl;
+
+  // Protect debug and profiling endpoints (/debug/pprof, etc.) behind admin authentication or disable in production (F35)
+  if (pathname.startsWith('/debug') || pathname.startsWith('/api/debug')) {
+    const isProd = process.env.NODE_ENV === 'production';
+    const role = source.get('x-user-role');
+    if (isProd || (role !== 'SUPER_ADMIN' && role !== 'ADMIN')) {
+      return {
+        proxied: true,
+        response: NextResponse.json(
+          { error: 'Forbidden', message: 'Debug and profiling endpoints require admin authentication' },
+          { status: 403 },
+        ),
+      };
+    }
+  }
+
   // 1. Kill switch: immediate toggle to fall through to existing Next.js handlers.
   if (!goProxyEnabled()) {
     return { proxied: false };
   }
 
   // 2. Route map: only a method + path the Go backend serves is forwarded.
-  if (!goRouteFor(request.method, request.nextUrl.pathname)) return { proxied: false };
-
-  const source = headersOverride ?? request.headers;
+  if (!goRouteFor(request.method, pathname)) return { proxied: false };
 
   // 3. Canary tenant check: gradual server-side activation by tenant ID.
   const canaryTenantsRaw = process.env.LOGISTICS_GO_CANARY_TENANT_IDS?.trim();
@@ -47,8 +63,6 @@ export async function proxyToGoBackend(
       return { proxied: false };
     }
   }
-
-  const { pathname, search } = request.nextUrl;
 
   try {
     const upstream = new URL(goUpstreamPath(pathname) + search, GO_BACKEND_URL);
@@ -81,8 +95,14 @@ export async function proxyToGoBackend(
           };
         }
         try {
+          const impersonatedBy = source.get('x-impersonated-by') ?? source.get('x-real-user-id') ?? undefined;
           const token = await signJwtForBackend({
-            userId, tenantId, role, permissions, plan: source.get('x-tenant-plan'),
+            userId,
+            tenantId,
+            role,
+            permissions,
+            plan: source.get('x-tenant-plan'),
+            impersonatedBy,
           });
           headers.set('Authorization', `Bearer ${token}`);
         } catch (err) {
@@ -110,6 +130,7 @@ export async function proxyToGoBackend(
       headers,
       body: hasRequestBody(request.method) ? request.body : undefined,
       redirect: 'manual',
+      signal: AbortSignal.timeout(10_000), // 10s proxy timeout per audit F35
     });
 
     const resHeaders = new Headers(response.headers);
@@ -124,12 +145,13 @@ export async function proxyToGoBackend(
       }),
     };
   } catch (err) {
+    const isTimeout = err instanceof Error && (err.name === 'TimeoutError' || err.message.includes('timeout'));
     const message = err instanceof Error ? err.message : 'Go backend unavailable';
     return {
       proxied: true,
       response: NextResponse.json(
-        { error: 'Backend unavailable', message },
-        { status: 502 }
+        { error: isTimeout ? 'Gateway Timeout' : 'Backend unavailable', message },
+        { status: isTimeout ? 504 : 502 }
       ),
     };
   }

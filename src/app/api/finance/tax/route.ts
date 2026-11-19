@@ -28,15 +28,16 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const sp = req.nextUrl.searchParams;
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const sp = req.nextUrl.searchParams;
       const type = sp.get('type'); // categories | audit | summary
 
       if (type === 'audit') {
         const rows = await tx.$queryRawUnsafe<TaxRow[]>(
           `SELECT * FROM finance_vat_audit_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`,
           tenantId,
-        ).catch(() => []);
+        );
         return NextResponse.json({ data: rows });
       }
 
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
         const startMonth = (q - 1) * 3 + 1;
         const endMonth   = q * 3;
         const startDate  = `${y}-${String(startMonth).padStart(2,'0')}-01`;
-        const endDateObj = new Date(y, endMonth, 0);
+        const endDateObj = new Date(Date.UTC(y, endMonth, 0));
         const endDate    = endDateObj.toISOString().slice(0, 10);
 
         // Output VAT (from finance_invoices, excluding mirrored RENTAL and LOGISTICS)
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
                AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')
                AND issue_date BETWEEN $1::date AND $2::date${TAX_NOT_MIRRORED}`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0', count: '0' }]);
+        );
 
         // Output VAT from logistics
         const [logRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
                AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
                AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         // Output VAT from rental invoices
         const [racRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
@@ -75,14 +76,14 @@ export async function GET(req: NextRequest) {
              FROM rental_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
                AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         // Input VAT from fuel logs
         const [fuelRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_cost * 0.05 / 1.05),0)::text as total
              FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         // Input VAT from approved maintenance
         const [mainRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
@@ -91,7 +92,7 @@ export async function GET(req: NextRequest) {
                AND status IN ('COMPLETED')
                AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         // Input VAT from AP payables
         const [payRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
@@ -100,7 +101,7 @@ export async function GET(req: NextRequest) {
                AND status IN ('APPROVED','POSTED')
                AND issue_date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         // Input VAT from approved expenses
         const [expRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
                AND status IN ('APPROVED','PAID')
                AND expense_date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
-        ).catch(() => [{ total: '0' }]);
+        );
 
         const outputVat = parseFloat(outputRow?.total ?? '0')
                         + parseFloat(logRow?.total   ?? '0')
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest) {
           `SELECT code, name, rate::text FROM (${VISIBLE_CATEGORIES}) c
             WHERE is_active = TRUE ORDER BY rate DESC, code`,
           tenantId,
-        ).catch(() => []);
+        );
 
         return NextResponse.json({
           period: { year: y, quarter: q, startDate, endDate },
@@ -140,9 +141,13 @@ export async function GET(req: NextRequest) {
       const categories = await tx.$queryRawUnsafe<TaxRow[]>(
         `SELECT * FROM (${VISIBLE_CATEGORIES}) c ORDER BY rate DESC, code`,
         tenantId,
-      ).catch(() => []);
+      );
       return NextResponse.json({ data: categories });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/tax GET]', err);
+    return NextResponse.json({ error: 'Failed to load tax data' }, { status: 500 });
+  }
 }
 
 
@@ -154,8 +159,9 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const bodyRaw = await req.json();
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
       if (body.type === 'audit_log') {
@@ -164,7 +170,7 @@ export async function POST(req: NextRequest) {
            VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)`,
           body.action, body.entityType ?? null, body.entityId ?? null,
           body.performedBy ?? null, JSON.stringify(body.details ?? {}), body.notes ?? null, tenantId
-        ).catch(() => {});
+        );
         return NextResponse.json({ ok: true }, { status: 201 });
       }
 
@@ -194,5 +200,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to save tax category' }, { status: 500 });
       }
       return NextResponse.json(row, { status: 201 });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/tax POST]', err);
+    return NextResponse.json({ error: 'Failed to save tax record' }, { status: 500 });
+  }
 }

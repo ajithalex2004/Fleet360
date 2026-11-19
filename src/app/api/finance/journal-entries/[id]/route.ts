@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { approvalGate, approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
 import { sessionUser } from '@/lib/session-user';
-import { nextJournalNumber } from '@/lib/finance/journal-service';
+import { nextJournalNumber, assertPeriodOpen } from '@/lib/finance/journal-service';
 type JeRow = Record<string, unknown>;
 
 // ── GET /api/finance/journal-entries/:id ─────────────────────────────────────
@@ -99,9 +99,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       // Fetch current JE — enforce tenant ownership.
       const [current] = await tx.$queryRawUnsafe<
-        { status: string; je_number: string; entry_date: string; narration: string; total_debit: string; tenant_id: string }[]
+        { status: string; je_number: string; entry_date: string; narration: string; total_debit: string; tenant_id: string; prepared_by: string | null }[]
       >(
-        `SELECT status, je_number, entry_date, narration, total_debit, tenant_id
+        `SELECT status, je_number, entry_date, narration, total_debit, tenant_id, prepared_by
            FROM finance_journal_entries
           WHERE id::text = $1 AND deleted_at IS NULL AND tenant_id = $2`,
         params.id, tenantId,
@@ -124,16 +124,24 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           sqlParams = [params.id, now, tenantId];
           break;
 
-        case 'approve':
+        case 'approve': {
           if (current.status !== 'SUBMITTED') {
             return NextResponse.json({ error: 'Only SUBMITTED entries can be approved' }, { status: 400 });
+          }
+          const approver = body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager';
+          if (current.prepared_by && approver && String(current.prepared_by).trim().toLowerCase() === String(approver).trim().toLowerCase()) {
+            return NextResponse.json(
+              { error: 'Preparer cannot approve their own journal entry (Segregation of Duties Maker-Checker violation)' },
+              { status: 403 },
+            );
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'APPROVED', approved_by = $2, approved_at = $3::timestamptz, updated_at = $3::timestamptz
                   WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
-          sqlParams = [params.id, body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
+          sqlParams = [params.id, approver, now, tenantId];
           break;
+        }
 
         case 'reject': {
           // Back to the preparer as a draft, with the reason in its notes.
@@ -150,10 +158,18 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           break;
         }
 
-        case 'post':
+        case 'post': {
           // Only once approved: a submitted entry has not been.
           if (current.status !== 'APPROVED') {
             return NextResponse.json({ error: 'Entry must be APPROVED before posting' }, { status: 400 });
+          }
+          try {
+            await assertPeriodOpen(tx, tenantId, current.entry_date);
+          } catch (periodErr: any) {
+            return NextResponse.json(
+              { error: periodErr.message || 'Cannot post to locked accounting period' },
+              { status: periodErr.statusCode || 422 },
+            );
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'POSTED', posted_by = $2, posted_at = $3::timestamptz, updated_at = $3::timestamptz
@@ -161,6 +177,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                   RETURNING *`;
           sqlParams = [params.id, body.postedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
           break;
+        }
 
         case 'void':
           if (current.status === 'POSTED') {
@@ -210,6 +227,14 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           const revJeNo = `${await nextJournalNumber(tx, tenantId)}-REV`;
 
           const revDate    = body.reversalDate ?? new Date().toISOString().slice(0, 10);
+          try {
+            await assertPeriodOpen(tx, tenantId, revDate);
+          } catch (periodErr: any) {
+            return NextResponse.json(
+              { error: periodErr.message || 'Cannot post reversal to locked accounting period' },
+              { status: periodErr.statusCode || 422 },
+            );
+          }
           const d          = new Date(revDate);
           const totalDebit = parseFloat(current.total_debit);
 

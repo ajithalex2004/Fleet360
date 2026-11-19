@@ -17,6 +17,7 @@ export const VEHICLE_UNASSIGNABLE_STATUSES = new Set([
   'INACTIVE',
   'SOLD',
   'DECOMMISSIONED',
+  'GROUNDED',
   // A vehicle returned but not yet clearance-assessed by the leasing
   // return workflow (src/lib/leasing/return-workflow.ts) — missing
   // evidence, not a confirmed problem, but must not be assignable until
@@ -26,11 +27,14 @@ export const VEHICLE_UNASSIGNABLE_STATUSES = new Set([
 
 export type VehicleAssignability = {
   ok: true;
+  assignable?: boolean;
   vehicleId: string;
   status: string | null;
   licensePlate: string | null;
 } | {
   ok: false;
+  assignable?: boolean;
+  reason?: string;
   error: string;
   vehicleId: string;
   status: string | null;
@@ -62,16 +66,32 @@ export async function checkVehicleAssignable(
       status: true,
       licensePlate: true,
       tenantId: true,
+      isActive: true,
     },
   });
 
   if (!vehicle) {
     return {
       ok: false,
+      assignable: false,
+      reason: 'Vehicle not found',
       vehicleId,
       status: null,
       licensePlate: null,
       error: 'Vehicle not found',
+    };
+  }
+
+  if (vehicle.isActive === false) {
+    const plate = vehicle.licensePlate ?? vehicleId.slice(0, 8);
+    return {
+      ok: false,
+      assignable: false,
+      reason: 'Vehicle is inactive',
+      vehicleId,
+      status: vehicle.status,
+      licensePlate: vehicle.licensePlate,
+      error: `Vehicle ${plate} is inactive and cannot be assigned to trips`,
     };
   }
 
@@ -93,6 +113,8 @@ export async function checkVehicleAssignable(
     const plate = vehicle.licensePlate ?? vehicleId.slice(0, 8);
     return {
       ok: false,
+      assignable: false,
+      reason: `Vehicle is ${status.toLowerCase().replace(/_/g, ' ')}`,
       vehicleId,
       status,
       licensePlate: vehicle.licensePlate,
@@ -102,6 +124,7 @@ export async function checkVehicleAssignable(
 
   return {
     ok: true,
+    assignable: true,
     vehicleId,
     status: status || vehicle.status,
     licensePlate: vehicle.licensePlate,
@@ -123,6 +146,7 @@ export async function assertVehicleAssignableOrError(
 export function vehicleAssignableWhere() {
   return {
     deletedAt: null,
+    isActive: true,
     OR: [
       { status: null },
       {

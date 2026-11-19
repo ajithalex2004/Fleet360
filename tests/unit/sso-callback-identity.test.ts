@@ -7,7 +7,7 @@
  *    reactivated on the next SSO sign-in.
  *  - The post-login redirect stays on this site (returnTo is unchecked input).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('next/server', async () => await import('next/server.js'));
 
@@ -75,12 +75,16 @@ async function callback() {
 
 describe('SSO callback identity', () => {
   beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
     st.claims = { sub: 'sub-1', email: 'me@corp.example' };
     st.returnTo = '/platform';
     st.membership = { id: 'm1', isActive: true, role: { code: 'MEMBER' } };
     st.updates.length = 0;
     st.creates.length = 0;
     st.signed.length = 0;
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('signs in the user the IdP names', async () => {

@@ -1,104 +1,18 @@
-import crypto from 'crypto';
-
-export type LegacyOcrDocType = 'EMIRATES_ID' | 'DRIVING_LICENSE' | 'PASSPORT';
-
-export type KycDocumentType =
-  | 'EMIRATES_ID'
-  | 'DRIVING_LICENSE'
-  | 'PASSPORT'
-  | 'INTERNATIONAL_DRIVING_PERMIT';
-
-export type KycOcrProvider =
-  | 'gemini-2.5-flash'
-  | 'gpt-4o-mini'
-  | 'mrz-parser'
-  | 'deterministic-fallback';
-
-export interface UaePassProfile {
-  uuid: string;
-  fullNameEn: string;
-  fullNameAr: string;
-  emiratesId: string;
-  mobile: string;
-  email: string;
-  nationality: string;
-  userType: 'CITIZEN' | 'RESIDENT' | 'VISITOR';
-  assuranceLevel: 'SOP3' | 'HIGH';
-  verifiedAt: string;
-}
-
-export interface OcrScanResult {
-  docType: LegacyOcrDocType;
-  docNumber: string;
-  fullName: string;
-  expiryDate: string;
-  issueDate: string;
-  nationality: string;
-  isExpired: boolean;
-  confidenceScore: number;
-  dateOfBirth?: string | null;
-  emiratesId?: string | null;
-  issuingCountry?: string | null;
-  licenseClass?: string | null;
-  daysUntilExpiry?: number | null;
-  provider?: KycOcrProvider;
-}
-
-export interface ElectronicSignatureRecord {
-  signerName: string;
-  signerEmail: string;
-  emiratesId: string;
-  signatureDataUrl: string;
-  contentHash: string;
-  signedAt: string;
-  termsAccepted: boolean;
-}
-
-export interface MultimodalKycScanInput {
-  documentType: KycDocumentType;
-  imageBase64OrUrl?: string;
-  mimeType?: string;
-  mrzText?: string;
-  hintName?: string;
-}
-
-export interface MultimodalKycScanResult {
-  documentType: KycDocumentType;
-  docType: LegacyOcrDocType;
-  fullName: string;
-  documentNumber: string;
-  docNumber: string;
-  emiratesId: string | null;
-  emiratesIdValid: boolean | null;
-  nationality: string | null;
-  dateOfBirth: string | null;
-  issueDate: string | null;
-  expiryDate: string | null;
-  issuingCountry: string | null;
-  licenseClass: string | null;
-  visaTypeHint: 'RESIDENT' | 'TOURIST';
-  confidence: number;
-  confidenceScore: number;
-  isExpired: boolean;
-  daysUntilExpiry: number | null;
-  warnings: string[];
-  provider: KycOcrProvider;
-}
-
-export const DEMO_UAE_PASS_USER: UaePassProfile = {
-  uuid: 'uaepass-usr-8891-dxb',
-  fullNameEn: 'Mohammed Al-Maktoum',
-  fullNameAr: 'محمد المكتوم',
-  emiratesId: '784-1988-1234567-1',
-  mobile: '+971 50 123 4567',
-  email: 'm.almaktoum@fleet360.ae',
-  nationality: 'ARE',
-  userType: 'CITIZEN',
-  assuranceLevel: 'SOP3',
-  verifiedAt: new Date().toISOString(),
-};
-
-export const STANDARD_RENTAL_TERMS = `I hereby certify that all provided personal and corporate identification documents are valid and authentic. I agree to the standard UAE FTA, RTA, and Fleet360 mobility rental terms, insurance coverage liability policies, Salik/Darb toll pass-through tariffs, and traffic fine obligations under the laws of the United Arab Emirates.`;
+export * from './digital-kyc-types';
+import {
+  type LegacyOcrDocType,
+  type KycDocumentType,
+  type KycOcrProvider,
+  type MultimodalKycScanInput,
+  type MultimodalKycScanResult,
+  type OcrScanResult,
+  type UaePassProfile,
+  formatCanonicalEmiratesId,
+  sealElectronicSignature,
+  verifyEmiratesIdFormat,
+  DEMO_UAE_PASS_USER,
+  STANDARD_RENTAL_TERMS,
+} from './digital-kyc-types';
 
 const ISO3_TO_COUNTRY_NAME: Record<string, string> = {
   ARE: 'United Arab Emirates',
@@ -126,34 +40,6 @@ const ISO3_TO_COUNTRY_NAME: Record<string, string> = {
   JPN: 'Japan',
   SGP: 'Singapore',
 };
-
-export function verifyEmiratesIdFormat(id: string): boolean {
-  if (!id) return false;
-  // Standard format: 784-YYYY-XXXXXXX-X (15 digits total, starting with 784)
-  const regex = /^784-[0-9]{4}-[0-9]{7}-[0-9]{1}$/;
-  return regex.test(id.trim());
-}
-
-export function formatCanonicalEmiratesId(raw?: string | null): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (verifyEmiratesIdFormat(trimmed)) return trimmed;
-  const digits = trimmed.replace(/[\s-]/g, '');
-  if (/^784\d{12}$/.test(digits)) {
-    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14, 15)}`;
-  }
-  return trimmed || null;
-}
-
-export function sealElectronicSignature(
-  signerName: string,
-  emiratesId: string,
-  signedAt: string,
-  termsText: string = STANDARD_RENTAL_TERMS,
-): string {
-  const payload = `${signerName}|${emiratesId}|${signedAt}|${termsText}`;
-  return crypto.createHash('sha256').update(payload).digest('hex');
-}
 
 function parseMrzYyMmDd(raw: string, mode: 'DOB' | 'EXPIRY'): string | null {
   if (!/^\d{6}$/.test(raw)) return null;
@@ -525,74 +411,39 @@ async function tryGeminiVisionOcr(
   documentType: KycDocumentType,
   inlineImage: { base64Data: string; mimeType: string },
   mrzText?: string,
+  tenantId?: string,
 ): Promise<RawExtractedFields | null> {
   const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
   if (!apiKey) return null;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
   const promptText = [
     `Extract structured UAE Rent-A-Car KYC fields from this ${documentType.replace(/_/g, ' ')} document.`,
     'Return ISO dates in YYYY-MM-DD format.',
     'If an Emirates ID number is visible, format it strictly as 784-YYYY-XXXXXXX-X.',
     mrzText ? `Additional MRZ text hint:\n${mrzText}` : '',
+    'Return ONLY a valid JSON object with keys: fullName, documentNumber, emiratesId, nationality, dateOfBirth, issueDate, expiryDate, issuingCountry, licenseClass, confidence.',
   ]
     .filter(Boolean)
     .join(' ');
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            {
-              inline_data: {
-                mime_type: inlineImage.mimeType,
-                data: inlineImage.base64Data,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            fullName: { type: 'STRING', nullable: true },
-            documentNumber: { type: 'STRING', nullable: true },
-            emiratesId: { type: 'STRING', nullable: true },
-            nationality: { type: 'STRING', nullable: true },
-            dateOfBirth: { type: 'STRING', nullable: true },
-            issueDate: { type: 'STRING', nullable: true },
-            expiryDate: { type: 'STRING', nullable: true },
-            issuingCountry: { type: 'STRING', nullable: true },
-            licenseClass: { type: 'STRING', nullable: true },
-            confidence: { type: 'NUMBER', nullable: true },
-          },
-        },
-      },
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!res.ok) return null;
-  const payload = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  const candidates = Array.isArray(payload?.candidates)
-    ? (payload.candidates as Array<Record<string, unknown>>)
-    : [];
-  const content = candidates[0]?.content as Record<string, unknown> | undefined;
-  const parts = Array.isArray(content?.parts)
-    ? (content.parts as Array<Record<string, unknown>>)
-    : [];
-  const jsonText = typeof parts[0]?.text === 'string' ? parts[0].text.trim() : '';
-  if (!jsonText) return null;
-
   try {
-    return JSON.parse(jsonText) as RawExtractedFields;
+    const dataUri = `data:${inlineImage.mimeType};base64,${inlineImage.base64Data}`;
+    const { aiGateway } = await import('@/lib/agents/gateway');
+    const res = await aiGateway.vision(
+      [dataUri],
+      promptText,
+      {
+        tenantId,
+        agentId: 'kyc-engine',
+        preferredProvider: 'gemini',
+        modelOverride: 'gemini-2.5-flash',
+        responseFormat: 'json',
+      },
+    );
+    if (res.content) {
+      return JSON.parse(res.content) as RawExtractedFields;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -602,46 +453,37 @@ async function tryOpenAiVisionOcr(
   documentType: KycDocumentType,
   inlineImage: { base64Data: string; mimeType: string },
   mrzText?: string,
+  tenantId?: string,
 ): Promise<RawExtractedFields | null> {
   const apiKey = (process.env.OPENAI_API_KEY || '').trim();
   if (!apiKey || inlineImage.mimeType === 'application/pdf') return null;
 
-  const systemPrompt =
+  const promptText = [
     'You are a UAE Rent-A-Car KYC OCR engine. Return ONLY a JSON object with keys: ' +
     'fullName, documentNumber, emiratesId (format 784-YYYY-XXXXXXX-X if present), ' +
     'nationality, dateOfBirth (YYYY-MM-DD), issueDate (YYYY-MM-DD), expiryDate (YYYY-MM-DD), ' +
-    'issuingCountry, licenseClass, confidence (0..1).';
-
-  const dataUri = `data:${inlineImage.mimeType};base64,${inlineImage.base64Data}`;
+    'issuingCountry, licenseClass, confidence (0..1).',
+    `Extract KYC fields for ${documentType}.${mrzText ? ` MRZ hint: ${mrzText}` : ''}`,
+  ].join('\n\n');
 
   try {
-    const openAiMod = await import('openai');
-    const OpenAIClient = openAiMod.default;
-    const client = new OpenAIClient({ apiKey, timeout: 15_000 });
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Extract KYC fields for ${documentType}.${mrzText ? ` MRZ hint: ${mrzText}` : ''}`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: dataUri },
-            },
-          ],
-        },
-      ],
-    });
-    const rawContent = completion.choices[0]?.message?.content?.trim() ?? '';
-    if (!rawContent) return null;
-    return JSON.parse(rawContent) as RawExtractedFields;
+    const dataUri = `data:${inlineImage.mimeType};base64,${inlineImage.base64Data}`;
+    const { aiGateway } = await import('@/lib/agents/gateway');
+    const res = await aiGateway.vision(
+      [dataUri],
+      promptText,
+      {
+        tenantId,
+        agentId: 'kyc-engine',
+        preferredProvider: 'openai',
+        modelOverride: 'gpt-4o-mini',
+        responseFormat: 'json',
+      },
+    );
+    if (res.content) {
+      return JSON.parse(res.content) as RawExtractedFields;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -662,7 +504,7 @@ export async function scanKycDocumentMultimodal(
   // Priority 1: Gemini 2.5 Flash Vision
   if (inlineImage) {
     try {
-      const geminiFields = await tryGeminiVisionOcr(documentType, inlineImage, input.mrzText);
+      const geminiFields = await tryGeminiVisionOcr(documentType, inlineImage, input.mrzText, input.tenantId);
       if (geminiFields) {
         return finalizeMultimodalResult(
           documentType,
@@ -677,7 +519,7 @@ export async function scanKycDocumentMultimodal(
 
     // Priority 2: OpenAI gpt-4o-mini Vision
     try {
-      const openAiFields = await tryOpenAiVisionOcr(documentType, inlineImage, input.mrzText);
+      const openAiFields = await tryOpenAiVisionOcr(documentType, inlineImage, input.mrzText, input.tenantId);
       if (openAiFields) {
         return finalizeMultimodalResult(
           documentType,

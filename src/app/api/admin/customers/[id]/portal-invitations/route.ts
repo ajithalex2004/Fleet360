@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { getPublicOrigin } from '@/lib/public-origin';
 import {
   createPortalUser, listPortalUsersByCustomer,
 } from '@/lib/shipper-portal/portal-users-store';
@@ -104,9 +105,7 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
     });
 
     // Send the email (non-fatal on SMTP failure — operator can copy the link).
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-      ?? req.headers.get('origin')
-      ?? `https://${req.headers.get('host') ?? 'localhost:3000'}`;
+    const baseUrl = getPublicOrigin(req);
     const emailResult = await sendInvitationEmail({
       tenantId,
       recipientEmail: portalUser.email,
