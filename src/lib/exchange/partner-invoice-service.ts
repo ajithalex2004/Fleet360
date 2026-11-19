@@ -215,10 +215,71 @@ export class PartnerInvoiceService {
         userId: input.approvedByUserId,
       }, tx);
 
+      const snap = ((invoice.award?.commercialSnapshot || {}) as Record<string, unknown>);
+      const commercialModel: CommercialModel =
+        input.commercialModel ||
+        (snap.commercialModel as CommercialModel | undefined) ||
+        'AGENCY';
+      const agencySettlementMode: AgencySettlementMode =
+        input.agencySettlementMode ||
+        (snap.agencySettlementMode as AgencySettlementMode | undefined) ||
+        'PLATFORM_COLLECT_AND_NET_REMIT';
+      const supplierSubtotal = Number(invoice.subtotalAmount);
+      const buyerAgreedSubtotal =
+        input.buyerAgreedSubtotal != null
+          ? Number(input.buyerAgreedSubtotal)
+          : snap.buyerAgreedPrice != null
+          ? Number(snap.buyerAgreedPrice)
+          : supplierSubtotal;
+      const platformFeePct =
+        input.platformFeePct != null
+          ? Number(input.platformFeePct)
+          : snap.platformFeePct != null
+          ? Number(snap.platformFeePct)
+          : 3;
+      const financePolicyVersion =
+        input.financePolicyVersion ||
+        (snap.financePolicyVersion as string | undefined) ||
+        'IFRS15-UAE-2026.1';
+      const ifrs15Indicators =
+        input.ifrs15Indicators ||
+        (snap.ifrs15Indicators as Ifrs15PrincipalIndicators | undefined) || {
+          hasPrimaryFulfilmentResponsibility: commercialModel === 'PRINCIPAL',
+          hasCapacityOrSubstitutionRisk: false,
+          hasPricingDiscretion: commercialModel === 'PRINCIPAL',
+          approvedByFinancePolicyVersion: financePolicyVersion,
+        };
+
+      const economics = ExchangeCommercialLedgerService.calculateTransactionEconomics({
+        commercialModel,
+        agencySettlementFlow: agencySettlementMode,
+        principalIndicators: ifrs15Indicators,
+        buyerAgreedAmount: buyerAgreedSubtotal,
+        supplierAwardedAmount: supplierSubtotal,
+        platformFeeBasis: 'PERCENTAGE',
+        platformFeeValue: platformFeePct,
+        supplierDeductionsAmount: input.deductionsAmount ?? 0,
+        currencyCode: invoice.currency,
+        financePolicyVersion,
+      });
+
+      // Post to GL inside the transaction so approval and GL posting commit atomically
+      const glEntries = await ExchangeCommercialLedgerService.postSupplierApprovalToGl({
+        tenantId: input.tenantId,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        partnerName: invoice.partner?.legalName || invoice.partnerId,
+        economics,
+        preparedBy: input.approvedByUserId,
+        tx,
+      });
+
       return {
         invoice: updatedInvoice,
         rawInvoice: invoice,
         payable,
+        economics,
+        glEntries,
         isRetry: false,
       };
     });
@@ -231,69 +292,11 @@ export class PartnerInvoiceService {
       };
     }
 
-    const rawInvoice = txResult.rawInvoice;
-    const snap = ((rawInvoice.award?.commercialSnapshot || {}) as Record<string, unknown>);
-    const commercialModel: CommercialModel =
-      input.commercialModel ||
-      (snap.commercialModel as CommercialModel | undefined) ||
-      'AGENCY';
-    const agencySettlementMode: AgencySettlementMode =
-      input.agencySettlementMode ||
-      (snap.agencySettlementMode as AgencySettlementMode | undefined) ||
-      'PLATFORM_COLLECT_AND_NET_REMIT';
-    const supplierSubtotal = Number(rawInvoice.subtotalAmount);
-    const buyerAgreedSubtotal =
-      input.buyerAgreedSubtotal != null
-        ? Number(input.buyerAgreedSubtotal)
-        : snap.buyerAgreedPrice != null
-        ? Number(snap.buyerAgreedPrice)
-        : supplierSubtotal;
-    const platformFeePct =
-      input.platformFeePct != null
-        ? Number(input.platformFeePct)
-        : snap.platformFeePct != null
-        ? Number(snap.platformFeePct)
-        : 3;
-    const financePolicyVersion =
-      input.financePolicyVersion ||
-      (snap.financePolicyVersion as string | undefined) ||
-      'IFRS15-UAE-2026.1';
-    const ifrs15Indicators =
-      input.ifrs15Indicators ||
-      (snap.ifrs15Indicators as Ifrs15PrincipalIndicators | undefined) || {
-        hasPrimaryFulfilmentResponsibility: commercialModel === 'PRINCIPAL',
-        hasCapacityOrSubstitutionRisk: false,
-        hasPricingDiscretion: commercialModel === 'PRINCIPAL',
-        approvedByFinancePolicyVersion: financePolicyVersion,
-      };
-
-    const economics = ExchangeCommercialLedgerService.calculateTransactionEconomics({
-      commercialModel,
-      agencySettlementFlow: agencySettlementMode,
-      principalIndicators: ifrs15Indicators,
-      buyerAgreedAmount: buyerAgreedSubtotal,
-      supplierAwardedAmount: supplierSubtotal,
-      platformFeeBasis: 'PERCENTAGE',
-      platformFeeValue: platformFeePct,
-      supplierDeductionsAmount: input.deductionsAmount ?? 0,
-      currencyCode: rawInvoice.currency,
-      financePolicyVersion,
-    });
-
-    const glEntries = await ExchangeCommercialLedgerService.postSupplierApprovalToGl({
-      tenantId: input.tenantId,
-      invoiceId: rawInvoice.id,
-      invoiceNumber: rawInvoice.invoiceNumber,
-      partnerName: rawInvoice.partner?.legalName || rawInvoice.partnerId,
-      economics,
-      preparedBy: input.approvedByUserId,
-    });
-
     return {
       invoice: txResult.invoice,
       payable: txResult.payable,
-      economics,
-      glEntries,
+      economics: txResult.economics,
+      glEntries: txResult.glEntries,
       isRetry: false,
     };
   }

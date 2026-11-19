@@ -9,11 +9,11 @@ import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
+const query = <T = Row>(tx: any, sql: string, ...v: unknown[]) =>
+  tx.$queryRawUnsafe(sql, ...v).catch(() => [] as T[]);
 
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
+const exec = (tx: any, sql: string, ...v: unknown[]) =>
+  tx.$executeRawUnsafe(sql, ...v).catch(() => 0);
 
 function ser<T>(v: T): T {
   return JSON.parse(
@@ -35,44 +35,56 @@ const LIMITS = {
   MAX_ON_DUTY_8D_MINS: 70 * 60,    // 4200 mins
 };
 
-async function runViolationCheck(driverId: string, driverName: string | null) {
+async function runViolationCheck(tx: any, tenantId: string, driverId: string, driverName: string | null) {
   const now = new Date().toISOString();
 
   const [driving24h, onDuty24h, driving7d, onDuty8d] = await Promise.all([
     query<{ total_mins: unknown }>(
+      tx,
       `SELECT COALESCE(SUM(duration_mins), 0) AS total_mins
        FROM hos_logs
-       WHERE driver_id = $1
+       WHERE tenant_id = $1
+         AND driver_id = $2
          AND duty_status = 'DRIVING'
          AND started_at >= NOW() - INTERVAL '24 hours'
          AND duration_mins IS NOT NULL`,
+      tenantId,
       driverId,
     ),
     query<{ total_mins: unknown }>(
+      tx,
       `SELECT COALESCE(SUM(duration_mins), 0) AS total_mins
        FROM hos_logs
-       WHERE driver_id = $1
+       WHERE tenant_id = $1
+         AND driver_id = $2
          AND duty_status IN ('DRIVING', 'ON_DUTY')
          AND started_at >= NOW() - INTERVAL '24 hours'
          AND duration_mins IS NOT NULL`,
+      tenantId,
       driverId,
     ),
     query<{ total_mins: unknown }>(
+      tx,
       `SELECT COALESCE(SUM(duration_mins), 0) AS total_mins
        FROM hos_logs
-       WHERE driver_id = $1
+       WHERE tenant_id = $1
+         AND driver_id = $2
          AND duty_status = 'DRIVING'
          AND started_at >= NOW() - INTERVAL '168 hours'
          AND duration_mins IS NOT NULL`,
+      tenantId,
       driverId,
     ),
     query<{ total_mins: unknown }>(
+      tx,
       `SELECT COALESCE(SUM(duration_mins), 0) AS total_mins
        FROM hos_logs
-       WHERE driver_id = $1
+       WHERE tenant_id = $1
+         AND driver_id = $2
          AND duty_status IN ('DRIVING', 'ON_DUTY')
          AND started_at >= NOW() - INTERVAL '192 hours'
          AND duration_mins IS NOT NULL`,
+      tenantId,
       driverId,
     ),
   ]);
@@ -130,14 +142,16 @@ async function runViolationCheck(driverId: string, driverName: string | null) {
   }
 
   for (const v of violations) {
-    // Use a unique constraint simulation: skip if same driver+type+date already open
     const existing = await query<{ id: string }>(
+      tx,
       `SELECT id FROM hos_violations
-       WHERE driver_id = $1
-         AND violation_type = $2
-         AND DATE(occurred_at) = DATE($3::TIMESTAMPTZ)
+       WHERE tenant_id = $1
+         AND driver_id = $2
+         AND violation_type = $3
+         AND DATE(occurred_at) = DATE($4::TIMESTAMPTZ)
          AND status = 'OPEN'
        LIMIT 1`,
+      tenantId,
       driverId,
       v.type,
       now,
@@ -145,10 +159,12 @@ async function runViolationCheck(driverId: string, driverName: string | null) {
 
     if (existing.length === 0) {
       await exec(
+        tx,
         `INSERT INTO hos_violations (
-           driver_id, driver_name, violation_type, occurred_at,
+           tenant_id, driver_id, driver_name, violation_type, occurred_at,
            severity, description, hours_exceeded, status
-         ) VALUES ($1, $2, $3, $4::timestamptz, $5, $6, $7::numeric, 'OPEN')`,
+         ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::numeric, 'OPEN')`,
+        tenantId,
         driverId,
         driverName ?? null,
         v.type,
@@ -168,7 +184,7 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async () => {
+  return withTenantRls(prisma, tenantId, async (tx) => {
     await ensureHosSchema();
     try {
       const sp = req.nextUrl.searchParams;
@@ -179,8 +195,8 @@ export async function GET(req: NextRequest) {
       const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
       const offset = parseInt(sp.get('offset') ?? '0', 10);
 
-      const conditions: string[] = [];
-      const params: unknown[] = [];
+      const conditions: string[] = ['tenant_id = $1'];
+      const params: unknown[] = [tenantId];
 
       if (driverId) {
         params.push(driverId);
@@ -198,17 +214,19 @@ export async function GET(req: NextRequest) {
         conditions.push(`ended_at IS NULL`);
       }
 
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const where = `WHERE ${conditions.join(' AND ')}`;
 
       const countParams = [...params];
       params.push(limit, offset);
 
       const [countRows, rows] = await Promise.all([
         query<{ count: bigint }>(
+          tx,
           `SELECT COUNT(*) AS count FROM hos_logs ${where}`,
           ...countParams,
         ),
         query<Row>(
+          tx,
           `SELECT *,
              CASE
                WHEN ended_at IS NULL THEN EXTRACT(EPOCH FROM (NOW() - started_at)) / 60
@@ -251,7 +269,7 @@ export async function POST(req: NextRequest) {
   // transaction has committed (see below).
   let checkFor: { driverId: string; driverName: string | null } | null = null;
 
-  const response = await withTenantRls(prisma, tenantId, async () => {
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     await ensureHosSchema();
     try {
       const body = await req.json();
@@ -267,16 +285,18 @@ export async function POST(req: NextRequest) {
       const now = new Date().toISOString();
 
       const rows = await query<Row>(
+        tx,
         `INSERT INTO hos_logs (
-           id, driver_id, driver_name, vehicle_id, vehicle_code,
+           id, tenant_id, driver_id, driver_name, vehicle_id, vehicle_code,
            duty_status, started_at, ended_at, duration_mins,
            location, notes, source, created_at, updated_at
          ) VALUES (
-           $1::uuid, $2, $3, $4, $5,
-           $6, $7::timestamptz, $8::timestamptz, $9::int,
-           $10, $11, $12, $13::timestamptz, $14::timestamptz
+           $1::uuid, $2, $3, $4, $5, $6,
+           $7, $8::timestamptz, $9::timestamptz, $10::int,
+           $11, $12, $13, $14::timestamptz, $15::timestamptz
          ) RETURNING *`,
         id,
+        tenantId,
         body.driver_id,
         body.driver_name ?? null,
         body.vehicle_id ?? null,
@@ -295,7 +315,7 @@ export async function POST(req: NextRequest) {
       checkFor = { driverId: body.driver_id, driverName: body.driver_name ?? null };
 
       return NextResponse.json(ser(rows[0]), { status: 201 });
-      } catch (e) {
+    } catch (e) {
       console.error('Error creating HoS log:', e);
       return NextResponse.json({ error: 'Failed to create HoS log' }, { status: 500 });
     }
@@ -309,7 +329,7 @@ export async function POST(req: NextRequest) {
   const pending = checkFor as { driverId: string; driverName: string | null } | null;
   if (pending) {
     void runOutsideRlsScope(() =>
-      withTenantRls(prisma, tenantId, () => runViolationCheck(pending.driverId, pending.driverName)),
+      withTenantRls(prisma, tenantId, (tx) => runViolationCheck(tx, tenantId, pending.driverId, pending.driverName)),
     ).catch((e) => console.error('Violation check error:', e));
   }
 

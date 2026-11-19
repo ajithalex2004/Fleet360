@@ -19,6 +19,8 @@ import {
   AgentRunTelemetry,
 } from '../types';
 import { calculateTokenCost, recordAiInvocation } from '../telemetry';
+import { RateLimiter } from '@/lib/rate-limiter';
+import { policyService } from '../governance';
 
 export interface GatewayMessage {
   role: 'system' | 'user' | 'assistant';
@@ -42,6 +44,8 @@ export interface GatewayOptions {
   eventType?: string;
   entityId?: string;
   recordTelemetry?: boolean;
+  skipRateLimit?: boolean;
+  skipBudgetCheck?: boolean;
 }
 
 export interface GatewayVisionOptions extends GatewayOptions {
@@ -50,6 +54,8 @@ export interface GatewayVisionOptions extends GatewayOptions {
   systemPrompt?: string;
   /** Abort the provider call after this long (default 45 s). */
   timeoutMs?: number;
+  /** Optional structured JSON schema (forwarded to Gemini responseSchema). */
+  responseSchema?: Record<string, unknown>;
 }
 
 export interface GatewayResponse {
@@ -111,12 +117,12 @@ const ALIAS_MODEL_MAP: Record<
   // live via ListModels against a real key: HTTP 404 model-not-found). Using
   // Google's "latest" aliases instead of pinning a dated version avoids this
   // exact rot recurring every time Google retires a model generation.
-  ECONOMY_TEXT:         { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
-  STANDARD_REASONING:   { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
-  ADVANCED_REASONING:   { openai: 'o3-mini', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
-  VISION_FAST:          { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
-  VISION_HIGH_ACCURACY: { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
-  STRUCTURED_EXTRACTION:{ openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
+  ECONOMY_TEXT:         { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-haiku-5-5' },
+  STANDARD_REASONING:   { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-sonnet-5-5' },
+  ADVANCED_REASONING:   { openai: 'o3-mini', gemini: 'gemini-pro-latest', anthropic: 'claude-sonnet-5-5' },
+  VISION_FAST:          { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-haiku-5-5' },
+  VISION_HIGH_ACCURACY: { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-sonnet-5-5' },
+  STRUCTURED_EXTRACTION:{ openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-haiku-5-5' },
 };
 
 // ── Resilient HTTP Fetch with Exponential Backoff & Jitter ───────────────────
@@ -208,6 +214,43 @@ async function fetchWithExponentialBackoff(
 }
 
 export class AIGatewayService {
+  private readonly rateLimiter = new RateLimiter({ windowMs: 60_000, maxRequests: 120 });
+
+  /**
+   * Enforce sliding-window rate limiting per tenant across all AI Gateway callers (F32).
+   */
+  async enforceRateLimit(tenantId?: string, skip?: boolean): Promise<void> {
+    if (skip) return;
+    const key = `ai-gateway:${tenantId || 'global'}`;
+    const result = await this.rateLimiter.check(key);
+    if (!result.allowed) {
+      const waitSec = Math.ceil(result.resetMs / 1000);
+      throw new Error(`AI Gateway rate limit exceeded for tenant ${tenantId || 'global'}. Retry in ${waitSec}s.`);
+    }
+  }
+
+  /**
+   * Enforce tenant budget quota across all AI Gateway / LLM callers (F32).
+   */
+  async enforceBudgetQuota(tenantId?: string, estimatedCostAed = 0.05, skip?: boolean): Promise<void> {
+    if (skip || !tenantId || tenantId === 'default') return;
+    try {
+      const quota = await policyService.checkBudgetQuota(tenantId, estimatedCostAed);
+      if (!quota.allowed) {
+        throw new Error(quota.reason || `AI budget quota exceeded for tenant ${tenantId}`);
+      }
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes('budget') || err.message.includes('circuit breaker'))) {
+        throw err;
+      }
+      if (IS_TEST_ENV || process.env.NODE_ENV !== 'production') {
+        console.warn('[ai-gateway] budget check bypassed in dev/test environment:', err);
+        return;
+      }
+      throw err;
+    }
+  }
+
   /**
    * 1. Multi-Turn / Tool Chat Completion with Fallback Stack & Caching
    */
@@ -215,6 +258,11 @@ export class AIGatewayService {
     const callStarted = Date.now();
     const alias = options.capabilityAlias ?? 'ECONOMY_TEXT';
     const tenantId = options.tenantId ?? 'default';
+
+    // F32: Enforce rate limiting and token budget quota
+    await this.enforceRateLimit(options.tenantId, options.skipRateLimit);
+    await this.enforceBudgetQuota(options.tenantId, 0.05, options.skipBudgetCheck);
+
     const cacheKey = hashPromptKey(messages, alias, tenantId);
     const dispatchTelemetry = (res: GatewayResponse) => {
       if (options.recordTelemetry !== false) {
@@ -416,18 +464,54 @@ export class AIGatewayService {
     prompt: string,
     options: GatewayVisionOptions = {},
   ): Promise<GatewayResponse> {
+    const callStarted = Date.now();
     const alias = options.capabilityAlias ?? (options.detail === 'high' ? 'VISION_HIGH_ACCURACY' : 'VISION_FAST');
+
+    // F32: Enforce rate limiting & token budget accounting on all vision callers
+    await this.enforceRateLimit(options.tenantId, options.skipRateLimit);
+    await this.enforceBudgetQuota(options.tenantId, 0.10, options.skipBudgetCheck);
+
+    const dispatchTelemetry = (res: GatewayResponse) => {
+      if (options.recordTelemetry !== false) {
+        void recordAiInvocation({
+          tenantId: options.tenantId,
+          agentId: options.agentId ?? 'ai-gateway-vision',
+          eventType: options.eventType ?? 'VISION_ANALYSIS',
+          entityId: options.entityId,
+          modelAlias: res.capabilityAlias,
+          modelProvider: res.provider,
+          inputTokens: res.inputTokens,
+          outputTokens: res.outputTokens,
+          cachedTokens: res.cachedTokens,
+          costUsd: res.costUsd,
+          costAed: res.costAed,
+          status: res.fromFallback ? 'FAILED' : 'COMPLETED',
+          durationMs: Date.now() - callStarted,
+        });
+      }
+      return res;
+    };
+
     const openAiKey = process.env.OPENAI_API_KEY;
-
+    const hasOpenAi = Boolean(openAiKey && !openAiKey.startsWith('dev-'));
     const geminiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '').trim();
-    if ((!openAiKey || openAiKey.startsWith('dev-')) && geminiKey) {
-      return this.callGeminiVision(images, prompt, options, alias, geminiKey);
+
+    if ((options.preferredProvider === 'gemini' || !hasOpenAi) && geminiKey) {
+      try {
+        const res = await this.callGeminiVision(images, prompt, options, alias, geminiKey);
+        return dispatchTelemetry(res);
+      } catch (geminiErr) {
+        if (!hasOpenAi) throw geminiErr;
+        // Fall through to OpenAI fallback if preferredProvider was gemini and OpenAI is configured
+      }
     }
-    if (!openAiKey || openAiKey.startsWith('dev-')) {
-      throw new Error('Vision is unavailable: OPENAI_API_KEY is not set');
+    if (!hasOpenAi || !openAiKey) {
+      throw new Error('Vision is unavailable: no active OpenAI or Gemini API key configured');
     }
 
-    const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].openai;
+    const model = options.modelOverride && !options.modelOverride.startsWith('gemini')
+      ? options.modelOverride
+      : ALIAS_MODEL_MAP[alias].openai;
     const documentParts = images.map((img, i) => (
       img.startsWith('data:application/pdf')
         ? { type: 'file', file: { filename: `document-${i + 1}.pdf`, file_data: img } }
@@ -440,7 +524,8 @@ export class AIGatewayService {
           }
     ));
 
-    const body = {
+    const isReasoning = /^(o1|o3|o4)(-|$)/i.test(model);
+    const body: Record<string, unknown> = {
       model,
       messages: [
         ...(options.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
@@ -452,9 +537,18 @@ export class AIGatewayService {
           ],
         },
       ],
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature ?? 0.2,
     };
+
+    // F33: OpenAI reasoning models reject temperature and require max_completion_tokens
+    if (isReasoning) {
+      body.max_completion_tokens = options.maxTokens ?? 1024;
+    } else {
+      body.max_tokens = options.maxTokens ?? 1024;
+      body.temperature = options.temperature ?? 0.2;
+    }
+    if (options.responseFormat === 'json') {
+      body.response_format = { type: 'json_object' };
+    }
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -468,19 +562,20 @@ export class AIGatewayService {
 
     if (!res.ok) {
       if (geminiKey) {
-        return this.callGeminiVision(images, prompt, options, alias, geminiKey);
+        const fallbackRes = await this.callGeminiVision(images, prompt, options, alias, geminiKey);
+        return dispatchTelemetry(fallbackRes);
       }
       throw new Error(`OpenAI Vision error ${res.status}: ${await res.text()}`);
     }
 
     const data = await res.json() as {
-      choices: Array<{ message: { content: string } }>;
-      model: string;
-      usage: { prompt_tokens: number; completion_tokens: number };
+      choices?: Array<{ message?: { content?: string } }>;
+      model?: string;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
-    const inputTokens = data.usage.prompt_tokens;
-    const outputTokens = data.usage.completion_tokens;
+    const inputTokens = data.usage?.prompt_tokens ?? 0;
+    const outputTokens = data.usage?.completion_tokens ?? 0;
     const cost = calculateTokenCost(alias, inputTokens, outputTokens);
 
     const telemetry: AgentRunTelemetry = {
@@ -493,10 +588,10 @@ export class AIGatewayService {
       costAed: cost.costAed,
     };
 
-    return {
-      content: data.choices[0].message.content.trim(),
+    return dispatchTelemetry({
+      content: data.choices?.[0]?.message?.content?.trim() ?? '',
       capabilityAlias: alias,
-      model: data.model,
+      model: data.model ?? model,
       provider: 'openai',
       inputTokens,
       outputTokens,
@@ -508,7 +603,7 @@ export class AIGatewayService {
       costAvoidedUsd: 0,
       costAvoidedAed: 0,
       telemetry,
-    };
+    });
   }
 
   /**
@@ -525,7 +620,9 @@ export class AIGatewayService {
     alias: ModelCapabilityAlias,
     geminiKey: string,
   ): Promise<GatewayResponse> {
-    const geminiModel = 'gemini-2.0-flash';
+    const geminiModel = options.modelOverride && options.modelOverride.startsWith('gemini')
+      ? options.modelOverride
+      : ALIAS_MODEL_MAP[alias].gemini;
     const parts: Array<Record<string, unknown>> = [
       { text: options.systemPrompt ? `${options.systemPrompt}\n\n${prompt}` : prompt },
     ];
@@ -538,15 +635,21 @@ export class AIGatewayService {
       }
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    // F33: Pass Gemini API key in x-goog-api-key header, not in query string URL
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': geminiKey,
+      },
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
         generationConfig: {
           temperature: options.temperature ?? 0,
           maxOutputTokens: options.maxTokens ?? 1024,
+          ...(options.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}),
+          ...(options.responseSchema ? { responseSchema: options.responseSchema } : {}),
         },
       }),
       signal: AbortSignal.timeout(options.timeoutMs ?? 45_000),
@@ -600,15 +703,20 @@ export class AIGatewayService {
     apiKey: string,
   ): Promise<GatewayResponse> {
     const alias = options.capabilityAlias ?? 'ECONOMY_TEXT';
-    const maxTokens = options.maxTokens ?? 512;
-    const temperature = options.temperature ?? 0.3;
+    const isReasoningModel = /^(o1|o3|o4)(-|$)/i.test(model);
 
     const payload: Record<string, unknown> = {
       model,
       messages,
-      max_tokens: maxTokens,
-      temperature,
     };
+
+    // F33: OpenAI reasoning models (o1, o3-mini, o4) reject temperature and top_p, and require max_completion_tokens
+    if (isReasoningModel) {
+      payload.max_completion_tokens = options.maxTokens ?? 512;
+    } else {
+      payload.max_tokens = options.maxTokens ?? 512;
+      payload.temperature = options.temperature ?? 0.3;
+    }
 
     if (options.responseFormat === 'json') {
       payload.response_format = { type: 'json_object' };
@@ -686,16 +794,29 @@ export class AIGatewayService {
     };
 
     const invokeGeminiModel = async (targetModel: string): Promise<GatewayResponse> => {
-      const contents = messages.map(m => ({
+      const systemMsg = messages.find(m => m.role === 'system');
+      const nonSystemMessages = messages.filter(m => m.role !== 'system');
+      const contents = nonSystemMessages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+      const geminiBody: Record<string, unknown> = { contents };
+      if (systemMsg) {
+        geminiBody.systemInstruction = {
+          parts: [{ text: systemMsg.content }],
+        };
+      }
+
+      // F33: Pass Gemini API key in x-goog-api-key header, not in query string URL
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`;
       const res = await fetchWithExponentialBackoff(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents }),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify(geminiBody),
       }, retryConfig);
 
       if (!res.ok) {

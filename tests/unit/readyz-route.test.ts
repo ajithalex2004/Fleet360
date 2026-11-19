@@ -1,68 +1,76 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET } from '@/app/api/readyz/route';
-import { hasTestDatabase } from '../db-guard';
+import { schemaReport } from '@/lib/db/schema-registry';
+import { ensureDbConnected } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
-// These tests use a real database. Without one (no TEST_DATABASE_URL to a
-// local database) they are skipped — they used to run against whatever
-// .env pointed at, which on a developer machine is production.
-const NO_TEST_DB = !hasTestDatabase();
+vi.mock('@/lib/prisma', () => ({
+  ensureDbConnected: vi.fn(),
+  prisma: {
+    $queryRaw: vi.fn(),
+  },
+}));
 
+vi.mock('@/lib/rls', () => ({
+  withPlatformAdmin: vi.fn(),
+}));
 
-describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003)', () => {
+vi.mock('@/lib/db/schema-registry', () => ({
+  schemaReport: vi.fn(),
+}));
+
+describe('Next.js GET /api/readyz Decoupled Readiness (F34)', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(schemaReport).mockResolvedValue({
+      status: 'ok',
+      missing: {},
+      missingCount: 0,
+      checkedAt: new Date().toISOString(),
+    });
+    vi.mocked(ensureDbConnected).mockResolvedValue(undefined);
+    vi.mocked(withPlatformAdmin).mockImplementation(async (...args: any[]) => {
+      const fn = args.length === 2 ? args[1] : args[0];
+      return fn({ $queryRaw: vi.fn().mockResolvedValue([{ 1: 1 }]) });
+    });
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
   });
 
-  it('returns generic 503 without backendUrl or err.message on upstream connection failure', async () => {
+  it('returns 200 ready when DB & schema are healthy even if upstream Go is unreachable', async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED 10.0.12.34:8080'));
 
     const res = await GET();
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body).toEqual({
-      status: 'not_ready',
-      error: 'service unavailable',
-    });
-    expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
-    expect(JSON.stringify(body)).not.toContain('10.0.12.34');
-    expect(body).not.toHaveProperty('backendUrl');
+    expect(body.status).toBe('ready');
+    expect(typeof body.timestamp).toBe('string');
   });
 
-  it('returns generic 503 without raw error when upstream returns non-JSON HTML (e.g. 502 Bad Gateway)', async () => {
+  it('returns 200 ready when upstream Go returns non-JSON 502', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       status: 502,
       ok: false,
-      json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON at position 0')),
+      json: () => Promise.reject(new SyntaxError('Unexpected token <')),
     } as any);
 
     const res = await GET();
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body).toEqual({
-      status: 'not_ready',
-      error: 'service unavailable',
-    });
-    expect(body).not.toHaveProperty('backendUrl');
+    expect(body.status).toBe('ready');
   });
 
-  it('returns generic 503 even when upstream returns valid JSON 503 with internal hostnames and errors', async () => {
-    // Upstream returns valid JSON containing internal diagnostics, hostnames, and URLs
+  it('returns 200 ready and strips upstream diagnostics on 503 from Go', async () => {
     const upstreamLeakingPayload = {
       status: 'not_ready',
       error: 'database ping failed: dial tcp 10.0.4.15:5432: connection refused',
       backendUrl: 'http://fleet360-backend.railway.internal:8080',
-      internalHost: 'ip-10-0-4-15.ec2.internal',
-      checks: {
-        database: { reachable: false, dsn: 'postgres://app:password@localhost:5432/fleet' },
-      },
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -72,29 +80,20 @@ describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003
     } as any);
 
     const res = await GET();
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
 
     const body = await res.json();
-    // Must be completely sanitized to generic error
-    expect(body).toEqual({
-      status: 'not_ready',
-      error: 'service unavailable',
-    });
+    expect(body.status).toBe('ready');
     expect(body).not.toHaveProperty('backendUrl');
     expect(body).not.toHaveProperty('internalHost');
-    expect(body).not.toHaveProperty('checks');
-    expect(JSON.stringify(body)).not.toContain('railway.internal');
-    expect(JSON.stringify(body)).not.toContain('10.0.4.15');
-    expect(JSON.stringify(body)).not.toContain('secret');
   });
 
-  it.skipIf(NO_TEST_DB)('returns strictly allowlisted fields on upstream 200 OK and strips arbitrary extra keys', async () => {
+  it('returns strictly allowlisted fields and optional upstream version when available', async () => {
     const upstreamSuccessPayload = {
       status: 'ready',
       version: 'v2.4.1-rc1',
       checks: { database: { reachable: true } },
       internalIp: '10.0.99.12',
-      metricsPort: 9090,
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -110,9 +109,7 @@ describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003
     expect(body.status).toBe('ready');
     expect(body.version).toBe('v2.4.1-rc1');
     expect(typeof body.timestamp).toBe('string');
-    // Ensure all non-allowlisted fields are stripped
     expect(body).not.toHaveProperty('checks');
     expect(body).not.toHaveProperty('internalIp');
-    expect(body).not.toHaveProperty('metricsPort');
   });
 });

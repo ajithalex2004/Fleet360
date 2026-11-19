@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { loadOnboardingState } from '@/lib/exchange/onboarding-state';
 import { findReviewablePartner, notify, partnerMemberEmails, reviewerScope } from '@/lib/exchange/onboarding-review';
+import { getPublicOrigin } from '@/lib/public-origin';
 import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
@@ -112,7 +113,7 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
     userId: reviewerId,
   });
 
-  const portal = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/exchange/compliance`;
+  const portal = `${getPublicOrigin(req)}/exchange/compliance`;
   await notify(
     emails,
     decision === 'ACTIVATE'

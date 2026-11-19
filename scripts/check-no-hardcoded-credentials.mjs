@@ -53,6 +53,7 @@ export const APPROVED_PLACEHOLDER_HOSTS = new Set([
 
 const IGNORE_DIRS = new Set([
   '.git',
+  '.agents',
   '.claude',
   '.audit-reports',
   'node_modules',
@@ -200,12 +201,13 @@ export function getTrackedFiles(rootDir) {
         return !parts.some(p => IGNORE_DIRS.has(p));
       });
   } catch {
-    // Fallback if git is not available: directory walk
+    // Fallback if git is not available: directory walk (skip untracked .env* secret files)
     const files = [];
     function walk(currentDir) {
       const entries = fs.readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
         if (IGNORE_DIRS.has(entry.name)) continue;
+        if (/^\.env(\..+)?$/.test(entry.name) && entry.name !== '.env.example' && entry.name !== '.env.test') continue;
         const fullPath = path.join(currentDir, entry.name);
         if (entry.isDirectory()) {
           walk(fullPath);

@@ -32,7 +32,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
 import {
   seedTestTenantFull,
@@ -97,7 +97,7 @@ beforeAll(async () => {
   tenant = await seedTestTenantFull();
   const tid = tenant.tenant.id;
 
-  await withPlatformAdmin(prisma, async (tx) => {
+  await withTenantRls(prisma, tid, async (tx) => {
     const vehicle = await tx.vehicle.create({
       data: {
         tenantId: tid, make: 'ATT', model: 'Fixture',
@@ -153,21 +153,21 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!hasDb) return;
-  await withPlatformAdmin(prisma, async (tx) => {
-    if (tripId) {
-      await tx.boardingEvent.deleteMany({ where: { scheduleId: tripId } }).catch(() => {});
-      await tx.tripPassenger.deleteMany({ where: { tripId } }).catch(() => {});
-      await tx.tripSchedule.deleteMany({ where: { id: tripId } }).catch(() => {});
-    }
-    await tx.bleGateway.deleteMany({ where: { gatewayId: GATEWAY_ID } }).catch(() => {});
-    await tx.staffBleTag.deleteMany({ where: { tagId: TAG_ID } }).catch(() => {});
-    if (stopAId)   await tx.routeStop.deleteMany({ where: { id: stopAId } }).catch(() => {});
-    if (staffId)   await tx.staffMember.deleteMany({ where: { id: staffId } }).catch(() => {});
-    if (routeId)   await tx.busRoute.deleteMany({ where: { id: routeId } }).catch(() => {});
-    if (vehicleId) await tx.vehicle.deleteMany({ where: { id: vehicleId } }).catch(() => {});
-  }).catch(() => {});
-
   if (tenant) {
+    await withTenantRls(prisma, tenant.tenant.id, async (tx) => {
+      if (tripId) {
+        await tx.boardingEvent.deleteMany({ where: { scheduleId: tripId } }).catch(() => {});
+        await tx.tripPassenger.deleteMany({ where: { tripId } }).catch(() => {});
+        await tx.tripSchedule.deleteMany({ where: { id: tripId } }).catch(() => {});
+      }
+      await tx.bleGateway.deleteMany({ where: { gatewayId: GATEWAY_ID } }).catch(() => {});
+      await tx.staffBleTag.deleteMany({ where: { tagId: TAG_ID } }).catch(() => {});
+      if (stopAId)   await tx.routeStop.deleteMany({ where: { id: stopAId } }).catch(() => {});
+      if (staffId)   await tx.staffMember.deleteMany({ where: { id: staffId } }).catch(() => {});
+      if (routeId)   await tx.busRoute.deleteMany({ where: { id: routeId } }).catch(() => {});
+      if (vehicleId) await tx.vehicle.deleteMany({ where: { id: vehicleId } }).catch(() => {});
+    }).catch(() => {});
+
     await cleanupTenant(tenant.tenant.id).catch(() => {});
     await cleanupUser(tenant.user.id).catch(() => {});
   }
@@ -179,7 +179,7 @@ describe('missed assigned stop, then boarded at a later stop', () => {
   it('marks the passenger ABSENT when the bus leaves their assigned stop', async () => {
     if (!serverAvailable || !hasDb || !passengerId) return;
 
-    const result = await prisma.$transaction((tx) =>
+    const result = await withTenantRls(prisma, tenant!.tenant.id, (tx) =>
       recordAbsence(tx, {
         scheduleId:    tripId!,
         passengerId:   passengerId!,
@@ -247,7 +247,7 @@ describe('missed assigned stop, then boarded at a later stop', () => {
     // ABSENT for someone sitting on the bus.
     const before = await readState();
 
-    const result = await prisma.$transaction((tx) =>
+    const result = await withTenantRls(prisma, tenant!.tenant.id, (tx) =>
       recordAbsence(tx, {
         scheduleId:  tripId!,
         passengerId: passengerId!,

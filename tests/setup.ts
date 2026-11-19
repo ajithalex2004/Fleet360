@@ -28,6 +28,10 @@ export { hashPassword };
 
 // ── Lazy Prisma import (after env is loaded) ──────────────────────────────────
 import { prisma } from '@/lib/prisma';
+import { MODULES, normalizeTenantModules } from '@/lib/modules';
+import { SYSTEM_ROLES } from '@/lib/permissions';
+import { systemRolePermissions } from '@/lib/authz/session-permissions';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -163,20 +167,50 @@ export async function createTestRole(
   }> = {},
 ): Promise<TestRole> {
   const uid = crypto.randomUUID().slice(0, 8);
-  const id = overrides.id ?? crypto.randomUUID();
   const roleCode = code ?? 'TENANT_ADMIN';
+  const isSystemRole = SYSTEM_ROLES.some((r) => r.code === roleCode);
+
+  if (isSystemRole) {
+    const existing = await withPlatformAdmin(prisma, (tx) =>
+      tx.role.findFirst({ where: { tenantId: null, code: roleCode } }),
+    );
+    if (existing) {
+      return { id: existing.id, tenantId: null, name: existing.name, code: existing.code };
+    }
+    const id = overrides.id ?? crypto.randomUUID();
+    const sysDef = SYSTEM_ROLES.find((r) => r.code === roleCode);
+    const name = overrides.name ?? sysDef?.name ?? roleCode;
+    const description = overrides.description ?? sysDef?.description ?? `Platform role ${roleCode}`;
+    await withPlatformAdmin(prisma, (tx) =>
+      tx.role.create({
+        data: {
+          id,
+          tenantId: null,
+          name,
+          code: roleCode,
+          description,
+          isSystem: true,
+        },
+      }),
+    );
+    return { id, tenantId: null, name, code: roleCode };
+  }
+
+  const id = overrides.id ?? crypto.randomUUID();
   const name = overrides.name ?? `Test Role ${uid}`;
   const description = overrides.description ?? 'Auto-generated test role';
 
-  await prisma.role.create({
-    data: {
-      id,
-      tenantId,
-      name,
-      code: roleCode,
-      description,
-      isSystem: false,
-    },
+  await withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.role.create({
+      data: {
+        id,
+        tenantId,
+        name,
+        code: roleCode,
+        description,
+        isSystem: false,
+      },
+    });
   });
 
   return { id, tenantId, name, code: roleCode };
@@ -191,14 +225,16 @@ export async function createTestUserTenant(
 ): Promise<TestUserTenant> {
   const id = crypto.randomUUID();
 
-  await prisma.userTenant.create({
-    data: {
-      id,
-      userId,
-      tenantId,
-      roleId,
-      isActive: true,
-    },
+  await withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.userTenant.create({
+      data: {
+        id,
+        userId,
+        tenantId,
+        roleId,
+        isActive: true,
+      },
+    });
   });
 
   return { id, userId, tenantId, roleId };
@@ -215,8 +251,15 @@ export async function createSessionToken(
   tenantId: string,
   plan = 'ENTERPRISE',
   role = 'TENANT_ADMIN',
+  permissions?: string[],
 ): Promise<string> {
-  return signSession({ userId, tenantId, plan, role });
+  const catalogPerms = systemRolePermissions(role);
+  const resolved = permissions ?? (
+    role === 'SUPER_ADMIN'
+      ? Array.from(new Set([...catalogPerms, '*:*:*']))
+      : catalogPerms
+  );
+  return signSession({ userId, tenantId, plan, role, permissions: resolved });
 }
 
 /**
@@ -272,68 +315,59 @@ export async function makeRequest(
  */
 export async function cleanupTenant(tenantId: string): Promise<void> {
   try {
-    // Delete in reverse FK order ─────────────────────────────────────────────
+    // Delete in reverse FK order inside tenant RLS context ────────────────────
+    await withTenantRls(prisma, tenantId, async (tx) => {
+      // Optional raw tables: check existence via to_regclass so missing tables
+      // never abort the enclosing Postgres transaction (25P02).
+      const optionalTenantTables = [
+        'public.tenant_admin_nav_permissions',
+        'finance.finance_invoices',
+        'public.finance_invoices',
+        'public.vehicles',
+        'public.school_bus_students',
+        'public.incidents',
+        'public.logistics_trips',
+        'public.rental_agreements',
+      ];
+      for (const tbl of optionalTenantTables) {
+        const reg = await tx.$queryRawUnsafe<Array<{ oid: string | null }>>(
+          `SELECT to_regclass($1)::text AS oid`,
+          tbl,
+        );
+        if (reg[0]?.oid) {
+          await tx.$executeRawUnsafe(
+            `DELETE FROM ${tbl} WHERE tenant_id = $1`,
+            tenantId,
+          ).catch(() => {});
+        }
+      }
 
-    // Nav permissions (raw table — no Prisma model)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM tenant_admin_nav_permissions WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {}); // table may not exist yet
+      // UserTenant links
+      await tx.userTenant.deleteMany({ where: { tenantId } });
 
-    // Finance invoices (raw table — no Prisma model)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM finance_invoices WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+      // Roles (including permissions cascade via FK on role_permissions)
+      const roles = await tx.role.findMany({ where: { tenantId } });
+      if (roles.length > 0) {
+        const regRp = await tx.$queryRawUnsafe<Array<{ oid: string | null }>>(
+          `SELECT to_regclass('public.role_permissions')::text AS oid`,
+        );
+        if (regRp[0]?.oid) {
+          for (const role of roles) {
+            await tx.$executeRawUnsafe(
+              `DELETE FROM public.role_permissions WHERE role_id = $1`,
+              role.id,
+            ).catch(() => {});
+          }
+        }
+      }
+      await tx.role.deleteMany({ where: { tenantId } });
 
-    // Vehicles (raw table — uses tenant_id column added outside schema)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM vehicles WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+      // TenantModules
+      await tx.tenantModule.deleteMany({ where: { tenantId } });
 
-    // School bus students (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM school_bus_students WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
-
-    // Incidents (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM incidents WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
-
-    // Logistics trips (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM logistics_trips WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
-
-    // Rental agreements (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM rental_agreements WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
-
-    // UserTenant links
-    await prisma.userTenant.deleteMany({ where: { tenantId } });
-
-    // Roles (including permissions cascade via FK on role_permissions)
-    const roles = await prisma.role.findMany({ where: { tenantId } });
-    for (const role of roles) {
-      await prisma.$executeRawUnsafe(
-        `DELETE FROM role_permissions WHERE role_id = $1`,
-        role.id,
-      ).catch(() => {});
-    }
-    await prisma.role.deleteMany({ where: { tenantId } });
-
-    // TenantModules
-    await prisma.tenantModule.deleteMany({ where: { tenantId } }).catch(() => {});
-
-    // TenantSettings
-    await prisma.tenantSettings.deleteMany({ where: { tenantId } }).catch(() => {});
+      // TenantSettings
+      await tx.tenantSettings.deleteMany({ where: { tenantId } });
+    });
 
     // Tenant itself
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
@@ -348,7 +382,9 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
  */
 export async function cleanupUser(userId: string): Promise<void> {
   try {
-    await prisma.userTenant.deleteMany({ where: { userId } });
+    await withPlatformAdmin(prisma, async (tx) => {
+      await tx.userTenant.deleteMany({ where: { userId } });
+    });
     await prisma.user.delete({ where: { id: userId } }).catch(() => {});
   } catch (err) {
     console.warn(`[cleanupUser] Warning cleaning up user ${userId}:`, err);
@@ -372,6 +408,19 @@ export async function seedTestTenantFull(
   password = 'TestPassword123!',
 ): Promise<SeedResult> {
   const tenant = await createTestTenant({ plan });
+  const normalized = normalizeTenantModules(MODULES.map((m) => m.key));
+  if (normalized.ok) {
+    await withTenantRls(prisma, tenant.id, async (tx) => {
+      await tx.tenantModule.createMany({
+        data: normalized.modules.map((mod) => ({
+          tenantId: tenant.id,
+          module: mod,
+          isEnabled: true,
+        })),
+        skipDuplicates: true,
+      });
+    });
+  }
   const user = await createTestUser({ password });
   const testRole = await createTestRole(tenant.id, role);
   const userTenant = await createTestUserTenant(user.id, tenant.id, testRole.id);
@@ -388,17 +437,20 @@ export async function seedTestTenantFull(
  * Integration tests should call this and skip if false.
  */
 export async function isServerRunning(): Promise<boolean> {
-  try {
-    await fetch('http://localhost:3000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: '__ping__', password: '__ping__' }),
-      signal: AbortSignal.timeout(3000),
-    });
-    return true;
-  } catch {
-    return false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await fetch('http://localhost:3000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '__ping__', password: '__ping__' }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      return true;
+    } catch {
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+    }
   }
+  return false;
 }
 
 // ── Global teardown ───────────────────────────────────────────────────────────

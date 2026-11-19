@@ -104,7 +104,10 @@ export async function GET(req: NextRequest) {
                AND t.scheduled_date = $2::date
              ORDER BY t.scheduled_start ASC NULLS LAST`,
             routeIds, todayDate,
-          ).catch(() => [])
+          ).catch((err) => {
+            console.error('[school-bus/parent/today] trip query error:', err);
+            return [];
+          })
         : [];
       const tripsByRoute = new Map<string, typeof trips>();
       for (const t of trips) {

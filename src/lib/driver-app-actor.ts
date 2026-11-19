@@ -211,13 +211,34 @@ export type DriverRefTx = Pick<Prisma.TransactionClient, 'driver' | '$queryRawUn
  * Must run inside the tenant's RLS transaction.
  */
 export async function requireActiveDriver(
-  tx: Pick<DriverRefTx, 'driver'>,
+  tx: DriverRefTx | Pick<DriverRefTx, 'driver'>,
   session: { tenantId: string; userId: string },
 ): Promise<NextResponse | null> {
-  const driver = await tx.driver.findFirst({
-    where: { id: session.userId, tenantId: session.tenantId, deletedAt: null },
+  let driver = await tx.driver.findFirst({
+    where: {
+      tenantId: session.tenantId,
+      deletedAt: null,
+      id: session.userId,
+    },
     select: { status: true },
-  });
+  }).catch(() => null);
+
+  if (!driver && '$queryRawUnsafe' in tx && typeof (tx as any).$queryRawUnsafe === 'function') {
+    const fkRows = await (tx as DriverRefTx)
+      .$queryRawUnsafe<Array<{ status: string | null }>>(
+        `SELECT status
+           FROM drivers
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND user_id = $2
+          LIMIT 1`,
+        session.tenantId,
+        session.userId,
+      )
+      .catch(() => []);
+    driver = fkRows[0] ?? null;
+  }
+
   if (!driver || (driver.status && driver.status !== 'ACTIVE')) {
     return forbidden('An active driver account is required for this action');
   }
@@ -252,12 +273,38 @@ export async function authorizeDriverReferences(
   const { tenantId, userId } = session;
   const namedVehicles: string[] = [];
 
+  // Resolve Driver.id where Driver.id = session.userId or legacy Driver.user_id = session.userId
+  let driverRow = await (tx as any).driver?.findFirst?.({
+    where: {
+      tenantId,
+      deletedAt: null,
+      id: userId,
+    },
+    select: { id: true },
+  }).catch(() => null);
+  if (!driverRow) {
+    const fkRows = await tx
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+           FROM drivers
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND user_id = $2
+          LIMIT 1`,
+        tenantId,
+        userId,
+      )
+      .catch(() => []);
+    driverRow = fkRows[0] ?? null;
+  }
+  const driverId = driverRow?.id ?? userId;
+
   if (refs.shiftId) {
     const rows = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null }>>(
       `SELECT vehicle_id::text AS vehicle_id FROM shifts
-        WHERE id::text = $1 AND tenant_id::text = $2 AND driver_id::text = $3
+        WHERE id::text = $1 AND tenant_id::text = $2 AND (driver_id::text = $3 OR driver_id::text = $4)
         LIMIT 1`,
-      refs.shiftId, tenantId, userId,
+      refs.shiftId, tenantId, userId, driverId,
     );
     if (!rows[0]) return forbidden('shiftId is not a shift of the signed-in driver');
     if (rows[0].vehicle_id) namedVehicles.push(rows[0].vehicle_id);
@@ -266,10 +313,10 @@ export async function authorizeDriverReferences(
   if (refs.tripId) {
     const rows = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null }>>(
       `SELECT vehicle_id::text AS vehicle_id FROM trip_schedules
-        WHERE id::text = $1 AND tenant_id::text = $2 AND driver_id::text = $3
+        WHERE id::text = $1 AND tenant_id::text = $2 AND (driver_id::text = $3 OR driver_id::text = $4)
           AND status IS DISTINCT FROM 'CANCELLED'
         LIMIT 1`,
-      refs.tripId, tenantId, userId,
+      refs.tripId, tenantId, userId, driverId,
     );
     if (!rows[0]) return forbidden('tripId is not a trip of the signed-in driver');
     if (rows[0].vehicle_id) namedVehicles.push(rows[0].vehicle_id);
@@ -280,16 +327,16 @@ export async function authorizeDriverReferences(
       `SELECT v.id::text AS id FROM vehicles v
         WHERE v.id::text = $1 AND v.tenant_id::text = $2
           AND (
-            v.assigned_driver_id::text = $3
+            v.assigned_driver_id::text IN ($3, $4)
             OR EXISTS (SELECT 1 FROM shifts s
                         WHERE s.vehicle_id::text = v.id::text AND s.tenant_id::text = $2
-                          AND s.driver_id::text = $3 AND s.status = 'ACTIVE')
+                          AND s.driver_id::text IN ($3, $4) AND s.status = 'ACTIVE')
             OR EXISTS (SELECT 1 FROM trip_schedules t
                         WHERE t.vehicle_id::text = v.id::text AND t.tenant_id::text = $2
-                          AND t.driver_id::text = $3 AND t.status IN (${TRIP_OPEN_SQL}))
+                          AND t.driver_id::text IN ($3, $4) AND t.status IN (${TRIP_OPEN_SQL}))
           )
         LIMIT 1`,
-      refs.vehicleId, tenantId, userId,
+      refs.vehicleId, tenantId, userId, driverId,
     );
     if (!rows[0]) return forbidden('vehicleId is not a vehicle assigned to the signed-in driver');
   }

@@ -12,28 +12,46 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: NextRequest) {
   try {
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!authToken) {
+      console.error('[twilio webhook] rejected: TWILIO_AUTH_TOKEN unset');
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+    }
+
+    const signature = req.headers.get('x-twilio-signature');
+    if (!signature) {
+      console.error('[twilio webhook] rejected: missing X-Twilio-Signature header');
+      return NextResponse.json({ error: 'Missing X-Twilio-Signature' }, { status: 401 });
+    }
+
     const contentType = req.headers.get('content-type') || '';
     let body: any = {};
+    const form = new URLSearchParams();
+    const url = twilioWebhookUrl(req, '/api/webhooks/twilio');
 
     if (contentType.includes('application/json')) {
-      // Twilio's own status callbacks are always x-www-form-urlencoded;
-      // this branch only exists for non-Twilio/manual test callers, so
-      // there's no X-Twilio-Signature to check here.
-      body = await req.json().catch(() => ({}));
-    } else {
-      // Twilio always sends x-www-form-urlencoded — verify the signature
-      // before trusting anything in the body.
-      const rawBody = await req.text();
-      const form = new URLSearchParams(rawBody);
-
-      const signature = req.headers.get('x-twilio-signature');
-      const url = twilioWebhookUrl(req, '/api/webhooks/twilio');
-      if (!verifyTwilioSignature(url, form, signature, process.env.TWILIO_AUTH_TOKEN)) {
-        console.error('[twilio webhook] rejected: invalid or missing X-Twilio-Signature');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+      const jsonBody = await req.json().catch(() => null);
+      if (!jsonBody || typeof jsonBody !== 'object') {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
       }
+      for (const [k, v] of Object.entries(jsonBody)) {
+        if (v !== undefined && v !== null) {
+          form.set(k, String(v));
+        }
+      }
+      body = jsonBody;
+    } else {
+      const rawBody = await req.text();
+      const parsedForm = new URLSearchParams(rawBody);
+      for (const [k, v] of parsedForm.entries()) {
+        form.set(k, v);
+      }
+      body = Object.fromEntries(parsedForm.entries());
+    }
 
-      body = Object.fromEntries(form.entries());
+    if (!verifyTwilioSignature(url, form, signature, authToken)) {
+      console.error('[twilio webhook] rejected: invalid X-Twilio-Signature');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
     }
 
     const { MessageSid, MessageStatus, To, ErrorCode, ErrorMessage } = body;

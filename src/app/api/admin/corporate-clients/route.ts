@@ -19,20 +19,23 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get('clientId');
 
     if (clientId) {
-      const match = CORPORATE_CLIENTS_REGISTRY.find((c) => c.id === clientId);
+      const match = CORPORATE_CLIENTS_REGISTRY.find(
+        (c) => c.id === clientId && c.tenantId === auth.tenantId
+      );
       if (match) return NextResponse.json({ client: match });
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
     if (domain) {
       const match = CORPORATE_CLIENTS_REGISTRY.find(
-        (c) => c.emailDomain.toLowerCase() === domain.toLowerCase().trim()
+        (c) => c.emailDomain.toLowerCase() === domain.toLowerCase().trim() && c.tenantId === auth.tenantId
       );
       if (match) return NextResponse.json({ client: match });
       return NextResponse.json({ error: 'Domain not registered' }, { status: 404 });
     }
 
-    return NextResponse.json({ clients: CORPORATE_CLIENTS_REGISTRY });
+    const tenantClients = CORPORATE_CLIENTS_REGISTRY.filter((c) => c.tenantId === auth.tenantId);
+    return NextResponse.json({ clients: tenantClients });
   } catch (err) {
     console.error('[api/admin/corporate-clients GET]', err);
     return NextResponse.json({ error: 'Failed to fetch corporate clients' }, { status: 500 });
@@ -45,17 +48,16 @@ async function handlePOST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const requestedTenantId =
-      typeof rawBody?.tenantId === 'string' && rawBody.tenantId.trim()
-        ? rawBody.tenantId.trim()
-        : auth.tenantId || 'tnt-exl-solutions';
     const body = stripTenantOwnershipFields(rawBody);
+    const tenantId = auth.tenantId;
     const action = body?.action; // 'CREATE_CLIENT' | 'ADD_USER_TO_ROSTER' | 'DELETE_USER_FROM_ROSTER'
 
     // 1. Add User to Client's Roster
     if (action === 'ADD_USER_TO_ROSTER') {
       const { clientId, name, mobileNumber, email, role = 'LOGISTICS_LEAD', costCenter, maxSpendingLimitAed } = body;
-      const client = CORPORATE_CLIENTS_REGISTRY.find((c) => c.id === clientId);
+      const client = CORPORATE_CLIENTS_REGISTRY.find(
+        (c) => c.id === clientId && c.tenantId === auth.tenantId
+      );
       if (!client) {
         return NextResponse.json({ error: 'Client not found' }, { status: 404 });
       }
@@ -79,7 +81,9 @@ async function handlePOST(req: NextRequest) {
     // 2. Delete User from Client's Roster
     if (action === 'DELETE_USER_FROM_ROSTER') {
       const { clientId, userId } = body;
-      const client = CORPORATE_CLIENTS_REGISTRY.find((c) => c.id === clientId);
+      const client = CORPORATE_CLIENTS_REGISTRY.find(
+        (c) => c.id === clientId && c.tenantId === auth.tenantId
+      );
       if (!client) {
         return NextResponse.json({ error: 'Client not found' }, { status: 404 });
       }
@@ -97,7 +101,6 @@ async function handlePOST(req: NextRequest) {
       discountPercent = 10,
       creditLimitAed = 50000,
     } = body;
-    const tenantId = requestedTenantId;
 
     if (!clientName || !emailDomain || !costCenterCode) {
       return NextResponse.json({ error: 'Missing required client fields' }, { status: 400 });
@@ -105,7 +108,7 @@ async function handlePOST(req: NextRequest) {
 
     const cleanDomain = emailDomain.replace('@', '').toLowerCase().trim();
     const existingIdx = CORPORATE_CLIENTS_REGISTRY.findIndex(
-      (c) => c.emailDomain === cleanDomain
+      (c) => c.emailDomain === cleanDomain && c.tenantId === auth.tenantId
     );
 
     const newRecord: CorporateClientRecord = {

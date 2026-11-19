@@ -143,7 +143,7 @@ export default function PartnerStatementsPage() {
                         <span>Preview</span>
                       </button>
                       <a
-                        href={`/api/exchange/documents/statement/${s.id}`}
+                        href={`/api/exchange/statements/${s.id}/pdf`}
                         target="_blank"
                         rel="noreferrer"
                         className="px-3 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 font-bold text-[11px] inline-flex items-center gap-1.5"
@@ -221,7 +221,7 @@ export default function PartnerStatementsPage() {
                 Close
               </button>
               <a
-                href={`/api/exchange/documents/statement/${selectedStatement.id}`}
+                href={`/api/exchange/statements/${selectedStatement.id}/pdf`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5"

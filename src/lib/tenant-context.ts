@@ -190,8 +190,7 @@ export function resolveAuthorizedTenant(
 ): AuthorizedTenantResult {
   const userId = req.headers.get('x-user-id');
   const rawRole = req.headers.get('x-user-role') ?? req.headers.get('x-role');
-  const isImpersonatingSuperAdmin = Boolean(req.headers.get('x-impersonated-by')?.trim());
-  const role = isImpersonatingSuperAdmin ? 'SUPER_ADMIN' : rawRole;
+  const role = rawRole;
   const sessionTenant = sanitizeTenantId(req.headers.get('x-tenant-id') ?? '');
 
   if (!sessionTenant) {

@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
             COUNT(*) FILTER (WHERE customer_type = 'VIP')             as vip,
             COUNT(*) FILTER (WHERE customer_type = 'CORPORATE')       as corporate,
             COUNT(*) FILTER (WHERE customer_type = 'INTERNAL')        as internal
-          FROM customers WHERE deleted_at IS NULL
-        `);
+          FROM customers WHERE deleted_at IS NULL AND tenant_id = $1
+        `, tenantId);
         const r = (rows as any[])[0];
         return NextResponse.json({
           total:    Number(r?.total    ?? 0),

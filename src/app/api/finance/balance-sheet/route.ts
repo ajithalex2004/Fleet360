@@ -14,6 +14,17 @@ import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
+function isValidIsoDate(val: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) return false;
+  const [y, m, d] = val.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() + 1 === m &&
+    dt.getUTCDate() === d
+  );
+}
+
 interface BSLine { code: string; label: string; amount: number; subtype?: string | null; }
 
 export async function GET(req: NextRequest) {
@@ -24,15 +35,24 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const sp = req.nextUrl.searchParams;
+  const asOfParam = sp.get('asOf');
+  if (asOfParam !== null && !isValidIsoDate(asOfParam)) {
+    return NextResponse.json(
+      { error: 'Invalid asOf date format. Expected YYYY-MM-DD' },
+      { status: 400 },
+    );
+  }
+  const asOf = asOfParam ?? new Date().toISOString().slice(0, 10);
+
+  try {
+  return await withTenantRls(prisma, tenantId, async (tx) => {
     await ensureTenantChartOfAccounts(tx, tenantId);
-    const sp   = req.nextUrl.searchParams;
-    const asOf = sp.get('asOf') ?? new Date().toISOString().slice(0, 10);
 
     // ── Check GL availability ────────────────────────────────────────────────
     const [glCheck] = await tx.$queryRawUnsafe<{ count: string }[]>(
       `SELECT COUNT(*)::text as count FROM finance_journal_entries WHERE tenant_id = $2 AND status='POSTED' AND entry_date <= $1::date`, asOf, tenantId
-    ).catch(() => [{ count: '0' }]);
+    );
     const hasGl = parseInt(glCheck?.count ?? '0') > 0;
 
     // ── Helper: balance for an account range from GL ─────────────────────────
@@ -49,7 +69,7 @@ export async function GET(req: NextRequest) {
          GROUP BY jl.account_code, c.account_name, c.account_subtype
          HAVING COALESCE(SUM(jl.debit_amount - jl.credit_amount),0) != 0
          ORDER BY jl.account_code`, asOf, like, tenantId
-      ).catch(() => []);
+      );
 
       return rows.map(r => {
         const raw = toN(r.balance);
@@ -69,12 +89,12 @@ export async function GET(req: NextRequest) {
         };
       }
       // Module fallback
-      const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND payment_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-      const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT','VOID')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-      const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction IN ('INWARD', 'INCOMING') AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND payment_date <= $1::date`, asOf, tenantId);
+      const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT','VOID')`, asOf, tenantId);
+      const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction IN ('INWARD', 'INCOMING') AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId);
       const faScoped  = await fixedAssetsTenantScoped(tx);
-      const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
-      const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
+      const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId) : [{t:'0'}];
+      const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId) : [{t:'0'}];
       return {
         current: [
           { code: '1110', label: 'Cash & Cash Equivalents',   amount: toN(cash?.t)  },
@@ -105,7 +125,7 @@ export async function GET(req: NextRequest) {
             AND status NOT IN ('DRAFT','VOID') AND payment_status != 'PAID'
             AND issue_date <= $2::date`,
         tenantId, asOf
-      ).catch(()=>[{t:'0'}]);
+      );
       const [outVat]  = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(vat_amount),0)::text as t
            FROM finance_invoices
@@ -113,7 +133,7 @@ export async function GET(req: NextRequest) {
             AND issue_date <= $1::date
             AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')`,
         asOf, tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
       const [inVatExp] = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(vat_amount),0)::text as t
            FROM finance_expenses
@@ -121,7 +141,7 @@ export async function GET(req: NextRequest) {
             AND status IN ('APPROVED','PAID')
             AND expense_date <= $1::date`,
         asOf, tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
       const [inVatPay] = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(vat_amount),0)::text as t
            FROM finance_payables
@@ -129,14 +149,14 @@ export async function GET(req: NextRequest) {
             AND status NOT IN ('DRAFT','VOID')
             AND issue_date <= $1::date`,
         asOf, tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
       const [expPay]  = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(total_amount),0)::text as t
            FROM finance_expenses
           WHERE tenant_id = $2 AND deleted_at IS NULL AND status='APPROVED'
             AND expense_date <= $1::date`,
         asOf, tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
       const [secDep]  = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(collected_amount - COALESCE(refunded_amount, 0) - COALESCE(total_deducted, 0)), 0)::text as t
            FROM finance_security_deposits
@@ -144,7 +164,7 @@ export async function GET(req: NextRequest) {
             AND status IN ('HELD', 'PARTIALLY_REFUNDED', 'DEDUCTED', 'PARTIALLY_DEDUCTED')
             AND (collected_amount - COALESCE(refunded_amount, 0) - COALESCE(total_deducted, 0)) > 0`,
         tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
       const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(amount),0)::text as t
            FROM finance_pdc_cheques
@@ -152,7 +172,7 @@ export async function GET(req: NextRequest) {
             AND direction IN ('OUTWARD', 'OUTGOING')
             AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`,
         asOf, tenantId
-      ).catch(()=>[{t:'0'}]);
+      );
 
       const netVatPayable = toN(outVat?.t) - (toN(inVatExp?.t) + toN(inVatPay?.t));
 
@@ -179,7 +199,7 @@ export async function GET(req: NextRequest) {
            JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
            WHERE je.tenant_id = $2 AND je.status='POSTED' AND je.entry_date <= $1::date
              AND c.account_type IN ('INCOME','EXPENSE')`, asOf, tenantId
-        ).catch(() => [{ net: '0' }]);
+        );
         const retainedEarnings = toN((Array.isArray(pl) ? pl[0]?.net : pl?.net) ?? '0');
         const existingIdx = rows.findIndex(r => r.code === '3200');
         if (existingIdx >= 0) {
@@ -195,9 +215,9 @@ export async function GET(req: NextRequest) {
         ];
       }
       // Module fallback: estimate retained earnings from revenue - expenses (do NOT clamp negative net income!)
-      const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-      const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
-      const [pay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_payables WHERE tenant_id = $2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') AND issue_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+      const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('DRAFT','CANCELLED','VOID')`, asOf, tenantId);
+      const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1::date`, asOf, tenantId);
+      const [pay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_payables WHERE tenant_id = $2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') AND issue_date <= $1::date`, asOf, tenantId);
       const netIncome = toN(rev?.t) - toN(exp?.t) - toN(pay?.t);
       return [
         { code: '3100', label: 'Share Capital',                       amount: 0 },
@@ -253,4 +273,8 @@ export async function GET(req: NextRequest) {
       },
     });
   });
+  } catch (err) {
+    console.error('[finance/balance-sheet GET]', err);
+    return NextResponse.json({ error: 'Failed to generate balance sheet' }, { status: 500 });
+  }
 }

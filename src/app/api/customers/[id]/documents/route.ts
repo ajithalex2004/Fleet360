@@ -23,7 +23,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const docs = await tx.$queryRawUnsafe(
-          `SELECT * FROM customer_documents WHERE customer_id = '${params.id}' ORDER BY created_at DESC`
+          `SELECT * FROM customer_documents WHERE customer_id = $1 AND tenant_id = $2 ORDER BY created_at DESC`,
+          params.id,
+          tenantId,
         );
         return NextResponse.json(docs);
       } catch (e) {
@@ -49,20 +51,25 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!body.docName?.trim()) return NextResponse.json({ error: 'Document name is required' }, { status: 400 });
         const id  = randomUUID();
         const now = new Date().toISOString();
-        const safeTenantId = tenantId.replace(/'/g, "''");
-        await tx.$executeRawUnsafe(`
-          INSERT INTO customer_documents (id, tenant_id, created_at, customer_id, doc_name, doc_type, file_name, file_url, uploaded_by, notes)
-          VALUES (
-            '${id}', '${safeTenantId}', '${now}', '${params.id}',
-            '${body.docName.replace(/'/g,"''")}',
-            ${body.docType    ? `'${body.docType}'`                          : 'NULL'},
-            ${body.fileName   ? `'${body.fileName.replace(/'/g,"''")}'`     : 'NULL'},
-            ${body.fileUrl    ? `'${body.fileUrl.replace(/'/g,"''")}'`      : 'NULL'},
-            ${body.uploadedBy ? `'${body.uploadedBy.replace(/'/g,"''")}'`   : 'NULL'},
-            ${body.notes      ? `'${body.notes.replace(/'/g,"''")}'`        : 'NULL'}
-          )
-        `);
-        const rows = await tx.$queryRawUnsafe(`SELECT * FROM customer_documents WHERE id = '${id}'`);
+        await tx.$executeRawUnsafe(
+          `INSERT INTO customer_documents (id, tenant_id, created_at, customer_id, doc_name, doc_type, file_name, file_url, uploaded_by, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          id,
+          tenantId,
+          now,
+          params.id,
+          body.docName,
+          body.docType ?? null,
+          body.fileName ?? null,
+          body.fileUrl ?? null,
+          body.uploadedBy ?? null,
+          body.notes ?? null,
+        );
+        const rows = await tx.$queryRawUnsafe(
+          `SELECT * FROM customer_documents WHERE id = $1 AND tenant_id = $2`,
+          id,
+          tenantId,
+        );
         return NextResponse.json((rows as any[])[0], { status: 201 });
         } catch (e) {
         return NextResponse.json({ error: errorMessage(e, 'Failed to add document') }, { status: 500 });
@@ -85,7 +92,12 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         const { searchParams } = new URL(req.url);
         const docId = searchParams.get('docId');
         if (!docId) return NextResponse.json({ error: 'docId required' }, { status: 400 });
-        await tx.$executeRawUnsafe(`DELETE FROM customer_documents WHERE id = '${docId}' AND customer_id = '${params.id}'`);
+        await tx.$executeRawUnsafe(
+          `DELETE FROM customer_documents WHERE id = $1 AND customer_id = $2 AND tenant_id = $3`,
+          docId,
+          params.id,
+          tenantId,
+        );
         return NextResponse.json({ success: true });
         } catch (e) {
         return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });

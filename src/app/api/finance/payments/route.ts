@@ -179,7 +179,15 @@ export async function POST(req: NextRequest) {
 
         // Propagate settlement to LeaseInvoice & reset dunning
         if (newStatus === 'PAID') {
-          await resetInvoiceDunningOnSettlement(tx, tenantId, leaseInvId, 'finance-payment').catch(() => {});
+          await tx.$executeRawUnsafe('SAVEPOINT reset_inv_dunning');
+          try {
+            await resetInvoiceDunningOnSettlement(tx, tenantId, leaseInvId, 'finance-payment');
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT reset_inv_dunning');
+          } catch (dunErr) {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT reset_inv_dunning').catch(() => {});
+            await tx.$executeRawUnsafe('RELEASE SAVEPOINT reset_inv_dunning').catch(() => {});
+            console.warn('[finance/payments] resetInvoiceDunningOnSettlement rolled back to savepoint:', dunErr);
+          }
 
           if ((inv?.reference_type === 'LEASE_INVOICE' || inv?.module_source === 'LEASING') && inv?.reference_id) {
             await tx.$executeRawUnsafe('SAVEPOINT sync_lease_inv');

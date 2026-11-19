@@ -42,7 +42,7 @@ interface Job {
 }
 interface Driver {
   driver_id: string; driver_name: string; driver_phone?: string; driver_rating?: number;
-  vehicle_reg?: string; vehicle_type?: string; vehicle_capacity?: number;
+  vehicle_id?: string; vehicle_reg?: string; vehicle_type?: string; vehicle_capacity?: number;
   status: DrvStatus; zone_id?: string;
   last_lat?: number; last_lng?: number; last_ping?: string; hours_worked_today?: number;
 }
@@ -55,7 +55,7 @@ interface MergePair {
   routingSource: string;
 }
 interface CtxMenu  { x: number; y: number; kind: 'job'|'vehicle'|'driver'|'map'|'exception'; target: unknown; }
-interface Candidate{ driver_id: string; driver_name: string; vehicle_reg?: string; eta_minutes: number; score: number; }
+interface Candidate{ driver_id: string; driver_name: string; vehicle_id?: string; vehicle_reg?: string; eta_minutes: number; score: number; }
 interface LogEntry { time: string; msg: string; kind: 'info'|'warn'|'error'|'success'; }
 
 /* ═══════════════════ CONSTANTS ══════════════════════ */
@@ -588,11 +588,49 @@ export default function CommandCentre() {
   /* ── Actions ── */
   const handleCtxAction=useCallback(async(action:string,target:unknown)=>{
     if(action==='Assign Vehicle'){
-      setDrawer({job:target as Job,candidates:[],loading:true});
-      await new Promise(r=>setTimeout(r,600));
-      const cands=drivers.filter(d=>d.status==='AVAILABLE').slice(0,5).map((d,i)=>({
-        driver_id:d.driver_id,driver_name:d.driver_name,vehicle_reg:d.vehicle_reg,eta_minutes:4+i*2,score:94-i*4,
-      }));
+      const j = target as Job;
+      setDrawer({job:j,candidates:[],loading:true});
+      await new Promise(r=>setTimeout(r,300));
+      const avail = drivers.filter(d=>d.status==='AVAILABLE');
+      const cands: Candidate[] = avail.map((d, i) => {
+        let distanceKm = 0;
+        let hasCoords = false;
+        if (j.origin_lat && j.origin_lng && d.last_lat && d.last_lng) {
+          hasCoords = true;
+          const R = 6371;
+          const dLat = (d.last_lat - j.origin_lat) * Math.PI / 180;
+          const dLng = (d.last_lng - j.origin_lng) * Math.PI / 180;
+          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(j.origin_lat * Math.PI / 180) * Math.cos(d.last_lat * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+          const cDist = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          distanceKm = Math.round(R * cDist * 10) / 10;
+        }
+
+        const eta_minutes = hasCoords
+          ? Math.max(3, Math.round((distanceKm / 40) * 60))
+          : 5 + i * 3;
+
+        const ratingBonus = ((d.driver_rating ?? 4.5) - 4.0) * 15;
+        const fatiguePenalty = Math.min(20, (d.hours_worked_today ?? 0) * 2.5);
+        const distPenalty = hasCoords ? Math.min(50, distanceKm * 3.5) : i * 5;
+        const rawScore = Math.round(95 - distPenalty + ratingBonus - fatiguePenalty);
+        const score = Math.max(45, Math.min(99, rawScore));
+
+        const resolvedVehicleId = d.vehicle_id || (d as any).assigned_vehicle_id || (d as any).vehicle_reg || d.driver_id;
+
+        return {
+          driver_id: d.driver_id,
+          driver_name: d.driver_name,
+          vehicle_id: resolvedVehicleId,
+          vehicle_reg: d.vehicle_reg || 'N/A',
+          eta_minutes,
+          score,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
       setDrawer(p=>p?{...p,candidates:cands,loading:false}:null);
     } else if(action==='Auto-Dispatch Now'){
       const j=target as Job;
@@ -602,8 +640,25 @@ export default function CommandCentre() {
       addLog(res?.ok?`✓ Dispatch triggered for ${j.id.slice(0,8)}`:`✗ Dispatch failed`,(res?.ok?'success':'error'));
       fetchAll();
     } else if(action==='Cancel Job'){
-      if(!confirm('Cancel this job?')) return;
-      addLog(`Job ${(target as Job).id.slice(0,8)} cancelled`,'warn');
+      const j = target as Job;
+      if(!confirm(`Cancel job ${j.id.slice(0,8)}?`)) return;
+      addLog(`Cancelling job ${j.id.slice(0,8)}…`, 'warn');
+      const res = await fetch(`/api/dispatcher/trips/${j.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Dispatcher cancelled via Command Center' }),
+      }).catch(() => null);
+      if (res?.ok) {
+        addLog(`✓ Job ${j.id.slice(0,8)} cancelled`, 'warn');
+      } else {
+        await fetch(`/api/rental/bookings/${j.id}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cancellationReason: 'Dispatcher cancelled' }),
+        }).catch(() => null);
+        addLog(`Job ${j.id.slice(0,8)} cancel requested`, 'warn');
+      }
+      fetchAll();
     } else if(action==='Call Driver'){
       alert(`Calling ${(target as Driver).driver_name} at ${(target as Driver).driver_phone??'N/A'}`);
     } else if(action==='Send Message (WhatsApp)'){
@@ -616,9 +671,10 @@ export default function CommandCentre() {
 
   const handleAssign=async(c:Candidate)=>{
     if(!drawer) return;
+    const vehicleId = c.vehicle_id || (drivers.find(d => d.driver_id === c.driver_id)?.vehicle_id) || (drawer.job as any).assigned_vehicle_id || c.driver_id;
     const res=await fetch('/api/dispatch/jobs',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jobId:drawer.job.id,driverId:c.driver_id,vehicleId:c.driver_id,adminId:'dispatcher'})});
-    addLog(res.ok?`✓ ${c.vehicle_reg} assigned to ${drawer.job.id.slice(0,8)} (score ${c.score})`:`✗ Assignment failed`,res.ok?'success':'error');
+      body:JSON.stringify({jobId:drawer.job.id,driverId:c.driver_id,vehicleId,adminId:'dispatcher'})});
+    addLog(res.ok?`✓ ${c.vehicle_reg || vehicleId} assigned to ${drawer.job.id.slice(0,8)} (score ${c.score})`:`✗ Assignment failed`,res.ok?'success':'error');
     setDrawer(null); fetchAll();
   };
 

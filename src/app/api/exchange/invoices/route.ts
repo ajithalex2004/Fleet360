@@ -33,12 +33,20 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return partnerAuthFailure(auth);
 
   const includeStatements = req.nextUrl.searchParams.get('includeStatements') === '1';
+  const statusParam = req.nextUrl.searchParams.get('status');
+  const VALID_STATUSES = new Set(['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'DISPUTED', 'APPROVED', 'PAID', 'CANCELLED', 'REJECTED']);
+  if (statusParam && !VALID_STATUSES.has(statusParam.toUpperCase())) {
+    return NextResponse.json({ error: `Invalid status enum value: ${statusParam}` }, { status: 400 });
+  }
 
   // Invoices sit in the buyers' tenants: platform context, limited to the
   // verified partner's own.
   const invoices = await withPlatformAdmin(prisma, (tx) =>
     tx.partnerInvoice.findMany({
-      where: { partnerId: auth.ctx.partnerId },
+      where: {
+        partnerId: auth.ctx.partnerId,
+        ...(statusParam ? { status: statusParam.toUpperCase() as any } : {}),
+      },
       include: {
         items: true,
         disputes: true,

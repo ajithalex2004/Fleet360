@@ -31,6 +31,7 @@ import { captureException } from '@/lib/sentry';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import { postLeaseInvoiceToGl } from '@/lib/leasing/leasing-gl-posting';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -142,12 +143,45 @@ export async function POST(req: NextRequest) {
             const count = await tx.leaseInvoice.count({ where: { tenantId } });
             const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
             const currency = items[0].currency ?? 'AED';
-            const subTotal = items.reduce((s, f) => s + Number(f.finalAmount ?? f.fineAmount), 0);
-            const vatPct = 5;
-            const vatAmount = subTotal * (vatPct / 100);
+            const finePrincipal = items.reduce((s, f) => s + Number(f.finalAmount ?? f.fineAmount), 0);
+            const adminFee = items.reduce((s, f) => s + Number((f as any).adminFee ?? (f as any).admin_fee ?? 0), 0);
+            const subTotal = finePrincipal + adminFee;
+            // UAE FTA VATP006 / VATP040: Statutory fine principal is 0% VAT; 5% standard VAT applies exclusively to administrative surcharge
+            const vatAmount = Math.round(adminFee * 0.05 * 100) / 100;
+            const vatPct = adminFee > 0 ? 5 : 0;
             const totalAmount = subTotal + vatAmount;
             const issueDate = new Date();
             const dueDate = new Date(issueDate.getTime() + 30 * 86400000);
+
+            const linesData: any[] = [];
+            for (const f of items) {
+              const p = Number(f.finalAmount ?? f.fineAmount);
+              const fee = Number((f as any).adminFee ?? (f as any).admin_fee ?? 0);
+              linesData.push({
+                tenantId,
+                contractId: f.contract!.id,
+                vehicleRef: f.vehicleId ?? null,
+                description: `${f.violationType} fine principal ${f.fineNo ?? f.id.slice(0, 8)} — ${f.violationDate.toISOString().slice(0, 10)}${f.location ? ` @ ${f.location}` : ''}${f.authority ? ` (${f.authority})` : ''} (Statutory out-of-scope UAE VAT)`,
+                lineType: 'STATUTORY_FINE',
+                quantity: 1,
+                unitAmount: p,
+                totalAmount: p,
+                currency,
+              });
+              if (fee > 0) {
+                linesData.push({
+                  tenantId,
+                  contractId: f.contract!.id,
+                  vehicleRef: f.vehicleId ?? null,
+                  description: `Fine administrative handling surcharge (${f.fineNo ?? f.id.slice(0, 8)})`,
+                  lineType: 'ADMIN_FEE',
+                  quantity: 1,
+                  unitAmount: fee,
+                  totalAmount: fee,
+                  currency,
+                });
+              }
+            }
 
             const invoice = await tx.leaseInvoice.create({
               data: {
@@ -160,19 +194,17 @@ export async function POST(req: NextRequest) {
                 notes: `Auto-generated consolidated invoice for ${items.length} traffic fine${items.length === 1 ? '' : 's'}.`,
                 tenantId,
                 lines: {
-                  create: items.map(f => ({
-                    tenantId,
-                    contractId: f.contract!.id,
-                    vehicleRef: f.vehicleId ?? null,
-                    description: `${f.violationType} fine ${f.fineNo ?? f.id.slice(0, 8)} — ${f.violationDate.toISOString().slice(0, 10)}${f.location ? ` @ ${f.location}` : ''}${f.authority ? ` (${f.authority})` : ''}`,
-                    lineType: 'TRAFFIC_FINE',
-                    quantity: 1,
-                    unitAmount: Number(f.finalAmount ?? f.fineAmount),
-                    totalAmount: Number(f.finalAmount ?? f.fineAmount),
-                    currency,
-                  })),
+                  create: linesData,
                 },
               },
+            });
+
+            await postLeaseInvoiceToGl(tx as any, {
+              invoiceId: invoice.id,
+              tenantId,
+              preparedBy: req.headers.get('x-user-id') ?? 'leasing-traffic-fines-sweep',
+            }).catch((err) => {
+              console.warn('[sweep-bill] postLeaseInvoiceToGl warning:', err);
             });
 
             await tx.leaseTrafficFine.updateMany({

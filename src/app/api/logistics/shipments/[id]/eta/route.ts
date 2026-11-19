@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { recomputeShipmentEta } from '@/lib/logistics/eta-notifier';
 
@@ -35,11 +36,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   try {
-    const result = await recomputeShipmentEta({
-      tenantId,
-      shipmentOrderId: id,
-      suppressNotifications: true,
-    });
+    const result = await withTenantRls(prisma, tenantId, () =>
+      recomputeShipmentEta({
+        tenantId,
+        shipmentOrderId: id,
+        suppressNotifications: true,
+      }),
+    );
     if (!result.prediction) {
       return NextResponse.json({ error: result.reason || 'No ETA available' }, { status: 404 });
     }

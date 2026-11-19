@@ -46,6 +46,12 @@ export async function GET(req: NextRequest) {
       conditions.push(`(invoice_number ILIKE $${i} OR client_name ILIKE $${i} OR description ILIKE $${i})`);
     }
 
+    const typeParam = searchParams.get('type') ?? '';
+    if (typeParam.toUpperCase() === 'CUSTOMER') {
+      conditions.push(`invoice_number NOT LIKE 'SUB-%'`);
+      conditions.push(`COALESCE(module_source, '') <> 'PLATFORM_SAAS'`);
+    }
+
     const where = conditions.join(' AND ');
 
     type InvRow = Record<string, unknown>;
@@ -89,6 +95,11 @@ export async function GET(req: NextRequest) {
         due_date:   r.due_date ? (r.due_date as Date)?.toISOString?.().split('T')[0] ?? r.due_date : null,
         created_at: (r.created_at as Date)?.toISOString?.() ?? r.created_at,
         updated_at: (r.updated_at as Date)?.toISOString?.() ?? r.updated_at,
+        invoiceNumber: String(r.invoice_number ?? ''),
+        totalAmount: Number(r.total_amount ?? 0),
+        subtotalAmount: Number(r.subtotal ?? 0),
+        vatAmount: Number(r.vat_amount ?? 0),
+        paidAmount: Number(r.paid_amount ?? 0),
       };
     });
 
@@ -105,6 +116,7 @@ export async function GET(req: NextRequest) {
     for (const s of summary) counts[s.payment_status] = Number(s.cnt);
 
     return NextResponse.json({
+      invoices: enriched,
       data:  enriched,
       total: Number(countRows[0]?.count ?? 0),
       page,

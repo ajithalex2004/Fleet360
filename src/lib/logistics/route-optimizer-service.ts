@@ -374,35 +374,51 @@ export async function listPlannerInputs(tenantId: string): Promise<{
 
   const vehicles = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `SELECT id,
-            COALESCE(plate_number, license_plate) AS license_plate,
+            license_plate,
             make, model, vehicle_usage, status,
-            COALESCE(payload_capacity_kg, 3000) AS payload_capacity_kg,
+            payload_capacity_kg,
             payload_capacity_cbm,
             depot_latitude, depot_longitude, cost_per_km
        FROM vehicles
       WHERE tenant_id = $1
         AND deleted_at IS NULL
         AND COALESCE(status, 'ACTIVE') NOT IN ('INACTIVE', 'RETIRED', 'SOLD')
-      ORDER BY plate_number ASC NULLS LAST
+        AND payload_capacity_kg IS NOT NULL
+        AND payload_capacity_kg > 0
+        AND depot_latitude IS NOT NULL
+        AND depot_longitude IS NOT NULL
+      ORDER BY license_plate ASC NULLS LAST
       LIMIT 200`,
     tenantId,
-  ).catch(() => []);
+  );
 
   const shipments = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT id, shipment_no, status, priority,
-            cargo_owner_name, origin_name, origin_address,
-            destination_name, destination_address,
-            pickup_window_from::text, pickup_window_to::text,
-            delivery_window_from::text, delivery_window_to::text,
-            requested_vehicle_type, total_weight_kg, total_volume_cbm
-       FROM logistics_shipment_orders
-      WHERE tenant_id = $1
-        AND deleted_at IS NULL
-        AND status IN ('DRAFT', 'SUBMITTED', 'PENDING', 'APPROVED')
-      ORDER BY created_at DESC
+    `SELECT so.id, so.shipment_no, so.status, so.priority,
+            so.cargo_owner_name, so.origin_name, so.origin_address,
+            so.destination_name, so.destination_address,
+            so.pickup_window_from::text, so.pickup_window_to::text,
+            so.delivery_window_from::text, so.delivery_window_to::text,
+            so.requested_vehicle_type, so.total_weight_kg, so.total_volume_cbm
+       FROM logistics_shipment_orders so
+      WHERE so.tenant_id = $1
+        AND so.deleted_at IS NULL
+        AND so.status IN ('DRAFT', 'SUBMITTED', 'PENDING', 'APPROVED')
+        AND EXISTS (
+          SELECT 1 FROM logistics_shipment_stops p
+           WHERE p.shipment_order_id = so.id
+             AND p.tenant_id = so.tenant_id
+             AND UPPER(p.stop_type) = 'PICKUP'
+        )
+        AND EXISTS (
+          SELECT 1 FROM logistics_shipment_stops d
+           WHERE d.shipment_order_id = so.id
+             AND d.tenant_id = so.tenant_id
+             AND UPPER(d.stop_type) = 'DELIVERY'
+        )
+      ORDER BY so.created_at DESC
       LIMIT 200`,
     tenantId,
-  ).catch(() => []);
+  );
 
   return { vehicles, shipments };
 }
@@ -498,7 +514,7 @@ export async function discardPlan(tenantId: string, planId: string): Promise<voi
   await ensureRouteOptimizerSchema();
   await prisma.$executeRawUnsafe(
     `UPDATE logistics_route_plans
-        SET status = 'DISCARDED', deleted_at = NOW(), updated_at = NOW()
+        SET status = 'DISCARDED', updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2 AND status = 'DRAFT'`,
     planId, tenantId,
   );

@@ -57,7 +57,7 @@ const ProvisionSchema = z.object({
   selectedModules:       z.array(z.string()).min(0),
   adminFirstName:        z.string().min(1),
   adminLastName:         z.string().min(1),
-  adminPassword:         z.string().min(8),
+  adminPassword:         z.string().min(8).max(128),
   trn:                   z.string().optional(),
   corporateTaxTrn:       z.string().optional(),
   tradeLicenseNo:        z.string().optional(),
@@ -255,9 +255,29 @@ async function persistPostCommitCompanyProfileAndAttachments(
   }
 }
 
+// In-memory IP rate limiter for public tenant provisioning (10 attempts per hour)
+const PROVISION_RATE_LIMITS = new Map<string, number[]>();
+function checkProvisionRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const timestamps = (PROVISION_RATE_LIMITS.get(ip) || []).filter((ts) => now - ts < windowMs);
+  if (timestamps.length >= 10) return false;
+  timestamps.push(now);
+  PROVISION_RATE_LIMITS.set(ip, timestamps);
+  return true;
+}
+
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!checkProvisionRateLimit(clientIp)) {
+    return NextResponse.json(
+      { error: 'Too Many Requests', message: 'Registration rate limit exceeded. Please try again later.' },
+      { status: 429 },
+    );
+  }
+
   const [userTable, domainVerifColumnsExist] = await Promise.all([
     detectUserTableName(),
     detectDomainVerifColumnsExist(),
@@ -373,10 +393,10 @@ export async function POST(request: NextRequest) {
             contactName:   data.contactName,
             contactPhone:  data.contactPhone,
             address:       data.address || undefined,
-            plan:          data.plan,
+            plan:          'TRIAL',
             isActive:      true,
             code:          generateCode(data.companyName),
-            dataResidency: data.plan === 'ENTERPRISE' ? data.dataResidency : 'GLOBAL',
+            dataResidency: 'GLOBAL',
           },
         });
 

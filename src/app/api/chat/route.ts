@@ -19,18 +19,40 @@ export async function POST(req: NextRequest) {
   }
 
   const t0 = Date.now();
-  const { prompt, threadId, responseId } = (await req.json()) as {
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || !body.prompt) {
+    return NextResponse.json({ error: 'Invalid prompt payload' }, { status: 400 });
+  }
+
+  const { prompt, threadId, responseId } = body as {
     prompt: DBMessage;
     threadId: string;
     responseId: string;
   };
+
+  // Prompt Injection Defense (F33): reject incoming client messages claiming role: 'system'
+  const rawRole = typeof prompt.role === 'string' ? prompt.role.trim().toLowerCase() : '';
+  if (rawRole === 'system') {
+    return NextResponse.json(
+      { error: 'Prompt Injection Rejected: client messages cannot claim system role' },
+      { status: 400 },
+    );
+  }
+
+  // Enforce role: 'user' for all client messages
+  const sanitizedPrompt: DBMessage = {
+    role: 'user',
+    content: typeof prompt.content === 'string' ? prompt.content : (Array.isArray(prompt.content) ? (prompt.content as any) : String(prompt.content ?? '')),
+    ...(prompt.id ? { id: prompt.id } : {}),
+  };
+
   const client = new OpenAI({
     baseURL: "https://api.thesys.dev/v1/embed/",
     apiKey: process.env.THESYS_API_KEY,
   });
   const messageStore = getMessageStore(threadId, tenantId);
 
-  messageStore.addMessage(prompt);
+  messageStore.addMessage(sanitizedPrompt);
 
   const sentMessages = messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 });
   let reportedUsage: ReportedUsage = null;

@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('next/server', async () => await import('next/server.js'));
+vi.mock('@/lib/upstash', () => ({ getRedis: () => null }));
 
 import { aiGateway } from '@/lib/agents/gateway';
 import { processDocumentWithRouter } from '@/lib/agents/document-intelligence/pipeline/router';

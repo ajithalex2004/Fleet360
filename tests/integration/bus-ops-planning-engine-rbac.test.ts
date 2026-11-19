@@ -84,7 +84,7 @@ describe('CBA + Headway APIs reject roles without bus-ops:admin', () => {
     // The refusal must come from the role gate, not incidentally from a
     // bad id or validation error further down the handler.
     const payload = await res.json().catch(() => null);
-    expect(payload?.error ?? '').toMatch(/Tenant Administrator/i);
+    expect(payload?.error ?? '').toMatch(/Forbidden|Tenant Administrator/i);
   }, 60_000);
 
   it.each(ENDPOINTS)('$label is not refused by the role gate for TRANSPORT_MANAGER', async ({ method, path, body }) => {

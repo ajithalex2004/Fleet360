@@ -27,6 +27,7 @@ vi.mock('@/lib/rental/rbac', () => ({
 
 vi.mock('@/lib/workflow/approvals', () => ({
   approvalRequired: vi.fn(async () => false),
+  requireApproved: vi.fn(async () => null),
   withApprovalStart: vi.fn(),
 }));
 

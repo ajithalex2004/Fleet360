@@ -8,13 +8,13 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureRouteOptimizerSchema } from '@/lib/logistics/route-optimizer-schema';
 import { runOptimization } from '@/lib/logistics/route-optimizer-service';
 import { POST as editPOST } from '@/app/api/logistics/planner/plans/[id]/edit/route';
 
-const prisma = new PrismaClient();
 const TENANT = `pedit-${randomUUID().slice(0, 8)}`;
 const vehicleIds: string[] = [];
 const shipmentIds: string[] = [];
@@ -30,40 +30,50 @@ function editReq(planId: string, body: unknown, tenant: string | null = TENANT):
 
 async function seedVehicle(capKg: number): Promise<string> {
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO vehicles (id, license_plate, vehicle_usage, status,
+  await withTenantRls(prisma, TENANT, (tx) => tx.$executeRawUnsafe(
+    `INSERT INTO vehicles (id, tenant_id, license_plate, vehicle_usage, status,
        payload_capacity_kg, payload_capacity_cbm, depot_latitude, depot_longitude, cost_per_km, created_at, updated_at)
-     VALUES ($1,$2,'LOGISTICS','AVAILABLE',$3,50,$4,$5,2.5,NOW(),NOW())`,
-    id, `PE-${id.slice(0,6)}`, capKg, DEPOT.lat, DEPOT.lng,
-  );
+     VALUES ($1,$2,$3,'LOGISTICS','AVAILABLE',$4,50,$5,$6,2.5,NOW(),NOW())`,
+    id, TENANT, `PE-${id.slice(0,6)}`, capKg, DEPOT.lat, DEPOT.lng,
+  ));
   vehicleIds.push(id);
   return id;
 }
 
 async function seedShipment(pickup: { lat: number; lng: number }, delivery: { lat: number; lng: number }): Promise<string> {
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, total_weight_kg, total_volume_cbm, created_at, updated_at)
-     VALUES ($1,$2,$3,'PENDING','AED',300,5,NOW(),NOW())`,
-    id, TENANT, `PE-SHP-${id.slice(0,6)}`,
-  );
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency, total_weight_kg, total_volume_cbm, created_at, updated_at)
+       VALUES ($1,$2,$3,'PENDING','AED',300,5,NOW(),NOW())`,
+      id, TENANT, `PE-SHP-${id.slice(0,6)}`,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, address, latitude, longitude, service_duration_minutes, created_at, updated_at)
+       VALUES ($1,$2,$3,1,'PICKUP','P',$4,$5,15,NOW(),NOW()), ($6,$2,$3,2,'DELIVERY','D',$7,$8,15,NOW(),NOW())`,
+      randomUUID(), TENANT, id, pickup.lat, pickup.lng, randomUUID(), delivery.lat, delivery.lng,
+    );
+  });
   shipmentIds.push(id);
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type, address, latitude, longitude, service_duration_minutes, created_at, updated_at)
-     VALUES ($1,$2,$3,1,'PICKUP','P',$4,$5,15,NOW(),NOW()), ($6,$2,$3,2,'DELIVERY','D',$7,$8,15,NOW(),NOW())`,
-    randomUUID(), TENANT, id, pickup.lat, pickup.lng, randomUUID(), delivery.lat, delivery.lng,
-  );
   return id;
 }
 
-beforeAll(async () => { await ensureRouteOptimizerSchema(); }, 60_000);
+beforeAll(async () => {
+  await ensureRouteOptimizerSchema();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO tenants (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+    TENANT, `Planner Edit Test ${TENANT}`,
+  );
+}, 60_000);
 
 afterAll(async () => {
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_route_plans WHERE tenant_id = $1`, TENANT).catch(() => {});
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
-  if (shipmentIds.length) await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, shipmentIds).catch(() => {});
-  if (vehicleIds.length) await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, vehicleIds).catch(() => {});
-  await prisma.$disconnect();
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_route_plans WHERE tenant_id = $1`, TENANT).catch(() => {});
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
+    if (shipmentIds.length) await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, shipmentIds).catch(() => {});
+    if (vehicleIds.length) await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, vehicleIds).catch(() => {});
+  });
+  await prisma.$executeRawUnsafe(`DELETE FROM tenants WHERE id = $1`, TENANT).catch(() => {});
 });
 
 describe('planner edit / revalidate', () => {
@@ -72,10 +82,10 @@ describe('planner edit / revalidate', () => {
     const s0 = await seedShipment({ lat: 25.25, lng: 55.30 }, { lat: 25.30, lng: 55.35 });
     const s1 = await seedShipment({ lat: 25.22, lng: 55.28 }, { lat: 25.18, lng: 55.25 });
 
-    const opt = await runOptimization({
+    const opt = await withTenantRls(prisma, TENANT, () => runOptimization({
       tenantId: TENANT, vehicleIds: [vId], shipmentIds: [s0, s1],
       config: { distanceProvider: 'haversine' },
-    });
+    }));
     expect(opt.result.routes.length).toBe(1);
     const route = opt.result.routes[0];
     const originalOrder = route.stops.map(s => s.stopId);
@@ -96,10 +106,10 @@ describe('planner edit / revalidate', () => {
     const vId = await seedVehicle(2000);
     const s0 = await seedShipment({ lat: 25.25, lng: 55.30 }, { lat: 25.30, lng: 55.35 });
 
-    const opt = await runOptimization({
+    const opt = await withTenantRls(prisma, TENANT, () => runOptimization({
       tenantId: TENANT, vehicleIds: [vId], shipmentIds: [s0],
       config: { distanceProvider: 'haversine' },
-    });
+    }));
     const route = opt.result.routes[0];
     // Reverse so delivery precedes pickup — the revalidate must flag it.
     const reversed = [...route.stops.map(s => s.stopId)].reverse();
@@ -118,10 +128,10 @@ describe('planner edit / revalidate', () => {
     const s0 = await seedShipment({ lat: 25.25, lng: 55.30 }, { lat: 25.30, lng: 55.35 });
     const s1 = await seedShipment({ lat: 25.22, lng: 55.28 }, { lat: 25.18, lng: 55.25 });
 
-    const opt = await runOptimization({
+    const opt = await withTenantRls(prisma, TENANT, () => runOptimization({
       tenantId: TENANT, vehicleIds: [vId], shipmentIds: [s0, s1],
       config: { distanceProvider: 'haversine' },
-    });
+    }));
     const route = opt.result.routes[0];
     // Keep only s0's stops in the route; unassign s1.
     const s0Stops = route.stops.filter(s => s.shipmentId === s0).map(s => s.stopId);

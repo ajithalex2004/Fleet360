@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { createLoadBroadcast, getActiveLoadBroadcast, resolveShipmentPickupGeo } from '@/lib/logistics/domain';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           responseDeadlineMin: body.responseDeadlineMin ?? null,
           autoAssign: Boolean(body.autoAssign),
           createdBy: body.createdBy ?? createdBy,
-          baseUrl: req.nextUrl.origin,
+          baseUrl: getPublicOrigin(req),
         });
         return NextResponse.json(broadcast, { status: 201 });
         } catch (e) {

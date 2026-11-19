@@ -6,7 +6,8 @@
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
-import { cleanupTenant, isServerRunning, makeRequest, seedTestTenantFull } from '../setup';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull } from '../setup';
 
 let serverUp = false;
 let seed: Awaited<ReturnType<typeof seedTestTenantFull>> | null = null;
@@ -21,25 +22,32 @@ beforeAll(async () => {
   seed = await seedTestTenantFull('ENTERPRISE', 'TENANT_ADMIN');
 
   // Need a route to attach headway rules to
-  const route = await basePrisma.busRoute.create({
-    data: {
-      tenantId: seed.tenant.id,
-      name: 'E2E Headway Route',
-      origin: 'A',
-      destination: 'B',
-      routeType: 'STAFF',
-      isActive: true,
-    },
-  });
+  const route = await withTenantRls(basePrisma, seed.tenant.id, (tx) =>
+    tx.busRoute.create({
+      data: {
+        tenantId: seed!.tenant.id,
+        name: 'E2E Headway Route',
+        origin: 'A',
+        destination: 'B',
+        routeType: 'STAFF',
+        isActive: true,
+      },
+    }),
+  );
   testRouteId = route.id;
 });
 
 afterAll(async () => {
-  if (testRouteId) {
-    await basePrisma.headwayRule.deleteMany({ where: { routeId: testRouteId } });
-    await basePrisma.busRoute.delete({ where: { id: testRouteId } }).catch(() => {});
+  if (testRouteId && seed) {
+    await withTenantRls(basePrisma, seed.tenant.id, async (tx) => {
+      await tx.headwayRule.deleteMany({ where: { routeId: testRouteId! } });
+      await tx.busRoute.delete({ where: { id: testRouteId! } }).catch(() => {});
+    }).catch(() => {});
   }
-  if (seed) await cleanupTenant(seed.tenant.id);
+  if (seed) {
+    await cleanupTenant(seed.tenant.id);
+    await cleanupUser(seed.user.id);
+  }
 });
 
 describe('Headway /api/bus-ops/headway', () => {

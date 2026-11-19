@@ -7,7 +7,7 @@ import {
   OcrScanResult,
   sealElectronicSignature,
   STANDARD_RENTAL_TERMS,
-} from '@/lib/digital-kyc-engine';
+} from '@/lib/digital-kyc-types';
 
 interface DigitalKycUaePassProps {
   requestorName?: string;

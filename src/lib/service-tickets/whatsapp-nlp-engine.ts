@@ -12,6 +12,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { aiGateway } from '@/lib/agents/gateway';
 import { nextReadableId } from './schema';
 import type { TicketType, TicketPriority } from '@/types/service-tickets';
 
@@ -288,16 +289,22 @@ export function parseTier1Regex(body: string): ParsedTicketIntent | null {
 }
 
 /**
- * Tier 2: Google Gemini 2.0 Flash / 1.5 Flash Caller
+ * Tier 2: Unified AI Gateway Ingestion (F32 - Governed, Metered & Accounted)
  */
 export async function parseTier2GeminiFlash(
   body: string,
-  apiKey?: string
+  apiKey?: string,
+  tenantId?: string,
 ): Promise<ParsedTicketIntent> {
-  const key = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
+  const hasKeys = Boolean(
+    apiKey ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AI_API_KEY ||
+    process.env.OPENAI_API_KEY
+  );
 
-  if (!key) {
-    // Fallback if no Gemini API Key is configured
+  if (!hasKeys) {
+    // Fallback if no external AI keys are configured
     return fallbackIntent(body, 'FALLBACK');
   }
 
@@ -334,56 +341,25 @@ Respond ONLY with a valid JSON object:
 `;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-    const payload = JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `User Message: "${body}"` }],
-        },
+    const res = await aiGateway.chat(
+      [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: `User Message: "${body}"` },
       ],
-      systemInstruction: {
-        parts: [{ text: systemInstruction }],
+      {
+        capabilityAlias: 'ECONOMY_TEXT',
+        responseFormat: 'json',
+        tenantId,
+        agentId: 'whatsapp-nlp-engine',
+        eventType: 'WHATSAPP_TICKET_PARSE',
       },
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-      },
-    });
+    );
 
-    let response: Response | null = null;
-    const maxRetries = 2;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-      });
+    let cleaned = res.content.trim();
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
 
-      if (response.ok) break;
-
-      // Check if transient error (503 UNAVAILABLE, 429)
-      if ((response.status === 503 || response.status === 429) && attempt < maxRetries) {
-        const delay = (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)) ? 10 : 800 * Math.pow(2, attempt);
-        console.warn(`[whatsapp-nlp] Gemini 2.0 Flash transient HTTP ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
-      break;
-    }
-
-    if (!response || !response.ok) {
-      console.warn(`Gemini 2.0 Flash returned HTTP ${response?.status ?? 'error'}, falling back`);
-      return fallbackIntent(body, 'FALLBACK');
-    }
-
-    const data = await response.json();
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!candidateText) {
-      return fallbackIntent(body, 'FALLBACK');
-    }
-
-    const parsed = JSON.parse(candidateText);
+    const parsed = JSON.parse(cleaned);
     return {
       ticketType: parsed.ticketType || 'SUPPORT',
       priority: parsed.priority || 'Medium',
@@ -399,7 +375,7 @@ Respond ONLY with a valid JSON object:
         'Thank you. Your request has been logged and our team is assisting.',
     };
   } catch (err) {
-    console.warn('Gemini 2.0 Flash call error:', err);
+    console.warn('[whatsapp-nlp] AI Gateway failed, falling back:', err);
     return fallbackIntent(body, 'FALLBACK');
   }
 }
@@ -429,7 +405,7 @@ export async function parseInboundMessage(
   params: InboundMessageParams,
   customGeminiKey?: string
 ): Promise<ParsedTicketIntent> {
-  const { body } = params;
+  const { body, tenantId } = params;
 
   // 1. Try Tier 1 Fast Regex
   const tier1 = parseTier1Regex(body);
@@ -437,8 +413,8 @@ export async function parseInboundMessage(
     return tier1;
   }
 
-  // 2. Try Tier 2 Gemini 2.0 Flash
-  return await parseTier2GeminiFlash(body, customGeminiKey);
+  // 2. Try Tier 2 Governed AI Gateway (Gemini / OpenAI)
+  return await parseTier2GeminiFlash(body, customGeminiKey, tenantId);
 }
 
 /**
