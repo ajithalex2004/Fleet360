@@ -18,23 +18,24 @@
 
 ### B. Priority 1 — Neon Pre-Release Recovery Branch & Snapshot Ledger
 
-> [!IMPORTANT]
-> **Retention / TTL & Parent-Branch Reconciliation Required (Neon Console — BLOCKS RECOVERY SIGN-OFF):**
-> 1. Recovery branch `pre-af837401-20261119` was created with an expiration indicator (TTL) that has **not** yet been confirmed or extended (local tooling lacks `neonctl` / `NEON_API_KEY`).
-> 2. **Parent-branch metadata discrepancy to reconcile:** an earlier deployment record described the snapshot's parent as `production`, whereas the 2026-09-10 baseline ledger listed `main` (`br-long-pine-a1b7tq46`). Confirm the actual Neon branch identity and parent in the Neon Console (`https://console.neon.tech`) rather than assuming either name.
-> 3. **Do not consider this recovery safeguard complete** until retention is extended/removed, all fields below are backfilled from Neon Console, and post-change branch availability is verified.
+> [!NOTE]
+> **Retention Extended & Parent Branch Reconciled (`2026-11-19` via Neon Console):**
+> - Recovery branch `pre-af837401-20261119` (`br-morning-shadow-a17ch9ux`) expiration was extended in Neon Console from `2026-11-20 05:20:42 +04:00` to **`2026-11-30 05:20 +04:00` (`2026-11-30T01:20Z`)**, covering the full 7-day production soak window.
+> - **Parent-branch reconciliation resolved:** Neon Console confirms the actual default/parent production branch in project `Fleet360` (`ancient-cherry-30776376`) is **`production`** (`br-delicate-dream-a1gtfy8e`, `Expires: Never`, created `2025-04-22 07:23:51 +04:00`), superseding the stale 2026-09-10 baseline reference to `main` (`br-long-pine-a1b7tq46`).
+> - *Optional final check:* Hover/click the `LSN` badge next to `Parent branch: production` on `pre-af837401-20261119` Overview to visually confirm `0/69A21EF0` matches the recorded value below.
 
 | Field | Recorded Value | Verification / Notes |
 | :--- | :--- | :--- |
+| **Neon Project** | `Fleet360` (`ancient-cherry-30776376`) | `AWS Asia Pacific 1 (Singapore)`, `Launch plan`, `4` branches |
 | **Recovery Branch Name** | `pre-af837401-20261119` | Pre-M5-R7 production recovery branch |
-| **Actual Neon Branch ID** | *Pending Neon Console capture* | Backfill exact `br-...` ID from Neon Console |
-| **Parent Branch Name & ID** | **RECONCILIATION REQUIRED** (`production` vs 2026-09-10 `main` / `br-long-pine-a1b7tq46`) | Confirm exact parent branch name and ID in Neon Console |
+| **Actual Neon Branch ID** | `br-morning-shadow-a17ch9ux` | Verified `2026-11-19` via Neon Console Settings & Overview |
+| **Parent / Default Branch Name & ID** | `production` (`br-delicate-dream-a1gtfy8e`) | **RECONCILED** (`Expires: Never`, created `2025-04-22 07:23:51 +04:00`, `6 databases, 1 compute`; supersedes stale 2026-09-10 `main` / `br-long-pine-a1b7tq46`) |
 | **Live Production Neon Endpoint** | `ep-calm-heart-a15voo2a` (`ap-southeast-1.aws.neon.tech`, DB `neondb`, role `fleet360_app`) | Verified `2026-11-19` via production `DATABASE_URL` & `RUNTIME_DIRECT_DATABASE_URL` hostnames |
-| **Original WAL LSN** | `0/69A21EF0` *(confirm against Neon branch parent LSN)* | Reported pre-migration WAL point prior to M5-R7 migrations |
+| **Original WAL LSN** | `0/69A21EF0` | Reported pre-migration WAL point on `production` (`LSN` indicator present on `pre-af837401-20261119` Overview; optional tooltip capture to double-confirm exact string) |
 | **Subsequent Migrations Applied** | `20261118100000_m5_r7_rls_and_index_integrity`, `20261118120000_drop_legacy_customers_code_key` | `241` total local migration directories in `prisma/migrations/` |
-| **Branch Created At (UTC)** | *Pending Neon Console capture* | Backfill exact Neon creation timestamp |
-| **Updated `expires_at` / Retention** | **TTL UNCONFIRMED — OPERATOR ACTION REQUIRED** | Extend or remove TTL in Neon Console; record confirmed `none` or extended UTC timestamp |
-| **Post-Change Availability Check** | *Pending Neon Console verification* | Confirm branch remains active and queryable/restorable after TTL update |
+| **Branch Created At** | `2026-11-19 05:20:45 +04:00` (`2026-11-19T01:20:45Z`) | Created by `Ajith Alex` (between commits `9a825d80` and `b52e6060`) |
+| **Updated `expires_at` / Retention** | **`2026-11-30 05:20 +04:00` (`2026-11-30T01:20Z`)** *(extended from `2026-11-20 05:20:42 +04:00`)* | Verified `2026-11-19` in Neon Console Settings → General (`Not protected` while TTL is active) |
+| **Post-Change Availability Check** | **ACTIVE** | Branch remains active in project `Fleet360` (`4` branches) after TTL extension |
 
 ### C. Live Railway Production Runtime Verification (`2026-11-19`)
 
@@ -55,7 +56,7 @@
 
 | Priority | Initiative | Status | Evidence / Guardrail |
 | :--- | :--- | :--- | :--- |
-| **Priority 1** *(Immediate)* | Preserve Neon branch `pre-af837401-20261119`, reconcile parent branch & WAL LSN `0/69A21EF0` | **OPEN — Neon Console Action Required** | Recorded in §B above with explicit parent-branch reconciliation flag (`production` vs `main`). Do not mark complete until TTL is extended/removed and post-change branch availability is verified in Neon Console. |
+| **Priority 1** *(Immediate)* | Preserve Neon branch `pre-af837401-20261119`, reconcile parent branch & WAL LSN `0/69A21EF0` | **Retention Extended & Reconciled (`Expires 2026-11-30 05:20 +04:00`)** | Extended TTL by 10 days (`br-morning-shadow-a17ch9ux`, created `2026-11-19 05:20:45 +04:00`) and reconciled parent branch as `production` (`br-delicate-dream-a1gtfy8e`) in project `Fleet360` (`ancient-cherry-30776376`). Optional 5-second visual check on `LSN` tooltip to double-confirm `0/69A21EF0`. |
 | **Priority 2** *(Before Dec 1)* | Railway IaC migration (`.railway/railway.ts`) via controlled PR | **Staging Verified / Production Cutover Held Pending Approval** | Isolated branch `chore/railway-iac-migration` (`package.json` + `package-lock.json` updated with `railway@3.17.0` devDependency and `@prisma/client` lockfile alignment; `railway.json` removed; `38/38` parity/governance unit tests passing). Staging (`909ab1b4-55e8-4089-bdc3-29dd89ae4991`) applied & deployed (`fleet360-app` `3d880519-2c46-4d56-994d-c15af0a92e97`, `fleet360-backend` `53246304-b7e6-499b-8661-89c222537560`, both `SUCCESS`; post-apply drift exit `0`). Verbatim production plan retained in §E below. |
 | **Priority 3** *(Planned)* | Optional integrations (`stripe`, `sendgrid`, `sentry`) | **Planned / Failure Isolation Audited (Workflow Acceptance Pending)** | Zero placeholder credentials; `/api/health` explicitly reports `status: "degraded"` (`missingConfig: ["stripe", "sendgrid", "sentry"]`). Code audit confirms `/api/readyz` and core dispatch/fleet/finance routes do not require them (`src/lib/sentry.ts` no-ops/swallows on 2 s timeout; `src/lib/email.ts` falls back to platform SMTP or returns non-throwing `EmailSendResult`; `src/lib/billing.ts` is lazy-init with explicit `503`/`402` route guards). End-to-end workflow impact testing + Sentry prioritization remain tracked separately. |
 
