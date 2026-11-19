@@ -393,9 +393,9 @@ describe('Milestone M4 Governance & Hygiene Unit Test Suite (F32 - F39)', () => 
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // F36: Railway Deployment Migration Automation
+  // F36: Controlled Migration Separation & Restricted Runtime Identity
   // ───────────────────────────────────────────────────────────────────────────
-  describe('F36: Railway Deployment Migration Automation', () => {
+  describe('F36: Railway Deployment Migration Separation & Runtime Identity', () => {
     it('moves @prisma/client to production dependencies in package.json', () => {
       const pkgPath = path.resolve(process.cwd(), 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -404,18 +404,34 @@ describe('Milestone M4 Governance & Hygiene Unit Test Suite (F32 - F39)', () => 
       expect(pkg.devDependencies['@prisma/client']).toBeUndefined();
     });
 
-    it('configures automated prisma migrate deploy in railway.json and package.json scripts', () => {
+    it('separates web startup in railway.json from controlled migration execution and restricts runtime DB credentials', () => {
       const railwayJsonPath = path.resolve(process.cwd(), 'railway.json');
       expect(fs.existsSync(railwayJsonPath)).toBe(true);
 
       const railwayConfig = JSON.parse(fs.readFileSync(railwayJsonPath, 'utf8'));
       expect(railwayConfig.deploy).toBeDefined();
-      expect(railwayConfig.deploy.startCommand).toContain('prisma migrate deploy');
+      // Application startup must NOT execute Prisma migrations on replica boot/restart
+      expect(railwayConfig.deploy.startCommand).toBe('npm start');
+      expect(railwayConfig.deploy.startCommand).not.toMatch(/prisma\s+migrate/i);
 
+      // Dedicated, separate migration script exists in package.json while `start` stays pure Next.js
       const pkgPath = path.resolve(process.cwd(), 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       expect(pkg.scripts['db:migrate:deploy']).toBe('prisma migrate deploy');
-      expect(pkg.scripts['railway:deploy']).toContain('prisma migrate deploy');
+      expect(pkg.scripts['start']).toBe('next start');
+
+      // Web runtime does not require migration-owner credentials (DIRECT_URL / MIGRATION_DATABASE_URL)
+      const envSource = fs.readFileSync(path.resolve(process.cwd(), 'src/lib/env.ts'), 'utf8');
+      expect(envSource).toContain('DATABASE_URL:');
+      expect(envSource).not.toMatch(/^\s*DIRECT_URL\s*:/m);
+      expect(envSource).not.toMatch(/^\s*MIGRATION_DATABASE_URL\s*:/m);
+
+      // Restricted fleet360_app runtime identity is enforced by verify-db-identity gate
+      const dbGateSource = fs.readFileSync(
+        path.resolve(process.cwd(), 'scripts/security/verify-db-identity.mjs'),
+        'utf8',
+      );
+      expect(dbGateSource).toContain("EXPECTED_RUNTIME_ROLE || 'fleet360_app'");
     });
   });
 

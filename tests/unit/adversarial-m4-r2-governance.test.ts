@@ -14,10 +14,10 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
   const root = process.cwd();
 
   // ───────────────────────────────────────────────────────────────────────────
-  // F36: Railway Deployment Migration Automation & Prisma Runtime Dependencies
+  // F36: Controlled Migration Separation & Restricted Runtime Identity
   // ───────────────────────────────────────────────────────────────────────────
   describe('F36: Railway Deployment & Package Dependencies Stress Testing', () => {
-    it('railway.json is strictly valid JSON with required Nixpacks builder and deploy command', () => {
+    it('railway.json separates web startup from Prisma migrations and starts only via npm start', () => {
       const railwayPath = path.join(root, 'railway.json');
       expect(fs.existsSync(railwayPath)).toBe(true);
 
@@ -31,12 +31,35 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
       expect(config.build).toBeDefined();
       expect(config.build.builder).toBe('NIXPACKS');
       expect(config.deploy).toBeDefined();
-      expect(config.deploy.startCommand).toBe('npx prisma migrate deploy && npm start');
+
+      // Ordinary web replicas must never execute Prisma migrations on startup/restart
+      expect(config.deploy.startCommand).toBe('npm start');
+      expect(config.deploy.startCommand).not.toMatch(/prisma\s+migrate/i);
       expect(config.deploy.restartPolicyType).toBe('ON_FAILURE');
       expect(config.deploy.restartPolicyMaxRetries).toBeGreaterThanOrEqual(5);
+    });
 
-      // Verify command uses AND (&&) to guarantee fail-fast behavior
-      expect(config.deploy.startCommand).toMatch(/^npx prisma migrate deploy && /);
+    it('enforces restricted fleet360_app runtime identity without requiring migration-owner credentials on web replicas', () => {
+      const envSource = fs.readFileSync(path.join(root, 'src', 'lib', 'env.ts'), 'utf8');
+      // Runtime env requires DATABASE_URL (restricted fleet360_app role) and must NOT require migration-owner URLs
+      expect(envSource).toContain('DATABASE_URL:');
+      expect(envSource).not.toMatch(/^\s*DIRECT_URL\s*:/m);
+      expect(envSource).not.toMatch(/^\s*MIGRATION_DATABASE_URL\s*:/m);
+
+      // Prisma schema separates pooled runtime DATABASE_URL from dedicated migration DIRECT_URL
+      const schemaSource = fs.readFileSync(path.join(root, 'prisma', 'schema.prisma'), 'utf8');
+      expect(schemaSource).toMatch(/url\s*=\s*env\("DATABASE_URL"\)/);
+      expect(schemaSource).toMatch(/directUrl\s*=\s*env\("DIRECT_URL"\)/);
+
+      // Database identity gate enforces restricted fleet360_app runtime role with no superuser/BYPASSRLS/DDL
+      const identityGateSource = fs.readFileSync(
+        path.join(root, 'scripts', 'security', 'verify-db-identity.mjs'),
+        'utf8',
+      );
+      expect(identityGateSource).toContain("EXPECTED_RUNTIME_ROLE || 'fleet360_app'");
+      expect(identityGateSource).toContain('rolsuper');
+      expect(identityGateSource).toContain('rolbypassrls');
+      expect(identityGateSource).toContain("has_schema_privilege(current_user, oid, 'CREATE')");
     });
 
     it('package.json strictly places @prisma/client in dependencies and eliminates it from devDependencies', () => {
@@ -56,13 +79,13 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
       expect(pkg.devDependencies['prisma']).toBeDefined();
     });
 
-    it('package.json provides explicit migration deployment and railway scripts', () => {
+    it('package.json keeps dedicated migration deployment separate from web runtime start', () => {
       const pkgPath = path.join(root, 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
       expect(pkg.scripts['db:migrate:deploy']).toBe('prisma migrate deploy');
-      expect(pkg.scripts['railway:deploy']).toBe('npx prisma migrate deploy && next start');
       expect(pkg.scripts['start']).toBe('next start');
+      expect(pkg.scripts['start']).not.toMatch(/prisma\s+migrate/i);
     });
   });
 
