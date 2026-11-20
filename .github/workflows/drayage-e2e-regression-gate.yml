@@ -140,6 +140,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
           DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          THESYS_API_KEY: ci-dummy-thesys-key
+          OPENAI_API_KEY: ci-dummy-openai-key
           NEXT_TELEMETRY_DISABLED: "1"
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
@@ -155,6 +157,8 @@ jobs:
           DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
           DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
           RUNTIME_DIRECT_DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          THESYS_API_KEY: ci-dummy-thesys-key
+          OPENAI_API_KEY: ci-dummy-openai-key
           NEXT_TELEMETRY_DISABLED: "1"
         run: npx playwright test tests/e2e/drayage-5phase-regression.spec.ts --trace=off
 
