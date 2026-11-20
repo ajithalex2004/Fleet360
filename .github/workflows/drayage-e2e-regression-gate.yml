@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Target deployment URL for E2E regression suite'
+        description: 'Optional non-production target URL (leave empty for isolated CI build & seeded Postgres)'
         required: false
-        default: 'https://fleet360-app-production.up.railway.app'
+        default: ''
 
 concurrency:
   group: drayage-regression-${{ github.ref }}
@@ -49,13 +49,21 @@ jobs:
     # Playwright has no Chromium build for ubuntu26.04 yet (ubuntu-latest);
     # pinned until it does, or the browser install fails before any test runs.
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.target_url || vars.PLAYWRIGHT_BASE_URL || 'https://fleet360-app-production.up.railway.app' }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || 'biju@trexla.ae' }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'Trexla@2026' }}
-      E2E_DRIVER_EMAIL: ${{ secrets.E2E_DRIVER_EMAIL || 'ATINERBIR@fastandsafe.com' }}
-      E2E_DRIVER_PASSWORD: ${{ secrets.E2E_DRIVER_PASSWORD || 'Driver@123' }}
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_e2e_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fleet360_e2e_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,16 +74,101 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Validate remote target & secrets (manual non-production dispatch only)
+        if: ${{ github.event.inputs.target_url != '' }}
+        env:
+          TARGET_URL: ${{ github.event.inputs.target_url }}
+          HAS_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL != '' }}
+          HAS_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD != '' }}
+          HAS_DRIVER_EMAIL: ${{ secrets.E2E_DRIVER_EMAIL != '' }}
+          HAS_DRIVER_PASSWORD: ${{ secrets.E2E_DRIVER_PASSWORD != '' }}
+        run: |
+          if echo "$TARGET_URL" | grep -qiE 'fleet360-app-production\.up\.railway\.app'; then
+            echo "::error::Gate 2 must not run against the live production deployment."
+            exit 1
+          fi
+          missing=""
+          [ "$HAS_ADMIN_EMAIL" = "true" ] || missing="$missing E2E_ADMIN_EMAIL"
+          [ "$HAS_ADMIN_PASSWORD" = "true" ] || missing="$missing E2E_ADMIN_PASSWORD"
+          [ "$HAS_DRIVER_EMAIL" = "true" ] || missing="$missing E2E_DRIVER_EMAIL"
+          [ "$HAS_DRIVER_PASSWORD" = "true" ] || missing="$missing E2E_DRIVER_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Remote Gate 2 dispatch requires configured GitHub Actions secrets:$missing"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Bootstrap isolated CI Postgres 16 database (fresh migrations + RLS runtime role)
+        if: ${{ github.event.inputs.target_url == '' }}
+        env:
+          PGPASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          BOOTSTRAP_RUNTIME_DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          CONFIRM_FRESH_INSTALL: "1"
+        run: |
+          command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -yqq postgresql-client; }
+          psql -h 127.0.0.1 -p 5432 -U postgres -d fleet360_e2e_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+          node scripts/fresh-install-migrate.cjs --fresh-install
+
+      - name: Generate ephemeral CI session & encryption keys
+        if: ${{ github.event.inputs.target_url == '' }}
+        run: |
+          session_key="$(openssl rand -hex 32)"
+          sso_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$session_key"
+          echo "::add-mask::$sso_key"
+          echo "SESSION_SECRET=$session_key" >> "$GITHUB_ENV"
+          echo "SSO_ENCRYPTION_KEY=$sso_key" >> "$GITHUB_ENV"
+
+      - name: Build Next.js production bundle for isolated Gate 2
+        if: ${{ github.event.inputs.target_url == '' }}
+        env:
+          DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
 
       - name: Install Playwright Chromium browser
         run: npx playwright install --with-deps chromium
 
-      - name: Execute 5-Phase (21-Check) Playwright Regression Suite
-        run: npx playwright test tests/e2e/drayage-5phase-regression.spec.ts
+      - name: Execute 5-Phase (21-Check) Playwright Regression Suite (Isolated CI)
+        if: ${{ github.event.inputs.target_url == '' }}
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          TEST_DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          RUNTIME_DIRECT_DATABASE_URL: postgresql://fleet360_app:test@127.0.0.1:5432/fleet360_e2e_ci?sslmode=disable
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npx playwright test tests/e2e/drayage-5phase-regression.spec.ts --trace=off
 
-      - name: Upload Playwright HTML Report & Traces
+      - name: Execute 5-Phase (21-Check) Playwright Regression Suite (Remote Staging Dispatch)
+        if: ${{ github.event.inputs.target_url != '' }}
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.target_url }}
+          E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          E2E_DRIVER_EMAIL: ${{ secrets.E2E_DRIVER_EMAIL }}
+          E2E_DRIVER_PASSWORD: ${{ secrets.E2E_DRIVER_PASSWORD }}
+        run: npx playwright test tests/e2e/drayage-5phase-regression.spec.ts --trace=off
+
+      - name: Upload Playwright HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
