@@ -2,7 +2,56 @@
 
 ---
 
-## Latest Release Entry — 2026-11-19 (M5-R7 Production Release & Operational Follow-Ups)
+## Latest Release Entry — 2026-11-20 (PR #253 Baseline & Driver-App Security Release)
+
+**Ledger Updated:** 2026-11-20  
+**Release Scope:** [PR #253](https://github.com/ajithalex2004/Fleet360/pull/253) (`claude/fix-main-ddl-driver-leak` @ `d933c2075dbc9b4bd912f607f5d1f8bd44d29769` → merged into `main` at **`997526a48e7dffc9923e64e050991287c5dee69d`**, `2026-11-20T11:48:24Z`) — **PRODUCTION RELEASE VERIFIED**  
+**CI Gate Result:** **22/22 GitHub Actions jobs PASS** on `d933c207`, including isolated CI `Gate 2` (`5/5` phases / `21/21` Drayage & Driver App Playwright checks against a fresh Postgres 16 container + Next.js production build under `fleet360_app` with zero inline credentials).  
+**Superseded PRs:** [PR #255](https://github.com/ajithalex2004/Fleet360/pull/255) closed as superseded after production verification.  
+**Seven-Day Soak Window:** Started `2026-11-20` (monitor frontend/backend errors, DB connectivity, auth failures, tenant isolation, and unexpected restarts; manual authenticated login + driver/dispatch/finance sanity check recommended).
+
+### A. Controlled Production Migration Rollout (`2026-11-20T11:47Z`, Executed Before Merge)
+
+| Check | Verified Evidence |
+| :--- | :--- |
+| **Target Database** | Neon `production` branch (`br-delicate-dream-a1gtfy8e`), endpoint `ep-calm-heart-a15voo2a.ap-southeast-1.aws.neon.tech`, DB `neondb`, `PostgreSQL 17.11` |
+| **Migration Applied** | `20261113090000_tenant_einvoice_columns_and_carrier_broadcast_tables` (`started_at: 2026-11-20T11:47:05.141Z`, `finished_at: 2026-11-20T11:47:05.650Z`, `509ms`, `applied_steps_count: 1`) |
+| **WAL LSN Delta** | Pre-migrate `0/6A9B3CF0` → Post-migrate `0/6A9BDDE8` *(recovery branch `pre-af837401-20261119` / `br-morning-shadow-a17ch9ux` active through `2026-11-30 05:20 +04:00`)* |
+| **`prisma migrate status`** | `242` local migration directories; `270` rows in `_prisma_migrations` (`245` finished, `25` rolled back, **`0` active unresolved**) — **`Database schema is up to date!`** |
+| **Schema & Policy Verification** | `tenants` PEPPOL columns: `14/14` present; `esign_requests.failed_attempts`: `integer NOT NULL DEFAULT 0`; all 4 carrier/broadcast tables (`logistics_carrier_app_devices`, `logistics_carrier_presence`, `logistics_load_broadcasts`, `logistics_load_broadcast_offers`) verified with `ENABLE` + `FORCE ROW LEVEL SECURITY`, tightened `tenant_isolation` policies (no `IS NULL` escape), and `SELECT/INSERT/UPDATE/DELETE` granted to `fleet360_app` |
+| **Effective RLS & Role Separation** | `node scripts/check-rls-effective.mjs --role fleet360_app`: **`exit 0`** across `410` tenant-owned tables (`409 SCOPED`, `1 DENIED`, `0` violations; `NULLABLE_ESCAPE_DEAD` reduced from `80` → `76`). `fleet360_app` verified `rolsuper=false`, `rolbypassrls=false`, and `INSERT/UPDATE/DELETE/TRUNCATE` all `false` on `_prisma_migrations` |
+
+### B. Live Railway Production Deployment Verification (`2026-11-20T11:48–11:57Z`)
+
+- **`fleet360-app` (`40e64e58-f468-4ebe-9412-99cd5af910aa`):**
+  - Active Deployment: `acbed78a-225f-4331-950e-66e61916469f` (`SUCCESS`, `2026-11-20T11:48:26.453Z`, commit `997526a48e7dffc9923e64e050991287c5dee69d`)
+  - Image Digest: `sha256:c5873e0bcb79b0ec6c106d983b000e4fb1dbe7f7c34e92e5c840a5557bd4384a` (`Ready in 1007ms`, zero startup/runtime errors)
+  - Owner Credential Boundary: **CLOSED / PASS** — `DIRECT_URL`, `DIRECT_DATABASE_URL`, and `MIGRATION_DATABASE_URL` verified absent from production `fleet360-app`.
+- **`fleet360-backend` (`6b454bef-fec5-4840-acc5-edd8473c8f03`):**
+  - Active Deployment: `829b49ab-dd3a-41c7-bd93-f38471b48af6` (`SUCCESS`, `2026-11-20T11:48:26.454Z`, commit `997526a48e7dffc9923e64e050991287c5dee69d`)
+  - Image Digest: `sha256:10d02d86fbd4536f880b60d35093b85b35aeda35f28295c9bf1fe375f2d05a1c` (`phasegate: cross-tenant isolation VERIFIED`, `object store ready`, `/healthz 200`, `/readyz 200`)
+- **`staging` (`909ab1b4-55e8-4089-bdc3-29dd89ae4991`):** Both `fleet360-app` (`3e4582f0-6c81-4080-aa0d-b9da3d812f07`) and `fleet360-backend` (`ff98ccdf-5091-449a-a9e5-a6c57c94ee5e`) deployed `997526a4` with `SUCCESS`; post-deploy `railway config plan --detailed-exit-code` exited `0` (zero IaC drift).
+- **Live Production Probes (`2026-11-20T11:57Z`):**
+  - `GET /api/readyz` → **`200 OK`** (`status: "ready"`, `version: "997526a48e7dffc9923e64e050991287c5dee69d"`).
+  - `GET /api/health` → **`200 OK`** (`status: "degraded"`, `release: "997526a48e7dffc9923e64e050991287c5dee69d"`, `db: { status: "connected", latencyMs: 6 }`, `schema: { status: "ok", missing: 0 }`, `storage: { backend: "s3", durable: true, ok: true }`, `services: { goBackend: "ok" }`, `backend: { status: "ready", version: "997526a48e7dffc9923e64e050991287c5dee69d" }`, `missingConfig: ["stripe", "sendgrid", "sentry"]`).
+  - Unauthenticated API boundaries verified fail-closed (`/api/driver-app/auth/vehicle-login?list=true` → `200 {"hasSession":false}`, `/api/driver-app/today/assignments`, `/api/drivers`, `/api/logistics/drayage`, `/api/admin/company-profile`, `/api/finance/dashboard` → `401`, `/api/esign/verify` without token → `400 signingToken is required`).
+
+### C. Re-Verified Pre-Cutover Production IaC Plan (`2026-11-20`, Read-Only — Gate 3 ON HOLD)
+
+Re-captured on `chore/railway-iac-migration` rebased onto `997526a4` against `production` (`7dd6e11e-dae2-46c1-b4c6-6ee24441de4d`; no changes applied; CLI immediately re-linked to `staging`):
+
+- **Plan Kind / CLI Version:** `railway.config.plan` v1 (`railway 5.62.1`), `destructive: false`, `claim: true`, `diagnostics: []`
+- **Plan File SHA-256:** `A16D4F9E87EE2BEC047502364CBDDB9F684E558AB379DBD3A848EC89F0F69D3C` *(identical to pre-PR-#253 baseline plan)*
+- **`configEtag`:** `b1323e003e4eb0f920518685a1802ed30072516aa274b05939f33fc31aa1d499` *(zero production config drift)*
+- **`changeSetHash`:** `sha256:30f74e93871ba28d1e78f8de47dadbd268c07621905247e6cc711ed940cf3e88`
+- **Proposed Non-Destructive Changes (`0 to add, 2 to change, 0 to destroy`):**
+  1. `service.fleet360-app` (`resources.service.fleet360-app.deploy`, `severity: safe`, `deployEffect: deploy`): `deploy.startCommand (null → "npm start")`
+  2. `service.fleet360-backend` (`resources.service.fleet360-backend.build`, `severity: safe`, `deployEffect: deploy`): `build.builder (null → "DOCKERFILE")`, `build.dockerfilePath (null → "/backend/Dockerfile")`
+- **Deadlines:** Neon recovery branch `pre-af837401-20261119` expires **`2026-11-30 05:20 +04:00`**; Railway Config-as-Code (`railway.json`) deadline is **`2026-12-01`**.
+
+---
+
+## Previous Release Entry — 2026-11-19 (M5-R7 Production Release & Operational Follow-Ups)
 
 **Ledger Updated:** 2026-11-19  
 **Certification Scope:** Milestone M5-R7 (`af837401239a1d36cb3149e2f1ebc3a353b4d556`) — **VICTORY CONFIRMED (GO FOR PRODUCTION)** *(closed; operational follow-ups below do not reopen M5-R7 certification)*  
