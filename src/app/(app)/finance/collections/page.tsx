@@ -29,10 +29,6 @@ const STATUS_STYLE: Record<string, string> = {
   WRITTEN_OFF: 'bg-slate-500/20 text-[var(--text-muted)]  border-slate-500/30',
   CLOSED:     'bg-slate-500/20 text-[var(--text-faint)]  border-slate-500/30',
 };
-const AGING_STYLE: Record<string, string> = {
-  'CURRENT': 'text-emerald-400', '1-30': 'text-amber-400',
-  '31-60': 'text-orange-400', '61-90': 'text-red-400', '90+': 'text-red-600',
-};
 
 /* ── Case Detail Drawer ── */
 function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase; onClose: () => void; onUpdate: () => void }) {
@@ -164,7 +160,7 @@ export default function CollectionsPage() {
   const [loading, setLoading]     = useState(true);
   const [tab, setTab]             = useState('ALL');
   const [selected, setSelected]   = useState<CollectionCase | null>(null);
-  const [creatingFor, setCreatingFor] = useState<OverdueInv | null>(null);
+  const [, setCreatingFor] = useState<OverdueInv | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);

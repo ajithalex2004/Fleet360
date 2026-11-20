@@ -11,6 +11,11 @@
 import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
+/** The raw-SQL part of a Prisma client or transaction. */
+type RawSqlQueryDb = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+};
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type CreateDraftJournalEntryParams = {
@@ -125,7 +130,7 @@ export function normalizeLeafGlAccount(code: string, fallbackName: string): { co
  * Throws an Error with statusCode = 422 if locked.
  */
 export async function assertPeriodOpen(
-  tx: { $queryRawUnsafe: Function },
+  tx: RawSqlQueryDb,
   tenantId: string,
   dateStr?: string | Date | null,
 ): Promise<void> {
@@ -135,7 +140,7 @@ export async function assertPeriodOpen(
       : new Date(dateStr).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
 
-  const rows = (await tx.$queryRawUnsafe(
+  const rows = await tx.$queryRawUnsafe<Array<{ status?: string; period_name?: string }>>(
     `SELECT status, period_name
        FROM finance_periods
       WHERE tenant_id = $1
@@ -144,7 +149,7 @@ export async function assertPeriodOpen(
       LIMIT 1`,
     tenantId,
     d,
-  )) as Array<{ status?: string; period_name?: string }>;
+  );
 
   const locked = rows?.[0];
   if (locked && (locked.status === 'LOCKED' || locked.status === 'YEAR_END')) {

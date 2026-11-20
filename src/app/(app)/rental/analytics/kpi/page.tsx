@@ -342,16 +342,6 @@ export default function RevpacDashboardPage() {
   );
 }
 
-function Kpi({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
-  return (
-    <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-4">
-      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${valueClass ?? 'text-[var(--text-main)]'}`}>{value}</div>
-      {sub && <div className="text-xs text-[var(--text-faint)] mt-1">{sub}</div>}
-    </div>
-  );
-}
-
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">

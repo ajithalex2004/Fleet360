@@ -44,7 +44,7 @@ export async function POST(
     const arrivalTimestamp = body.arrivedAt ? new Date(body.arrivedAt) : new Date();
 
     // Verify trip exists in trip_schedules or school_bus_trips
-    let trip = await tx.tripSchedule.findFirst({
+    const trip = await tx.tripSchedule.findFirst({
       where: { id: tripId, tenantId, deletedAt: null },
       select: { id: true, status: true, notes: true },
     });

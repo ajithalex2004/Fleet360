@@ -279,7 +279,8 @@ export class MarketplaceService {
       });
 
       const enrichedOpportunities = filteredOpportunities.map((opp) => {
-        const { tenantId: _omitTenantId, ...sanitizedOpp } = opp as unknown as Record<string, unknown>;
+        const sanitizedOpp: Record<string, unknown> = { ...(opp as unknown as Record<string, unknown>) };
+        delete sanitizedOpp.tenantId;
         const buyerTenantId = resolveBuyerTenantId(opp);
         const buyerRelStatus = buyerTenantId ? relMap.get(buyerTenantId) ?? null : null;
         const isPreferredForBuyer = buyerTenantId

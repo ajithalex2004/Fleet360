@@ -18,8 +18,6 @@ import { proxyToGoBackend } from '@/lib/api-shim';
 import { API_VERSION_HEADER, CURRENT_API_VERSION } from '@/lib/api-version';
 import {
   isPublicPath,
-  PUBLIC_EXACT,
-  PUBLIC_PREFIXES,
   PROTECTED_UI_PREFIXES,
   CRON_SESSION_BYPASS_PATHS,
 } from '@/lib/auth-route-policies';

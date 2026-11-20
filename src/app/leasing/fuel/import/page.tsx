@@ -146,16 +146,6 @@ export default function FuelImportPage() {
   );
 }
 
-function Stat({ label, value, accent = 'slate' }: { label: string; value: number; accent?: string }) {
-  const cls: Record<string, string> = { slate: 'text-[var(--text-main)]', emerald: 'text-emerald-300', amber: 'text-amber-300', rose: 'text-rose-300' };
-  return (
-    <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4">
-      <div className={`text-3xl font-bold ${cls[accent]}`}>{value}</div>
-      <div className="text-xs text-[var(--text-muted)] mt-1">{label}</div>
-    </div>
-  );
-}
-
 function Errors({ title, rows }: { title: string; rows: { row: number; reason: string }[] }) {
   return (
     <details className="rounded-xl bg-rose-500/5 border border-rose-500/30 p-3">
