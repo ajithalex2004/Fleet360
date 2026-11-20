@@ -37,9 +37,10 @@ test.describe('F40: E2E Test Suite Boundaries & Configuration', () => {
     expect(content).toContain('forbidOnly: !!process.env.CI');
   });
 
-  test('TC-F40-B05: Base URL configured to standard localhost port 3000', () => {
+  test('TC-F40-B05: Base URL defaults to standard localhost port 3000 with PLAYWRIGHT_BASE_URL override', () => {
     const configPath = path.resolve(process.cwd(), 'playwright.config.ts');
     const content = fs.readFileSync(configPath, 'utf8');
-    expect(content).toContain("baseURL: 'http://localhost:3000'");
+    expect(content).toContain('PLAYWRIGHT_BASE_URL');
+    expect(content).toContain("'http://localhost:3000'");
   });
 });
