@@ -29,7 +29,7 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
 
       expect(config.$schema).toBe('https://railway.app/railway.schema.json');
       expect(config.build).toBeDefined();
-      expect(config.build.builder).toBe('NIXPACKS');
+      expect(config.build.builder).toBe('RAILPACK');
       expect(config.deploy).toBeDefined();
 
       // Ordinary web replicas must never execute Prisma migrations on startup/restart
