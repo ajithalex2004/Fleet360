@@ -268,13 +268,13 @@ export function InteractiveRoutePicker({
               onChange={(e) => handleOriginType(e.target.value)}
               placeholder={originPlaceholder}
               required
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-4 py-3 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner"
             />
           </div>
 
           {/* Fallback Autocomplete Suggestions */}
           {originSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
+            <div className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
               {originSuggestions.map((item) => (
                 <button
                   key={item.name}
@@ -284,8 +284,8 @@ export function InteractiveRoutePicker({
                 >
                   <MapPin className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
-                    <p className="text-[11px] text-slate-400">{item.area}</p>
+                    <p className="text-xs font-bold text-[var(--text-main)] group-hover:text-cyan-300">{item.name}</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{item.area}</p>
                   </div>
                 </button>
               ))}
@@ -311,13 +311,13 @@ export function InteractiveRoutePicker({
               onChange={(e) => handleDestType(e.target.value)}
               placeholder={destinationPlaceholder}
               required
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-4 py-3 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner"
             />
           </div>
 
           {/* Fallback Autocomplete Suggestions */}
           {destSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
+            <div className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
               {destSuggestions.map((item) => (
                 <button
                   key={item.name}
@@ -327,8 +327,8 @@ export function InteractiveRoutePicker({
                 >
                   <Navigation className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
-                    <p className="text-[11px] text-slate-400">{item.area}</p>
+                    <p className="text-xs font-bold text-[var(--text-main)] group-hover:text-cyan-300">{item.name}</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{item.area}</p>
                   </div>
                 </button>
               ))}
@@ -339,11 +339,11 @@ export function InteractiveRoutePicker({
 
       {/* ── Real-time Route Calculation Widget ── */}
       {stats && (
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl shadow-black/80">
-          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3 border-b border-[var(--border-subtle)] pb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
+              <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
                 Geospatial Route Intelligence
               </span>
             </div>
@@ -353,26 +353,26 @@ export function InteractiveRoutePicker({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Distance</p>
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Distance</p>
               <p className="text-base font-extrabold text-cyan-400 font-mono">{stats.distanceKm} km</p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Est. Duration</p>
-              <p className="text-base font-extrabold text-white font-mono">
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Est. Duration</p>
+              <p className="text-base font-extrabold text-[var(--text-main)] font-mono">
                 {stats.durationMins >= 60
                   ? `${Math.floor(stats.durationMins / 60)}h ${stats.durationMins % 60}m`
                   : `${stats.durationMins} mins`}
               </p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Salik Gates</p>
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Salik Gates</p>
               <p className="text-base font-extrabold text-emerald-400 font-mono">
                 {stats.salikTollsCount > 0 ? `${stats.salikTollsCount} Gates` : '0 Gates'}
               </p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Toll Surcharges</p>
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Toll Surcharges</p>
               <p className="text-base font-extrabold text-cyan-400 font-mono">AED {stats.salikTollsAed}</p>
             </div>
           </div>
@@ -381,17 +381,17 @@ export function InteractiveRoutePicker({
 
       {/* ── Interactive Visual Map Preview ── */}
       {showMap && (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 overflow-hidden">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
               🗺️ Interactive Corridor Map
             </span>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] text-[var(--text-faint)]">
               {originCoords && destCoords ? '📍 2 Waypoints Placed' : '📍 Awaiting locations'}
             </span>
           </div>
 
-          <div className="relative w-full h-44 rounded-xl bg-slate-950 border border-white/5 overflow-hidden flex items-center justify-center">
+          <div className="relative w-full h-44 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] overflow-hidden flex items-center justify-center">
             {/* SVG Visual Map Canvas with Route Line */}
             <svg className="w-full h-full" viewBox="0 0 400 180">
               <defs>
@@ -447,7 +447,7 @@ export function InteractiveRoutePicker({
 
             {/* Live GPS Coordinates Tag */}
             {originCoords && destCoords && (
-              <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] text-slate-300 font-mono border border-white/10">
+              <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] text-[var(--text-muted)] font-mono border border-[var(--border-subtle)]">
                 DXB ➔ SZR Corridor · GPS Lock Active
               </div>
             )}

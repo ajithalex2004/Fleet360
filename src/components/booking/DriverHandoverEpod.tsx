@@ -120,12 +120,12 @@ export function DriverHandoverEpod({
   };
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <div className="flex items-center gap-2">
           <Truck className="w-4 h-4 text-orange-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Driver Mobile Handover & Electronic Proof of Delivery (e-POD)
           </span>
         </div>
@@ -139,8 +139,8 @@ export function DriverHandoverEpod({
       </div>
 
       {/* Driver Execution Milestones Tracker */}
-      <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3.5 space-y-2">
-        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+      <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-2">
+        <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider block">
           Driver Trip Execution Status:
         </span>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -150,7 +150,7 @@ export function DriverHandoverEpod({
             className={`p-2 rounded-lg border text-center transition-all ${
               driverStatus === 'EN_ROUTE_TO_PICKUP'
                 ? 'bg-orange-600/20 border-orange-500 text-orange-300 font-bold'
-                : 'bg-slate-900 border-white/5 text-slate-400'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)]'
             }`}
           >
             1. En Route to Base
@@ -161,7 +161,7 @@ export function DriverHandoverEpod({
             className={`p-2 rounded-lg border text-center transition-all ${
               driverStatus === 'CARGO_LOADED'
                 ? 'bg-orange-600/20 border-orange-500 text-orange-300 font-bold'
-                : 'bg-slate-900 border-white/5 text-slate-400'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)]'
             }`}
           >
             2. Cargo Loaded
@@ -172,7 +172,7 @@ export function DriverHandoverEpod({
             className={`p-2 rounded-lg border text-center transition-all ${
               driverStatus === 'ARRIVED_AT_DESTINATION'
                 ? 'bg-orange-600/20 border-orange-500 text-orange-300 font-bold'
-                : 'bg-slate-900 border-white/5 text-slate-400'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)]'
             }`}
           >
             3. Arrived at Dock
@@ -181,7 +181,7 @@ export function DriverHandoverEpod({
             className={`p-2 rounded-lg border text-center ${
               driverStatus === 'DELIVERED'
                 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
-                : 'bg-slate-900 border-white/5 text-slate-500'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-faint)]'
             }`}
           >
             4. e-POD Confirmed
@@ -195,8 +195,8 @@ export function DriverHandoverEpod({
           {/* Pallet Condition & Temperature Checklist — tap a pallet's
               condition badge to cycle it if the driver finds an issue
               (e.g. a torn wrap or a rejected/damaged load) during handover. */}
-          <div className="bg-slate-950/60 border border-white/10 rounded-xl p-3.5 space-y-2.5">
-            <span className="text-xs font-bold text-slate-200 block">
+          <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-2.5">
+            <span className="text-xs font-bold text-[var(--text-main)] block">
               1. Receiving Pallet Condition & Cold-Chain Probe Verification:
             </span>
 
@@ -216,10 +216,10 @@ export function DriverHandoverEpod({
                 return (
                   <div
                     key={item.palletId}
-                    className="bg-slate-900 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs"
+                    className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-2.5 flex items-center justify-between text-xs"
                   >
                     <div className="space-y-0.5">
-                      <span className="font-bold text-white block">
+                      <span className="font-bold text-[var(--text-main)] block">
                         {idx + 1}. {item.palletId}
                       </span>
                       <span className="text-[10px] text-blue-300 flex items-center gap-1 font-mono">
@@ -242,73 +242,73 @@ export function DriverHandoverEpod({
           </div>
 
           {/* Proof of Delivery (POD) Dock Camera Photo */}
-          <div className="bg-slate-950/60 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+          <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-200 flex items-center gap-1.5">
+              <span className="font-bold text-[var(--text-main)] flex items-center gap-1.5">
                 <Camera className="w-3.5 h-3.5 text-orange-400" />
                 2. Dock Unloading Proof Photo (GPS Watermarked)
               </span>
               <span className="text-[10px] text-emerald-400 font-mono">GPS Verified</span>
             </div>
 
-            <div className="relative rounded-xl overflow-hidden border border-white/15 max-h-36 bg-slate-950 flex items-center justify-center">
+            <div className="relative rounded-xl overflow-hidden border border-[var(--border-subtle)] max-h-36 bg-[var(--bg-surface-hover)] flex items-center justify-center">
               <img
                 src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80"
                 alt="Pallet at Loading Dock"
                 className="w-full h-36 object-cover opacity-80"
               />
-              <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] text-slate-300 font-mono border border-white/10">
+              <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] text-[var(--text-muted)] font-mono border border-[var(--border-subtle)]">
                 📍 Dubai Mall Service Dock 3 · 25.1972° N, 55.2744° E · {new Date().toLocaleTimeString()}
               </div>
             </div>
           </div>
 
           {/* Consignee Recipient Details & On-Glass Signature Pad */}
-          <div className="bg-slate-950/60 border border-white/10 rounded-xl p-3.5 space-y-3">
-            <span className="text-xs font-bold text-slate-200 block">
+          <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-3">
+            <span className="text-xs font-bold text-[var(--text-main)] block">
               3. Consignee Receiver Verification & On-Glass Signature:
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Receiver Name *</label>
+                <label className="text-[10px] text-[var(--text-muted)] block mb-1">Receiver Name *</label>
                 <input
                   type="text"
                   required
                   value={recipientName}
                   onChange={(e) => setRecipientName(e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)]"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Designation</label>
+                <label className="text-[10px] text-[var(--text-muted)] block mb-1">Designation</label>
                 <input
                   type="text"
                   value={recipientDesignation}
                   onChange={(e) => setRecipientDesignation(e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)]"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Emirates ID *</label>
+                <label className="text-[10px] text-[var(--text-muted)] block mb-1">Emirates ID *</label>
                 <input
                   type="text"
                   required
                   value={recipientEmiratesId}
                   onChange={(e) => setRecipientEmiratesId(e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)] font-mono"
                 />
               </div>
             </div>
 
             {/* On-Glass Signature Canvas */}
-            <div className="border border-white/15 rounded-xl bg-slate-900 p-3 space-y-1.5">
-              <div className="flex justify-between text-[10px] text-slate-400">
+            <div className="border border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)] p-3 space-y-1.5">
+              <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
                 <span>Sign on glass (Consignee Receiving Signature):</span>
                 {signed && <span className="text-emerald-400 font-mono">SHA-256 Captured</span>}
               </div>
               {signed ? (
-                <div className="h-16 bg-slate-950 rounded-lg border border-dashed border-white/20 flex items-center justify-center relative">
+                <div className="h-16 bg-[var(--bg-surface-hover)] rounded-lg border border-dashed border-[var(--border-subtle)] flex items-center justify-center relative">
                   <svg className="w-48 h-12">
                     <path
                       d="M 10 35 Q 50 10 90 35 T 180 30"
@@ -317,13 +317,13 @@ export function DriverHandoverEpod({
                       fill="none"
                     />
                   </svg>
-                  <span className="absolute bottom-1 right-2 text-[9px] text-slate-500 font-mono">
+                  <span className="absolute bottom-1 right-2 text-[9px] text-[var(--text-faint)] font-mono">
                     {recipientName} (Signed)
                   </span>
                   <button
                     type="button"
                     onClick={handleClearSignature}
-                    className="absolute top-1 right-1.5 text-[9px] text-slate-500 hover:text-rose-300"
+                    className="absolute top-1 right-1.5 text-[9px] text-[var(--text-faint)] hover:text-rose-300"
                   >
                     Clear
                   </button>
@@ -332,7 +332,7 @@ export function DriverHandoverEpod({
                 <button
                   type="button"
                   onClick={handleSignNow}
-                  className="w-full h-16 bg-slate-950 rounded-lg border border-dashed border-amber-500/40 flex items-center justify-center gap-2 text-amber-300 text-xs font-semibold hover:border-amber-400 hover:bg-slate-900 transition-colors"
+                  className="w-full h-16 bg-[var(--bg-surface-hover)] rounded-lg border border-dashed border-amber-500/40 flex items-center justify-center gap-2 text-amber-300 text-xs font-semibold hover:border-amber-400 hover:bg-[var(--bg-surface)] transition-colors"
                 >
                   <Signature className="w-4 h-4" />
                   Tap to capture receiver signature
@@ -353,14 +353,14 @@ export function DriverHandoverEpod({
         </form>
       ) : (
         /* Confirmed e-POD Certificate Card */
-        <div className="bg-slate-950 border border-emerald-500/30 rounded-2xl p-5 space-y-4 text-xs">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="bg-[var(--bg-surface-hover)] border border-emerald-500/30 rounded-2xl p-5 space-y-4 text-xs">
+          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg">
                 ✅
               </div>
               <div>
-                <h4 className="font-bold text-white text-sm">Delivery Confirmed & e-POD Sealed</h4>
+                <h4 className="font-bold text-[var(--text-main)] text-sm">Delivery Confirmed & e-POD Sealed</h4>
                 <p className="text-[10px] text-emerald-400 font-mono">{generatedEpod.epodNumber}</p>
               </div>
             </div>
@@ -370,17 +370,17 @@ export function DriverHandoverEpod({
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-900/60 p-2.5 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">Received By:</span>
-              <strong className="text-white block">{generatedEpod.consigneeRecipientName}</strong>
-              <span className="text-[10px] text-slate-400 font-mono">
+            <div className="bg-[var(--bg-surface)] p-2.5 rounded-xl">
+              <span className="text-[10px] text-[var(--text-muted)] block">Received By:</span>
+              <strong className="text-[var(--text-main)] block">{generatedEpod.consigneeRecipientName}</strong>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">
                 EID: {generatedEpod.consigneeEmiratesId}
               </span>
             </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-xl">
-              <span className="text-[10px] text-slate-400 block">Delivering Driver:</span>
-              <strong className="text-white block">{generatedEpod.driverName}</strong>
-              <span className="text-[10px] text-slate-400 font-mono">{generatedEpod.vehiclePlate}</span>
+            <div className="bg-[var(--bg-surface)] p-2.5 rounded-xl">
+              <span className="text-[10px] text-[var(--text-muted)] block">Delivering Driver:</span>
+              <strong className="text-[var(--text-main)] block">{generatedEpod.driverName}</strong>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">{generatedEpod.vehiclePlate}</span>
             </div>
           </div>
 
@@ -391,14 +391,14 @@ export function DriverHandoverEpod({
               </span>
               <span>100% Tamper-Proof</span>
             </div>
-            <p className="font-mono text-slate-400 break-all">{generatedEpod.cryptographicPODSeal}</p>
+            <p className="font-mono text-[var(--text-muted)] break-all">{generatedEpod.cryptographicPODSeal}</p>
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-white/10"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs border border-[var(--border-subtle)]"
             >
               <Printer className="w-3.5 h-3.5" /> Print Delivery Proof
             </button>

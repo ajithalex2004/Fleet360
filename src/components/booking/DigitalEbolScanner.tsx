@@ -204,12 +204,12 @@ export function DigitalEbolScanner({
   const totalWeight = items.reduce((sum, i) => sum + i.weightKg, 0);
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <div className="flex items-center gap-2">
           <Barcode className="w-4 h-4 text-orange-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Consignment Barcode Scanner & Electronic Bill of Lading (e-BOL)
           </span>
         </div>
@@ -219,9 +219,9 @@ export function DigitalEbolScanner({
       </div>
 
       {/* Dock Scanner Input Bar */}
-      <div className="bg-slate-950/60 border border-white/10 rounded-xl p-3.5 space-y-3">
+      <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-3">
         <div className="flex items-center justify-between text-xs">
-          <label className="font-bold text-slate-300 flex items-center gap-1.5">
+          <label className="font-bold text-[var(--text-muted)] flex items-center gap-1.5">
             <QrCode className="w-3.5 h-3.5 text-orange-400" />
             Warehouse Dock Pallet Scanner
           </label>
@@ -236,7 +236,7 @@ export function DigitalEbolScanner({
             value={scanInput}
             onChange={(e) => setScanInput(e.target.value)}
             placeholder="Scan GS1-128 or QR barcode on pallet label…"
-            className="flex-1 bg-slate-900 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
+            className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
           />
           <button
             type="button"
@@ -252,19 +252,19 @@ export function DigitalEbolScanner({
             before anything is submitted to the verify endpoint. */}
         {livePreview && (
           livePreview.gtin ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-slate-300 bg-slate-900/60 border border-white/10 rounded-lg px-2.5 py-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5">
               <span className="flex items-center gap-1 text-cyan-300">
                 <Package className="w-3.5 h-3.5 shrink-0" /> Parsed:
               </span>
-              <span>GTIN <strong className="text-white">{livePreview.gtin}</strong></span>
+              <span>GTIN <strong className="text-[var(--text-main)]">{livePreview.gtin}</strong></span>
               {livePreview.batchLot && (
-                <span>Lot <strong className="text-white">{livePreview.batchLot}</strong></span>
+                <span>Lot <strong className="text-[var(--text-main)]">{livePreview.batchLot}</strong></span>
               )}
               {livePreview.serialNumber && (
-                <span>SN <strong className="text-white">{livePreview.serialNumber}</strong></span>
+                <span>SN <strong className="text-[var(--text-main)]">{livePreview.serialNumber}</strong></span>
               )}
               {livePreview.weightKg !== undefined && (
-                <span>Wt <strong className="text-white">{livePreview.weightKg} kg</strong></span>
+                <span>Wt <strong className="text-[var(--text-main)]">{livePreview.weightKg} kg</strong></span>
               )}
             </div>
           ) : (
@@ -277,7 +277,7 @@ export function DigitalEbolScanner({
 
         {/* 1-Click Pallet Simulation Buttons */}
         <div className="flex items-center gap-2 pt-1">
-          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+          <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-400" />
             Quick Test Scans:
           </span>
@@ -286,7 +286,7 @@ export function DigitalEbolScanner({
             onClick={() =>
               handleScanBarcode('(01)06291100000003(10)LOT-2026-C(21)SN987656(3102)000480')
             }
-            className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-white/10 font-mono"
+            className="text-[10px] bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-muted)] px-2 py-0.5 rounded border border-[var(--border-subtle)] font-mono"
           >
             Scan Pallet #3 (LOT-2026-C)
           </button>
@@ -305,9 +305,9 @@ export function DigitalEbolScanner({
       </div>
 
       {/* Manifest Items Table */}
-      <div className="overflow-x-auto rounded-xl border border-white/10">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-950/80 text-slate-400 text-[10px] uppercase font-mono">
+          <thead className="bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-[10px] uppercase font-mono">
             <tr>
               <th className="p-2.5">Pallet ID & GS1</th>
               <th className="p-2.5">Cargo Description</th>
@@ -316,19 +316,19 @@ export function DigitalEbolScanner({
               <th className="p-2.5 text-right">Verification</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5 bg-slate-900/40">
+          <tbody className="divide-y divide-white/5 bg-[var(--bg-surface)]">
             {items.map((pallet) => (
               <tr key={pallet.palletId} className="hover:bg-white/[0.02]">
                 <td className="p-2.5 font-mono">
-                  <span className="font-bold text-white block">{pallet.palletId}</span>
-                  <span className="text-[9px] text-slate-500 truncate max-w-[140px] block">
+                  <span className="font-bold text-[var(--text-main)] block">{pallet.palletId}</span>
+                  <span className="text-[9px] text-[var(--text-faint)] truncate max-w-[140px] block">
                     {pallet.gs1Barcode}
                   </span>
                 </td>
-                <td className="p-2.5 text-slate-200">{pallet.description}</td>
-                <td className="p-2.5 font-mono text-slate-300">
+                <td className="p-2.5 text-[var(--text-main)]">{pallet.description}</td>
+                <td className="p-2.5 font-mono text-[var(--text-muted)]">
                   {pallet.palletType === 'EURO_PALLET_EPAL' ? 'Euro EPAL' : 'ISO Standard'} ·{' '}
-                  <strong className="text-white">{pallet.weightKg} kg</strong>
+                  <strong className="text-[var(--text-main)]">{pallet.weightKg} kg</strong>
                 </td>
                 <td className="p-2.5">
                   <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono">
@@ -354,7 +354,7 @@ export function DigitalEbolScanner({
 
       {/* Generate Official e-BOL Action Button */}
       <div className="flex items-center justify-between pt-1">
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[var(--text-muted)]">
           Customs Ready: <strong>UAE Customs Declaration & SHA-256 Seal</strong>
         </div>
         <button
@@ -372,15 +372,15 @@ export function DigitalEbolScanner({
       ══════════════════════════════════════════════════════════════ */}
       {showEbolModal && generatedEbol && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/20 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl text-white">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl text-[var(--text-main)]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-bold text-lg">
                   🚛
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-[var(--text-main)]">
                     Official Electronic Bill of Lading (e-BOL)
                   </h3>
                   <p className="text-xs text-orange-400 font-mono">{generatedEbol.ebolNumber}</p>
@@ -388,34 +388,34 @@ export function DigitalEbolScanner({
               </div>
               <button
                 onClick={() => setShowEbolModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm"
               >
                 ✕ Close
               </button>
             </div>
 
             {/* Official e-BOL Sheet Document */}
-            <div className="bg-slate-950 border border-white/15 rounded-xl p-5 space-y-4 text-xs">
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4 text-xs">
               {/* Carrier & Customs Top Banner */}
-              <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-3">
+              <div className="grid grid-cols-2 gap-4 border-b border-[var(--border-subtle)] pb-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1.5">
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase font-bold flex items-center gap-1.5">
                     <Truck className="w-3 h-3" />
                     Issuing Freight Carrier
                   </span>
-                  <strong className="text-white text-sm block">{generatedEbol.carrierName}</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <strong className="text-[var(--text-main)] text-sm block">{generatedEbol.carrierName}</strong>
+                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
                     Trade License: {generatedEbol.carrierTradeLicense}
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-500 uppercase block font-bold">
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block font-bold">
                     UAE Customs Declaration No.
                   </span>
                   <strong className="text-emerald-400 text-sm font-mono block">
                     {generatedEbol.uaeCustomsDeclarationNo}
                   </strong>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-[var(--text-muted)]">
                     Sealed: {new Date(generatedEbol.issuedAt).toLocaleDateString()}
                   </span>
                 </div>
@@ -423,26 +423,26 @@ export function DigitalEbolScanner({
 
               {/* Shipper & Consignee */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-900/60 p-3 rounded-lg border border-white/5 space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                <div className="bg-[var(--bg-surface)] p-3 rounded-lg border border-[var(--border-subtle)] space-y-1">
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold flex items-center gap-1.5">
                     <Building2 className="w-3 h-3" />
                     Shipper / Origin:
                   </span>
-                  <strong className="text-white block">{generatedEbol.shipperName}</strong>
-                  <p className="text-[11px] text-slate-300">{generatedEbol.shipperAddress}</p>
+                  <strong className="text-[var(--text-main)] block">{generatedEbol.shipperName}</strong>
+                  <p className="text-[11px] text-[var(--text-muted)]">{generatedEbol.shipperAddress}</p>
                 </div>
-                <div className="bg-slate-900/60 p-3 rounded-lg border border-white/5 space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                <div className="bg-[var(--bg-surface)] p-3 rounded-lg border border-[var(--border-subtle)] space-y-1">
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold block">
                     Consignee / Destination:
                   </span>
-                  <strong className="text-white block">{generatedEbol.consigneeName}</strong>
-                  <p className="text-[11px] text-slate-300">{generatedEbol.consigneeAddress}</p>
+                  <strong className="text-[var(--text-main)] block">{generatedEbol.consigneeName}</strong>
+                  <p className="text-[11px] text-[var(--text-muted)]">{generatedEbol.consigneeAddress}</p>
                 </div>
               </div>
 
               {/* Manifest Summary */}
-              <div className="border-t border-white/10 pt-3 space-y-2">
-                <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1.5">
+              <div className="border-t border-[var(--border-subtle)] pt-3 space-y-2">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold flex items-center gap-1.5">
                   <Layers className="w-3 h-3" />
                   Consignment Cargo Manifest ({generatedEbol.totalPallets} Units ·{' '}
                   {generatedEbol.totalGrossWeightKg} kg Total Gross Weight)
@@ -451,12 +451,12 @@ export function DigitalEbolScanner({
                   {generatedEbol.items.map((item, idx) => (
                     <div
                       key={item.palletId}
-                      className="flex justify-between bg-slate-900/40 p-2 rounded border border-white/5"
+                      className="flex justify-between bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)]"
                     >
                       <span>
                         <strong>{idx + 1}. {item.palletId}</strong> — {item.description} ({item.temperatureRange})
                       </span>
-                      <span className="font-mono text-slate-300">{item.weightKg} kg</span>
+                      <span className="font-mono text-[var(--text-muted)]">{item.weightKg} kg</span>
                     </div>
                   ))}
                 </div>
@@ -471,7 +471,7 @@ export function DigitalEbolScanner({
                   </span>
                   <span>Tamper-Proof Seal</span>
                 </div>
-                <p className="font-mono text-slate-400 break-all">{generatedEbol.cryptographicSeal}</p>
+                <p className="font-mono text-[var(--text-muted)] break-all">{generatedEbol.cryptographicSeal}</p>
               </div>
             </div>
 
@@ -481,14 +481,14 @@ export function DigitalEbolScanner({
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold"
                 >
                   <Printer className="w-4 h-4" /> Print e-BOL PDF
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadEbol}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold"
                 >
                   <Download className="w-4 h-4" /> Download e-BOL JSON
                 </button>
