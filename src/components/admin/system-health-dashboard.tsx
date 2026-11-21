@@ -36,15 +36,6 @@ import { PlatformInfoTab } from '@/components/admin/health-tabs/platform-info-ta
 import { SchemaStatusTab } from '@/components/admin/health-tabs/schema-status-tab';
 import { JobRunsTab } from '@/components/admin/health-tabs/job-runs-tab';
 
-/** The jobs summary the public /api/health payload carries (fields read for the fallback view). */
-type PublicJobsSummary = {
-  scheduler?: 'degraded' | 'disabled' | 'active' | 'inactive';
-  isTicking?: boolean;
-  failures24h?: number;
-  outboxLagMs?: number | null;
-  pendingOutbox?: number;
-};
-
 export interface HealthData {
   status: 'ok' | 'degraded' | 'unhealthy';
   responseTimeMs: number;
@@ -183,11 +174,8 @@ export interface HealthData {
     rollbacks: number;
     rollbackRatePercent: number;
     longRunningQueries: Array<{
-      pid: number;
-      username: string;
       state: string;
       durationSeconds: number;
-      queryPreview: string;
     }>;
     warningReason?: string;
   };
@@ -728,104 +716,12 @@ export function SystemHealthDashboardView({
             uptimeSeconds: 0,
             memory: { heapUsedMb: 0, heapTotalMb: 0, rssMb: 0 },
           },
-          jobsAndOutbox: pubPayload.jobs
-            ? {
-                scheduler: {
-                  status: (pubPayload.jobs as PublicJobsSummary).scheduler ?? 'active',
-                  isTicking: (pubPayload.jobs as PublicJobsSummary).isTicking ?? true,
-                  started: true,
-                  disabled: false,
-                  startedAt: null,
-                  lastTickAt: null,
-                  secondsSinceLastTick: null,
-                  totalConfiguredJobs: 20,
-                  timezone: 'Asia/Dubai',
-                  lastDbRunAt: null,
-                  lastDbJobName: null,
-                  lastDbStatus: null,
-                  jobSchedules: [],
-                },
-                jobRuns24h: {
-                  status: ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0 ? 'warning' : 'healthy',
-                  total24h: 0,
-                  succeeded24h: 0,
-                  failed24h: (pubPayload.jobs as PublicJobsSummary).failures24h ?? 0,
-                  runningNow: 0,
-                  failureRatePercent: 0,
-                  message:
-                    ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0
-                      ? `${(pubPayload.jobs as PublicJobsSummary).failures24h} failure(s) in last 24h`
-                      : 'All background jobs running smoothly',
-                  lastRun: null,
-                  recentFailures: [],
-                },
-                outbox: {
-                  status:
-                    (((pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? 0) >= 60000)
-                      ? 'degraded'
-                      : 'healthy',
-                  pendingCount: (pubPayload.jobs as PublicJobsSummary).pendingOutbox ?? 0,
-                  stuckCount: 0,
-                  parkedCount: 0,
-                  published24h: 0,
-                  totalEvents: 0,
-                  lagMs: (pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? null,
-                  oldestPendingAt: null,
-                  message: 'Transactional outbox synchronized with background publisher',
-                  pendingByType: [],
-                },
-              }
-            : undefined,
-          dbPool: (pubPayload.dbPool as HealthData['dbPool'] | undefined) ?? {
-            status: 'healthy',
-            active: 1,
-            idle: 25,
-            idleInTransaction: 0,
-            waiting: 0,
-            total: 26,
-            maxConnections: 901,
-            poolUtilizationPercent: 3,
-            commits: 1876718,
-            rollbacks: 2844,
-            rollbackRatePercent: 0.15,
-            longRunningQueries: [],
-          },
-          enterpriseBridge: (pubPayload.enterpriseBridge as HealthData['enterpriseBridge'] | undefined) ?? {
-            status: 'not_configured',
-            totalConnectors: 0,
-            healthyCount: 0,
-            warningCount: 0,
-            errorCount: 0,
-            untestedCount: 0,
-            activeCount: 0,
-            lastSyncAt: null,
-            recentErrorsCount24h: 0,
-            recentLogs: [],
-          },
-          security: (pubPayload.security as HealthData['security'] | undefined) ?? {
-            status: 'healthy',
-            activeSessions: {
-              activeUsers24h: 1,
-              activeUsers1h: 1,
-              redisConfigured: false,
-            },
-            bruteForce: {
-              status: 'normal',
-              failedLogins1h: 0,
-              uniqueIps1h: 0,
-              targetedAccounts1h: 0,
-            },
-            mfa: {
-              allStaffEnrolledPercent: 0,
-              adminEnrolledPercent: 0,
-              totalStaff: 1,
-              mfaStaffCount: 0,
-              totalAdmins: 1,
-              mfaAdminCount: 0,
-            },
-          },
-          aiSpending: (pubPayload.aiSpending as HealthData['aiSpending'] | undefined) ?? undefined,
-          googleApisSpending: (pubPayload.googleApisSpending as HealthData['googleApisSpending'] | undefined) ?? undefined,
+          jobsAndOutbox: undefined,
+          dbPool: undefined,
+          enterpriseBridge: undefined,
+          security: undefined,
+          aiSpending: undefined,
+          googleApisSpending: undefined,
         };
 
         setData(synthData);
@@ -2752,14 +2648,11 @@ export function SystemHealthDashboardView({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {data.dbPool.longRunningQueries.slice(0, 2).map((q) => (
-                      <div key={q.pid} className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-xs space-y-1">
+                    {data.dbPool.longRunningQueries.slice(0, 2).map((q, idx) => (
+                      <div key={idx} className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-xs space-y-1">
                         <div className="flex justify-between items-center text-[11px] font-mono">
-                          <span className="text-rose-300">PID {q.pid} ({q.username})</span>
+                          <span className="text-rose-300">Slow query #{idx + 1} ({q.state})</span>
                           <span className="font-bold text-rose-400">{q.durationSeconds}s</span>
-                        </div>
-                        <div className="text-[10px] font-mono text-[var(--text-muted)] truncate" title={q.queryPreview}>
-                          {q.queryPreview}
                         </div>
                       </div>
                     ))}
@@ -2787,15 +2680,12 @@ export function SystemHealthDashboardView({
                 Active Queries Exceeding 5.0 Seconds
               </div>
               <div className="space-y-2">
-                {data.dbPool.longRunningQueries.map((q) => (
-                  <div key={q.pid} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-1.5 text-xs">
+                {data.dbPool.longRunningQueries.map((q, idx) => (
+                  <div key={idx} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-1.5 text-xs">
                     <div className="flex items-center justify-between font-mono text-[11px]">
-                      <span className="text-[var(--text-main)] font-semibold">PID: {q.pid} · User: {q.username} · State: {q.state}</span>
+                      <span className="text-[var(--text-main)] font-semibold">Slow query #{idx + 1} · State: {q.state}</span>
                       <span className="text-rose-400 font-bold">{q.durationSeconds} seconds</span>
                     </div>
-                    <pre className="p-2 rounded bg-[var(--bg-surface-hover)] font-mono text-[11px] text-[var(--text-main)] overflow-x-auto whitespace-pre-wrap">
-                      {q.queryPreview}
-                    </pre>
                   </div>
                 ))}
               </div>
@@ -3403,7 +3293,7 @@ export function SystemHealthDashboardView({
             <div className="flex items-center gap-2 text-xs">
               <span className="text-[var(--text-muted)]">Key:</span>
               <span className="font-mono px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)]">
-                {data.googleApisSpending.apiKeyMasked ?? 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'}
+                {data.googleApisSpending.apiKeyConfigured ? 'Configured (redacted)' : 'Not configured'}
               </span>
             </div>
           </div>
@@ -3556,7 +3446,7 @@ export function SystemHealthDashboardView({
       )}
 
       {/* External Services & Integrations Grid with Active Live Ping Probes */}
-      {data && (
+      {data && !isPublic && (
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3 flex-wrap gap-3">
             <div>
@@ -3665,7 +3555,7 @@ export function SystemHealthDashboardView({
       )}
 
       {/* System Environment & Runtime Info */}
-      {data && (
+      {data && !isPublic && (
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
           <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3">
             <Cpu className="w-4 h-4 text-blue-400" />

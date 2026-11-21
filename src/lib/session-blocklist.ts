@@ -35,26 +35,45 @@ async function fingerprint(token: string): Promise<string> {
 
 // ── public API ────────────────────────────────────────────────────────────────
 
+export type RevokeSessionResult =
+  | { ok: true; persisted: 'redis' | 'unconfigured' }
+  | { ok: false; persisted: 'failed'; error: string };
+
 /**
  * Add a token to the blocklist.
  *
  * @param token      The raw xl-session (or backend JWT) token string.
  * @param expiresAt  Unix epoch ms when the token expires.  The Redis key TTL
  *                   is set to this remaining lifetime so the key auto-deletes.
+ *
+ * Returns an explicit structured result so callers NEVER silently report
+ * successful server-side revocation when Redis is configured and write fails.
  */
-export async function revokeSession(token: string, expiresAt: number): Promise<void> {
+export async function revokeSession(token: string, expiresAt: number): Promise<RevokeSessionResult> {
   const redis = getRedis();
-  if (!redis) return; // degraded mode — no Redis, logout clears cookie
+  if (!redis) {
+    return { ok: true, persisted: 'unconfigured' };
+  }
 
   const key    = PREFIX + (await fingerprint(token));
   const ttlSec = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
 
+  let timerId: ReturnType<typeof setTimeout> | undefined;
   try {
-    await redis.set(key, '1', { ex: ttlSec });
+    const write = redis.set(key, '1', { ex: ttlSec });
+    // Prevent late rejection after timeout from becoming UnhandledPromiseRejection.
+    write.catch(() => {});
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => reject(new Error('Redis revocation write timed out after 2000ms')), 2_000);
+    });
+    await Promise.race([write, timeout]);
+    return { ok: true, persisted: 'redis' };
   } catch (err) {
-    // Non-fatal — a Redis write failure during logout just means the token
-    // won't be in the blocklist.  The cookie is still cleared by the caller.
-    console.warn('[session-blocklist] revokeSession failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[session-blocklist] revokeSession failed:', err);
+    return { ok: false, persisted: 'failed', error: message };
+  } finally {
+    if (timerId !== undefined) clearTimeout(timerId);
   }
 }
 
@@ -81,15 +100,21 @@ export async function isSessionRevoked(token: string): Promise<boolean> {
   const redis = getRedis();
   if (!redis) return false;
 
+  let timerId: ReturnType<typeof setTimeout> | undefined;
   try {
     const key = PREFIX + (await fingerprint(token));
     const lookup = redis.get(key);
+    lookup.catch(() => {});
     // A timeout resolves to undefined, distinct from Redis's null (not set).
-    const timeout = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000));
+    const timeout = new Promise<undefined>((resolve) => {
+      timerId = setTimeout(() => resolve(undefined), 1000);
+    });
     const val = await Promise.race([lookup, timeout]);
     if (val === undefined) return unavailable('timed out');
     return val !== null;
   } catch (err) {
     return unavailable(err);
+  } finally {
+    if (timerId !== undefined) clearTimeout(timerId);
   }
 }

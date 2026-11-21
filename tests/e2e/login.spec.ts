@@ -250,8 +250,11 @@ test('logout clears session and redirects protected routes to /login', async ({ 
     await page.waitForURL('**/login**', { timeout: 10_000 });
     expect(page.url()).toContain('/login');
   } else {
-    // If no logout button found, call the logout API directly
-    const res = await page.request.post('/api/auth/logout');
+    // If no logout button found, call the logout API directly with same-origin header
+    const pageOrigin = new URL(page.url()).origin;
+    const res = await page.request.post('/api/auth/logout', {
+      headers: { Origin: pageOrigin },
+    });
     expect([200, 204]).toContain(res.status());
 
     // Navigating to protected /fleet should now redirect to /login
