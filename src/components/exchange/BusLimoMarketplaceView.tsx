@@ -38,6 +38,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import type { CommercialSnapshot, SettlementStatementRow } from '@/lib/exchange/client-types';
 
 export type MarketplaceDomainFilter = 'ALL' | 'PASSENGER_TRANSPORT' | 'LIMOUSINE' | 'RECOVERY';
 
@@ -73,7 +74,7 @@ interface OutsourceAwardItem {
   currency: string;
   status: string;
   awardedAt: string;
-  commercialSnapshot?: Record<string, any> | null;
+  commercialSnapshot?: CommercialSnapshot | null;
   partner?: PartnerSummary | null;
   assignment?: {
     id: string;
@@ -96,7 +97,7 @@ interface OutsourceAwardItem {
       latitude?: number | null;
       longitude?: number | null;
       occurredAt: string;
-      payload?: Record<string, any> | null;
+      payload?: { speed?: number | string | null; [key: string]: unknown } | null;
     }>;
   } | null;
   invoice?: {
@@ -759,7 +760,7 @@ export function BusLimoMarketplaceView({
 
   // Phase 7: Buyer 3-Way Match, Dispute Resolution & Settlement Statements state
   const [showSettlementsModal, setShowSettlementsModal] = useState(false);
-  const [statements, setStatements] = useState<any[]>([]);
+  const [statements, setStatements] = useState<SettlementStatementRow[]>([]);
   const [stmtPartnerId, setStmtPartnerId] = useState('');
   const [stmtPeriodStart, setStmtPeriodStart] = useState(() => {
     const d = new Date();

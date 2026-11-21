@@ -17,12 +17,13 @@ import {
   Scale,
   X,
 } from 'lucide-react';
+import type { CommercialSnapshot, PartnerInvoiceRow, SettlementStatementRow } from '@/lib/exchange/client-types';
 
 export default function PartnerStatementsPage() {
-  const [statements, setStatements] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [statements, setStatements] = useState<SettlementStatementRow[]>([]);
+  const [invoices, setInvoices] = useState<PartnerInvoiceRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedStatement, setSelectedStatement] = useState<any | null>(null);
+  const [selectedStatement, setSelectedStatement] = useState<SettlementStatementRow | null>(null);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -103,7 +104,7 @@ export default function PartnerStatementsPage() {
             <tbody className="divide-y divide-slate-800/60 font-medium">
               {statements.length > 0 ? (
                 statements.map((s) => {
-                  const firstSnap = (s.invoices?.[0]?.award?.commercialSnapshot || {}) as Record<string, any>;
+                  const firstSnap = (s.invoices?.[0]?.award?.commercialSnapshot || {}) as CommercialSnapshot;
                   const commercialModel = s.commercialModel || firstSnap.commercialModel || 'AGENCY';
                   const feePct = s.platformFeePct ?? firstSnap.platformFeePct ?? 3;
                   return (
@@ -255,7 +256,7 @@ function RaiseDisputeModal({
   onClose,
   onRaised,
 }: {
-  invoices: any[];
+  invoices: PartnerInvoiceRow[];
   onClose: () => void;
   onRaised: () => void;
 }) {

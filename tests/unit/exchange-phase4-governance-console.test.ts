@@ -18,16 +18,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+type MockRow = Record<string, unknown>;
+
 const mockState = vi.hoisted(() => ({
-  relationships: [] as any[],
-  rateCards: [] as any[],
-  existingRelationship: null as any,
-  createdRateCard: null as any,
-  failoverResult: null as any,
-  submittedInvoiceInput: null as any,
-  raisedDisputeInput: null as any,
-  statements: [] as any[],
-  invoices: [] as any[],
+  relationships: [] as MockRow[],
+  rateCards: [] as MockRow[],
+  existingRelationship: null as MockRow | null,
+  createdRateCard: null as MockRow | null,
+  failoverResult: null as MockRow | null,
+  submittedInvoiceInput: null as { items?: Array<{ varianceReason?: string }>; [key: string]: unknown } | null,
+  raisedDisputeInput: null as MockRow | null,
+  statements: [] as MockRow[],
+  invoices: [] as MockRow[],
 }));
 
 vi.mock('@/lib/audit', () => ({
@@ -36,7 +38,7 @@ vi.mock('@/lib/audit', () => ({
 }));
 
 vi.mock('@/lib/audited-action', () => ({
-  withAuditedAction: (fn: any) => fn,
+  withAuditedAction: <F>(fn: F) => fn,
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -44,12 +46,12 @@ vi.mock('@/lib/prisma', () => ({
     tenantPartnerRelationship: {
       findMany: vi.fn(async () => mockState.relationships),
       findFirst: vi.fn(async () => mockState.existingRelationship),
-      update: vi.fn(async ({ data }: any) => ({ id: 'rel-1', ...data })),
-      create: vi.fn(async ({ data }: any) => ({ id: 'rel-new', ...data })),
+      update: vi.fn(async ({ data }: { data: MockRow }) => ({ id: 'rel-1', ...data })),
+      create: vi.fn(async ({ data }: { data: MockRow }) => ({ id: 'rel-new', ...data })),
     },
     partnerRateCard: {
       findMany: vi.fn(async () => mockState.rateCards),
-      create: vi.fn(async ({ data }: any) => {
+      create: vi.fn(async ({ data }: { data: MockRow }) => {
         const created = {
           id: 'rc-101',
           createdAt: new Date('2026-11-07T10:00:00Z'),
@@ -71,7 +73,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     transportPartner: {
       findMany: vi.fn(async () => []),
-      update: vi.fn(async ({ where, data }: any) => ({
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { operationalStatus?: string } }) => ({
         id: where.id,
         legalName: 'Al Futtaim Logistics LLC',
         partnerCode: 'AFL-DXB',
@@ -114,7 +116,7 @@ vi.mock('@/lib/rls-scope', () => ({
 
 vi.mock('@/lib/exchange/exception-service', () => ({
   ExceptionService: {
-    triggerGovernedFailoverResourcing: vi.fn(async (input: any) => ({
+    triggerGovernedFailoverResourcing: vi.fn(async (input: { awardId: string }) => ({
       outcome: 'PROMOTED_STANDBY_RUNNER_UP',
       awardId: input.awardId,
       defaultingPartnerPenaltyAmount: 450,
@@ -151,7 +153,7 @@ vi.mock('@/lib/exchange/marketplace-service', () => ({
 
 vi.mock('@/lib/exchange/partner-invoice-service', () => ({
   PartnerInvoiceService: {
-    submitInvoice: vi.fn(async (input: any) => {
+    submitInvoice: vi.fn(async (input: NonNullable<typeof mockState.submittedInvoiceInput>) => {
       mockState.submittedInvoiceInput = input;
       return {
         id: 'inv-1',
@@ -164,7 +166,7 @@ vi.mock('@/lib/exchange/partner-invoice-service', () => ({
 
 vi.mock('@/lib/exchange/dispute-service', () => ({
   DisputeService: {
-    raiseDispute: vi.fn(async (input: any) => {
+    raiseDispute: vi.fn(async (input: MockRow) => {
       mockState.raisedDisputeInput = input;
       return {
         id: 'dsp-1',
@@ -403,8 +405,8 @@ describe('Phase 4 & Phase 5: Enterprise Network Governance, Settlement & Platfor
       invoiceNumber: 'INV-AFL-2026-009',
       subtotalAmount: 2150,
     });
-    expect(mockState.submittedInvoiceInput.items).toHaveLength(3);
-    expect(mockState.submittedInvoiceInput.items[1].varianceReason).toBe('WAITING_TIME');
+    expect(mockState.submittedInvoiceInput?.items).toHaveLength(3);
+    expect(mockState.submittedInvoiceInput?.items?.[1]?.varianceReason).toBe('WAITING_TIME');
   });
 
   it('Phase 5.1: GET /api/exchange/invoices?includeStatements=1 returns partner settlement statements and POST action=RAISE_DISPUTE registers a non-blocking commercial dispute', async () => {

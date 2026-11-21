@@ -91,12 +91,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     };
 
     type VoidOutcome =
-      | { ok: true; invoice: any; creditNote: CreditNoteSummary | null }
+      | { ok: true; invoice: Record<string, unknown>; creditNote: CreditNoteSummary | null }
       | { ok: false; response: NextResponse };
 
     const outcome = await withTenantRls<VoidOutcome>(prisma, tenantId, async (tx) =>
       withInvoicePaymentLock(tx, tenantId, params.id, async () => {
-        const rows = await tx.$queryRawUnsafe<any[]>(
+        const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           'SELECT * FROM rental_invoices WHERE id = $1 AND tenant_id::text = $2 AND deleted_at IS NULL',
           params.id,
           tenantId,
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             0,
           );
 
-          const updated = await tx.$queryRawUnsafe<any[]>(
+          const updated = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
             'SELECT * FROM rental_invoices WHERE id = $1 AND tenant_id::text = $2',
             params.id,
             tenantId,
@@ -296,7 +296,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           tenantId,
           invoiceId: params.id,
           invoiceNo: String(inv.invoice_no ?? params.id),
-          invoiceDate: inv.invoice_date ?? now,
+          invoiceDate: (inv.invoice_date as Date | string | null) ?? now,
           status: currentStatus,
           currency: String(inv.currency ?? 'AED'),
           subtotal: Number(inv.subtotal ?? 0),
@@ -527,7 +527,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           status: 'ISSUED',
         };
 
-        const updated = await tx.$queryRawUnsafe<any[]>(
+        const updated = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           'SELECT * FROM rental_invoices WHERE id = $1 AND tenant_id::text = $2',
           params.id,
           tenantId,

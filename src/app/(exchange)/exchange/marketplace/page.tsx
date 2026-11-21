@@ -18,16 +18,17 @@ import {
   MapPin,
 } from 'lucide-react';
 import { OpportunityCard } from '@/components/exchange/marketplace/OpportunityCard';
+import type { MarketplaceOpportunityRow } from '@/lib/exchange/client-types';
 
 export default function MarketplaceOpportunityFeedPage() {
-  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<MarketplaceOpportunityRow[]>([]);
   const [partnerServiceAreas, setPartnerServiceAreas] = useState<Array<{ emirate: string; zoneName: string | null }>>([]);
   const [hasPreferredRelationship, setHasPreferredRelationship] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeDomain, setActiveDomain] = useState<string>('ALL');
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'MATCHED_ONLY'>('ALL');
   const [quoteFilter, setQuoteFilter] = useState<'ALL' | 'UNQUOTED' | 'QUOTED'>('ALL');
-  const [selectedOpp, setSelectedOpp] = useState<any | null>(null);
+  const [selectedOpp, setSelectedOpp] = useState<MarketplaceOpportunityRow | null>(null);
   const [quoteAmount, setQuoteAmount] = useState('');
   const [quoteNotes, setQuoteNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -99,7 +100,7 @@ export default function MarketplaceOpportunityFeedPage() {
     };
   }, [liveSyncEnabled, fetchOpportunities]);
 
-  const openQuoteModal = (opp: any) => {
+  const openQuoteModal = (opp: MarketplaceOpportunityRow) => {
     const existingQuote = opp?.request?.quotes?.[0];
     setSelectedOpp(opp);
     setQuoteAmount(existingQuote?.amount != null ? String(Number(existingQuote.amount)) : '');
@@ -116,7 +117,7 @@ export default function MarketplaceOpportunityFeedPage() {
   });
 
   const matchedZoneCount = opportunities.filter((o) => o.emirateMatch !== false).length;
-  const unquotedCount = opportunities.filter((o) => !(o.request?.quotes?.length > 0)).length;
+  const unquotedCount = opportunities.filter((o) => !((o.request?.quotes?.length ?? 0) > 0)).length;
   const quotedCount = opportunities.filter((o) => (o.request?.quotes?.length || 0) > 0).length;
 
   const handleQuoteSubmit = async (e: React.FormEvent) => {
@@ -135,7 +136,7 @@ export default function MarketplaceOpportunityFeedPage() {
           isRevision
             ? {
                 action: 'REVISE',
-                quoteId: existingQuote.id,
+                quoteId: existingQuote?.id,
                 requestId: selectedOpp.outsourceRequestId,
                 amount: parseFloat(quoteAmount),
                 notes: quoteNotes,
@@ -155,7 +156,7 @@ export default function MarketplaceOpportunityFeedPage() {
 
       setFeedback(
         isRevision
-          ? `✓ Quote revised to Rev ${(existingQuote.revisionNo || 1) + 1} for ${selectedOpp.request?.requestNumber || 'RFQ'}!`
+          ? `✓ Quote revised to Rev ${(existingQuote?.revisionNo || 1) + 1} for ${selectedOpp.request?.requestNumber || 'RFQ'}!`
           : `✓ Blind quote submitted for ${selectedOpp.request?.requestNumber || 'RFQ'}!`
       );
       setTimeout(() => setFeedback(null), 5000);
@@ -363,12 +364,12 @@ export default function MarketplaceOpportunityFeedPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <span className="text-[10px] font-bold text-cyan-400 uppercase">
-                  {selectedOpp.request?.quotes?.length > 0
-                    ? `Blind Quote Revision (Rev ${(selectedOpp.request.quotes[0].revisionNo || 1) + 1})`
+                  {(selectedOpp.request?.quotes?.length ?? 0) > 0
+                    ? `Blind Quote Revision (Rev ${(selectedOpp.request?.quotes?.[0]?.revisionNo || 1) + 1})`
                     : 'Blind Quotation'}
                 </span>
                 <h3 className="font-bold text-base text-white">
-                  {selectedOpp.request?.quotes?.length > 0 ? 'Revise Quote on ' : 'Quote on '}
+                  {(selectedOpp.request?.quotes?.length ?? 0) > 0 ? 'Revise Quote on ' : 'Quote on '}
                   {selectedOpp.request?.requestNumber || selectedOpp.id.slice(0, 8)}
                 </h3>
               </div>
@@ -377,11 +378,11 @@ export default function MarketplaceOpportunityFeedPage() {
               </button>
             </div>
 
-            {selectedOpp.request?.quotes?.length > 0 && (
+            {(selectedOpp.request?.quotes?.length ?? 0) > 0 && (
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-300 flex items-center justify-between">
-                <span>Current Active Quote (Rev {selectedOpp.request.quotes[0].revisionNo || 1}):</span>
+                <span>Current Active Quote (Rev {selectedOpp.request?.quotes?.[0]?.revisionNo || 1}):</span>
                 <span className="font-mono font-bold text-emerald-400">
-                  AED {Number(selectedOpp.request.quotes[0].amount).toFixed(2)} + VAT
+                  AED {Number(selectedOpp.request?.quotes?.[0]?.amount).toFixed(2)} + VAT
                 </span>
               </div>
             )}
@@ -427,8 +428,8 @@ export default function MarketplaceOpportunityFeedPage() {
                 >
                   {submitting
                     ? 'Submitting...'
-                    : selectedOpp.request?.quotes?.length > 0
-                    ? `Submit Rev ${(selectedOpp.request.quotes[0].revisionNo || 1) + 1}`
+                    : (selectedOpp.request?.quotes?.length ?? 0) > 0
+                    ? `Submit Rev ${(selectedOpp.request?.quotes?.[0]?.revisionNo || 1) + 1}`
                     : 'Submit Blind Quote'}
                 </button>
               </div>

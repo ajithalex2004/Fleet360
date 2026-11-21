@@ -15,7 +15,7 @@
  * Run with: npx playwright test tests/e2e/tenant-management.spec.ts
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 import { hashPassword } from '../test-utils';
 import { isServerAvailable, skipIfOffline } from './helpers';
 
@@ -102,7 +102,7 @@ test.beforeEach(async ({}, testInfo) => {
 
 // ── Shared setup: log in + mock API + navigate to /admin/tenants ──────────────
 
-async function goToTenantsPage({ page }: { page: any }) {
+async function goToTenantsPage({ page }: { page: Page }) {
   // 1. Log in
   await page.goto('/login');
   await page.fill('input[type="email"], input[name="email"]', TM_EMAIL);
@@ -111,7 +111,7 @@ async function goToTenantsPage({ page }: { page: any }) {
   await page.waitForURL('**/platform**', { timeout: 20_000 });
 
   // 2. Intercept tenant API with mock data (AFTER login so auth cookie is set)
-  await page.route('**/api/admin/tenants', async (route: any) => {
+  await page.route('**/api/admin/tenants', async (route: Route) => {
     const method = route.request().method();
     if (method === 'GET') {
       await route.fulfill({
@@ -138,7 +138,7 @@ async function goToTenantsPage({ page }: { page: any }) {
   });
 
   // 2b. Mock attachment-types so Tab 4 (Attachments) renders empty state deterministically
-  await page.route('**/api/admin/attachment-types*', async (route: any) => {
+  await page.route('**/api/admin/attachment-types*', async (route: Route) => {
     await route.fulfill({ status: 200, json: [] });
   });
 

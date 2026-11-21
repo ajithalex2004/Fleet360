@@ -16,10 +16,11 @@ import {
   X,
 } from 'lucide-react';
 import { usePartnerMembership } from '@/components/exchange/PartnerMembershipContext';
+import type { CommercialSnapshot, OutsourceAwardRow, PartnerInvoiceRow } from '@/lib/exchange/client-types';
 
 export default function ExchangeInvoicesPage() {
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [awards, setAwards] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<PartnerInvoiceRow[]>([]);
+  const [awards, setAwards] = useState<OutsourceAwardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export default function ExchangeInvoicesPage() {
           <tbody className="divide-y divide-slate-800/60">
             {invoices.length > 0 ? (
               invoices.map((inv) => {
-                const snap = (inv.award?.commercialSnapshot || {}) as Record<string, any>;
+                const snap = (inv.award?.commercialSnapshot || {}) as CommercialSnapshot;
                 const commercialModel = snap.commercialModel || 'AGENCY';
                 const feePct = snap.platformFeePct != null ? Number(snap.platformFeePct) : 3;
                 const verification = inv.verificationStatus || 'MATCHED';
@@ -131,9 +132,9 @@ export default function ExchangeInvoicesPage() {
                         )}
                         {verification}
                       </span>
-                      {inv.items?.length > 0 && (
+                      {(inv.items?.length ?? 0) > 0 && (
                         <div className="text-[10px] text-slate-400 mt-1">
-                          {inv.items.length} ancillary line item(s)
+                          {inv.items?.length} ancillary line item(s)
                         </div>
                       )}
                     </td>
@@ -191,7 +192,7 @@ function CreateInvoiceModal({
   onClose,
   onCreated,
 }: {
-  awards: any[];
+  awards: OutsourceAwardRow[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -249,7 +250,7 @@ function CreateInvoiceModal({
     e.preventDefault();
     if (!awardId || !invoiceNumber || !subtotal) return;
 
-    const items: any[] = [
+    const items: Array<{ description: string; varianceReason?: string; quantity: number; unitPrice: number }> = [
       {
         description: 'Base Contracted / Awarded Trip Service',
         quantity: 1,

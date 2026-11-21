@@ -34,6 +34,7 @@ import {
 import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { LogisticsMessage, readLogisticsApiError } from '@/components/logistics/master-data-fields';
 import CargoClassificationPanel, { type CargoClassificationMeta } from '@/components/logistics/CargoClassificationPanel';
+import type { SettlementStatementRow } from '@/lib/exchange/client-types';
 
 // ── Types (mirror mapRfq / mapBid) ─────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ interface Rfq {
   negotiationRound: number;
   awardedBidId: string | null;
   bidCount: number;
-  metadata?: Record<string, any> | null;
+  metadata?: { exchangeRequestNumber?: string; commercialModel?: string; [key: string]: unknown } | null;
   shipment: {
     origin: string | null;
     destination: string | null;
@@ -488,7 +489,7 @@ export default function MarketplacePage() {
 
   // Phase 9: Logistics Marketplace 3-Way Match & Settlements Console state
   const [showSettlementsModal, setShowSettlementsModal] = useState(false);
-  const [statements, setStatements] = useState<any[]>([]);
+  const [statements, setStatements] = useState<SettlementStatementRow[]>([]);
   const [stmtPartnerId, setStmtPartnerId] = useState('');
   const [stmtPeriodStart, setStmtPeriodStart] = useState(() => {
     const d = new Date();
