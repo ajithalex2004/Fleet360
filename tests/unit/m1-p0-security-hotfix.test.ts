@@ -33,6 +33,8 @@ const {
   mockGetSecurityHealthMetrics,
   mockGetAiHealthAndSpendingMetrics,
   mockGetGoogleMapsAndApisSpendingMetrics,
+  mockGetHealthAlertConfig,
+  mockEvaluateAndTriggerHealthAlerts,
   mockRecordDrayageDriverLogout,
   redisState,
 } = vi.hoisted(() => {
@@ -105,6 +107,19 @@ const {
       apiKeyMasked: null,
       summary: { grossSpendUsd: 0.14 },
     }),
+    mockGetHealthAlertConfig: vi.fn().mockResolvedValue({
+      enabled: true,
+      minSeverity: 'degraded' as const,
+      webhookUrl: 'https://hooks.slack.com/services/T00000000/B00000000/SUPER_SECRET_TOKEN_XYZ',
+      webhookEnabled: true,
+      email: 'ops@fleet360.example.com',
+      emailEnabled: true,
+      cooldownMinutes: 15,
+      lastStatus: null,
+      lastSentAt: null,
+      lastSummary: null,
+    }),
+    mockEvaluateAndTriggerHealthAlerts: vi.fn().mockResolvedValue({ triggered: false }),
     mockRecordDrayageDriverLogout: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -149,6 +164,15 @@ vi.mock('@/lib/health/extended-metrics', () => ({
   getGoogleMapsAndApisSpendingMetrics: mockGetGoogleMapsAndApisSpendingMetrics,
 }));
 
+vi.mock('@/lib/health/alerting', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/health/alerting')>('@/lib/health/alerting');
+  return {
+    ...actual,
+    getHealthAlertConfig: mockGetHealthAlertConfig,
+    evaluateAndTriggerHealthAlerts: mockEvaluateAndTriggerHealthAlerts,
+  };
+});
+
 vi.mock('@/lib/logistics/drayage-domain', () => ({
   recordDrayageDriverLogout: mockRecordDrayageDriverLogout,
 }));
@@ -160,6 +184,7 @@ let verifySession: typeof import('@/lib/tenant-session').verifySession;
 let extractSessionExpiry: typeof import('@/lib/tenant-session').extractSessionExpiry;
 let healthGET: typeof import('@/app/api/health/route').GET;
 let adminHealthGET: typeof import('@/app/api/admin/health/route').GET;
+let adminHealthPingPOST: typeof import('@/app/api/admin/health/ping/route').POST;
 let setupGET: typeof import('@/app/api/setup/super-admin/route').GET;
 let setupPOST: typeof import('@/app/api/setup/super-admin/route').POST;
 let resetSetupRateLimiterForTests: typeof import('@/lib/auth/setup-bootstrap').resetSetupRateLimiterForTests;
@@ -175,6 +200,7 @@ beforeAll(async () => {
   ({ signSession, verifySession, extractSessionExpiry } = await import('@/lib/tenant-session'));
   ({ GET: healthGET } = await import('@/app/api/health/route'));
   ({ GET: adminHealthGET } = await import('@/app/api/admin/health/route'));
+  ({ POST: adminHealthPingPOST } = await import('@/app/api/admin/health/ping/route'));
   ({ GET: setupGET, POST: setupPOST } = await import('@/app/api/setup/super-admin/route'));
   ({ resetSetupRateLimiterForTests } = await import('@/lib/auth/setup-bootstrap'));
   ({ POST: logoutPOST, GET: logoutGET } = await import('@/app/api/auth/logout/route'));
@@ -239,9 +265,23 @@ describe('M1-P0-1: Public /api/health telemetry isolation', () => {
     expect(mockGetBackgroundJobsAndOutboxHealth).not.toHaveBeenCalled();
   });
 
-  it('denies unauthenticated and non-SUPER_ADMIN requests to /api/admin/health', async () => {
+  it('denies unauthenticated (401) and TENANT_ADMIN (403) requests to /api/admin/health with zero collector invocations', async () => {
+    const assertZeroCollectorsCalled = () => {
+      expect(mockSchemaReport).not.toHaveBeenCalled();
+      expect(mockStorageStatus).not.toHaveBeenCalled();
+      expect(mockGetBackgroundJobsAndOutboxHealth).not.toHaveBeenCalled();
+      expect(mockGetDbPoolMetrics).not.toHaveBeenCalled();
+      expect(mockGetEnterpriseBridgeMetrics).not.toHaveBeenCalled();
+      expect(mockGetSecurityHealthMetrics).not.toHaveBeenCalled();
+      expect(mockGetAiHealthAndSpendingMetrics).not.toHaveBeenCalled();
+      expect(mockGetGoogleMapsAndApisSpendingMetrics).not.toHaveBeenCalled();
+      expect(mockGetHealthAlertConfig).not.toHaveBeenCalled();
+      expect(mockEvaluateAndTriggerHealthAlerts).not.toHaveBeenCalled();
+    };
+
     const unauth = await adminHealthGET(new NextRequest('https://fleet360.example.com/api/admin/health'));
     expect(unauth.status).toBe(401);
+    assertZeroCollectorsCalled();
 
     const tenantAdmin = await adminHealthGET(new NextRequest('https://fleet360.example.com/api/admin/health', {
       headers: {
@@ -251,6 +291,62 @@ describe('M1-P0-1: Public /api/health telemetry isolation', () => {
       },
     }));
     expect(tenantAdmin.status).toBe(403);
+    assertZeroCollectorsCalled();
+  });
+
+  it('denies unauthenticated (401) and TENANT_ADMIN (403) requests to /api/admin/health/ping without running probes', async () => {
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_dummy_key_for_authz_probe_guard');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      const unauth = await adminHealthPingPOST(
+        new NextRequest('https://fleet360.example.com/api/admin/health/ping', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ target: 'all' }),
+        }),
+      );
+      expect(unauth.status).toBe(401);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      const tenantAdmin = await adminHealthPingPOST(
+        new NextRequest('https://fleet360.example.com/api/admin/health/ping', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-tenant-id': 'tenant-1',
+            'x-user-id': 'user-1',
+            'x-user-role': 'TENANT_ADMIN',
+          },
+          body: JSON.stringify({ target: 'all' }),
+        }),
+      );
+      expect(tenantAdmin.status).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('allows SUPER_ADMIN on /api/admin/health while keeping alert webhook URL completely redacted', async () => {
+    const res = await adminHealthGET(
+      new NextRequest('https://fleet360.example.com/api/admin/health', {
+        headers: {
+          'x-tenant-id': 'platform-tenant-1',
+          'x-user-id': 'sa-1',
+          'x-user-role': 'SUPER_ADMIN',
+        },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = await res.json();
+    const rawJson = JSON.stringify(body);
+
+    expect(body.alerting?.webhookConfigured).toBe(true);
+    expect(body.alerting?.webhookUrl).toBe('');
+    expect(rawJson).not.toContain('SUPER_SECRET_TOKEN_XYZ');
+    expect(rawJson).not.toContain('hooks.slack.com');
   });
 });
 
@@ -555,9 +651,11 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
     expect(await verifySession(token)).not.toBeNull();
   });
 
-  it('fails honestly (503, ok:false, revoked:false) and logs error when Redis revocation fails, while still clearing cookies', async () => {
+  it('fails honestly (503, ok:false, revoked:false) on logout during Redis outage while protected production requests fail closed', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
     const token = await mintTokenWithMod4(0);
     mockRedis.set.mockRejectedValueOnce(new Error('Upstash ECONNREFUSED'));
+    mockRedis.get.mockRejectedValueOnce(new Error('Upstash ECONNREFUSED'));
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -577,6 +675,9 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
       expect(body.cookiesCleared).toBe(true);
       expect(errSpy).toHaveBeenCalled();
       expect(res.headers.get('set-cookie')).toContain('xl-session=;');
+
+      // While Redis remains unavailable in production, verifySession fails closed (null)
+      expect(await verifySession(token)).toBeNull();
     } finally {
       errSpy.mockRestore();
     }

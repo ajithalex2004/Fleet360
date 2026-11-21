@@ -545,6 +545,7 @@ export function SystemHealthDashboardView({
     emailEnabled: true,
     cooldownMinutes: 15,
   });
+  const [clearWebhookUrl, setClearWebhookUrl] = useState(false);
   const [savingAlertConfig, setSavingAlertConfig] = useState(false);
   const [testingAlert, setTestingAlert] = useState(false);
   const [alertTestFeedback, setAlertTestFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -762,14 +763,32 @@ export function SystemHealthDashboardView({
       setAlertConfigForm({
         enabled: data.alerting.enabled,
         minSeverity: data.alerting.minSeverity,
-        webhookUrl: data.alerting.webhookUrl || '',
+        webhookUrl: '',
         webhookEnabled: data.alerting.webhookEnabled,
         email: data.alerting.email || '',
         emailEnabled: data.alerting.emailEnabled,
         cooldownMinutes: data.alerting.cooldownMinutes,
       });
+      setClearWebhookUrl(false);
     }
   }, [data?.alerting]);
+
+  const buildAlertConfigPayload = () => {
+    const trimmedWebhook = alertConfigForm.webhookUrl.trim();
+    return {
+      enabled: alertConfigForm.enabled,
+      minSeverity: alertConfigForm.minSeverity,
+      webhookEnabled: clearWebhookUrl ? false : alertConfigForm.webhookEnabled,
+      email: alertConfigForm.email,
+      emailEnabled: alertConfigForm.emailEnabled,
+      cooldownMinutes: alertConfigForm.cooldownMinutes,
+      ...(clearWebhookUrl
+        ? { clearWebhookUrl: true }
+        : trimmedWebhook
+        ? { webhookUrl: trimmedWebhook }
+        : {}),
+    };
+  };
 
   const saveAlertSettings = async () => {
     setSavingAlertConfig(true);
@@ -778,10 +797,11 @@ export function SystemHealthDashboardView({
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', config: alertConfigForm }),
+        body: JSON.stringify({ action: 'save', config: buildAlertConfigPayload() }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to save settings');
+      setClearWebhookUrl(false);
       setAlertSaveFeedback('Settings saved successfully!');
       fetchHealth();
       setTimeout(() => setAlertSaveFeedback(null), 3500);
@@ -799,7 +819,7 @@ export function SystemHealthDashboardView({
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test', config: alertConfigForm }),
+        body: JSON.stringify({ action: 'test', config: buildAlertConfigPayload() }),
       });
       const resData = await res.json();
       setAlertTestFeedback({
@@ -1350,12 +1370,46 @@ export function SystemHealthDashboardView({
                     className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
                   />
                 </div>
+                {data?.alerting?.webhookConfigured && (
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-emerald-400 font-medium">
+                      {clearWebhookUrl
+                        ? 'Stored webhook will be removed on save'
+                        : 'Stored webhook configured (redacted) — leave blank to preserve'}
+                    </span>
+                    <label className="inline-flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={clearWebhookUrl}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setClearWebhookUrl(next);
+                          if (next) {
+                            setAlertConfigForm((p) => ({ ...p, webhookUrl: '', webhookEnabled: false }));
+                          }
+                        }}
+                        className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                      <span>Remove stored webhook URL</span>
+                    </label>
+                  </div>
+                )}
                 <input
                   type="url"
                   value={alertConfigForm.webhookUrl}
-                  onChange={(e) => setAlertConfigForm((p) => ({ ...p, webhookUrl: e.target.value }))}
-                  placeholder="https://hooks.slack.com/services/... or Discord Webhook"
-                  className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-rose-500/50"
+                  disabled={clearWebhookUrl}
+                  onChange={(e) => {
+                    setClearWebhookUrl(false);
+                    setAlertConfigForm((p) => ({ ...p, webhookUrl: e.target.value }));
+                  }}
+                  placeholder={
+                    clearWebhookUrl
+                      ? 'Stored webhook URL will be removed on save'
+                      : data?.alerting?.webhookConfigured
+                      ? 'Configured (redacted) — paste a new URL to replace'
+                      : 'https://hooks.slack.com/services/... or Discord Webhook'
+                  }
+                  className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-rose-500/50 disabled:opacity-50"
                 />
                 <div className="text-[10px] text-[var(--text-faint)]">
                   Formats rich colored messages with affected components, latency, and direct link.
@@ -1427,7 +1481,12 @@ export function SystemHealthDashboardView({
               <button
                 type="button"
                 onClick={runTestAlertProbe}
-                disabled={testingAlert || (!alertConfigForm.webhookUrl && !alertConfigForm.email)}
+                disabled={
+                  testingAlert ||
+                  (!alertConfigForm.webhookUrl.trim() &&
+                    !(data?.alerting?.webhookConfigured && !clearWebhookUrl) &&
+                    !alertConfigForm.email.trim())
+                }
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 transition-colors"
               >
                 {testingAlert ? (

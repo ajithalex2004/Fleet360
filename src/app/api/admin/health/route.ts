@@ -19,6 +19,7 @@ import {
 import {
   getHealthAlertConfig,
   evaluateAndTriggerHealthAlerts,
+  sanitizeHealthAlertConfigForResponse,
 } from '@/lib/health/alerting';
 
 const RELEASE =
@@ -283,23 +284,7 @@ export async function GET(req: NextRequest) {
       security,
       aiSpending,
       googleApisSpending,
-      alerting: alertConfig
-        ? {
-            enabled: alertConfig.enabled,
-            minSeverity: alertConfig.minSeverity,
-            webhookConfigured: !!alertConfig.webhookUrl,
-            webhookEnabled: alertConfig.webhookEnabled,
-            emailConfigured: !!alertConfig.email,
-            emailEnabled: alertConfig.emailEnabled,
-            // Never return webhook URL characters (may contain secret tokens)
-            webhookUrl: '',
-            email: alertConfig.email || '',
-            cooldownMinutes: alertConfig.cooldownMinutes,
-            lastStatus: alertConfig.lastStatus,
-            lastSentAt: alertConfig.lastSentAt,
-            lastSummary: alertConfig.lastSummary,
-          }
-        : null,
+      alerting: alertConfig ? sanitizeHealthAlertConfigForResponse(alertConfig) : null,
       system: systemInfo,
     },
     {
