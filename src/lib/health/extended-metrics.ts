@@ -15,11 +15,8 @@ export interface DbPoolMetrics {
   rollbacks: number;
   rollbackRatePercent: number;
   longRunningQueries: Array<{
-    pid: number;
-    username: string;
     state: string;
     durationSeconds: number;
-    queryPreview: string;
   }>;
   warningReason?: string;
 }
@@ -133,18 +130,12 @@ export async function getDbPoolMetrics(): Promise<DbPoolMetrics> {
     }
 
     const longQueryRows = await prisma.$queryRawUnsafe<Array<{
-      pid: number;
-      usename: string;
       state: string;
       duration_seconds: number;
-      query: string;
     }>>(`
       SELECT 
-        pid, 
-        COALESCE(usename, 'unknown') as usename, 
         COALESCE(state, 'unknown') as state, 
-        round(extract(epoch from (now() - query_start))::numeric, 2)::float as duration_seconds, 
-        LEFT(query, 200) as query
+        round(extract(epoch from (now() - query_start))::numeric, 2)::float as duration_seconds
       FROM pg_stat_activity 
       WHERE datname = current_database() 
         AND pid != pg_backend_pid() 
@@ -157,11 +148,8 @@ export async function getDbPoolMetrics(): Promise<DbPoolMetrics> {
     if (Array.isArray(longQueryRows)) {
       for (const row of longQueryRows) {
         longRunningQueries.push({
-          pid: row.pid,
-          username: row.usename,
           state: row.state,
           durationSeconds: row.duration_seconds,
-          queryPreview: row.query,
         });
       }
     }
@@ -788,7 +776,8 @@ export interface GoogleMapsAndApisSpendingMetrics {
 export async function getGoogleMapsAndApisSpendingMetrics(): Promise<GoogleMapsAndApisSpendingMetrics> {
   const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   const apiKeyConfigured = Boolean(rawKey);
-  const apiKeyMasked = rawKey && rawKey.length > 8 ? `${rawKey.slice(0, 6)}...${rawKey.slice(-4)}` : null;
+  // Never expose partial characters of API keys in health payloads.
+  const apiKeyMasked: string | null = null;
 
   await ensureAgentSchema().catch(() => {});
 

@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     await withPlatformAdmin(prisma, (tx) => tx.$queryRaw`SELECT 1`);
   } catch (err) {
     dbStatus = 'error';
-    dbError = err instanceof Error ? err.message : String(err);
+    dbError = 'Database connectivity check failed';
     console.error('[api/admin/health] database check failed:', err);
   }
   const dbLatencyMs = Date.now() - dbStart;
@@ -291,7 +291,8 @@ export async function GET(req: NextRequest) {
             webhookEnabled: alertConfig.webhookEnabled,
             emailConfigured: !!alertConfig.email,
             emailEnabled: alertConfig.emailEnabled,
-            webhookUrl: alertConfig.webhookUrl ? `${alertConfig.webhookUrl.slice(0, 28)}...` : '',
+            // Never return webhook URL characters (may contain secret tokens)
+            webhookUrl: '',
             email: alertConfig.email || '',
             cooldownMinutes: alertConfig.cooldownMinutes,
             lastStatus: alertConfig.lastStatus,

@@ -26,13 +26,15 @@ function isSessionDbUnavailable(err: unknown): boolean {
   const message = String(error.message ?? '');
   return (
     name.includes('DbConnectionError') ||
-    ['P1000', 'P1001', 'P1002', 'P1017'].includes(code) ||
+    ['P1000', 'P1001', 'P1002', 'P1017', '57P01', 'E57P01', '57P02', 'E57P02', '57P03', 'E57P03'].includes(code) ||
     message.includes('Database connection unavailable') ||
     message.includes("Can't reach database server") ||
     message.includes('Server has closed the connection') ||
     message.includes('Connection terminated') ||
+    message.includes('terminating connection due to administrator command') ||
+    /SqlState\(E?57P0[123]\)/.test(message) ||
     message.includes('connection timed out') ||
-    isSessionDbUnavailable(error.cause)
+    (error.cause !== undefined && error.cause !== err && isSessionDbUnavailable(error.cause))
   );
 }
 

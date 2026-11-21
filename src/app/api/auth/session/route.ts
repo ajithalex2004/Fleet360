@@ -20,6 +20,7 @@ import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { signSession, verifySession } from '@/lib/tenant-session';
+import { performSessionLogout } from '@/lib/auth/logout-revocation';
 import { tenantModulesFor } from '@/lib/module-policies';
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 
@@ -191,10 +192,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ── DELETE — Destroy session ──────────────────────────────────────────────────
+// ── DELETE — Destroy & revoke session (unified with POST /api/auth/logout) ────
 
-export async function DELETE(_request: NextRequest) {
-  const response = NextResponse.json({ ok: true }, { status: 200 });
-  response.cookies.set(COOKIE_NAME, '', sessionCookieOptions(0));
-  return response;
+export async function DELETE(request: NextRequest) {
+  return performSessionLogout(request);
 }

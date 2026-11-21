@@ -164,6 +164,9 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  if (authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Only a platform admin can run health connectivity pings.' }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const target = (body.target as string) || 'all';
