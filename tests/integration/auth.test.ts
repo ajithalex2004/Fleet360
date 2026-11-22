@@ -279,23 +279,23 @@ describe('POST /api/auth/logout', () => {
   it('returns 200 and clears the xl-session cookie', async () => {
     if (!serverAvailable) return;
 
-    const res = await makeRequest('POST', '/api/auth/logout', undefined, seed.headers);
+    const baseOrigin = new URL(process.env.TEST_BASE_URL ?? 'http://localhost:3000').origin;
+    const res = await makeRequest('POST', '/api/auth/logout', undefined, {
+      ...seed.headers,
+      Origin: baseOrigin,
+    });
 
     expect(res.status).toBe(200);
 
-    // The Set-Cookie header should clear the cookie (maxAge=0 or expires=past)
     const setCookie = res.headers.get('set-cookie') ?? '';
-    // Either the cookie is set to empty, or max-age=0, or expires in the past
-    const cookieCleared =
+    expect(
+      setCookie === '' ||
       setCookie.includes('xl-session=;') ||
-      setCookie.includes('xl-session=') && (
-        setCookie.includes('Max-Age=0') ||
-        setCookie.includes('max-age=0') ||
-        setCookie.includes('Expires=') // some frameworks set a past date
-      );
-
-    // If the endpoint doesn't return a Set-Cookie (valid too — just returns 200)
-    // we accept either behaviour
+      (setCookie.includes('xl-session=') &&
+        (setCookie.includes('Max-Age=0') ||
+          setCookie.includes('max-age=0') ||
+          setCookie.includes('Expires='))),
+    ).toBe(true);
     const body = await res.json();
     expect(body.ok ?? true).toBeTruthy();
   });

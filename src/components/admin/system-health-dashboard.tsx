@@ -36,15 +36,6 @@ import { PlatformInfoTab } from '@/components/admin/health-tabs/platform-info-ta
 import { SchemaStatusTab } from '@/components/admin/health-tabs/schema-status-tab';
 import { JobRunsTab } from '@/components/admin/health-tabs/job-runs-tab';
 
-/** The jobs summary the public /api/health payload carries (fields read for the fallback view). */
-type PublicJobsSummary = {
-  scheduler?: 'degraded' | 'disabled' | 'active' | 'inactive';
-  isTicking?: boolean;
-  failures24h?: number;
-  outboxLagMs?: number | null;
-  pendingOutbox?: number;
-};
-
 export interface HealthData {
   status: 'ok' | 'degraded' | 'unhealthy';
   responseTimeMs: number;
@@ -183,11 +174,8 @@ export interface HealthData {
     rollbacks: number;
     rollbackRatePercent: number;
     longRunningQueries: Array<{
-      pid: number;
-      username: string;
       state: string;
       durationSeconds: number;
-      queryPreview: string;
     }>;
     warningReason?: string;
   };
@@ -557,6 +545,7 @@ export function SystemHealthDashboardView({
     emailEnabled: true,
     cooldownMinutes: 15,
   });
+  const [clearWebhookUrl, setClearWebhookUrl] = useState(false);
   const [savingAlertConfig, setSavingAlertConfig] = useState(false);
   const [testingAlert, setTestingAlert] = useState(false);
   const [alertTestFeedback, setAlertTestFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -728,104 +717,12 @@ export function SystemHealthDashboardView({
             uptimeSeconds: 0,
             memory: { heapUsedMb: 0, heapTotalMb: 0, rssMb: 0 },
           },
-          jobsAndOutbox: pubPayload.jobs
-            ? {
-                scheduler: {
-                  status: (pubPayload.jobs as PublicJobsSummary).scheduler ?? 'active',
-                  isTicking: (pubPayload.jobs as PublicJobsSummary).isTicking ?? true,
-                  started: true,
-                  disabled: false,
-                  startedAt: null,
-                  lastTickAt: null,
-                  secondsSinceLastTick: null,
-                  totalConfiguredJobs: 20,
-                  timezone: 'Asia/Dubai',
-                  lastDbRunAt: null,
-                  lastDbJobName: null,
-                  lastDbStatus: null,
-                  jobSchedules: [],
-                },
-                jobRuns24h: {
-                  status: ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0 ? 'warning' : 'healthy',
-                  total24h: 0,
-                  succeeded24h: 0,
-                  failed24h: (pubPayload.jobs as PublicJobsSummary).failures24h ?? 0,
-                  runningNow: 0,
-                  failureRatePercent: 0,
-                  message:
-                    ((pubPayload.jobs as PublicJobsSummary).failures24h ?? 0) > 0
-                      ? `${(pubPayload.jobs as PublicJobsSummary).failures24h} failure(s) in last 24h`
-                      : 'All background jobs running smoothly',
-                  lastRun: null,
-                  recentFailures: [],
-                },
-                outbox: {
-                  status:
-                    (((pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? 0) >= 60000)
-                      ? 'degraded'
-                      : 'healthy',
-                  pendingCount: (pubPayload.jobs as PublicJobsSummary).pendingOutbox ?? 0,
-                  stuckCount: 0,
-                  parkedCount: 0,
-                  published24h: 0,
-                  totalEvents: 0,
-                  lagMs: (pubPayload.jobs as PublicJobsSummary).outboxLagMs ?? null,
-                  oldestPendingAt: null,
-                  message: 'Transactional outbox synchronized with background publisher',
-                  pendingByType: [],
-                },
-              }
-            : undefined,
-          dbPool: (pubPayload.dbPool as HealthData['dbPool'] | undefined) ?? {
-            status: 'healthy',
-            active: 1,
-            idle: 25,
-            idleInTransaction: 0,
-            waiting: 0,
-            total: 26,
-            maxConnections: 901,
-            poolUtilizationPercent: 3,
-            commits: 1876718,
-            rollbacks: 2844,
-            rollbackRatePercent: 0.15,
-            longRunningQueries: [],
-          },
-          enterpriseBridge: (pubPayload.enterpriseBridge as HealthData['enterpriseBridge'] | undefined) ?? {
-            status: 'not_configured',
-            totalConnectors: 0,
-            healthyCount: 0,
-            warningCount: 0,
-            errorCount: 0,
-            untestedCount: 0,
-            activeCount: 0,
-            lastSyncAt: null,
-            recentErrorsCount24h: 0,
-            recentLogs: [],
-          },
-          security: (pubPayload.security as HealthData['security'] | undefined) ?? {
-            status: 'healthy',
-            activeSessions: {
-              activeUsers24h: 1,
-              activeUsers1h: 1,
-              redisConfigured: false,
-            },
-            bruteForce: {
-              status: 'normal',
-              failedLogins1h: 0,
-              uniqueIps1h: 0,
-              targetedAccounts1h: 0,
-            },
-            mfa: {
-              allStaffEnrolledPercent: 0,
-              adminEnrolledPercent: 0,
-              totalStaff: 1,
-              mfaStaffCount: 0,
-              totalAdmins: 1,
-              mfaAdminCount: 0,
-            },
-          },
-          aiSpending: (pubPayload.aiSpending as HealthData['aiSpending'] | undefined) ?? undefined,
-          googleApisSpending: (pubPayload.googleApisSpending as HealthData['googleApisSpending'] | undefined) ?? undefined,
+          jobsAndOutbox: undefined,
+          dbPool: undefined,
+          enterpriseBridge: undefined,
+          security: undefined,
+          aiSpending: undefined,
+          googleApisSpending: undefined,
         };
 
         setData(synthData);
@@ -866,14 +763,32 @@ export function SystemHealthDashboardView({
       setAlertConfigForm({
         enabled: data.alerting.enabled,
         minSeverity: data.alerting.minSeverity,
-        webhookUrl: data.alerting.webhookUrl || '',
+        webhookUrl: '',
         webhookEnabled: data.alerting.webhookEnabled,
         email: data.alerting.email || '',
         emailEnabled: data.alerting.emailEnabled,
         cooldownMinutes: data.alerting.cooldownMinutes,
       });
+      setClearWebhookUrl(false);
     }
   }, [data?.alerting]);
+
+  const buildAlertConfigPayload = () => {
+    const trimmedWebhook = alertConfigForm.webhookUrl.trim();
+    return {
+      enabled: alertConfigForm.enabled,
+      minSeverity: alertConfigForm.minSeverity,
+      webhookEnabled: clearWebhookUrl ? false : alertConfigForm.webhookEnabled,
+      email: alertConfigForm.email,
+      emailEnabled: alertConfigForm.emailEnabled,
+      cooldownMinutes: alertConfigForm.cooldownMinutes,
+      ...(clearWebhookUrl
+        ? { clearWebhookUrl: true }
+        : trimmedWebhook
+        ? { webhookUrl: trimmedWebhook }
+        : {}),
+    };
+  };
 
   const saveAlertSettings = async () => {
     setSavingAlertConfig(true);
@@ -882,10 +797,11 @@ export function SystemHealthDashboardView({
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', config: alertConfigForm }),
+        body: JSON.stringify({ action: 'save', config: buildAlertConfigPayload() }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to save settings');
+      setClearWebhookUrl(false);
       setAlertSaveFeedback('Settings saved successfully!');
       fetchHealth();
       setTimeout(() => setAlertSaveFeedback(null), 3500);
@@ -903,7 +819,7 @@ export function SystemHealthDashboardView({
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test', config: alertConfigForm }),
+        body: JSON.stringify({ action: 'test', config: buildAlertConfigPayload() }),
       });
       const resData = await res.json();
       setAlertTestFeedback({
@@ -1454,12 +1370,46 @@ export function SystemHealthDashboardView({
                     className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
                   />
                 </div>
+                {data?.alerting?.webhookConfigured && (
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-emerald-400 font-medium">
+                      {clearWebhookUrl
+                        ? 'Stored webhook will be removed on save'
+                        : 'Stored webhook configured (redacted) — leave blank to preserve'}
+                    </span>
+                    <label className="inline-flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={clearWebhookUrl}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setClearWebhookUrl(next);
+                          if (next) {
+                            setAlertConfigForm((p) => ({ ...p, webhookUrl: '', webhookEnabled: false }));
+                          }
+                        }}
+                        className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                      <span>Remove stored webhook URL</span>
+                    </label>
+                  </div>
+                )}
                 <input
                   type="url"
                   value={alertConfigForm.webhookUrl}
-                  onChange={(e) => setAlertConfigForm((p) => ({ ...p, webhookUrl: e.target.value }))}
-                  placeholder="https://hooks.slack.com/services/... or Discord Webhook"
-                  className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-rose-500/50"
+                  disabled={clearWebhookUrl}
+                  onChange={(e) => {
+                    setClearWebhookUrl(false);
+                    setAlertConfigForm((p) => ({ ...p, webhookUrl: e.target.value }));
+                  }}
+                  placeholder={
+                    clearWebhookUrl
+                      ? 'Stored webhook URL will be removed on save'
+                      : data?.alerting?.webhookConfigured
+                      ? 'Configured (redacted) — paste a new URL to replace'
+                      : 'https://hooks.slack.com/services/... or Discord Webhook'
+                  }
+                  className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-xs rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-rose-500/50 disabled:opacity-50"
                 />
                 <div className="text-[10px] text-[var(--text-faint)]">
                   Formats rich colored messages with affected components, latency, and direct link.
@@ -1531,7 +1481,12 @@ export function SystemHealthDashboardView({
               <button
                 type="button"
                 onClick={runTestAlertProbe}
-                disabled={testingAlert || (!alertConfigForm.webhookUrl && !alertConfigForm.email)}
+                disabled={
+                  testingAlert ||
+                  (!alertConfigForm.webhookUrl.trim() &&
+                    !(data?.alerting?.webhookConfigured && !clearWebhookUrl) &&
+                    !alertConfigForm.email.trim())
+                }
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 transition-colors"
               >
                 {testingAlert ? (
@@ -2752,14 +2707,11 @@ export function SystemHealthDashboardView({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {data.dbPool.longRunningQueries.slice(0, 2).map((q) => (
-                      <div key={q.pid} className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-xs space-y-1">
+                    {data.dbPool.longRunningQueries.slice(0, 2).map((q, idx) => (
+                      <div key={idx} className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-xs space-y-1">
                         <div className="flex justify-between items-center text-[11px] font-mono">
-                          <span className="text-rose-300">PID {q.pid} ({q.username})</span>
+                          <span className="text-rose-300">Slow query #{idx + 1} ({q.state})</span>
                           <span className="font-bold text-rose-400">{q.durationSeconds}s</span>
-                        </div>
-                        <div className="text-[10px] font-mono text-[var(--text-muted)] truncate" title={q.queryPreview}>
-                          {q.queryPreview}
                         </div>
                       </div>
                     ))}
@@ -2787,15 +2739,12 @@ export function SystemHealthDashboardView({
                 Active Queries Exceeding 5.0 Seconds
               </div>
               <div className="space-y-2">
-                {data.dbPool.longRunningQueries.map((q) => (
-                  <div key={q.pid} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-1.5 text-xs">
+                {data.dbPool.longRunningQueries.map((q, idx) => (
+                  <div key={idx} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-1.5 text-xs">
                     <div className="flex items-center justify-between font-mono text-[11px]">
-                      <span className="text-[var(--text-main)] font-semibold">PID: {q.pid} · User: {q.username} · State: {q.state}</span>
+                      <span className="text-[var(--text-main)] font-semibold">Slow query #{idx + 1} · State: {q.state}</span>
                       <span className="text-rose-400 font-bold">{q.durationSeconds} seconds</span>
                     </div>
-                    <pre className="p-2 rounded bg-[var(--bg-surface-hover)] font-mono text-[11px] text-[var(--text-main)] overflow-x-auto whitespace-pre-wrap">
-                      {q.queryPreview}
-                    </pre>
                   </div>
                 ))}
               </div>
@@ -3403,7 +3352,7 @@ export function SystemHealthDashboardView({
             <div className="flex items-center gap-2 text-xs">
               <span className="text-[var(--text-muted)]">Key:</span>
               <span className="font-mono px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)]">
-                {data.googleApisSpending.apiKeyMasked ?? 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'}
+                {data.googleApisSpending.apiKeyConfigured ? 'Configured (redacted)' : 'Not configured'}
               </span>
             </div>
           </div>
@@ -3556,7 +3505,7 @@ export function SystemHealthDashboardView({
       )}
 
       {/* External Services & Integrations Grid with Active Live Ping Probes */}
-      {data && (
+      {data && !isPublic && (
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3 flex-wrap gap-3">
             <div>
@@ -3665,7 +3614,7 @@ export function SystemHealthDashboardView({
       )}
 
       {/* System Environment & Runtime Info */}
-      {data && (
+      {data && !isPublic && (
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
           <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3">
             <Cpu className="w-4 h-4 text-blue-400" />

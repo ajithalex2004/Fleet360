@@ -15,6 +15,103 @@ export interface HealthAlertConfig {
   lastSummary: string | null;
 }
 
+export type HealthAlertConfigUpdate = Partial<HealthAlertConfig> & {
+  /** Must be explicitly true to remove an existing stored webhook URL. */
+  clearWebhookUrl?: boolean;
+};
+
+export interface RedactedHealthAlertConfig {
+  enabled: boolean;
+  minSeverity: 'degraded' | 'unhealthy';
+  webhookConfigured: boolean;
+  webhookEnabled: boolean;
+  emailConfigured: boolean;
+  emailEnabled: boolean;
+  /** Always empty in API responses — webhook URLs often contain bearer/path secrets. */
+  webhookUrl: '';
+  email: string;
+  cooldownMinutes: number;
+  lastStatus: 'ok' | 'degraded' | 'unhealthy' | null;
+  lastSentAt: string | null;
+  lastSummary: string | null;
+}
+
+/**
+ * Canonical API response serializer for health alert configuration.
+ * Never returns any characters of the stored webhook URL.
+ */
+export function sanitizeHealthAlertConfigForResponse(
+  config: HealthAlertConfig,
+): RedactedHealthAlertConfig {
+  return {
+    enabled: config.enabled,
+    minSeverity: config.minSeverity,
+    webhookConfigured: Boolean(config.webhookUrl),
+    webhookEnabled: config.webhookEnabled,
+    emailConfigured: Boolean(config.email),
+    emailEnabled: config.emailEnabled,
+    webhookUrl: '',
+    email: config.email || '',
+    cooldownMinutes: config.cooldownMinutes,
+    lastStatus: config.lastStatus,
+    lastSentAt: config.lastSentAt,
+    lastSummary: config.lastSummary,
+  };
+}
+
+/**
+ * Resolves the effective webhook URL for a save or test-alert request:
+ *  - `clearWebhookUrl === true` explicitly clears the webhook URL to `''`.
+ *  - A non-empty string `webhookUrl` replaces/overrides the stored webhook URL.
+ *  - Omitted or blank `webhookUrl` preserves `currentWebhookUrl`.
+ */
+export function resolveWebhookUrlUpdate(
+  currentWebhookUrl: string,
+  updates?: HealthAlertConfigUpdate,
+): string {
+  if (updates?.clearWebhookUrl === true) {
+    return '';
+  }
+  if (typeof updates?.webhookUrl === 'string') {
+    const trimmed = updates.webhookUrl.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return currentWebhookUrl;
+}
+
+/**
+ * Strips any raw webhook URL (and generic HTTP/HTTPS URLs containing paths/tokens)
+ * from log messages or error text so secrets are never leaked to logs or responses.
+ */
+export function redactWebhookSecrets(text: string, secretUrl?: string): string {
+  let safe = text;
+  if (secretUrl && secretUrl.trim()) {
+    const trimmed = secretUrl.trim();
+    safe = safe.split(trimmed).join('[REDACTED_WEBHOOK_URL]');
+    const encoded = encodeURIComponent(trimmed);
+    if (encoded !== trimmed) {
+      safe = safe.split(encoded).join('[REDACTED_WEBHOOK_URL]');
+    }
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.password) {
+        safe = safe.split(parsed.password).join('[REDACTED_SECRET]');
+      }
+      if (parsed.pathname && parsed.pathname.length > 1) {
+        safe = safe.split(parsed.pathname).join('/[REDACTED_PATH]');
+      }
+      if (parsed.search && parsed.search.length > 1) {
+        safe = safe.split(parsed.search).join('?[REDACTED_QUERY]');
+      }
+    } catch {
+      // Ignore malformed URLs — exact-string + generic regex redaction below still apply.
+    }
+  }
+  return safe.replace(/https?:\/\/[^\s"'<>)]+/gi, '[REDACTED_URL]');
+}
+
 export interface HealthStatusSnapshot {
   status: 'ok' | 'degraded' | 'unhealthy';
   responseTimeMs: number;
@@ -82,21 +179,54 @@ export async function getHealthAlertConfig(): Promise<HealthAlertConfig> {
       memoryAlertConfig = config;
       return config;
     } catch (err) {
-      console.warn('[getHealthAlertConfig] Failed to read platform_settings, using fallback config:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[getHealthAlertConfig] Failed to read platform_settings, using fallback config:', redactWebhookSecrets(msg));
       return memoryAlertConfig;
     }
   });
 }
 
 /**
- * Save health alert configuration to platform_settings
+ * Reset in-memory alert config cache (for isolated unit tests).
  */
-export async function saveHealthAlertConfig(updates: Partial<HealthAlertConfig>): Promise<HealthAlertConfig> {
+export function resetHealthAlertMemoryCacheForTests(): void {
+  memoryAlertConfig = {
+    enabled: true,
+    minSeverity: 'degraded',
+    webhookUrl: process.env.HEALTH_ALERT_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL || '',
+    webhookEnabled: !!(process.env.HEALTH_ALERT_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL),
+    email: process.env.HEALTH_ALERT_EMAIL || process.env.ADMIN_ALERT_EMAIL || process.env.OPS_ALERT_EMAIL || '',
+    emailEnabled: !!(process.env.HEALTH_ALERT_EMAIL || process.env.ADMIN_ALERT_EMAIL || process.env.OPS_ALERT_EMAIL),
+    cooldownMinutes: 15,
+    lastStatus: null,
+    lastSentAt: null,
+    lastSummary: null,
+  };
+}
+
+/**
+ * Save health alert configuration to platform_settings.
+ *
+ * Preserves the stored webhookUrl whenever `updates.webhookUrl` is omitted or
+ * blank; removing the webhook requires explicit `updates.clearWebhookUrl === true`.
+ */
+export async function saveHealthAlertConfig(updates: HealthAlertConfigUpdate): Promise<HealthAlertConfig> {
   return runOutsideRlsScope(async () => {
     const current = await getHealthAlertConfig();
+    const { clearWebhookUrl, ...otherUpdates } = updates;
+    const nextWebhookUrl = resolveWebhookUrlUpdate(current.webhookUrl, updates);
+    const nextWebhookEnabled =
+      clearWebhookUrl === true
+        ? false
+        : typeof otherUpdates.webhookEnabled === 'boolean'
+        ? otherUpdates.webhookEnabled
+        : current.webhookEnabled;
+
     const merged: HealthAlertConfig = {
       ...current,
-      ...updates,
+      ...otherUpdates,
+      webhookUrl: nextWebhookUrl,
+      webhookEnabled: nextWebhookEnabled,
     };
 
     const pairs: Array<[string, string]> = [
@@ -130,7 +260,11 @@ export async function saveHealthAlertConfig(updates: Partial<HealthAlertConfig>)
         `, key, val);
       }
     } catch (err) {
-      console.error('[saveHealthAlertConfig] Error writing to platform_settings:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        '[saveHealthAlertConfig] Error writing to platform_settings:',
+        redactWebhookSecrets(msg, merged.webhookUrl),
+      );
     }
 
     memoryAlertConfig = merged;
@@ -180,13 +314,14 @@ export async function dispatchWebhookAlert(
   snapshot: HealthStatusSnapshot,
   isTest = false
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!webhookUrl || !webhookUrl.trim().startsWith('http')) {
+  if (!webhookUrl || !/^https?:\/\//i.test(webhookUrl.trim())) {
     return { ok: false, error: 'Invalid or missing Webhook URL' };
   }
 
   const url = webhookUrl.trim();
-  const isSlack = url.includes('slack.com');
-  const isDiscord = url.includes('discord.com') || url.includes('discordapp.com');
+  const lowerUrl = url.toLowerCase();
+  const isSlack = lowerUrl.includes('slack.com');
+  const isDiscord = lowerUrl.includes('discord.com') || lowerUrl.includes('discordapp.com');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://fleet360.ae';
   const dashboardUrl = `${appUrl}/admin/health`;
 
@@ -281,18 +416,24 @@ export async function dispatchWebhookAlert(
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
+      // Discard upstream error body: webhook endpoints may echo the target URL or tokens.
+      await res.text().catch(() => '');
       return {
         ok: false,
-        error: `Webhook returned HTTP ${res.status}: ${errText.slice(0, 180)}`,
+        error: `Webhook returned HTTP ${res.status}`,
       };
     }
 
     return { ok: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[dispatchWebhookAlert] Webhook delivery failed:', msg);
-    return { ok: false, error: msg };
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const errName = err instanceof Error ? err.name : '';
+    console.error('[dispatchWebhookAlert] Webhook delivery failed:', redactWebhookSecrets(rawMsg, url));
+    const isTimeout = errName === 'TimeoutError' || errName === 'AbortError' || /timeout|aborted/i.test(rawMsg);
+    return {
+      ok: false,
+      error: isTimeout ? 'Webhook delivery timed out' : 'Webhook delivery failed',
+    };
   }
 }
 
@@ -598,19 +739,22 @@ export async function evaluateAndTriggerHealthAlerts(
       emailResult,
     };
   } catch (err) {
-    console.error('[evaluateAndTriggerHealthAlerts] Error in alert evaluation:', err);
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    console.error('[evaluateAndTriggerHealthAlerts] Error in alert evaluation:', redactWebhookSecrets(rawMsg));
     return {
       triggered: false,
-      reason: err instanceof Error ? err.message : String(err),
+      reason: 'Alert evaluation failed',
     };
   }
 }
 
 /**
- * One-click synthetic test alert for testing webhook and email delivery
+ * One-click synthetic test alert for testing webhook and email delivery.
+ * Preserves the stored webhook URL unless a replacement URL or explicit
+ * `clearWebhookUrl: true` is supplied.
  */
 export async function sendTestHealthAlert(
-  customConfig?: Partial<HealthAlertConfig>
+  customConfig?: HealthAlertConfigUpdate
 ): Promise<{
   success: boolean;
   webhook: { attempted: boolean; success: boolean; error?: string };
@@ -618,7 +762,19 @@ export async function sendTestHealthAlert(
   message: string;
 }> {
   const baseConfig = await getHealthAlertConfig();
-  const config = { ...baseConfig, ...customConfig };
+  const { clearWebhookUrl, ...restCustom } = customConfig ?? {};
+  const resolvedWebhookUrl = resolveWebhookUrlUpdate(baseConfig.webhookUrl, customConfig);
+  const config: HealthAlertConfig = {
+    ...baseConfig,
+    ...restCustom,
+    webhookUrl: resolvedWebhookUrl,
+    webhookEnabled:
+      clearWebhookUrl === true
+        ? false
+        : typeof restCustom.webhookEnabled === 'boolean'
+        ? restCustom.webhookEnabled
+        : baseConfig.webhookEnabled,
+  };
 
   const testSnapshot: HealthStatusSnapshot = {
     status: 'degraded',

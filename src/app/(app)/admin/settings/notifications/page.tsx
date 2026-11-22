@@ -672,6 +672,7 @@ function WhatsAppCard() {
 interface HealthAlertState {
   enabled: boolean;
   minSeverity: 'degraded' | 'unhealthy';
+  webhookConfigured?: boolean;
   webhookUrl: string;
   webhookEnabled: boolean;
   email: string;
@@ -686,12 +687,14 @@ function HealthAlertCard() {
   const [config, setConfig] = useState<HealthAlertState>({
     enabled: true,
     minSeverity: 'degraded',
+    webhookConfigured: false,
     webhookUrl: '',
     webhookEnabled: true,
     email: '',
     emailEnabled: true,
     cooldownMinutes: 15,
   });
+  const [clearWebhookUrl, setClearWebhookUrl] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -702,11 +705,33 @@ function HealthAlertCard() {
       .then((r) => r.json())
       .then((data) => {
         if (data.config) {
-          setConfig(data.config);
+          setConfig({
+            ...data.config,
+            webhookConfigured: Boolean(data.config.webhookConfigured),
+            webhookUrl: '',
+          });
+          setClearWebhookUrl(false);
         }
       })
       .catch(() => {});
   }, []);
+
+  const buildPayload = () => {
+    const trimmedWebhook = config.webhookUrl.trim();
+    return {
+      enabled: config.enabled,
+      minSeverity: config.minSeverity,
+      webhookEnabled: clearWebhookUrl ? false : config.webhookEnabled,
+      email: config.email,
+      emailEnabled: config.emailEnabled,
+      cooldownMinutes: config.cooldownMinutes,
+      ...(clearWebhookUrl
+        ? { clearWebhookUrl: true }
+        : trimmedWebhook
+        ? { webhookUrl: trimmedWebhook }
+        : {}),
+    };
+  };
 
   const save = async () => {
     setSaving(true);
@@ -715,10 +740,19 @@ function HealthAlertCard() {
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', config }),
+        body: JSON.stringify({ action: 'save', config: buildPayload() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
+      if (data.config) {
+        setConfig((p) => ({
+          ...p,
+          ...data.config,
+          webhookConfigured: Boolean(data.config.webhookConfigured),
+          webhookUrl: '',
+        }));
+      }
+      setClearWebhookUrl(false);
       setSaveMsg('Saved!');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch {
@@ -735,7 +769,7 @@ function HealthAlertCard() {
       const res = await fetch('/api/admin/health/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test', config }),
+        body: JSON.stringify({ action: 'test', config: buildPayload() }),
       });
       const data = await res.json();
       setTestResult({
@@ -835,12 +869,46 @@ function HealthAlertCard() {
           </div>
 
           <div className="grid grid-cols-1 gap-2">
+            {config.webhookConfigured && (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                  {clearWebhookUrl
+                    ? 'Stored webhook URL marked for removal on save'
+                    : 'Stored webhook configured (redacted) — leave blank to preserve'}
+                </span>
+                <label className="inline-flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={clearWebhookUrl}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setClearWebhookUrl(next);
+                      if (next) {
+                        setConfig((p) => ({ ...p, webhookUrl: '', webhookEnabled: false }));
+                      }
+                    }}
+                    className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  />
+                  <span>Remove stored webhook URL</span>
+                </label>
+              </div>
+            )}
             <input
               type="url"
               value={config.webhookUrl}
-              onChange={(e) => setConfig((p) => ({ ...p, webhookUrl: e.target.value }))}
-              placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..."
-              className={baseInput}
+              disabled={clearWebhookUrl}
+              onChange={(e) => {
+                setClearWebhookUrl(false);
+                setConfig((p) => ({ ...p, webhookUrl: e.target.value }));
+              }}
+              placeholder={
+                clearWebhookUrl
+                  ? 'Stored webhook URL will be removed on save'
+                  : config.webhookConfigured
+                  ? 'Configured (redacted) — enter a new URL to replace'
+                  : 'https://hooks.slack.com/services/... or https://discord.com/api/webhooks/...'
+              }
+              className={`${baseInput} disabled:opacity-50`}
             />
             <p className="text-[11px] text-[var(--text-faint)]">
               Auto-detects Slack incoming webhooks, Discord channel webhooks, or generic JSON HTTP endpoints.
@@ -917,7 +985,10 @@ function HealthAlertCard() {
           <button
             type="button"
             onClick={testProbe}
-            disabled={testing || (!config.webhookUrl && !config.email)}
+            disabled={
+              testing ||
+              (!config.webhookUrl.trim() && !(config.webhookConfigured && !clearWebhookUrl) && !config.email.trim())
+            }
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 transition-all"
           >
             {testing ? (

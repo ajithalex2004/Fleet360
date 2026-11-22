@@ -35,15 +35,18 @@ export interface RlsScope {
  */
 const contexts = ((globalThis as unknown as { __fleet360RlsContexts?: {
   scope: AsyncLocalStorage<RlsScope>;
+  activeTx?: AsyncLocalStorage<Prisma.TransactionClient>;
   backgroundTenant: AsyncLocalStorage<string>;
   actingTenant: AsyncLocalStorage<string>;
 } }).__fleet360RlsContexts ??= {
   scope: new AsyncLocalStorage<RlsScope>(),
+  activeTx: new AsyncLocalStorage<Prisma.TransactionClient>(),
   backgroundTenant: new AsyncLocalStorage<string>(),
   actingTenant: new AsyncLocalStorage<string>(),
 });
 
 const storage = contexts.scope;
+const activeTxStorage = (contexts.activeTx ??= new AsyncLocalStorage<Prisma.TransactionClient>());
 
 export function activeRlsScope(): RlsScope | undefined {
   return storage.getStore();
@@ -51,6 +54,15 @@ export function activeRlsScope(): RlsScope | undefined {
 
 export function runWithRlsScope<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T> {
   return storage.run(scope, fn);
+}
+
+/** Active Prisma interactive transaction client even when no tenant RLS scope was installed. */
+export function activeTransactionClient(): Prisma.TransactionClient | undefined {
+  return activeTxStorage.getStore();
+}
+
+export function runWithActiveTx<T>(tx: Prisma.TransactionClient, fn: () => Promise<T>): Promise<T> {
+  return activeTxStorage.run(tx, fn);
 }
 
 /**
@@ -77,7 +89,9 @@ export function runWithRlsScope<T>(scope: RlsScope, fn: () => Promise<T>): Promi
 export function runOutsideRlsScope<T>(fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     storage.exit(() => {
-      fn().then(resolve, reject);
+      activeTxStorage.exit(() => {
+        fn().then(resolve, reject);
+      });
     });
   });
 }
