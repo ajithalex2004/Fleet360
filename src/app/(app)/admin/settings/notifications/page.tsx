@@ -184,8 +184,20 @@ function TestBtn({ channelKey, settings, onColor }: {
 /* ─────────────────────────────────────────────────────────────
    Channel Field Row
 ───────────────────────────────────────────────────────────── */
-function FieldRow({ field, value, onChange }: {
-  field: ChannelField; value: string; onChange: (k: string, v: string) => void;
+function FieldRow({
+  field,
+  value,
+  onChange,
+  secretConfigured,
+  markedForClear,
+  onToggleClear,
+}: {
+  field: ChannelField;
+  value: string;
+  onChange: (k: string, v: string) => void;
+  secretConfigured?: boolean;
+  markedForClear?: boolean;
+  onToggleClear?: (k: string, clear: boolean) => void;
 }) {
   const base = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-[var(--text-faint)] w-full';
 
@@ -224,8 +236,41 @@ function FieldRow({ field, value, onChange }: {
             onChange={e => onChange(field.key, e.target.value)} className={base} />
         )}
         {field.type === 'password' && (
-          <PasswordInput value={value} onChange={v => onChange(field.key, v)}
-            placeholder={field.placeholder} className={base} />
+          <div className="space-y-1.5">
+            {secretConfigured && (
+              <div className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="text-emerald-400 font-medium">
+                  {markedForClear ? 'Will be cleared on save' : 'Configured (redacted)'}
+                </span>
+                {onToggleClear && (
+                  <label className="inline-flex items-center gap-1 text-[var(--text-muted)] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!markedForClear}
+                      onChange={e => onToggleClear(field.key, e.target.checked)}
+                      className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <span>Remove</span>
+                  </label>
+                )}
+              </div>
+            )}
+            <PasswordInput
+              value={markedForClear ? '' : value}
+              onChange={v => {
+                if (markedForClear && onToggleClear) onToggleClear(field.key, false);
+                onChange(field.key, v);
+              }}
+              placeholder={
+                markedForClear
+                  ? 'Saved secret will be removed on save'
+                  : secretConfigured
+                  ? 'Configured — leave blank to preserve'
+                  : field.placeholder
+              }
+              className={`${base} ${markedForClear ? 'opacity-50 pointer-events-none' : ''}`}
+            />
+          </div>
         )}
       </div>
     </div>
@@ -236,12 +281,31 @@ function FieldRow({ field, value, onChange }: {
    Email / SMS Channel Card
    (reads & writes platform_settings)
 ───────────────────────────────────────────────────────────── */
-function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, settings, onChange, onSave, saving, saved, testMode }: {
+function ChannelCard({
+  channelKey,
+  label,
+  icon,
+  gradient,
+  borderColor,
+  fields,
+  settings,
+  configuredSecrets,
+  clearSecrets,
+  onChange,
+  onToggleClear,
+  onSave,
+  saving,
+  saved,
+  testMode,
+}: {
   channelKey: 'email' | 'sms';
   label: string; icon: string; gradient: string; borderColor: string;
   fields: ChannelField[];
   settings: Settings;
+  configuredSecrets: Record<string, boolean>;
+  clearSecrets: Record<string, boolean>;
   onChange: (k: string, v: string) => void;
+  onToggleClear: (k: string, clear: boolean) => void;
   onSave: () => void;
   saving: boolean; saved: boolean;
   testMode: string;
@@ -294,7 +358,15 @@ function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, s
           <div key={grp.name} className="px-6 py-1">
             <p className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-widest pt-4 pb-1">{grp.name}</p>
             {grp.fields.map(f => (
-              <FieldRow key={f.key} field={f} value={settings[f.key] ?? ''} onChange={onChange} />
+              <FieldRow
+                key={f.key}
+                field={f}
+                value={settings[f.key] ?? ''}
+                onChange={onChange}
+                secretConfigured={f.type === 'password' ? Boolean(configuredSecrets[f.key]) : undefined}
+                markedForClear={f.type === 'password' ? Boolean(clearSecrets[f.key]) : undefined}
+                onToggleClear={f.type === 'password' ? onToggleClear : undefined}
+              />
             ))}
           </div>
         ))}
@@ -1038,6 +1110,8 @@ function HealthAlertCard() {
 
 export default function NotificationChannelsPage() {
   const [settings, setSettings] = useState<Settings>({});
+  const [configuredSecrets, setConfiguredSecrets] = useState<Record<string, boolean>>({});
+  const [clearSecrets, setClearSecrets] = useState<Record<string, boolean>>({});
   const [loading, setLoading]   = useState(true);
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailSaved,  setEmailSaved]  = useState(false);
@@ -1049,6 +1123,9 @@ export default function NotificationChannelsPage() {
   const EMAIL_KEYS = EMAIL_FIELDS.map(f => f.key);
   /* SMS keys */
   const SMS_KEYS = SMS_FIELDS.map(f => f.key);
+  const SECRET_FIELD_KEYS = new Set(
+    [...EMAIL_FIELDS, ...SMS_FIELDS].filter(f => f.type === 'password').map(f => f.key),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1056,6 +1133,8 @@ export default function NotificationChannelsPage() {
       const res = await fetch('/api/admin/platform-settings');
       const data = await res.json();
       setSettings(data.settings ?? {});
+      setConfiguredSecrets(data.configuredSecrets ?? {});
+      setClearSecrets({});
     } catch { setError('Failed to load settings'); }
     finally { setLoading(false); }
   }, []);
@@ -1065,20 +1144,63 @@ export default function NotificationChannelsPage() {
   const handleChange = (k: string, v: string) =>
     setSettings(s => ({ ...s, [k]: v }));
 
+  const handleToggleClear = (k: string, clear: boolean) => {
+    setClearSecrets(prev => ({ ...prev, [k]: clear }));
+    if (clear) {
+      setSettings(s => ({ ...s, [k]: '' }));
+    }
+  };
+
   const saveKeys = async (
     keys: string[],
     setSaving: (b: boolean) => void,
     setSaved: (b: boolean) => void,
   ) => {
     setSaving(true);
-    const payload: Settings = {};
-    keys.forEach(k => { payload[k] = settings[k] ?? ''; });
+    const payload: Record<string, unknown> = {};
+    const keysToClear: string[] = [];
+    keys.forEach(k => {
+      if (SECRET_FIELD_KEYS.has(k)) {
+        if (clearSecrets[k]) {
+          keysToClear.push(k);
+        } else {
+          const trimmed = (settings[k] ?? '').trim();
+          if (trimmed.length > 0) {
+            payload[k] = trimmed;
+          }
+        }
+      } else {
+        payload[k] = settings[k] ?? '';
+      }
+    });
+    if (keysToClear.length > 0) {
+      payload.clearSecrets = keysToClear;
+    }
     try {
       const res = await fetch('/api/admin/platform-settings', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error();
+      if (data.configuredSecrets) {
+        setConfiguredSecrets(data.configuredSecrets);
+      }
+      // Clear submitted secret inputs from browser state after saving
+      setSettings(prev => {
+        const next = { ...prev };
+        for (const k of keys) {
+          if (SECRET_FIELD_KEYS.has(k)) next[k] = '';
+        }
+        return next;
+      });
+      setClearSecrets(prev => {
+        const next = { ...prev };
+        for (const k of keys) {
+          if (SECRET_FIELD_KEYS.has(k)) delete next[k];
+        }
+        return next;
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { setError('Failed to save — please try again'); }
@@ -1118,7 +1240,10 @@ export default function NotificationChannelsPage() {
         borderColor="border-indigo-500/25"
         fields={EMAIL_FIELDS}
         settings={settings}
+        configuredSecrets={configuredSecrets}
+        clearSecrets={clearSecrets}
         onChange={handleChange}
+        onToggleClear={handleToggleClear}
         onSave={() => saveKeys(EMAIL_KEYS, setEmailSaving, setEmailSaved)}
         saving={emailSaving}
         saved={emailSaved}
@@ -1134,7 +1259,10 @@ export default function NotificationChannelsPage() {
         borderColor="border-purple-500/25"
         fields={SMS_FIELDS}
         settings={settings}
+        configuredSecrets={configuredSecrets}
+        clearSecrets={clearSecrets}
         onChange={handleChange}
+        onToggleClear={handleToggleClear}
         onSave={() => saveKeys(SMS_KEYS, setSmsSaving, setSmsSaved)}
         saving={smsSaving}
         saved={smsSaved}

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { getRedis } from '@/lib/upstash';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
@@ -344,19 +345,21 @@ export async function getSecurityHealthMetrics(): Promise<SecurityHealthMetrics>
   let targetedAccounts1h = 0;
 
   try {
-    const failedRows = await prisma.$queryRawUnsafe<Array<{
-      failed_attempts: number;
-      unique_ips: number;
-      targeted_accounts: number;
-    }>>(`
-      SELECT 
-        count(*)::int as failed_attempts,
-        count(DISTINCT ip_address)::int as unique_ips,
-        count(DISTINCT user_email)::int as targeted_accounts
-      FROM audit_logs
-      WHERE action = 'LOGIN_FAILED'
-        AND created_at >= NOW() - INTERVAL '1 hour'
-    `);
+    const failedRows = await withPlatformAdmin(prisma, (tx) =>
+      tx.$queryRawUnsafe<Array<{
+        failed_attempts: number;
+        unique_ips: number;
+        targeted_accounts: number;
+      }>>(`
+        SELECT 
+          count(*)::int as failed_attempts,
+          count(DISTINCT ip_address)::int as unique_ips,
+          count(DISTINCT user_email)::int as targeted_accounts
+        FROM audit_logs
+        WHERE action = 'LOGIN_FAILED'
+          AND created_at >= NOW() - INTERVAL '1 hour'
+      `),
+    );
     if (failedRows && failedRows[0]) {
       failedLogins1h = failedRows[0].failed_attempts;
       uniqueIps1h = failedRows[0].unique_ips;
@@ -372,22 +375,28 @@ export async function getSecurityHealthMetrics(): Promise<SecurityHealthMetrics>
   let mfaAdminCount = 0;
 
   try {
-    const mfaRows = await prisma.$queryRawUnsafe<Array<{
-      total_users: number;
-      mfa_enabled_users: number;
-      total_admins: number;
-      mfa_enabled_admins: number;
-    }>>(`
-      SELECT 
-        count(DISTINCT u.id)::int as total_users,
-        count(DISTINCT u.id) FILTER (WHERE COALESCE(u.mfa_enabled, false) = true)::int as mfa_enabled_users,
-        count(DISTINCT u.id) FILTER (WHERE r.code IN ('SUPER_ADMIN', 'TENANT_ADMIN') OR r.name ILIKE '%Admin%')::int as total_admins,
-        count(DISTINCT u.id) FILTER (WHERE (r.code IN ('SUPER_ADMIN', 'TENANT_ADMIN') OR r.name ILIKE '%Admin%') AND COALESCE(u.mfa_enabled, false) = true)::int as mfa_enabled_admins
-      FROM "User" u
-      LEFT JOIN user_tenants ut ON ut.user_id = u.id
-      LEFT JOIN roles r ON r.id = ut.role_id
-      WHERE u.is_active = true
-    `);
+    // Platform-wide MFA posture crosses tenants: user_tenants, tenants, & roles are
+    // RLS-protected, so run inside withPlatformAdmin (only invoked from SUPER_ADMIN
+    // /api/admin/health) and count only active memberships in active tenants.
+    const mfaRows = await withPlatformAdmin(prisma, (tx) =>
+      tx.$queryRawUnsafe<Array<{
+        total_users: number;
+        mfa_enabled_users: number;
+        total_admins: number;
+        mfa_enabled_admins: number;
+      }>>(`
+        SELECT 
+          count(DISTINCT u.id)::int as total_users,
+          count(DISTINCT u.id) FILTER (WHERE COALESCE(u.mfa_enabled, false) = true)::int as mfa_enabled_users,
+          count(DISTINCT u.id) FILTER (WHERE t.id IS NOT NULL AND (r.code IN ('SUPER_ADMIN', 'TENANT_ADMIN') OR r.name ILIKE '%Admin%'))::int as total_admins,
+          count(DISTINCT u.id) FILTER (WHERE t.id IS NOT NULL AND (r.code IN ('SUPER_ADMIN', 'TENANT_ADMIN') OR r.name ILIKE '%Admin%') AND COALESCE(u.mfa_enabled, false) = true)::int as mfa_enabled_admins
+        FROM "User" u
+        LEFT JOIN user_tenants ut ON ut.user_id = u.id AND COALESCE(ut.is_active, true) = true
+        LEFT JOIN tenants t ON t.id = ut.tenant_id AND COALESCE(t.is_active, true) = true
+        LEFT JOIN roles r ON r.id = ut.role_id
+        WHERE u.is_active = true
+      `),
+    );
     if (mfaRows && mfaRows[0]) {
       totalStaff = mfaRows[0].total_users;
       mfaStaffCount = mfaRows[0].mfa_enabled_users;

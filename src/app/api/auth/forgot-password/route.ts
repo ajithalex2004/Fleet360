@@ -19,28 +19,51 @@ import { appUrl, NO_TENANT, sendTemplatedEmail } from '@/lib/email-templates';
 import { runAsTenant } from '@/lib/rls-scope';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { trustedClientIp } from '@/lib/auth/setup-bootstrap';
+import { checkForgotPasswordRateLimit } from '@/lib/auth/auth-rate-limit';
 
 export const runtime = 'nodejs';
 
 const TOKEN_TTL_MIN = 60;
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 export async function POST(req: NextRequest) {
   let email: string;
   try {
     const body = await req.json();
-    email = String(body?.email ?? '').trim().toLowerCase();
+    email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
   } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400, headers: NO_STORE_HEADERS });
   }
-  if (!email || !/.+@.+\..+/.test(email)) {
-    return NextResponse.json({ ok: false, error: 'A valid email is required' }, { status: 400 });
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ ok: false, error: 'A valid email is required' }, { status: 400, headers: NO_STORE_HEADERS });
+  }
+
+  // Enforce per-IP and per-email rate limits BEFORE any user lookup so both
+  // existing and non-existent addresses behave identically (anti-enumeration).
+  const ipAddress = trustedClientIp(req);
+  const throttle = await checkForgotPasswordRateLimit(ipAddress, email);
+  if (!throttle.allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'Too many password reset requests. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          ...NO_STORE_HEADERS,
+          'Retry-After': String(throttle.retryAfterSec),
+        },
+      },
+    );
   }
 
   // Generic response — never reveal whether the email exists.
-  const generic = () => NextResponse.json({
-    ok: true,
-    message: 'If an account exists for that email, a reset link has been sent.',
-  });
+  const generic = () => NextResponse.json(
+    {
+      ok: true,
+      message: 'If an account exists for that email, a reset link has been sent.',
+    },
+    { headers: NO_STORE_HEADERS },
+  );
 
   try {
     const userRows = await prisma.$queryRawUnsafe<Array<{ id: string; username: string }>>(
