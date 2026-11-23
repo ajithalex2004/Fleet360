@@ -45,12 +45,12 @@ export const metadata: Metadata = {
 };
 
 // Applies the saved theme class to <html> before paint, so there is no flash of
-// the wrong theme on load. Defaults to dark (the app's baseline).
+// the wrong theme on load. Defaults to light when no theme was saved.
 //
 // The driver app (/driver-app/*) is permanently dark — drivers in the
 // desert need high contrast and the mobile UI was designed dark-only.
 // We force dark for those routes regardless of the saved preference.
-const THEME_NO_FLASH = `(function(){try{var path=window.location.pathname;var isDriverApp=path.indexOf('/driver-app')===0;var c=localStorage.getItem('fleet360-theme')||'dark';var d=isDriverApp||c==='dark'||(c==='auto'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;e.classList.add(d?'dark':'light');e.style.colorScheme=d?'dark':'light';}catch(_){document.documentElement.classList.add('dark');}})();`;
+const THEME_NO_FLASH = `(function(){try{var path=window.location.pathname;var isDriverApp=path.indexOf('/driver-app')===0;var c=localStorage.getItem('fleet360-theme')||'light';var d=isDriverApp||c==='dark'||(c==='auto'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;e.classList.add(d?'dark':'light');e.style.colorScheme=d?'dark':'light';}catch(_){document.documentElement.classList.add('light');}})();`;
 
 // Registers the stale-chunk recovery listener before any webpack chunk —
 // including the root layout's own chunk — has a chance to load. The React
