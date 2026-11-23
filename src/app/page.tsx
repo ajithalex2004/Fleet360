@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import MarketingHero from '@/components/marketing/MarketingHero';
+import HomeHero from '@/components/marketing/HomeHero';
 import AgentOrchestration from '@/components/marketing/AgentOrchestration';
 import UnifiedPlatform from '@/components/marketing/UnifiedPlatform';
+import LiveProductStage from '@/components/marketing/LiveProductStage';
 import OperationalOutcomes from '@/components/marketing/OperationalOutcomes';
 import GccIntelligence from '@/components/marketing/GccIntelligence';
 import GovernedAi from '@/components/marketing/GovernedAi';
@@ -20,15 +21,16 @@ export const revalidate = 60;
 export default function Home() {
   const snapshot = getHomepageSnapshot();
   return (
-    <>
+    <main style={{ background: '#020908', color: '#f4f4ed' }}>
       <HomepageAnalytics />
-      <MarketingHero snapshot={snapshot} />
+      <HomeHero snapshot={snapshot} />
       <AgentOrchestration />
       <UnifiedPlatform />
+      <LiveProductStage snapshot={snapshot} />
       <OperationalOutcomes />
       <GccIntelligence />
       <GovernedAi />
       <FinalConversion />
-    </>
+    </main>
   );
 }
