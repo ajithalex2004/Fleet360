@@ -11,13 +11,55 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import QRCode from 'qrcode';
+import * as QRCodeNs from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { getTenantContext } from '@/lib/tenant-session';
 import { generateTotpSecret, provisioningUri } from '@/lib/totp';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
+async function generateMfaQrDataUrl(uri: string): Promise<string | null> {
+  const qrMod = QRCodeNs as unknown as {
+    toDataURL?: (text: string, opts?: Record<string, unknown>) => Promise<string>;
+    toString?: (text: string, opts?: Record<string, unknown>) => Promise<string>;
+    default?: {
+      toDataURL?: (text: string, opts?: Record<string, unknown>) => Promise<string>;
+      toString?: (text: string, opts?: Record<string, unknown>) => Promise<string>;
+    };
+  };
+
+  const toDataURL = qrMod.toDataURL ?? qrMod.default?.toDataURL;
+  if (typeof toDataURL === 'function') {
+    try {
+      return await toDataURL(uri, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 240,
+      });
+    } catch (err) {
+      console.warn('[auth/mfa/enroll] QR PNG generation failed, attempting SVG fallback:', err instanceof Error ? err.name : 'Error');
+    }
+  }
+
+  const toString = qrMod.toString ?? qrMod.default?.toString;
+  if (typeof toString === 'function') {
+    try {
+      const svg = await toString(uri, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 240,
+      });
+      return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+    } catch (err) {
+      console.warn('[auth/mfa/enroll] QR SVG fallback failed:', err instanceof Error ? err.name : 'Error');
+    }
+  }
+
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,11 +70,14 @@ export async function POST(req: NextRequest) {
       ctx.userId,
     );
     if (rows.length === 0) {
-      return NextResponse.json({ ok: false, error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ ok: false, error: 'User not found' }, { status: 404, headers: NO_STORE_HEADERS });
     }
     const user = rows[0];
     if (user.mfa_enabled) {
-      return NextResponse.json({ ok: false, error: 'MFA is already enabled. Disable it first to re-enrol.' }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: 'MFA is already enabled. Disable it first to re-enrol.' },
+        { status: 400, headers: NO_STORE_HEADERS },
+      );
     }
 
     const secret = generateTotpSecret();
@@ -44,25 +89,24 @@ export async function POST(req: NextRequest) {
       secret, ctx.userId,
     );
 
-    // Render the otpauth:// URI as an inline PNG data URL so the page can
-    // render <img src={qrDataUrl}> without any client-side QR library.
-    const qrDataUrl = await QRCode.toDataURL(uri, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 240,
-    }).catch(() => null);
+    // Render the otpauth:// URI as an inline PNG (or SVG fallback) data URL so
+    // the page displays a scannable QR code immediately without external requests.
+    const qrDataUrl = await generateMfaQrDataUrl(uri);
 
-    return NextResponse.json({
-      ok: true,
-      secret,            // fallback for manual entry
-      otpauthUri: uri,
-      qrDataUrl,         // PNG data URL ready for <img src={...}>
-      issuer,
-      account: user.email,
-    });
-    } catch (err) {
+    return NextResponse.json(
+      {
+        ok: true,
+        secret,            // fallback for manual entry
+        otpauthUri: uri,
+        qrDataUrl,         // PNG/SVG data URL ready for <img src={...}>
+        issuer,
+        account: user.email,
+      },
+      { headers: NO_STORE_HEADERS },
+    );
+  } catch (err) {
     if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.enroll' });
-    return NextResponse.json({ ok: false, error: 'Failed to start MFA enrolment' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Failed to start MFA enrolment' }, { status: 500, headers: NO_STORE_HEADERS });
   }
 }

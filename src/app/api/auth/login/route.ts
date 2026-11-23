@@ -20,57 +20,27 @@ import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { effectivePermissions } from '@/lib/authz/session-permissions';
 import { tenantModulesFor } from '@/lib/module-policies';
 import { logAudit } from '@/lib/audit';
+import { trustedClientIp } from '@/lib/auth/setup-bootstrap';
+import {
+  consumeLoginAttempt,
+  consumeAliasAccountAttempt,
+  consumeMfaAttempt,
+  checkMfaThrottle,
+  releaseLoginIpSlotOnSuccess,
+  clearLoginFailures,
+} from '@/lib/auth/auth-rate-limit';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
-interface LoginRateLimitRecord {
-  attempts: number;
-  firstAttempt: number;
-  lockedUntil?: number;
-}
-const LOGIN_RATE_LIMITS = new Map<string, LoginRateLimitRecord>();
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+const GENERIC_INVALID_CREDENTIALS = { error: 'Unauthorized', message: 'Invalid email or password' };
 
-function checkLoginRateLimit(key: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const record = LOGIN_RATE_LIMITS.get(key);
-  if (!record) return { allowed: true };
-
-  if (record.lockedUntil && now < record.lockedUntil) {
-    return { allowed: false, retryAfter: Math.ceil((record.lockedUntil - now) / 1000) };
-  }
-
-  if (now - record.firstAttempt > LOGIN_WINDOW_MS) {
-    LOGIN_RATE_LIMITS.delete(key);
-    return { allowed: true };
-  }
-
-  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
-    record.lockedUntil = now + LOGIN_LOCKOUT_MS;
-    return { allowed: false, retryAfter: Math.ceil(LOGIN_LOCKOUT_MS / 1000) };
-  }
-
-  return { allowed: true };
-}
-
-function recordLoginFailure(key: string) {
-  const now = Date.now();
-  const record = LOGIN_RATE_LIMITS.get(key);
-  if (!record || (now - record.firstAttempt > LOGIN_WINDOW_MS)) {
-    LOGIN_RATE_LIMITS.set(key, { attempts: 1, firstAttempt: now });
-  } else {
-    record.attempts += 1;
-    if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
-      record.lockedUntil = now + LOGIN_LOCKOUT_MS;
-    }
-  }
-}
-
-function recordLoginSuccess(key: string) {
-  LOGIN_RATE_LIMITS.delete(key);
-}
+// Pre-computed 100k-iteration PBKDF2 dummy digest used to equalize timing on
+// unknown, disabled, or passwordless accounts (anti-enumeration).
+const DUMMY_PASSWORD_STORED =
+  '00000000000000000000000000000000:' +
+  '0000000000000000000000000000000000000000000000000000000000000000' +
+  '0000000000000000000000000000000000000000000000000000000000000000';
 
 async function verifySinglePassword(plaintext: string, stored: string): Promise<boolean> {
   try {
@@ -104,43 +74,57 @@ const COOKIE_NAME = 'xl-session';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password, tenantId: preferredTenantId, mfaCode, recoveryCode } = body as {
-      email?: string;
-      password?: string;
-      tenantId?: string;
-      mfaCode?: string;
-      recoveryCode?: string;
-    };
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = await request.json();
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return NextResponse.json(
+          { error: 'Bad Request', message: 'Invalid request body' },
+          { status: 400, headers: NO_STORE_HEADERS },
+        );
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json(
+        { error: 'Bad Request', message: 'Invalid JSON body' },
+        { status: 400, headers: NO_STORE_HEADERS },
+      );
+    }
 
-    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || '127.0.0.1';
+    const email = typeof body.email === 'string' ? body.email : undefined;
+    const password = typeof body.password === 'string' ? body.password : undefined;
+    const preferredTenantId = typeof body.tenantId === 'string' ? body.tenantId : undefined;
+    const mfaCode = typeof body.mfaCode === 'string' ? body.mfaCode : undefined;
+    const recoveryCode = typeof body.recoveryCode === 'string' ? body.recoveryCode : undefined;
+
+    const ipAddress = trustedClientIp(request);
     const userAgent = request.headers.get('user-agent') || '';
+    const normalizedIdent = email ? email.toLowerCase().trim() : '';
 
-    if (!email || !password) {
+    if (!normalizedIdent || !password) {
       return NextResponse.json(
         { error: 'Bad Request', message: 'Email and password are required' },
-        { status: 400 },
+        { status: 400, headers: NO_STORE_HEADERS },
       );
     }
 
-    if (typeof password === 'string' && password.length > 128) {
+    if (password.length > 128) {
       return NextResponse.json(
         { error: 'Bad Request', message: 'Password is too long' },
-        { status: 400 },
+        { status: 400, headers: NO_STORE_HEADERS },
       );
     }
 
-    const rateKey = `${ipAddress}:${email.toLowerCase().trim()}`;
-    const rateCheck = checkLoginRateLimit(rateKey);
+    // Atomic increment-before-verify defeats concurrent burst (TOCTOU) attacks.
+    const rateCheck = await consumeLoginAttempt(ipAddress, normalizedIdent);
     if (!rateCheck.allowed) {
       return NextResponse.json(
-        { error: 'Too Many Requests', message: `Too many failed login attempts. Please retry after ${rateCheck.retryAfter}s.` },
-        { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } }
+        { error: 'Too Many Requests', message: `Too many failed login attempts. Please retry after ${rateCheck.retryAfterSec}s.` },
+        { status: 429, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(rateCheck.retryAfterSec) } },
       );
     }
 
     // 1. Find the user by email, username, employeeId, or driver email prefix
-    const normalizedIdent = email.toLowerCase().trim();
     let user = await prisma.user.findUnique({ where: { email: normalizedIdent } });
     if (!user) {
       user = await prisma.user.findFirst({
@@ -157,36 +141,42 @@ export async function POST(request: NextRequest) {
       });
     }
     if (!user) {
-      recordLoginFailure(rateKey);
+      await verifySinglePassword(password, DUMMY_PASSWORD_STORED);
       void logAudit({
         entityType: 'User',
         action: 'LOGIN_FAILED',
         details: 'Invalid email or password (user not found)',
-        userEmail: email.toLowerCase().trim(),
+        userEmail: normalizedIdent,
         ipAddress,
         userAgent,
       });
-      // Same message for both "not found" and "wrong password" to prevent user enumeration
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Invalid email or password' },
-        { status: 401 },
-      );
+      // Same message & status for not found, disabled, passwordless, and wrong password
+      return NextResponse.json(GENERIC_INVALID_CREDENTIALS, { status: 401, headers: NO_STORE_HEADERS });
+    }
+
+    const canonicalIdent = user.email ? user.email.toLowerCase().trim() : normalizedIdent;
+    if (canonicalIdent !== normalizedIdent) {
+      const canonicalCheck = await consumeAliasAccountAttempt(ipAddress, canonicalIdent);
+      if (!canonicalCheck.allowed) {
+        return NextResponse.json(
+          { error: 'Too Many Requests', message: `Too many failed login attempts. Please retry after ${canonicalCheck.retryAfterSec}s.` },
+          { status: 429, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(canonicalCheck.retryAfterSec) } },
+        );
+      }
     }
 
     if (!user.isActive) {
+      await verifySinglePassword(password, DUMMY_PASSWORD_STORED);
       void logAudit({
         entityType: 'User',
         entityId: user.id,
         action: 'LOGIN_FAILED',
-        details: 'Your account has been disabled',
+        details: 'Account disabled',
         userEmail: user.email,
         ipAddress,
         userAgent,
       });
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Your account has been disabled. Contact your administrator.' },
-        { status: 403 },
-      );
+      return NextResponse.json(GENERIC_INVALID_CREDENTIALS, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     // 2. Fetch password hash via raw SQL (column added outside Prisma schema).
@@ -200,6 +190,7 @@ export async function POST(request: NextRequest) {
     const passwordHash = rows[0]?.password_hash ?? null;
 
     if (!passwordHash) {
+      await verifySinglePassword(password, DUMMY_PASSWORD_STORED);
       void logAudit({
         entityType: 'User',
         entityId: user.id,
@@ -209,14 +200,10 @@ export async function POST(request: NextRequest) {
         ipAddress,
         userAgent,
       });
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'No password set for this account. Please contact your administrator.' },
-        { status: 401 },
-      );
+      return NextResponse.json(GENERIC_INVALID_CREDENTIALS, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     if (!(await verifyPassword(password, passwordHash))) {
-      recordLoginFailure(rateKey);
       void logAudit({
         entityType: 'User',
         entityId: user.id,
@@ -226,10 +213,7 @@ export async function POST(request: NextRequest) {
         ipAddress,
         userAgent,
       });
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Invalid email or password' },
-        { status: 401 },
-      );
+      return NextResponse.json(GENERIC_INVALID_CREDENTIALS, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     // 2.5 MFA gate (after password verification)
@@ -241,14 +225,42 @@ export async function POST(request: NextRequest) {
     );
     const mfaRow = mfaRows[0];
     if (mfaRow?.mfa_enabled) {
-      const code = mfaCode ? String(mfaCode).trim() : '';
-      const rec  = recoveryCode ? String(recoveryCode).trim() : '';
+      const code = mfaCode ? mfaCode.trim() : '';
+      const rec  = recoveryCode ? recoveryCode.trim() : '';
       if (!code && !rec) {
+        // Step-1 MFA challenge prompt: return 429 if already MFA-locked; otherwise
+        // release the per-IP slot so legitimate NAT office users don't accumulate ipOnly.
+        const mfaThrottle = await checkMfaThrottle(user.id);
+        if (!mfaThrottle.allowed) {
+          return NextResponse.json(
+            {
+              error: 'Too Many Requests',
+              mfaRequired: true,
+              message: `Too many failed verification attempts. Please retry after ${mfaThrottle.retryAfterSec}s.`,
+            },
+            { status: 429, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(mfaThrottle.retryAfterSec) } },
+          );
+        }
+        await releaseLoginIpSlotOnSuccess(ipAddress);
         return NextResponse.json(
           { error: 'MFA required', mfaRequired: true, message: 'Enter your authenticator code.' },
-          { status: 401 },
+          { status: 401, headers: NO_STORE_HEADERS },
         );
       }
+
+      // Atomic per-user MFA increment-before-verify across all IPs (defeats parallel bursts).
+      const mfaAttempt = await consumeMfaAttempt(user.id);
+      if (!mfaAttempt.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Too Many Requests',
+            mfaRequired: true,
+            message: `Too many failed verification attempts. Please retry after ${mfaAttempt.retryAfterSec}s.`,
+          },
+          { status: 429, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(mfaAttempt.retryAfterSec) } },
+        );
+      }
+
       let ok = false;
       let consumedHash: string | null = null;
       if (code && mfaRow.mfa_secret && verifyTotp(mfaRow.mfa_secret, code)) {
@@ -270,16 +282,38 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json(
           { error: 'Unauthorized', mfaRequired: true, message: 'Invalid authenticator or recovery code.' },
-          { status: 401 },
+          { status: 401, headers: NO_STORE_HEADERS },
         );
       }
-      // Recovery code consumed → remove it from the list (single-use).
+      // Atomic single-use recovery code consumption: prevents concurrent replay.
       if (consumedHash) {
-        const remaining = (mfaRow.mfa_recovery_codes ?? []).filter(h => h !== consumedHash);
-        await prisma.$executeRawUnsafe(
-          `UPDATE "User" SET mfa_recovery_codes = $1::jsonb, "updatedAt" = NOW() WHERE id = $2`,
-          JSON.stringify(remaining), user.id,
+        const affected = await prisma.$executeRawUnsafe(
+          `UPDATE "User"
+              SET mfa_recovery_codes = COALESCE(
+                    (SELECT jsonb_agg(elem) FROM jsonb_array_elements_text(mfa_recovery_codes) AS elem WHERE elem <> $1),
+                    '[]'::jsonb
+                  ),
+                  "updatedAt" = NOW()
+            WHERE id = $2
+              AND mfa_recovery_codes IS NOT NULL
+              AND mfa_recovery_codes @> jsonb_build_array($1::text)`,
+          consumedHash, user.id,
         );
+        if (Number(affected) !== 1) {
+          void logAudit({
+            entityType: 'User',
+            entityId: user.id,
+            action: 'LOGIN_FAILED',
+            details: 'Recovery code replay rejected',
+            userEmail: user.email,
+            ipAddress,
+            userAgent,
+          });
+          return NextResponse.json(
+            { error: 'Unauthorized', mfaRequired: true, message: 'Invalid authenticator or recovery code.' },
+            { status: 401, headers: NO_STORE_HEADERS },
+          );
+        }
       }
     }
 
@@ -321,7 +355,7 @@ export async function POST(request: NextRequest) {
     if (userTenants.length === 0) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'No active tenant access found for this account.' },
-        { status: 403 },
+        { status: 403, headers: NO_STORE_HEADERS },
       );
     }
 
@@ -333,7 +367,7 @@ export async function POST(request: NextRequest) {
     if (!userTenant.tenant.isActive) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'This tenant account is inactive.' },
-        { status: 403 },
+        { status: 403, headers: NO_STORE_HEADERS },
       );
     }
 
@@ -482,7 +516,7 @@ export async function POST(request: NextRequest) {
     });
     void prisma.$executeRaw`UPDATE "User" SET last_login_at = NOW() WHERE id = ${user.id}`.catch(() => {});
 
-    const response = NextResponse.json(responseBody, { status: 200 });
+    const response = NextResponse.json(responseBody, { status: 200, headers: NO_STORE_HEADERS });
     response.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -517,7 +551,11 @@ export async function POST(request: NextRequest) {
       path:     '/',
     });
 
-    recordLoginSuccess(rateKey);
+    await clearLoginFailures(ipAddress, normalizedIdent, user.id);
+    if (canonicalIdent !== normalizedIdent) {
+      await clearLoginFailures(ipAddress, canonicalIdent, user.id);
+    }
+    await releaseLoginIpSlotOnSuccess(ipAddress);
     return response;
   } catch (err) {
     console.error('[auth/login]', err);
@@ -527,12 +565,12 @@ export async function POST(request: NextRequest) {
           error: 'Service Unavailable',
           message: 'Database connection unavailable. Please check Neon/network connectivity and try again.',
         },
-        { status: 503 },
+        { status: 503, headers: NO_STORE_HEADERS },
       );
     }
     return NextResponse.json(
       { error: 'Internal Server Error', message: 'Login failed. Please try again.' },
-      { status: 500 },
+      { status: 500, headers: NO_STORE_HEADERS },
     );
   }
 }

@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/prisma';
+import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { NotificationEvent, RecipientType } from '@prisma/client';
 import { captureMessage } from '@/lib/sentry';
+import { smtpTlsOptions } from '@/lib/smtp-tls';
 
 // Global transporter cache to prevent re-instantiation
 let cachedTransporter: nodemailer.Transporter | null = null;
@@ -54,21 +56,21 @@ export const sendServerEmail = async (
         }
 
         // 2. Configure Transporter (Reuse if possible)
-        const configHash = `${config.host}:${config.port}:${config.username}`;
+        const encryption = (config.encryption || (config.port === '465' ? 'ssl' : 'tls')).trim();
+        const passwordHash = crypto.createHash('sha256').update(config.password || '').digest('hex').slice(0, 12);
+        const configHash = `${config.host}:${config.port}:${config.username}:${passwordHash}:${encryption}:${process.env.SMTP_ALLOW_INSECURE_TLS ?? ''}`;
 
         if (!cachedTransporter || lastConfigHash !== configHash) {
             console.log('[ServerNotification] Initializing new SMTP Transporter');
             cachedTransporter = nodemailer.createTransport({
                 host: config.host!,
-                port: parseInt(config.port || '587'),
-                secure: config.encryption === 'SSL',
+                port: parseInt(config.port || '587', 10),
+                secure: encryption.toUpperCase() === 'SSL' || config.port === '465',
                 auth: {
                     user: config.username!,
                     pass: config.password!,
                 },
-                tls: {
-                    rejectUnauthorized: false
-                }
+                ...smtpTlsOptions(config.host!, encryption),
             });
             lastConfigHash = configHash;
         }
