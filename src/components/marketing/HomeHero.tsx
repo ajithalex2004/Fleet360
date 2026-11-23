@@ -40,26 +40,26 @@ function NetworkScene({ vehiclesLive }: { vehiclesLive: number }) {
       <svg className={styles.map} viewBox="0 0 1000 760" preserveAspectRatio="xMidYMid slice">
         <defs>
           <linearGradient id="homeRoute" x1="0" x2="1">
-            <stop offset="0" stopColor="#baff69" stopOpacity="0" />
-            <stop offset=".26" stopColor="#9dff42" />
-            <stop offset="1" stopColor="#e0ff9f" />
+            <stop offset="0" stopColor="#427209" stopOpacity="0" />
+            <stop offset=".26" stopColor="#3b7209" />
+            <stop offset="1" stopColor="#507209" />
           </linearGradient>
           <linearGradient id="homeRoad" x1="0" y1="0" x2="1" y2="1">
-            <stop stopColor="#82907c" stopOpacity=".03" />
-            <stop offset=".5" stopColor="#b3c6a8" stopOpacity=".34" />
-            <stop offset="1" stopColor="#82907c" stopOpacity=".03" />
+            <stop stopColor="#0c1a14" stopOpacity=".03" />
+            <stop offset=".5" stopColor="#0c1a14" stopOpacity=".34" />
+            <stop offset="1" stopColor="#0c1a14" stopOpacity=".03" />
           </linearGradient>
           <radialGradient id="homeCore">
-            <stop offset="0" stopColor="#d9ffad" />
-            <stop offset=".18" stopColor="#91ff32" />
-            <stop offset="1" stopColor="#91ff32" stopOpacity="0" />
+            <stop offset="0" stopColor="#417209" />
+            <stop offset=".18" stopColor="#3a7209" />
+            <stop offset="1" stopColor="#3a7209" stopOpacity="0" />
           </radialGradient>
           <filter id="homeGlow">
             <feGaussianBlur stdDeviation="6" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           <pattern id="homeBlocks" width="54" height="42" patternUnits="userSpaceOnUse" patternTransform="rotate(-18)">
-            <rect width="38" height="24" x="8" y="8" rx="2" fill="#e9c680" fillOpacity=".07" stroke="#f2d49a" strokeOpacity=".08" />
+            <rect width="38" height="24" x="8" y="8" rx="2" fill="#7e5b16" fillOpacity=".07" stroke="#835c11" strokeOpacity=".08" />
           </pattern>
         </defs>
 

@@ -114,8 +114,8 @@ const RADAR_UNITS = [
     summary: 'Prime Mover Coupled w/ DXB-TR-9901 · Container MSCU8492014 · E11 → D53 Corridor · Fuel 84%',
     cx: 175,
     cy: 96,
-    color: '#baff68',
-    textColor: '#e9ffd0',
+    color: '#427209',
+    textColor: '#417209',
   },
   {
     id: 'u1',
@@ -124,8 +124,8 @@ const RADAR_UNITS = [
     summary: 'Volvo FH16 Coupled w/ 45FT Chassis DXB-TR-9905 · CMAU2210941 + TGHU1904422 (36.8T) · E311 Spine',
     cx: 295,
     cy: 102,
-    color: '#83d8d4',
-    textColor: '#bdf1ee',
+    color: '#267874',
+    textColor: '#1c827d',
   },
   {
     id: 'u2',
@@ -134,8 +134,8 @@ const RADAR_UNITS = [
     summary: 'Scania R500 · Import Empty HLXU9034118 Triangulated to Export Booking DRY-EXP-1001 · D57 Expo Rd',
     cx: 270,
     cy: 162,
-    color: '#e8c16e',
-    textColor: '#f6d38a',
+    color: '#805e14',
+    textColor: '#89600b',
   },
   {
     id: 'u3',
@@ -144,8 +144,8 @@ const RADAR_UNITS = [
     summary: 'Standalone Skeletal Chassis Pinned at NIP Mega DC Bay Ramp 07 · Live Offload ETC: 01h 42m remaining',
     cx: 395,
     cy: 84,
-    color: '#c2a5ff',
-    textColor: '#e3d6ff',
+    color: '#370c92',
+    textColor: '#360c92',
   },
 ];
 
@@ -249,27 +249,27 @@ export default function LiveProductStage({ snapshot }: { snapshot: HomepageSnaps
             <svg viewBox="0 0 540 220" aria-label="UAE drayage corridor live radar map">
               <defs>
                 <pattern id="stageRadarGrid" width="36" height="36" patternUnits="userSpaceOnUse">
-                  <path d="M 36 0 L 0 0 0 36" fill="none" stroke="rgba(186,255,104,.07)" strokeWidth="0.8" />
+                  <path d="M 36 0 L 0 0 0 36" fill="none" stroke="rgba(66, 114, 9, .07)" strokeWidth="0.8" />
                 </pattern>
               </defs>
-              <rect width="540" height="220" fill="#030c09" />
+              <rect width="540" height="220" fill="#f7f6f0" />
               <rect width="540" height="220" fill="url(#stageRadarGrid)" />
-              <path d="M 0,0 L 210,0 L 145,75 L 75,140 L 0,190 Z" fill="#0a1d16" opacity="0.8" />
-              <text x="16" y="26" fill="#e7ba6c" opacity="0.6" fontSize="10" fontFamily="monospace" letterSpacing="2">
+              <path d="M 0,0 L 210,0 L 145,75 L 75,140 L 0,190 Z" fill="#f1f0e8" opacity="0.8" />
+              <text x="16" y="26" fill="#7f5815" opacity="0.6" fontSize="10" fontFamily="monospace" letterSpacing="2">
                 JEBEL ALI MARITIME APPROACH
               </text>
 
-              <polyline points="25,180 165,105 335,60 510,22" fill="none" stroke="#baff68" strokeWidth="3.5" strokeLinecap="round" opacity="0.7" />
-              <text x="148" y="88" fill="#c7ff82" fontSize="10" fontFamily="monospace">E11 CORRIDOR</text>
-              <polyline points="85,205 255,132 410,76 520,38" fill="none" stroke="#83d8d4" strokeWidth="3" strokeLinecap="round" opacity="0.65" />
-              <text x="258" y="122" fill="#a9e9e5" fontSize="10" fontFamily="monospace">E311 SPINE</text>
-              <polyline points="115,82 175,96 295,102 395,84" fill="none" stroke="#e8c16e" strokeWidth="2" strokeDasharray="5,4" opacity="0.75" />
-              <line x1="295" y1="102" x2="395" y2="84" stroke="#83d8d4" strokeWidth="2" strokeDasharray="6,4" />
-              <path d="M 270,162 Q 345,130 435,172" fill="none" stroke="#e8c16e" strokeWidth="2" strokeDasharray="6,4" />
+              <polyline points="25,180 165,105 335,60 510,22" fill="none" stroke="#427209" strokeWidth="3.5" strokeLinecap="round" opacity="0.7" />
+              <text x="148" y="88" fill="#427209" fontSize="10" fontFamily="monospace">E11 CORRIDOR</text>
+              <polyline points="85,205 255,132 410,76 520,38" fill="none" stroke="#267874" strokeWidth="3" strokeLinecap="round" opacity="0.65" />
+              <text x="258" y="122" fill="#207e78" fontSize="10" fontFamily="monospace">E311 SPINE</text>
+              <polyline points="115,82 175,96 295,102 395,84" fill="none" stroke="#805e14" strokeWidth="2" strokeDasharray="5,4" opacity="0.75" />
+              <line x1="295" y1="102" x2="395" y2="84" stroke="#267874" strokeWidth="2" strokeDasharray="6,4" />
+              <path d="M 270,162 Q 345,130 435,172" fill="none" stroke="#805e14" strokeWidth="2" strokeDasharray="6,4" />
 
-              <circle cx="115" cy="82" r="24" fill="#baff68" fillOpacity="0.08" stroke="#baff68" strokeOpacity=".6" strokeWidth="1.2" strokeDasharray="4,3" />
-              <text x="72" y="52" fill="#d9ffad" fontSize="10" fontFamily="monospace">DP WORLD JEBEL ALI</text>
-              <circle cx="395" cy="84" r="22" fill="#c2a5ff" fillOpacity="0.1" stroke="#c2a5ff" strokeOpacity=".7" strokeWidth="1.2" strokeDasharray="4,3" />
+              <circle cx="115" cy="82" r="24" fill="#427209" fillOpacity="0.08" stroke="#427209" strokeOpacity=".6" strokeWidth="1.2" strokeDasharray="4,3" />
+              <text x="72" y="52" fill="#417209" fontSize="10" fontFamily="monospace">DP WORLD JEBEL ALI</text>
+              <circle cx="395" cy="84" r="22" fill="#370c92" fillOpacity="0.1" stroke="#370c92" strokeOpacity=".7" strokeWidth="1.2" strokeDasharray="4,3" />
 
               {RADAR_UNITS.map((u, idx) => {
                 const isSel = selectedRadarUnit === idx;
@@ -290,7 +290,7 @@ export default function LiveProductStage({ snapshot }: { snapshot: HomepageSnaps
                     }}
                   >
                     {isSel && <circle cx={u.cx} cy={u.cy} r="16" fill="none" stroke={u.color} strokeWidth="1.5" strokeDasharray="4,2" />}
-                    <circle cx={u.cx} cy={u.cy} r={isSel ? 8 : 6.5} fill={u.color} stroke="#030c09" strokeWidth="2" style={{ filter: `drop-shadow(0 0 6px ${u.color})` }} />
+                    <circle cx={u.cx} cy={u.cy} r={isSel ? 8 : 6.5} fill={u.color} stroke="#f7f6f0" strokeWidth="2" style={{ filter: `drop-shadow(0 0 6px ${u.color})` }} />
                     <text x={u.cx} y={idx % 2 === 0 ? u.cy + 21 : u.cy - 13} textAnchor="middle" fill={u.textColor} fontSize="10" fontFamily="monospace">
                       {u.label}
                     </text>

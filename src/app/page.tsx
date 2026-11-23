@@ -21,7 +21,7 @@ export const revalidate = 60;
 export default function Home() {
   const snapshot = getHomepageSnapshot();
   return (
-    <main style={{ background: '#020908', color: '#f4f4ed' }}>
+    <main style={{ background: '#f7f6f0', color: '#0c1a14' }}>
       <HomepageAnalytics />
       <HomeHero snapshot={snapshot} />
       <AgentOrchestration />
