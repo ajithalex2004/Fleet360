@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BACK_BUTTON } from '@/lib/ui/toggle';
+import AuthShell, { authStyles } from '@/components/marketing/AuthShell';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]     = useState('');
@@ -33,63 +33,48 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  const s = authStyles;
   return (
-    <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center space-y-2">
-          <div className="text-4xl font-black text-white tracking-tight">
-            XL <span className="text-blue-500">AI</span>
-          </div>
-          <p className="text-slate-400 text-sm">Smart Mobility Platform</p>
-        </div>
-
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 shadow-2xl space-y-6">
-          <div>
-            <h1 className="text-xl font-bold text-white">Reset your password</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              {sent
-                ? "Check your inbox — if an account exists for that email, we've sent a reset link."
-                : 'Enter the email on your account and we’ll send you a reset link.'}
-            </p>
-          </div>
-
-          {error && (
-            <div className="bg-red-950/50 border border-red-500/40 rounded-lg px-4 py-3 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
-
-          {!sent ? (
-            <form onSubmit={submit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Email address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@yourcompany.com"
-                  autoComplete="email"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <button type="submit" disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm">
-                {loading ? 'Sending…' : 'Send reset link'}
-              </button>
-            </form>
-          ) : (
-            <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-lg p-4 text-emerald-300 text-sm">
-              The link expires in 60 minutes. Didn&rsquo;t get it? Check your spam folder, or
-              <button onClick={() => setSent(false)} className="ml-1 underline">try again</button>.
-            </div>
-          )}
-
-          <div className="text-center">
-            <a href="/login" className={BACK_BUTTON}>&larr; Back to sign in</a>
-          </div>
-        </div>
+    <AuthShell eyebrow="Account recovery">
+      <div>
+        <h1 className={s.title}>Reset your password</h1>
+        <p className={s.lede}>
+          {sent
+            ? "Check your inbox — if an account exists for that email, we've sent a reset link."
+            : 'Enter the email on your account and we’ll send you a reset link.'}
+        </p>
       </div>
-    </div>
+
+      {error && <div className={s.error} role="alert"><span>{error}</span></div>}
+
+      {!sent ? (
+        <form onSubmit={submit} className={s.form}>
+          <label className={s.field}>
+            <span className={s.label}>Email address</span>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@yourcompany.com"
+              autoComplete="email"
+              className={s.input}
+              required
+            />
+          </label>
+          <button type="submit" disabled={loading} className={s.primary}>
+            {loading ? 'Sending…' : 'Send reset link'} <span aria-hidden="true">→</span>
+          </button>
+        </form>
+      ) : (
+        <div className={s.success}>
+          The link expires in 60 minutes. Didn&rsquo;t get it? Check your spam folder, or
+          <button type="button" onClick={() => setSent(false)} className={s.accentLink} style={{ marginLeft: 4 }}>try again</button>.
+        </div>
+      )}
+
+      <div className={s.center}>
+        <a href="/login" className={s.link}>&larr; Back to sign in</a>
+      </div>
+    </AuthShell>
   );
 }

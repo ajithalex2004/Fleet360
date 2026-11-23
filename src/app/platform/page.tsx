@@ -34,7 +34,6 @@ import {
   Headphones,
   Settings,
   Anchor,
-  Navigation,
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -52,142 +51,6 @@ interface ModuleDef {
   flagship?: boolean;
   quickActions?: Array<{ label: string; href: string }>;
 }
-
-interface StageTabDef {
-  id: number;
-  shortLabel: string;
-  badge: string;
-  title: string;
-  subtitle: string;
-  metrics: Array<{ code: string; detail: string; status: string; tone: 'cyan' | 'emerald' | 'purple' | 'amber' }>;
-}
-
-const STAGE_TABS: StageTabDef[] = [
-  {
-    id: 0,
-    shortLabel: '1. Drayage Radar',
-    badge: 'TAB 1 · LIVE CORRIDOR RADAR (/logistics/drayage/tracking)',
-    title: 'Real-Time Coupled Prime Movers & Detached Ramp Chassis',
-    subtitle: 'Track moving tractors on E11/E311 alongside uncoupled skeletal trailers dropped at customer ramps with live offload ETC countdowns.',
-    metrics: [
-      {
-        code: 'DXB-767-4011',
-        detail: 'Coupled w/ DXB-TR-9901 · MSCU8492014 · 72 km/h on E11',
-        status: 'IN_TRANSIT',
-        tone: 'cyan',
-      },
-      {
-        code: 'DXB-767-4012',
-        detail: '2×20FT Bogie Tether · 36.8T Payload on E311 Spine',
-        status: 'BOGIE_PAIRED',
-        tone: 'emerald',
-      },
-      {
-        code: 'DXB-TR-9902',
-        detail: 'Detached at NIP Mega DC Ramp 07 · Live Offload ETC: 01h 42m',
-        status: 'DETACHED_AT_RAMP',
-        tone: 'purple',
-      },
-    ],
-  },
-  {
-    id: 1,
-    shortLabel: '2. PCS Gate Tokens',
-    badge: 'TAB 2 · PCS & GATE AUTOMATION (/logistics/drayage/containers)',
-    title: 'Dubai Trade & AD Ports ATLP e-Token & Customs Clearance',
-    subtitle: 'Book automated terminal gate slots, clear multi-agency Customs/Municipality/CPIP inspections, and guard against Delivery Order (eDO) expiry.',
-    metrics: [
-      {
-        code: 'DT-TKN-884120',
-        detail: 'DP World Jebel Ali T1 · Automated Gate Slot 08:00–09:00 GST',
-        status: 'SLOT_BOOKED',
-        tone: 'cyan',
-      },
-      {
-        code: 'CPIP Seal #DM-99812',
-        detail: 'Multi-Agency Customs & Dubai Municipality Inspection Cleared',
-        status: 'CLEARED',
-        tone: 'emerald',
-      },
-      {
-        code: 'eDO Validity Guard',
-        detail: '72h Remaining · Automated Revalidation Workflow Ready',
-        status: 'VALID_EDO',
-        tone: 'amber',
-      },
-    ],
-  },
-  {
-    id: 2,
-    shortLabel: '3. AI Co-Pilot',
-    badge: 'TAB 3 · GOVERNED AI ORCHESTRATOR (/agents)',
-    title: '6 Specialized AI Agents Coordinating Dispatch & Maintenance',
-    subtitle: 'Policy-controlled AI agents detect exceptions, triangulate empty containers to exports, and automate driver trip settlements.',
-    metrics: [
-      {
-        code: 'Dispatch AI Agent',
-        detail: 'Matched Import Empty HLXU9034118 to Export (-42 km Deadhead)',
-        status: 'STREET_TURN',
-        tone: 'emerald',
-      },
-      {
-        code: 'Maintenance AI Agent',
-        detail: 'Predictive DPF Service Scheduled at Jebel Ali Workshop',
-        status: 'READY_99.7%',
-        tone: 'cyan',
-      },
-      {
-        code: 'Finance Settlement AI',
-        detail: 'Auto-Verified AED 145 Driver Bogie + Port Gate Allowance',
-        status: 'RECONCILED',
-        tone: 'purple',
-      },
-    ],
-  },
-];
-
-const RADAR_UNITS = [
-  {
-    id: 'u0',
-    plate: 'DXB-767-4011',
-    label: 'DXB-767-4011 (72km/h)',
-    summary: 'Prime Mover Coupled w/ DXB-TR-9901 · Container MSCU8492014 · E11 → D53 Corridor · Fuel 84%',
-    cx: 175,
-    cy: 96,
-    color: '#3B82F6',
-    textColor: '#f8fafc',
-  },
-  {
-    id: 'u1',
-    plate: 'DXB-767-4012',
-    label: '2×20FT BOGIE',
-    summary: 'Volvo FH16 Coupled w/ 45FT Chassis DXB-TR-9905 · CMAU2210941 + TGHU1904422 (36.8T) · E311 Spine',
-    cx: 295,
-    cy: 102,
-    color: '#06B6D4',
-    textColor: '#67e8f9',
-  },
-  {
-    id: 'u2',
-    plate: 'DXB-767-4013',
-    label: 'STREET-TURN (-42km)',
-    summary: 'Scania R500 · Import Empty HLXU9034118 Triangulated to Export Booking DRY-EXP-1001 · D57 Expo Rd',
-    cx: 270,
-    cy: 162,
-    color: '#10B981',
-    textColor: '#6ee7b7',
-  },
-  {
-    id: 'u3',
-    plate: 'DXB-TR-9902',
-    label: 'DETACHED RAMP 07',
-    summary: 'Standalone Skeletal Chassis Pinned at NIP Mega DC Bay Ramp 07 · Live Offload ETC: 01h 42m remaining',
-    cx: 395,
-    cy: 84,
-    color: '#A855F7',
-    textColor: '#e9d5ff',
-  },
-];
 
 const MODULES: ModuleDef[] = [
   // ── 1. AI & INTELLIGENCE ──────────────────────────────────────────
@@ -688,8 +551,6 @@ export default function PlatformPage() {
 
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeStageTab, setActiveStageTab] = useState<number>(0);
-  const [selectedRadarUnit, setSelectedRadarUnit] = useState<number>(0);
 
   const canOpen = (id: string) => {
     if (!user) return true;
@@ -752,16 +613,6 @@ export default function PlatformPage() {
     0
   );
 
-  const currentStage = STAGE_TABS[activeStageTab] ?? STAGE_TABS[0];
-  const currentUnit = RADAR_UNITS[selectedRadarUnit] ?? RADAR_UNITS[0];
-
-  const toneBadgeClass = (tone: 'cyan' | 'emerald' | 'purple' | 'amber') => {
-    if (tone === 'emerald') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-    if (tone === 'purple') return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
-    if (tone === 'amber') return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
-    return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
-  };
-
   return (
     <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150 flex flex-col">
       {/* Top Spatial Glass Enterprise Bar */}
@@ -811,186 +662,25 @@ export default function PlatformPage() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-10">
-        {/* Sample A: Spatial Command Glass & Interactive Product Stage Hero */}
-        <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 text-slate-100 p-6 lg:p-9 shadow-2xl bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cyan-950/45 via-slate-950 to-slate-950">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Left Column: Hero Copy, Quick Launch Buttons & Search */}
-            <div className="lg:col-span-6 space-y-5">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-semibold text-cyan-300">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                <span>{tLabel('Autonomous Transport & Fleet Operations')}</span>
-              </div>
-
-              <div className="space-y-3">
-                <div className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-400">
-                  {tLabel('Fleet360 Platform Command')}
-                </div>
-                <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
-                  One Autonomous Command Layer for{' '}
-                  <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
-                    Every Vehicle, Container &amp; Route.
-                  </span>
-                </h1>
-                <p className="text-slate-300 text-sm sm:text-base font-medium leading-relaxed">
-                  Unify Prime Movers, Skeletal Chassis &amp; Container Tracking powered by Governed AI agents
-                </p>
-              </div>
-
-              {/* Direct Quick-Access Launch Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs">
-                <Link
-                  href="/logistics/drayage/tracking"
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-blue-500 hover:to-cyan-400 transition-all"
-                >
-                  <Navigation className="w-3.5 h-3.5" />
-                  <span>Open Live Corridor Radar</span>
-                </Link>
-                <Link
-                  href="/logistics/drayage"
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-2.5 font-semibold text-slate-200 hover:border-cyan-400 hover:text-white transition-all"
-                >
-                  <Anchor className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Port &amp; Container Drayage</span>
-                </Link>
-                <Link
-                  href="/logistics/drayage/portal"
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 font-semibold text-slate-200 hover:border-emerald-400 hover:text-white transition-all"
-                >
-                  <span>Consignee Portal</span>
-                </Link>
-              </div>
-
-              {/* Search Bar Input */}
-              <div className="pt-2">
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder={tLabel('Search modules, features, tariffs, permits, telematics...')}
-                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-14 py-3 text-white placeholder-slate-400 text-xs focus:outline-none focus:border-cyan-400 shadow-inner transition-all"
-                  />
-                  <button
-                    onClick={openPalette}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white"
-                    title={tLabel('Open Universal Command Palette')}
-                  >
-                    ⌘K
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Interactive 3-Tab Live Product Stage */}
-            <div className="lg:col-span-6 rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-2xl space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-mono font-bold text-cyan-400">LIVE INTERACTIVE PRODUCT STAGE</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {STAGE_TABS.map(tab => {
-                    const active = activeStageTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveStageTab(tab.id)}
-                        className={`px-2.5 py-1 rounded-lg font-bold transition-all text-xs ${
-                          active
-                            ? 'bg-cyan-400 text-slate-950 shadow-sm'
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-                        }`}
-                      >
-                        {tab.shortLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Interactive Corridor Radar SVG */}
-              <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
-                <svg viewBox="0 0 540 195" className="w-full h-[180px] block select-none">
-                  <defs>
-                    <pattern id="platformRadarGrid" width="36" height="36" patternUnits="userSpaceOnUse">
-                      <path d="M 36 0 L 0 0 0 36" fill="none" stroke="#1e293b" strokeWidth="0.8" />
-                    </pattern>
-                  </defs>
-                  <rect width="540" height="195" fill="#060b14" />
-                  <rect width="540" height="195" fill="url(#platformRadarGrid)" />
-                  <path d="M 0,0 L 200,0 L 140,70 L 70,130 L 0,175 Z" fill="#0c192c" opacity="0.7" />
-                  <polyline points="25,165 165,98 335,56 510,20" fill="none" stroke="#3B82F6" strokeWidth="4" opacity="0.8" />
-                  <text x="148" y="84" fill="#60A5FA" fontSize="11" fontWeight="bold">E11 Corridor</text>
-                  <polyline points="85,185 255,122 410,70 520,34" fill="none" stroke="#10B981" strokeWidth="3.5" opacity="0.8" />
-                  <text x="258" y="114" fill="#34D399" fontSize="11" fontWeight="bold">E311 Spine</text>
-                  <line x1="295" y1="102" x2="395" y2="84" stroke="#22D3EE" strokeWidth="2.5" strokeDasharray="6,4" />
-                  <path d="M 270,162 Q 345,130 435,172" fill="none" stroke="#10B981" strokeWidth="2.5" strokeDasharray="6,4" />
-
-                  {RADAR_UNITS.map((u, idx) => {
-                    const isSel = selectedRadarUnit === idx;
-                    return (
-                      <g
-                        key={u.id}
-                        onClick={() => setSelectedRadarUnit(idx)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {isSel && (
-                          <circle cx={u.cx} cy={u.cy} r="15" fill="none" stroke="#ffffff" strokeWidth="2" strokeDasharray="4,2" />
-                        )}
-                        <circle cx={u.cx} cy={u.cy} r={isSel ? 8.5 : 7} fill={u.color} stroke="#ffffff" strokeWidth="2" />
-                        <text
-                          x={u.cx}
-                          y={idx % 2 === 0 ? u.cy + 19 : u.cy - 12}
-                          textAnchor="middle"
-                          fill={u.textColor}
-                          fontSize="11"
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                        >
-                          {u.label}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-
-                <div className="border-t border-slate-800 bg-slate-900/95 px-3 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono font-bold text-cyan-300">
-                      {currentUnit.plate}
-                    </span>
-                    <span className="text-slate-300">{currentUnit.summary}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stage Metrics List */}
-              <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-cyan-400">{currentStage.badge}</span>
-                  <Link href="/logistics/drayage/tracking" className="font-semibold text-blue-400 hover:text-cyan-300">
-                    Full Radar Console →
-                  </Link>
-                </div>
-                {currentStage.metrics.map(m => (
-                  <div
-                    key={m.code}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/90 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-cyan-300">{m.code}</span>
-                      <span className="text-slate-200">{m.detail}</span>
-                    </div>
-                    <span className={`rounded border px-2 py-0.5 font-mono text-xs font-bold ${toneBadgeClass(m.tone)}`}>
-                      {m.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* Module search */}
+        <div className="relative max-w-3xl mx-auto w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder={tLabel('Search modules, features, tariffs, permits, telematics...')}
+            aria-label={tLabel('Search modules')}
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-14 py-3 text-[var(--text-main)] placeholder:text-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--border-strong)] transition-all"
+          />
+          <button
+            type="button"
+            onClick={openPalette}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            title={tLabel('Open Universal Command Palette')}
+          >
+            ⌘K
+          </button>
         </div>
 
         {/* Category Navigation Pills */}
