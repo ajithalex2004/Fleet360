@@ -24,7 +24,7 @@ export type SystemTicketType =
 /**
  * A ticket type key. Any `service_types.key` in the tenant's catalogue that is
  * linked to the SERVICE_TICKETING module is a valid ticket type — the seven
- * system types plus tenant-defined ones (e.g. the Facilities catalogue).
+ * system types plus tenant-defined ones (e.g. the Field Service Management catalogue).
  * `(string & {})` keeps editor autocompletion for the system keys.
  */
 export type TicketType = SystemTicketType | (string & {});

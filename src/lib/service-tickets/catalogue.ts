@@ -3,7 +3,7 @@
  *
  * A service type is a ticket type when its `service_module_mapping` row links
  * it to SERVICE_TICKETING. That covers the seven seeded system types and any
- * tenant-defined type (e.g. the Facilities catalogue) without code changes.
+ * tenant-defined type (e.g. the Field Service Management catalogue) without code changes.
  *
  * The service-config tables have no RLS (see migration
  * 20260910000033_service_config_engine_tables), so every query here filters

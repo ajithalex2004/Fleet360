@@ -10,7 +10,7 @@
 import {
   Wrench, Calendar, Sparkles, LifeBuoy, Siren, Truck,
   MessageSquareWarning, MessageCircle, Headphones, Bus, Car,
-  // Facilities catalogue
+  // Field Service Management catalogue
   Snowflake, Zap, Droplets, ArrowUpDown, Flame, DoorOpen, SprayCan, Bug,
   Trash2, Trees, Package, Presentation, KeyRound, CircleParking, ShieldAlert,
   HardHat, Building2,

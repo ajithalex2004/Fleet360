@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     // Seed a new tenant's service catalogue once, before the per-type reads
     // below run in parallel.
     await runAsTenant(tenantId, () => ensureSeededForTenant(tenantId));
-    // Tenant-defined ticket types (e.g. the Facilities catalogue) appear too,
+    // Tenant-defined ticket types (e.g. the Field Service Management catalogue) appear too,
     // enabled by default until a row says otherwise.
     const catalogue = await runAsTenant(tenantId, () => listTicketCatalogue(tenantId));
     const known = new Set(baseMatrix.map((r) => r.ticketType));

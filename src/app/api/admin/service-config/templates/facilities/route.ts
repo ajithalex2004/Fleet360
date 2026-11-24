@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic';
 /**
  * /api/admin/service-config/templates/facilities
  *
- * GET  — install status: { installed, total } types of the Facilities catalogue.
- * POST — install the Facilities Management catalogue for the caller's tenant
+ * GET  — install status: { installed, total } types of the Field Service Management catalogue.
+ * POST — install the Field Service Management catalogue for the caller's tenant
  *        (4 categories, 16 ticket types, 4 departments). Idempotent; never
  *        overwrites admin edits. TENANT_ADMIN / SUPER_ADMIN only.
  */
@@ -41,13 +41,13 @@ async function handlePOST(req: NextRequest) {
     const result = await installFacilitiesTemplate(auth.tenantId);
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
-      entityType: 'ServiceCatalogueTemplate', entityId: 'FACILITIES', entityName: 'Facilities Management',
-      action: 'CREATE', details: `Installed Facilities catalogue: ${result.typesAdded} of ${result.total} types added`,
+      entityType: 'ServiceCatalogueTemplate', entityId: 'FACILITIES', entityName: 'Field Service Management',
+      action: 'CREATE', details: `Installed Field Service Management catalogue: ${result.typesAdded} of ${result.total} types added`,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     captureException(err, { context: 'service-config.templates.facilities.install' });
-    return NextResponse.json({ ok: false, error: 'Failed to install the Facilities catalogue' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Failed to install the Field Service Management catalogue' }, { status: 500 });
   }
 }
 

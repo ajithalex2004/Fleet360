@@ -1,5 +1,5 @@
 /**
- * Facilities Management service-desk template.
+ * Field Service Management (FM) service-desk template.
  *
  * An opt-in starter catalogue an admin installs for a tenant from
  * /admin/service-config. It adds four categories, sixteen ticket types
@@ -73,7 +73,7 @@ const sel = (key: string, label: string, options: string[], required = false): F
 
 export const FACILITIES_CATALOGUE: FmCategory[] = [
   {
-    key: 'FM_HARD_SERVICES', name: 'Facilities — Hard services',
+    key: 'FM_HARD_SERVICES', name: 'Field Service — Hard services',
     description: 'Building systems: HVAC, electrical, plumbing, lifts, fire safety and fabric.',
     icon: 'Building2', tone: 'amber', sortOrder: 60,
     types: [
@@ -99,7 +99,7 @@ export const FACILITIES_CATALOGUE: FmCategory[] = [
     ],
   },
   {
-    key: 'FM_SOFT_SERVICES', name: 'Facilities — Soft services',
+    key: 'FM_SOFT_SERVICES', name: 'Field Service — Soft services',
     description: 'Cleaning, pest control, waste and landscaping.',
     icon: 'SprayCan', tone: 'emerald', sortOrder: 61,
     types: [
@@ -114,7 +114,7 @@ export const FACILITIES_CATALOGUE: FmCategory[] = [
     ],
   },
   {
-    key: 'FM_WORKPLACE', name: 'Facilities — Workplace services',
+    key: 'FM_WORKPLACE', name: 'Field Service — Workplace services',
     description: 'Moves, meeting rooms, access cards and parking.',
     icon: 'Presentation', tone: 'blue', sortOrder: 62,
     types: [
@@ -135,7 +135,7 @@ export const FACILITIES_CATALOGUE: FmCategory[] = [
     ],
   },
   {
-    key: 'FM_SECURITY_SAFETY', name: 'Facilities — Security & safety',
+    key: 'FM_SECURITY_SAFETY', name: 'Field Service — Security & safety',
     description: 'Security incidents and health & safety hazards.',
     icon: 'ShieldAlert', tone: 'rose', sortOrder: 63,
     types: [
@@ -172,7 +172,7 @@ export async function facilitiesInstallStatus(tenantId: string): Promise<{ insta
   return { installed: Number(rows[0]?.n ?? 0), total: keys.length };
 }
 
-/** Install the Facilities catalogue for a tenant. Returns how many types were added. */
+/** Install the Field Service Management catalogue for a tenant. Returns how many types were added. */
 export async function installFacilitiesTemplate(tenantId: string): Promise<{ typesAdded: number; total: number }> {
   await ensureSeededForTenant(tenantId);
   const rootScopeId = await ensureRootScope(tenantId);
@@ -212,7 +212,7 @@ export async function installFacilitiesTemplate(tenantId: string): Promise<{ typ
            (service_type_id, linked_module, sub_module,
             workflow_engine_enabled, notification_engine_enabled, approval_engine_enabled,
             finance_engine_enabled, dispatch_engine_enabled)
-         VALUES ($1::uuid, 'SERVICE_TICKETING', 'Facilities', TRUE, TRUE, $2, FALSE, FALSE)
+         VALUES ($1::uuid, 'SERVICE_TICKETING', 'Field Service', TRUE, TRUE, $2, FALSE, FALSE)
          ON CONFLICT (service_type_id) DO NOTHING`,
         type.id, !!t.approvalRequired,
       );

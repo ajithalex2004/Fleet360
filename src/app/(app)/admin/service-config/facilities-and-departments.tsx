@@ -2,7 +2,7 @@
 
 /**
  * Two admin panels on /admin/service-config:
- *   • FacilitiesTemplateCard — installs the Facilities Management catalogue
+ *   • FacilitiesTemplateCard — installs the Field Service Management catalogue
  *   • DepartmentsPanel       — rename / hide / add triage & forwarding departments
  */
 
@@ -31,7 +31,7 @@ export function FacilitiesTemplateCard({ onInstalled }: { onInstalled: () => voi
       const res = await fetch('/api/admin/service-config/templates/facilities', { method: 'POST' });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) throw new Error(data?.error ?? 'Install failed');
-      setMsg({ ok: true, text: data.typesAdded > 0 ? `Added ${data.typesAdded} Facilities request types.` : 'Already installed — nothing changed.' });
+      setMsg({ ok: true, text: data.typesAdded > 0 ? `Added ${data.typesAdded} Field Service request types.` : 'Already installed — nothing changed.' });
       await load();
       onInstalled();
     } catch (e) {
@@ -47,7 +47,7 @@ export function FacilitiesTemplateCard({ onInstalled }: { onInstalled: () => voi
       <div className="flex items-start gap-3">
         <span className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-300"><Building2 className="w-5 h-5" /></span>
         <div className="flex-1 min-w-0">
-          <h2 id="fm-template-title" className="text-sm font-semibold text-[var(--text-main)]">Facilities Management catalogue</h2>
+          <h2 id="fm-template-title" className="text-sm font-semibold text-[var(--text-main)]">Field Service Management catalogue</h2>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">
             Adds 16 request types in 4 categories: hard services (HVAC, electrical, plumbing, lifts, fire safety, fabric),
             soft services, workplace and security &amp; safety. Each has location fields, an SLA per priority and a

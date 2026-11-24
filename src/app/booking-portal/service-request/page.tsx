@@ -2,11 +2,11 @@
 
 /**
  * /booking-portal/service-request — raise a service request from the
- * Booking Portal (Facilities, support, cleaning…).
+ * Booking Portal (field service, support, cleaning…).
  *
  * The cards come from the tenant's service catalogue via
  * /api/service-tickets/form-fields, so any type an admin adds (or the
- * Facilities template installs) appears here with no code change. Requests
+ * Field Service Management template installs) appears here with no code change. Requests
  * are created as Service Tickets, so SLAs, triage, departments, approvals,
  * tracking links and CSAT all apply. Types that need a vehicle are left to
  * the fleet team in Service Tickets.
@@ -100,7 +100,7 @@ function ServiceRequestForm() {
         if (!byCat.has(key)) byCat.set(key, { name: t.categoryName || 'Other requests', items: [] });
         byCat.get(key)!.items.push([k, t]);
       });
-    // Facilities first: that's what most employees come here for.
+    // Field Service (FM_) categories first: that's what most employees come here for.
     return [...byCat.entries()].sort(([a], [b]) => Number(b.startsWith('FM_')) - Number(a.startsWith('FM_')));
   }, [types]);
 
@@ -275,7 +275,7 @@ function ServiceRequestForm() {
       {!loadError && groups.length === 0 && (
         <p className="rounded-2xl bg-slate-900/60 border border-white/10 p-6 text-slate-300">
           No service requests are set up yet. An administrator can add them in Service Configuration,
-          for example by installing the Facilities Management catalogue.
+          for example by installing the Field Service Management catalogue.
         </p>
       )}
 
