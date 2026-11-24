@@ -228,3 +228,20 @@ describe('Facilities template', () => {
     for (const d of FACILITIES_DEPARTMENTS) expect(validateDepartmentInput(d)).toBeNull();
   });
 });
+
+describe('admin route policy for the new service-config routes', () => {
+  it('lets tenant admins (not just platform admins) use departments and the Facilities template', async () => {
+    const { requiredAdminLevel, roleSatisfies } = await import('@/lib/admin-access');
+    for (const [path, method] of [
+      ['/api/admin/service-config/departments', 'GET'],
+      ['/api/admin/service-config/departments', 'PUT'],
+      ['/api/admin/service-config/templates/facilities', 'GET'],
+      ['/api/admin/service-config/templates/facilities', 'POST'],
+    ] as const) {
+      const level = requiredAdminLevel(path, method);
+      expect(level).toBe('admin');
+      expect(roleSatisfies('TENANT_ADMIN', level!)).toBe(true);
+      expect(roleSatisfies('DISPATCHER', level!)).toBe(false);
+    }
+  });
+});
