@@ -141,7 +141,8 @@ html.light :is(
   [class~="bg-rose-950"],
   [class^="bg-gradient-"], [class*=" bg-gradient-"],
   [class^="bg-black"], [class*=" bg-black"],
-  [class~="bg-black"]
+  [class~="bg-black"],
+  [class~="dark"]
 ) {
   --lc-slate-200: #e2e8f0;
   --lc-slate-300: #cbd5e1;

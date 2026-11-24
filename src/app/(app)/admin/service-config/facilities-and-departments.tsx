@@ -83,7 +83,7 @@ const TONE_DOT: Record<string, string> = {
   blue: 'bg-blue-500', violet: 'bg-violet-500', cyan: 'bg-cyan-500', gold: 'bg-yellow-500',
 };
 
-export function DepartmentsPanel() {
+export function DepartmentsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const [depts, setDepts] = useState<Dept[]>([]);
   const [editing, setEditing] = useState<Dept | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -95,7 +95,7 @@ export function DepartmentsPanel() {
     const data = await res.json().catch(() => null);
     if (res.ok && data?.ok) setDepts(data.departments);
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
 
   const save = async (d: Dept) => {
     setBusy(true); setErr(null);

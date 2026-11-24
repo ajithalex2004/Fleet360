@@ -79,6 +79,7 @@ export default function ServiceConfigPage() {
   const [activeTab, setActiveTab]             = useState<TabKey>('basic');
   const [showNewCat, setShowNewCat]           = useState(false);
   const [showNewType, setShowNewType]         = useState<string | null>(null); // categoryId
+  const [deptRefresh, setDeptRefresh]         = useState(0);
 
   // Phase 2E — scope state. scopes is the full list for this tenant;
   // activeScopeId is the scope currently being edited (root by default).
@@ -184,8 +185,8 @@ export default function ServiceConfigPage() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <FacilitiesTemplateCard onInstalled={() => void load()} />
-        <DepartmentsPanel />
+        <FacilitiesTemplateCard onInstalled={() => { void load(); setDeptRefresh(n => n + 1); }} />
+        <DepartmentsPanel refreshKey={deptRefresh} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4">

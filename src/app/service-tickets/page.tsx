@@ -3,7 +3,7 @@
 /**
  * /service-tickets — Service & Support Ticketing module home (Phase 1B).
  *
- * One module, 7 ticket types. Same engines as /maintenance/service-requests:
+ * One module, every catalogue ticket type. Same engines as /maintenance/service-requests:
  *   - Status workflow: Pending → Acknowledged → Assigned/Escalated → Resolved
  *   - SLA aging badge on Pending cards (24h / 72h thresholds)
  *   - Bulk actions toolbar (Acknowledge / Assign / Escalate / Resolve)
@@ -404,7 +404,7 @@ export default function ServiceTicketsHome() {
     <div className="space-y-6 max-w-7xl">
       <PageHeader
         title="Service & Support Ticket Hub"
-        subtitle="Central operations triage hopper · 7 ticket types · 1-click recovery · replacement fleet swaps"
+        subtitle={`Central operations triage hopper · ${enabledTypes.length || 7} ticket types · 1-click recovery · replacement fleet swaps`}
         icon={Headphones}
         accent="violet"
         actions={
