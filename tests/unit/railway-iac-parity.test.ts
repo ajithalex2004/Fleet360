@@ -141,14 +141,17 @@ describe('Railway IaC Migration — Configuration Parity Checks (.railway/railwa
         }
       }
 
+      // Dormant one-time bootstrap secret must not remain in runtime environments post-bootstrap
+      const appVars = byName.get('fleet360-app')!.variables ?? {};
+      expect(appVars).not.toHaveProperty('SETUP_SECRET');
+
       // Production fleet360-app must never expose migration-owner database URLs
       if (env === 'production') {
-        const prodAppVars = byName.get('fleet360-app')!.variables ?? {};
-        expect(prodAppVars).not.toHaveProperty('DIRECT_URL');
-        expect(prodAppVars).not.toHaveProperty('DIRECT_DATABASE_URL');
-        expect(prodAppVars).not.toHaveProperty('MIGRATION_DATABASE_URL');
-        expect(prodAppVars).toHaveProperty('DATABASE_URL');
-        expect(prodAppVars).toHaveProperty('RUNTIME_DIRECT_DATABASE_URL');
+        expect(appVars).not.toHaveProperty('DIRECT_URL');
+        expect(appVars).not.toHaveProperty('DIRECT_DATABASE_URL');
+        expect(appVars).not.toHaveProperty('MIGRATION_DATABASE_URL');
+        expect(appVars).toHaveProperty('DATABASE_URL');
+        expect(appVars).toHaveProperty('RUNTIME_DIRECT_DATABASE_URL');
       }
     }
   });
