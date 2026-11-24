@@ -18,18 +18,21 @@ import {
 import {
   TICKET_DEPARTMENTS,
   type TicketDepartment,
+  type TicketDepartmentDef,
   type TicketPriority,
   type ServiceTicket,
 } from '@/types/service-tickets';
 
 interface ForwardTicketModalProps {
+  /** The tenant's active departments (from /api/service-tickets/form-fields). */
+  departments?: TicketDepartmentDef[];
   ticket: ServiceTicket | null;
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (updatedTicket: ServiceTicket, createdMr?: any) => void;
 }
 
-const DEPT_ICONS: Record<TicketDepartment, React.ComponentType<{ className?: string }>> = {
+const DEPT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   OPERATIONS_TRIAGE: Inbox,
   WORKSHOP_MAINTENANCE: Wrench,
   RECOVERY_DISPATCH: Truck,
@@ -39,7 +42,7 @@ const DEPT_ICONS: Record<TicketDepartment, React.ComponentType<{ className?: str
 };
 
 const DEPT_BADGES: Record<
-  TicketDepartment,
+  string,
   { bg: string; text: string; border: string }
 > = {
   OPERATIONS_TRIAGE: {
@@ -74,23 +77,45 @@ const DEPT_BADGES: Record<
   },
 };
 
+/** Colours for tenant-defined departments, keyed by tone. */
+const TONE_BADGES: Record<string, { bg: string; text: string; border: string }> = {
+  slate: DEPT_BADGES.OPERATIONS_TRIAGE, amber: DEPT_BADGES.WORKSHOP_MAINTENANCE,
+  rose: DEPT_BADGES.RECOVERY_DISPATCH, violet: DEPT_BADGES.SAFETY_COMPLIANCE,
+  blue: DEPT_BADGES.CUSTOMER_SERVICE, emerald: DEPT_BADGES.FACILITIES_CLEANING,
+  cyan: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/40' },
+  gold: { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/40' },
+};
+
+/** Sensible default target: an FM team for Facilities tickets, else Workshop. */
+function defaultTarget(ticket: ServiceTicket | null, departments: TicketDepartmentDef[]): TicketDepartment {
+  const current = ticket?.assignedDepartment || 'OPERATIONS_TRIAGE';
+  if (current !== 'OPERATIONS_TRIAGE') return current;
+  const keys = departments.map((d) => d.key);
+  if (ticket?.ticketType?.startsWith('FM_')) {
+    const fm = keys.find((k) => k.startsWith('FM_'));
+    if (fm) return fm;
+  }
+  return keys.includes('WORKSHOP_MAINTENANCE') ? 'WORKSHOP_MAINTENANCE' : (keys.find((k) => k !== 'OPERATIONS_TRIAGE') ?? 'OPERATIONS_TRIAGE');
+}
+
 export function ForwardTicketModal({
+  departments = TICKET_DEPARTMENTS,
   ticket,
   isOpen,
   onClose,
   onSuccess,
 }: ForwardTicketModalProps) {
   const currentDept = ticket?.assignedDepartment || 'OPERATIONS_TRIAGE';
-  
-  // Default to WORKSHOP_MAINTENANCE if currently in triage, else first other dept
-  const [selectedDept, setSelectedDept] = useState<TicketDepartment>(
-    currentDept === 'OPERATIONS_TRIAGE' ? 'WORKSHOP_MAINTENANCE' : currentDept
-  );
+
+  const [selectedDept, setSelectedDept] = useState<TicketDepartment>(() => defaultTarget(ticket, departments));
   const [assignee, setAssignee] = useState<string>(ticket?.assignedTo || '');
   const [priority, setPriority] = useState<TicketPriority>(ticket?.priority || 'Medium');
   const [forwardNotes, setForwardNotes] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const badgeFor = (key: string) =>
+    DEPT_BADGES[key] ?? TONE_BADGES[departments.find((d) => d.key === key)?.tone ?? 'slate'] ?? DEPT_BADGES.OPERATIONS_TRIAGE;
 
   if (!isOpen || !ticket) return null;
 
@@ -172,12 +197,12 @@ export function ForwardTicketModal({
             <span className="text-[10px] text-slate-400 block mb-0.5">Current Dept:</span>
             <span
               className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
-                DEPT_BADGES[currentDept]?.bg || 'bg-slate-500/20'
-              } ${DEPT_BADGES[currentDept]?.text || 'text-slate-300'} ${
-                DEPT_BADGES[currentDept]?.border || 'border-slate-500/40'
+                badgeFor(currentDept).bg
+              } ${badgeFor(currentDept).text} ${
+                badgeFor(currentDept).border
               }`}
             >
-              {TICKET_DEPARTMENTS.find((d) => d.key === currentDept)?.label || currentDept}
+              {departments.find((d) => d.key === currentDept)?.label || currentDept}
             </span>
           </div>
         </div>
@@ -197,11 +222,11 @@ export function ForwardTicketModal({
               Target Department <span className="text-rose-400">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {TICKET_DEPARTMENTS.map((dept) => {
-                const Icon = DEPT_ICONS[dept.key];
+              {departments.map((dept) => {
+                const Icon = DEPT_ICONS[dept.key] ?? Building2;
                 const isSelected = selectedDept === dept.key;
                 const isCurrent = currentDept === dept.key;
-                const tone = DEPT_BADGES[dept.key];
+                const tone = badgeFor(dept.key);
 
                 return (
                   <button
@@ -259,6 +284,7 @@ export function ForwardTicketModal({
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
                 <option value="High">High (Immediate)</option>
+                <option value="Critical">Critical (Emergency)</option>
               </select>
             </div>
 

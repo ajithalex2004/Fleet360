@@ -19,8 +19,8 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star, Send, Inbox, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
-import { TICKET_TYPES_ORDER, TICKET_DEPARTMENTS } from '@/types/service-tickets';
-import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment } from '@/types/service-tickets';
+import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
+import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment, TicketDepartmentDef, TicketPriority } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
@@ -45,8 +45,11 @@ interface ServiceTypeConfig {
   sortOrder: number;
   vehicleRequired: boolean;
   autoCreatesMaintenanceRequest: boolean;
-  defaultPriority: 'Low' | 'Medium' | 'High';
+  defaultPriority: TicketPriority;
   defaultSlaHours: number;
+  categoryKey?: string;
+  categoryName?: string;
+  slaByPriority?: Record<TicketPriority, number>;
   prefix: string;
   approvalRequired: boolean;
   approvalEmergencyBypass: boolean;
@@ -67,12 +70,12 @@ interface VehiclePickerOption {
 const TONE_BG: Record<string, string> = {
   gold: 'bg-amber-500/10', blue: 'bg-blue-500/10', emerald: 'bg-emerald-500/10',
   amber: 'bg-amber-500/10', rose: 'bg-rose-500/10', slate: 'bg-slate-500/10',
-  violet: 'bg-violet-500/10',
+  violet: 'bg-violet-500/10', cyan: 'bg-cyan-500/10',
 };
 const TONE_FG: Record<string, string> = {
   gold: 'text-yellow-700 dark:text-amber-300', blue: 'text-blue-700 dark:text-blue-300', emerald: 'text-emerald-700 dark:text-emerald-300',
   amber: 'text-amber-700 dark:text-amber-300', rose: 'text-rose-700 dark:text-rose-300', slate: 'text-slate-700 dark:text-slate-300',
-  violet: 'text-violet-700 dark:text-violet-300',
+  violet: 'text-violet-700 dark:text-violet-300', cyan: 'text-cyan-700 dark:text-cyan-300',
 };
 const STATUS_BADGE: Record<string, string> = {
   'Awaiting Approval': 'bg-amber-500/30 text-amber-200 border-amber-500/60 ring-1 ring-amber-500/30',
@@ -90,6 +93,7 @@ const PRIORITY_FG: Record<string, string> = {
   Low:    'text-emerald-400',
   Medium: 'text-amber-400',
   High:   'text-rose-400',
+  Critical: 'text-rose-300 font-bold',
 };
 
 // ── SLA aging helper ─────────────────────────────────────────────────────────
@@ -134,6 +138,7 @@ export default function ServiceTicketsHome() {
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
   const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
   const [typeConfigByType, setTypeConfigByType] = useState<TypeConfigByType>({});
+  const [departments, setDepartments] = useState<TicketDepartmentDef[]>(TICKET_DEPARTMENTS);
   const [vehicles, setVehicles]       = useState<VehiclePickerOption[]>([]);
   const [tickets, setTickets]         = useState<ServiceTicket[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -188,6 +193,7 @@ export default function ServiceTicketsHome() {
         const data = await fieldsRes.json();
         setFormFieldsByType(data.formFields ?? {});
         setTypeConfigByType(data.typeConfig ?? {});
+        if (Array.isArray(data.departments) && data.departments.length > 0) setDepartments(data.departments);
       }
       if (vehiclesRes.ok) {
         const data: Array<VehiclePickerOption & { status?: string | null }> = await vehiclesRes.json();
@@ -231,23 +237,23 @@ export default function ServiceTicketsHome() {
   // ── Counts per type for tabs ─────────────────────────────────────────
   const countByType = useMemo(() => {
     const out: Record<string, number> = { ALL: tickets.length };
-    for (const type of TICKET_TYPES_ORDER) out[type] = 0;
+    for (const { type } of enabledTypes) out[type] = 0;
     for (const t of tickets) {
       out[t.ticketType] = (out[t.ticketType] ?? 0) + 1;
     }
     return out;
-  }, [tickets]);
+  }, [tickets, enabledTypes]);
 
   // ── Counts per department for tabs ───────────────────────────────────
   const countByDept = useMemo(() => {
     const out: Record<string, number> = { ALL: tickets.length };
-    for (const dept of TICKET_DEPARTMENTS) out[dept.key] = 0;
+    for (const dept of departments) out[dept.key] = 0;
     for (const t of tickets) {
       const d = t.assignedDepartment || 'OPERATIONS_TRIAGE';
       out[d] = (out[d] ?? 0) + 1;
     }
     return out;
-  }, [tickets]);
+  }, [tickets, departments]);
 
   // ── Mutations ────────────────────────────────────────────────────────
   const patch = async (id: string, patchBody: Record<string, unknown>): Promise<ServiceTicket | null> => {
@@ -466,7 +472,7 @@ export default function ServiceTicketsHome() {
               {countByDept.ALL}
             </span>
           </button>
-          {TICKET_DEPARTMENTS.map((dept) => {
+          {departments.map((dept) => {
             const active = activeDepartment === dept.key;
             const count = countByDept[dept.key] ?? 0;
             const isTriage = dept.key === 'OPERATIONS_TRIAGE';
@@ -570,6 +576,7 @@ export default function ServiceTicketsHome() {
               ticket={t}
               formFields={formFieldsByType[t.ticketType]}
               typeConfig={typeConfigByType[t.ticketType]}
+              departmentDef={departments.find(d => d.key === (t.assignedDepartment || 'OPERATIONS_TRIAGE'))}
               selected={selectedIds.has(t.id)}
               onToggleSelect={() => toggleSelected(t.id)}
               onStatusChange={(status) => handleStatusChange(t, status)}
@@ -595,6 +602,8 @@ export default function ServiceTicketsHome() {
 
       {/* Forward Ticket to Department Modal */}
       <ForwardTicketModal
+        key={forwardingTicket?.id ?? 'none'}
+        departments={departments}
         ticket={forwardingTicket}
         isOpen={!!forwardingTicket}
         onClose={() => setForwardingTicket(null)}
@@ -643,7 +652,7 @@ function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: ()
 }
 
 const DEPT_BADGE_STYLE: Record<
-  TicketDepartment,
+  'OPERATIONS_TRIAGE' | 'WORKSHOP_MAINTENANCE' | 'RECOVERY_DISPATCH' | 'SAFETY_COMPLIANCE' | 'CUSTOMER_SERVICE' | 'FACILITIES_CLEANING',
   { label: string; bg: string; text: string; border: string }
 > = {
   OPERATIONS_TRIAGE: { label: 'Triage Hopper', bg: 'bg-slate-500/20', text: 'text-slate-300', border: 'border-slate-500/40' },
@@ -660,12 +669,26 @@ const SOURCE_BADGES: Record<string, { label: string; cls: string }> = {
   DVIR: { label: 'DVIR Defect', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
   TELEMATICS: { label: 'Telematics', cls: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   WEB: { label: 'Web Portal', cls: 'bg-slate-500/20 text-slate-300 border-slate-500/40' },
+  BOOKING_PORTAL: { label: 'Booking Portal', cls: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
 };
 
-function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange, onOpen360, onForward }: {
+/** Badge colours for tenant-defined departments, by tone. */
+const DEPT_TONE_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+  slate:   { bg: 'bg-slate-500/20',   text: 'text-slate-300',   border: 'border-slate-500/40' },
+  amber:   { bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/40' },
+  rose:    { bg: 'bg-rose-500/20',    text: 'text-rose-300',    border: 'border-rose-500/40' },
+  emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40' },
+  blue:    { bg: 'bg-blue-500/20',    text: 'text-blue-300',    border: 'border-blue-500/40' },
+  violet:  { bg: 'bg-violet-500/20',  text: 'text-violet-300',  border: 'border-violet-500/40' },
+  cyan:    { bg: 'bg-cyan-500/20',    text: 'text-cyan-300',    border: 'border-cyan-500/40' },
+  gold:    { bg: 'bg-yellow-500/20',  text: 'text-yellow-300',  border: 'border-yellow-500/40' },
+};
+
+function TicketCard({ ticket, formFields, typeConfig, departmentDef, selected, onToggleSelect, onStatusChange, onOpen360, onForward }: {
   ticket: ServiceTicket;
   formFields?: FormFieldDef[];
   typeConfig?: ServiceTypeConfig;
+  departmentDef?: TicketDepartmentDef;
   selected: boolean;
   onToggleSelect: () => void;
   onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
@@ -676,11 +699,16 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
   const tone = typeConfig?.tone ?? 'violet';
   const typeLabel = typeConfig?.name ?? ticket.ticketType;
   const age = pendingAge(ticket);
-  const isHigh = ticket.priority === 'High';
+  const isHigh = ticket.priority === 'High' || ticket.priority === 'Critical';
   const awaitingApproval = ticket.status === 'Awaiting Approval';
 
   const dept = ticket.assignedDepartment || 'OPERATIONS_TRIAGE';
-  const deptBadge = DEPT_BADGE_STYLE[dept] || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
+  // Built-in departments keep their colours; renamed or tenant-defined ones
+  // use the configured label and tone.
+  const builtInBadge = DEPT_BADGE_STYLE[dept as keyof typeof DEPT_BADGE_STYLE];
+  const deptBadge = departmentDef && (!builtInBadge || !departmentDef.isSystem || departmentDef.shortLabel !== builtInBadge.label)
+    ? { ...(builtInBadge ?? DEPT_TONE_STYLE[departmentDef.tone] ?? DEPT_TONE_STYLE.slate), label: departmentDef.shortLabel || departmentDef.label }
+    : builtInBadge || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
   // Operations Triage is the generic landing hopper — it has authority to
   // route a ticket to the owning department (Forward) but not to action it
   // (Acknowledge/Assign/Escalate/Resolve). Those unlock once a specialist
@@ -935,7 +963,7 @@ function NewTicketForm({
   const [ticketType, setTicketType] = useState<TicketType>(enabledTypes[0] ?? 'MAINTENANCE');
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
-  const [priority, setPriority]     = useState<'Low' | 'Medium' | 'High'>('Medium');
+  const [priority, setPriority]     = useState<TicketPriority>('Medium');
   const [vehicleId, setVehicleId]   = useState('');
   const [dueDate, setDueDate]       = useState('');
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
@@ -955,7 +983,7 @@ function NewTicketForm({
   const defaultSlaHours         = tc?.defaultSlaHours ?? 24;
   const willAwaitApproval =
     !!tc?.approvalRequired
-    && !(tc.approvalEmergencyBypass && priority === 'High');
+    && !(tc.approvalEmergencyBypass && (priority === 'High' || priority === 'Critical'));
 
   // Reset per-type custom fields whenever the ticket type changes — different
   // types have different field schemas, so values don't carry across.
@@ -966,7 +994,7 @@ function NewTicketForm({
   // When the type's defaultPriority differs from current selection AND the
   // user hasn't started typing, snap to it. We only do this on type change.
   useEffect(() => {
-    setPriority(p => (p === 'Low' || p === 'Medium' || p === 'High') ? resolvedDefaultPriority : p);
+    setPriority(resolvedDefaultPriority);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketType]);
 
@@ -1075,9 +1103,9 @@ function NewTicketForm({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Priority</label>
-          <select value={priority} onChange={e => setPriority(e.target.value as 'Low' | 'Medium' | 'High')}
+          <select value={priority} onChange={e => setPriority(e.target.value as TicketPriority)}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
-            <option>Low</option><option>Medium</option><option>High</option>
+            {TICKET_PRIORITIES.map(p => <option key={p}>{p}</option>)}
           </select>
         </div>
         <div className="space-y-1">

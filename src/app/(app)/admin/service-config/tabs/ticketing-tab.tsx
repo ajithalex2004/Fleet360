@@ -66,7 +66,7 @@ export function TicketingTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
       </Section>
 
       <Section title="Priority matrix" hint="Resolution SLA hours per priority">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Field label="Low (h)">
             <NumberInput value={rules.priorityMatrix.Low} min={0}
               onChange={v => updateMatrix('Low', v ?? 0)} />
@@ -78,6 +78,10 @@ export function TicketingTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
           <Field label="High (h)">
             <NumberInput value={rules.priorityMatrix.High} min={0}
               onChange={v => updateMatrix('High', v ?? 0)} />
+          </Field>
+          <Field label="Critical (h)" hint="Leave empty to use the High SLA">
+            <NumberInput value={rules.priorityMatrix.Critical ?? null} min={0}
+              onChange={v => patch({ priorityMatrix: { ...rules.priorityMatrix, Critical: v ?? undefined } })} />
           </Field>
         </div>
       </Section>

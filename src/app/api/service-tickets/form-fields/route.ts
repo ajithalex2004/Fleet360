@@ -9,7 +9,11 @@ export const dynamic = 'force-dynamic';
  *     • typeConfig per type — vehicleRequired, autoCreatesMaintenanceRequest,
  *       defaultPriority, plus the presentation metadata
  *       (label, longLabel, description, tone, iconName, defaultSlaHours,
- *        sortOrder)
+ *        sortOrder, categoryKey, categoryName, slaByPriority)
+ *     • departments — the tenant's active triage / forwarding departments
+ *
+ * Types come from the tenant's service catalogue: every service type linked
+ * to SERVICE_TICKETING (system or tenant-defined) that isn't disabled.
  *
  * Replaces the runtime use of TICKET_TYPE_CONFIG. All values resolve
  * through the Service Configuration Engine — service_rules + service_types
@@ -22,9 +26,9 @@ import {
   resolveTicketFormFieldsBatch,
 } from '@/lib/service-config/resolvers';
 import { loadServiceConfig } from '@/lib/service-config/load';
-import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
+import { listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
+import { listDepartments } from '@/lib/service-tickets/departments';
 import {
-  TICKET_TYPES_ORDER,
   type TicketType, type TicketPriority, type FormFieldDef,
 } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
@@ -41,11 +45,15 @@ interface ServiceTypeConfig {
   iconName: string | null;
   tone: ServiceTone;
   sortOrder: number;
+  categoryKey: string;
+  categoryName: string;
   // Behavioural flags resolved via service_rules.
   vehicleRequired: boolean;
   autoCreatesMaintenanceRequest: boolean;
   defaultPriority: TicketPriority;
   defaultSlaHours: number;
+  /** Resolved SLA hours per priority (Critical falls back to High). */
+  slaByPriority: Record<TicketPriority, number>;
   prefix: string;
   // Approval gate flags — UI uses these to render the "will start in
   // Awaiting Approval" hint without hitting another endpoint.
@@ -65,8 +73,12 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const enabled = await getTenantEnabledTypes(tenantId);
-    const types: TicketType[] = enabled.length > 0 ? enabled : [...TICKET_TYPES_ORDER];
+    const [catalogue, departments] = await Promise.all([
+      listEnabledTicketTypes(tenantId),
+      listDepartments(tenantId),
+    ]);
+    const types: TicketType[] = catalogue.map((e) => e.key);
+    const categoryOf = new Map(catalogue.map((e) => [e.key, e]));
 
     const fieldsMatrix = await resolveTicketFormFieldsBatch(tenantId, types);
 
@@ -83,10 +95,16 @@ export async function GET(req: NextRequest) {
         iconName: cfg.type.icon,
         tone: cfg.type.tone,
         sortOrder: cfg.type.sortOrder,
+        categoryKey: categoryOf.get(t)?.categoryKey ?? '',
+        categoryName: categoryOf.get(t)?.categoryName ?? '',
         vehicleRequired: !!cfg.rules.vehicle.vehicleRequired,
         autoCreatesMaintenanceRequest: !!cfg.rules.ticketing.autoCreatesMaintenanceRequest,
         defaultPriority: cfg.type.defaultPriority,
         defaultSlaHours: matrix.Medium,
+        slaByPriority: {
+          Low: matrix.Low, Medium: matrix.Medium, High: matrix.High,
+          Critical: matrix.Critical ?? matrix.High,
+        },
         prefix: cfg.rules.ticketing.ticketPrefix || '',
         approvalRequired: !!cfg.rules.approval.approvalRequired,
         approvalEmergencyBypass: !!cfg.rules.approval.emergencyBypassEnabled,
@@ -99,7 +117,11 @@ export async function GET(req: NextRequest) {
     for (const t of types) formFields[t] = fieldsMatrix.get(t) ?? [];
     for (const entry of cfgEntries) if (entry) typeConfig[entry[0]] = entry[1];
 
-    return NextResponse.json({ ok: true, formFields, typeConfig });
+    return NextResponse.json({
+      ok: true, formFields, typeConfig,
+      departments: departments.map(({ key, label, shortLabel, description, tone, isSystem }) =>
+        ({ key, label, shortLabel, description, tone, isSystem })),
+    });
     } catch (err) {
     captureException(err, { context: 'service-tickets.form-fields.list' });
     return NextResponse.json({ ok: false, error: 'Failed to resolve form fields' }, { status: 500 });

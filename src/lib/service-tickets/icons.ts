@@ -10,12 +10,19 @@
 import {
   Wrench, Calendar, Sparkles, LifeBuoy, Siren, Truck,
   MessageSquareWarning, MessageCircle, Headphones, Bus, Car,
+  // Facilities catalogue
+  Snowflake, Zap, Droplets, ArrowUpDown, Flame, DoorOpen, SprayCan, Bug,
+  Trash2, Trees, Package, Presentation, KeyRound, CircleParking, ShieldAlert,
+  HardHat, Building2,
   type LucideIcon,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Wrench, Calendar, Sparkles, LifeBuoy, Siren, Truck,
   MessageSquareWarning, MessageCircle, Headphones, Bus, Car,
+  Snowflake, Zap, Droplets, ArrowUpDown, Flame, DoorOpen, SprayCan, Bug,
+  Trash2, Trees, Package, Presentation, KeyRound, CircleParking, ShieldAlert,
+  HardHat, Building2,
 };
 
 /** Resolve an icon name to a Lucide component, with a Headphones fallback. */

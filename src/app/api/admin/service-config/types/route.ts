@@ -53,7 +53,7 @@ async function handlePOST(req: NextRequest) {
   if (!name)       return NextResponse.json({ ok: false, error: 'Name is required.' }, { status: 400 });
 
   const tone = (SERVICE_TONES as readonly string[]).includes(body.tone ?? '') ? body.tone! : 'violet';
-  const priority = ['Low', 'Medium', 'High'].includes(body.defaultPriority ?? '') ? body.defaultPriority! : 'Medium';
+  const priority = ['Low', 'Medium', 'High', 'Critical'].includes(body.defaultPriority ?? '') ? body.defaultPriority! : 'Medium';
   const sortOrder = Number.isFinite(body.sortOrder) ? Number(body.sortOrder) : 100;
 
   // Verify the category belongs to this tenant.

@@ -11,8 +11,8 @@
  * per-type configuration table.
  */
 
-/** All seven ticket types supported by the module. */
-export type TicketType =
+/** The seven built-in (system) ticket types seeded for every tenant. */
+export type SystemTicketType =
   | 'MAINTENANCE'
   | 'RENEWAL'
   | 'CLEANING'
@@ -21,7 +21,18 @@ export type TicketType =
   | 'TOWING'
   | 'COMPLAINT';
 
-export const TICKET_TYPES_ORDER: TicketType[] = [
+/**
+ * A ticket type key. Any `service_types.key` in the tenant's catalogue that is
+ * linked to the SERVICE_TICKETING module is a valid ticket type — the seven
+ * system types plus tenant-defined ones (e.g. the Facilities catalogue).
+ * `(string & {})` keeps editor autocompletion for the system keys.
+ */
+export type TicketType = SystemTicketType | (string & {});
+
+/** Shape of a catalogue key: upper-case letters, digits, underscore. */
+export const TICKET_TYPE_KEY_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+export const TICKET_TYPES_ORDER: SystemTicketType[] = [
   'MAINTENANCE',
   'RENEWAL',
   'CLEANING',
@@ -31,8 +42,8 @@ export const TICKET_TYPES_ORDER: TicketType[] = [
   'COMPLAINT',
 ];
 
-/** Canonical departments for the Operations team forwarding workflow. */
-export type TicketDepartment =
+/** The six system departments for the Operations forwarding workflow. */
+export type SystemTicketDepartment =
   | 'OPERATIONS_TRIAGE'
   | 'WORKSHOP_MAINTENANCE'
   | 'RECOVERY_DISPATCH'
@@ -40,13 +51,28 @@ export type TicketDepartment =
   | 'CUSTOMER_SERVICE'
   | 'FACILITIES_CLEANING';
 
-export const TICKET_DEPARTMENTS: Array<{
+/** A department key — a system department or a tenant-defined one
+ *  (stored in `service_departments`). */
+export type TicketDepartment = SystemTicketDepartment | (string & {});
+
+/** Triage is the landing hopper every new ticket starts in. */
+export const TRIAGE_DEPARTMENT: SystemTicketDepartment = 'OPERATIONS_TRIAGE';
+
+export type DepartmentTone = 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' | 'violet' | 'cyan' | 'gold';
+
+export interface TicketDepartmentDef {
   key: TicketDepartment;
   label: string;
   shortLabel: string;
   description: string;
-  tone: 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' | 'violet';
-}> = [
+  tone: DepartmentTone;
+  /** True for the six built-in departments (cannot be deleted). */
+  isSystem?: boolean;
+}
+
+/** Built-in departments. Tenants can rename/hide these and add their own;
+ *  the resolved list comes from src/lib/service-tickets/departments.ts. */
+export const TICKET_DEPARTMENTS: TicketDepartmentDef[] = [
   {
     key: 'OPERATIONS_TRIAGE',
     label: 'Operations Triage',
@@ -107,7 +133,14 @@ export type TicketStatus =
   | 'Rejected'
   | 'Closed';
 
-export type TicketPriority = 'Low' | 'Medium' | 'High';
+export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+
+/** Priorities in ascending order of urgency. */
+export const TICKET_PRIORITIES: TicketPriority[] = ['Low', 'Medium', 'High', 'Critical'];
+
+export function isTicketPriority(v: unknown): v is TicketPriority {
+  return typeof v === 'string' && (TICKET_PRIORITIES as string[]).includes(v);
+}
 
 /** Form field schema for per-type custom fields (1C). Renders dynamically
  *  in the create form and surfaces on the card. */
@@ -220,8 +253,8 @@ export interface ServiceTicket {
   /** Assigned department after triage forwarding. Defaults to 'OPERATIONS_TRIAGE'. */
   assignedDepartment?: TicketDepartment;
 
-  /** Ingestion source: DRIVER_APP, WHATSAPP, DVIR, WEB, TELEMATICS */
-  source?: 'DRIVER_APP' | 'WHATSAPP' | 'DVIR' | 'WEB' | 'TELEMATICS';
+  /** Ingestion source: DRIVER_APP, WHATSAPP, DVIR, WEB, TELEMATICS, BOOKING_PORTAL */
+  source?: 'DRIVER_APP' | 'WHATSAPP' | 'DVIR' | 'WEB' | 'TELEMATICS' | 'BOOKING_PORTAL';
 
   history?: TicketHistoryEntry[];
   attachments?: TicketAttachment[];

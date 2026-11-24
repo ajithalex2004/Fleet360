@@ -66,7 +66,7 @@ export interface ServiceCategory {
   updatedAt: string;
 }
 
-export type DefaultPriority = 'Low' | 'Medium' | 'High';
+export type DefaultPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export interface ServiceType {
   id: string;
