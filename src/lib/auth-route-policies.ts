@@ -27,6 +27,10 @@ export const PUBLIC_EXACT: readonly string[] = [
   // First-party, rate-limited marketing funnel events. Payloads are limited
   // to non-sensitive event dimensions and are emitted to deployment logs.
   '/api/public/analytics',
+  // Crawler and social-share metadata for the public marketing site.
+  '/robots.txt',
+  '/sitemap.xml',
+  '/opengraph-image',
   '/onboarding',
   '/api/auth/session',
   '/api/auth/login',
