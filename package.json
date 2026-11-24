@@ -80,6 +80,7 @@
         "@fontsource/noto-sans-arabic": "^5.2.10",
         "@neondatabase/serverless": "^1.1.0",
         "@prisma/adapter-neon": "^5.22.0",
+        "@prisma/client": "^5.22.0",
         "@radix-ui/react-dialog": "^1.1.15",
         "@react-pdf/renderer": "^4.5.1",
         "@simplewebauthn/browser": "^10.0.0",
@@ -112,8 +113,7 @@
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
         "zod": "^4.1.13",
         "zod-to-json-schema": "^3.25.0",
-        "zustand": "^5.0.8",
-        "@prisma/client": "^5.22.0"
+        "zustand": "^5.0.8"
     },
     "optionalDependencies": {
         "ioredis": "^5.4.1"
@@ -142,6 +142,7 @@
         "eslint-config-next": "15.2.4",
         "lightningcss": "^1.29.2",
         "prisma": "^5.22.0",
+        "railway": "^3.17.0",
         "tailwindcss": "^4",
         "ts-node": "^10.9.2",
         "typescript": "^5",

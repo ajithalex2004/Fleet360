@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { createRailwayContext, project as railwayProject, type ServiceNode } from 'railway/iac';
+import railwayProgram from '../../.railway/railway';
 
 // Load validation functions from scripts/validate-tenant-schema.js
 const {
@@ -17,26 +19,32 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
   // F36: Controlled Migration Separation & Restricted Runtime Identity
   // ───────────────────────────────────────────────────────────────────────────
   describe('F36: Railway Deployment & Package Dependencies Stress Testing', () => {
-    it('railway.json separates web startup from Prisma migrations and starts only via npm start', () => {
-      const railwayPath = path.join(root, 'railway.json');
-      expect(fs.existsSync(railwayPath)).toBe(true);
+    it('.railway/railway.ts separates web startup from Prisma migrations and starts only via npm start', async () => {
+      const railwayIaCPath = path.join(root, '.railway', 'railway.ts');
+      expect(fs.existsSync(railwayIaCPath)).toBe(true);
+      expect(fs.existsSync(path.join(root, 'railway.json'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'railway.toml'))).toBe(false);
 
-      const content = fs.readFileSync(railwayPath, 'utf8');
-      let config: any;
-      expect(() => {
-        config = JSON.parse(content);
-      }).not.toThrow();
+      const prodDef = await railwayProgram(
+        createRailwayContext({ environment: 'production' }),
+        railwayProject,
+      );
+      const resources = (prodDef.resources ?? []).flat();
+      const appService = resources.find(
+        (r): r is ServiceNode => r.type === 'service' && r.name === 'fleet360-app',
+      );
 
-      expect(config.$schema).toBe('https://railway.app/railway.schema.json');
-      expect(config.build).toBeDefined();
-      expect(config.build.builder).toBe('RAILPACK');
-      expect(config.deploy).toBeDefined();
+      expect(appService).toBeDefined();
+      expect(appService?.build?.builder).toBe('RAILPACK');
+      expect(appService?.deploy).toBeDefined();
 
       // Ordinary web replicas must never execute Prisma migrations on startup/restart
-      expect(config.deploy.startCommand).toBe('npm start');
-      expect(config.deploy.startCommand).not.toMatch(/prisma\s+migrate/i);
-      expect(config.deploy.restartPolicyType).toBe('ON_FAILURE');
-      expect(config.deploy.restartPolicyMaxRetries).toBeGreaterThanOrEqual(5);
+      expect(appService?.deploy?.startCommand).toBe('npm start');
+      expect(appService?.deploy?.startCommand).not.toMatch(/prisma\s+migrate/i);
+      // Railway's default restart policy (ON_FAILURE, 10 retries) is normalized to null/omitted
+      // by Railway's IaC API to avoid perpetual drift; assert it is never weakened to NEVER or < 5.
+      expect(appService?.deploy?.restartPolicyType ?? 'ON_FAILURE').toBe('ON_FAILURE');
+      expect(appService?.deploy?.restartPolicyMaxRetries ?? 10).toBeGreaterThanOrEqual(5);
     });
 
     it('enforces restricted fleet360_app runtime identity without requiring migration-owner credentials on web replicas', () => {

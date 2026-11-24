@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { NextRequest } from 'next/server';
+import { createRailwayContext, project as railwayProject, type ServiceNode } from 'railway/iac';
+import railwayProgram from '../../.railway/railway';
 
 // ── Imports for tested modules ──────────────────────────────────────────────
 import { aiGateway } from '@/lib/agents/gateway/gateway-service';
@@ -404,15 +406,23 @@ describe('Milestone M4 Governance & Hygiene Unit Test Suite (F32 - F39)', () => 
       expect(pkg.devDependencies['@prisma/client']).toBeUndefined();
     });
 
-    it('separates web startup in railway.json from controlled migration execution and restricts runtime DB credentials', () => {
-      const railwayJsonPath = path.resolve(process.cwd(), 'railway.json');
-      expect(fs.existsSync(railwayJsonPath)).toBe(true);
+    it('separates web startup in .railway/railway.ts from controlled migration execution and restricts runtime DB credentials', async () => {
+      const railwayIaCPath = path.resolve(process.cwd(), '.railway/railway.ts');
+      expect(fs.existsSync(railwayIaCPath)).toBe(true);
+      expect(fs.existsSync(path.resolve(process.cwd(), 'railway.json'))).toBe(false);
 
-      const railwayConfig = JSON.parse(fs.readFileSync(railwayJsonPath, 'utf8'));
-      expect(railwayConfig.deploy).toBeDefined();
+      const prodDef = await railwayProgram(
+        createRailwayContext({ environment: 'production' }),
+        railwayProject,
+      );
+      const resources = (prodDef.resources ?? []).flat();
+      const appService = resources.find(
+        (r): r is ServiceNode => r.type === 'service' && r.name === 'fleet360-app',
+      );
+      expect(appService?.deploy).toBeDefined();
       // Application startup must NOT execute Prisma migrations on replica boot/restart
-      expect(railwayConfig.deploy.startCommand).toBe('npm start');
-      expect(railwayConfig.deploy.startCommand).not.toMatch(/prisma\s+migrate/i);
+      expect(appService?.deploy?.startCommand).toBe('npm start');
+      expect(appService?.deploy?.startCommand).not.toMatch(/prisma\s+migrate/i);
 
       // Dedicated, separate migration script exists in package.json while `start` stays pure Next.js
       const pkgPath = path.resolve(process.cwd(), 'package.json');
