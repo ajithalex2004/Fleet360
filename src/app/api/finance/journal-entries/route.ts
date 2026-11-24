@@ -18,10 +18,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
-import { nextJournalNumber } from '@/lib/finance/journal-service';
+import { nextJournalNumber, assertPeriodOpen } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type JeRow   = Record<string, unknown>;
+
+function isValidIsoDate(val: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) return false;
+  const [y, m, d] = val.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() + 1 === m &&
+    dt.getUTCDate() === d
+  );
+}
 
 // ── GET /api/finance/journal-entries ─────────────────────────────────────────
 
@@ -33,16 +44,27 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-      const sp     = req.nextUrl.searchParams;
-      const status = sp.get('status');
-      const source = sp.get('source');
-      const from   = sp.get('from');
-      const to     = sp.get('to');
-      const page   = Math.max(1, parseInt(sp.get('page')  ?? '1'));
-      const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-      const offset = (page - 1) * limit;
+  const sp     = req.nextUrl.searchParams;
+  const status = sp.get('status');
+  const source = sp.get('source');
+  const fromParam = sp.get('from');
+  const toParam   = sp.get('to');
 
+  if (fromParam !== null && fromParam !== '' && !isValidIsoDate(fromParam)) {
+    return NextResponse.json({ error: 'Invalid from date format. Expected YYYY-MM-DD' }, { status: 400 });
+  }
+  if (toParam !== null && toParam !== '' && !isValidIsoDate(toParam)) {
+    return NextResponse.json({ error: 'Invalid to date format. Expected YYYY-MM-DD' }, { status: 400 });
+  }
+
+  const from   = fromParam || null;
+  const to     = toParam || null;
+  const page   = Math.max(1, parseInt(sp.get('page')  ?? '1') || 1);
+  const limit  = Math.min(100, Math.max(1, parseInt(sp.get('limit') ?? '50') || 50));
+  const offset = (page - 1) * limit;
+
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
       // Always scope by tenant. requireAuthorizedTenant never yields '*' —
       // sanitizeTenantId() strips the wildcard, and an empty tenant is
       // rejected with a 403 — so there is no platform-admin bypass here.
@@ -51,49 +73,48 @@ export async function GET(req: NextRequest) {
       let pi = 2;
       if (status) { where += ` AND je.status = $${pi++}`;      params.push(status); }
       if (source) { where += ` AND je.source_type = $${pi++}`; params.push(source); }
-      // entry_date is a DATE column and these params arrive as text, so the
-      // cast is required — without it Postgres raises 42883 (date >= text),
-      // which the .catch() below would silently turn into an empty result.
       if (from)   { where += ` AND je.entry_date >= $${pi++}::date`; params.push(from); }
       if (to)     { where += ` AND je.entry_date <= $${pi++}::date`; params.push(to); }
 
-      const [entries, counts] = await Promise.all([
-        tx.$queryRawUnsafe<JeRow[]>(
-          `SELECT je.*,
-             COALESCE(
-               json_agg(json_build_object(
-                 'id',          jl.id,
-                 'lineNumber',  jl.line_number,
-                 'accountCode', jl.account_code,
-                 'accountName', jl.account_name,
-                 'description', jl.description,
-                 'debitAmount', jl.debit_amount,
-                 'creditAmount',jl.credit_amount,
-                 'costCentre',  jl.cost_centre
-               ) ORDER BY jl.line_number) FILTER (WHERE jl.id IS NOT NULL),
-               '[]'::json
-             ) AS lines
-           FROM finance_journal_entries je
-           LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
-           ${where}
-           GROUP BY je.id
-           ORDER BY je.entry_date DESC, je.je_number DESC
-           LIMIT $${pi} OFFSET $${pi + 1}`,
-          ...params, limit, offset,
-        ).catch(() => [] as JeRow[]),
+      const entries = await tx.$queryRawUnsafe<JeRow[]>(
+        `SELECT je.*,
+           COALESCE(
+             json_agg(json_build_object(
+               'id',          jl.id,
+               'lineNumber',  jl.line_number,
+               'accountCode', jl.account_code,
+               'accountName', jl.account_name,
+               'description', jl.description,
+               'debitAmount', jl.debit_amount,
+               'creditAmount',jl.credit_amount,
+               'costCentre',  jl.cost_centre
+             ) ORDER BY jl.line_number) FILTER (WHERE jl.id IS NOT NULL),
+             '[]'::json
+           ) AS lines
+         FROM finance_journal_entries je
+         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
+         ${where}
+         GROUP BY je.id
+         ORDER BY je.entry_date DESC, je.je_number DESC
+         LIMIT $${pi} OFFSET $${pi + 1}`,
+        ...params, limit, offset,
+      );
 
-        tx.$queryRawUnsafe<{ status: string; count: string; total_debit: string }[]>(
-          `SELECT status, COUNT(*)::text AS count,
-                  COALESCE(SUM(total_debit), 0)::text AS total_debit
-             FROM finance_journal_entries
-            WHERE deleted_at IS NULL AND tenant_id = $1
-            GROUP BY status`,
-          tenantId,
-        ).catch(() => []),
-      ]);
+      const counts = await tx.$queryRawUnsafe<{ status: string; count: string; total_debit: string }[]>(
+        `SELECT status, COUNT(*)::text AS count,
+                COALESCE(SUM(total_debit), 0)::text AS total_debit
+           FROM finance_journal_entries
+          WHERE deleted_at IS NULL AND tenant_id = $1
+          GROUP BY status`,
+        tenantId,
+      );
 
       return NextResponse.json({ data: entries, counts, page, limit });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/journal-entries GET]', err);
+    return NextResponse.json({ error: 'Failed to fetch journal entries' }, { status: 500 });
+  }
 }
 
 
@@ -150,20 +171,51 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Resolve account names from Chart of Accounts.
+      const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
+      try {
+        await assertPeriodOpen(tx, tenantId, entryDate);
+      } catch (periodErr: any) {
+        return NextResponse.json(
+          { error: periodErr.message || 'Cannot post to locked accounting period' },
+          { status: periodErr.statusCode || 422 },
+        );
+      }
+
+      // Resolve account names from Chart of Accounts and validate controls.
       const accountCodes = lines.map(l => l.accountCode);
       const accounts = await tx.$queryRawUnsafe<
-        { account_code: string; account_name: string; normal_balance: string }[]
+        { account_code: string; account_name: string; normal_balance: string; is_header?: boolean; is_active?: boolean }[]
       >(
-        `SELECT account_code, account_name, normal_balance
+        `SELECT account_code, account_name, normal_balance, is_header, is_active
            FROM finance_chart_of_accounts
           WHERE account_code = ANY($1::text[]) AND tenant_id = $2`,
         accountCodes, tenantId,
       );
       const accMap = new Map(accounts.map(a => [a.account_code, a]));
 
+      for (const code of accountCodes) {
+        const acc = accMap.get(code);
+        if (!acc) {
+          return NextResponse.json(
+            { error: `Account code "${code}" does not exist in chart of accounts` },
+            { status: 422 },
+          );
+        }
+        if (acc.is_header) {
+          return NextResponse.json(
+            { error: `Account code "${code}" is a summary header account and cannot accept journal postings` },
+            { status: 422 },
+          );
+        }
+        if (acc.is_active === false) {
+          return NextResponse.json(
+            { error: `Account code "${code}" is inactive and cannot accept journal postings` },
+            { status: 422 },
+          );
+        }
+      }
+
       const jeNumber  = await nextJournalNumber(tx, tenantId);
-      const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
       const d         = new Date(entryDate);
 
       const [je] = await tx.$queryRawUnsafe<JeRow[]>(

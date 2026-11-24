@@ -198,6 +198,9 @@ describe('WhatsApp webhook', () => {
     body: new URLSearchParams({ MessageSid: 'SMin', From: 'whatsapp:+971501234567', To: 'whatsapp:+971500000000', Body: 'hello' }).toString(),
   });
   const inserts = () => rec.sql.filter((q) => q.sql.includes('INSERT INTO whatsapp_messages'));
+  // The webhook refuses Twilio traffic (503) until its signing secret is set;
+  // the signature check itself is mocked above.
+  beforeEach(() => { process.env.TWILIO_AUTH_TOKEN = 'twilio-token-for-tests'; });
 
   it('stores the conversation under the tenant that last messaged the sender', async () => {
     rec.lastOutboundTenant = TENANT_B;
@@ -211,7 +214,8 @@ describe('WhatsApp webhook', () => {
   });
 
   it('keeps an unattributed conversation platform-only', async () => {
-    await whatsappWebhook(inbound());
+    expect((await whatsappWebhook(inbound())).status).toBe(200);
+    expect(inserts()).toHaveLength(2);
     for (const q of inserts()) expect(q.params[q.params.length - 1]).toBe('default');
   });
 });

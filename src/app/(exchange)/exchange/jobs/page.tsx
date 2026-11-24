@@ -29,87 +29,7 @@ import {
   AlertTriangle,
   Ban,
 } from 'lucide-react';
-
-interface PartnerQuoteRow {
-  id: string;
-  revisionNo: number;
-  amount: number | string;
-  vatAmount: number | string;
-  totalAmount: number | string;
-  currency: string;
-  status: string;
-  notes?: string | null;
-}
-
-interface OutsourceRequestRow {
-  id: string;
-  requestNumber: string;
-  domain: string;
-  pricingMethod: string;
-  status: string;
-  serviceDate: string;
-  pickupTime: string;
-  pickupLocation: string;
-  dropoffLocation: string;
-  requiredCapacity: number;
-  vehicleTypeRequired?: string | null;
-  specialInstructions?: string | null;
-  opportunity?: { closesAt?: string | null } | null;
-  quotes?: PartnerQuoteRow[];
-  invitedPartners?: Array<{ status: string; declineReason?: string | null }>;
-}
-
-interface PartnerAssignmentRow {
-  id: string;
-  vehiclePlate?: string | null;
-  driverName?: string | null;
-  driverPhone?: string | null;
-  isTokenRevoked?: boolean | null;
-  reachedAt?: string | null;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  lastLat?: number | null;
-  lastLng?: number | null;
-  pod?: {
-    passengerCount?: number | null;
-    signedByName?: string | null;
-    sealNumber?: string | null;
-    deliveredWeightKg?: number | null;
-    damageConditionNotes?: string | null;
-  } | null;
-  events?: Array<{
-    id: string;
-    eventType: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    createdAt: string;
-  }>;
-}
-
-interface OutsourceAwardRow {
-  id: string;
-  status: string;
-  totalAwarded: number | string;
-  partnerId: string;
-  commercialSnapshot?: Record<string, any> | null;
-  request?: OutsourceRequestRow | null;
-  assignment?: PartnerAssignmentRow | null;
-}
-
-interface PartnerVehicleRow {
-  id: string;
-  licensePlate: string;
-  vehicleType: string;
-  mulkiyaExpiry?: string | null;
-}
-
-interface PartnerDriverRow {
-  id: string;
-  fullName: string;
-  mobileNumber: string;
-  licenseExpiry?: string | null;
-  permitExpiry?: string | null;
-}
+import type { CommercialSnapshot, OutsourceAwardRow, OutsourceRequestRow, PartnerDriverRow, PartnerVehicleRow, RateCardSnapshot } from '@/lib/exchange/client-types';
 
 const DECLINE_REASONS: Array<{ code: string; label: string }> = [
   { code: 'NO_VEHICLE', label: 'No suitable vehicle available for requested date/time' },
@@ -429,9 +349,9 @@ export default function ExchangeJobsPage() {
               {awards.map((a) => {
                 const assignment = a.assignment;
                 const pod = assignment?.pod;
-                const snap = (a.commercialSnapshot || {}) as Record<string, any>;
-                const rcSnap = (snap.rateCardSnapshot || {}) as Record<string, any>;
-                const ancillary = (rcSnap.ancillaryCharges || {}) as Record<string, any>;
+                const snap = (a.commercialSnapshot || {}) as CommercialSnapshot;
+                const rcSnap = (snap.rateCardSnapshot || {}) as RateCardSnapshot;
+                const ancillary = (rcSnap.ancillaryCharges || {}) as NonNullable<RateCardSnapshot['ancillaryCharges']>;
                 const commercialModel = snap.commercialModel || 'AGENCY';
                 const snapshotHash = rcSnap.snapshotHash || snap.snapshotHash || null;
                 const isFailoverPromoted = Boolean(snap.failoverPromotedAt || snap.failoverHistory);

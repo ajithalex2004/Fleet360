@@ -51,14 +51,6 @@ const STATUS_COLORS: Record<string, string> = {
   LOST:      'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-const STATUS_SUMMARY_COLORS: Record<string, { bg: string; text: string; border: string; icon: string }> = {
-  NEW:       { bg: 'bg-blue-500/10',    text: 'text-blue-400',    border: 'border-blue-500/20',    icon: '🔵' },
-  CONTACTED: { bg: 'bg-amber-500/10',   text: 'text-amber-400',   border: 'border-amber-500/20',   icon: '📞' },
-  QUOTED:    { bg: 'bg-violet-500/10',  text: 'text-violet-400',  border: 'border-violet-500/20',  icon: '📋' },
-  CONVERTED: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', icon: '✅' },
-  LOST:      { bg: 'bg-red-500/10',     text: 'text-red-400',     border: 'border-red-500/20',     icon: '❌' },
-};
-
 type CategoryItem = string | { value?: string; code?: string; label?: string };
 const VEHICLE_TYPE_OPTIONS = (RENTAL_VEHICLE_CATEGORIES as readonly CategoryItem[]).map((item) => {
   const value = typeof item === 'string' ? item : String(item.value ?? item.code ?? '');

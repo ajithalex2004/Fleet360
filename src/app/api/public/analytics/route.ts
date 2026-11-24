@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { RateLimiter } from '@/lib/rate-limiter';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,8 @@ function getClientIp(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== request.nextUrl.origin) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
+  const publicOrigin = getPublicOrigin(request);
+  if (origin && origin !== publicOrigin && origin !== request.nextUrl.origin) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
   const limit = await limiter.check(`public-analytics:${getClientIp(request)}`);
   if (!limit.allowed) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
   const parsed = EventSchema.safeParse(await request.json().catch(() => null));

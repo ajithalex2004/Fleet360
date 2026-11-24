@@ -10,6 +10,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
 
+  const type = req.nextUrl.searchParams.get('type');
+  if (type && type !== 'vehicles' && type !== 'shipments') {
+    return NextResponse.json(
+      { error: `Invalid type '${type}'; expected 'vehicles' or 'shipments'` },
+      { status: 400 },
+    );
+  }
+
   try {
     const data = await withTenantRls(prisma, authz.tenantId, () => listPlannerInputs(authz.tenantId));
     return NextResponse.json({

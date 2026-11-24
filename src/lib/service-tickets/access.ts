@@ -1,9 +1,9 @@
 /**
  * Tenant ticket-type access matrix.
  *
- * Lazy-creates `tenant_ticket_types` on first call. Defaults to
- * "all 7 types enabled" for any tenant without explicit rows so existing
- * tenants don't lose access on rollout. Platform Admin can disable
+ * Defaults to "enabled" for any type without an explicit row so existing
+ * tenants don't lose access on rollout. Rows can exist for system types and
+ * for tenant-defined catalogue types alike. Platform Admin can disable
  * specific types per tenant via /admin/tenants/[id]/ticket-types.
  */
 
@@ -29,8 +29,14 @@ export async function getTenantAccessMatrix(tenantId: string): Promise<TenantTic
   ).catch(() => []);
 
   const byType = new Map(rows.map(r => [r.ticket_type, r]));
+  // System types first (always listed, default enabled), then any
+  // tenant-defined type that has an explicit access row.
+  const keys: TicketType[] = [
+    ...TICKET_TYPES_ORDER,
+    ...rows.map(r => r.ticket_type).filter(t => !(TICKET_TYPES_ORDER as string[]).includes(t)),
+  ];
 
-  return TICKET_TYPES_ORDER.map(t => {
+  return keys.map(t => {
     const row = byType.get(t);
     return {
       tenantId,

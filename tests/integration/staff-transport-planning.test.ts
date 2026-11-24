@@ -11,7 +11,8 @@
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
-import { cleanupTenant, isServerRunning, makeRequest, seedTestTenantFull } from '../setup';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull } from '../setup';
 
 let serverUp = false;
 let seed: Awaited<ReturnType<typeof seedTestTenantFull>> | null = null;
@@ -28,8 +29,11 @@ beforeAll(async () => {
 afterAll(async () => {
   if (seed) {
     // Delete any plans we created
-    await basePrisma.staffTransportPlan.deleteMany({ where: { tenantId: seed.tenant.id, name: { startsWith: 'E2E-' } } });
+    await withTenantRls(basePrisma, seed.tenant.id, (tx) =>
+      tx.staffTransportPlan.deleteMany({ where: { tenantId: seed!.tenant.id, name: { startsWith: 'E2E-' } } }),
+    ).catch(() => {});
     await cleanupTenant(seed.tenant.id);
+    await cleanupUser(seed.user.id);
   }
 });
 
@@ -151,7 +155,9 @@ describe('Planning Core /api/bus-ops/plan', () => {
     expect(r.status).toBe(200);
 
     // Verify status is ARCHIVED
-    const after = await basePrisma.staffTransportPlan.findUnique({ where: { id: created.id } });
+    const after = await withTenantRls(basePrisma, seed!.tenant.id, (tx) =>
+      tx.staffTransportPlan.findUnique({ where: { id: created.id } }),
+    );
     expect(after?.status).toBe('ARCHIVED');
   });
 

@@ -4,8 +4,9 @@ import { NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
+import { smtpTlsOptions } from '@/lib/smtp-tls';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
@@ -58,17 +59,16 @@ export async function POST(request: Request) {
             }
 
             // 2. Configure Transporter
+            const encryption = (config.encryption || (config.port === '465' ? 'ssl' : 'tls')).trim();
             const transporter = nodemailer.createTransport({
                 host: config.host!,
-                port: parseInt(config.port || '587'),
-                secure: config.encryption === 'SSL', // true for 465, false for other ports
+                port: parseInt(config.port || '587', 10),
+                secure: encryption.toUpperCase() === 'SSL' || config.port === '465', // true for 465, false for other ports
                 auth: {
                     user: config.username!,
                     pass: config.password!,
                 },
-                tls: {
-                    rejectUnauthorized: false // Allow self-signed certs if needed (common in dev/staging)
-                }
+                ...smtpTlsOptions(config.host!, encryption),
             });
 
             // 3. Send Email

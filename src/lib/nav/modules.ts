@@ -487,17 +487,21 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    // Field Service Management — the service desk (tickets, SLAs, CSAT) and its
+    // configuration. Keeps the 'service-tickets' id so existing permissions,
+    // subscriptions and features are unchanged.
     id: 'service-tickets',
     category: 'operations',
-    label: 'Service & Support Ticket Hub',
+    label: 'Field Service Management',
     href: '/service-tickets',
     icon: Headphones,
     subPages: [
-      { label: 'Triage Dashboard', href: '/service-tickets', icon: LayoutDashboard },
+      { label: 'Service Tickets', href: '/service-tickets', icon: LayoutDashboard },
       { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
       { label: 'CSAT Analytics', href: '/service-tickets/csat', icon: Star },
       { label: 'Triage Simulator', href: '/service-tickets/simulator', icon: Sparkles },
       { label: 'WhatsApp console', href: '/admin/whatsapp', icon: MessageCircle, navKey: 'whatsapp' },
+      { label: 'Service configuration', href: '/admin/service-config', icon: Sliders, navKey: 'service-config' },
     ],
   },
   {
@@ -509,7 +513,8 @@ export const MODULES: ModuleDef[] = [
     subPages: [
       { label: 'Dashboard',              href: '/booking-portal',             icon: LayoutDashboard },
       { label: 'New booking',            href: '/booking-portal/new',         icon: Send },
-      { label: 'My bookings',            href: '/booking-portal/my-bookings', icon: BookOpen },
+      { label: 'Service request',        href: '/booking-portal/service-request', icon: Wrench },
+      { label: 'My requests',            href: '/booking-portal/my-bookings', icon: BookOpen },
       { label: 'Approvals',              href: '/booking-portal/approvals',   icon: CheckCircle2 },
       { label: 'Limo & Bus Marketplace', href: '/booking-portal/marketplace', icon: Gavel },
     ],
@@ -581,7 +586,6 @@ export const MODULES: ModuleDef[] = [
       { label: 'SLA',                 href: '/maintenance/sla',                icon: TrendingUp },
       { label: 'Risk scores',         href: '/maintenance/risk',               icon: Gauge },
       { label: 'NUI Reason Master',   href: '/fleet/nui-reasons',              icon: BookOpen, navKey: 'nui-reasons' },
-      { label: 'Service configuration', href: '/admin/service-config',         icon: Sliders,  navKey: 'service-config' },
     ],
   },
   {

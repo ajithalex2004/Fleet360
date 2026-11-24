@@ -46,7 +46,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Build performance & memory optimizations for large page sets
@@ -136,6 +136,38 @@ const nextConfig: NextConfig = {
   },
 
   async headers() {
+    // Global HTTP security headers
+    const securityHeaders = [
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=63072000; includeSubDomains; preload',
+      },
+      {
+        key: 'X-Frame-Options',
+        value: 'SAMEORIGIN',
+      },
+      {
+        key: 'X-Content-Type-Options',
+        value: 'nosniff',
+      },
+      {
+        key: 'Referrer-Policy',
+        value: 'strict-origin-when-cross-origin',
+      },
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), geolocation=(self)',
+      },
+      {
+        key: 'Content-Security-Policy',
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; frame-ancestors 'self';",
+      },
+      {
+        key: 'Vary',
+        value: 'Cookie, Authorization',
+      },
+    ];
+
     // Cache-Control for read-heavy dashboard/stats API routes.
     // private = CDN won't cache (user-specific data), but the browser does.
     // max-age=30 = serve from browser cache for 30 s without a new request.
@@ -166,6 +198,10 @@ const nextConfig: NextConfig = {
     ];
 
     return [
+      {
+        source: '/:path*',
+        headers: securityHeaders,
+      },
       ...statRoutes.map((source) => ({
         source,
         headers: [{ key: 'Cache-Control', value: CACHE_30 }],

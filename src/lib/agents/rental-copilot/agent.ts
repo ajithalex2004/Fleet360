@@ -21,9 +21,9 @@
  *   has 0 available units.
  */
 
-import OpenAI from 'openai';
 import { z } from 'zod';
 import { env, hasOpenAI } from '@/lib/env';
+import { aiGateway } from '../gateway';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, type TxClient } from '@/lib/rls';
 import { findGroundingBlocks } from '@/lib/fleet/grounding-blocks';
@@ -1207,6 +1207,7 @@ function sanitizeLlmIntent(
  */
 export async function extractRentalIntent(
   brief: string,
+  tenantId?: string,
 ): Promise<RentalIntentExtractionResult | RentalCopilotError> {
   if (!brief || brief.trim().length < 10) {
     return {
@@ -1219,170 +1220,50 @@ export async function extractRentalIntent(
   const today = formatIsoDate(getUaeTodayDate());
   const deterministicFallback = parseRentalIntentDeterministic(brief);
 
-  // 1. Primary: Gemini 3.8 Flash Interactions REST API (zero extra npm dependency)
+  // Route LLM extraction through unified AI Gateway (rate limiting, budget quota, telemetry)
   const geminiKey =
     process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_AI_API_KEY?.trim() || '';
-  if (geminiKey) {
+  if (geminiKey || (hasOpenAI && env.OPENAI_API_KEY)) {
     try {
-      const geminiSchema = {
-        type: 'object',
-        properties: {
-          vehicleCategory: { type: 'string' },
-          pickupDate: { type: 'string' },
-          dropoffDate: { type: 'string' },
-          rentalDays: { type: 'integer' },
-          pickupLocation: { type: 'string' },
-          dropoffLocation: { type: 'string' },
-          pickupLocationCode: { type: 'string' },
-          dropoffLocationCode: { type: 'string' },
-          customerType: { type: 'string' },
-          channel: { type: 'string' },
-          insurancePlanCode: { type: 'string' },
-          requestedAncillaries: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                quantity: { type: 'integer' },
-              },
-              required: ['code', 'quantity'],
-            },
-          },
-          promoCode: { type: 'string' },
-          youngDriverUnder25: { type: 'boolean' },
-          crossBorderDestination: { type: 'string' },
-          detectedLanguage: { type: 'string' },
-          confidence: { type: 'string' },
-          warnings: { type: 'array', items: { type: 'string' } },
-        },
-        required: [
-          'vehicleCategory',
-          'pickupDate',
-          'dropoffDate',
-          'rentalDays',
-          'pickupLocation',
-          'dropoffLocation',
-          'customerType',
-          'channel',
-          'insurancePlanCode',
-          'requestedAncillaries',
-          'detectedLanguage',
-          'confidence',
-          'warnings',
-        ],
-      };
-
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': geminiKey,
-          'Content-Type': 'application/json',
-          'Api-Revision': '2026-05-20',
-        },
-        body: JSON.stringify({
-          model: 'gemini-3.8-flash',
-          system_instruction: INTENT_SYSTEM_PROMPT,
-          input: `Today's date in UAE timezone (UTC+4): ${today}\n\nCustomer brief:\n${brief.trim()}`,
-          store: false,
-          response_format: {
-            type: 'text',
-            mime_type: 'application/json',
-            schema: geminiSchema,
-          },
-        }),
-        signal: AbortSignal.timeout(15_000),
-      });
-
-      if (res.ok) {
-        const data = (await res.json()) as {
-          model?: string;
-          steps?: Array<{
-            type?: string;
-            content?: Array<{ type?: string; text?: string }>;
-          }>;
-          usage?: {
-            input_tokens?: number;
-            output_tokens?: number;
-            prompt_tokens?: number;
-            completion_tokens?: number;
-          };
-        };
-
-        const modelOutputs = (data.steps ?? []).filter((s) => s.type === 'model_output');
-        const lastOutput = modelOutputs[modelOutputs.length - 1];
-        const rawText = (lastOutput?.content ?? [])
-          .filter((c) => c.type === 'text' && typeof c.text === 'string')
-          .map((c) => c.text)
-          .join('')
-          .trim();
-
-        if (rawText) {
-          const parsed = JSON.parse(rawText) as Record<string, unknown>;
-          return {
-            ok: true,
-            intent: sanitizeLlmIntent(parsed, deterministicFallback),
-            modelUsed: data.model ?? 'gemini-3.8-flash',
-            promptTokens: data.usage?.input_tokens ?? data.usage?.prompt_tokens ?? 0,
-            completionTokens: data.usage?.output_tokens ?? data.usage?.completion_tokens ?? 0,
-            durationMs: Date.now() - t0,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn(
-        '[rental-copilot] Gemini intent extraction failed, cascading to fallback:',
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
-
-  // 2. Secondary: OpenAI Structured Outputs (Intent extraction ONLY — zero prices)
-  if (hasOpenAI && env.OPENAI_API_KEY) {
-    try {
-      const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
+      const gwRes = await aiGateway.structuredOutput<Record<string, unknown>>(
+        [
           { role: 'system', content: INTENT_SYSTEM_PROMPT },
           {
             role: 'user',
             content: `Today's date in UAE timezone (UTC+4): ${today}\n\nCustomer brief:\n${brief.trim()}`,
           },
         ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'extracted_rental_intent',
-            strict: true,
-            schema: INTENT_EXTRACTION_SCHEMA_JSON,
-          },
+        JSON.stringify(INTENT_EXTRACTION_SCHEMA_JSON),
+        {
+          capabilityAlias: 'STRUCTURED_EXTRACTION',
+          preferredProvider: geminiKey ? 'gemini' : 'openai',
+          tenantId,
+          agentId: 'rental-copilot',
+          eventType: 'RENTAL_INTENT_EXTRACTION',
+          temperature: 0.1,
+          maxTokens: 900,
         },
-        temperature: 0.1,
-        max_tokens: 900,
-      });
+      );
 
-      const raw = completion.choices[0]?.message?.content ?? '';
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (!gwRes.fromFallback && gwRes.data) {
         return {
           ok: true,
-          intent: sanitizeLlmIntent(parsed, deterministicFallback),
-          modelUsed: completion.model,
-          promptTokens: completion.usage?.prompt_tokens ?? 0,
-          completionTokens: completion.usage?.completion_tokens ?? 0,
+          intent: sanitizeLlmIntent(gwRes.data, deterministicFallback),
+          modelUsed: gwRes.model,
+          promptTokens: gwRes.inputTokens,
+          completionTokens: gwRes.outputTokens,
           durationMs: Date.now() - t0,
         };
       }
     } catch (err) {
       console.warn(
-        '[rental-copilot] OpenAI intent extraction failed, using deterministic bilingual parser:',
+        '[rental-copilot] AI Gateway intent extraction failed, using deterministic bilingual parser:',
         err instanceof Error ? err.message : err,
       );
     }
   }
 
-  // 3. Deterministic Bilingual (English + Arabic) NLP Parser
+  // Deterministic Bilingual (English + Arabic) NLP Parser
   return {
     ok: true,
     intent: deterministicFallback,
@@ -2070,7 +1951,7 @@ export async function generateRentalSuggestion(
   brief: string,
   opts?: { tenantId?: string },
 ): Promise<RentalCopilotResult | RentalCopilotError> {
-  const extracted = await extractRentalIntent(brief);
+  const extracted = await extractRentalIntent(brief, opts?.tenantId);
   if (!extracted.ok) {
     return extracted;
   }

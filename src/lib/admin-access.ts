@@ -116,6 +116,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'seed':                                        { GET: 'platform', POST: 'platform' },
   'seed/leasing':                                { POST: 'platform' },
   'service-config/categories':                   { GET: 'member', POST: 'admin' },
+  'service-config/departments':                  { GET: 'admin', PUT: 'admin' },
+  'service-config/templates/facilities':         { GET: 'admin', POST: 'admin' },
   'service-config/categories/[id]':              { PATCH: 'admin', DELETE: 'admin' },
   'service-config/scopes':                       { GET: 'member', POST: 'admin' },
   'service-config/scopes/[id]':                  { PATCH: 'admin', DELETE: 'admin' },

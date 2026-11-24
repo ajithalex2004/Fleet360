@@ -22,15 +22,15 @@ async function computeRevenue(tx: TxClient, from: string, to: string, tenantId: 
     `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices
      WHERE tenant_id = $3 AND deleted_at IS NULL AND issue_date BETWEEN $1::date AND $2::date
        AND payment_status NOT IN ('DRAFT','CANCELLED')${excludeMirrored(['RENTAL', 'LOGISTICS'])}`, from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   const [rac] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_amount),0)::text as t FROM rental_invoices
      WHERE tenant_id = $3 AND deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   const [lg] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(customer_rate_amount),0)::text as t FROM logistics_shipment_orders
      WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   return toN(rev?.t) + toN(rac?.t) + toN(lg?.t);
 }
 
@@ -38,11 +38,11 @@ async function computeDeductions(tx: TxClient, from: string, to: string, tenantI
   const [fuel]  = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_cost),0)::text as t FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`,
     from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   const [maint] = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0)::text as t FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1::date AND $2::date`,
     from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   // Depreciation from the fixed asset register, only where it is tenant-scoped
   const [dep]   = await fixedAssetsTenantScoped(tx)
     ? await tx.$queryRawUnsafe<{t:string}[]>(
@@ -51,16 +51,16 @@ async function computeDeductions(tx: TxClient, from: string, to: string, tenantI
            JOIN finance_fixed_assets fa ON fa.id::text = ds.asset_id AND fa.tenant_id = ds.tenant_id
           WHERE fa.tenant_id = $3
             AND ds.period_year || '-' || LPAD(ds.period_month::text,2,'0') || '-01' BETWEEN $1 AND $2`,
-        from, to, tenantId).catch(()=>[{t:'0'}])
+        from, to, tenantId)
     : [{t:'0'}];
   const [exp]   = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1::date AND $2::date`,
     from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   const [pay]   = await tx.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_payables WHERE tenant_id = $3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') AND issue_date BETWEEN $1::date AND $2::date`,
     from, to, tenantId
-  ).catch(()=>[{t:'0'}]);
+  );
   return toN(fuel?.t) + toN(maint?.t) + toN(dep?.t) + toN(exp?.t) + toN(pay?.t);
 }
 
@@ -72,7 +72,8 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
 
       const sp   = req.nextUrl.searchParams;
       const type = sp.get('type') ?? 'returns';
@@ -82,16 +83,14 @@ export async function GET(req: NextRequest) {
         const from = `${year}-01-01`;
         const to   = `${year}-12-31`;
 
-        const [revenue, deductions, returns] = await Promise.all([
-          computeRevenue(tx, from, to, tenantId),
-          computeDeductions(tx, from, to, tenantId),
-          tx.$queryRawUnsafe<{adj_type:string; amount:string}[]>(
-            `SELECT adj_type, SUM(amount)::text as amount FROM finance_ct_adjustments
-              WHERE tenant_id=$2 AND return_id IN (
-               SELECT id::text FROM finance_ct_returns WHERE tenant_id=$2 AND tax_year=$1 AND deleted_at IS NULL
-             ) GROUP BY adj_type`, year, tenantId
-          ).catch(()=>[]),
-        ]);
+        const revenue = await computeRevenue(tx, from, to, tenantId);
+        const deductions = await computeDeductions(tx, from, to, tenantId);
+        const returns = await tx.$queryRawUnsafe<{adj_type:string; amount:string}[]>(
+          `SELECT adj_type, SUM(amount)::text as amount FROM finance_ct_adjustments
+            WHERE tenant_id=$2 AND return_id IN (
+             SELECT id::text FROM finance_ct_returns WHERE tenant_id=$2 AND tax_year=$1 AND deleted_at IS NULL
+           ) GROUP BY adj_type`, year, tenantId
+        );
 
         const addBacks    = returns.filter(r => r.adj_type === 'ADD_BACK').reduce((s,r) => s + toN(r.amount), 0);
         const extraDeduct = returns.filter(r => r.adj_type === 'DEDUCTION').reduce((s,r) => s + toN(r.amount), 0);
@@ -120,7 +119,7 @@ export async function GET(req: NextRequest) {
         if (!returnId) return NextResponse.json({ error: 'returnId required' }, { status: 400 });
         const rows = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
           `SELECT * FROM finance_ct_adjustments WHERE tenant_id=$2 AND return_id=$1 ORDER BY created_at`, returnId, tenantId
-        ).catch(()=>[]);
+        );
         return NextResponse.json({ data: rows });
       }
 
@@ -128,9 +127,13 @@ export async function GET(req: NextRequest) {
       const returns = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
         `SELECT * FROM finance_ct_returns WHERE tenant_id=$1 AND deleted_at IS NULL ORDER BY tax_year DESC, period_from DESC`,
         tenantId,
-      ).catch(()=>[]);
+      );
       return NextResponse.json({ data: returns });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/corporate-tax GET]', err);
+    return NextResponse.json({ error: 'Failed to generate corporate tax report' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -141,7 +144,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -152,7 +156,7 @@ export async function POST(req: NextRequest) {
           `INSERT INTO finance_ct_adjustments (return_id, adj_type, description, amount, reference, notes, tenant_id)
            VALUES ($1,$2,$3,$4::numeric,$5,$6,$7) RETURNING *`,
           returnId, adjType, description, amount, reference ?? null, notes ?? null, tenantId
-        ).catch(()=>[]);
+        );
         return NextResponse.json(row ?? {}, { status: 201 });
       }
 
@@ -160,7 +164,7 @@ export async function POST(req: NextRequest) {
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
           `UPDATE finance_ct_returns SET status='FILED', filed_at=NOW(), updated_at=NOW()
             WHERE id::text=$1 AND tenant_id=$2 RETURNING *`, body.returnId, tenantId
-        ).catch(()=>[]);
+        );
         return NextResponse.json(row ?? {});
       }
 
@@ -170,7 +174,7 @@ export async function POST(req: NextRequest) {
           `UPDATE finance_ct_returns SET tax_paid=$2::numeric, balance_due=ct_liability-$2::numeric, updated_at=NOW()
             WHERE id::text=$1 AND tenant_id=$3 RETURNING *`,
           returnId, amount, tenantId
-        ).catch(()=>[]);
+        );
         return NextResponse.json(row ?? {});
       }
 
@@ -193,9 +197,13 @@ export async function POST(req: NextRequest) {
         Math.round(revenue*100)/100, Math.round(deductions*100)/100, Math.round(taxableIncome*100)/100,
         Math.round(aboveThreshold*100)/100, ctLiability,
         isSBR, filingDeadline, notes ?? null, tenantId
-      ).catch(()=>[]);
+      );
 
       if (!row) return NextResponse.json({ error: 'Failed to create return' }, { status: 500 });
       return NextResponse.json(row, { status: 201 });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/corporate-tax POST]', err);
+    return NextResponse.json({ error: 'Failed to process corporate tax request' }, { status: 500 });
+  }
 }

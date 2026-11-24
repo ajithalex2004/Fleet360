@@ -6,6 +6,32 @@ import { prisma } from '@/lib/prisma';
 import { withSavepoint } from '@/lib/rental/locks';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
+/** Row shapes returned by the raw expiry queries below. */
+type ExpiryRow = {
+  id: string;
+  name: string;
+  document_type: string;
+  expiry_date: unknown;
+  /** Postgres numeric; parsed with parseFloat. */
+  days_remaining: string;
+  ref_id?: string | null;
+};
+type VehicleExpiryRow = {
+  id: string;
+  name: string;
+  registration_expiry: unknown;
+  insurance_expiry: unknown;
+  mulkiya_expiry: unknown;
+};
+type DriverExpiryRow = {
+  id: string;
+  name: string;
+  license_expiry: unknown;
+  emirates_id_expiry: unknown;
+  passport_expiry: unknown;
+  visa_expiry: unknown;
+};
+
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -42,7 +68,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_rental_documents',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<ExpiryRow[]>(
             `SELECT
                id::text,
                COALESCE(NULLIF(TRIM(customer_name), ''), customer_id::text, 'Unknown Customer') AS name,
@@ -84,7 +110,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_rental_insurance',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<ExpiryRow[]>(
             `SELECT
                id::text,
                COALESCE(NULLIF(TRIM(insurer), ''), policy_no, 'Insurance Policy') AS name,
@@ -126,7 +152,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_lease_credit_v2',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<ExpiryRow[]>(
             `SELECT
                lca.id::text AS id,
                COALESCE(NULLIF(TRIM(l.name), ''), lca.lessee_id::text, 'Lessee') AS name,
@@ -161,7 +187,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_leasing_credit_legacy',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<ExpiryRow[]>(
             `SELECT
                id::text,
                full_name AS name,
@@ -200,7 +226,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_lease_insurance_v2',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<ExpiryRow[]>(
             `SELECT
                id::text,
                COALESCE(NULLIF(TRIM(insurer), ''), policy_no, 'Leasing Insurance') AS name,
@@ -236,7 +262,7 @@ export async function GET(req: NextRequest) {
           tx,
           'expiry_leasing_insurance_legacy',
           () =>
-            tx.$queryRawUnsafe<any[]>(
+            tx.$queryRawUnsafe<ExpiryRow[]>(
               `SELECT
                  id::text,
                  COALESCE(insurer_name, policy_no, 'Leasing Insurance') AS name,
@@ -281,7 +307,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_vehicles',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<VehicleExpiryRow[]>(
             `SELECT
                id::text,
                COALESCE(
@@ -342,7 +368,7 @@ export async function GET(req: NextRequest) {
         tx,
         'expiry_drivers',
         () =>
-          tx.$queryRawUnsafe<any[]>(
+          tx.$queryRawUnsafe<DriverExpiryRow[]>(
             `SELECT
                id::text,
                COALESCE(

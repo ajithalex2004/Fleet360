@@ -86,24 +86,53 @@ export default function DemurrageConfigPage() {
   const [simDays, setSimDays] = useState<number>(8);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('drayage_demurrage_config');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.freeDaysDry) setFreeDaysDry(parsed.freeDaysDry);
-        if (parsed.freeDaysReefer) setFreeDaysReefer(parsed.freeDaysReefer);
-        if (parsed.freeDaysSpecial) setFreeDaysSpecial(parsed.freeDaysSpecial);
-        if (parsed.freeDaysHazmat) setFreeDaysHazmat(parsed.freeDaysHazmat);
-        if (parsed.gracePeriodHours) setGracePeriodHours(parsed.gracePeriodHours);
-        if (parsed.tiers) setTiers(parsed.tiers);
-        if (parsed.terminalOverrides) setTerminalOverrides(parsed.terminalOverrides);
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/logistics/drayage?scope=telemetry');
+        if (res.ok) {
+          const data = await res.json();
+          const demurrageLog = data.statusLogs?.find(
+            (l: { jobId?: string; jobCode?: string; notes?: string }) =>
+              l.jobId === 'CFG-DEMURRAGE' || l.jobCode === 'DEMURRAGE-CONFIG'
+          );
+          if (demurrageLog?.notes) {
+            const parsed = JSON.parse(demurrageLog.notes);
+            if (isMounted) {
+              if (parsed.freeDaysDry) setFreeDaysDry(parsed.freeDaysDry);
+              if (parsed.freeDaysReefer) setFreeDaysReefer(parsed.freeDaysReefer);
+              if (parsed.freeDaysSpecial) setFreeDaysSpecial(parsed.freeDaysSpecial);
+              if (parsed.freeDaysHazmat) setFreeDaysHazmat(parsed.freeDaysHazmat);
+              if (parsed.gracePeriodHours) setGracePeriodHours(parsed.gracePeriodHours);
+              if (parsed.tiers) setTiers(parsed.tiers);
+              if (parsed.terminalOverrides) setTerminalOverrides(parsed.terminalOverrides);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Fallback to localStorage if API request fails
       }
-    } catch {
-      // Use defaults
-    }
+      try {
+        const stored = localStorage.getItem('drayage_demurrage_config');
+        if (stored && isMounted) {
+          const parsed = JSON.parse(stored);
+          if (parsed.freeDaysDry) setFreeDaysDry(parsed.freeDaysDry);
+          if (parsed.freeDaysReefer) setFreeDaysReefer(parsed.freeDaysReefer);
+          if (parsed.freeDaysSpecial) setFreeDaysSpecial(parsed.freeDaysSpecial);
+          if (parsed.freeDaysHazmat) setFreeDaysHazmat(parsed.freeDaysHazmat);
+          if (parsed.gracePeriodHours) setGracePeriodHours(parsed.gracePeriodHours);
+          if (parsed.tiers) setTiers(parsed.tiers);
+          if (parsed.terminalOverrides) setTerminalOverrides(parsed.terminalOverrides);
+        }
+      } catch {
+        // Use defaults
+      }
+    })();
+    return () => { isMounted = false; };
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const config = {
       freeDaysDry,
       freeDaysReefer,
@@ -114,12 +143,30 @@ export default function DemurrageConfigPage() {
       terminalOverrides,
       updatedAt: new Date().toISOString(),
     };
-    localStorage.setItem('drayage_demurrage_config', JSON.stringify(config));
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3500);
+    try {
+      localStorage.setItem('drayage_demurrage_config', JSON.stringify(config));
+      await fetch('/api/logistics/drayage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'record_log',
+          jobId: 'CFG-DEMURRAGE',
+          jobCode: 'DEMURRAGE-CONFIG',
+          status: 'CONFIG_SAVED',
+          notes: JSON.stringify(config),
+          actor: 'Drayage Demurrage Admin',
+        }),
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3500);
+    } catch (e) {
+      console.error('Failed to save demurrage config to database:', e);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3500);
+    }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('Reset all demurrage free-days, rate tiers, and terminal overrides to standard UAE port defaults?')) {
       setFreeDaysDry(5);
       setFreeDaysReefer(3);
@@ -129,6 +176,29 @@ export default function DemurrageConfigPage() {
       setTiers(DEFAULT_TIERS);
       setTerminalOverrides(DEFAULT_TERMINAL_OVERRIDES);
       localStorage.removeItem('drayage_demurrage_config');
+      try {
+        await fetch('/api/logistics/drayage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'record_log',
+            jobId: 'CFG-DEMURRAGE',
+            jobCode: 'DEMURRAGE-CONFIG',
+            status: 'CONFIG_RESET',
+            notes: JSON.stringify({
+              freeDaysDry: 5,
+              freeDaysReefer: 3,
+              freeDaysSpecial: 3,
+              freeDaysHazmat: 2,
+              gracePeriodHours: 4,
+              tiers: DEFAULT_TIERS,
+              terminalOverrides: DEFAULT_TERMINAL_OVERRIDES,
+              updatedAt: new Date().toISOString(),
+            }),
+            actor: 'Drayage Demurrage Admin',
+          }),
+        });
+      } catch {}
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     }

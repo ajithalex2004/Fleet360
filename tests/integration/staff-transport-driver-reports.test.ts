@@ -8,8 +8,9 @@
  * Run: npx vitest run tests/integration/staff-transport-driver-reports.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { cleanupTenant, cleanupUser, isServerRunning, makeRequest, seedTestTenantFull, type SeedResult } from '../setup';
 
 let seed: SeedResult | undefined;
 const createdReportIds: string[] = [];
@@ -19,19 +20,32 @@ beforeAll(async () => {
     throw new Error('dev server must be running on :3000 — start with `npm run dev`');
   }
   seed = await seedTestTenantFull();
+  await withTenantRls(prisma, seed.tenant.id, async (tx) => {
+    await tx.driver.create({
+      data: {
+        id: seed!.user.id,
+        tenantId: seed!.tenant.id,
+        name: `${seed!.user.firstName} ${seed!.user.lastName}`,
+        firstName: seed!.user.firstName,
+        lastName: seed!.user.lastName,
+        licenseNumber: `DL-${seed!.user.id.slice(0, 8)}`,
+        status: 'ACTIVE',
+      },
+    });
+  });
 });
 
 afterAll(async () => {
-  const prisma = new PrismaClient();
-  try {
-    if (createdReportIds.length > 0) {
-      for (const id of createdReportIds) {
-        await prisma.$executeRaw`DELETE FROM driver_reports WHERE id = ${id}::uuid`;
-      }
+  if (!seed) return;
+  const tid = seed.tenant.id;
+  await withTenantRls(prisma, tid, async (tx) => {
+    for (const id of createdReportIds) {
+      await tx.$executeRaw`DELETE FROM driver_reports WHERE id = ${id}::uuid`.catch(() => {});
     }
-  } finally {
-    await prisma.$disconnect();
-  }
+    await tx.driver.deleteMany({ where: { id: seed!.user.id } }).catch(() => {});
+  }).catch(() => {});
+  await cleanupTenant(tid).catch(() => {});
+  await cleanupUser(seed.user.id).catch(() => {});
 });
 
 describe('Driver reports — driver side', () => {

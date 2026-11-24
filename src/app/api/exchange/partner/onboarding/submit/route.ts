@@ -9,6 +9,7 @@ import { notProvisionedAware, partnerAuthFailure, PROFILE_ROLES, requirePartnerC
 import { loadOnboardingState } from '@/lib/exchange/onboarding-state';
 import { SUBMITTABLE_STATUSES } from '@/lib/exchange/partner-activation';
 import { notify, tenantAdminEmails } from '@/lib/exchange/onboarding-review';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 export const runtime = 'nodejs';
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
   await notify(result.reviewers, `${auth.ctx.legalName} submitted its documents for activation`, [
     `${auth.ctx.legalName} has uploaded its compliance documents and is waiting for your review.`,
     'Review and activate it under Admin → Partner onboarding:',
-    `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/admin/partner-onboarding`,
+    `${getPublicOrigin(req)}/admin/partner-onboarding`,
   ]);
 
   return NextResponse.json({ ok: true, onboardingStatus: 'UNDER_REVIEW' });

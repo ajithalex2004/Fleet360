@@ -79,7 +79,12 @@ describe('GET /api/admin/tenants', () => {
   it('returned tenants array contains our seeded tenant', async () => {
     if (!serverAvailable) return;
 
-    const res = await makeRequest('GET', '/api/admin/tenants', undefined, superAdminSeed.headers);
+    const res = await makeRequest(
+      'GET',
+      `/api/admin/tenants?search=${encodeURIComponent(superAdminSeed.tenant.code)}`,
+      undefined,
+      superAdminSeed.headers,
+    );
     const tenants = await res.json() as Array<Record<string, unknown>>;
 
     const found = tenants.some(

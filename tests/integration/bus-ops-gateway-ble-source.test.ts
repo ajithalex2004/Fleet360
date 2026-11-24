@@ -31,7 +31,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import {
   seedTestTenantFull,
   cleanupTenant,
@@ -79,7 +79,7 @@ beforeAll(async () => {
   tenant = await seedTestTenantFull();
   const tid = tenant.tenant.id;
 
-  await withPlatformAdmin(prisma, async (tx) => {
+  await withTenantRls(prisma, tid, async (tx) => {
     const vehicle = await tx.vehicle.create({
       data: {
         tenantId: tid, make: 'BLE', model: 'Fixture',
@@ -134,20 +134,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!hasDb) return;
-  await withPlatformAdmin(prisma, async (tx) => {
-    if (tripId) {
-      await tx.boardingEvent.deleteMany({ where: { scheduleId: tripId } }).catch(() => {});
-      await tx.tripPassenger.deleteMany({ where: { tripId } }).catch(() => {});
-      await tx.tripSchedule.deleteMany({ where: { id: tripId } }).catch(() => {});
-    }
-    await tx.bleGateway.deleteMany({ where: { gatewayId: GATEWAY_ID } }).catch(() => {});
-    await tx.staffBleTag.deleteMany({ where: { tagId: TAG_ID } }).catch(() => {});
-    if (staffId)   await tx.staffMember.deleteMany({ where: { id: staffId } }).catch(() => {});
-    if (routeId)   await tx.busRoute.deleteMany({ where: { id: routeId } }).catch(() => {});
-    if (vehicleId) await tx.vehicle.deleteMany({ where: { id: vehicleId } }).catch(() => {});
-  }).catch(() => {});
-
   if (tenant) {
+    await withTenantRls(prisma, tenant.tenant.id, async (tx) => {
+      if (tripId) {
+        await tx.boardingEvent.deleteMany({ where: { scheduleId: tripId } }).catch(() => {});
+        await tx.tripPassenger.deleteMany({ where: { tripId } }).catch(() => {});
+        await tx.tripSchedule.deleteMany({ where: { id: tripId } }).catch(() => {});
+      }
+      await tx.bleGateway.deleteMany({ where: { gatewayId: GATEWAY_ID } }).catch(() => {});
+      await tx.staffBleTag.deleteMany({ where: { tagId: TAG_ID } }).catch(() => {});
+      if (staffId)   await tx.staffMember.deleteMany({ where: { id: staffId } }).catch(() => {});
+      if (routeId)   await tx.busRoute.deleteMany({ where: { id: routeId } }).catch(() => {});
+      if (vehicleId) await tx.vehicle.deleteMany({ where: { id: vehicleId } }).catch(() => {});
+    }).catch(() => {});
+
     await cleanupTenant(tenant.tenant.id).catch(() => {});
     await cleanupUser(tenant.user.id).catch(() => {});
   }
@@ -204,10 +204,12 @@ describe('BLE gateway boarding ingest', () => {
     if (!serverAvailable || !hasDb || !tripId || !passengerId) return;
 
     // The dedup lookup queried on method too, so it threw on the same
-    // invalid enum — meaning dedup never worked either.
+    // invalid enum — meaning dedup never worked either. Send a distinct
+    // HTTP body within ±5s (different rssiDbm) so it passes HTTP replay
+    // protection and exercises DB-level ±5s event dedup.
     const occurredAt = new Date().toISOString();
-    await postEvents({ gatewayId: GATEWAY_ID, events: [{ kind: 'BOARD', tagId: TAG_ID, occurredAt }] });
-    const res = await postEvents({ gatewayId: GATEWAY_ID, events: [{ kind: 'BOARD', tagId: TAG_ID, occurredAt }] });
+    await postEvents({ gatewayId: GATEWAY_ID, events: [{ kind: 'BOARD', tagId: TAG_ID, occurredAt, rssiDbm: -58 }] });
+    const res = await postEvents({ gatewayId: GATEWAY_ID, events: [{ kind: 'BOARD', tagId: TAG_ID, occurredAt, rssiDbm: -59 }] });
 
     const body = await res.json() as { ok: boolean; summary: { duplicates: number; errors: number } };
     expect(body.summary.errors).toBe(0);

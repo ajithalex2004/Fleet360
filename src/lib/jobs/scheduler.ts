@@ -6,6 +6,8 @@
  */
 
 import { scheduledOccurrence } from '@/lib/jobs/occurrence';
+import { claimRun, finishRun, leaseSecondsFor } from '@/lib/jobs/job-runs';
+import { JOB_MAP, type JobContext } from '@/lib/jobs/registry';
 
 const TIMEZONE = 'Asia/Dubai';
 
@@ -177,32 +179,59 @@ export function startJobScheduler(): void {
 }
 
 async function runScheduled(jobName: string, firedAt: Date): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  // The occurrence (the minute this tick is for) makes the run claim unique
-  // across replicas: every replica fires the same tick, one runs it
-  // (src/lib/jobs/job-runs.ts).
-  const url = `${base}/api/jobs/run?job=${encodeURIComponent(jobName)}&occurrence=${encodeURIComponent(scheduledOccurrence(firedAt))}`;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (process.env.CRON_SECRET) {
-    headers['Authorization'] = `Bearer ${process.env.CRON_SECRET}`;
+  const jobDef = JOB_MAP.get(jobName);
+  if (!jobDef) {
+    console.error(`[job-scheduler] ${jobName} is not registered`);
+    return;
   }
 
+  const occurrence = scheduledOccurrence(firedAt);
   const start = Date.now();
+
+  let claim: Awaited<ReturnType<typeof claimRun>>;
   try {
-    const res = await fetch(url, { method: 'POST', headers, body: '{}' });
-    const body = await res.json().catch(() => ({}));
+    claim = await claimRun({
+      jobName,
+      scope: '*',
+      occurrence,
+      trigger: 'scheduler',
+      leaseSeconds: leaseSecondsFor(jobDef.maxDurationSec),
+    });
+  } catch (err) {
+    console.error(`[job-scheduler] ${jobName} not run: could not claim the run:`, err);
+    return;
+  }
+
+  if (!claim.claimed) {
+    const summary = claim.reason === 'running'
+      ? `skipped: a run of ${jobName} is still in progress${claim.runId ? ` (run ${claim.runId})` : ''}`
+      : `skipped: occurrence ${occurrence} already ran`;
+    console.info(`[job-scheduler] ${jobName} ${summary}`);
+    return;
+  }
+
+  const ctx: JobContext = {
+    tenantId: null,
+    userId: 'system:cron',
+    searchParams: new URLSearchParams({ job: jobName, occurrence }),
+  };
+
+  try {
+    const result = await jobDef.handler(ctx);
     const durationMs = Date.now() - start;
-    if (!res.ok) {
-      console.error(`[job-scheduler] ${jobName} -> HTTP ${res.status} in ${durationMs}ms -`, body);
-      return;
-    }
-    if (body.status === 'skipped') {
-      console.info(`[job-scheduler] ${jobName} -> ${body.summary}`);
-      return;
-    }
-    console.info(`[job-scheduler] ${jobName} -> ${body.status ?? 'ok'} in ${durationMs}ms - ${body.summary ?? ''}`);
+    console.info(`[job-scheduler] ${jobName} -> ${result.status} in ${durationMs}ms - ${result.summary ?? ''}`);
+    await finishRun(claim.runId, {
+      status: result.status === 'error' ? 'FAILED' : 'SUCCEEDED',
+      durationMs,
+      summary: result.summary,
+    });
   } catch (err) {
     const durationMs = Date.now() - start;
-    console.error(`[job-scheduler] ${jobName} unreachable after ${durationMs}ms:`, err);
+    console.error(`[job-scheduler] ${jobName} threw after ${durationMs}ms:`, err);
+    await finishRun(claim.runId, {
+      status: 'FAILED',
+      durationMs,
+      error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+    });
   }
 }

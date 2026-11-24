@@ -9,6 +9,7 @@ import { withSavepoint } from '@/lib/rental/locks';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/twilio-client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 /**
  * E-Signing — Send / Request API
@@ -27,9 +28,7 @@ const VALID_CONTRACT_TYPES = [
 const VALID_CHANNELS = ['SMS', 'WHATSAPP', 'EMAIL'] as const;
 
 function resolveAppOrigin(req: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim();
-  const base = configured || req.nextUrl.origin;
-  return base.replace(/\/$/, '');
+  return getPublicOrigin(req);
 }
 
 async function verifyTargetContractOwnership(

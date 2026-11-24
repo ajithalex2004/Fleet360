@@ -26,7 +26,8 @@
  * journal creation to src/lib/finance/journal-service.ts.
  */
 
-import { createDraftJournalEntry } from '@/lib/finance/journal-service';
+import { createDraftJournalEntry, postOperationalJournalEntry } from '@/lib/finance/journal-service';
+import { prisma } from '@/lib/prisma';
 
 export type ExchangeCommercialModel = 'AGENCY' | 'PRINCIPAL';
 export type CommercialModel = ExchangeCommercialModel;
@@ -440,65 +441,36 @@ export class ExchangeCommercialLedgerService {
     partnerName: string;
     economics: ExchangeTransactionEconomics;
     preparedBy?: string;
+    tx?: any;
   }) {
     if (!params.economics.isBalanced) {
       throw new Error('Cannot post unbalanced exchange transaction to General Ledger');
     }
 
-    const entries = [];
+    const db = params.tx ?? prisma;
+    const lines = (params.economics.journalLines ?? []).map((jl) => ({
+      code: jl.accountCode,
+      name: jl.accountName,
+      description: jl.description,
+      debit: jl.debit,
+      credit: jl.credit,
+    }));
 
-    // 1. Supplier Subcontracted Cost -> Accounts Payable
-    const apEntry = await createDraftJournalEntry({
+    if (lines.length === 0) return [];
+
+    const glEntry = await postOperationalJournalEntry(db, {
       tenantId: params.tenantId,
+      entryDate: new Date().toISOString().slice(0, 10),
       narration: `Exchange Partner Invoice ${params.invoiceNumber} — ${params.partnerName}`,
       reference: params.invoiceNumber,
       sourceType: 'CARRIER_SETTLEMENT',
       sourceId: params.invoiceId,
-      amount: params.economics.supplierGrossPayableInclVat,
       currency: params.economics.currencyCode,
       preparedBy: params.preparedBy || 'EXCHANGE_FINANCE',
-      debit: {
-        code: '5220',
-        name: 'Subcontracted Partner Transport Cost',
-        description: `Partner fulfilment cost (${params.invoiceNumber})`,
-      },
-      credit: {
-        code: '2110',
-        name: 'Accounts Payable — Trade',
-        description: `Payable to ${params.partnerName} (${params.invoiceNumber})`,
-      },
-      idempotencyKey: `EXCHANGE_AP:${params.invoiceId}`,
-    }).catch(() => null);
+      idempotencyKey: `EXCHANGE_APPROVAL:${params.invoiceId}`,
+      lines,
+    });
 
-    if (apEntry) entries.push(apEntry);
-
-    // 2. If Platform Commission applies, record commission journal entry idempotently
-    if (params.economics.platformFeeInclVat > 0) {
-      const commEntry = await createDraftJournalEntry({
-        tenantId: params.tenantId,
-        narration: `Exchange Platform Commission on ${params.invoiceNumber} — ${params.partnerName}`,
-        reference: `COMM-${params.invoiceNumber}`,
-        sourceType: 'EXCHANGE_COMMISSION',
-        sourceId: params.invoiceId,
-        amount: params.economics.platformFeeInclVat,
-        currency: params.economics.currencyCode,
-        preparedBy: params.preparedBy || 'EXCHANGE_FINANCE',
-        debit: {
-          code: '2110',
-          name: 'Accounts Payable — Trade',
-          description: `Commission deduction from ${params.partnerName}`,
-        },
-        credit: {
-          code: '4400',
-          name: 'Staff Transport Revenue',
-          description: `Exchange platform commission (${params.invoiceNumber})`,
-        },
-        idempotencyKey: `EXCHANGE_COMMISSION:${params.invoiceId}`,
-      }).catch(() => null);
-
-      if (commEntry) entries.push(commEntry);
-    }
-
-    return entries;
+    return glEntry ? [glEntry] : [];
   }
 }

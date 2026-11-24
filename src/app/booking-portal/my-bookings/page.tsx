@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { MyServiceRequests } from './my-service-requests';
 
 interface UserBooking {
   id: string;
@@ -155,9 +156,12 @@ export default function MyBookings() {
 
   if (error) {
     return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-red-400">
-        <p className="font-medium">Error loading bookings</p>
-        <p className="text-sm mt-1">{error}</p>
+      <div className="space-y-8">
+        <MyServiceRequests />
+        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-red-400">
+          <p className="font-medium">Error loading bookings</p>
+          <p className="text-sm mt-1">{error}</p>
+        </div>
       </div>
     );
   }
@@ -167,8 +171,8 @@ export default function MyBookings() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)] mb-2">My Bookings</h1>
-          <p className="text-[var(--text-muted)]">View and manage your transport bookings</p>
+          <h1 className="text-3xl font-bold text-[var(--text-main)] mb-2">My Requests</h1>
+          <p className="text-[var(--text-muted)]">Your service requests and transport bookings in one place</p>
         </div>
         <Link href="/booking-portal/new">
           <button className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-medium text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all">
@@ -176,6 +180,10 @@ export default function MyBookings() {
           </button>
         </Link>
       </div>
+
+      <MyServiceRequests />
+
+      <h2 className="text-xl font-bold text-[var(--text-main)] pt-2">Transport bookings</h2>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

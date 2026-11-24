@@ -1759,6 +1759,20 @@
    }
   },
   {
+   "template": "service-config/departments",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "service-config/templates/facilities",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
    "template": "service-config/categories/[id]",
    "methods": {
     "PATCH": "admin",

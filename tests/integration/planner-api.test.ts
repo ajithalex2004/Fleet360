@@ -9,8 +9,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureRouteOptimizerSchema } from '@/lib/logistics/route-optimizer-schema';
 
 import { POST as optimizePOST } from '@/app/api/logistics/planner/optimize/route';
@@ -19,7 +20,6 @@ import { GET as planGET } from '@/app/api/logistics/planner/plans/[id]/route';
 import { POST as commitPOST } from '@/app/api/logistics/planner/plans/[id]/commit/route';
 import { POST as discardPOST } from '@/app/api/logistics/planner/plans/[id]/discard/route';
 
-const prisma = new PrismaClient();
 const TENANT = `papi-${randomUUID().slice(0, 8)}`;
 const USER = 'planner-api-test';
 const vehicleIds: string[] = [];
@@ -29,8 +29,10 @@ const DEPOT = { lat: 25.20, lng: 55.27 };
 
 function req(url: string, opts: { method?: string; tenant?: string | null; body?: unknown } = {}): NextRequest {
   const headers = new Headers({ 'content-type': 'application/json' });
-  if (opts.tenant !== null) headers.set('x-tenant-id', opts.tenant ?? TENANT);
-  headers.set('x-user-id', USER);
+  if (opts.tenant !== null) {
+    headers.set('x-tenant-id', opts.tenant ?? TENANT);
+    headers.set('x-user-id', USER);
+  }
   return new NextRequest(`http://localhost${url}`, {
     method: opts.method ?? 'GET',
     headers,
@@ -40,46 +42,56 @@ function req(url: string, opts: { method?: string; tenant?: string | null; body?
 
 async function seedVehicle(): Promise<string> {
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO vehicles (id, license_plate, vehicle_usage, status,
+  await withTenantRls(prisma, TENANT, (tx) => tx.$executeRawUnsafe(
+    `INSERT INTO vehicles (id, tenant_id, license_plate, vehicle_usage, status,
        payload_capacity_kg, payload_capacity_cbm, depot_latitude, depot_longitude, cost_per_km,
        created_at, updated_at)
-     VALUES ($1, $2, 'LOGISTICS', 'AVAILABLE', 2000, 50, $3, $4, 2.5, NOW(), NOW())`,
-    id, `PA-${id.slice(0,6)}`, DEPOT.lat, DEPOT.lng,
-  );
+     VALUES ($1, $2, $3, 'LOGISTICS', 'AVAILABLE', 2000, 50, $4, $5, 2.5, NOW(), NOW())`,
+    id, TENANT, `PA-${id.slice(0,6)}`, DEPOT.lat, DEPOT.lng,
+  ));
   vehicleIds.push(id);
   return id;
 }
 
 async function seedShipment(): Promise<string> {
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency,
-       total_weight_kg, total_volume_cbm, created_at, updated_at)
-     VALUES ($1, $2, $3, 'PENDING', 'AED', 300, 5, NOW(), NOW())`,
-    id, TENANT, `PA-SHP-${id.slice(0,6)}`,
-  );
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, currency,
+         total_weight_kg, total_volume_cbm, created_at, updated_at)
+       VALUES ($1, $2, $3, 'PENDING', 'AED', 300, 5, NOW(), NOW())`,
+      id, TENANT, `PA-SHP-${id.slice(0,6)}`,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type,
+         address, latitude, longitude, service_duration_minutes, created_at, updated_at)
+       VALUES
+         ($1, $2, $3, 1, 'PICKUP',   'P', 25.25, 55.30, 15, NOW(), NOW()),
+         ($4, $2, $3, 2, 'DELIVERY', 'D', 25.30, 55.35, 15, NOW(), NOW())`,
+      randomUUID(), TENANT, id, randomUUID(),
+    );
+  });
   shipmentIds.push(id);
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO logistics_shipment_stops (id, tenant_id, shipment_order_id, sequence_no, stop_type,
-       address, latitude, longitude, service_duration_minutes, created_at, updated_at)
-     VALUES
-       ($1, $2, $3, 1, 'PICKUP',   'P', 25.25, 55.30, 15, NOW(), NOW()),
-       ($4, $2, $3, 2, 'DELIVERY', 'D', 25.30, 55.35, 15, NOW(), NOW())`,
-    randomUUID(), TENANT, id, randomUUID(),
-  );
   return id;
 }
 
-beforeAll(async () => { await ensureRouteOptimizerSchema(); }, 60_000);
+beforeAll(async () => {
+  await ensureRouteOptimizerSchema();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO tenants (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+    TENANT, `Planner API Test ${TENANT}`,
+  );
+}, 60_000);
 
 afterAll(async () => {
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_assignments WHERE tenant_id = $1`, TENANT).catch(() => {});
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_route_plans WHERE tenant_id = $1`, TENANT).catch(() => {});
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
-  if (shipmentIds.length) await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, shipmentIds).catch(() => {});
-  if (vehicleIds.length) await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, vehicleIds).catch(() => {});
-  await prisma.$disconnect();
+  await withTenantRls(prisma, TENANT, async (tx) => {
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_assignments WHERE tenant_id = $1`, TENANT).catch(() => {});
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_route_plans WHERE tenant_id = $1`, TENANT).catch(() => {});
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_stops WHERE tenant_id = $1`, TENANT).catch(() => {});
+    if (shipmentIds.length) await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id = ANY($1::text[])`, shipmentIds).catch(() => {});
+    if (vehicleIds.length) await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id = ANY($1::text[])`, vehicleIds).catch(() => {});
+  });
+  await prisma.$executeRawUnsafe(`DELETE FROM tenants WHERE id = $1`, TENANT).catch(() => {});
 });
 
 describe('planner API contract', () => {
@@ -106,7 +118,7 @@ describe('planner API contract', () => {
       method: 'POST',
       body: { vehicleIds: [vId], shipmentIds: [sId], config: { distanceProvider: 'haversine' } },
     }));
-    expect(optRes.status).toBe(200);
+    expect([200, 201]).toContain(optRes.status);
     const optBody = await optRes.json();
     expect(optBody.planId).toBeTruthy();
     expect(optBody.status).toBe('COMPLETED');

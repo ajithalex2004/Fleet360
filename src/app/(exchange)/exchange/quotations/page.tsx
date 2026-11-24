@@ -18,12 +18,13 @@ import {
   Send,
   ShieldCheck,
 } from 'lucide-react';
+import type { PartnerQuoteWithRequestRow } from '@/lib/exchange/client-types';
 
 export default function ExchangeQuotationsPage() {
-  const [quotes, setQuotes] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<PartnerQuoteWithRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [domainFilter, setDomainFilter] = useState<string>('ALL');
-  const [revisingQuote, setRevisingQuote] = useState<any | null>(null);
+  const [revisingQuote, setRevisingQuote] = useState<PartnerQuoteWithRequestRow | null>(null);
   const [newAmount, setNewAmount] = useState('');
   const [newNotes, setNewNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -57,7 +58,7 @@ export default function ExchangeQuotationsPage() {
     return true;
   });
 
-  const handleOpenRevise = (q: any) => {
+  const handleOpenRevise = (q: PartnerQuoteWithRequestRow) => {
     setRevisingQuote(q);
     setNewAmount(String(Number(q.amount || 0)));
     setNewNotes(q.notes || '');
@@ -176,7 +177,7 @@ export default function ExchangeQuotationsPage() {
             {filteredQuotes.length > 0 ? (
               filteredQuotes.map((q) => {
                 const domain = q.request?.domain || 'PASSENGER_TRANSPORT';
-                const disc = (q.request?.opportunity?.disclosurePayload || {}) as Record<string, any>;
+                const disc = (q.request?.opportunity?.disclosurePayload || {}) as Record<string, unknown>;
                 const corridor =
                   disc.originCity && disc.destinationCity
                     ? `${disc.originCity} → ${disc.destinationCity}`

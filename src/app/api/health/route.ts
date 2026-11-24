@@ -1,41 +1,27 @@
 /**
  * GET /api/health
  *
- * Operational probe for monitoring + dev warm-up.
+ * Public operational probe for external monitoring and load balancers.
  *
- *   200 { status: 'ok',       db, integrations, release }   — fully healthy
- *   200 { status: 'degraded', db, integrations, release }   — DB ok, optional service missing
- *   503 { status: 'unhealthy', db, release }                — DB unreachable
+ *   200 { status: 'ok' | 'degraded', db, schema, storage, services, backend, timestamp }
+ *   503 { status: 'unhealthy', db, timestamp }
  *
- * `schema` reports whether every table/column the app checks at runtime
- * exists (src/lib/db/schema-registry.ts); a missing one makes the status
- * "degraded". Names are on Admin > Schema status, not here (public probe).
- * `storage` reports whether uploads are durable and working; local disk in
- * production (lost on every redeploy) makes the status "degraded".
- *
- * Hit this once after `npm run dev` to warm the Neon pool.
+ * Security boundary (M1-P0-1):
+ * This endpoint is intentionally public and MUST NEVER expose privileged
+ * operational diagnostics (security/MFA/brute-force metrics, DB pool /
+ * pg_stat_activity query details, AI or Google Maps spending, partial API keys,
+ * enterprise bridge logs, job queues, or secret-integration configuration lists).
+ * Full diagnostics are served exclusively on SUPER_ADMIN-gated GET /api/admin/health.
  */
 
 import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
 import { schemaReport } from '@/lib/db/schema-registry';
 import { storageStatus } from '@/lib/storage/health';
-import { getBackgroundJobsAndOutboxHealth } from '@/lib/jobs/health';
-import {
-  getDbPoolMetrics,
-  getEnterpriseBridgeMetrics,
-  getSecurityHealthMetrics,
-  getAiHealthAndSpendingMetrics,
-  getGoogleMapsAndApisSpendingMetrics,
-} from '@/lib/health/extended-metrics';
 
 export const dynamic = 'force-dynamic'; // never cache
 
-const RELEASE =
-  process.env.GIT_COMMIT_SHA ??
-  process.env.VERCEL_GIT_COMMIT_SHA ??
-  process.env.RAILWAY_GIT_COMMIT_SHA ??
-  'unknown';
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 export async function GET() {
   const t0 = Date.now();
@@ -57,73 +43,21 @@ export async function GET() {
       {
         status: 'unhealthy',
         db: { status: 'error', latencyMs: dbLatencyMs, error: 'database unreachable' },
-        release: RELEASE,
         timestamp: new Date().toISOString(),
       },
-      { status: 503 },
+      { status: 503, headers: NO_STORE_HEADERS },
     );
   }
 
-  // Optional integration checks — missing keys make us "degraded", not failed.
-  const integrations = {
-    stripe:        !!process.env.STRIPE_SECRET_KEY,
-    sendgrid:      !!process.env.SENDGRID_API_KEY && !!(process.env.EMAIL_FROM ?? process.env.SMTP_FROM),
-    sentry:        !!(process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN),
-    ssoEncryption: !!process.env.SSO_ENCRYPTION_KEY,
-    appUrl:        !!process.env.NEXT_PUBLIC_APP_URL,
-    sessionSecret: !!process.env.SESSION_SECRET,
-    // Session revocation (role change, deactivation, sign-out everywhere)
-    // reaches the edge middleware only through Redis; without it revoked
-    // sessions stay valid until they expire (24 h).
-    redis:         !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN,
-  };
-  const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
-  const schema  = await schemaReport();
-  const storage = await storageStatus();
+  const [schema, storage] = await Promise.all([
+    schemaReport(),
+    storageStatus(),
+  ]);
 
-  // Background jobs & outbox status
-  let jobsAndOutbox: Awaited<ReturnType<typeof getBackgroundJobsAndOutboxHealth>> | null = null;
-  try {
-    jobsAndOutbox = await getBackgroundJobsAndOutboxHealth();
-  } catch (err) {
-    console.error('[api/health] jobs/outbox health check failed:', err);
-  }
-
-  // Extended Metrics: DB Pool, Enterprise Bridge, Security, AI & Maps Spending
-  let dbPoolData: Awaited<ReturnType<typeof getDbPoolMetrics>> | null = null;
-  let enterpriseData: Awaited<ReturnType<typeof getEnterpriseBridgeMetrics>> | null = null;
-  let securityData: Awaited<ReturnType<typeof getSecurityHealthMetrics>> | null = null;
-  let aiData: Awaited<ReturnType<typeof getAiHealthAndSpendingMetrics>> | null = null;
-  let mapsData: Awaited<ReturnType<typeof getGoogleMapsAndApisSpendingMetrics>> | null = null;
-  try {
-    [dbPoolData, enterpriseData, securityData, aiData, mapsData] = await Promise.all([
-      getDbPoolMetrics(),
-      getEnterpriseBridgeMetrics(),
-      getSecurityHealthMetrics(),
-      getAiHealthAndSpendingMetrics(),
-      getGoogleMapsAndApisSpendingMetrics(),
-    ]);
-  } catch (err) {
-    console.error('[api/health] extended metrics failed:', err);
-  }
-
-  const jobsDegraded =
-    jobsAndOutbox?.jobRuns24h.status === 'critical' ||
-    jobsAndOutbox?.outbox.status === 'critical' ||
-    dbPoolData?.status === 'critical' ||
-    securityData?.status === 'critical';
-
-  const status =
-    missing.length > 0 ||
-    schema.status === 'incomplete' ||
-    !storage.durable ||
-    !storage.ok ||
-    jobsDegraded
-      ? 'degraded'
-      : 'ok';
-
-  // Optional Go backend readiness probe
-  let backendInfo: { status: string; version?: string; error?: string } | undefined;
+  // Optional Go backend readiness probe: surface connectivity status without
+  // leaking internal URLs, error strings, or deployment metadata.
+  let backendInfo: { status: 'ready' | 'not_ready' | 'unreachable' } | undefined;
+  let goBackendServiceStatus: 'ok' | 'degraded' = 'ok';
   const goBackendUrl = process.env.GO_BACKEND_URL;
   if (goBackendUrl) {
     try {
@@ -131,40 +65,39 @@ export async function GET() {
         cache: 'no-store',
         signal: AbortSignal.timeout(2000),
       });
-      const bData = await bRes.json();
-      backendInfo = {
-        status: bData.status ?? (bRes.ok ? 'ready' : 'not_ready'),
-        version: bData.version,
-      };
+      const bData = await bRes.json().catch(() => null) as Record<string, unknown> | null;
+      const isReady = bRes.ok && bData?.status === 'ready';
+      backendInfo = { status: isReady ? 'ready' : 'not_ready' };
+      if (!isReady) {
+        goBackendServiceStatus = 'degraded';
+      }
     } catch (bErr) {
       console.error('[api/health] backend readiness check failed:', bErr);
       backendInfo = { status: 'unreachable' };
+      goBackendServiceStatus = 'degraded';
     }
   }
 
-  return NextResponse.json({
-    status,
-    db: { status: dbStatus, latencyMs: dbLatencyMs },
-    integrations,
-    missingConfig: missing,
-    schema: { status: schema.status, missing: schema.missingCount },
-    storage: { backend: storage.backend, durable: storage.durable, ok: storage.ok },
-    release: RELEASE,
-    backend: backendInfo,
-    jobs: jobsAndOutbox
-      ? {
-          scheduler: jobsAndOutbox.scheduler.status,
-          isTicking: jobsAndOutbox.scheduler.isTicking,
-          failures24h: jobsAndOutbox.jobRuns24h.failed24h,
-          pendingOutbox: jobsAndOutbox.outbox.pendingCount,
-          outboxLagMs: jobsAndOutbox.outbox.lagMs,
-        }
-      : undefined,
-    dbPool: dbPoolData ?? undefined,
-    enterpriseBridge: enterpriseData ?? undefined,
-    security: securityData ?? undefined,
-    aiSpending: aiData ?? undefined,
-    googleApisSpending: mapsData ?? undefined,
-    timestamp: new Date().toISOString(),
-  });
+  const status: 'ok' | 'degraded' =
+    schema.status === 'incomplete' ||
+    !storage.durable ||
+    !storage.ok ||
+    goBackendServiceStatus === 'degraded'
+      ? 'degraded'
+      : 'ok';
+
+  return NextResponse.json(
+    {
+      status,
+      db: { status: dbStatus, latencyMs: dbLatencyMs },
+      schema: { status: schema.status, missing: schema.missingCount },
+      storage: { backend: storage.backend, durable: storage.durable, ok: storage.ok },
+      services: {
+        goBackend: goBackendServiceStatus,
+      },
+      ...(backendInfo ? { backend: backendInfo } : {}),
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200, headers: NO_STORE_HEADERS },
+  );
 }

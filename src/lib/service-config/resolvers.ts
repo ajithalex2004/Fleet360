@@ -16,7 +16,7 @@ import type { TicketType, TicketPriority, FormFieldDef } from '@/types/service-t
  * Resolve the initial status for a new service-ticket.
  *
  *   - approval.approvalRequired = true   → 'Awaiting Approval'
- *   - approval.emergencyBypassEnabled    → High priority skips the gate
+ *   - approval.emergencyBypassEnabled    → High / Critical priority skips the gate
  *   - else                               → 'Pending'
  */
 export async function resolveTicketInitialStatus(
@@ -32,7 +32,7 @@ export async function resolveTicketInitialStatus(
   const a = cfg.rules.approval;
   const source = cfg.configured.approval ? 'service_rules' : 'defaults';
 
-  if (a.emergencyBypassEnabled && priority === 'High') {
+  if (a.emergencyBypassEnabled && (priority === 'High' || priority === 'Critical')) {
     return { status: 'Pending', source };
   }
   if (a.approvalRequired) {
@@ -55,7 +55,7 @@ export async function resolveTicketSlaHours(
   if (!cfg) return { hours: 24, source: 'defaults' };
   const matrix = cfg.rules.ticketing.priorityMatrix;
   return {
-    hours: matrix[normalizeTicketPriority(priority)] ?? matrix.Medium,
+    hours: pickSlaHours(matrix, priority),
     source: cfg.configured.ticketing ? 'service_rules' : 'defaults',
   };
 }
@@ -73,7 +73,7 @@ export async function resolveTicketPrefix(
   return fromRules || 'GEN';
 }
 
-export type SlaMatrix = { Low: number; Medium: number; High: number };
+export type SlaMatrix = { Low: number; Medium: number; High: number; Critical?: number };
 
 /**
  * Batch resolve the SLA priority matrix for a set of ticket types in one
@@ -91,7 +91,7 @@ export async function resolveTicketSlaMatrixBatch(
     const cfg = await loadServiceConfig(tenantId, type);
     if (cfg) {
       const m = cfg.rules.ticketing.priorityMatrix;
-      out.set(type, { Low: m.Low, Medium: m.Medium, High: m.High });
+      out.set(type, { Low: m.Low, Medium: m.Medium, High: m.High, ...(m.Critical ? { Critical: m.Critical } : {}) });
     } else {
       out.set(type, { Low: 72, Medium: 24, High: 4 });
     }
@@ -100,24 +100,29 @@ export async function resolveTicketSlaMatrixBatch(
   return out;
 }
 
-/** Pick the SLA hours for a single ticket given its priority. */
+/**
+ * Pick the SLA hours for a single ticket given its priority. Critical uses
+ * the matrix's Critical tier when the service type defines one, otherwise
+ * the High tier — so a critical defect never gets a looser SLA than High.
+ */
 export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority | string): number {
-  return matrix[normalizeTicketPriority(priority)] ?? matrix.Medium;
+  const p = normalizeTicketPriority(priority);
+  if (p === 'Critical') return matrix.Critical ?? matrix.High ?? matrix.Medium;
+  return matrix[p] ?? matrix.Medium;
 }
 
 /**
- * Map a stored priority string onto the Low / Medium / High matrix keys.
- * Rows written before the DVIR fix carry 'Critical', and some writers use
- * upper case; both used to miss the matrix and fall through to Medium —
- * a critical safety defect got the most relaxed SLA. Critical / urgent
- * now map to the tightest tier.
+ * Map a stored priority string onto the Low / Medium / High / Critical keys.
+ * Some writers use upper case, and older rows say 'Urgent'; both used to miss
+ * the matrix and fall through to Medium — a critical safety defect got the
+ * most relaxed SLA. Critical / urgent now map to the Critical tier.
  */
 export function normalizeTicketPriority(priority: string | null | undefined): TicketPriority {
   switch ((priority ?? '').trim().toUpperCase()) {
     case 'LOW': return 'Low';
-    case 'HIGH':
+    case 'HIGH': return 'High';
     case 'CRITICAL':
-    case 'URGENT': return 'High';
+    case 'URGENT': return 'Critical';
     default: return 'Medium';
   }
 }

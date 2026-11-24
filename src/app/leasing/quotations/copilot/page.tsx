@@ -342,15 +342,6 @@ export default function QuotationCopilotPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs text-[var(--text-muted)]">{label}</div>
-      <div className="font-semibold text-[var(--text-main)] mt-0.5">{value}</div>
-    </div>
-  );
-}
-
 function BundleCard({ label, included, cost }: { label: string; included: boolean; cost: number }) {
   return (
     <div

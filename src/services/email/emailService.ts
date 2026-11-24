@@ -1,6 +1,7 @@
 import { EmailLog, EnhancedMaintenanceRequest } from '@/types/maintenance';
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
+import { smtpTlsOptions } from '@/lib/smtp-tls';
 
 /**
  * Classifies a nodemailer send failure by which SMTP command was in
@@ -65,28 +66,31 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
     }).catch(() => null);
 
     if (dbConfig && dbConfig.host && dbConfig.username) {
+        const dbEncryption = (dbConfig.encryption || (dbConfig.port === '465' ? 'ssl' : 'tls')).trim();
         transport = nodemailer.createTransport({
             host: dbConfig.host,
-            port: parseInt(dbConfig.port || '587'),
-            secure: (dbConfig.encryption || '').toUpperCase() === 'SSL' || dbConfig.port === '465',
+            port: parseInt(dbConfig.port || '587', 10),
+            secure: dbEncryption.toUpperCase() === 'SSL' || dbConfig.port === '465',
             auth: {
                 user: dbConfig.username,
                 pass: dbConfig.password || '',
             },
-            tls: { rejectUnauthorized: false },
+            ...smtpTlsOptions(dbConfig.host, dbEncryption),
         });
         fromAddress = `"${dbConfig.fromName || 'Fleet360'}" <${dbConfig.senderEmail || dbConfig.username}>`;
         console.log(`[EMAIL SERVICE] Using DATABASE configuration for: ${recipients}`);
     } else if (process.env.SMTP_HOST && process.env.SMTP_USER) {
         // Fallback to ENV configuration
+        const envEncryption = (process.env.SMTP_ENCRYPTION || (process.env.SMTP_PORT === '465' ? 'ssl' : 'tls')).trim();
         transport = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_PORT === '465',
+            port: parseInt(process.env.SMTP_PORT || '587', 10),
+            secure: envEncryption.toUpperCase() === 'SSL' || process.env.SMTP_PORT === '465',
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS || '',
             },
+            ...smtpTlsOptions(process.env.SMTP_HOST, envEncryption),
         });
         console.log(`[EMAIL SERVICE] Using ENVIRONMENT configuration for: ${recipients}`);
     }

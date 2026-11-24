@@ -10,10 +10,13 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import type { TxClient } from '@/lib/rls';
 import { withSavepoint } from '@/lib/rental/locks';
+import { postOperationalJournalEntry } from '@/lib/finance/journal-service';
 
 export type FineLiabilityCategory =
   | 'DRIVER'
   | 'RENTAL_CUSTOMER'
+  | 'LEASING_CUSTOMER'
+  | 'LOGISTICS_CARRIER'
   | 'COMPANY'
   | 'SPLIT'
   | 'UNASSIGNED';
@@ -23,6 +26,11 @@ export type MatchSource =
   | 'TRIP_MANIFEST'
   | 'DAILY_SHIFT_EXCLUSIVE'
   | 'RENTAL_AGREEMENT'
+  | 'LEASING_CONTRACT'
+  | 'LOGISTICS_SHIPMENT'
+  | 'BUS_OPS_TRIP'
+  | 'SCHOOL_BUS_TRIP'
+  | 'DISPATCH_JOB'
   | 'COMPANY_DEFECT_OFFENCE'
   | 'UNMATCHED';
 
@@ -37,16 +45,20 @@ export interface FineMatchResult {
   fineDate: Date;
   offenceType?: string | null;
   authority?: string | null;
-  assignedTo: 'DRIVER' | 'COMPANY' | 'RENTAL_CUSTOMER';
+  assignedTo: 'DRIVER' | 'COMPANY' | 'RENTAL_CUSTOMER' | 'LEASING_CUSTOMER' | 'LOGISTICS_CARRIER';
   matchConfidence: number; // 0 - 100%
   confidence?: MatchConfidenceBand;
   matchSource: MatchSource;
   shiftId?: string | null;
   tripId?: string | null;
   rentalAgreementId?: string | null;
+  leaseContractId?: string | null;
+  shipmentId?: string | null;
+  dispatchJobId?: string | null;
   agreementNo?: string | null;
   customerId?: string | null;
   customerName?: string | null;
+  rechargeTarget?: 'DRIVER' | 'CUSTOMER' | 'CARRIER' | 'COMPANY';
   notes: string;
 }
 
@@ -512,10 +524,296 @@ async function findMatchingRentalAgreementInDb(
   return null;
 }
 
+// 1. Match Drayage / Logistics (logistics_shipment_orders)
+async function findMatchingLogisticsShipment(
+  tx: any,
+  tenantId: string,
+  vehicleId: string,
+  eventDate: Date,
+): Promise<{ id: string; shipmentNo: string | null; driverId: string | null; customerId: string | null } | null> {
+  try {
+    const rows = await tx.$queryRawUnsafe(
+      `SELECT id::text, shipment_no, assigned_driver_id::text, cargo_owner_customer_id::text
+       FROM logistics_shipment_orders
+       WHERE tenant_id = $1
+         AND assigned_vehicle_id = $2
+         AND (
+           ($3 >= COALESCE(pickup_window_from, created_at - INTERVAL '2 hours')
+            AND $3 <= COALESCE(delivery_window_to, pickup_window_from + INTERVAL '12 hours', created_at + INTERVAL '24 hours'))
+           OR DATE(created_at) = DATE($3)
+         )
+         AND deleted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      tenantId,
+      vehicleId,
+      eventDate,
+    );
+    if (rows && rows.length > 0) {
+      return {
+        id: rows[0].id,
+        shipmentNo: rows[0].shipment_no,
+        driverId: rows[0].assigned_driver_id,
+        customerId: rows[0].cargo_owner_customer_id,
+      };
+    }
+  } catch {
+    /* table or column not found */
+  }
+  return null;
+}
+
+// 2. Match Bus-Ops trip_schedules
+async function findMatchingBusOpsTrip(
+  tx: any,
+  tenantId: string,
+  vehicleId: string,
+  eventDate: Date,
+): Promise<{ id: string; scheduleNumber: string | null; driverId: string | null } | null> {
+  try {
+    const rows = await tx.$queryRawUnsafe(
+      `SELECT id::text, schedule_number, driver_id::text
+       FROM trip_schedules
+       WHERE tenant_id = $1
+         AND vehicle_id = $2
+         AND (
+           ($3 >= COALESCE(departure_time, scheduled_time - INTERVAL '1 hour', created_at - INTERVAL '2 hours')
+            AND $3 <= COALESCE(arrival_time, departure_time + INTERVAL '4 hours', scheduled_time + INTERVAL '6 hours'))
+           OR DATE(scheduled_date) = DATE($3)
+         )
+         AND deleted_at IS NULL
+       ORDER BY scheduled_date DESC
+       LIMIT 1`,
+      tenantId,
+      vehicleId,
+      eventDate,
+    );
+    if (rows && rows.length > 0) {
+      return {
+        id: rows[0].id,
+        scheduleNumber: rows[0].schedule_number,
+        driverId: rows[0].driver_id,
+      };
+    }
+  } catch {
+    /* table or column not found */
+  }
+  return null;
+}
+
+// 3. Match School-Bus trips (school_bus_trips)
+async function findMatchingSchoolBusTrip(
+  tx: any,
+  tenantId: string,
+  vehicleId: string,
+  eventDate: Date,
+): Promise<{ id: string; tripName: string | null; driverId: string | null; driverName: string | null } | null> {
+  try {
+    const rows = await tx.$queryRawUnsafe(
+      `SELECT id::text, route_name, driver_id::text, driver_name
+       FROM school_bus_trips
+       WHERE tenant_id = $1
+         AND vehicle_id = $2
+         AND (
+           ($3 >= COALESCE(started_at, scheduled_date - INTERVAL '2 hours')
+            AND $3 <= COALESCE(completed_at, started_at + INTERVAL '4 hours', scheduled_date + INTERVAL '12 hours'))
+           OR DATE(scheduled_date) = DATE($3)
+         )
+       ORDER BY scheduled_date DESC
+       LIMIT 1`,
+      tenantId,
+      vehicleId,
+      eventDate,
+    );
+    if (rows && rows.length > 0) {
+      return {
+        id: rows[0].id,
+        tripName: rows[0].route_name,
+        driverId: rows[0].driver_id,
+        driverName: rows[0].driver_name,
+      };
+    }
+  } catch {
+    /* table or column not found */
+  }
+  return null;
+}
+
+// 4. Match Dispatch jobs (dispatch_jobs)
+async function findMatchingDispatchJob(
+  tx: any,
+  tenantId: string,
+  vehicleId: string,
+  eventDate: Date,
+): Promise<{ id: string; jobNumber: string | null; driverId: string | null; customerId: string | null } | null> {
+  try {
+    const rows = await tx.$queryRawUnsafe(
+      `SELECT id::text, job_number, driver_id::text, customer_id::text
+       FROM dispatch_jobs
+       WHERE tenant_id = $1
+         AND vehicle_id = $2
+         AND (
+           ($3 >= COALESCE(pickup_window_start, created_at - INTERVAL '2 hours')
+            AND $3 <= COALESCE(delivery_window_end, pickup_window_start + INTERVAL '8 hours', created_at + INTERVAL '12 hours'))
+           OR DATE(created_at) = DATE($3)
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      tenantId,
+      vehicleId,
+      eventDate,
+    );
+    if (rows && rows.length > 0) {
+      return {
+        id: rows[0].id,
+        jobNumber: rows[0].job_number,
+        driverId: rows[0].driver_id,
+        customerId: rows[0].customer_id,
+      };
+    }
+  } catch {
+    /* table or column not found */
+  }
+  return null;
+}
+
+// 5. Match Corporate Leasing contract (lease_contracts_v2)
+async function findMatchingLeaseContract(
+  tx: any,
+  tenantId: string,
+  vehicleId: string,
+  eventDate: Date,
+): Promise<{ id: string; contractNo: string | null; customerId: string | null } | null> {
+  try {
+    const rows = await tx.$queryRawUnsafe(
+      `SELECT c.id::text, c.contract_number, c.customer_id::text
+       FROM lease_contracts_v2 c
+       JOIN lease_vehicle_assignments a ON a.contract_id = c.id
+       WHERE c.tenant_id = $1
+         AND a.vehicle_id = $2
+         AND a.start_date <= $3
+         AND (a.end_date >= $3 OR a.end_date IS NULL)
+       LIMIT 1`,
+      tenantId,
+      vehicleId,
+      eventDate,
+    );
+    if (rows && rows.length > 0) {
+      return {
+        id: rows[0].id,
+        contractNo: rows[0].contract_number,
+        customerId: rows[0].customer_id,
+      };
+    }
+  } catch {
+    try {
+      const rows = await tx.$queryRawUnsafe(
+        `SELECT id::text, agreement_no, customer_id::text
+         FROM lease_agreements
+         WHERE tenant_id = $1
+           AND vehicle_id = $2
+           AND start_date <= $3
+           AND (end_date >= $3 OR end_date IS NULL)
+         LIMIT 1`,
+        tenantId,
+        vehicleId,
+        eventDate,
+      );
+      if (rows && rows.length > 0) {
+        return {
+          id: rows[0].id,
+          contractNo: rows[0].agreement_no,
+          customerId: rows[0].customer_id,
+        };
+      }
+    } catch {}
+  }
+  return null;
+}
+
 /**
- * Matches a single traffic fine or toll timestamp against `DriverShift` first (for
- * chauffeur/bus/logistics shifts), and if no driver shift matched, against self-drive
- * `rental_agreements` (`[start_date, COALESCE(actual_return_date, end_date)]`).
+ * Posts General Ledger lines for matched traffic fine:
+ * Uses 2160 Fine Recharge Clearing, AR (1100), and AP (2000).
+ */
+export async function postFineMatchedGlEntry(
+  tx: any,
+  tenantId: string,
+  fine: { id: string; fineAmount: number; fineDate?: Date | string; offenceType?: string | null; authority?: string | null },
+  match: FineMatchResult,
+): Promise<{ id: string; number: string; created: boolean } | null> {
+  if (!fine.fineAmount || fine.fineAmount <= 0) return null;
+
+  const authority = fine.authority || 'Police Authority';
+  const entryDate = (fine.fineDate ? new Date(fine.fineDate) : new Date()).toISOString().slice(0, 10);
+  const isRecoverable = match.assignedTo === 'DRIVER' || match.assignedTo === 'RENTAL_CUSTOMER' || match.assignedTo === 'LEASING_CUSTOMER' || match.assignedTo === 'LOGISTICS_CARRIER';
+
+  const lines = isRecoverable
+    ? [
+        {
+          code: '1100',
+          name: 'Trade Receivables - Fine Recharge',
+          description: `Fine recharge receivable for fine ${fine.id.slice(0, 8)} (${match.assignedTo})`,
+          debit: fine.fineAmount,
+          credit: 0,
+        },
+        {
+          code: '2160',
+          name: 'Traffic Fines & Tolls Clearing',
+          description: `Fine recharge clearing for fine ${fine.id.slice(0, 8)}`,
+          debit: 0,
+          credit: fine.fineAmount,
+        },
+        {
+          code: '2160',
+          name: 'Traffic Fines & Tolls Clearing',
+          description: `Statutory fine payable clearing for fine ${fine.id.slice(0, 8)}`,
+          debit: fine.fineAmount,
+          credit: 0,
+        },
+        {
+          code: '2000',
+          name: 'Accounts Payable - Fines Authority',
+          description: `Payable to ${authority} for fine ${fine.id.slice(0, 8)}`,
+          debit: 0,
+          credit: fine.fineAmount,
+        },
+      ]
+    : [
+        {
+          code: '5170',
+          name: 'Operating Expenses - Traffic Fines',
+          description: `Company fine liability for fine ${fine.id.slice(0, 8)}`,
+          debit: fine.fineAmount,
+          credit: 0,
+        },
+        {
+          code: '2000',
+          name: 'Accounts Payable - Fines Authority',
+          description: `Payable to ${authority} for fine ${fine.id.slice(0, 8)}`,
+          debit: 0,
+          credit: fine.fineAmount,
+        },
+      ];
+
+  return await postOperationalJournalEntry(tx as any, {
+    tenantId,
+    entryDate,
+    narration: `Traffic Fine ${fine.id.slice(0, 8)}: ${fine.offenceType || 'Violation'} matched to ${match.assignedTo}`,
+    reference: `FINE-${fine.id.slice(0, 8).toUpperCase()}`,
+    sourceType: 'TRAFFIC_FINE',
+    sourceId: fine.id,
+    currency: 'AED',
+    lines,
+  }).catch((err) => {
+    console.warn('[fine-toll-matcher] GL posting warning:', err);
+    return null;
+  });
+}
+
+/**
+ * Matches a single traffic fine or toll timestamp across DriverShift, self-drive
+ * RAC rental agreements, corporate leasing contracts, drayage/logistics shipments,
+ * bus ops trips, school bus trips, and dispatch jobs.
  */
 export async function matchFineOrToll(
   tx: Prisma.TransactionClient | PrismaClient | TxClient,
@@ -572,6 +870,7 @@ export async function matchFineOrToll(
     return shiftMatch;
   }
 
+  // 1. Rental Agreement match
   const agr = await findMatchingRentalAgreementInDb(
     tx,
     input.tenantId,
@@ -595,7 +894,126 @@ export async function matchFineOrToll(
       confidence: 'HIGH',
       matchConfidence: 95,
       matchSource: 'RENTAL_AGREEMENT',
+      rechargeTarget: 'CUSTOMER',
       notes: `Matched to self-drive Rental Agreement ${agr.agreement_no || agr.id.slice(0, 8)}`,
+    };
+  }
+
+  // 2. Corporate Leasing Contract match
+  const lease = await findMatchingLeaseContract(tx, input.tenantId, input.vehicleId, eventDate);
+  if (lease) {
+    return {
+      fineId,
+      vehicleId: input.vehicleId,
+      driverId: null,
+      driverName: null,
+      fineAmount,
+      fineDate: eventDate,
+      offenceType: input.offenceType ?? null,
+      authority: input.authority ?? null,
+      assignedTo: 'LEASING_CUSTOMER',
+      leaseContractId: lease.id,
+      agreementNo: lease.contractNo,
+      customerId: lease.customerId,
+      confidence: 'HIGH',
+      matchConfidence: 90,
+      matchSource: 'LEASING_CONTRACT',
+      rechargeTarget: 'CUSTOMER',
+      notes: `Matched to Corporate Lease Contract ${lease.contractNo || lease.id.slice(0, 8)}`,
+    };
+  }
+
+  // 3. Drayage & Logistics Shipment match
+  const shipment = await findMatchingLogisticsShipment(tx, input.tenantId, input.vehicleId, eventDate);
+  if (shipment) {
+    return {
+      fineId,
+      vehicleId: input.vehicleId,
+      driverId: shipment.driverId,
+      driverName: null,
+      fineAmount,
+      fineDate: eventDate,
+      offenceType: input.offenceType ?? null,
+      authority: input.authority ?? null,
+      assignedTo: shipment.driverId ? 'DRIVER' : 'LOGISTICS_CARRIER',
+      shipmentId: shipment.id,
+      agreementNo: shipment.shipmentNo,
+      customerId: shipment.customerId,
+      confidence: 'HIGH',
+      matchConfidence: 85,
+      matchSource: 'LOGISTICS_SHIPMENT',
+      rechargeTarget: shipment.driverId ? 'DRIVER' : 'CARRIER',
+      notes: `Matched to Logistics Shipment ${shipment.shipmentNo || shipment.id.slice(0, 8)}`,
+    };
+  }
+
+  // 4. Bus-Ops Trip Schedule match
+  const busTrip = await findMatchingBusOpsTrip(tx, input.tenantId, input.vehicleId, eventDate);
+  if (busTrip) {
+    return {
+      fineId,
+      vehicleId: input.vehicleId,
+      driverId: busTrip.driverId,
+      driverName: null,
+      fineAmount,
+      fineDate: eventDate,
+      offenceType: input.offenceType ?? null,
+      authority: input.authority ?? null,
+      assignedTo: 'DRIVER',
+      tripId: busTrip.id,
+      agreementNo: busTrip.scheduleNumber,
+      confidence: 'HIGH',
+      matchConfidence: 85,
+      matchSource: 'BUS_OPS_TRIP',
+      rechargeTarget: 'DRIVER',
+      notes: `Matched to Bus-Ops Trip Schedule ${busTrip.scheduleNumber || busTrip.id.slice(0, 8)}`,
+    };
+  }
+
+  // 5. School Bus Trip match
+  const schoolTrip = await findMatchingSchoolBusTrip(tx, input.tenantId, input.vehicleId, eventDate);
+  if (schoolTrip) {
+    return {
+      fineId,
+      vehicleId: input.vehicleId,
+      driverId: schoolTrip.driverId,
+      driverName: schoolTrip.driverName,
+      fineAmount,
+      fineDate: eventDate,
+      offenceType: input.offenceType ?? null,
+      authority: input.authority ?? null,
+      assignedTo: 'DRIVER',
+      tripId: schoolTrip.id,
+      agreementNo: schoolTrip.tripName,
+      confidence: 'HIGH',
+      matchConfidence: 85,
+      matchSource: 'SCHOOL_BUS_TRIP',
+      rechargeTarget: 'DRIVER',
+      notes: `Matched to School Bus Trip ${schoolTrip.tripName || schoolTrip.id.slice(0, 8)}`,
+    };
+  }
+
+  // 6. Dispatch Job match
+  const dispatchJob = await findMatchingDispatchJob(tx, input.tenantId, input.vehicleId, eventDate);
+  if (dispatchJob) {
+    return {
+      fineId,
+      vehicleId: input.vehicleId,
+      driverId: dispatchJob.driverId,
+      driverName: null,
+      fineAmount,
+      fineDate: eventDate,
+      offenceType: input.offenceType ?? null,
+      authority: input.authority ?? null,
+      assignedTo: 'DRIVER',
+      dispatchJobId: dispatchJob.id,
+      agreementNo: dispatchJob.jobNumber,
+      customerId: dispatchJob.customerId,
+      confidence: 'HIGH',
+      matchConfidence: 80,
+      matchSource: 'DISPATCH_JOB',
+      rechargeTarget: 'DRIVER',
+      notes: `Matched to Dispatch Job ${dispatchJob.jobNumber || dispatchJob.id.slice(0, 8)}`,
     };
   }
 
@@ -603,8 +1021,8 @@ export async function matchFineOrToll(
 }
 
 /**
- * Sweeps all unassigned/unpaid fines in the tenant and matches them against driver shifts
- * and self-drive RAC rental agreements.
+ * Sweeps all unassigned/unpaid fines in the tenant and matches them across driver shifts,
+ * self-drive RAC rental agreements, corporate leasing, logistics, bus-ops, school-bus, and dispatch.
  */
 export async function batchAutoMatchTenantFines(
   tx: Prisma.TransactionClient | PrismaClient,
@@ -647,22 +1065,6 @@ export async function batchAutoMatchTenantFines(
     };
   }
 
-  // 2. Fetch driver shifts for this tenant
-  const shifts = await tx.driverShift.findMany({
-    where: {
-      tenantId,
-      vehicleId: { not: null },
-    },
-    select: {
-      id: true,
-      driverId: true,
-      vehicleId: true,
-      shiftDate: true,
-      startTime: true,
-      endTime: true,
-    },
-  });
-
   const matches: FineMatchResult[] = [];
   let matchedToDriverCount = 0;
   let matchedToRentalCustomerCount = 0;
@@ -678,116 +1080,63 @@ export async function batchAutoMatchTenantFines(
       continue;
     }
 
-    let match = matchFineWithShiftRecords(
-      {
-        id: fine.id,
-        vehicleId: fine.vehicleId,
-        fineDate: fine.fineDate,
-        fineAmount: fine.fineAmount,
-        offenceType: fine.offenceType,
-        authority: fine.authority,
-      },
-      shifts,
-    );
-
-    // If no DriverShift matched, check active/completed/closed self-drive RAC RentalAgreements
-    if (match.matchSource === 'UNMATCHED') {
-      const agr = await findMatchingRentalAgreementInDb(
-        tx,
-        tenantId,
-        fine.vehicleId,
-        fine.fineDate,
-      );
-      if (agr) {
-        match = {
-          fineId: fine.id,
-          vehicleId: fine.vehicleId,
-          driverId: null,
-          driverName: null,
-          fineAmount: fine.fineAmount,
-          fineDate: new Date(fine.fineDate),
-          offenceType: fine.offenceType,
-          authority: fine.authority,
-          assignedTo: 'RENTAL_CUSTOMER',
-          rentalAgreementId: agr.id,
-          agreementNo: agr.agreement_no,
-          customerId: agr.customer_id,
-          confidence: 'HIGH',
-          matchConfidence: 95,
-          matchSource: 'RENTAL_AGREEMENT',
-          notes: `Matched to self-drive Rental Agreement ${agr.agreement_no || agr.id.slice(0, 8)}`,
-        };
-      }
-    }
+    const match = await matchFineOrToll(tx, {
+      id: fine.id,
+      fineId: fine.id,
+      tenantId,
+      vehicleId: fine.vehicleId,
+      fineDate: fine.fineDate,
+      fineAmount: Number(fine.fineAmount),
+      offenceType: fine.offenceType,
+      authority: fine.authority,
+    });
 
     matches.push(match);
 
-    if (match.assignedTo === 'DRIVER' && match.matchConfidence >= threshold && match.driverId) {
-      matchedToDriverCount++;
-      totalDriverRecoverableAed += match.fineAmount;
-
+    if (match.matchConfidence >= threshold) {
       if (!isDryRun) {
-        await tx.trafficFine.update({
-          where: { id: fine.id },
-          data: {
-            driverId: match.driverId,
-            assignedTo: 'DRIVER',
-          },
-        });
+        await postFineMatchedGlEntry(tx, tenantId, { ...fine, fineAmount: Number(fine.fineAmount) }, match);
       }
-    } else if (
-      match.assignedTo === 'RENTAL_CUSTOMER' &&
-      match.matchConfidence >= threshold &&
-      match.rentalAgreementId
-    ) {
-      matchedToRentalCustomerCount++;
-      totalRentalCustomerRecoverableAed += match.fineAmount;
+      if (match.assignedTo === 'DRIVER' && match.driverId) {
+        matchedToDriverCount++;
+        totalDriverRecoverableAed += match.fineAmount;
 
-      if (!isDryRun) {
-        let updatedViaRawSql = false;
-        const rawExec = tx as unknown as {
-          $executeRawUnsafe?: (sql: string, ...params: unknown[]) => Promise<unknown>;
-        };
-        if (typeof rawExec.$executeRawUnsafe === 'function') {
-          updatedViaRawSql = await withSavepoint(
-            tx as unknown as TxClient,
-            'fine_update_rac_agr',
-            async () => {
-              await rawExec.$executeRawUnsafe!(
-                `UPDATE traffic_fines
-                    SET assigned_to = 'RENTAL_CUSTOMER',
-                        rental_agreement_id = $1
-                  WHERE id = $2
-                    AND tenant_id = $3`,
-                match.rentalAgreementId,
-                fine.id,
-                tenantId,
-              );
-              return true;
-            },
-            false,
-          );
-        }
-        if (!updatedViaRawSql) {
+        if (!isDryRun) {
           await tx.trafficFine.update({
             where: { id: fine.id },
             data: {
-              assignedTo: 'RENTAL_CUSTOMER',
+              driverId: match.driverId,
+              assignedTo: 'DRIVER',
             },
-          });
+          }).catch(() => {});
         }
-      }
-    } else if (match.matchSource === 'COMPANY_DEFECT_OFFENCE') {
-      assignedToCompanyCount++;
-      totalCompanyLiabilityAed += match.fineAmount;
+      } else if (match.assignedTo === 'RENTAL_CUSTOMER' || match.assignedTo === 'LEASING_CUSTOMER' || match.assignedTo === 'LOGISTICS_CARRIER') {
+        matchedToRentalCustomerCount++;
+        totalRentalCustomerRecoverableAed += match.fineAmount;
 
-      if (!isDryRun) {
-        await tx.trafficFine.update({
-          where: { id: fine.id },
-          data: {
-            assignedTo: 'COMPANY',
-          },
-        });
+        if (!isDryRun) {
+          await tx.trafficFine.update({
+            where: { id: fine.id },
+            data: {
+              assignedTo: match.assignedTo === 'LEASING_CUSTOMER' ? 'RENTAL_CUSTOMER' : match.assignedTo,
+            },
+          }).catch(() => {});
+        }
+      } else if (match.assignedTo === 'COMPANY' || match.matchSource === 'COMPANY_DEFECT_OFFENCE') {
+        assignedToCompanyCount++;
+        totalCompanyLiabilityAed += match.fineAmount;
+
+        if (!isDryRun) {
+          await tx.trafficFine.update({
+            where: { id: fine.id },
+            data: {
+              assignedTo: 'COMPANY',
+            },
+          }).catch(() => {});
+        }
+      } else {
+        unmatchedCount++;
+        totalCompanyLiabilityAed += match.fineAmount;
       }
     } else {
       unmatchedCount++;

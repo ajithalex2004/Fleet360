@@ -14,13 +14,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureRouteOptimizerSchema } from '@/lib/logistics/route-optimizer-schema';
 import { geocode } from '@/lib/logistics/geocoder';
 import { computeDistanceMatrix, haversineKm } from '@/lib/logistics/distance-matrix';
 
-const prisma = new PrismaClient();
 const TENANT_A = `phase0-${randomUUID().slice(0, 8)}`;
 const TENANT_B = `phase0-${randomUUID().slice(0, 8)}`;
 
@@ -39,38 +39,53 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Remove anything this run wrote.
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM logistics_geocode_cache WHERE tenant_id = ANY($1::text[])`,
-    [TENANT_A, TENANT_B],
-  ).catch(() => {});
-  await prisma.$disconnect();
+  await withTenantRls(prisma, TENANT_A, (tx) => tx.$executeRawUnsafe(
+    `DELETE FROM logistics_geocode_cache WHERE tenant_id = $1`,
+    TENANT_A,
+  )).catch(() => {});
+  await withTenantRls(prisma, TENANT_B, (tx) => tx.$executeRawUnsafe(
+    `DELETE FROM logistics_geocode_cache WHERE tenant_id = $1`,
+    TENANT_B,
+  )).catch(() => {});
 });
 
 describe('Route Optimizer Phase 0 (live)', () => {
   liveTest('geocodes via Mapbox on first call and from cache on second', async () => {
-    const first = await geocode(ADDRESSES[0], TENANT_A);
-    expect(first.source).toBe('mapbox');
-    expect(first.latitude).toBeCloseTo(25.2, 0);   // Dubai Mall ≈ 25.2
-    expect(first.longitude).toBeCloseTo(55.3, 0);  // ≈ 55.3
-    expect(first.confidence).toBeGreaterThan(0);
+    const savedGmaps = process.env.GOOGLE_MAPS_API_KEY;
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    try {
+      const first = await withTenantRls(prisma, TENANT_A, () => geocode(ADDRESSES[0], TENANT_A));
+      expect(first.source).toBe('mapbox');
+      expect(first.latitude).toBeCloseTo(25.2, 0);   // Dubai Mall ≈ 25.2
+      expect(first.longitude).toBeCloseTo(55.3, 0);  // ≈ 55.3
+      expect(first.confidence).toBeGreaterThan(0);
 
-    const second = await geocode(ADDRESSES[0], TENANT_A);
-    expect(second.source).toBe('cache');
-    expect(second.latitude).toBeCloseTo(first.latitude, 4);
-    expect(second.longitude).toBeCloseTo(first.longitude, 4);
+      const second = await withTenantRls(prisma, TENANT_A, () => geocode(ADDRESSES[0], TENANT_A));
+      expect(second.source).toBe('cache');
+      expect(second.latitude).toBeCloseTo(first.latitude, 4);
+      expect(second.longitude).toBeCloseTo(first.longitude, 4);
+    } finally {
+      if (savedGmaps) process.env.GOOGLE_MAPS_API_KEY = savedGmaps;
+    }
   }, 30_000);
 
   liveTest('cache is tenant-scoped — another tenant requesting the same address hits Mapbox again', async () => {
-    // TENANT_A already cached Dubai Mall above.
-    const fromB = await geocode(ADDRESSES[0], TENANT_B);
-    // TENANT_B has no cache row yet, so this must come from Mapbox.
-    expect(fromB.source).toBe('mapbox');
-    expect(fromB.latitude).toBeCloseTo(25.2, 0);
+    const savedGmaps = process.env.GOOGLE_MAPS_API_KEY;
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    try {
+      // TENANT_A already cached Dubai Mall above.
+      const fromB = await withTenantRls(prisma, TENANT_B, () => geocode(ADDRESSES[0], TENANT_B));
+      // TENANT_B has no cache row yet, so this must come from Mapbox.
+      expect(fromB.source).toBe('mapbox');
+      expect(fromB.latitude).toBeCloseTo(25.2, 0);
+    } finally {
+      if (savedGmaps) process.env.GOOGLE_MAPS_API_KEY = savedGmaps;
+    }
   }, 30_000);
 
   liveTest('builds a 3×3 road-distance matrix via Mapbox', async () => {
     // Reuse cached geocodes — these were populated by the test above.
-    const geos = await Promise.all(ADDRESSES.map(a => geocode(a, TENANT_A)));
+    const geos = await withTenantRls(prisma, TENANT_A, () => Promise.all(ADDRESSES.map(a => geocode(a, TENANT_A))));
     const points = geos.map(g => ({ latitude: g.latitude, longitude: g.longitude }));
 
     const matrix = await computeDistanceMatrix(points, { provider: 'mapbox' });
@@ -91,7 +106,7 @@ describe('Route Optimizer Phase 0 (live)', () => {
   }, 30_000);
 
   liveTest('road distance exceeds straight-line — sanity check on the detour factor assumption', async () => {
-    const geos = await Promise.all(ADDRESSES.map(a => geocode(a, TENANT_A)));
+    const geos = await withTenantRls(prisma, TENANT_A, () => Promise.all(ADDRESSES.map(a => geocode(a, TENANT_A))));
     const points = geos.map(g => ({ latitude: g.latitude, longitude: g.longitude }));
 
     const road = await computeDistanceMatrix(points, { provider: 'mapbox' });
@@ -105,9 +120,11 @@ describe('Route Optimizer Phase 0 (live)', () => {
   }, 30_000);
 
   it('falls back to haversine when no token is configured (offline mode)', async () => {
-    // Temporarily clear the token to simulate dev/CI without secret.
+    // Temporarily clear provider keys to simulate dev/CI without secret.
     const saved = process.env.MAPBOX_TOKEN;
+    const savedGmaps = process.env.GOOGLE_MAPS_API_KEY;
     delete process.env.MAPBOX_TOKEN;
+    delete process.env.GOOGLE_MAPS_API_KEY;
     try {
       const points = [
         { latitude: 25.197, longitude: 55.279 },
@@ -120,6 +137,7 @@ describe('Route Optimizer Phase 0 (live)', () => {
       expect(matrix.distances[0][1]).toBeLessThan(180);
     } finally {
       if (saved) process.env.MAPBOX_TOKEN = saved;
+      if (savedGmaps) process.env.GOOGLE_MAPS_API_KEY = savedGmaps;
     }
   });
 

@@ -17,10 +17,10 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
-  TICKET_DEPARTMENTS,
   type TicketDepartment,
   type TicketPriority,
 } from '@/types/service-tickets';
+import { listDepartments } from '@/lib/service-tickets/departments';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -118,12 +118,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const department = body.department;
-    const deptDef = TICKET_DEPARTMENTS.find((d) => d.key === department);
+    const departments = await listDepartments(tenantId, { tx });
+    const deptDef = departments.find((d) => d.key === department);
     if (!department || !deptDef) {
       return NextResponse.json(
         {
           ok: false,
-          error: `Invalid or missing department. Must be one of: ${TICKET_DEPARTMENTS.map((d) => d.key).join(', ')}`,
+          error: `Invalid or missing department. Must be one of: ${departments.map((d) => d.key).join(', ')}`,
         },
         { status: 400 }
       );

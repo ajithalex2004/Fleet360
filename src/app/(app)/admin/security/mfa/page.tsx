@@ -4,21 +4,21 @@
  * /admin/security/mfa — Enrol or disable TOTP MFA for the logged-in user.
  *
  * Two-step enrolment:
- *  1. POST /api/auth/mfa/enroll          → returns secret + otpauth URI
+ *  1. POST /api/auth/mfa/enroll          → returns secret, otpauth URI, and inline QR data URL
  *  2. POST /api/auth/mfa/enroll/verify   → returns one-time recovery codes
  *
  * Disable: POST /api/auth/mfa/disable with password + (TOTP code OR recovery code).
- *
- * Note: QR image rendering is intentionally omitted (no extra npm dep).
- * Users add the secret manually in their authenticator app — every modern
- * authenticator (Google, Microsoft, 1Password, Authy) supports manual entry.
  */
 
 import { useEffect, useState } from 'react';
-import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, RefreshCw, Download, Link2 } from 'lucide-react';
 
 interface Status { mfaEnabled: boolean; }
 interface EnrolResponse { ok: true; secret: string; otpauthUri: string; qrDataUrl: string | null; issuer: string; account: string; }
+
+function formatSecretGroups(secret: string): string {
+  return secret.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+}
 
 export default function MfaSecurityPage() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -118,6 +118,24 @@ export default function MfaSecurityPage() {
     setTimeout(() => setCopied(null), 1500);
   };
 
+  const downloadRecoveryCodes = (codes: string[]) => {
+    const content = [
+      'Fleet360 MFA Recovery Codes',
+      `Generated: ${new Date().toISOString()}`,
+      'Each code can be used once if you lose access to your authenticator app.',
+      '',
+      ...codes,
+      '',
+    ].join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fleet360-mfa-recovery-codes.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-8 max-w-3xl">
       <div className="flex items-start gap-3">
@@ -152,11 +170,18 @@ export default function MfaSecurityPage() {
           <div className="grid grid-cols-2 gap-2 font-mono text-sm bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg p-4">
             {recoveryCodes.map(c => <div key={c} className="text-amber-200">{c}</div>)}
           </div>
-          <button onClick={() => copy(recoveryCodes.join('\n'), 'recovery')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-sm text-amber-200">
-            {copied === 'recovery' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied === 'recovery' ? 'Copied' : 'Copy all'}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={() => copy(recoveryCodes.join('\n'), 'recovery')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-sm text-amber-200">
+              {copied === 'recovery' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied === 'recovery' ? 'Copied' : 'Copy all'}
+            </button>
+            <button onClick={() => downloadRecoveryCodes(recoveryCodes)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-main)]">
+              <Download className="w-4 h-4" />
+              Download .txt
+            </button>
+          </div>
         </div>
       )}
 
@@ -165,9 +190,9 @@ export default function MfaSecurityPage() {
         <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-[var(--text-main)]">Set up MFA</h2>
           <ol className="list-decimal list-inside text-sm text-[var(--text-muted)] space-y-1">
-            <li>Install an authenticator app (Google Authenticator, 1Password, Authy, Microsoft Authenticator).</li>
-            <li>Tap the button below to generate your setup key.</li>
-            <li>Add the key to your authenticator and enter the 6-digit code it shows.</li>
+            <li>Install an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, or Authy).</li>
+            <li>Click <strong>Start enrolment</strong> to generate your QR code and backup setup key.</li>
+            <li>Scan the QR code (or paste the setup key) and enter the 6-digit verification code.</li>
           </ol>
           <button onClick={startEnrol} disabled={loading}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-white font-semibold text-sm">
@@ -177,20 +202,20 @@ export default function MfaSecurityPage() {
         </div>
       )}
 
-      {/* Enrolment step 2: secret displayed, awaiting verification code */}
+      {/* Enrolment step 2: QR code & setup key displayed, awaiting verification code */}
       {enrol && (
         <form onSubmit={completeEnrol} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
           <h2 className="text-lg font-semibold text-[var(--text-main)]">Scan with your authenticator</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
             {enrol.qrDataUrl ? (
-              <div className="bg-white p-3 rounded-xl inline-block">
+              <div className="bg-white p-3 rounded-xl inline-block shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={enrol.qrDataUrl} alt="MFA QR code" width={216} height={216} />
+                <img src={enrol.qrDataUrl} alt="MFA QR code" width={216} height={216} className="block" />
               </div>
             ) : (
               <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-6 text-xs text-[var(--text-muted)]">
-                QR code unavailable — use the setup key on the right.
+                QR code unavailable — copy the setup key or otpauth URI on the right.
               </div>
             )}
 
@@ -203,8 +228,8 @@ export default function MfaSecurityPage() {
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Or enter setup key manually</div>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 font-mono text-xs text-emerald-300 break-all">
-                    {enrol.secret}
+                  <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 font-mono text-xs text-emerald-300 break-all tracking-wider">
+                    {formatSecretGroups(enrol.secret)}
                   </code>
                   <button type="button" onClick={() => copy(enrol.secret, 'secret')}
                     className="px-3 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-[var(--text-main)] text-sm inline-flex items-center gap-2">
@@ -212,10 +237,20 @@ export default function MfaSecurityPage() {
                     {copied === 'secret' ? 'Copied' : 'Copy'}
                   </button>
                 </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => copy(enrol.otpauthUri, 'uri')}
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    {copied === 'uri' ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+                    {copied === 'uri' ? 'Copied otpauth:// URI' : 'Copy otpauth:// setup URI (for password managers)'}
+                  </button>
+                </div>
               </div>
 
               <p className="text-xs text-[var(--text-faint)]">
-                Open Google Authenticator / 1Password / Authy → scan the QR or paste the key. Account name: {enrol.account}.
+                Open Google Authenticator, Microsoft Authenticator, 1Password, or Authy → scan the QR code or paste the key. Account name: {enrol.account}.
               </p>
             </div>
           </div>

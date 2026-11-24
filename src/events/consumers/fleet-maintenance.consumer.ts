@@ -33,23 +33,50 @@ export class FleetMaintenanceConsumer extends BaseEventConsumer<MaintenanceWorkO
       return;
     }
 
-    // Attempt to mark vehicle available — try both common column name variants
-    // (operational_status is the canonical Fleet360 column; status is a fallback)
+    // Attempt to mark vehicle available — canonical vehicle status is 'status' and 'is_active'
+    // Guard against releasing vehicles with unresolved safety defects (e.g. failed pre-trip inspection)
     const updated = await prisma.$executeRawUnsafe(
       `UPDATE vehicles
-          SET operational_status = 'AVAILABLE',
-              updated_at         = NOW()
+          SET status     = 'AVAILABLE',
+              is_active  = true,
+              updated_at = NOW()
         WHERE id = $1
-          AND operational_status IN ('IN_MAINTENANCE', 'UNDER_REPAIR')`,
+          AND status IN ('MAINTENANCE', 'IN_MAINTENANCE', 'UNDER_REPAIR')
+          AND NOT EXISTS (
+            SELECT 1 FROM bus_pretrip_checks bpc
+             WHERE bpc.vehicle_id = vehicles.id
+               AND bpc.deleted_at IS NULL
+               AND bpc.overall_pass = false
+               AND NOT EXISTS (
+                 SELECT 1 FROM bus_pretrip_checks bpc2
+                  WHERE bpc2.vehicle_id = bpc.vehicle_id
+                    AND bpc2.deleted_at IS NULL
+                    AND bpc2.overall_pass = true
+                    AND bpc2.performed_at > bpc.performed_at
+               )
+          )`,
       vehicleId,
     ).catch(async () => {
-      // Fallback: some schemas use 'status' column
+      // Fallback: operational_status column variant if present
       return prisma.$executeRawUnsafe(
         `UPDATE vehicles
-            SET status     = 'AVAILABLE',
-                updated_at = NOW()
+            SET operational_status = 'AVAILABLE',
+                updated_at         = NOW()
           WHERE id = $1
-            AND status IN ('IN_MAINTENANCE', 'UNDER_REPAIR')`,
+            AND operational_status IN ('MAINTENANCE', 'IN_MAINTENANCE', 'UNDER_REPAIR')
+            AND NOT EXISTS (
+              SELECT 1 FROM bus_pretrip_checks bpc
+               WHERE bpc.vehicle_id = vehicles.id
+                 AND bpc.deleted_at IS NULL
+                 AND bpc.overall_pass = false
+                 AND NOT EXISTS (
+                   SELECT 1 FROM bus_pretrip_checks bpc2
+                    WHERE bpc2.vehicle_id = bpc.vehicle_id
+                      AND bpc2.deleted_at IS NULL
+                      AND bpc2.overall_pass = true
+                      AND bpc2.performed_at > bpc.performed_at
+                 )
+            )`,
         vehicleId,
       ).catch(err => {
         // Column doesn't exist or table structure differs — log and continue

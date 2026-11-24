@@ -7,8 +7,8 @@
  * missing value on either side never matches, so an unset secret can't be
  * satisfied by an empty credential.
  */
-export function secretsEqual(supplied: string | null | undefined, expected: string | null | undefined): boolean {
-  if (!supplied || !expected) return false;
+export function secretsEqual(supplied: unknown, expected: string | null | undefined): boolean {
+  if (typeof supplied !== 'string' || typeof expected !== 'string' || !supplied || !expected) return false;
   const a = new TextEncoder().encode(supplied);
   const b = new TextEncoder().encode(expected);
   // Always walk the expected secret's full length; a length mismatch still

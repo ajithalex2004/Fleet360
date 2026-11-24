@@ -89,6 +89,6 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
   return {
     status: 'ok',
     summary: `Closed ${closed.length} stale trip(s) across ${stalePerTenant.length} tenant(s); skipped ${skipped.length}`,
-    data: { tenantsScanned: stalePerTenant.length, scanned: allStale.length, closed, skipped },
+    data: { staleThresholdHours: STALE_HOURS, tenantsScanned: stalePerTenant.length, scanned: allStale.length, closed, skipped },
   };
 }

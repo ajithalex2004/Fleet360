@@ -255,14 +255,12 @@ export async function POST(req: NextRequest) {
                 AND (
                   assigned_vehicle_id = $2
                   OR assigned_driver_id = $3
-                  OR LOWER(TRIM(COALESCE(assigned_driver_name, ''))) = LOWER(TRIM($4))
                 )
               ORDER BY updated_at DESC
               LIMIT 1`,
             tenantId,
             vehicle.id,
             driver.id,
-            displayName(driver),
           )
           .catch(() => []);
 

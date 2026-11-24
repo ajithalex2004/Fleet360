@@ -204,7 +204,8 @@ export async function getBackgroundJobsAndOutboxHealth(): Promise<BackgroundJobs
     `).catch(() => []);
 
     // 3. Scheduler Status Evaluation
-    // Active if in-process loop is ticking or last db run was recent (< 5 min)
+    // Active if in-process loop is ticking and db run was recent (< 5 min).
+    // If scheduler is running but latestRunRow lags > 5 minutes, report degraded.
     const isDbRecent = latestRunRow?.startedAt
       ? Date.now() - new Date(latestRunRow.startedAt).getTime() < 5 * 60 * 1000
       : false;
@@ -212,10 +213,10 @@ export async function getBackgroundJobsAndOutboxHealth(): Promise<BackgroundJobs
     let schedulerStatus: 'active' | 'degraded' | 'disabled' | 'inactive' = 'inactive';
     if (inProcessState.disabled) {
       schedulerStatus = 'disabled';
-    } else if (inProcessState.isTicking || isDbRecent) {
-      schedulerStatus = 'active';
     } else if (inProcessState.started) {
-      schedulerStatus = 'degraded';
+      schedulerStatus = (inProcessState.isTicking && isDbRecent) ? 'active' : 'degraded';
+    } else if (isDbRecent) {
+      schedulerStatus = 'active';
     }
 
     // 4. Job Runs Health Evaluation

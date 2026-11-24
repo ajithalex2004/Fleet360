@@ -11,11 +11,10 @@ import { logAudit } from '@/lib/audit';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/twilio-client';
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { getPublicOrigin } from '@/lib/public-origin';
 
 function resolveAppOrigin(req: NextRequest): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim();
-  const base = configured || req.nextUrl.origin;
-  return base.replace(/\/$/, '');
+  return getPublicOrigin(req);
 }
 
 async function dispatchEsignOtp(args: {
@@ -103,7 +102,6 @@ const postTokenLimiter = new RateLimiter({ windowMs: 15 * 60_000, maxRequests: 1
 
 // In-memory brute-force fallback in case failed_attempts DDL column is unavailable
 const failedOtpFallbackMap = new Map<string, number>();
-let failedAttemptsColumnEnsured = false;
 
 interface EsignContractSummary {
   startDate: string;
@@ -220,30 +218,10 @@ function maskEmailAddress(email: string | null | undefined): string | null {
   return `${visible}***@${domain}`;
 }
 
-async function ensureFailedAttemptsColumn(): Promise<void> {
-  if (failedAttemptsColumnEnsured) return;
-  try {
-    await runOutsideRlsScope(() =>
-      withPlatformAdmin(prisma, (tx) =>
-        withSavepoint(
-          tx,
-          'esign_ensure_failed_attempts_col',
-          () =>
-            tx.$executeRawUnsafe(
-              `ALTER TABLE esign_requests ADD COLUMN IF NOT EXISTS failed_attempts INT NOT NULL DEFAULT 0`,
-            ),
-          0,
-        ),
-      ),
-    );
-    failedAttemptsColumnEnsured = true;
-  } catch {
-    // Non-fatal: in-memory fallback map still protects against brute force
-  }
-}
+// esign_requests.failed_attempts comes from migration
+// 20261113090000_tenant_einvoice_columns_and_carrier_broadcast_tables.
 
 async function lookupEsignByToken(signingToken: string): Promise<EsignRow | null> {
-  await ensureFailedAttemptsColumn();
   const rows = await runOutsideRlsScope(() =>
     withPlatformAdmin(prisma, async (tx) => {
       const withAttempts = await withSavepoint<EsignRow[] | null>(

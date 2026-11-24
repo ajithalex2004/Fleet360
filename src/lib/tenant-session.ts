@@ -170,6 +170,8 @@ export interface VerifiedSession {
   permissions: string[] | null;
   /** When the session was issued (ms). */
   issuedAt: number;
+  /** When the session expires (ms). */
+  expiresAt: number;
 }
 
 /**
@@ -214,6 +216,7 @@ export async function signSession(payload: {
  */
 export async function verifySession(
   token: string,
+  options?: { skipRevocationCheck?: boolean },
 ): Promise<VerifiedSession | null> {
   try {
     const dotIndex = token.lastIndexOf('.');
@@ -239,18 +242,21 @@ export async function verifySession(
       return null;
     }
 
-    // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
-    if (await isSessionRevoked(token)) {
-      return null;
-    }
-
-    // Revoked for the user, the tenant or the user in the tenant (role or
-    // membership change, deactivation, password reset, sign out everywhere)
-    // since it was issued; re-checked at most every 60 s. Sessions from
-    // before iat existed count as issued a full lifetime before expiry.
     const issuedAt = typeof payload.iat === 'number' ? payload.iat : payload.exp - TOKEN_TTL_MS;
-    if (await isRevokedSince(payload.userId, payload.tenantId, issuedAt)) {
-      return null;
+
+    if (!options?.skipRevocationCheck) {
+      // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
+      if (await isSessionRevoked(token)) {
+        return null;
+      }
+
+      // Revoked for the user, the tenant or the user in the tenant (role or
+      // membership change, deactivation, password reset, sign out everywhere)
+      // since it was issued; re-checked at most every 60 s. Sessions from
+      // before iat existed count as issued a full lifetime before expiry.
+      if (await isRevokedSince(payload.userId, payload.tenantId, issuedAt)) {
+        return null;
+      }
     }
 
     return {
@@ -263,7 +269,26 @@ export async function verifySession(
       // null: signed without a claim, or against another catalogue version.
       permissions:   decodePermissionClaim(payload.perms),
       issuedAt,
+      expiresAt:     payload.exp,
     };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Safely decode the expiry timestamp (ms) from a signed session token's
+ * Base64URL payload. Handles all Base64URL padding lengths (mod 4 === 0, 2, 3)
+ * without throwing. Callers MUST still verify the signature via verifySession().
+ */
+export function extractSessionExpiry(token: string): number | null {
+  try {
+    const dotIndex = token.lastIndexOf('.');
+    if (dotIndex <= 0) return null;
+    const decoded = fromBase64Url(token.slice(0, dotIndex));
+    if (!decoded) return null;
+    const parsed = JSON.parse(decoded) as { exp?: unknown };
+    return typeof parsed.exp === 'number' && Number.isFinite(parsed.exp) ? parsed.exp : null;
   } catch {
     return null;
   }

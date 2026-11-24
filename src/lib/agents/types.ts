@@ -11,7 +11,7 @@ export type ModelCapabilityAlias =
   | 'DETERMINISTIC_RULES'     // Tier 0: Pure SQL, rules, Math, 0 API tokens
   | 'LOCAL_STATISTICAL'       // Tier 1: PostGIS, Haversine, Moving Avg, TSP
   | 'ECONOMY_TEXT'            // Tier 2: e.g. gpt-4o-mini, gemini-flash (Summaries, quick extraction)
-  | 'STANDARD_REASONING'      // Tier 2.5: e.g. gpt-4o standard, claude-3-5-sonnet
+  | 'STANDARD_REASONING'      // Tier 2.5: e.g. gpt-4o standard, claude-sonnet-5-5
   | 'ADVANCED_REASONING'      // Tier 3: e.g. gpt-5, o1, o3 (deep root cause, scenario comparison)
   | 'VISION_FAST'             // Fast low-res OCR, KYC classification
   | 'VISION_HIGH_ACCURACY'    // High-res damage inspection, multi-panel comparison

@@ -96,22 +96,35 @@ export async function GET(req: NextRequest) {
   const tenantName = new Map(tenants.map((t) => [t.id, t.name]));
 
   const now = new Date();
-  const partners = run.value.map((raw: any) => {
-    const { _count, capabilities, complianceDocuments, vehicles, drivers, scorecard, serviceAreas, ...p } = raw;
+  // The kill-switch relations are selected conditionally, so the row type is a
+  // union; read it through one shape where those relations are optional.
+  type PartnerListRow = {
+    _count: { users: number };
+    capabilities?: { domain: string }[];
+    complianceDocuments?: { id: string }[];
+    vehicles?: { id: string; mulkiyaExpiry: Date | null }[];
+    drivers?: { id: string; licenseExpiry: Date | null; permitExpiry: Date | null }[];
+    scorecard?: unknown;
+    serviceAreas?: unknown;
+    onboardedByTenantId: string | null;
+    [field: string]: unknown;
+  };
+  const partners = run.value.map((raw) => {
+    const { _count, capabilities, complianceDocuments, vehicles, drivers, scorecard, serviceAreas, ...p } = raw as PartnerListRow;
     const base = {
       ...p,
       onboardedByTenantName: p.onboardedByTenantId ? tenantName.get(p.onboardedByTenantId) ?? null : null,
       memberCount: _count.users,
-      approvedDomains: [...new Set((capabilities || []).map((c: any) => c.domain))],
+      approvedDomains: [...new Set((capabilities || []).map((c) => c.domain))],
       pendingDocuments: (complianceDocuments || []).length,
     };
     if (!includeKillSwitch) return base;
 
     const vehList = Array.isArray(vehicles) ? vehicles : [];
     const drvList = Array.isArray(drivers) ? drivers : [];
-    const dispatchReadyVehicles = vehList.filter((v: any) => !v.mulkiyaExpiry || new Date(v.mulkiyaExpiry) > now).length;
+    const dispatchReadyVehicles = vehList.filter((v) => !v.mulkiyaExpiry || new Date(v.mulkiyaExpiry) > now).length;
     const dispatchReadyDrivers = drvList.filter(
-      (d: any) =>
+      (d) =>
         (!d.licenseExpiry || new Date(d.licenseExpiry) > now) &&
         (!d.permitExpiry || new Date(d.permitExpiry) > now),
     ).length;

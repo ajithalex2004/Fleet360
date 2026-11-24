@@ -10,7 +10,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 
 | Area (`/api/…`) | Routes | Reads (GET) | Writes (POST/PUT/PATCH/DELETE) |
 |---|---:|---|---|
-| `admin` | 102 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
+| `admin` | 104 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
 | `agents` | 11 | module `agents` | module `agents` |
 | `agents/anomalies` | 1 | module `finance` | module `finance` |
 | `agents/preventive-maintenance` | 3 | module `maintenance` | module `maintenance` |
@@ -23,7 +23,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `assets` | 33 | module `assets` | module `assets` |
 | `assets/ble/ingest` | 1 | external | external |
 | `auth` | 16 | self | self |
-| `billing` | 2 | tenant-admin | tenant-admin |
+| `billing` | 4 | tenant-admin | tenant-admin |
 | `booking-portal` | 4 | module `booking-portal` | module `booking-portal` |
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |
 | `branch-staff` | 1 | self | self |
@@ -44,13 +44,13 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `documents` | 8 | module `compliance` | module `compliance` |
 | `documents/intelligence/cron` | 1 | external | external |
 | `driver` | 1 | module `logistics` | module `logistics` |
-| `driver-app` | 33 | external | external |
+| `driver-app` | 34 | external | external |
 | `drivers` | 9 | module `driver-mgmt` | module `driver-mgmt` |
 | `esign` | 2 | module `leasing` | module `leasing` |
 | `esign/verify` | 1 | external | external |
-| `exchange` | 17 | partner | partner |
+| `exchange` | 20 | partner | partner |
 | `files` | 1 | self | self |
-| `finance` | 47 | module `finance` | module `finance` |
+| `finance` | 58 | module `finance` | module `finance` |
 | `fleet` | 36 | module `fleet` | module `fleet` |
 | `garages` | 2 | module `maintenance` | module `maintenance` |
 | `health` | 2 | external | external |
@@ -60,7 +60,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `integrations/enterprise/webhook` | 1 | external | external |
 | `jobs` | 1 | external | external |
 | `kyc` | 2 | module `customer-mgmt` | module `customer-mgmt` |
-| `leasing` | 91 | module `leasing` | module `leasing` |
+| `leasing` | 94 | module `leasing` | module `leasing` |
 | `leasing-portal` | 13 | external | external |
 | `leasing/documents/upload` | 1 | module `leasing` | self |
 | `logistics` | 68 | module `logistics` | module `logistics` |
@@ -100,7 +100,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `telematics` | 5 | module `fleet` | module `fleet` |
 | `tenant` | 1 | self | tenant-admin |
 | `tenant-branches` | 1 | self | tenant-admin |
-| `tenant-subscriptions` | 1 | tenant-admin | tenant-admin |
+| `tenant-subscriptions` | 2 | tenant-admin | tenant-admin |
 | `tenants` | 3 | external | external |
 | `track` | 1 | external | external |
 | `users` | 2 | self | tenant-admin |

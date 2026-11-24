@@ -12,14 +12,14 @@
  * 5. Fail-closed security: Unauthenticated requests return HTTP 401 Unauthorized.
  */
 
-const { PrismaClient } = require('@prisma/client');
-const crypto = require('crypto');
-
 const STAGING_URL = process.env.STAGING_DATABASE_URL;
 if (!STAGING_URL) {
   console.error('STAGING_DATABASE_URL environment variable is required. There is no built-in default connection string.');
   process.exit(1);
 }
+
+const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
 const STAGING_APP_ORIGIN = process.env.STAGING_APP_ORIGIN || 'https://fleet360-app-staging.up.railway.app';
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 

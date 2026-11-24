@@ -190,6 +190,9 @@ describe('Route CRUD /api/bus-ops/routes', () => {
   it('DELETE /:id soft-deletes the route', async () => {
     if (!createdRouteId) throw new Error('route not created');
 
+    const deactivate = await makeRequest('PATCH', `/api/bus-ops/routes/${createdRouteId}`, { isActive: false }, seed!.headers);
+    expect(deactivate.status).toBe(200);
+
     const del = await makeRequest('DELETE', `/api/bus-ops/routes/${createdRouteId}`, undefined, seed!.headers);
     expect(del.status).toBe(200);
 

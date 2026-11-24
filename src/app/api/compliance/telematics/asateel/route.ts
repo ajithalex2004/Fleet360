@@ -15,8 +15,10 @@ export const dynamic = 'force-dynamic';
  * Mode 2: Action = 'evaluate_gating' -> Executes cross-emirate dispatch compliance gate
  */
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthorizedTenant(req);
-  if (auth instanceof NextResponse) return auth;
+  const auth = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const rawBody = await req.json();

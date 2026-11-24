@@ -787,7 +787,7 @@ test.describe.serial(
       const feedARes = await apiJson('/api/exchange/marketplace', { cookie: partnerACookie });
       expect(feedARes.status).toBe(200);
       const oppForA = (feedARes.data.opportunities || []).find(
-        (o: any) => o.outsourceRequestId === busRequestId,
+        (o: { outsourceRequestId?: string }) => o.outsourceRequestId === busRequestId,
       );
       expect(oppForA).toBeDefined();
       expect(oppForA.tenantId).toBeUndefined(); // ARCH-3: buyer identity never leaked!
@@ -796,7 +796,7 @@ test.describe.serial(
       const feedBRes = await apiJson('/api/exchange/marketplace', { cookie: partnerBCookie });
       expect(feedBRes.status).toBe(200);
       const oppForB = (feedBRes.data.opportunities || []).find(
-        (o: any) => o.outsourceRequestId === busRequestId,
+        (o: { outsourceRequestId?: string }) => o.outsourceRequestId === busRequestId,
       );
       expect(oppForB).toBeUndefined();
 
@@ -829,7 +829,7 @@ test.describe.serial(
       const feedBRes = await apiJson('/api/exchange/marketplace', { cookie: partnerBCookie });
       expect(feedBRes.status).toBe(200);
       const oppForB = (feedBRes.data.opportunities || []).find(
-        (o: any) => o.outsourceRequestId === busRequestId,
+        (o: { outsourceRequestId?: string }) => o.outsourceRequestId === busRequestId,
       );
       expect(oppForB).toBeDefined();
       expect(oppForB.tenantId).toBeUndefined();
@@ -1008,9 +1008,9 @@ test.describe.serial(
       });
       expect(marketView.status).toBe(200);
       const submittedQuotes = (marketView.data.outsourceRequest?.quotes || []).filter(
-        (q: any) => q.status === 'SUBMITTED',
+        (q: { status?: string }) => q.status === 'SUBMITTED',
       );
-      const partnerBActiveQuote = submittedQuotes.find((q: any) => q.partnerId === partnerBId);
+      const partnerBActiveQuote = submittedQuotes.find((q: { partnerId?: string }) => q.partnerId === partnerBId);
       expect(partnerBActiveQuote).toBeDefined();
 
       // Fire 4 concurrent award requests for Partner A's quote (with 8% fuel surcharge indexation)
@@ -1102,7 +1102,9 @@ test.describe.serial(
         const verifiedAward = await prisma.outsourceAward.findUniqueOrThrow({
           where: { id: busAwardId },
         });
-        const snap = verifiedAward.commercialSnapshot as Record<string, any>;
+        const snap = verifiedAward.commercialSnapshot as {
+          rateCardSnapshot?: { snapshotHash?: string; ancillaryCharges?: { fuelSurchargePct?: number } };
+        };
         expect(snap.rateCardSnapshot?.snapshotHash).toMatch(/^[a-f0-9]{64}$/);
         expect(snap.rateCardSnapshot?.ancillaryCharges?.fuelSurchargePct).toBe(8);
 
@@ -1457,7 +1459,7 @@ test.describe.serial(
       });
       expect(loadBoardBids.status).toBe(200);
       const projectedBid = (loadBoardBids.data.data || []).find(
-        (b: any) => b.canonicalQuoteId === quoteFreight.data.quote.id,
+        (b: { canonicalQuoteId?: string }) => b.canonicalQuoteId === quoteFreight.data.quote.id,
       );
       expect(projectedBid).toBeDefined();
       expect(projectedBid.amount).toBe(2400);
@@ -1999,7 +2001,7 @@ test.describe.serial(
       expect(dirRes.status).toBe(200);
       const breakdown = dirRes.data.executiveAnalytics?.verticalBreakdown || [];
       for (const dom of ['PASSENGER_TRANSPORT', 'LIMOUSINE', 'FREIGHT', 'RECOVERY']) {
-        const entry = breakdown.find((b: any) => b.domain === dom);
+        const entry = breakdown.find((b: { domain?: string }) => b.domain === dom);
         expect(entry).toBeDefined();
         expect(entry.awardCount).toBeGreaterThanOrEqual(1);
         expect(entry.awardedSpendAed).toBeGreaterThan(0);

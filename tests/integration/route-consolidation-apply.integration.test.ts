@@ -22,14 +22,14 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 import {
   applyConsolidation,
   revertConsolidation,
   type ApplyConsolidationInput,
 } from '@/lib/planning/route-consolidation-apply';
-
-const prisma = new PrismaClient();
 
 type Fixture = {
   tenantId: string;
@@ -61,86 +61,82 @@ async function seed(): Promise<Fixture> {
   await prisma.tenant.create({ data: { id: tenantId, name: `Test Tenant ${suffix}` } });
   await prisma.tenant.create({ data: { id: otherTenantId, name: `Other Test Tenant ${suffix}` } });
 
-  await prisma.busRoute.create({
-    data: {
-      id: sourceA, tenantId, name: `Test A ${suffix}`,
-      origin: 'A-origin', destination: 'shared-dest',
-      isActive: true, capacity: 40,
-    },
-  });
-  await prisma.busRoute.create({
-    data: {
-      id: sourceB, tenantId, name: `Test B ${suffix}`,
-      origin: 'B-origin', destination: 'shared-dest',
-      isActive: true, capacity: 40,
-    },
-  });
-
   const stopsA: [string, string] = [randomUUID(), randomUUID()];
   const stopsB: [string, string] = [randomUUID(), randomUUID()];
   const placeIds: [string, string] = [randomUUID(), randomUUID()];
-
-  // Seed spatial.places first so route_stops.place_id FKs are satisfied.
-  // Route A and B share placeIds so the engine's EXACT_PLACE_ID stop-
-  // mapping path can match A's original enrolment stops onto B's copied
-  // stops on the merged route.
-  for (let i = 0; i < 2; i++) {
-    await prisma.place.create({
-      data: {
-        id: placeIds[i],
-        tenantId,
-        name: `Place ${i} ${suffix}`,
-        type: 'STOP',
-        shape: 'POINT',
-        centerLat: 25.10 + i * 0.05,
-        centerLng: 55.15 + i * 0.05,
-      },
-    });
-  }
-
-  for (let i = 0; i < 2; i++) {
-    await prisma.routeStop.create({
-      data: {
-        id: stopsA[i], tenantId, routeId: sourceA,
-        stopName: `A-stop-${i}`, sequence: i + 1,
-        gpsLat: 25.10 + i * 0.01, gpsLng: 55.15 + i * 0.01,
-        placeId: placeIds[i], // shared placeId so EXACT_PLACE_ID matches on merged route
-      },
-    });
-    await prisma.routeStop.create({
-      data: {
-        id: stopsB[i], tenantId, routeId: sourceB,
-        stopName: `B-stop-${i}`, sequence: i + 1,
-        gpsLat: 25.20 + i * 0.01, gpsLng: 55.25 + i * 0.01,
-        placeId: placeIds[i],
-      },
-    });
-  }
-
-  // RoutePassenger enrolled on source A at stop-a-pickup / dropoff
   const routePassengerId = randomUUID();
-  await prisma.routePassenger.create({
-    data: {
-      id: routePassengerId, tenantId, routeId: sourceA,
-      staffMemberId: randomUUID(),
-      pickupStopId: stopsA[0], dropoffStopId: stopsA[1],
-      status: 'ACTIVE',
-    },
-  });
-
-  // TransportEnrollment on source B at stop-b-pickup
   const transportEnrollmentId = randomUUID();
   const employeeId = randomUUID();
-  // TransportEnrollment.employeeId FKs to StaffMember; create a minimal one
-  await prisma.staffMember.create({
-    data: { id: employeeId, tenantId, name: `Emp ${suffix}` },
-  });
-  await prisma.transportEnrollment.create({
-    data: {
-      id: transportEnrollmentId, tenantId, employeeId,
-      defaultRouteId: sourceB, defaultStopId: stopsB[0],
-      isActive: true,
-    },
+
+  await withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.busRoute.create({
+      data: {
+        id: sourceA, tenantId, name: `Test A ${suffix}`,
+        origin: 'A-origin', destination: 'shared-dest',
+        isActive: true, capacity: 40,
+      },
+    });
+    await tx.busRoute.create({
+      data: {
+        id: sourceB, tenantId, name: `Test B ${suffix}`,
+        origin: 'B-origin', destination: 'shared-dest',
+        isActive: true, capacity: 40,
+      },
+    });
+
+    // Seed spatial.places first so route_stops.place_id FKs are satisfied.
+    for (let i = 0; i < 2; i++) {
+      await tx.place.create({
+        data: {
+          id: placeIds[i],
+          tenantId,
+          name: `Place ${i} ${suffix}`,
+          type: 'STOP',
+          shape: 'POINT',
+          centerLat: 25.10 + i * 0.05,
+          centerLng: 55.15 + i * 0.05,
+        },
+      });
+    }
+
+    for (let i = 0; i < 2; i++) {
+      await tx.routeStop.create({
+        data: {
+          id: stopsA[i], tenantId, routeId: sourceA,
+          stopName: `A-stop-${i}`, sequence: i + 1,
+          gpsLat: 25.10 + i * 0.01, gpsLng: 55.15 + i * 0.01,
+          placeId: placeIds[i],
+        },
+      });
+      await tx.routeStop.create({
+        data: {
+          id: stopsB[i], tenantId, routeId: sourceB,
+          stopName: `B-stop-${i}`, sequence: i + 1,
+          gpsLat: 25.20 + i * 0.01, gpsLng: 55.25 + i * 0.01,
+          placeId: placeIds[i],
+        },
+      });
+    }
+
+    await tx.routePassenger.create({
+      data: {
+        id: routePassengerId, tenantId, routeId: sourceA,
+        staffMemberId: randomUUID(),
+        pickupStopId: stopsA[0], dropoffStopId: stopsA[1],
+        status: 'ACTIVE',
+      },
+    });
+
+    await tx.staffMember.create({
+      data: { id: employeeId, tenantId, name: `Emp ${suffix}` },
+    });
+    await tx.transportEnrollment.create({
+      data: {
+        id: transportEnrollmentId, tenantId, employeeId,
+        defaultRouteId: sourceB, defaultStopId: stopsB[0],
+        isActive: true,
+      },
+    });
   });
 
   return { tenantId, otherTenantId, sourceA, sourceB, stopsA, stopsB, routePassengerId, transportEnrollmentId };
@@ -149,16 +145,18 @@ async function seed(): Promise<Fixture> {
 async function teardown(f: Fixture): Promise<void> {
   // Order matters — child FKs first. Consolidation cascade handles
   // its own children; we still need to drop everything else.
-  await prisma.routeConsolidation.deleteMany({ where: { tenantId: f.tenantId } });
-  await prisma.transportEnrollment.deleteMany({ where: { tenantId: f.tenantId } });
-  await prisma.staffMember.deleteMany({ where: { tenantId: f.tenantId } });
-  await prisma.routePassenger.deleteMany({ where: { tenantId: f.tenantId } });
-  await prisma.routeStop.deleteMany({ where: { tenantId: f.tenantId } });
-  await prisma.busRoute.deleteMany({ where: { tenantId: f.tenantId } });
-  // Same for otherTenantId in case a test used it
-  await prisma.busRoute.deleteMany({ where: { tenantId: f.otherTenantId } });
-  // Places after route_stops
-  await prisma.place.deleteMany({ where: { tenantId: f.tenantId } });
+  await withTenantRls(prisma, f.tenantId, async (tx) => {
+    await tx.routeConsolidation.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.transportEnrollment.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.staffMember.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.routePassenger.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.routeStop.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.busRoute.deleteMany({ where: { tenantId: f.tenantId } });
+    await tx.place.deleteMany({ where: { tenantId: f.tenantId } });
+  });
+  await withTenantRls(prisma, f.otherTenantId, async (tx) => {
+    await tx.busRoute.deleteMany({ where: { tenantId: f.otherTenantId } });
+  });
   // Tenants last — anything FK'd to them is already gone.
   await prisma.tenant.deleteMany({ where: { id: { in: [f.tenantId, f.otherTenantId] } } });
 }
@@ -198,65 +196,60 @@ function applyInput(f: Fixture, over: Partial<ApplyConsolidationInput> = {}): Ap
 describe('scenario 1: apply is atomic', () => {
   it('creates merged route, retires both sources, migrates both enrollment types, writes lineage rows', async () => {
     const input = applyInput(fx);
-    const r = await applyConsolidation(prisma, input);
+    const r = await runAsTenant(fx.tenantId, () => applyConsolidation(prisma, input));
 
     expect(r.status).toBe('APPLIED');
     if (r.status !== 'APPLIED') return;
 
-    // Merged route exists and is active
-    const merged = await prisma.busRoute.findUnique({ where: { id: r.mergedRouteId } });
-    expect(merged?.isActive).toBe(true);
-    expect(merged?.name).toBe('Merged Test');
-    const mergedStops = await prisma.routeStop.count({ where: { routeId: r.mergedRouteId } });
-    expect(mergedStops).toBe(3);
+    await withTenantRls(prisma, fx.tenantId, async (tx) => {
+      // Merged route exists and is active
+      const merged = await tx.busRoute.findUnique({ where: { id: r.mergedRouteId } });
+      expect(merged?.isActive).toBe(true);
+      expect(merged?.name).toBe('Merged Test');
+      const mergedStops = await tx.routeStop.count({ where: { routeId: r.mergedRouteId } });
+      expect(mergedStops).toBe(3);
 
-    // A consolidated route is a first-class BusRoute — ops need to find
-    // it by code the same way as any manually- or bulk-created route.
-    // Previously null: this create had no `code` field at all.
-    expect(merged?.code).toBeTruthy();
-    expect(merged?.code).toMatch(/^[A-Z]+-\d{4}$/);
+      expect(merged?.code).toBeTruthy();
+      expect(merged?.code).toMatch(/^[A-Z]+-\d{4}$/);
 
-    // Sources retired
-    const sources = await prisma.busRoute.findMany({
-      where: { id: { in: [fx.sourceA, fx.sourceB] } },
-      select: { id: true, isActive: true, retiredReason: true, retiredBy: true },
+      // Sources retired
+      const sources = await tx.busRoute.findMany({
+        where: { id: { in: [fx.sourceA, fx.sourceB] } },
+        select: { id: true, isActive: true, retiredReason: true, retiredBy: true },
+      });
+      for (const s of sources) {
+        expect(s.isActive).toBe(false);
+        expect(s.retiredReason).toBe('CONSOLIDATED_SOURCE');
+        expect(s.retiredBy).toBe('test-user');
+      }
+
+      // Both enrollment types migrated
+      const rp = await tx.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
+      expect(rp?.routeId).toBe(r.mergedRouteId);
+      const te = await tx.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
+      expect(te?.defaultRouteId).toBe(r.mergedRouteId);
+
+      const mergedStopRows = await tx.routeStop.findMany({
+        where: { routeId: r.mergedRouteId },
+        select: { id: true, sequence: true },
+        orderBy: { sequence: 'asc' },
+      });
+      const bySeq = new Map(mergedStopRows.map((s) => [s.sequence, s.id]));
+      expect(rp?.pickupStopId).toBe(bySeq.get(1));
+      expect(rp?.dropoffStopId).toBe(bySeq.get(3));
+      expect(te?.defaultStopId).toBe(bySeq.get(2));
+      expect(bySeq.get(1)).toBeTruthy();
+
+      // Lineage rows exist
+      const consolidation = await tx.routeConsolidation.findUnique({
+        where: { id: r.consolidationId },
+        include: { sources: true, enrollmentMigrations: true },
+      });
+      expect(consolidation?.status).toBe('APPLIED');
+      expect(consolidation?.appliedBy).toBe('test-user');
+      expect(consolidation?.sources).toHaveLength(2);
+      expect(consolidation?.enrollmentMigrations).toHaveLength(2);
     });
-    for (const s of sources) {
-      expect(s.isActive).toBe(false);
-      expect(s.retiredReason).toBe('CONSOLIDATED_SOURCE');
-      expect(s.retiredBy).toBe('test-user');
-    }
-
-    // Both enrollment types migrated
-    const rp = await prisma.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
-    expect(rp?.routeId).toBe(r.mergedRouteId);
-    const te = await prisma.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
-    expect(te?.defaultRouteId).toBe(r.mergedRouteId);
-
-    // ...and point at stops ON the merged route, not at the retired
-    // source routes' stops they were copied from.
-    // Merged stops are copied in mergedRoute.stopIds order:
-    // [stopsA[0], stopsB[0], stopsA[1]] → sequence 1, 2, 3.
-    const mergedStopRows = await prisma.routeStop.findMany({
-      where: { routeId: r.mergedRouteId },
-      select: { id: true, sequence: true },
-      orderBy: { sequence: 'asc' },
-    });
-    const bySeq = new Map(mergedStopRows.map((s) => [s.sequence, s.id]));
-    expect(rp?.pickupStopId).toBe(bySeq.get(1));   // was stopsA[0]
-    expect(rp?.dropoffStopId).toBe(bySeq.get(3));  // was stopsA[1]
-    expect(te?.defaultStopId).toBe(bySeq.get(2));  // was stopsB[0]
-    expect(bySeq.get(1)).toBeTruthy();
-
-    // Lineage rows exist
-    const consolidation = await prisma.routeConsolidation.findUnique({
-      where: { id: r.consolidationId },
-      include: { sources: true, enrollmentMigrations: true },
-    });
-    expect(consolidation?.status).toBe('APPLIED');
-    expect(consolidation?.appliedBy).toBe('test-user');
-    expect(consolidation?.sources).toHaveLength(2);
-    expect(consolidation?.enrollmentMigrations).toHaveLength(2);
   });
 });
 
@@ -271,31 +264,31 @@ describe('scenario 2: mid-transaction failure rolls back completely', () => {
       },
     });
 
-    const priorConsolidationCount = await prisma.routeConsolidation.count({ where: { tenantId: fx.tenantId } });
-    await expect(applyConsolidation(prisma, input)).rejects.toThrow();
+    const priorConsolidationCount = await withTenantRls(prisma, fx.tenantId, (tx) =>
+      tx.routeConsolidation.count({ where: { tenantId: fx.tenantId } }),
+    );
+    await expect(runAsTenant(fx.tenantId, () => applyConsolidation(prisma, input))).rejects.toThrow();
 
-    // No consolidation row
-    const afterCount = await prisma.routeConsolidation.count({ where: { tenantId: fx.tenantId } });
-    expect(afterCount).toBe(priorConsolidationCount);
+    await withTenantRls(prisma, fx.tenantId, async (tx) => {
+      const afterCount = await tx.routeConsolidation.count({ where: { tenantId: fx.tenantId } });
+      expect(afterCount).toBe(priorConsolidationCount);
 
-    // Sources still active
-    const sources = await prisma.busRoute.findMany({ where: { id: { in: [fx.sourceA, fx.sourceB] } } });
-    for (const s of sources) {
-      expect(s.isActive).toBe(true);
-      expect(s.retiredReason).toBeNull();
-    }
+      const sources = await tx.busRoute.findMany({ where: { id: { in: [fx.sourceA, fx.sourceB] } } });
+      for (const s of sources) {
+        expect(s.isActive).toBe(true);
+        expect(s.retiredReason).toBeNull();
+      }
 
-    // Enrollments unchanged
-    const rp = await prisma.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
-    expect(rp?.routeId).toBe(fx.sourceA);
-    const te = await prisma.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
-    expect(te?.defaultRouteId).toBe(fx.sourceB);
+      const rp = await tx.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
+      expect(rp?.routeId).toBe(fx.sourceA);
+      const te = await tx.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
+      expect(te?.defaultRouteId).toBe(fx.sourceB);
 
-    // No orphan merged route
-    const orphanRoutes = await prisma.busRoute.count({
-      where: { tenantId: fx.tenantId, name: 'Merged Test' },
+      const orphanRoutes = await tx.busRoute.count({
+        where: { tenantId: fx.tenantId, name: 'Merged Test' },
+      });
+      expect(orphanRoutes).toBe(0);
     });
-    expect(orphanRoutes).toBe(0);
   });
 });
 
@@ -304,21 +297,21 @@ describe('scenario 2: mid-transaction failure rolls back completely', () => {
 describe('scenario 3: idempotencyKey enforces one consolidation per key', () => {
   it('second apply with same key returns ALREADY_APPLIED and does not create a new row', async () => {
     const input = applyInput(fx);
-    const first = await applyConsolidation(prisma, input);
+    const first = await runAsTenant(fx.tenantId, () => applyConsolidation(prisma, input));
     expect(first.status).toBe('APPLIED');
     if (first.status !== 'APPLIED') return;
 
-    // Second call with the same input (same idempotencyKey)
-    const second = await applyConsolidation(prisma, input);
+    const second = await runAsTenant(fx.tenantId, () => applyConsolidation(prisma, input));
     expect(second.status).toBe('ALREADY_APPLIED');
     if (second.status !== 'ALREADY_APPLIED') return;
     expect(second.consolidationId).toBe(first.consolidationId);
     expect(second.mergedRouteId).toBe(first.mergedRouteId);
 
-    // Only one consolidation row for that key
-    const count = await prisma.routeConsolidation.count({
-      where: { tenantId: fx.tenantId, idempotencyKey: input.idempotencyKey },
-    });
+    const count = await withTenantRls(prisma, fx.tenantId, (tx) =>
+      tx.routeConsolidation.count({
+        where: { tenantId: fx.tenantId, idempotencyKey: input.idempotencyKey },
+      }),
+    );
     expect(count).toBe(1);
   });
 });
@@ -330,11 +323,9 @@ describe('scenario 4: concurrent applies sharing a source route cannot both succ
     const inputA = applyInput(fx);
     const inputB = applyInput(fx); // shares sources with A but different idempotencyKey
 
-    // Fire both without awaiting — the SELECT FOR UPDATE in the first
-    // transaction should force serialisation of the source-route locks.
     const results = await Promise.allSettled([
-      applyConsolidation(prisma, inputA),
-      applyConsolidation(prisma, inputB),
+      runAsTenant(fx.tenantId, () => applyConsolidation(prisma, inputA)),
+      runAsTenant(fx.tenantId, () => applyConsolidation(prisma, inputB)),
     ]);
 
     const settled = results.map((r) => r.status === 'fulfilled' ? r.value : { status: 'ERROR', error: String(r.reason) });
@@ -344,8 +335,9 @@ describe('scenario 4: concurrent applies sharing a source route cannot both succ
     expect(applied).toHaveLength(1);
     expect(blocked).toHaveLength(1);
 
-    // Only one consolidation row for this tenant across both attempts
-    const count = await prisma.routeConsolidation.count({ where: { tenantId: fx.tenantId } });
+    const count = await withTenantRls(prisma, fx.tenantId, (tx) =>
+      tx.routeConsolidation.count({ where: { tenantId: fx.tenantId } }),
+    );
     expect(count).toBe(1);
   });
 });
@@ -355,82 +347,62 @@ describe('scenario 4: concurrent applies sharing a source route cannot both succ
 describe('scenario 5: revert restores originals and archives merged route', () => {
   it('sources reactivate, enrollments restored to source route + old stops, merged route archived not deleted', async () => {
     const input = applyInput(fx);
-    const applied = await applyConsolidation(prisma, input);
+    const applied = await runAsTenant(fx.tenantId, () => applyConsolidation(prisma, input));
     expect(applied.status).toBe('APPLIED');
     if (applied.status !== 'APPLIED') return;
 
-    const reverted = await revertConsolidation(prisma, {
+    const reverted = await runAsTenant(fx.tenantId, () => revertConsolidation(prisma, {
       tenantId: fx.tenantId,
       consolidationId: applied.consolidationId,
       revertedBy: 'test-user-revert',
       revertReason: 'operator error',
-    });
+    }));
     expect(reverted.status).toBe('REVERTED');
     if (reverted.status !== 'REVERTED') return;
 
-    // Sources reactivated
-    const sources = await prisma.busRoute.findMany({
-      where: { id: { in: [fx.sourceA, fx.sourceB] } },
-      select: { id: true, isActive: true, retiredReason: true, retiredAt: true },
+    await withTenantRls(prisma, fx.tenantId, async (tx) => {
+      const sources = await tx.busRoute.findMany({
+        where: { id: { in: [fx.sourceA, fx.sourceB] } },
+        select: { id: true, isActive: true, retiredReason: true, retiredAt: true },
+      });
+      for (const s of sources) {
+        expect(s.isActive).toBe(true);
+        expect(s.retiredReason).toBeNull();
+        expect(s.retiredAt).toBeNull();
+      }
+
+      const rp = await tx.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
+      expect(rp?.routeId).toBe(fx.sourceA);
+      expect(rp?.pickupStopId).toBe(fx.stopsA[0]);
+      expect(rp?.dropoffStopId).toBe(fx.stopsA[1]);
+      const te = await tx.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
+      expect(te?.defaultRouteId).toBe(fx.sourceB);
+      expect(te?.defaultStopId).toBe(fx.stopsB[0]);
+
+      const merged = await tx.busRoute.findUnique({ where: { id: applied.mergedRouteId } });
+      expect(merged).not.toBeNull();
+      expect(merged?.isActive).toBe(false);
+      expect(merged?.retiredReason).toBe('CONSOLIDATED_ARCHIVED');
+      expect(merged?.retiredBy).toBe('test-user-revert');
+
+      const consolidation = await tx.routeConsolidation.findUnique({
+        where: { id: applied.consolidationId },
+        include: { sources: true, enrollmentMigrations: true },
+      });
+      expect(consolidation?.status).toBe('REVERTED');
+      expect(consolidation?.revertedBy).toBe('test-user-revert');
+      expect(consolidation?.revertReason).toBe('operator error');
+      expect(consolidation?.sources).toHaveLength(2);
+      expect(consolidation?.enrollmentMigrations).toHaveLength(2);
     });
-    for (const s of sources) {
-      expect(s.isActive).toBe(true);
-      expect(s.retiredReason).toBeNull();
-      expect(s.retiredAt).toBeNull();
-    }
-
-    // Enrollments restored to source routes with old stops
-    const rp = await prisma.routePassenger.findUnique({ where: { id: fx.routePassengerId } });
-    expect(rp?.routeId).toBe(fx.sourceA);
-    expect(rp?.pickupStopId).toBe(fx.stopsA[0]);
-    expect(rp?.dropoffStopId).toBe(fx.stopsA[1]);
-    const te = await prisma.transportEnrollment.findUnique({ where: { id: fx.transportEnrollmentId } });
-    expect(te?.defaultRouteId).toBe(fx.sourceB);
-    expect(te?.defaultStopId).toBe(fx.stopsB[0]);
-
-    // Merged route archived, not deleted
-    const merged = await prisma.busRoute.findUnique({ where: { id: applied.mergedRouteId } });
-    expect(merged).not.toBeNull();
-    expect(merged?.isActive).toBe(false);
-    expect(merged?.retiredReason).toBe('CONSOLIDATED_ARCHIVED');
-    expect(merged?.retiredBy).toBe('test-user-revert');
-
-    // Consolidation row updated to REVERTED — lineage preserved
-    const consolidation = await prisma.routeConsolidation.findUnique({
-      where: { id: applied.consolidationId },
-      include: { sources: true, enrollmentMigrations: true },
-    });
-    expect(consolidation?.status).toBe('REVERTED');
-    expect(consolidation?.revertedBy).toBe('test-user-revert');
-    expect(consolidation?.revertReason).toBe('operator error');
-    expect(consolidation?.sources).toHaveLength(2);
-    expect(consolidation?.enrollmentMigrations).toHaveLength(2);
   });
 });
 
 // ─── Scenario 6: RLS blocks cross-tenant access ─────────────────────
 
 describe('scenario 6: RLS structural + data-level tenant isolation', () => {
-  /**
-   * Full end-to-end RLS enforcement requires the DB session user to
-   * lack BYPASSRLS. The Neon-hosted dev DB used by this suite only
-   * exposes bypass-RLS roles (neondb_owner, neon_superuser). The
-   * production connection role MUST not have BYPASSRLS for RLS to
-   * actually filter — verify that separately as part of the deploy
-   * runbook. This test covers the two checks that DO work here:
-   *
-   *   1. Structural — the policies exist on every new lineage table
-   *      with USING + WITH CHECK + the strict tenant predicate.
-   *      A policy misconfiguration is caught here.
-   *
-   *   2. Data-level — the persisted row carries the correct tenant_id.
-   *      If the engine ever wrote to the wrong tenant, RLS would leak
-   *      the row cross-tenant even with a non-bypass role; this test
-   *      proves the engine isn't leaking at the write level.
-   */
-
   it('lineage tables have RLS + FORCE + policy with USING and WITH CHECK on the strict tenant predicate', async () => {
-    const rows = await prisma.$queryRawUnsafe<Array<{
+    const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{
       tablename: string;
       rls_enabled: boolean;
       rls_forced: boolean;
@@ -454,9 +426,8 @@ describe('scenario 6: RLS structural + data-level tenant isolation', () => {
           'route_consolidation_enrollment_migrations'
         )
       ORDER BY c.relname
-    `);
+    `));
 
-    // 3 tables, each with exactly one policy
     expect(rows).toHaveLength(3);
     const byTable: Record<string, typeof rows[number]> = {};
     for (const r of rows) byTable[r.tablename] = r;
@@ -466,38 +437,36 @@ describe('scenario 6: RLS structural + data-level tenant isolation', () => {
       expect(r.rls_enabled, `${table} must have ROW LEVEL SECURITY enabled`).toBe(true);
       expect(r.rls_forced,  `${table} must have FORCE ROW LEVEL SECURITY enabled`).toBe(true);
       expect(r.polname).toBe('tenant_isolation');
-      // Both clauses present and identical
       expect(r.qual).toBeTruthy();
       expect(r.with_check).toBeTruthy();
       expect(r.qual).toBe(r.with_check);
-      // Strict predicate — no NULL branch, no wildcard bypass
       expect(r.qual).toContain('current_setting');
       expect(r.qual).toContain('app.tenant_id');
     }
   });
 
   it('a committed apply writes rows tagged with the caller\'s tenantId, not any other', async () => {
-    const applied = await applyConsolidation(prisma, applyInput(fx));
+    const applied = await runAsTenant(fx.tenantId, () => applyConsolidation(prisma, applyInput(fx)));
     expect(applied.status).toBe('APPLIED');
     if (applied.status !== 'APPLIED') return;
 
-    // Parent lineage row
-    const consolidation = await prisma.routeConsolidation.findUnique({
-      where: { id: applied.consolidationId },
-      include: { sources: true, enrollmentMigrations: true },
+    await withTenantRls(prisma, fx.tenantId, async (tx) => {
+      const consolidation = await tx.routeConsolidation.findUnique({
+        where: { id: applied.consolidationId },
+        include: { sources: true, enrollmentMigrations: true },
+      });
+      expect(consolidation?.tenantId).toBe(fx.tenantId);
+
+      for (const s of consolidation!.sources) expect(s.tenantId).toBe(fx.tenantId);
+      for (const m of consolidation!.enrollmentMigrations) expect(m.tenantId).toBe(fx.tenantId);
+
+      const merged = await tx.busRoute.findUnique({ where: { id: applied.mergedRouteId! } });
+      expect(merged?.tenantId).toBe(fx.tenantId);
     });
-    expect(consolidation?.tenantId).toBe(fx.tenantId);
 
-    // Child tenant tagging
-    for (const s of consolidation!.sources) expect(s.tenantId).toBe(fx.tenantId);
-    for (const m of consolidation!.enrollmentMigrations) expect(m.tenantId).toBe(fx.tenantId);
-
-    // Merged route tenant tagging
-    const merged = await prisma.busRoute.findUnique({ where: { id: applied.mergedRouteId! } });
-    expect(merged?.tenantId).toBe(fx.tenantId);
-
-    // Nothing under otherTenantId
-    const cross = await prisma.routeConsolidation.count({ where: { tenantId: fx.otherTenantId } });
+    const cross = await withTenantRls(prisma, fx.otherTenantId, (tx) =>
+      tx.routeConsolidation.count({ where: { tenantId: fx.otherTenantId } }),
+    );
     expect(cross).toBe(0);
   });
 });

@@ -21,13 +21,16 @@ import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession, requireDriverSessionForTenant } from '@/lib/driver-session';
-import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app-actor';
+import { authorizeDriverReferences, requireActiveDriver, loadDriverActor } from '@/lib/driver-app-actor';
+import { getEventBus } from '@/events/event-bus';
+import { FUEL_FILLED, type FuelFilledPayload } from '@/events/contracts/fuel.events';
+import crypto from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
   // Client-generated UUID for idempotency. The sync queue uses the
   // same UUID across retries, so duplicate submissions no-op.
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   shiftId: z.string().uuid().optional(),
   tripId: z.string().uuid().optional(),
   vehicleId: z.string().uuid().optional(),
@@ -35,13 +38,15 @@ const PostBodySchema = z.object({
   // Cost in minor units (fils for AED, paise for INR). 100 minor
   // units = 1.00 major unit. The client converts from the major-unit
   // form field.
-  costMinor: z.number().int().nonnegative(),
+  costMinor: z.number().int().nonnegative().optional(),
+  totalCost: z.number().nonnegative().optional(),
   currency: z.string().length(3).default('AED'),
-  odometer: z.number().int().nonnegative().optional(),
+  odometer: z.number().int().optional(),
   locationLat: z.number().min(-90).max(90).optional(),
   locationLng: z.number().min(-180).max(180).optional(),
   locationName: z.string().max(200).optional(),
-  filledAt: z.string().datetime().optional(),
+  stationName: z.string().max(200).optional(),
+  filledAt: z.string().optional(),
   notes: z.string().max(2000).optional(),
   // Optional bill photo (base64). First cut — production will use
   // presigned S3 upload.
@@ -133,34 +138,77 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = (await requireDriverSessionForTenant(req, tenantId));
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const ctx = (await requireDriverSessionForTenant(req, tenantId));
       if (ctx instanceof NextResponse) return ctx;
 
       const jsonRaw = await req.json().catch(() => null);
-    const json = jsonRaw ? stripTenantOwnershipFields(jsonRaw) : null;
+      const json = jsonRaw ? stripTenantOwnershipFields(jsonRaw) : null;
       const parsed = PostBodySchema.safeParse(json);
       if (!parsed.success) {
         return NextResponse.json({ error: 'validation failed', issues: parsed.error.issues }, { status: 400 });
       }
       const body = parsed.data;
 
+      if (body.odometer !== undefined && body.odometer < 0) {
+        return NextResponse.json({ error: 'Odometer cannot be negative' }, { status: 400 });
+      }
+
+      const fuelDate = body.filledAt ? new Date(body.filledAt) : new Date();
+      if (Number.isNaN(fuelDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid filledAt timestamp' }, { status: 400 });
+      }
+
+      const entryId = body.id ?? crypto.randomUUID();
+      const locationName = body.locationName ?? body.stationName ?? null;
+      const costMinor = body.costMinor ?? (body.totalCost != null ? Math.round(body.totalCost * 100) : 0);
+      const totalCost = body.totalCost ?? (costMinor / 100);
+
       // The caller must be an active driver, and every shift, trip and
       // vehicle the request names must be theirs (src/lib/driver-app-actor.ts).
-      const denied = (await requireActiveDriver(tx, ctx))
-        ?? (await authorizeDriverReferences(tx, ctx, { shiftId: body.shiftId, tripId: body.tripId, vehicleId: body.vehicleId }));
-      if (denied) return denied;
+      const notDriver = await requireActiveDriver(tx, ctx);
+      if (notDriver) return notDriver;
+
+      const explicitDenied = await authorizeDriverReferences(tx, ctx, { shiftId: body.shiftId, tripId: body.tripId });
+      if (explicitDenied) return explicitDenied;
+
+      let resolvedVehicleId = body.vehicleId ?? null;
+      if (!resolvedVehicleId) {
+        const actor = await loadDriverActor(tx, ctx.tenantId, ctx.userId);
+        resolvedVehicleId = actor?.activeTrip?.vehicle?.id || actor?.shiftVehicle?.id || null;
+      } else {
+        const vehDenied = await authorizeDriverReferences(tx, ctx, { vehicleId: resolvedVehicleId });
+        if (vehDenied) return vehDenied;
+      }
+
+      if (!resolvedVehicleId) {
+        return NextResponse.json(
+          { error: 'Vehicle could not be resolved from request or active shift/trip' },
+          { status: 422 },
+        );
+      }
+
+      if (body.odometer != null) {
+        const v = await tx.vehicle.findFirst({
+          where: { id: resolvedVehicleId, tenantId: ctx.tenantId },
+          select: { id: true, odometerReading: true },
+        });
+        if (v && v.odometerReading != null && BigInt(body.odometer) < v.odometerReading) {
+          return NextResponse.json({ error: 'Odometer reading cannot be lower than current vehicle odometer' }, { status: 422 });
+        }
+      }
 
       // Idempotency — same id twice is a no-op.
       const existing = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM fuel_entries
-        WHERE id = ${body.id}::uuid
+        WHERE id = ${entryId}::uuid
           AND tenant_id = ${ctx.tenantId}::uuid
           AND driver_id = ${ctx.userId}::uuid
         LIMIT 1
       `;
       if (existing.length > 0) {
-        return NextResponse.json({ ok: true, entryId: existing[0].id, idempotent: true });
+        return NextResponse.json({ ok: true, id: existing[0].id, entryId: existing[0].id, idempotent: true });
       }
 
       // Insert the bill photo first (if present) so we can FK it from the
@@ -194,21 +242,21 @@ export async function POST(req: NextRequest) {
           location_lat, location_lng, location_name,
           bill_photo_id, filled_at, notes, created_at, updated_at
         ) VALUES (
-          ${body.id}::uuid,
+          ${entryId}::uuid,
           ${ctx.tenantId}::uuid,
           ${shiftId}::uuid,
           ${body.tripId ?? null}::uuid,
           ${ctx.userId}::uuid,
-          ${body.vehicleId ?? null}::uuid,
+          ${resolvedVehicleId}::uuid,
           ${body.liters},
-          ${body.costMinor},
+          ${costMinor},
           ${body.currency},
           ${body.odometer ?? null},
           ${body.locationLat ?? null},
           ${body.locationLng ?? null},
-          ${body.locationName ?? null},
+          ${locationName},
           ${null}::uuid,
-          ${body.filledAt ?? new Date().toISOString()}::timestamptz,
+          ${fuelDate.toISOString()}::timestamptz,
           ${body.notes ?? null},
           NOW(),
           NOW()
@@ -221,7 +269,7 @@ export async function POST(req: NextRequest) {
           INSERT INTO fuel_entry_photos (id, fuel_entry_id, tenant_id, mime, size, data, taken_at, created_at)
           VALUES (
             ${body.billPhoto.id}::uuid,
-            ${body.id}::uuid,
+            ${entryId}::uuid,
             ${ctx.tenantId}::uuid,
             ${body.billPhoto.mime},
             ${body.billPhoto.size},
@@ -232,16 +280,67 @@ export async function POST(req: NextRequest) {
         `;
         await tx.$executeRaw`
           UPDATE fuel_entries SET bill_photo_id = ${body.billPhoto.id}::uuid, updated_at = NOW()
-          WHERE id = ${body.id}::uuid
+          WHERE id = ${entryId}::uuid
         `;
       }
 
+      // Bridge to public.fuel_logs atomically inside withTenantRls
+      const fuelLogId = crypto.randomUUID();
+      await tx.fuelLog.create({
+        data: {
+          id: fuelLogId,
+          tenantId: ctx.tenantId,
+          vehicleId: resolvedVehicleId,
+          driverId: ctx.userId ?? null,
+          fuelDate,
+          liters: body.liters,
+          costPerLiter: body.liters > 0 ? (totalCost / body.liters) : null,
+          totalCost,
+          mileage: body.odometer ?? null,
+          station: locationName,
+          notes: body.notes ?? null,
+        },
+      });
+
+      // Update Vehicle.odometerReading atomically inside withTenantRls
+      if (body.odometer != null) {
+        await tx.vehicle.update({
+          where: { id: resolvedVehicleId },
+          data: { odometerReading: BigInt(body.odometer) },
+        });
+      }
+
+      // Emit FUEL_FILLED event atomically inside withTenantRls outbox
+      await getEventBus().publish<FuelFilledPayload>({
+        eventType: FUEL_FILLED,
+        tenantId: ctx.tenantId,
+        aggregateId: fuelLogId,
+        aggregateType: 'fuel_log',
+        sourceModule: 'driver-app',
+        payload: {
+          fuelLogId,
+          vehicleId: resolvedVehicleId,
+          driverId: ctx.userId ?? null,
+          fuelDate: fuelDate.toISOString().slice(0, 10),
+          liters: body.liters,
+          costPerLiter: body.liters > 0 ? (totalCost / body.liters) : null,
+          totalCost,
+          station: locationName,
+        },
+      }, tx);
+
       return NextResponse.json({
         ok: true,
-        entryId: body.id,
+        id: entryId,
+        entryId,
+        fuelLogId,
         shiftId,
         hasBillPhoto: !!body.billPhoto,
       }, { status: 201 });
-  });
+    });
+  } catch (err) {
+    console.error('[driver-app/fuel-entries POST]', err);
+    return NextResponse.json({ error: 'Failed to record fuel entry' }, { status: 500 });
+  }
 }
 

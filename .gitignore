@@ -130,3 +130,14 @@ test_claude.py
 # Security harness: evidence reports and the accounts file (names env vars, no secrets, but site-specific)
 /security-evidence/
 /harness.accounts.json
+
+# DevOps hygiene: Build binaries, DEX, documents, logs, temp artifacts
+*.dex
+*.docx
+tmp/
+/tmp/
+errors.txt
+tsc-*.txt
+tsc-*.log
+
+.agents/

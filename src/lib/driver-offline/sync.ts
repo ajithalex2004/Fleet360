@@ -32,15 +32,27 @@ import {
   getReadySyncItems,
   incrementSyncAttempt,
   dequeueSync,
+  quarantineSyncItem,
+  getDvirPhotos,
   getSyncQueue,
   type OfflineSyncQueueItem,
 } from './db';
 
-/** Where the API lives. Defaults to same-origin (web dev), or set
- *  NEXT_PUBLIC_API_BASE in the native build to point at the production
- *  API. */
-const API_BASE =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE) || '';
+/** Where the API lives. Resolves valid origin in web and native builds. */
+function getApiBase(): string {
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, '');
+  }
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('capacitor://') && !window.location.origin.includes('localhost:')) {
+    return window.location.origin;
+  }
+  return '';
+}
+
+const API_BASE = getApiBase();
 
 /** Max attempts before we mark the item FAILED and stop auto-retrying. */
 const MAX_AUTO_ATTEMPTS = 20;
@@ -49,15 +61,31 @@ const MAX_AUTO_ATTEMPTS = 20;
  *  longer than this between retries. */
 const MAX_BACKOFF_MS = 5 * 60_000;
 
-/** The driver carries an `xl-driver-session` cookie after biometric
- *  login. Native HTTP requests go through the same Cookie header. We
- *  don't try to forward Authorization headers — the cookie IS the auth. */
+/** Uses Bearer JWT authentication from storage or cookie. */
 function authHeader(): Record<string, string> {
-  if (typeof document === 'undefined') return {};
-  const cookie = document.cookie
-    .split('; ')
-    .find((c) => c.startsWith('xl-driver-session='));
-  return cookie ? { Cookie: cookie } : {};
+  const headers: Record<string, string> = {};
+  if (typeof localStorage !== 'undefined') {
+    const token = localStorage.getItem('fleet360_driver_token') ||
+                  localStorage.getItem('xl_driver_token') ||
+                  localStorage.getItem('auth_token') ||
+                  localStorage.getItem('token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  if (typeof document !== 'undefined') {
+    const cookie = document.cookie
+      .split('; ')
+      .find((c) => c.startsWith('xl-driver-session='));
+    if (cookie) {
+      const val = cookie.split('=')[1];
+      if (val && !headers['Authorization']) {
+        headers['Authorization'] = `Bearer ${decodeURIComponent(val)}`;
+      }
+      headers['Cookie'] = cookie;
+    }
+  }
+  return headers;
 }
 
 /** Network status from the Capacitor Network plugin. When the plugin
@@ -113,6 +141,13 @@ export async function drain(): Promise<number> {
           synced += 1;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          const is4xx = msg.startsWith('permanent 4') || ((err as any)?.status >= 400 && (err as any)?.status < 500);
+          if (is4xx) {
+            // Quarantine unrecoverable 4xx items so they do not block the queue
+            console.warn('[driver-offline.sync] Quarantined unrecoverable 4xx item:', item.endpoint, msg);
+            await quarantineSyncItem(item.id, msg);
+            continue; // Continue draining subsequent items
+          }
           const backoff = nextBackoffMs(item.attempts);
           const giveUp = item.attempts + 1 >= MAX_AUTO_ATTEMPTS;
           await incrementSyncAttempt(
@@ -230,7 +265,49 @@ export interface EnqueueDvirInput {
   };
 }
 
+async function blobToBase64(blob: Blob): Promise<string> {
+  if (typeof FileReader === 'undefined') {
+    if (typeof (blob as any).arrayBuffer === 'function') {
+      const ab = await (blob as any).arrayBuffer();
+      return Buffer.from(ab).toString('base64');
+    }
+    return '';
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = reader.result as string;
+      const base64 = res.includes(',') ? res.split(',')[1] : res;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function enqueueDvirSubmission(input: EnqueueDvirInput): Promise<string> {
+  // Query IndexedDB dvir_photos for this dvir and serialize base64 data
+  let serializedPhotos: Array<{ id: string; mime: string; size: number; data: string }> = [];
+  try {
+    const photos = await getDvirPhotos(input.dvir.id);
+    serializedPhotos = await Promise.all(
+      photos.map(async (p) => {
+        let base64 = '';
+        if (p.blob) {
+          base64 = await blobToBase64(p.blob);
+        }
+        return {
+          id: p.id,
+          mime: p.mime || 'image/jpeg',
+          size: p.size || base64.length,
+          data: base64,
+        };
+      }),
+    );
+  } catch (e) {
+    console.warn('[driver-offline.sync] Error reading dvir_photos from IndexedDB:', e);
+  }
+
   return enqueueSync({
     kind: 'DVIR',
     endpoint: `/api/driver-app/dvir`,
@@ -240,6 +317,7 @@ export async function enqueueDvirSubmission(input: EnqueueDvirInput): Promise<st
       driverId: input.driverId,
       tenantId: input.tenantId,
       dvir: input.dvir,
+      photos: serializedPhotos,
     }),
   });
 }

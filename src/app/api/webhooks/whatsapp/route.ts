@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { WebhookReceiptService } from '@/lib/exchange/webhook-receipt-service';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -127,6 +128,23 @@ async function handleInboundTwilioMessage(form: URLSearchParams) {
   });
 }
 
+function verifyMetaHubSignature(rawBody: string, signatureHeader: string | null, secret: string | undefined): boolean {
+  if (!signatureHeader || !secret) return false;
+  const parts = signatureHeader.split('=');
+  if (parts.length !== 2 || parts[0] !== 'sha256') return false;
+  const signatureHex = parts[1];
+
+  const expectedHex = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+  const expectedBuf = Buffer.from(expectedHex, 'utf8');
+  const actualBuf = Buffer.from(signatureHex, 'utf8');
+  if (expectedBuf.length !== actualBuf.length) return false;
+  try {
+    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * GET /api/webhooks/whatsapp
  * Meta WhatsApp Webhook Verification Handshake
@@ -137,7 +155,11 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'fleet360_exchange_webhook_token';
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  if (!verifyToken) {
+    console.error('[whatsapp webhook] WHATSAPP_VERIFY_TOKEN is not configured');
+    return new NextResponse('Configuration Error', { status: 503 });
+  }
 
   if (mode === 'subscribe' && secretsEqual(token, verifyToken)) {
     return new NextResponse(challenge, { status: 200 });
@@ -158,13 +180,24 @@ export async function POST(req: NextRequest) {
   const contentType = req.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/x-www-form-urlencoded')) {
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!authToken) {
+      console.error('[whatsapp webhook] rejected: TWILIO_AUTH_TOKEN unset');
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+    }
+
     const rawBody = await req.text();
     const form = new URLSearchParams(rawBody);
 
     const signature = req.headers.get('x-twilio-signature');
+    if (!signature) {
+      console.error('[whatsapp webhook] rejected: missing X-Twilio-Signature');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
+
     const url = twilioWebhookUrl(req, '/api/webhooks/whatsapp');
-    if (!verifyTwilioSignature(url, form, signature, process.env.TWILIO_AUTH_TOKEN)) {
-      console.error('[whatsapp webhook] rejected: invalid or missing X-Twilio-Signature');
+    if (!verifyTwilioSignature(url, form, signature, authToken)) {
+      console.error('[whatsapp webhook] rejected: invalid X-Twilio-Signature');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
     }
 
@@ -177,7 +210,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const appSecret = process.env.WHATSAPP_APP_SECRET;
+    if (!appSecret) {
+      console.error('[whatsapp webhook] rejected: WHATSAPP_APP_SECRET unset');
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+    }
+
+    const hubSignature = req.headers.get('x-hub-signature-256');
+    if (!hubSignature) {
+      console.error('[whatsapp webhook] rejected: missing X-Hub-Signature-256');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
+
+    const rawBody = await req.text();
+    if (!verifyMetaHubSignature(rawBody, hubSignature, appSecret)) {
+      console.error('[whatsapp webhook] rejected: invalid X-Hub-Signature-256');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+    }
+
+    const body = JSON.parse(rawBody);
 
     // Check for WhatsApp status receipts in entry[].changes[].value.statuses[]
     const entries = body.entry || [];

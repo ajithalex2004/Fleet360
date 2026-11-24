@@ -26,13 +26,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { createPaymentIntent, confirmPaymentIntent } from '@/lib/leasing/payment-intents-store';
 import { recomputeSettlementStatus } from '@/lib/leasing/return-workflow';
 import { mirrorLeaseInvoiceToFinance, resetInvoiceDunningOnSettlement } from '@/lib/finance/module-ledger';
+import { getInvoiceOutstandingBalance } from '@/lib/leasing/invoice-balance';
+import { postLeasePaymentToGl } from '@/lib/leasing/leasing-gl-posting';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -68,17 +69,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       };
       const confirmedBy = req.headers.get('x-user-id') ?? 'staff';
 
-      // Outstanding balance calculation
-      const paidRows = await tx.$queryRawUnsafe<Array<{ total_paid: string | null }>>(
-        `SELECT COALESCE(SUM(amount), 0)::text AS total_paid
-         FROM lease_payment_intents
-         WHERE tenant_id = $1 AND invoice_id = $2 AND status = 'RECEIVED'`,
-        tenantId,
-        invoice.id,
-      );
-      const currentPaid = Number(paidRows[0]?.total_paid || 0);
-      const invoiceTotal = Number(invoice.totalAmount);
-      const outstandingBalance = Math.round((invoiceTotal - currentPaid + Number.EPSILON) * 100) / 100;
+      // Outstanding balance calculation (accounting for both payments and deposit applications)
+      const outstandingBalance = await getInvoiceOutstandingBalance(tx, tenantId, invoice.id);
 
       // Payment amount validation
       const amount = body.amount != null ? Number(body.amount) : outstandingBalance;
@@ -138,32 +130,56 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         receiptId = receipt.id;
       }
 
-      // Record payment intent atomically
-      const intentRows = await tx.$queryRawUnsafe<any[]>(
-        `INSERT INTO lease_payment_intents
-           (tenant_id, invoice_id, lessee_id, amount, currency, provider, provider_ref,
-            method, status, initiated_by, initiated_by_user, reference_code, notes,
-            confirmed_at, confirmed_by, receipt_id)
-         VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, 'RECEIVED', 'STAFF', $8, $9, $10, NOW(), $8, $11)
-         RETURNING id::text, status, amount::text, currency, reference_code`,
-        tenantId,
-        invoice.id,
-        invoice.lesseeId,
-        amount,
-        invoice.currency ?? 'AED',
-        bankRef,
-        body.method ?? 'BANK_TRANSFER',
-        confirmedBy,
-        referenceCode,
-        body.notes ?? null,
-        receiptId,
-      );
-      const intent = intentRows[0];
+      // Record payment intent atomically or confirm existing intent
+      let intent: any = null;
+      if (body.intentId) {
+        const updatedIntents = await tx.$queryRawUnsafe<any[]>(
+          `UPDATE lease_payment_intents
+              SET status = 'RECEIVED',
+                  confirmed_at = NOW(),
+                  confirmed_by = $1,
+                  receipt_id = COALESCE(receipt_id, $2),
+                  method = COALESCE($3, method),
+                  provider_ref = COALESCE($4, provider_ref)
+            WHERE id = $5::uuid AND tenant_id = $6
+            RETURNING id::text, status, amount::text, currency, reference_code`,
+          confirmedBy,
+          receiptId,
+          body.method ?? 'BANK_TRANSFER',
+          bankRef,
+          body.intentId,
+          tenantId,
+        );
+        intent = updatedIntents[0];
+      }
+
+      if (!intent) {
+        const intentRows = await tx.$queryRawUnsafe<any[]>(
+          `INSERT INTO lease_payment_intents
+             (tenant_id, invoice_id, lessee_id, amount, currency, provider, provider_ref,
+              method, status, initiated_by, initiated_by_user, reference_code, notes,
+              confirmed_at, confirmed_by, receipt_id)
+           VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, 'RECEIVED', 'STAFF', $8, $9, $10, NOW(), $8, $11)
+           RETURNING id::text, status, amount::text, currency, reference_code`,
+          tenantId,
+          invoice.id,
+          invoice.lesseeId,
+          amount,
+          invoice.currency ?? 'AED',
+          bankRef,
+          body.method ?? 'BANK_TRANSFER',
+          confirmedBy,
+          referenceCode,
+          body.notes ?? null,
+          receiptId,
+        );
+        intent = intentRows[0];
+      }
 
       // Update invoice status based on remaining balance
-      const newTotalPaid = Math.round((currentPaid + amount + Number.EPSILON) * 100) / 100;
-      const newOutstanding = Math.max(0, Math.round((invoiceTotal - newTotalPaid + Number.EPSILON) * 100) / 100);
+      const newOutstanding = Math.max(0, Math.round((outstandingBalance - amount + Number.EPSILON) * 100) / 100);
       const isFullyPaid = newOutstanding <= 0.005;
+      const newTotalPaid = Math.max(0, Math.round((Number(invoice.totalAmount ?? 0) - newOutstanding) * 100) / 100);
 
       await tx.leaseInvoice.update({
         where: { id: invoice.id },
@@ -172,6 +188,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           paidAt: isFullyPaid ? new Date() : invoice.paidAt,
           paymentRef: referenceCode,
         },
+      });
+
+      // Post double-entry cash receipt to General Ledger
+      await postLeasePaymentToGl(tx as any, {
+        invoiceId: invoice.id,
+        tenantId,
+        amount,
+        paymentRef: referenceCode,
+        paymentMethod: body.method,
+        preparedBy: confirmedBy,
+      }).catch((err) => {
+        console.warn('[leasing/record-payment] postLeasePaymentToGl warning:', err);
       });
 
       // A payment against this invoice can be the last piece of ANY of a

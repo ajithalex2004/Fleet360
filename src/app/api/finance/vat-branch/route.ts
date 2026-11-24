@@ -24,8 +24,8 @@ function quarterDates(q: string): { start: string; end: string } | null {
   if (!match) return null;
   const [, qNum, year] = match;
   const startMonth = (parseInt(qNum) - 1) * 3;
-  const start = new Date(parseInt(year), startMonth, 1);
-  const end   = new Date(parseInt(year), startMonth + 3, 0);
+  const start = new Date(Date.UTC(parseInt(year), startMonth, 1));
+  const end   = new Date(Date.UTC(parseInt(year), startMonth + 3, 0));
   return {
     start: start.toISOString().split('T')[0],
     end:   end.toISOString().split('T')[0],
@@ -40,8 +40,9 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const { searchParams } = new URL(req.url);
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const { searchParams } = new URL(req.url);
       const quarter  = searchParams.get('quarter') ?? '';
 
       let startDate = searchParams.get('startDate') ?? '';
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
 
       if (!startDate) {
         const now = new Date();
-        const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+        const qStart = new Date(Date.UTC(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) * 3, 1));
         startDate = qStart.toISOString().split('T')[0];
         endDate   = now.toISOString().split('T')[0];
       }
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
       const [tenant] = await tx.$queryRawUnsafe<TenantRow[]>(
         `SELECT name, trn, code, contact_email FROM tenants WHERE id::text = $1`,
         tenantId
-      ).catch(() => [] as TenantRow[]);
+      );
 
       // ── VAT by branch (output tax on sales) ─────────────────────────────────
       type VatRow = {
@@ -105,11 +106,11 @@ export async function GET(req: NextRequest) {
          GROUP BY b.id, b.branch_name, b.emirate, b.trade_license_no, b.trade_license_authority, b.cost_center_code
          ORDER BY b.emirate ASC, taxable_supplies DESC`,
         startDate, endDate, tenantId
-      ).catch(err => { console.error('[vat-branch output]', err); return [] as VatRow[]; });
+      );
 
       // Unassigned invoices (no branch)
       type UnassRow = { taxable_supplies: string|number; vat_output: string|number; zero_rated: string|number; invoice_count: bigint };
-      const [unassigned] = await tx.$queryRawUnsafe<UnassRow[]>(
+      const unassignedRows = await tx.$queryRawUnsafe<UnassRow[]>(
         `SELECT
            COALESCE(SUM(CASE WHEN vat_rate > 0 THEN subtotal ELSE 0 END), 0) AS taxable_supplies,
            COALESCE(SUM(vat_amount), 0)                                       AS vat_output,
@@ -122,7 +123,8 @@ export async function GET(req: NextRequest) {
            AND payment_status NOT IN ('DRAFT','CANCELLED')
            AND issue_date BETWEEN $2::date AND $3::date`,
         tenantId, startDate, endDate
-      ).catch(() => [] as UnassRow[]).then(r => r.length ? r : [{ taxable_supplies: 0, vat_output: 0, zero_rated: 0, invoice_count: BigInt(0) }]);
+      );
+      const unassigned = unassignedRows[0] ?? { taxable_supplies: 0, vat_output: 0, zero_rated: 0, invoice_count: BigInt(0) };
 
       // ── Input VAT (purchases / expenses) ────────────────────────────────────
       type InputRow = {
@@ -147,7 +149,7 @@ export async function GET(req: NextRequest) {
            AND b.deleted_at IS NULL
          GROUP BY b.id, b.branch_name`,
         startDate, endDate, tenantId
-      ).catch(() => [] as InputRow[]);
+      );
 
       const inputMap: Record<string, { input_vat: number; taxable_purchases: number }> = {};
       for (const r of inputVatByBranch) {
@@ -239,6 +241,10 @@ export async function GET(req: NextRequest) {
           filing_basis:  'ACCRUAL',
         },
       });
-  });
+    });
+  } catch (err) {
+    console.error('[finance/vat-branch GET]', err);
+    return NextResponse.json({ error: 'Failed to generate branch VAT report' }, { status: 500 });
+  }
 }
 

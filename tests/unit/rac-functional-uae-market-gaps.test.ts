@@ -27,6 +27,7 @@ vi.mock('@/lib/rental/rbac', () => ({
 
 vi.mock('@/lib/workflow/approvals', () => ({
   approvalRequired: vi.fn(async () => false),
+  requireApproved: vi.fn(async () => null),
   withApprovalStart: vi.fn(),
 }));
 
@@ -42,7 +43,7 @@ vi.mock('@/lib/rls', async () => {
   const actual = await vi.importActual<typeof import('@/lib/rls')>('@/lib/rls');
   return {
     ...actual,
-    withTenantRls: vi.fn(async (_prisma: unknown, _tenantId: string, fn: (tx: any) => unknown) =>
+    withTenantRls: vi.fn(async (_prisma: unknown, _tenantId: string, fn: (tx: unknown) => unknown) =>
       fn(mockTxState.currentTx),
     ),
   };
@@ -63,7 +64,6 @@ import {
 } from '@/lib/finance/rac-gl-posting';
 import { calculateUaeTollTariff } from '@/lib/fines/toll-reconciliation';
 import {
-  RentalSecurityError,
   assertAdditionalDriversEligible,
   assertCustomerEligibleForRental,
   isValidEmiratesIdNumber,

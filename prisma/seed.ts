@@ -21,7 +21,7 @@ const STATUS = {
 async function main() {
     // -- Vehicles ----------------------------------------------------------
     const v1 = await prisma.vehicle.upsert({
-        where: { licensePlate: 'DXB-12345' },
+        where: { tenantId_licensePlate: { tenantId: DEFAULT_TENANT_ID, licensePlate: 'DXB-12345' } },
         update: {},
         create: {
             id: 'v1',
@@ -40,7 +40,7 @@ async function main() {
     });
 
     const v2 = await prisma.vehicle.upsert({
-        where: { licensePlate: 'DXB-67890' },
+        where: { tenantId_licensePlate: { tenantId: DEFAULT_TENANT_ID, licensePlate: 'DXB-67890' } },
         update: {},
         create: {
             id: 'v2',
@@ -59,7 +59,7 @@ async function main() {
     });
 
     const v3 = await prisma.vehicle.upsert({
-        where: { licensePlate: 'DXB-54321' },
+        where: { tenantId_licensePlate: { tenantId: DEFAULT_TENANT_ID, licensePlate: 'DXB-54321' } },
         update: {},
         create: {
             id: 'v3',

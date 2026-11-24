@@ -18,8 +18,6 @@ import { proxyToGoBackend } from '@/lib/api-shim';
 import { API_VERSION_HEADER, CURRENT_API_VERSION } from '@/lib/api-version';
 import {
   isPublicPath,
-  PUBLIC_EXACT,
-  PUBLIC_PREFIXES,
   PROTECTED_UI_PREFIXES,
   CRON_SESSION_BYPASS_PATHS,
 } from '@/lib/auth-route-policies';
@@ -183,7 +181,7 @@ function applyCorsHeaders(res: NextResponse, origin: string | null): NextRespons
     res.headers.set('Access-Control-Allow-Origin', origin);
     res.headers.set('Access-Control-Allow-Credentials', 'true');
     res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Offline-Client, X-Offline-Item-Id, X-Offline-Created-At, X-Offline-Attempts, X-Offline-Sync-Id, X-Offline-Timestamp');
     res.headers.set('Vary', 'Origin');
   }
   return res;
@@ -208,7 +206,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
     if (origin && isAllowedCorsOrigin(origin)) {
       corsHeaders.set('Access-Control-Allow-Origin', origin);
       corsHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Offline-Client, X-Offline-Item-Id, X-Offline-Created-At, X-Offline-Attempts, X-Offline-Sync-Id, X-Offline-Timestamp');
       corsHeaders.set('Access-Control-Allow-Credentials', 'true');
       corsHeaders.set('Access-Control-Max-Age', '86400');
       corsHeaders.set('Vary', 'Origin');
@@ -279,17 +277,6 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
   // 1. Public routes — no session required. Client-sent identity headers
   // are removed; driver-app requests get the identity of their verified
   // session cookie, if they have one.
-  if (pathname.startsWith('/api/driver/')) {
-    const driverSession = await verifyDriverAppSession(request);
-    if (driverSession) {
-      const refusal = residencyRefusal(pathname, driverSession.dataResidency);
-      if (refusal) return refusal;
-      return NextResponse.next({
-        request: { headers: withVerifiedIdentity(request.headers, driverSession) },
-      });
-    }
-  }
-
   if (isPublicRoute(pathname)) {
     // Preserve legacy targeting as an untrusted selector. Public job handlers
     // must authenticate independently before honoring it.
@@ -312,7 +299,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
   }
 
   // 2. Verify session cookie (or Bearer session token from mobile APK WebView)
-  const token = bearerToken(request.headers) || request.cookies.get('xl-session')?.value;
+  const token = bearerToken(request.headers) || request.cookies.get('xl-session')?.value || request.cookies.get('xl-driver-session')?.value;
   const session = token ? await verifySession(token).catch(() => null) : null;
 
   // 3. Handle unauthenticated requests
@@ -379,7 +366,7 @@ async function middlewareInner(request: NextRequest, origin: string | null): Pro
 
   // 4a. Authorization dry run (src/lib/authz/dry-run.ts): answer the admin
   // gate and policy decision in headers without running anything.
-  const effectiveAuthzRole = session.impersonatedBy ? 'SUPER_ADMIN' : session.role;
+  const effectiveAuthzRole = session.role;
   if (pathname.startsWith('/api/') && request.headers.get(DRY_RUN_HEADER) === '1') {
     const level = isAdminApiPath(pathname) ? requiredAdminLevel(pathname, request.method) : null;
     const headers = dryRunHeaders({

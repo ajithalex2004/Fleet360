@@ -77,7 +77,22 @@ export default function JobClosurePage() {
                 completionDate: new Date().toISOString()
             };
 
-            // TODO: Save to backend
+            // Call backend API to close the maintenance request
+            const res = await fetch(`/api/maintenance-requests/${request.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: MaintenanceStatus.CLOSED,
+                    completionDate: new Date().toISOString(),
+                    historyNote: 'Job closed and verified by workshop manager',
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.error || 'Failed to close job');
+                return;
+            }
+
             alert('Job closed successfully! Closure notifications sent to all stakeholders.');
             router.push('/maintenance/requests');
         } catch (error) {

@@ -17,7 +17,8 @@ import { getTenantAccessMatrix, replaceTenantAccessMatrix } from '@/lib/service-
 import { loadServiceConfig } from '@/lib/service-config/load';
 import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
-import type { TicketType } from '@/types/service-tickets';
+import type { TicketType, TenantTicketTypeAccess } from '@/types/service-tickets';
+import { listTicketCatalogue } from '@/lib/service-tickets/catalogue';
 import type { ServiceTone } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -49,10 +50,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!auth.ok) return auth.res;
 
   try {
-    const matrix = await getTenantAccessMatrix(tenantId);
+    const baseMatrix = await getTenantAccessMatrix(tenantId);
     // Seed a new tenant's service catalogue once, before the per-type reads
     // below run in parallel.
     await runAsTenant(tenantId, () => ensureSeededForTenant(tenantId));
+    // Tenant-defined ticket types (e.g. the Field Service Management catalogue) appear too,
+    // enabled by default until a row says otherwise.
+    const catalogue = await runAsTenant(tenantId, () => listTicketCatalogue(tenantId));
+    const known = new Set(baseMatrix.map((r) => r.ticketType));
+    const matrix: TenantTicketTypeAccess[] = [
+      ...baseMatrix,
+      ...catalogue.filter((e) => !known.has(e.key)).map((e) => ({ tenantId, ticketType: e.key, enabled: true, slaOverrideHours: null })),
+    ];
 
     // Enrich each row with presentation metadata sourced from the Service
     // Configuration Engine. The matrix UI uses this to render the type
@@ -97,7 +106,8 @@ async function handlePUT(req: NextRequest, { params }: RouteParams) {
   }
 
   // Validate every row + reject unknown types.
-  const validTypes = new Set<string>(TICKET_TYPES_ORDER);
+  const catalogue = await runAsTenant(tenantId, () => listTicketCatalogue(tenantId)).catch(() => []);
+  const validTypes = new Set<string>([...TICKET_TYPES_ORDER, ...catalogue.map((e) => e.key)]);
   const cleaned = body.rows.map(r => {
     if (!r.ticketType || !validTypes.has(r.ticketType)) {
       throw new Error(`Unknown ticketType: ${r.ticketType}`);

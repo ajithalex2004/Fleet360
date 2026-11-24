@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import type { TicketType, TicketPriority } from '@/types/service-tickets';
+import { isTicketPriority, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import {
   resolveTicketSlaMatrixBatch, pickSlaHours, type SlaMatrix,
@@ -214,6 +214,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         p++;
       };
 
+      if (body.priority !== undefined && !isTicketPriority(body.priority)) {
+        return NextResponse.json({ ok: false, error: 'priority must be Low, Medium, High or Critical.' }, { status: 400 });
+      }
       setIf('status',                 body.status);
       setIf('priority',               body.priority);
       setIf('title',                  body.title);

@@ -15,7 +15,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { TICKET_DEPARTMENTS, type TicketDepartment } from '@/types/service-tickets';
+import { type TicketDepartment } from '@/types/service-tickets';
+import { listDepartments } from '@/lib/service-tickets/departments';
 
 export const runtime = 'nodejs';
 
@@ -64,6 +65,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       tx.$queryRawUnsafe<
         Array<{
           id: string;
+          tenant_id: string;
           ticket_type: string;
           readable_id: string | null;
           title: string;
@@ -77,7 +79,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           custom_fields: Record<string, unknown>;
         }>
       >(
-        `SELECT id, ticket_type, readable_id, title, description, priority, status,
+        `SELECT id, tenant_id, ticket_type, readable_id, title, description, priority, status,
                 created_at::text, updated_at::text, due_date::text, history, custom_fields
          FROM service_tickets
          WHERE custom_fields->>'trackingToken' = $1
@@ -107,7 +109,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
     const customFields = ticket.custom_fields || {};
     const assignedDepartment = (customFields.assignedDepartment as TicketDepartment) || 'OPERATIONS_TRIAGE';
-    const deptDef = TICKET_DEPARTMENTS.find((d) => d.key === assignedDepartment);
+    const departments = await listDepartments(ticket.tenant_id, { includeInactive: true });
+    const deptDef = departments.find((d) => d.key === assignedDepartment);
 
     // Filter history to public-safe milestones (masking internal staff usernames/emails)
     const rawHistory = Array.isArray(ticket.history) ? ticket.history : [];

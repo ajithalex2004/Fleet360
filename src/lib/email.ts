@@ -216,7 +216,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
 
   const fromAddr = msg.from ?? (cfg.fromName ? `"${cfg.fromName}" <${cfg.fromAddr}>` : cfg.fromAddr);
 
-  const secure = cfg.encryption === 'ssl';
+  const secure = cfg.encryption.trim().toUpperCase() === 'SSL' || cfg.port === 465;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transportOptions: Record<string, any> = {
     host: cfg.host,

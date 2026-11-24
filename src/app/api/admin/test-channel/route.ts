@@ -9,26 +9,88 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { smtpTlsOptions } from '@/lib/smtp-tls';
+import {
+  canReuseStoredSmtpPassword,
+  canReuseStoredSmsAuthToken,
+  redactPlatformSettingSecrets,
+} from '@/lib/platform-settings-secrets';
+
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
+const STORED_CHANNEL_KEYS = [
+  'smtp_host',
+  'smtp_port',
+  'smtp_username',
+  'smtp_encryption',
+  'smtp_password',
+  'sms_account_sid',
+  'sms_auth_token',
+] as const;
+
+async function loadStoredChannelSettings(): Promise<Record<string, string>> {
+  try {
+    const rows = await withPlatformAdmin(prisma, (tx) =>
+      tx.$queryRawUnsafe<Array<{ key: string; value: string }>>(
+        `SELECT key, value FROM platform_settings WHERE key = ANY($1::text[])`,
+        [...STORED_CHANNEL_KEYS],
+      ),
+    );
+    const out: Record<string, string> = {};
+    for (const r of rows) {
+      out[r.key] = r.value ?? '';
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 async function handlePOST(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
+    return NextResponse.json({ error: authz.error }, { status: authz.status, headers: NO_STORE_HEADERS });
   }
-  const { tenantId } = authz;
+  if (authz.role !== 'SUPER_ADMIN') {
+    return NextResponse.json(
+      { error: 'Only a platform admin can test notification channels.' },
+      { status: 403, headers: NO_STORE_HEADERS },
+    );
+  }
 
   try {
-    const body = await request.json() as {
-      channel: 'email' | 'sms';
-      settings: Record<string, string>;
-      toEmail?: string;
-    };
+    let parsed: unknown;
+    try {
+      parsed = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return NextResponse.json({ error: 'Invalid request body.' }, { status: 400, headers: NO_STORE_HEADERS });
+    }
 
-    const { channel, settings, toEmail } = body;
+    const body = parsed as Record<string, unknown>;
+    const channel = typeof body.channel === 'string' ? body.channel : '';
+    const toEmail = typeof body.toEmail === 'string' ? body.toEmail : undefined;
+    const rawSettings = body.settings;
+    if (
+      rawSettings !== undefined &&
+      (typeof rawSettings !== 'object' || rawSettings === null || Array.isArray(rawSettings))
+    ) {
+      return NextResponse.json({ error: 'Invalid settings object.' }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+    const settings: Record<string, string> = {};
+    if (rawSettings && typeof rawSettings === 'object') {
+      for (const [k, v] of Object.entries(rawSettings as Record<string, unknown>)) {
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+          settings[k] = String(v);
+        }
+      }
+    }
 
     if (channel === 'email') {
       return await testEmail(settings, toEmail);
@@ -38,11 +100,11 @@ async function handlePOST(request: NextRequest) {
       return await testSms(settings);
     }
 
-    return NextResponse.json({ error: `Unknown channel: ${channel}` }, { status: 400 });
-    } catch (err) {
+    return NextResponse.json({ error: `Unknown channel: ${channel}` }, { status: 400, headers: NO_STORE_HEADERS });
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[test-channel]', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[test-channel]', redactPlatformSettingSecrets(msg));
+    return NextResponse.json({ error: 'Channel test failed.' }, { status: 500, headers: NO_STORE_HEADERS });
   }
 }
 
@@ -65,14 +127,14 @@ async function testEmail(
   if (!recipient) {
     return NextResponse.json(
       { error: 'No recipient address. Fill in the "From Email" field or provide a toEmail.' },
-      { status: 400 },
+      { status: 400, headers: NO_STORE_HEADERS },
     );
   }
 
   if (provider === 'none') {
     return NextResponse.json(
       { error: 'Email provider is set to "none". Select SMTP or another provider first.' },
-      { status: 400 },
+      { status: 400, headers: NO_STORE_HEADERS },
     );
   }
 
@@ -84,7 +146,7 @@ async function testEmail(
   // their SDK — return a helpful message.
   return NextResponse.json(
     { error: `Live testing for "${provider}" is not yet implemented. Use SMTP to verify connectivity.` },
-    { status: 400 },
+    { status: 400, headers: NO_STORE_HEADERS },
   );
 }
 
@@ -94,23 +156,34 @@ async function testSmtp(
   fromAddr: string,
   recipient: string,
 ): Promise<NextResponse> {
-  const host       = settings['smtp_host'];
-  const port       = parseInt(settings['smtp_port'] || '587', 10);
-  const username   = settings['smtp_username'];
-  const password   = settings['smtp_password'];
-  const encryption = settings['smtp_encryption'] || 'tls'; // tls | ssl | none
+  const host       = (settings['smtp_host'] ?? '').trim();
+  const portRaw    = (settings['smtp_port'] ?? '587').trim() || '587';
+  const port       = parseInt(portRaw, 10);
+  const username   = (settings['smtp_username'] ?? '').trim();
+  const encryption = (settings['smtp_encryption'] || 'tls').trim(); // tls | ssl | none
+  const suppliedPassword = (settings['smtp_password'] ?? '').trim();
 
-  if (!host || !username || !password) {
+  if (!host || !username || !Number.isInteger(port) || port < 1 || port > 65535) {
     return NextResponse.json(
-      { error: 'SMTP Host, Username, and Password are all required.' },
-      { status: 400 },
+      { error: 'SMTP Host, valid Port, Username, and Password are all required.' },
+      { status: 400, headers: NO_STORE_HEADERS },
     );
+  }
+
+  let password = suppliedPassword;
+  if (!password) {
+    const stored = await loadStoredChannelSettings();
+    const reuse = canReuseStoredSmtpPassword(stored, { host, port, username, encryption });
+    if (!reuse.ok) {
+      return NextResponse.json({ error: reuse.error }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+    password = reuse.password;
   }
 
   try {
     const nodemailer = await import('nodemailer');
 
-    const secure = encryption === 'ssl'; // true only for implicit SSL (port 465)
+    const secure = encryption.toUpperCase() === 'SSL' || port === 465; // true only for implicit SSL (port 465)
     const transportOptions: Record<string, unknown> = {
       host,
       port,
@@ -169,13 +242,21 @@ async function testSmtp(
       `,
     });
 
-    return NextResponse.json({
-      ok: true,
-      message: `Test email delivered to ${recipient}`,
-      messageId: info.messageId,
-    });
-    } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      {
+        ok: true,
+        message: `Test email delivered to ${recipient}`,
+        messageId: info.messageId,
+      },
+      { headers: NO_STORE_HEADERS },
+    );
+  } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const msg = redactPlatformSettingSecrets(rawMsg, [
+      password,
+      `${username}:${password}`,
+      `\0${username}\0${password}`,
+    ]);
     console.error('[test-channel/smtp]', msg);
 
     // Give actionable error messages for common failures
@@ -186,7 +267,7 @@ async function testSmtp(
     else if (msg.includes('STARTTLS'))  friendly = `The server requires STARTTLS. Set Encryption to "TLS".`;
     else if (msg.includes('certificate')) friendly = `SSL certificate error: ${msg}`;
 
-    return NextResponse.json({ error: friendly }, { status: 502 });
+    return NextResponse.json({ error: friendly }, { status: 502, headers: NO_STORE_HEADERS });
   }
 }
 
@@ -198,25 +279,35 @@ async function testSms(settings: Record<string, string>): Promise<NextResponse> 
   if (provider === 'none') {
     return NextResponse.json(
       { error: 'SMS provider is set to "none". Select a provider first.' },
-      { status: 400 },
+      { status: 400, headers: NO_STORE_HEADERS },
     );
   }
 
   if (provider === 'twilio') {
-    const sid   = settings['sms_account_sid'];
-    const token = settings['sms_auth_token'];
-    const from  = settings['sms_from_number'];
+    const sid   = (settings['sms_account_sid'] ?? '').trim();
+    const suppliedToken = (settings['sms_auth_token'] ?? '').trim();
+    const from  = (settings['sms_from_number'] ?? '').trim();
 
-    if (!sid || !token || !from) {
+    if (!sid || !from) {
       return NextResponse.json(
         { error: 'Twilio Account SID, Auth Token, and Sender Number are required.' },
-        { status: 400 },
+        { status: 400, headers: NO_STORE_HEADERS },
       );
+    }
+
+    let token = suppliedToken;
+    if (!token) {
+      const stored = await loadStoredChannelSettings();
+      const reuse = canReuseStoredSmsAuthToken(stored, sid);
+      if (!reuse.ok) {
+        return NextResponse.json({ error: reuse.error }, { status: 400, headers: NO_STORE_HEADERS });
+      }
+      token = reuse.token;
     }
 
     // Just verify credentials by fetching account info
     try {
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}.json`;
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}.json`;
       const res = await fetch(url, {
         headers: {
           Authorization: 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
@@ -226,16 +317,20 @@ async function testSms(settings: Record<string, string>): Promise<NextResponse> 
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { message?: string }).message ?? `HTTP ${res.status}`);
       }
-      return NextResponse.json({ ok: true, message: 'Twilio credentials verified successfully.' });
-      } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return NextResponse.json({ error: `Twilio verification failed: ${msg}` }, { status: 502 });
+      return NextResponse.json(
+        { ok: true, message: 'Twilio credentials verified successfully.' },
+        { headers: NO_STORE_HEADERS },
+      );
+    } catch (err) {
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      const safeMsg = redactPlatformSettingSecrets(rawMsg, [token, `${sid}:${token}`]);
+      return NextResponse.json({ error: `Twilio verification failed: ${safeMsg}` }, { status: 502, headers: NO_STORE_HEADERS });
     }
   }
 
   return NextResponse.json(
     { error: `Live testing for "${provider}" SMS is not yet implemented.` },
-    { status: 400 },
+    { status: 400, headers: NO_STORE_HEADERS },
   );
 }
 

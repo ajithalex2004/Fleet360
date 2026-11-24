@@ -41,16 +41,16 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // 2. Fetch available vehicles for this tenant
+      // 2. Fetch active vehicles for this tenant (real DB state only)
       const vehicles = await tx.vehicle.findMany({
         where: {
           tenantId,
           deletedAt: null,
           isActive: true,
-          status: 'AVAILABLE',
         },
         select: {
           id: true,
+          status: true,
           model: true,
           make: true,
           vehicleClass: true,
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
           vehicleUsage: true,
           homeDepotId: true,
         },
-      }).catch(() => []);
+      });
 
       // 3. Define relevant categories for the requested service
       let serviceCategories: string[] = [];
@@ -77,27 +77,29 @@ export async function GET(req: NextRequest) {
         serviceCategories = ['Economy', 'Compact', 'Mid-Size', 'Full-Size', 'SUV', '4x4', 'Van', 'Pickup Truck'];
       }
 
-      // 4. Calculate live counts per category
-      const categories: CategoryStock[] = serviceCategories.map((cat, idx) => {
-        // Match actual DB vehicles or generate synthesized live baseline for empty demo tenants
-        const matchedDbCount = vehicles.filter(
+      // 4. Calculate live counts per category from database records only
+      const categories: CategoryStock[] = serviceCategories.map((cat) => {
+        const matchedVehicles = vehicles.filter(
           (v) =>
             v.vehicleClass?.toLowerCase() === cat.toLowerCase() ||
             v.vehicleGroup?.toLowerCase() === cat.toLowerCase() ||
             v.model?.toLowerCase().includes(cat.toLowerCase())
-        ).length;
+        );
 
-        // If DB has vehicles, use real count; otherwise provide realistic live stock profile
-        const availableCount = matchedDbCount > 0 ? matchedDbCount : Math.max(1, (idx * 3 + 2) % 7 + 1);
-        const totalCount = Math.max(availableCount, availableCount + 2);
+        const availableVehicles = matchedVehicles.filter((v) => v.status === 'AVAILABLE');
+        const availableCount = availableVehicles.length;
+        const totalCount = matchedVehicles.length;
 
-        // Distribute stock across standard UAE depots
         const depots: Record<string, number> = {
-          DXB_HUB: Math.max(1, Math.ceil(availableCount * 0.4)),
-          DSO_CENTRAL: Math.max(1, Math.ceil(availableCount * 0.3)),
-          JAFZA_LOGISTICS: Math.max(0, Math.floor(availableCount * 0.15)),
-          AUH_YAS: Math.max(0, Math.floor(availableCount * 0.15)),
+          DXB_HUB: 0,
+          DSO_CENTRAL: 0,
+          JAFZA_LOGISTICS: 0,
+          AUH_YAS: 0,
         };
+        for (const v of availableVehicles) {
+          const key = v.homeDepotId && v.homeDepotId in depots ? v.homeDepotId : 'DXB_HUB';
+          depots[key] = (depots[key] ?? 0) + 1;
+        }
 
         return {
           category: cat,

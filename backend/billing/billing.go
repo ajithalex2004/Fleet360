@@ -48,6 +48,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // PlanCode must match tenants.plan and tenants subscriptions.plan_code.
@@ -186,18 +187,21 @@ func usageLimit(p Plan, metric string) (int, bool) {
 // a subscription row (e.g. internal / dev tenants).
 func GetTenantPlan(ctx context.Context, tenantID uuid.UUID) (Plan, error) {
 	var code string
-	err := database.DB.WithContext(ctx).Raw(`
-		SELECT plan_code FROM subscriptions
-		WHERE tenant_id = ? AND status IN ('TRIALING','ACTIVE','PAST_DUE')
-		ORDER BY created_at DESC LIMIT 1
-	`, tenantID).Scan(&code).Error
-	if err != nil || code == "" {
-		err = database.DB.WithContext(ctx).Raw(`
-			SELECT COALESCE(plan, 'TRIAL') FROM tenants WHERE id = ?
+	err := database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		subErr := tx.Raw(`
+			SELECT plan_code FROM subscriptions
+			WHERE tenant_id = ? AND status IN ('TRIALING','ACTIVE','PAST_DUE')
+			ORDER BY created_at DESC LIMIT 1
 		`, tenantID).Scan(&code).Error
-		if err != nil {
-			return Plan{}, err
+		if subErr != nil || code == "" {
+			return tx.Raw(`
+				SELECT COALESCE(plan, 'TRIAL') FROM tenants WHERE id = ?
+			`, tenantID).Scan(&code).Error
 		}
+		return nil
+	})
+	if err != nil {
+		return Plan{}, err
 	}
 	plan, ok := Plans[PlanCode(code)]
 	if !ok {
@@ -252,9 +256,11 @@ func StripeWebhook(cfg StripeWebhookConfig) gin.HandlerFunc {
 
 		// Idempotency: ignore events we've already processed.
 		var seen bool
-		database.DB.WithContext(c.Request.Context()).Raw(`
-			SELECT EXISTS (SELECT 1 FROM stripe_events_processed WHERE stripe_event_id = ?)
-		`, env.ID).Scan(&seen)
+		_ = database.WithPlatformTx(c.Request.Context(), func(tx *gorm.DB) error {
+			return tx.Raw(`
+				SELECT EXISTS (SELECT 1 FROM stripe_events_processed WHERE stripe_event_id = ?)
+			`, env.ID).Scan(&seen).Error
+		})
 		if seen {
 			c.JSON(http.StatusOK, gin.H{"received": true, "duplicate": true})
 			return
@@ -277,33 +283,43 @@ func StripeWebhook(cfg StripeWebhookConfig) gin.HandlerFunc {
 		// the row is still inserted — Stripe will retry and we'll see
 		// "duplicate", which is fine; we never want to reprocess a
 		// destructive webhook twice.
-		database.DB.WithContext(c.Request.Context()).Exec(`
-			INSERT INTO stripe_events_processed (stripe_event_id, processed_at)
-			VALUES (?, NOW()) ON CONFLICT DO NOTHING
-		`, env.ID)
+		_ = database.WithPlatformTx(c.Request.Context(), func(tx *gorm.DB) error {
+			return tx.Exec(`
+				INSERT INTO stripe_events_processed (stripe_event_id, processed_at)
+				VALUES (?, NOW()) ON CONFLICT DO NOTHING
+			`, env.ID).Error
+		})
 
 		c.JSON(http.StatusOK, gin.H{"received": true})
 	}
 }
 
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
 func handleSubscriptionChange(ctx context.Context, obj map[string]any) {
-	tenantID := obj["metadata"].(map[string]any)["tenant_id"].(string)
+	meta, _ := obj["metadata"].(map[string]any)
+	tenantID := asString(meta["tenant_id"])
 	tid, err := uuid.Parse(tenantID)
 	if err != nil {
 		logging.L().Error("stripe subscription: bad tenant_id metadata", zap.Error(err))
 		return
 	}
-	planCode := obj["plan_code"].(string) // parsed from price/lookup_key in real code
-	status := obj["status"].(string)
+	planCode := asString(obj["plan_code"]) // parsed from price/lookup_key in real code
+	status := asString(obj["status"])
 
-	err = database.DB.WithContext(ctx).Exec(`
-		INSERT INTO subscriptions (tenant_id, plan_code, status, stripe_subscription_id, stripe_customer_id, current_period_start, current_period_end)
-		VALUES (?, ?, ?, ?, ?, NOW(), NOW() + INTERVAL '1 month')
-		ON CONFLICT (tenant_id) DO UPDATE SET
-			plan_code = EXCLUDED.plan_code,
-			status = EXCLUDED.status,
-			updated_at = NOW()
-	`, tid, planCode, status, obj["id"], obj["customer"]).Error
+	err = database.WithTenantTx(ctx, tid.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			INSERT INTO subscriptions (tenant_id, plan_code, status, stripe_subscription_id, stripe_customer_id, current_period_start, current_period_end)
+			VALUES (?, ?, ?, ?, ?, NOW(), NOW() + INTERVAL '1 month')
+			ON CONFLICT (tenant_id) DO UPDATE SET
+				plan_code = EXCLUDED.plan_code,
+				status = EXCLUDED.status,
+				updated_at = NOW()
+		`, tid, planCode, status, obj["id"], obj["customer"]).Error
+	})
 	if err != nil {
 		logging.L().Error("subscription upsert failed", zap.Error(err))
 		return
@@ -319,12 +335,25 @@ func handleSubscriptionChange(ctx context.Context, obj map[string]any) {
 }
 
 func handleSubscriptionCancelled(ctx context.Context, obj map[string]any) {
-	subID := obj["id"].(string)
+	subID := asString(obj["id"])
+	if subID == "" {
+		return
+	}
 	var tid uuid.UUID
-	err := database.DB.WithContext(ctx).Raw(`
-		UPDATE subscriptions SET status = 'CANCELED', canceled_at = NOW(), updated_at = NOW()
-		WHERE stripe_subscription_id = ? RETURNING tenant_id
-	`, subID).Scan(&tid).Error
+	err := database.WithPlatformTx(ctx, func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT tenant_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1
+		`, subID).Scan(&tid).Error
+	})
+	if err != nil || tid == uuid.Nil {
+		return
+	}
+	err = database.WithTenantTx(ctx, tid.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			UPDATE subscriptions SET status = 'CANCELED', canceled_at = NOW(), updated_at = NOW()
+			WHERE stripe_subscription_id = ? AND tenant_id = ?
+		`, subID, tid).Error
+	})
 	if err != nil {
 		logging.L().Error("subscription cancel failed", zap.Error(err))
 		return
@@ -336,12 +365,25 @@ func handleSubscriptionCancelled(ctx context.Context, obj map[string]any) {
 }
 
 func handlePaymentFailed(ctx context.Context, obj map[string]any) {
-	customerID := obj["customer"].(string)
+	customerID := asString(obj["customer"])
+	if customerID == "" {
+		return
+	}
 	var tid uuid.UUID
-	err := database.DB.WithContext(ctx).Raw(`
-		UPDATE subscriptions SET status = 'PAST_DUE', updated_at = NOW()
-		WHERE stripe_customer_id = ? RETURNING tenant_id
-	`, customerID).Scan(&tid).Error
+	err := database.WithPlatformTx(ctx, func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT tenant_id FROM subscriptions WHERE stripe_customer_id = ? LIMIT 1
+		`, customerID).Scan(&tid).Error
+	})
+	if err != nil || tid == uuid.Nil {
+		return
+	}
+	err = database.WithTenantTx(ctx, tid.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			UPDATE subscriptions SET status = 'PAST_DUE', updated_at = NOW()
+			WHERE stripe_customer_id = ? AND tenant_id = ?
+		`, customerID, tid).Error
+	})
 	if err != nil {
 		return
 	}
@@ -353,11 +395,25 @@ func handlePaymentFailed(ctx context.Context, obj map[string]any) {
 
 func handleInvoicePaid(ctx context.Context, obj map[string]any) {
 	// Reset PAST_DUE if previously set.
-	customerID := obj["customer"].(string)
-	database.DB.WithContext(ctx).Exec(`
-		UPDATE subscriptions SET status = 'ACTIVE', updated_at = NOW()
-		WHERE stripe_customer_id = ? AND status = 'PAST_DUE'
-	`, customerID)
+	customerID := asString(obj["customer"])
+	if customerID == "" {
+		return
+	}
+	var tid uuid.UUID
+	err := database.WithPlatformTx(ctx, func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT tenant_id FROM subscriptions WHERE stripe_customer_id = ? LIMIT 1
+		`, customerID).Scan(&tid).Error
+	})
+	if err != nil || tid == uuid.Nil {
+		return
+	}
+	_ = database.WithTenantTx(ctx, tid.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			UPDATE subscriptions SET status = 'ACTIVE', updated_at = NOW()
+			WHERE stripe_customer_id = ? AND tenant_id = ? AND status = 'PAST_DUE'
+		`, customerID, tid).Error
+	})
 }
 
 // verifyStripeSignature checks the Stripe-Signature header against the
@@ -382,11 +438,13 @@ func verifyStripeSignature(body []byte, sig, secret string) bool {
 // RecordUsage emits a usage event for billing. Idempotent on
 // idempotencyKey — passing the same key twice does NOT double-count.
 func RecordUsage(ctx context.Context, tenantID uuid.UUID, metric string, quantity float64, idempotencyKey string) error {
-	err := database.DB.WithContext(ctx).Exec(`
-		INSERT INTO usage_events (tenant_id, metric, quantity, idempotency_key)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT (idempotency_key) DO NOTHING
-	`, tenantID, metric, quantity, idempotencyKey).Error
+	err := database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		return tx.Exec(`
+			INSERT INTO usage_events (tenant_id, metric, quantity, idempotency_key)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT (idempotency_key) DO NOTHING
+		`, tenantID, metric, quantity, idempotencyKey).Error
+	})
 	if err != nil {
 		return fmt.Errorf("billing: record usage: %w", err)
 	}
@@ -397,12 +455,14 @@ func RecordUsage(ctx context.Context, tenantID uuid.UUID, metric string, quantit
 // billing period. Used by EnforceUsage to compare against plan limits.
 func CurrentUsage(ctx context.Context, tenantID uuid.UUID, metric string) (int64, error) {
 	var total *int64
-	err := database.DB.WithContext(ctx).Raw(`
-		SELECT COALESCE(SUM(quantity)::bigint, 0)
-		FROM usage_events
-		WHERE tenant_id = ? AND metric = ?
-		  AND occurred_at >= date_trunc('month', NOW())
-	`, tenantID, metric).Scan(&total).Error
+	err := database.WithTenantTx(ctx, tenantID.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT COALESCE(SUM(quantity)::bigint, 0)
+			FROM usage_events
+			WHERE tenant_id = ? AND metric = ?
+			  AND occurred_at >= date_trunc('month', NOW())
+		`, tenantID, metric).Scan(&total).Error
+	})
 	if err != nil {
 		return 0, err
 	}

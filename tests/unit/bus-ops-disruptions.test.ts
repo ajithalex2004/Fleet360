@@ -1,6 +1,7 @@
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { Prisma } from '@prisma/client';
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { execFileSync } from 'child_process';
 const mocks=vi.hoisted(()=>({publish:vi.fn(),audit:vi.fn(),validate:vi.fn(),locks:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{}}));
@@ -108,9 +109,19 @@ describe('review fixes: disruption gates everywhere a trip moves', () => {
     expect(route.indexOf('INSERT INTO fleet.bus_gps_pings')).toBeLessThan(route.indexOf('if (!scheduleId || disrupted) {'));
   });
   it('compares trip_schedules.tenant_id (uuid) as text in every raw lock', () => {
-    const files = execFileSync('git', ['ls-files', '-z', 'src'], { encoding: 'utf8' })
-      .split('\0')
-      .filter((file) => /\.tsx?$/.test(file));
+    let files: string[];
+    try {
+      files = execFileSync('git', ['ls-files', '-z', 'src'], { encoding: 'utf8' })
+        .split('\0')
+        .filter((file) => /\.tsx?$/.test(file));
+    } catch {
+      const walk = (dir: string): string[] =>
+        readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+          const p = join(dir, e.name);
+          return e.isDirectory() ? walk(p) : /\.tsx?$/.test(e.name) ? [p.replace(/\\/g, '/')] : [];
+        });
+      files = walk('src');
+    }
     const unsafeLock = /trip_schedules[^`']*tenant_id ?= ?\$[0-9]/;
     const hits = files.flatMap((file) =>
       readFileSync(file, 'utf8')

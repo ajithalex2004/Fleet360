@@ -53,21 +53,24 @@ const DefaultTTL = 24 * time.Hour
 // Gin context keys. Handlers read tenant / user / role via TenantID,
 // UserID, RoleCode — never c.Get with string literals.
 const (
-	CtxClaims    = "auth.claims"
-	CtxUserID    = "auth.user_id"
-	CtxTenantID  = "auth.tenant_id"
-	CtxRoleCode  = "auth.role"
+	CtxClaims         = "auth.claims"
+	CtxUserID         = "auth.user_id"
+	CtxTenantID       = "auth.tenant_id"
+	CtxRoleCode       = "auth.role"
+	CtxImpersonatedBy = "auth.impersonated_by"
 )
 
 // Claims is the validated JWT payload. RegisteredClaims provides sub/iat/
 // exp/iss with the right shapes; TenantID + Role are our additions.
 type Claims struct {
-	TenantID string `json:"tenant_id"`
-	Role     string `json:"role"`
+	TenantID       string `json:"tenant_id"`
+	Role           string `json:"role"`
 	// Perms is the permission claim, decoded by package authz.
 	Perms json.RawMessage `json:"perms,omitempty"`
 	// Plan is the tenant's plan (TRIAL is read-only outside trial-free modules).
 	Plan string `json:"plan,omitempty"`
+	// ImpersonatedBy is the real user id if the token was issued under an impersonated session.
+	ImpersonatedBy string `json:"impersonated_by,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -212,6 +215,9 @@ func Middleware() gin.HandlerFunc {
 		c.Set(CtxUserID, claims.Subject)
 		c.Set(CtxTenantID, claims.TenantID)
 		c.Set(CtxRoleCode, claims.Role)
+		if claims.ImpersonatedBy != "" {
+			c.Set(CtxImpersonatedBy, claims.ImpersonatedBy)
+		}
 		c.Next()
 	}
 }
@@ -249,6 +255,19 @@ func TenantID(c *gin.Context) string {
 // if the request didn't pass through Middleware.
 func UserID(c *gin.Context) string {
 	v, ok := c.Get(CtxUserID)
+	if !ok {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// ImpersonatedBy returns the real user id from the Gin context if this is
+// an impersonated session, or empty.
+func ImpersonatedBy(c *gin.Context) string {
+	v, ok := c.Get(CtxImpersonatedBy)
 	if !ok {
 		return ""
 	}

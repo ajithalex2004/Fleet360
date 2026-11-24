@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { postLeaseInvoiceToGl } from '@/lib/leasing/leasing-gl-posting';
 
 /**
  * Single-lease-invoice GET / PATCH.
@@ -53,12 +54,24 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     const { lines, lessee, ...data } = body;
     if (data.status === 'SENT' && !data.sentAt) data.sentAt = new Date();
     if (data.status === 'PAID' && !data.paidAt) data.paidAt = new Date();
-    const inv = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseInvoice.update({
-      where: { id: params.id },
-      data: { ...data, updatedAt: new Date() },
-    }),
-    );
+    const inv = await withTenantRls(prisma, tenantId, async (tx) => {
+      const updated = await tx.leaseInvoice.update({
+        where: { id: params.id },
+        data: { ...data, updatedAt: new Date() },
+      });
+
+      if (data.status === 'ISSUED' || data.status === 'SENT') {
+        await postLeaseInvoiceToGl(tx as any, {
+          invoiceId: params.id,
+          tenantId,
+          preparedBy: req.headers.get('x-user-id') ?? 'leasing-api',
+        }).catch((err) => {
+          console.warn('[leasing/invoices/[id]] postLeaseInvoiceToGl warning:', err);
+        });
+      }
+
+      return updated;
+    });
     return NextResponse.json(inv);
   } catch (e) {
     console.error('PATCH /api/leasing/invoices/[id] error:', e);
