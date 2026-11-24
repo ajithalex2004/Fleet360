@@ -111,12 +111,31 @@ describe('Railway IaC Migration — Configuration Parity Checks (.railway/railwa
     }
   });
 
-  it('preserves all declared environment variables without hardcoded literals or placeholder optional credentials', async () => {
+  it('preserves all secret/runtime env vars without hardcoded credentials and pins non-secret Go backend operational config', async () => {
     const optionalIntegrationVars = [
       'STRIPE_SECRET_KEY',
       'SENDGRID_API_KEY',
       'SENTRY_DSN',
       'NEXT_PUBLIC_SENTRY_DSN',
+    ];
+
+    const goOperationalKeys = new Set([
+      'ALLOWED_ORIGINS',
+      'DB_CONN_MAX_IDLE_SECONDS',
+      'DB_CONN_MAX_LIFETIME_SECONDS',
+      'DB_MAX_IDLE_CONNS',
+      'DB_MAX_OPEN_CONNS',
+      'GO_ENV',
+      'LOG_FORMAT',
+      'LOG_LEVEL',
+      'PHASE0_REQUIRE_SMOKE',
+    ]);
+
+    const nextJsDbPoolKeys = [
+      'DB_CONNECT_RETRIES',
+      'DB_CONNECT_TIMEOUT_MS',
+      'DB_KEEPALIVE_INTERVAL_MS',
+      'DB_OPERATION_RETRIES',
     ];
 
     for (const env of ['staging', 'production'] as const) {
@@ -128,9 +147,15 @@ describe('Railway IaC Migration — Configuration Parity Checks (.railway/railwa
         expect(entries.length).toBeGreaterThan(0);
 
         for (const [key, val] of entries) {
-          expect(val, `${env} ${svc.name}.${key} must use preserve()`).toEqual({
-            type: 'preserve',
-          });
+          if (svc.name === 'fleet360-backend' && goOperationalKeys.has(key)) {
+            expect(val, `${env} ${svc.name}.${key} must be a non-secret literal`).toMatchObject({
+              type: 'literal',
+            });
+          } else {
+            expect(val, `${env} ${svc.name}.${key} must use preserve()`).toEqual({
+              type: 'preserve',
+            });
+          }
         }
 
         for (const optKey of optionalIntegrationVars) {
@@ -141,9 +166,37 @@ describe('Railway IaC Migration — Configuration Parity Checks (.railway/railwa
         }
       }
 
-      // Dormant one-time bootstrap secret must not remain in runtime environments post-bootstrap
       const appVars = byName.get('fleet360-app')!.variables ?? {};
+      const backendVars = byName.get('fleet360-backend')!.variables ?? {};
+
+      // Dormant one-time bootstrap secret must not remain in runtime environments post-bootstrap
       expect(appVars).not.toHaveProperty('SETUP_SECRET');
+
+      // Active Next.js DB pool/keepalive vars MUST remain on fleet360-app
+      for (const key of nextJsDbPoolKeys) {
+        expect(appVars, `${env} fleet360-app must preserve Next.js DB var ${key}`).toHaveProperty(key);
+      }
+
+      // Go-only operational vars MUST NOT sit misplaced on fleet360-app and MUST be set on fleet360-backend
+      for (const key of goOperationalKeys) {
+        expect(appVars, `${env} fleet360-app must not hold Go-only var ${key}`).not.toHaveProperty(key);
+        expect(backendVars, `${env} fleet360-backend must declare Go var ${key}`).toHaveProperty(key);
+      }
+
+      const expectedOrigin =
+        env === 'production'
+          ? 'https://fleet360-app-production.up.railway.app'
+          : 'https://fleet360-app-staging.up.railway.app';
+
+      expect(backendVars.ALLOWED_ORIGINS).toMatchObject({ type: 'literal', value: expectedOrigin });
+      expect(backendVars.GO_ENV).toMatchObject({ type: 'literal', value: 'production' });
+      expect(backendVars.LOG_FORMAT).toMatchObject({ type: 'literal', value: 'json' });
+      expect(backendVars.LOG_LEVEL).toMatchObject({ type: 'literal', value: 'info' });
+      expect(backendVars.PHASE0_REQUIRE_SMOKE).toMatchObject({ type: 'literal', value: '1' });
+      expect(backendVars.DB_MAX_OPEN_CONNS).toMatchObject({ type: 'literal', value: '10' });
+      expect(backendVars.DB_MAX_IDLE_CONNS).toMatchObject({ type: 'literal', value: '5' });
+      expect(backendVars.DB_CONN_MAX_IDLE_SECONDS).toMatchObject({ type: 'literal', value: '60' });
+      expect(backendVars.DB_CONN_MAX_LIFETIME_SECONDS).toMatchObject({ type: 'literal', value: '300' });
 
       // Production fleet360-app must never expose migration-owner database URLs
       if (env === 'production') {
