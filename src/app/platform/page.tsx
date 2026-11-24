@@ -275,9 +275,9 @@ const MODULES: ModuleDef[] = [
   },
   {
     id: 'service-tickets',
-    title: 'Service & Support Ticket Hub',
+    title: 'Field Service Management',
     category: 'operations',
-    description: 'Central operations triage hopper, 1-click towing recovery dispatch, replacement fleet swaps, DVIR defect grounding, and multi-line case cost ledger.',
+    description: 'Service requests and tickets with triage, SLAs and departments, the Field Service catalogue, 1-click towing recovery, replacement fleet swaps, DVIR defect grounding and a case cost ledger.',
     href: '/service-tickets',
     icon: <Headphones className="w-5 h-5 text-sky-400" />,
     gradient: 'from-sky-500/20 to-blue-500/10',
@@ -291,7 +291,7 @@ const MODULES: ModuleDef[] = [
       { label: 'Auto-Grounding', value: 'Instant' },
     ],
     quickActions: [
-      { label: 'Triage Hopper', href: '/service-tickets' },
+      { label: 'Service Tickets', href: '/service-tickets' },
       { label: 'SLA Matrix', href: '/service-tickets/sla' },
       { label: 'CSAT Analytics', href: '/service-tickets/csat' },
     ],

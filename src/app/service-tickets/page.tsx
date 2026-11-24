@@ -403,7 +403,7 @@ export default function ServiceTicketsHome() {
   return (
     <div className="space-y-6 max-w-7xl">
       <PageHeader
-        title="Service & Support Ticket Hub"
+        title="Field Service Management"
         subtitle={`Central operations triage hopper · ${enabledTypes.length || 7} ticket types · 1-click recovery · replacement fleet swaps`}
         icon={Headphones}
         accent="violet"
