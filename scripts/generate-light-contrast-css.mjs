@@ -107,10 +107,13 @@ const paleTextOf = (h) => [100, ...paleShades(h)].map((s) => cls(`text-${h}-${s}
 const widgetOf = (h) =>
   `:is(${WIDGET_ELEMENTS}):is(${tintOf(h)}):is(${paleTextOf(h)}, ${cls('text-white')}, :has(> :is(${paleTextOf(h)})))`;
 
-// Dark backgrounds where pale text is intended: solid fills, gradients, overlays.
+// Dark backgrounds where pale text is intended: solid fills, gradients, overlays,
+// and areas that force the dark theme with Tailwind's `dark` class (e.g. the
+// Booking Portal shell, whose fill is an arbitrary `bg-[#0b0d14]`).
 const darkBackgrounds = [
   ...hues.flatMap((h) => [500, 600, 700, 800, 900, 950].map((s) => cls(`bg-${h}-${s}`))),
   startsClass('bg-gradient-'), startsClass('bg-black'), cls('bg-black'),
+  cls('dark'),
 ].join(',\n  ');
 
 // Lightest tint of each hue: accent text inside a widget turned dark by rule 4

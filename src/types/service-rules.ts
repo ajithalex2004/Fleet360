@@ -182,6 +182,8 @@ export interface PriorityMatrix {
   Low: number;     // SLA hours for Low priority
   Medium: number;
   High: number;
+  /** Optional tightest tier. When absent, Critical tickets use the High SLA. */
+  Critical?: number;
 }
 export interface TicketingEscalationStep {
   level: number;

@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   UserCheck,
   CarFront,
@@ -1076,6 +1077,16 @@ function NewBookingInner() {
               </button>
             ))}
           </div>
+
+          {/* Service requests live in Service Tickets; this is the front door. */}
+          <Link href="/booking-portal/service-request"
+            className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between rounded-2xl border border-dashed border-cyan-400/40 bg-cyan-500/5 hover:bg-cyan-500/10 px-6 py-5 transition-colors">
+            <span>
+              <span className="block text-base font-extrabold text-white">Need something fixed or arranged?</span>
+              <span className="block text-xs text-slate-400 mt-1">AC, cleaning, access cards, room setups and other service requests — tracked with an SLA.</span>
+            </span>
+            <span className="text-sm font-semibold text-cyan-300 whitespace-nowrap">Raise a service request →</span>
+          </Link>
         </div>
       )}
 

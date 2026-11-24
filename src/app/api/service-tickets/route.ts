@@ -2,23 +2,27 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET  /api/service-tickets                — list tickets for the current tenant
- *   Query params: type, status, search, from, to, limit, offset
+ *   Query params: type, status, department, search, from, to, limit, offset,
+ *                 mine=1 (only tickets the caller raised)
  * POST /api/service-tickets                — create a new ticket
  *   Body: { ticketType, title, description, priority?, vehicleId?, relatedDriverId?, dueDate? }
+ *   ticketType may be any catalogue service type linked to SERVICE_TICKETING
+ *   (the seven system types or a tenant-defined one); priority is
+ *   Low | Medium | High | Critical.
  *
  * Auth: x-tenant-id from middleware (any authenticated user). Tickets
  * are tenant-scoped; cross-tenant reads are not exposed by this route.
  *
- * Tenant-type access enforced on POST: if the tenant has the requested
- * ticket type disabled in their tenant_ticket_types matrix, returns 403.
+ * Tenant-type access enforced on POST: unknown types return 400; types the
+ * tenant disabled in tenant_ticket_types return 403.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { nextReadableId } from '@/lib/service-tickets/schema';
-import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
-import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
+import { TICKET_TYPE_KEY_RE, isTicketPriority, type TicketType, type TicketPriority } from '@/types/service-tickets';
+import { listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import {
   resolveTicketInitialStatus,
@@ -99,10 +103,11 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;
+  const { tenantId, userId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const sp = req.nextUrl.searchParams;
+      const mine       = sp.get('mine') === '1';
       const type       = sp.get('type');         // TicketType or null = all
       const status     = sp.get('status');
       const department = sp.get('department');   // TicketDepartment or null = all
@@ -116,7 +121,11 @@ export async function GET(req: NextRequest) {
       const params: unknown[] = [tenantId];
       let p = 2;
 
-      if (type   && TICKET_TYPES_ORDER.includes(type as TicketType)) { conditions.push(`ticket_type = $${p++}`); params.push(type); }
+      if (type   && TICKET_TYPE_KEY_RE.test(type)) { conditions.push(`ticket_type = $${p++}`); params.push(type); }
+      if (mine) {
+        if (!userId) return NextResponse.json({ ok: true, tickets: [] });
+        conditions.push(`requestor_id = $${p++}`); params.push(userId);
+      }
       if (status)                                                     { conditions.push(`status = $${p++}`);     params.push(status); }
       if (department) {
         if (department === 'OPERATIONS_TRIAGE') {
@@ -185,7 +194,7 @@ export async function POST(req: NextRequest) {
       const title       = String(body.title ?? '').trim();
       const description = String(body.description ?? '').trim();
 
-      if (!ticketType || !TICKET_TYPES_ORDER.includes(ticketType)) {
+      if (!ticketType || !TICKET_TYPE_KEY_RE.test(ticketType)) {
         return NextResponse.json({ ok: false, error: 'Invalid or missing ticketType.' }, { status: 400 });
       }
       if (!title) return NextResponse.json({ ok: false, error: 'Title is required.' }, { status: 400 });
@@ -196,14 +205,15 @@ export async function POST(req: NextRequest) {
       // resolvers. The initial-status resolver still runs separately so its
       // emergency-bypass logic stays in one place.
       const cfg = await loadServiceConfig(tenantId, ticketType);
-      if (!cfg) {
+      // Only catalogue types linked to the ticketing module can become tickets.
+      if (!cfg || cfg.mapping?.linkedModule !== 'SERVICE_TICKETING') {
         return NextResponse.json({ ok: false, error: `Unknown service type ${ticketType}.` }, { status: 400 });
       }
       const longLabel = cfg.type.name;
 
       // Enforce per-tenant access matrix.
-      const enabled = await getTenantEnabledTypes(tenantId);
-      if (!enabled.includes(ticketType)) {
+      const enabled = await listEnabledTicketTypes(tenantId);
+      if (!enabled.some((e) => e.key === ticketType)) {
         return NextResponse.json({
           ok: false,
           error: `${longLabel} is not enabled for your tenant. Ask your administrator to enable it.`,
@@ -211,8 +221,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Default priority lives on the service_types row.
-      const priority = (['Low', 'Medium', 'High'].includes(body.priority ?? '')
-        ? body.priority : cfg.type.defaultPriority) as 'Low' | 'Medium' | 'High';
+      const priority: TicketPriority = isTicketPriority(body.priority) ? body.priority : cfg.type.defaultPriority;
 
       // Vehicle requirement check.
       if (cfg.rules.vehicle.vehicleRequired && !body.vehicleId) {
@@ -259,7 +268,7 @@ export async function POST(req: NextRequest) {
 
       // Initial status — approval gate lives in resolveTicketInitialStatus.
       const { status: initialStatus, source: statusSource } =
-        await resolveTicketInitialStatus(tenantId, ticketType, priority as TicketPriority);
+        await resolveTicketInitialStatus(tenantId, ticketType, priority);
 
       try {
         // Prefix lives on the resolved ticketing rules.

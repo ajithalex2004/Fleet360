@@ -524,6 +524,8 @@ export const arabicLabels: Record<string, string> = {
   'Fleet360 Platform Command': 'مركز قيادة منصة فليت 360',
   'Multi-modal transport operations, predictive maintenance, staff dispatch, and ESG fleet intelligence in one unified system.': 'عمليات النقل متعددة الوسائط والصيانة التنبؤية وترحيل الموظفين وذكاء أسطول الاستدامة في نظام موحد.',
   'Service & Support Ticket Hub': 'مركز تذاكر الخدمة والدعم',
+  'Field Service Management': 'إدارة الخدمات الميدانية',
+  'Service Tickets': 'تذاكر الخدمة',
 
   // ── Platform Flagship & Module Cards ───────────────────────
   'AI Agent Ecosystem & Copilot': 'منظومة وكلاء الذكاء الاصطناعي والمساعد الآلي',

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarCheck, PlusCircle, Clock, Bookmark, Sparkles, Gavel } from 'lucide-react';
+import { CalendarCheck, PlusCircle, Clock, Bookmark, Sparkles, Gavel, Wrench } from 'lucide-react';
 import PlatformHomeBar from '@/components/PlatformHomeBar';
 import ModuleGuard from '@/components/ModuleGuard';
 
@@ -13,8 +13,9 @@ export default function BookingPortalShell({ children }: { children: React.React
   const navItems = [
     { href: '/booking-portal', label: 'All Bookings', icon: CalendarCheck },
     { href: '/booking-portal/new', label: 'New Booking', icon: PlusCircle },
+    { href: '/booking-portal/service-request', label: 'Service Request', icon: Wrench },
     { href: '/booking-portal/approvals', label: 'Pending Approvals', icon: Clock },
-    { href: '/booking-portal/my-bookings', label: 'My Bookings', icon: Bookmark },
+    { href: '/booking-portal/my-bookings', label: 'My Requests', icon: Bookmark },
     { href: '/booking-portal/marketplace', label: 'Limo & Bus Marketplace', icon: Gavel },
   ];
 

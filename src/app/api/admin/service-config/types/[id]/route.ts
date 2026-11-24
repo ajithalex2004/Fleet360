@@ -58,7 +58,7 @@ async function handlePATCH(req: NextRequest, { params }: RouteParams) {
   if (typeof body.tone === 'string' && (SERVICE_TONES as readonly string[]).includes(body.tone)) {
     setIf('tone', body.tone);
   }
-  if (typeof body.defaultPriority === 'string' && ['Low', 'Medium', 'High'].includes(body.defaultPriority)) {
+  if (typeof body.defaultPriority === 'string' && ['Low', 'Medium', 'High', 'Critical'].includes(body.defaultPriority)) {
     setIf('default_priority', body.defaultPriority);
   }
   if (typeof body.sortOrder === 'number')    setIf('sort_order',  body.sortOrder);
