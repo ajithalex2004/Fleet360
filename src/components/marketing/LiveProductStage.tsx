@@ -26,7 +26,7 @@ const STAGE_TABS: StageTabDef[] = [
   {
     id: 0,
     shortLabel: '1. Drayage Radar',
-    badge: 'TAB 1 · LIVE CORRIDOR RADAR (/logistics/drayage/tracking)',
+    badge: 'TAB 1 · LIVE CORRIDOR RADAR',
     title: 'Real-Time Coupled Prime Movers & Detached Ramp Chassis',
     subtitle: 'Track moving tractors on E11/E311 alongside uncoupled skeletal trailers dropped at customer ramps with live offload ETC countdowns.',
     metrics: [
@@ -53,7 +53,7 @@ const STAGE_TABS: StageTabDef[] = [
   {
     id: 1,
     shortLabel: '2. PCS Gate Tokens',
-    badge: 'TAB 2 · PCS & GATE AUTOMATION (/logistics/drayage/containers)',
+    badge: 'TAB 2 · PCS & GATE AUTOMATION',
     title: 'Dubai Trade & AD Ports ATLP e-Token & Customs Clearance',
     subtitle: 'Book automated terminal gate slots, clear multi-agency Customs/Municipality/CPIP inspections, and guard against Delivery Order (eDO) expiry.',
     metrics: [
@@ -80,7 +80,7 @@ const STAGE_TABS: StageTabDef[] = [
   {
     id: 2,
     shortLabel: '3. AI Co-Pilot',
-    badge: 'TAB 3 · GOVERNED AI ORCHESTRATOR (/agents)',
+    badge: 'TAB 3 · GOVERNED AI ORCHESTRATOR',
     title: '6 Specialized AI Agents Coordinating Dispatch & Maintenance',
     subtitle: 'Policy-controlled AI agents detect exceptions, triangulate empty containers to exports, and automate driver trip settlements.',
     metrics: [
@@ -155,28 +155,28 @@ const BENTO_CARDS = [
     title: 'Coupled & Detached Telemetry',
     description:
       'Real-time tracking of Prime Movers on E11/E311 and uncoupled skeletal trailers at customer ramps with live ETC offload timers.',
-    href: '/logistics/drayage/tracking',
+    href: '/operations-review',
   },
   {
     index: '02 // PCS GATE AUTOMATION',
     title: 'Dubai Trade & Maqta ATLP',
     description:
       'Automated gate slot booking, Customs/Municipality/CPIP seal clearance, and proactive Delivery Order (eDO) expiry protection.',
-    href: '/logistics/drayage/containers',
+    href: '/operations-review',
   },
   {
     index: '03 // BOGIE & STREET-TURN',
     title: 'Zero Empty Port Deadhead',
     description:
       'Pair 2×20ft containers on 45ft heavy chassis (up to 42T) and triangulate import empty containers directly to export bookings.',
-    href: '/logistics/drayage/assignment',
+    href: '/operations-review',
   },
   {
     index: '04 // MULTI-VERTICAL SAAS',
     title: 'Modular Tenant Provisioning',
     description:
       'Onboard standalone Port Drayage tenants or full-suite Enterprise Fleets with strict PostgreSQL RLS multi-tenant isolation.',
-    href: '/platform',
+    href: '/operations-review',
   },
 ];
 
@@ -212,8 +212,8 @@ export default function LiveProductStage({ snapshot }: { snapshot: HomepageSnaps
             <Link className={styles.primary} href="/operations-review" data-analytics-cta="stage_operations_review">
               Book an operations review <Arrow />
             </Link>
-            <Link className={styles.secondary} href="/logistics/drayage" data-analytics-cta="stage_drayage">
-              Explore drayage <Arrow />
+            <Link className={styles.secondary} href="/login" data-analytics-cta="stage_customer_signin">
+              Customers: open the console <Arrow />
             </Link>
           </div>
           <div
@@ -307,7 +307,7 @@ export default function LiveProductStage({ snapshot }: { snapshot: HomepageSnaps
           <div className={styles.stageBody}>
             <div className={styles.stageMeta}>
               <span>{currentStage.badge}</span>
-              <Link href="/logistics/drayage/tracking">Open radar console →</Link>
+              <Link href="/login">Customers: sign in →</Link>
             </div>
             <h3>{currentStage.title}</h3>
             <p>{currentStage.subtitle}</p>
@@ -325,7 +325,7 @@ export default function LiveProductStage({ snapshot }: { snapshot: HomepageSnaps
 
       <div className={styles.cards}>
         {BENTO_CARDS.map((card) => (
-          <Link key={card.index} href={card.href} className={styles.card}>
+          <Link key={card.index} href={card.href} className={styles.card} data-analytics-cta={`stage_card_${card.index.slice(0, 2)}`}>
             <span>{card.index}</span>
             <b>{card.title}</b>
             <small>{card.description}</small>

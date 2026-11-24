@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { carlito } from './editorial/font';
 import styles from './AuthShell.module.css';
 
 export { styles as authStyles };
 
 /**
  * Page frame for the public auth screens (login, forgot/reset password) in the
- * homepage theme. `identity` replaces the default eyebrow above the card, e.g.
- * with a tenant's white-label logo.
+ * editorial homepage style (Calibri, paper + ink, orange accent). `identity`
+ * replaces the default eyebrow above the card, e.g. with a tenant's
+ * white-label logo.
  */
 export default function AuthShell({
   children,
@@ -23,14 +25,22 @@ export default function AuthShell({
   dir?: 'ltr' | 'rtl';
 }) {
   return (
-    <div className={styles.page} dir={dir}>
+    <div className={`${styles.page} ${carlito.variable}`} dir={dir}>
       <header className={styles.header}>
-        <Link className={styles.brand} href="/" aria-label="Fleet360 home">
-          <span>FLEET</span><strong>360</strong>
-        </Link>
-        <Link className={styles.back} href="/">Back to overview <span aria-hidden="true">←</span></Link>
+        <Link className={styles.brand} href="/" aria-label="Fleet360 home">Fleet<b>360</b></Link>
+        <Link className={styles.back} href="/"><span aria-hidden="true">←</span> Back to overview</Link>
       </header>
       <main className={styles.main}>
+        <aside className={styles.aside} aria-hidden="true">
+          <p className={styles.kicker}>AI-orchestrated fleet intelligence · UAE &amp; GCC</p>
+          <p className={styles.display}>Your whole fleet, <em>thinking</em> as one.</p>
+          <p className={styles.asideLede}>
+            Vehicles, drivers, bookings and maintenance on one live map, orchestrated by governed AI agents.
+          </p>
+          <div className={styles.qualities}>
+            <span>UAE / GCC ready</span><span>Multi-tenant isolation</span><span>Human-approved AI</span>
+          </div>
+        </aside>
         <div className={styles.column}>
           <div className={styles.identity}>
             {identity}
