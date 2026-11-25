@@ -184,15 +184,17 @@ export default function ServiceCatalogPage() {
     }] : []),
   ], [canEdit, deleteType]);
 
+  // Until the first load lands, counts show "—" rather than a misleading 0.
+  const loaded = data !== null;
   const kpis: KpiTile[] = useMemo(() => [
-    { label: 'Service categories', value: categories.length, accent: 'violet' },
-    { label: 'Service types', value: totalTypes, accent: 'sky' },
+    { label: 'Service categories', value: loaded ? categories.length : '—', accent: 'violet' },
+    { label: 'Service types', value: loaded ? totalTypes : '—', accent: 'sky' },
     ...PRIORITY_TIERS.map((p) => ({
       label: p.label,
-      value: categories.reduce((n, c) => n + c.types.filter((t) => t.priority === p.priority).length, 0),
+      value: loaded ? categories.reduce((n, c) => n + c.types.filter((t) => t.priority === p.priority).length, 0) : '—',
       accent: (p.tier === 'P1' ? 'rose' : p.tier === 'P2' ? 'amber' : p.tier === 'P3' ? 'sky' : 'emerald') as KpiTile['accent'],
     })),
-  ], [categories, totalTypes]);
+  ], [categories, totalTypes, loaded]);
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -225,13 +227,13 @@ export default function ServiceCatalogPage() {
           <Check className="w-4 h-4" /> {notice}
         </div>
       )}
-      {!loading && !canEdit && (
+      {loaded && !canEdit && (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5" /> View only — a tenant administrator can change the catalogue.
         </p>
       )}
 
-      {!loading && categories.length === 0 ? (
+      {loaded && categories.length === 0 ? (
         <div className="sdg rounded-2xl border border-white/10 bg-slate-900/60 p-8 text-center space-y-3">
           <ListTree className="w-8 h-8 text-violet-400 mx-auto" />
           <h2 className="text-base font-semibold text-white">No service categories yet</h2>
@@ -262,7 +264,8 @@ export default function ServiceCatalogPage() {
                 </button>
               )}
             </div>
-            <CategoryButton label="All categories" count={totalTypes} active={selected === 'all'} onClick={() => setSelected('all')} />
+            {!loaded && <p className="px-2.5 py-2 text-sm text-slate-500">Loading…</p>}
+            {loaded && <CategoryButton label="All categories" count={totalTypes} active={selected === 'all'} onClick={() => setSelected('all')} />}
             {categories.map((c) => (
               <div key={c.id} className="group flex items-center gap-1">
                 <CategoryButton label={c.name} count={c.types.length} active={selected === c.id} onClick={() => setSelected(c.id)} />
