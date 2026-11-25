@@ -555,6 +555,29 @@ export async function deleteType(tenantId: string, id: string): Promise<string> 
 
 // ── Standard catalogue install ─────────────────────────────────────────────────
 
+/** How much of the FSM catalogue a tenant has (active categories / types). */
+export async function catalogStatus(tenantId: string): Promise<{
+  categories: number; types: number; standardCategories: number; standardTypes: number;
+}> {
+  const [row] = await prisma.$queryRawUnsafe<Array<{ categories: number; types: number }>>(
+    `SELECT
+       (SELECT COUNT(*)::int FROM service_categories
+         WHERE tenant_id = $1 AND deleted_at IS NULL AND key LIKE '${CATALOG_CATEGORY_PREFIX}%') AS categories,
+       (SELECT COUNT(*)::int FROM service_types st
+          JOIN service_categories c ON c.id = st.category_id AND c.tenant_id = st.tenant_id
+         WHERE st.tenant_id = $1 AND st.deleted_at IS NULL AND c.deleted_at IS NULL
+           AND c.key LIKE '${CATALOG_CATEGORY_PREFIX}%') AS types`,
+    tenantId,
+  );
+  return {
+    categories: Number(row?.categories ?? 0),
+    types: Number(row?.types ?? 0),
+    standardCategories: STANDARD_CATALOG.length,
+    standardTypes: STANDARD_CATALOG.reduce((n, c) => n + c.types.length, 0),
+  };
+}
+
+
 /**
  * Installs the standard FSM catalogue and archives the earlier Facilities
  * catalogue (its categories and types are soft-deleted; tickets keep their

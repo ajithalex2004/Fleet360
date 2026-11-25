@@ -274,6 +274,8 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 export default function TenantsPage() {
   const [showModal, setShowModal] = useState(false);
+  /** Tenant whose FSM catalogue is being loaded (disables its button). */
+  const [fsmLoadingId, setFsmLoadingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('basic');
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
@@ -486,6 +488,41 @@ export default function TenantsPage() {
     load();
   };
 
+  /** Load the standard Field Service catalogue into a tenant (no impersonation needed). */
+  const loadFsmCatalogue = async (t: TenantRow) => {
+    setFsmLoadingId(t.id);
+    try {
+      const statusRes = await fetch(`/api/admin/tenants/${t.id}/fsm-catalog`);
+      const status = await statusRes.json().catch(() => ({}));
+      if (!statusRes.ok) { alert(status?.error ?? 'Could not read the FSM catalogue.'); return; }
+      const ok = window.confirm(
+        `Load the standard Field Service catalogue into ${t.name}?
+
+` +
+        `It has ${status.categories} of ${status.standardCategories} categories and ${status.types} service types today. ` +
+        `Loading adds the missing standard categories and types (priority, SLA timers, approval and vehicle usage) ` +
+        `and archives the Facilities catalogue. The tenant's own edits and existing requests are kept.`
+      );
+      if (!ok) return;
+      const res = await fetch(`/api/admin/tenants/${t.id}/fsm-catalog`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(data?.error ?? 'Could not load the FSM catalogue.'); return; }
+      alert(
+        `${t.name}: FSM catalogue loaded.
+
+` +
+        `Added ${data.categoriesAdded} categories and ${data.typesAdded} service types` +
+        (data.facilitiesArchived ? `, archived ${data.facilitiesArchived} Facilities types` : '') +
+        `.
+The tenant now has ${data.categories} categories and ${data.types} service types.`
+      );
+    } catch {
+      alert('Network error — could not load the FSM catalogue.');
+    } finally {
+      setFsmLoadingId(null);
+    }
+  };
+
   const impersonate = async (t: TenantRow) => {
     const ok = window.confirm(
       `Impersonate ${t.name}?\n\nYou'll be signed in as a tenant admin for 1 hour.\n` +
@@ -614,6 +651,12 @@ export default function TenantsPage() {
                 className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30">
                 Ticket Types
               </Link>
+              <button onClick={() => void loadFsmCatalogue(t)}
+                disabled={fsmLoadingId === t.id}
+                title="Load the standard Field Service Management catalogue (categories, service types, priority and SLA) into this tenant"
+                className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 disabled:opacity-50">
+                {fsmLoadingId === t.id ? 'Loading FSM…' : 'Load FSM Catalogue'}
+              </button>
               <Link href={`/admin/tenants/${t.id}/settings`}
                 className="text-xs px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30">
                 Settings &amp; Security
