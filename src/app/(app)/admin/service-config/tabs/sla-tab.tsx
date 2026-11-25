@@ -57,10 +57,14 @@ export function SlaTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
   return (
     <div className="space-y-6 max-w-3xl">
       <Section title="Response targets">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Field label="Response SLA (min)" hint="First response target">
             <NumberInput value={rules.responseSlaMinutes} min={0}
               onChange={v => patch({ responseSlaMinutes: v })} />
+          </Field>
+          <Field label="On-site arrival (h)" hint="Field Service: technician on site">
+            <NumberInput value={rules.onSiteArrivalHours ?? null} min={0}
+              onChange={v => patch({ onSiteArrivalHours: v })} />
           </Field>
           <Field label="Resolution SLA (h)" hint="Total time to resolve">
             <NumberInput value={rules.resolutionSlaHours} min={0}

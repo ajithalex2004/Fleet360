@@ -1193,6 +1193,16 @@
    }
   },
   {
+   "prefix": "service-tickets/catalog",
+   "read": {
+    "kind": "module",
+    "module": "service-tickets"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
    "prefix": "setup",
    "read": {
     "kind": "external"
