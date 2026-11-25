@@ -1905,6 +1905,13 @@
    }
   },
   {
+   "template": "tenants/[id]/fsm-catalog",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
    "template": "tenants/[id]/hard-delete",
    "methods": {
     "POST": "platform"
