@@ -1291,7 +1291,7 @@
     "src/app/api/work-orders/route.ts": {
       "@typescript-eslint/no-unused-vars": 2
     },
-    "src/app/booking-portal/page.tsx": {
+    "src/app/(app)/booking-portal/page.tsx": {
       "@typescript-eslint/no-unused-vars": 2
     },
     "src/app/compliance/permits/page.tsx": {

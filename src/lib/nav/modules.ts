@@ -514,6 +514,7 @@ export const MODULES: ModuleDef[] = [
     subPages: [
       { label: 'Dashboard',              href: '/booking-portal',             icon: LayoutDashboard },
       { label: 'New booking',            href: '/booking-portal/new',         icon: Send },
+      { label: 'Service request',        href: '/booking-portal/service-request', icon: Wrench },
       { label: 'My bookings',            href: '/booking-portal/my-bookings', icon: BookOpen },
       { label: 'Approvals',              href: '/booking-portal/approvals',   icon: CheckCircle2 },
       { label: 'Limo & Bus Marketplace', href: '/booking-portal/marketplace', icon: Gavel },

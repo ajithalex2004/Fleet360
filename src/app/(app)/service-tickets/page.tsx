@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree, Wrench, FileText, MapPin, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
@@ -25,6 +25,10 @@ import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, T
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { formatSlaHours, priorityLabel } from '@/lib/service-tickets/priority-tiers';
+import {
+  FormPanel, FormSection, FormField, FormAlert, FormFooter, ReadOnlyValue, CheckboxField,
+  TextInput, SelectInput, TextAreaInput, PrimaryButton, SecondaryButton,
+} from '@/components/ui/form-kit';
 import { createMaintenanceRequest } from '@/services/mockData';
 import { ContextDrawer360 } from './components/context-drawer-360';
 import { ForwardTicketModal } from './components/forward-ticket-modal';
@@ -960,137 +964,105 @@ function NewTicketForm({
     }
   };
 
+  const vehicleOptionLabel = (v: VehiclePickerOption) =>
+    `${v.vehicleCode ?? v.id.slice(0, 8)}${v.licensePlate ? ` · ${v.licensePlate}` : ''}`
+    + `${v.make || v.model ? ` · ${[v.make, v.model].filter(Boolean).join(' ')}` : ''}`;
+
   return (
-    <form onSubmit={submit}
-      className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 space-y-4 shadow-lg shadow-violet-500/10">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">New request</h3>
-        <button type="button" onClick={onCancel}
-          className="text-xs text-slate-400 hover:text-white">Cancel</button>
-      </div>
+    <form onSubmit={submit}>
+      <FormPanel
+        title="New Service Request"
+        subtitle="Raise a field service request. Priority and SLA come from the Service Catalog & SLA master."
+        icon={Wrench}
+        accent="blue"
+        actions={<SecondaryButton icon={X} onClick={onCancel}>Close</SecondaryButton>}
+      >
+        {err && <FormAlert>{err}</FormAlert>}
 
-      {err && (
-        <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-xs">{err}</div>
-      )}
-
-      {/* Service category → service type */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Service category</label>
-          <select value={category} onChange={e => setCategory(e.target.value)} aria-label="Service category"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-            {typeGroups.map(([group, types]) => (
-              <option key={group} value={group}>{group} ({types.length})</option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Service type</label>
-          <select value={ticketType} onChange={e => setTicketType(e.target.value as TicketType)} aria-label="Service type"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-            {categoryTypes.map(t => <option key={t} value={t}>{typeConfigByType[t]!.name}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Priority and SLA — set per service type in the Service Catalog & SLA master */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2" aria-label="Priority and SLA">
-        {[
-          { label: 'Priority', value: priorityLabel(priority) },
-          { label: 'SLA response', value: catalogSla ? formatSlaHours(catalogSla.responseHours) : '—' },
-          { label: 'SLA on-site arrival', value: catalogSla ? formatSlaHours(catalogSla.onSiteHours) : '—' },
-          { label: 'SLA resolution', value: formatSlaHours(resolutionHours) },
-        ].map(x => (
-          <div key={x.label} className="rounded-lg border border-white/10 bg-slate-800/60 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-slate-400">{x.label}</div>
-            <div className="text-sm font-semibold text-white">{x.value}</div>
-          </div>
-        ))}
-      </div>
-      <p className="text-[11px] text-slate-500 -mt-2">
-        Priority and SLA come from the Service Catalog &amp; SLA master.
-        {autoCreatesMR && <span className="ml-2 text-blue-300">Auto-creates a Maintenance Request on Acknowledge.</span>}
-      </p>
-      {/* Approval-gate hint — derived server-side from the resolved approval rules. */}
-      {willAwaitApproval && (
-        <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
-          This request will start in <strong className="text-amber-200">Awaiting Approval</strong>.
-        </p>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Title</label>
-          <input value={title} onChange={e => setTitle(e.target.value)} required
-            placeholder="Short summary"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Description</label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Due date</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
-        </div>
-        {vehicleRequired ? (
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-              Vehicle <span className="text-rose-400">*</span>
-            </label>
-            <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} required
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-              <option value="">— Select a vehicle —</option>
-              {vehicles.map(v => (
-                <option key={v.id} value={v.id}>
-                  {v.vehicleCode ?? v.id.slice(0, 8)}
-                  {v.licensePlate ? ` · ${v.licensePlate}` : ''}
-                  {v.make || v.model ? ` · ${[v.make, v.model].filter(Boolean).join(' ')}` : ''}
-                </option>
+        <FormSection title="Service classification" icon={ListTree} columns={2}>
+          <FormField label="Service category" required hint="Categories come from the Service Catalog & SLA master">
+            <SelectInput value={category} onChange={e => setCategory(e.target.value)} aria-label="Service category">
+              {typeGroups.map(([group, types]) => (
+                <option key={group} value={group}>{group} ({types.length})</option>
               ))}
-            </select>
-            {vehicles.length === 0 && (
-              <p className="text-[11px] text-amber-300/90">No active vehicles found for this tenant.</p>
-            )}
+            </SelectInput>
+          </FormField>
+          <FormField label="Service type" required hint={tc?.description || undefined}>
+            <SelectInput value={ticketType} onChange={e => setTicketType(e.target.value as TicketType)} aria-label="Service type">
+              {categoryTypes.map(t => <option key={t} value={t}>{typeConfigByType[t]!.name}</option>)}
+            </SelectInput>
+          </FormField>
+          {/* Priority and SLA — set per service type in the master, shown read-only. */}
+          <div className="md:col-span-full grid grid-cols-2 md:grid-cols-4 gap-2" aria-label="Priority and SLA">
+            <ReadOnlyValue label="Priority" value={priorityLabel(priority)}
+              tone={priority === 'Critical' ? 'rose' : priority === 'High' ? 'amber' : priority === 'Medium' ? 'blue' : 'emerald'} />
+            <ReadOnlyValue label="SLA response" value={catalogSla ? formatSlaHours(catalogSla.responseHours) : '—'} />
+            <ReadOnlyValue label="SLA on-site arrival" value={catalogSla ? formatSlaHours(catalogSla.onSiteHours) : '—'} />
+            <ReadOnlyValue label="SLA resolution" value={formatSlaHours(resolutionHours)} />
           </div>
-        ) : (
-          <div className="space-y-1 md:col-span-2 opacity-40" title={`${longLabel} doesn't require a vehicle`}>
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vehicle</label>
-            <select disabled value=""
-              className="w-full bg-slate-800/50 border border-white/5 rounded-lg px-3 py-2 text-slate-500 text-sm cursor-not-allowed">
-              <option value="">Not applicable for {longLabel}</option>
-            </select>
-          </div>
+          {(willAwaitApproval || autoCreatesMR) && (
+            <div className="md:col-span-full space-y-2">
+              {willAwaitApproval && (
+                <FormAlert tone="warning">This request will start in <strong>Awaiting Approval</strong>.</FormAlert>
+              )}
+              {autoCreatesMR && (
+                <FormAlert tone="info">A Maintenance Request is created automatically when this request is acknowledged.</FormAlert>
+              )}
+            </div>
+          )}
+        </FormSection>
+
+        <FormSection title="Request details" icon={FileText} columns={2}>
+          <FormField label="Title" required span="full">
+            <TextInput value={title} onChange={e => setTitle(e.target.value)} required placeholder="Short summary of the request" />
+          </FormField>
+          <FormField label="Description" span="full" hint="What is the problem, and anything the technician should know">
+            <TextAreaInput value={description} onChange={e => setDescription(e.target.value)} rows={3} />
+          </FormField>
+          <FormField label="Due date" hint="Optional — when the requester needs it done by">
+            <TextInput type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+          </FormField>
+          {vehicleRequired ? (
+            <FormField label="Vehicle" required hint={vehicles.length === 0 ? 'No active vehicles found for this tenant.' : undefined}>
+              <SelectInput value={vehicleId} onChange={e => setVehicleId(e.target.value)} required>
+                <option value="">— Select a vehicle —</option>
+                {vehicles.map(v => <option key={v.id} value={v.id}>{vehicleOptionLabel(v)}</option>)}
+              </SelectInput>
+            </FormField>
+          ) : (
+            <FormField label="Vehicle" qualifier="(not required)">
+              <SelectInput disabled value="" title={`${longLabel} doesn't require a vehicle`}>
+                <option value="">Not applicable for {longLabel}</option>
+              </SelectInput>
+            </FormField>
+          )}
+        </FormSection>
+
+        {/* Per-type fields from the type's form rules (e.g. site, floor, area). */}
+        {formFields.length > 0 && (
+          <FormSection title="Location & additional details" icon={MapPin} columns={2}>
+            {formFields.map(f => (
+              <DynamicField key={`${ticketType}:${f.key}`}
+                field={f}
+                value={customFields[f.key]}
+                onChange={v => setField(f.key, v)} />
+            ))}
+          </FormSection>
         )}
 
-        {/* Per-type dynamic fields — driven by resolved formFields
-            (admin-edited rules first, compile-time config as fallback). */}
-        {formFields.map(f => (
-          <DynamicField key={`${ticketType}:${f.key}`}
-            field={f}
-            value={customFields[f.key]}
-            onChange={v => setField(f.key, v)} />
-        ))}
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel}
-          className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-        <button type="submit" disabled={submitting}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all">
-          <Plus className="w-4 h-4" /> {submitting ? 'Submitting…' : 'Submit request'}
-        </button>
-      </div>
+        <FormFooter secondary={<SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>}>
+          <PrimaryButton type="submit" icon={Send} busy={submitting}>
+            {submitting ? 'Submitting…' : 'Submit request'}
+          </PrimaryButton>
+        </FormFooter>
+      </FormPanel>
     </form>
   );
 }
 
 // ── Dynamic per-type form field ─────────────────────────────────────────────
 // Renders a single field from cfg.formFields. Knows about all 7 input types.
-// Layout: text/textarea/select span 2 cols; numbers/dates/checkboxes 1 col.
+// Layout: textarea and checkbox span the row; other fields take one column.
 function DynamicField({
   field, value, onChange,
 }: {
@@ -1098,57 +1070,33 @@ function DynamicField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const span = field.type === 'textarea' || field.type === 'select' || field.type === 'text'
-    ? 'md:col-span-2' : '';
-  const labelEl = (
-    <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-      {field.label} {field.required && <span className="text-rose-400">*</span>}
-    </label>
-  );
-
   if (field.type === 'checkbox') {
     return (
-      <div className="space-y-1 md:col-span-2">
-        <label className="inline-flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-          <input type="checkbox"
-            checked={!!value}
-            onChange={e => onChange(e.target.checked)}
-            className="w-4 h-4 accent-violet-500 rounded" />
-          <span>{field.label}{field.required && <span className="ml-1 text-rose-400">*</span>}</span>
-        </label>
+      <div className="md:col-span-full">
+        <CheckboxField label={field.required ? `${field.label} *` : field.label} checked={!!value} onChange={v => onChange(v)} />
       </div>
     );
   }
 
+  const span = field.type === 'textarea' ? 'full' as const : undefined;
+
   if (field.type === 'select') {
     return (
-      <div className={`space-y-1 ${span}`}>
-        {labelEl}
-        <select value={(value as string) ?? ''}
-          onChange={e => onChange(e.target.value || undefined)}
-          required={field.required}
-          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+      <FormField label={field.label} required={field.required} span={span}>
+        <SelectInput value={(value as string) ?? ''} onChange={e => onChange(e.target.value || undefined)} required={field.required}>
           <option value="">— Select —</option>
-          {field.options?.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
+          {field.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </SelectInput>
+      </FormField>
     );
   }
 
   if (field.type === 'textarea') {
     return (
-      <div className={`space-y-1 ${span}`}>
-        {labelEl}
-        <textarea
-          value={(value as string) ?? ''}
-          onChange={e => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          required={field.required}
-          rows={3}
-          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-      </div>
+      <FormField label={field.label} required={field.required} span={span}>
+        <TextAreaInput value={(value as string) ?? ''} onChange={e => onChange(e.target.value)}
+          placeholder={field.placeholder} required={field.required} rows={3} />
+      </FormField>
     );
   }
 
@@ -1159,19 +1107,17 @@ function DynamicField({
     field.type === 'datetime' ? 'datetime-local'   : 'text';
 
   return (
-    <div className={`space-y-1 ${span}`}>
-      {labelEl}
-      <input type={inputType}
+    <FormField label={field.label} required={field.required}>
+      <TextInput type={inputType}
         value={(value as string | number | undefined) ?? ''}
         onChange={e => {
           const v = e.target.value;
           onChange(field.type === 'number' ? (v === '' ? undefined : Number(v)) : v);
         }}
         placeholder={field.placeholder}
-        min={field.min}
-        max={field.max}
         required={field.required}
-        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-    </div>
+        min={field.min}
+        max={field.max} />
+    </FormField>
   );
 }

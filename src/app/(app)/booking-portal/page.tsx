@@ -43,7 +43,7 @@ const STATUS_STYLE: Record<string, string> = {
   APPROVED:  'bg-blue-500/20 text-blue-400 border border-blue-500/30',
   CONFIRMED: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
   ACTIVE:    'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-  COMPLETED: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
+  COMPLETED: 'bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/30',
   CANCELLED: 'bg-red-500/20 text-red-400 border border-red-500/30',
   REJECTED:  'bg-red-500/20 text-red-400 border border-red-500/30',
 };
@@ -63,7 +63,7 @@ function parseNotes(notes: string | null): Record<string, string> {
 }
 
 function statusStyle(s: string | null) {
-  return STATUS_STYLE[s ?? ''] ?? 'bg-slate-500/20 text-slate-400 border border-slate-500/20';
+  return STATUS_STYLE[s ?? ''] ?? 'bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/20';
 }
 
 // ── Service cards ─────────────────────────────────────────────────────────────
@@ -279,12 +279,12 @@ export default function BookingPortal() {
   return (
     <div className="space-y-6 text-[var(--text-main)] transition-colors duration-150">
       {/* ── Executive Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">
             Booking & Dispatch Portal
           </h1>
-          <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-[var(--text-muted)] dark:text-[var(--text-muted)] text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -309,7 +309,7 @@ export default function BookingPortal() {
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>
               Booking <strong>{outsourceSuccess.bookingRef}</strong> published to the Private Partner Exchange as{' '}
-              <strong className="font-mono text-white">{outsourceSuccess.requestNumber}</strong> ({outsourceSuccess.domain}).
+              <strong className="font-mono text-[var(--text-main)]">{outsourceSuccess.requestNumber}</strong> ({outsourceSuccess.domain}).
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -321,7 +321,7 @@ export default function BookingPortal() {
             </Link>
             <button
               onClick={() => setOutsourceSuccess(null)}
-              className="text-slate-400 hover:text-white font-semibold"
+              className="text-[var(--text-muted)] hover:text-[var(--text-main)] font-semibold"
             >
               Dismiss
             </button>
@@ -344,18 +344,18 @@ export default function BookingPortal() {
       {/* ── Flagship Mobile & B2B Booking Consoles ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Card 1: Universal Mobile Booking App */}
-        <div className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
                 MOBILE APP & APK
               </span>
-              <span className="text-xs text-zinc-400 font-mono">v2.4 Live</span>
+              <span className="text-xs text-[var(--text-muted)] font-mono">v2.4 Live</span>
             </div>
-            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-blue-500" /> Fleet360 Mobile Booking App
             </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-muted)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
               Universal mobile booking for Freight, Chauffeur, Bus & Rental. Biometrics, OTP, e-BOL & Cold-Chain IoT.
             </p>
           </div>
@@ -369,27 +369,27 @@ export default function BookingPortal() {
             <a
               href="/api/mobile/download-apk"
               download="Fleet360 Booking App.apk"
-              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-black/10 dark:border-white/10 transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-medium border border-[var(--border-subtle)] transition-all flex items-center gap-1.5"
             >
-              <Download className="w-3.5 h-3.5 text-zinc-500" />
+              <Download className="w-3.5 h-3.5 text-[var(--text-muted)]" />
               Download APK
             </a>
           </div>
         </div>
 
         {/* Card 2: Enterprise Booking Portal */}
-        <div className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20">
                 B2B BOOKING PORTAL
               </span>
-              <span className="text-xs text-zinc-400 font-mono">All Domains</span>
+              <span className="text-xs text-[var(--text-muted)] font-mono">All Domains</span>
             </div>
-            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-indigo-500" /> Booking Intake & Approvals
             </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-muted)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
               Bulk CSV uploader, 3-tier corporate approval hierarchy, multi-stop routing & UAE customs e-BOL manifests.
             </p>
           </div>
@@ -402,7 +402,7 @@ export default function BookingPortal() {
             </Link>
             <Link
               href="/customer-mgmt"
-              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-black/10 dark:border-white/10 transition-all"
+              className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-medium border border-[var(--border-subtle)] transition-all"
             >
               Corporate Hub
             </Link>
@@ -412,14 +412,14 @@ export default function BookingPortal() {
 
       {/* ── Service cards ── */}
       <div>
-        <h2 className="text-lg font-extrabold text-white mb-4">Book by Service Category</h2>
+        <h2 className="text-lg font-extrabold text-[var(--text-main)] mb-4">Book by Service Category</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleCards.map(card => (
             <Link key={card.type} href={card.href}>
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/60 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/80 group cursor-pointer h-full">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-sm group cursor-pointer h-full">
                 <div>
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-950/80 border border-white/10 flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
                       {card.type === 'RENTAL' && <CarFront className="w-6 h-6 text-cyan-400" />}
                       {card.type === 'LEASING' && <FileCheck className="w-6 h-6 text-cyan-400" />}
                       {card.type === 'STAFF_TRANSPORT' && <CarFront className="w-6 h-6 text-cyan-400" />}
@@ -431,12 +431,12 @@ export default function BookingPortal() {
                       {card.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-extrabold text-white mb-1 group-hover:text-cyan-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-[var(--text-main)] mb-1 group-hover:text-cyan-300 transition-colors">
                     {card.title}
                   </h3>
-                  <p className="text-slate-400 text-xs leading-relaxed">{card.desc}</p>
+                  <p className="text-[var(--text-muted)] text-xs leading-relaxed">{card.desc}</p>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)] text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform">
                   <span>Start Booking</span>
                   <span>→</span>
                 </div>
@@ -447,27 +447,27 @@ export default function BookingPortal() {
       </div>
 
       {/* ── Bookings table ── */}
-      <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-black/80">
-        <div className="px-6 py-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-sm ">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent">
           <div>
-            <h2 className="text-base font-bold text-white">All Bookings & Manifests</h2>
-            <p className="text-slate-400 text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>
+            <h2 className="text-base font-bold text-[var(--text-main)]">All Bookings & Manifests</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={load} className="text-xs text-cyan-300 hover:text-white border border-white/10 bg-slate-950/80 rounded-lg px-3 py-1.5 transition-colors">
+            <button onClick={load} className="text-xs text-cyan-300 hover:text-[var(--text-main)] border border-[var(--border-subtle)] bg-[var(--bg-main)] rounded-lg px-3 py-1.5 transition-colors">
               ↻ Refresh
             </button>
           </div>
         </div>
 
         {/* Type filter tabs */}
-        <div className="px-6 py-3 border-b border-amber-500/15 flex gap-2 overflow-x-auto bg-zinc-950/40">
+        <div className="px-6 py-3 border-b border-amber-500/15 flex gap-2 overflow-x-auto bg-[var(--bg-main)]">
           {activeTypes.map(t => (
             <button key={t} onClick={() => setTypeFilter(t)}
               className={`flex-shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 typeFilter === t
                   ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-md shadow-amber-500/25'
-                  : 'text-zinc-400 border border-white/5 hover:text-white hover:bg-zinc-900/60'
+                  : 'text-[var(--text-muted)] border border-[var(--border-subtle)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]'
               }`}>
               {SERVICE_STYLE[t]?.icon} {t === 'ALL' ? 'All Services' : SERVICE_STYLE[t]?.label ?? t}
               <span className="ml-1 opacity-70">({counts[t] ?? 0})</span>
@@ -476,10 +476,10 @@ export default function BookingPortal() {
         </div>
 
         {/* Search */}
-        <div className="px-6 py-3 border-b border-amber-500/15 bg-zinc-950/20">
+        <div className="px-6 py-3 border-b border-amber-500/15 bg-[var(--bg-main)]">
           <input type="text" placeholder="Search by reference number, requestor, email, or service…"
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full bg-zinc-900/90 border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+            className="w-full bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
           />
         </div>
 
@@ -492,16 +492,16 @@ export default function BookingPortal() {
         {loading ? (
           <div className="px-6 py-8 space-y-3">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 bg-slate-700/40 rounded-xl animate-pulse" />
+              <div key={i} className="h-12 bg-[var(--bg-surface-hover)] rounded-xl animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-5xl mb-3">📭</div>
-            <p className="text-zinc-300 font-medium">
+            <p className="text-[var(--text-main)] font-medium">
               {bookings.length === 0 ? 'No bookings recorded yet' : 'No bookings match your filter criteria'}
             </p>
-            <p className="text-zinc-500 text-sm mt-1">
+            <p className="text-[var(--text-muted)] text-sm mt-1">
               {bookings.length === 0
                 ? 'Click "New Booking Request" above to dispatch your first booking'
                 : 'Try changing the service category or search term'}
@@ -517,7 +517,7 @@ export default function BookingPortal() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-amber-500/20 text-amber-300/70 text-[11px] font-mono uppercase tracking-wider bg-zinc-950/60">
+                <tr className="border-b border-amber-500/20 text-amber-300/70 text-[11px] font-mono uppercase tracking-wider bg-[var(--bg-main)]">
                   <th className="text-left px-6 py-3.5">Ref #</th>
                   <th className="text-left px-6 py-3.5">Service Category</th>
                   <th className="text-left px-6 py-3.5">Requestor & Contact</th>
@@ -529,14 +529,14 @@ export default function BookingPortal() {
               </thead>
               <tbody>
                 {filtered.map(b => {
-                  const svc    = SERVICE_STYLE[b.serviceType] ?? { label: b.serviceType, color: 'text-zinc-400', icon: '📋' };
+                  const svc    = SERVICE_STYLE[b.serviceType] ?? { label: b.serviceType, color: 'text-[var(--text-muted)]', icon: '📋' };
                   const parsed = parseNotes(b.notes);
                   const route  = parsed.origin && parsed.destination
                     ? `${parsed.origin} → ${parsed.destination}`
                     : parsed.origin ?? parsed.destination ?? b.vehicleCategory ?? '—';
 
                   return (
-                    <tr key={b.id} className="border-b border-white/5 last:border-0 hover:bg-zinc-900/60 transition-colors">
+                    <tr key={b.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)] transition-colors">
                       <td className="px-6 py-4">
                         <span className="font-mono text-xs font-bold text-amber-400">
                           {b.bookingRef ?? b.id.slice(0, 10)}
@@ -549,16 +549,16 @@ export default function BookingPortal() {
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-zinc-200 text-xs font-medium">{b.requestorName ?? '—'}</p>
+                          <p className="text-[var(--text-main)] text-xs font-medium">{b.requestorName ?? '—'}</p>
                           {b.requestorEmail && (
-                            <p className="text-zinc-500 text-[11px] font-mono">{b.requestorEmail}</p>
+                            <p className="text-[var(--text-muted)] text-[11px] font-mono">{b.requestorEmail}</p>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 max-w-xs">
-                        <p className="text-zinc-300 text-xs truncate">{route}</p>
+                        <p className="text-[var(--text-main)] text-xs truncate">{route}</p>
                       </td>
-                      <td className="px-6 py-4 text-zinc-400 text-xs font-mono">
+                      <td className="px-6 py-4 text-[var(--text-muted)] text-xs font-mono">
                         {b.startDate
                           ? new Date(b.startDate).toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' })
                           : '—'}
@@ -579,7 +579,7 @@ export default function BookingPortal() {
                                 driverName: 'Ahmed Al-Sayed',
                               })
                             }
-                            className="inline-flex items-center gap-1 text-xs text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-colors"
+                            className="inline-flex items-center gap-1 text-xs text-amber-300 hover:text-[var(--text-main)] bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-colors"
                           >
                             <MessageSquare className="w-3 h-3 text-amber-400" />
                             Chat
@@ -596,7 +596,7 @@ export default function BookingPortal() {
                               type="button"
                               disabled={outsourcingId === b.id}
                               onClick={() => setOutsourceTarget(b)}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-cyan-300 hover:text-white bg-cyan-500/15 hover:bg-cyan-500/25 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-colors disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-cyan-300 hover:text-[var(--text-main)] bg-cyan-500/15 hover:bg-cyan-500/25 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-colors disabled:opacity-50"
                               title="Publish VIP Chauffeur or Passenger Transport RFQ to Private Partner Exchange"
                             >
                               <Sparkles className="w-3 h-3 text-cyan-400" />
@@ -683,95 +683,95 @@ function OutsourceBookingModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-slate-950 border border-cyan-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-xs text-slate-200">
-        <div className="flex items-start justify-between border-b border-white/10 pb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 ">
+      <div className="bg-[var(--bg-main)] border border-cyan-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-sm text-xs text-[var(--text-main)]">
+        <div className="flex items-start justify-between border-b border-[var(--border-subtle)] pb-3">
           <div>
             <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
               {isLimo ? 'LIMOUSINE EXCHANGE VERTICAL' : 'PASSENGER TRANSPORT EXCHANGE VERTICAL'}
             </span>
-            <h3 className="text-base font-bold text-white mt-0.5">
+            <h3 className="text-base font-bold text-[var(--text-main)] mt-0.5">
               Outsource Booking {booking.bookingRef || booking.id.slice(0, 10)} to Private Exchange
             </h3>
-            <p className="text-slate-400 text-[11px] mt-0.5">
+            <p className="text-[var(--text-muted)] text-[11px] mt-0.5">
               Publishes a sanitized RFQ opportunity to vetted {isLimo ? 'VIP Chauffeur & Limousine' : 'Passenger Coach'} partners.
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-sm font-bold px-2">
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm font-bold px-2">
             ✕
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Pickup Location *</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pickup Location *</label>
             <input
               type="text"
               value={pickupLocation}
               onChange={(e) => setPickupLocation(e.target.value)}
-              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+              className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)]"
             />
           </div>
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Dropoff Location *</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Dropoff Location *</label>
             <input
               type="text"
               value={dropoffLocation}
               onChange={(e) => setDropoffLocation(e.target.value)}
-              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+              className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)]"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Pickup Time</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pickup Time</label>
             <input
               type="time"
               value={pickupTime}
               onChange={(e) => setPickupTime(e.target.value)}
-              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white font-mono"
+              className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)] font-mono"
             />
           </div>
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Pax Capacity</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pax Capacity</label>
             <input
               type="number"
               min={1}
               max={100}
               value={requiredCapacity}
               onChange={(e) => setRequiredCapacity(e.target.value)}
-              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white font-mono"
+              className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)] font-mono"
             />
           </div>
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Vehicle Class</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Vehicle Class</label>
             <input
               type="text"
               value={vehicleTypeRequired}
               onChange={(e) => setVehicleTypeRequired(e.target.value)}
-              className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+              className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)]"
             />
           </div>
         </div>
 
         <div>
-          <label className="block font-semibold text-slate-300 mb-1">
+          <label className="block font-semibold text-[var(--text-main)] mb-1">
             {isLimo ? 'VIP Chauffeur & Flight / Meet-and-Greet Protocol' : 'Special Dispatch Instructions'}
           </label>
           <textarea
             rows={2}
             value={specialInstructions}
             onChange={(e) => setSpecialInstructions(e.target.value)}
-            className="w-full rounded-xl bg-slate-900 border border-white/10 p-2.5 text-white"
+            className="w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-main)]"
           />
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+        <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold"
+            className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold"
           >
             Cancel
           </button>

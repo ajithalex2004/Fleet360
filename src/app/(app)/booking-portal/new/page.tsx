@@ -1,5 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
+import { formInputCls } from '@/components/ui/form-kit';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -26,7 +27,6 @@ import { RecurringSchedulePicker } from '@/components/booking/RecurringScheduleP
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
-import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-cyan-400') {
   switch (type) {
@@ -680,12 +680,9 @@ function buildPayload(serviceType: ServiceType, form: FormData) {
 // Form field renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const inputCls =
-  'w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm ' +
-  'placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 ' +
-  'transition-all shadow-inner shadow-black/60';
+const inputCls = formInputCls;
 
-const labelCls = 'block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5';
+const labelCls = 'block text-xs font-semibold text-[var(--text-main)] mb-1.5';
 
 function FieldRenderer({
   field,
@@ -698,21 +695,21 @@ function FieldRenderer({
 }) {
   if (field.type === 'toggle') {
     return (
-      <div className="flex items-start gap-3 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-md">
+      <div className="flex items-start gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 shadow-md">
         <button
           type="button"
           role="switch"
           aria-checked={!!value}
           onClick={() => onChange(field.key, !value)}
           className={`relative mt-0.5 flex-shrink-0 w-10 h-6 rounded-full transition-colors ${
-            value ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/30' : 'bg-slate-800'
+            value ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/30' : 'bg-[var(--bg-main)]'
           }`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
         </button>
         <div>
-          <p className="text-sm font-bold text-white">{field.label}</p>
-          {field.hint && <p className="text-xs text-slate-400 mt-0.5">{field.hint}</p>}
+          <p className="text-sm font-bold text-[var(--text-main)]">{field.label}</p>
+          {field.hint && <p className="text-xs text-[var(--text-muted)] mt-0.5">{field.hint}</p>}
         </div>
       </div>
     );
@@ -728,10 +725,10 @@ function FieldRenderer({
           required={field.required}
           className={inputCls}
         >
-          <option value="" className="bg-[#0d111d] text-slate-400">— Select —</option>
-          {field.options?.map(o => <option key={o} value={o} className="bg-[#0d111d] text-white">{o}</option>)}
+          <option value="" className="bg-[var(--bg-surface)] text-[var(--text-muted)]">— Select —</option>
+          {field.options?.map(o => <option key={o} value={o} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{o}</option>)}
         </select>
-        {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-[var(--text-muted)] mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -747,7 +744,7 @@ function FieldRenderer({
           rows={3}
           className={`${inputCls} resize-none`}
         />
-        {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-[var(--text-muted)] mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -767,7 +764,7 @@ function FieldRenderer({
         required={field.required}
         className={inputCls}
       />
-      {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
+      {field.hint && <p className="text-xs text-[var(--text-muted)] mt-1">{field.hint}</p>}
     </div>
   );
 }
@@ -814,14 +811,14 @@ function FormSection({
   }
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/80 transition-all">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/30 rounded-2xl overflow-hidden shadow-sm transition-all">
       {/* Section header */}
-      <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
             {getSectionVectorIcon(section.title)}
           </div>
-          <h3 className="text-sm font-extrabold text-white tracking-wide">{section.title}</h3>
+          <h3 className="text-sm font-extrabold text-[var(--text-main)] tracking-wide">{section.title}</h3>
         </div>
         <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/15 px-2.5 py-1 rounded-full border border-cyan-500/30">
           REQUIRED
@@ -890,9 +887,9 @@ function FormSection({
 
 function ConfirmationDetail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl p-3">
+    <div className="flex flex-col gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3">
       <span className="text-[10px] text-cyan-300 uppercase tracking-wider font-semibold">{label}</span>
-      <span className="text-sm text-white font-medium">{value}</span>
+      <span className="text-sm text-[var(--text-main)] font-medium">{value}</span>
     </div>
   );
 }
@@ -1000,16 +997,16 @@ function NewBookingInner() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-[var(--text-main)] transition-colors duration-150">
 
       {/* ── Page header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">
             New Booking Intake
           </h1>
-          <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-[var(--text-muted)] dark:text-[var(--text-muted)] text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         {/* ── Progress stepper ── */}
-        <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl px-4 py-2.5 shadow-sm">
+        <div className="flex items-center gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 shadow-sm">
           {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
             const n = (i + 1) as 1 | 2 | 3;
             return (
@@ -1018,17 +1015,17 @@ function NewBookingInner() {
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                     step > n  ? 'bg-emerald-500 text-white font-bold' :
                     step === n ? 'bg-blue-600 text-white font-bold shadow-sm' :
-                    'bg-black/5 dark:bg-white/5 text-zinc-400'
+                    'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
                   }`}>
                     {step > n ? '✓' : n}
                   </div>
                   <span className={`text-xs hidden md:block font-medium transition-colors ${
-                    step >= n ? 'text-zinc-900 dark:text-zinc-100 font-semibold' : 'text-zinc-400'
+                    step >= n ? 'text-[var(--text-main)] font-semibold' : 'text-[var(--text-muted)]'
                   }`}>{label}</span>
                 </div>
                 {i < 2 && (
                   <div className={`w-6 h-0.5 rounded-full transition-all ${
-                    step > n ? 'bg-emerald-500' : 'bg-black/10 dark:bg-white/10'
+                    step > n ? 'bg-emerald-500' : 'bg-black/10 dark:bg-[var(--bg-surface-hover)]'
                   }`} />
                 )}
               </React.Fragment>
@@ -1043,8 +1040,8 @@ function NewBookingInner() {
       {step === 1 && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white tracking-wide">Select Transport Service Category</h2>
-            <span className="text-xs font-mono text-slate-400">Step 1 of 3</span>
+            <h2 className="text-xl font-bold text-[var(--text-main)] tracking-wide">Select Transport Service Category</h2>
+            <span className="text-xs font-mono text-[var(--text-muted)]">Step 1 of 3</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1052,25 +1049,25 @@ function NewBookingInner() {
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
-                className="group relative bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/60 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-cyan-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/80"
+                className="group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-2xl p-6 text-left hover:shadow-sm hover:shadow-cyan-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-sm "
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-950/80 border border-white/10 flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
                       {getServiceVectorIcon(opt.type, 'w-6 h-6 text-cyan-400')}
                     </div>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-full tracking-wider">
                       {opt.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-extrabold text-white group-hover:text-cyan-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-[var(--text-main)] group-hover:text-cyan-300 transition-colors">
                     {opt.title}
                   </h3>
-                  <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+                  <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed">
                     {opt.desc}
                   </p>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)] text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform">
                   <span>Configure Booking</span>
                   <span>→</span>
                 </div>
@@ -1082,8 +1079,8 @@ function NewBookingInner() {
           <Link href="/booking-portal/service-request"
             className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between rounded-2xl border border-dashed border-cyan-400/40 bg-cyan-500/5 hover:bg-cyan-500/10 px-6 py-5 transition-colors">
             <span>
-              <span className="block text-base font-extrabold text-white">Need something fixed or arranged?</span>
-              <span className="block text-xs text-slate-400 mt-1">AC, cleaning, access cards, room setups and other service requests — tracked with an SLA.</span>
+              <span className="block text-base font-extrabold text-[var(--text-main)]">Need something fixed or arranged?</span>
+              <span className="block text-xs text-[var(--text-muted)] mt-1">AC, cleaning, access cards, room setups and other service requests — tracked with an SLA.</span>
             </span>
             <span className="text-sm font-semibold text-cyan-300 whitespace-nowrap">Raise a service request →</span>
           </Link>
@@ -1097,7 +1094,7 @@ function NewBookingInner() {
         <div className="space-y-8">
           {/* Top Centered Frosted Glass Capsule Navigation Pills */}
           <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/80 overflow-x-auto max-w-full">
+            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-x-auto max-w-full">
               {visibleCards.map((opt) => {
                 const isActive = serviceType === opt.type;
                 return (
@@ -1110,8 +1107,8 @@ function NewBookingInner() {
                     }}
                     className={`px-6 py-2.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap ${
                       isActive
-                        ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/30 scale-100'
-                        : 'text-slate-400 hover:text-cyan-200 hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
                     }`}
                   >
                     {opt.title}
@@ -1126,9 +1123,9 @@ function NewBookingInner() {
               {/* ── LEFT COLUMN (Inputs & Vehicle Selection Grid) ── */}
               <div className="lg:col-span-8 space-y-6">
                 {/* 1. Pickup Origin & Destination Card */}
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/80">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4 shadow-sm ">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white tracking-wide">Pickup & Destination</h3>
+                    <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">Pickup & Destination</h3>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                       STEP 1
                     </span>
@@ -1137,7 +1134,7 @@ function NewBookingInner() {
                   <div className="space-y-3">
                     <div className="relative flex items-center">
                       <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-cyan-300/80 uppercase tracking-wider mb-1">
+                        <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">
                           Pickup Origin
                         </label>
                         <input
@@ -1145,7 +1142,7 @@ function NewBookingInner() {
                           value={(form.origin as string) || ''}
                           onChange={(e) => onChange('origin', e.target.value)}
                           placeholder="Enter pickup address (e.g. Dubai Airport Terminal 3)"
-                          className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
+                          className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                         />
                       </div>
                       <button
@@ -1156,7 +1153,7 @@ function NewBookingInner() {
                           onChange('origin', dest || '');
                           onChange('destination', orig || '');
                         }}
-                        className="ml-3 mt-4 w-10 h-10 rounded-xl bg-slate-900 border border-white/10 hover:border-cyan-400 text-cyan-400 flex items-center justify-center text-sm transition-all hover:scale-105"
+                        className="ml-3 mt-4 w-10 h-10 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400 text-cyan-400 flex items-center justify-center text-sm transition-all hover:scale-105"
                         title="Swap Origin and Destination"
                       >
                         ⇅
@@ -1164,7 +1161,7 @@ function NewBookingInner() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-cyan-300/80 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">
                         Destination
                       </label>
                       <input
@@ -1172,23 +1169,23 @@ function NewBookingInner() {
                         value={(form.destination as string) || ''}
                         onChange={(e) => onChange('destination', e.target.value)}
                         placeholder="Enter destination address (e.g. Burj Al Arab, Jumeirah)"
-                        className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
+                        className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Flight Tracking / Consignment Manifest Ref Card */}
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-3 shadow-2xl shadow-black/80">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-3 shadow-sm ">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white tracking-wide">
+                    <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">
                       {serviceType === 'EXECUTIVE'
                         ? 'Flight Tracking & Meet & Greet'
                         : serviceType === 'LOGISTICS'
                         ? 'B2B Consignment & Customs Reference'
                         : 'Schedule Reference'}
                     </h3>
-                    <span className="text-[10px] font-mono text-slate-400">OPTIONAL</span>
+                    <span className="text-[10px] font-mono text-[var(--text-muted)]">OPTIONAL</span>
                   </div>
 
                   <div>
@@ -1201,17 +1198,17 @@ function NewBookingInner() {
                           ? 'Enter Flight Number (e.g. EK202 from JFK) for automatic delay tracking'
                           : 'Enter Manifest or Reference Number (e.g. MAN-2026-DXB)'
                       }
-                      className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
+                      className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                     />
                   </div>
                 </div>
 
                 {/* 3. Luxury Vehicle Selection Grid */}
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/80">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4 shadow-sm ">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-white tracking-wide">Luxury Vehicle Selection</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">Select your preferred model class and asset tier</p>
+                      <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">Luxury Vehicle Selection</h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">Select your preferred model class and asset tier</p>
                     </div>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                       STEP 2
@@ -1256,22 +1253,22 @@ function NewBookingInner() {
                           }}
                           className={`p-4 rounded-xl text-left border transition-all flex flex-col justify-between space-y-3 ${
                             isSelected
-                              ? 'bg-cyan-500/15 border-cyan-400 shadow-lg shadow-cyan-500/25 scale-[1.02]'
-                              : 'bg-slate-950/60 border-white/10 hover:border-cyan-400/40 text-slate-400'
+                              ? 'bg-blue-500/10 border-blue-500 text-[var(--text-main)] shadow-sm ring-1 ring-blue-500/30'
+                              : 'bg-[var(--bg-main)] border-[var(--border-subtle)] hover:border-blue-500/40 text-[var(--text-main)]'
                           }`}
                         >
                           <div className="flex items-start justify-between">
-                            <span className="text-2xl p-2 bg-black/40 rounded-lg border border-white/10">{veh.icon}</span>
+                            <span className="text-2xl p-2 bg-[var(--bg-surface-hover)] rounded-lg border border-[var(--border-subtle)]">{veh.icon}</span>
                             <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                               {veh.badge}
                             </span>
                           </div>
                           <div>
-                            <h4 className="text-xs font-bold text-white">{veh.name}</h4>
-                            <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{veh.desc}</p>
+                            <h4 className="text-xs font-bold text-[var(--text-main)]">{veh.name}</h4>
+                            <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{veh.desc}</p>
                           </div>
-                          <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs font-mono">
-                            <span className="text-slate-500">From</span>
+                          <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between items-center text-xs font-mono">
+                            <span className="text-[var(--text-muted)]">From</span>
                             <span className="text-cyan-400 font-bold">AED {veh.fare}</span>
                           </div>
                         </button>
@@ -1440,50 +1437,50 @@ function NewBookingInner() {
 
               {/* ── RIGHT COLUMN (Pixel-Perfect Modern Obsidian Glass Order Summary) ── */}
               <div className="lg:col-span-4 sticky top-20 space-y-4">
-                <div className="bg-slate-900/75 backdrop-blur-2xl border border-white/15 rounded-2xl p-6 shadow-2xl shadow-black/90 space-y-5">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 shadow-sm space-y-5">
                   {/* Summary Header */}
-                  <div className="border-b border-white/10 pb-3">
-                    <h3 className="text-base font-bold text-white">Order Summary</h3>
+                  <div className="border-b border-[var(--border-subtle)] pb-3">
+                    <h3 className="text-base font-bold text-[var(--text-main)]">Order Summary</h3>
                   </div>
 
                   {/* Summary Details */}
                   <div className="space-y-3 text-xs">
-                    <div className="flex justify-between text-slate-300">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Trip Details</span>
-                      <strong className="text-white font-mono font-bold">13:00 – 17:30</strong>
+                      <strong className="text-[var(--text-main)] font-mono font-bold">13:00 – 17:30</strong>
                     </div>
                     {form.destination && (
-                      <div className="flex justify-between text-slate-300">
+                      <div className="flex justify-between text-[var(--text-main)]">
                         <span>Destination</span>
-                        <strong className="text-white font-bold truncate max-w-[160px]">{form.destination as string}</strong>
+                        <strong className="text-[var(--text-main)] font-bold truncate max-w-[160px]">{form.destination as string}</strong>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-300">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Pickup Summary</span>
-                      <span className="text-white font-bold">Confirmed VIP</span>
+                      <span className="text-[var(--text-main)] font-bold">Confirmed VIP</span>
                     </div>
                   </div>
 
                   {/* Itemized Pricing */}
                   <div className="border-t border-b border-amber-500/20 py-3 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between text-zinc-300">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Base Fare</span>
-                      <span className="text-white font-bold">AED {Number(form.fareSubtotal) || 450}</span>
+                      <span className="text-[var(--text-main)] font-bold">AED {Number(form.fareSubtotal) || 450}</span>
                     </div>
                     {Number(form.salikTollsAed) > 0 && (
-                      <div className="flex justify-between text-slate-300">
+                      <div className="flex justify-between text-[var(--text-main)]">
                         <span>Surcharges (Toll/Salik)</span>
-                        <span className="text-white font-bold">AED {Number(form.salikTollsAed)}</span>
+                        <span className="text-[var(--text-main)] font-bold">AED {Number(form.salikTollsAed)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-slate-300">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>5% UAE VAT</span>
-                      <span className="text-white font-bold">
+                      <span className="text-[var(--text-main)] font-bold">
                         AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 450) * 0.05)}
                       </span>
                     </div>
                     <div className="pt-2 flex justify-between items-baseline">
-                      <span className="text-sm font-bold text-white">Total (Incl. VAT)</span>
+                      <span className="text-sm font-bold text-[var(--text-main)]">Total (Incl. VAT)</span>
                       <span className="text-2xl font-extrabold text-cyan-400 font-mono">
                         AED{' '}
                         {Number(form.totalFareAed) ||
@@ -1504,11 +1501,11 @@ function NewBookingInner() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full py-4 rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-extrabold shadow-xl shadow-cyan-500/30 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
+                      className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
                     >
                       {loading ? (
                         <span className="flex items-center gap-2">
-                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span className="w-4 h-4 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin" />
                           Processing…
                         </span>
                       ) : (
@@ -1520,7 +1517,7 @@ function NewBookingInner() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className={`${BACK_BUTTON} w-full mt-3`}
+                        className="w-full mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
                       >
                         ← Back to Categories
                       </button>
@@ -1542,17 +1539,17 @@ function NewBookingInner() {
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-8 text-center">
             <div className="text-6xl mb-4">✅</div>
             <h2 className="text-2xl font-bold text-emerald-400">Booking Submitted!</h2>
-            <p className="text-slate-400 text-sm mt-1">Your request is now pending approval</p>
+            <p className="text-[var(--text-muted)] text-sm mt-1">Your request is now pending approval</p>
           </div>
 
           {/* Booking reference card */}
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-5 shadow-2xl shadow-cyan-500/10">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5 shadow-sm shadow-cyan-500/10">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
               <div>
                 <p className="text-xs text-cyan-300 uppercase tracking-wider mb-1 font-semibold">Booking Reference</p>
                 <p className="text-3xl font-mono font-bold text-cyan-400">{bookingRef}</p>
               </div>
-              <div className="bg-slate-950 border border-white/10 rounded-2xl p-3 text-3xl shadow-inner">{meta.icon}</div>
+              <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-3 text-3xl ">{meta.icon}</div>
             </div>
 
             {/* Key details */}
@@ -1612,7 +1609,7 @@ function NewBookingInner() {
 
             {/* Service-specific notes */}
             {meta.confirmNote && (
-              <div className="bg-zinc-900 border border-amber-500/20 rounded-xl px-4 py-3 text-zinc-300 text-xs leading-relaxed">
+              <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-3 text-[var(--text-main)] text-xs leading-relaxed">
                 {meta.confirmNote}{' '}
                 {serviceType === 'LOGISTICS' && (
                   <a href="/logistics/dispatch" className="underline text-amber-400 hover:text-amber-300">
@@ -1640,7 +1637,7 @@ function NewBookingInner() {
             </button>
             <button
               onClick={resetForm}
-              className="flex-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 px-6 py-3.5 text-sm font-medium text-zinc-300 transition-all border border-white/10"
+              className="flex-1 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] px-6 py-3.5 text-sm font-medium text-[var(--text-main)] transition-all border border-[var(--border-subtle)]"
             >
               + Create Another Booking
             </button>
