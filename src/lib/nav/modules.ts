@@ -499,7 +499,6 @@ export const MODULES: ModuleDef[] = [
       { label: 'Service Tickets', href: '/service-tickets', icon: LayoutDashboard },
       { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
       { label: 'CSAT Analytics', href: '/service-tickets/csat', icon: Star },
-      { label: 'Triage Simulator', href: '/service-tickets/simulator', icon: Sparkles },
       { label: 'WhatsApp console', href: '/admin/whatsapp', icon: MessageCircle, navKey: 'whatsapp' },
       { label: 'Service configuration', href: '/admin/service-config', icon: Sliders, navKey: 'service-config' },
     ],

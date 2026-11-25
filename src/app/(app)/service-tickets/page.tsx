@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, MessageSquare, Star, Send, Inbox, ExternalLink } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
@@ -561,12 +561,6 @@ export default function ServiceTicketsHome() {
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-amber-500/30 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 hover:border-amber-500/60 transition-all shadow-sm"
             >
               <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> CSAT & Feedback
-            </Link>
-            <Link
-              href="/service-tickets/simulator"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all shadow-sm"
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" /> WhatsApp Simulator
             </Link>
             <button onClick={() => setShowForm(s => !s)}
               disabled={enabledTypes.length === 0}
