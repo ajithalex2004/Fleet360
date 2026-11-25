@@ -139,6 +139,7 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'tenants/[id]/api-keys/[id]/revoke':           { POST: 'admin' },
   'tenants/[id]/branding':                       { GET: 'admin', PUT: 'admin' },
   'tenants/[id]/branding/logo':                  { POST: 'admin' },
+  'tenants/[id]/fsm-catalog':                    { GET: 'admin', POST: 'admin' },  // load the FSM catalogue into a tenant
   'tenants/[id]/hard-delete':                    { POST: 'platform' },
   'tenants/[id]/invitations':                    { GET: 'admin', POST: 'admin' },
   // New User form: create or invite a member of this company.
