@@ -1,6 +1,6 @@
 /**
  * Maps a booking serviceType to its owning module route segment.
- * Split out of src/app/booking-portal/page.tsx so tests can import it
+ * Split out of src/app/(app)/booking-portal/page.tsx so tests can import it
  * directly -- Next.js page.tsx files may only export the default
  * component and a small set of reserved names (metadata, dynamic, ...).
  */

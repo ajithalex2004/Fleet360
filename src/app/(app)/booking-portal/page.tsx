@@ -279,12 +279,12 @@ export default function BookingPortal() {
   return (
     <div className="space-y-6 text-[var(--text-main)] transition-colors duration-150">
       {/* ── Executive Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 dark:border-[var(--border-subtle)] pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">
             Booking & Dispatch Portal
           </h1>
-          <p className="text-[var(--text-faint)] dark:text-[var(--text-muted)] text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-[var(--text-muted)] dark:text-[var(--text-muted)] text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -344,7 +344,7 @@ export default function BookingPortal() {
       {/* ── Flagship Mobile & B2B Booking Consoles ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Card 1: Universal Mobile Booking App */}
-        <div className="bg-white dark:bg-[var(--bg-surface)] border border-black/10 dark:border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
@@ -352,10 +352,10 @@ export default function BookingPortal() {
               </span>
               <span className="text-xs text-[var(--text-muted)] font-mono">v2.4 Live</span>
             </div>
-            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-blue-500" /> Fleet360 Mobile Booking App
             </h3>
-            <p className="text-xs text-[var(--text-faint)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-muted)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
               Universal mobile booking for Freight, Chauffeur, Bus & Rental. Biometrics, OTP, e-BOL & Cold-Chain IoT.
             </p>
           </div>
@@ -369,16 +369,16 @@ export default function BookingPortal() {
             <a
               href="/api/mobile/download-apk"
               download="Fleet360 Booking App.apk"
-              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-[var(--bg-surface-hover)] hover:bg-black/10 dark:hover:bg-[var(--bg-surface-hover)] text-zinc-700 dark:text-[var(--text-muted)] text-xs font-medium border border-black/10 dark:border-[var(--border-subtle)] transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-medium border border-[var(--border-subtle)] transition-all flex items-center gap-1.5"
             >
-              <Download className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+              <Download className="w-3.5 h-3.5 text-[var(--text-muted)]" />
               Download APK
             </a>
           </div>
         </div>
 
         {/* Card 2: Enterprise Booking Portal */}
-        <div className="bg-white dark:bg-[var(--bg-surface)] border border-black/10 dark:border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20">
@@ -386,10 +386,10 @@ export default function BookingPortal() {
               </span>
               <span className="text-xs text-[var(--text-muted)] font-mono">All Domains</span>
             </div>
-            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-indigo-500" /> Booking Intake & Approvals
             </h3>
-            <p className="text-xs text-[var(--text-faint)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-muted)] dark:text-[var(--text-muted)] mt-1 leading-relaxed">
               Bulk CSV uploader, 3-tier corporate approval hierarchy, multi-stop routing & UAE customs e-BOL manifests.
             </p>
           </div>
@@ -402,7 +402,7 @@ export default function BookingPortal() {
             </Link>
             <Link
               href="/customer-mgmt"
-              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-[var(--bg-surface-hover)] hover:bg-black/10 dark:hover:bg-[var(--bg-surface-hover)] text-zinc-700 dark:text-[var(--text-muted)] text-xs font-medium border border-black/10 dark:border-[var(--border-subtle)] transition-all"
+              className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-medium border border-[var(--border-subtle)] transition-all"
             >
               Corporate Hub
             </Link>
@@ -416,10 +416,10 @@ export default function BookingPortal() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleCards.map(card => (
             <Link key={card.type} href={card.href}>
-              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-xl p-6 transition-all duration-200 active:scale-100 flex flex-col justify-between space-y-4 shadow-sm group cursor-pointer h-full">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-sm group cursor-pointer h-full">
                 <div>
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
                       {card.type === 'RENTAL' && <CarFront className="w-6 h-6 text-cyan-400" />}
                       {card.type === 'LEASING' && <FileCheck className="w-6 h-6 text-cyan-400" />}
                       {card.type === 'STAFF_TRANSPORT' && <CarFront className="w-6 h-6 text-cyan-400" />}
@@ -447,21 +447,21 @@ export default function BookingPortal() {
       </div>
 
       {/* ── Bookings table ── */}
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--bg-surface-hover)]">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-sm ">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent">
           <div>
             <h2 className="text-base font-bold text-[var(--text-main)]">All Bookings & Manifests</h2>
             <p className="text-[var(--text-muted)] text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={load} className="text-xs text-cyan-300 hover:text-[var(--text-main)] border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] rounded-lg px-3 py-1.5 transition-colors">
+            <button onClick={load} className="text-xs text-cyan-300 hover:text-[var(--text-main)] border border-[var(--border-subtle)] bg-[var(--bg-main)] rounded-lg px-3 py-1.5 transition-colors">
               ↻ Refresh
             </button>
           </div>
         </div>
 
         {/* Type filter tabs */}
-        <div className="px-6 py-3 border-b border-amber-500/15 flex gap-2 overflow-x-auto bg-[var(--bg-surface-hover)]">
+        <div className="px-6 py-3 border-b border-amber-500/15 flex gap-2 overflow-x-auto bg-[var(--bg-main)]">
           {activeTypes.map(t => (
             <button key={t} onClick={() => setTypeFilter(t)}
               className={`flex-shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -476,10 +476,10 @@ export default function BookingPortal() {
         </div>
 
         {/* Search */}
-        <div className="px-6 py-3 border-b border-amber-500/15 bg-[var(--bg-surface-hover)]">
+        <div className="px-6 py-3 border-b border-amber-500/15 bg-[var(--bg-main)]">
           <input type="text" placeholder="Search by reference number, requestor, email, or service…"
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+            className="w-full bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
           />
         </div>
 
@@ -492,23 +492,23 @@ export default function BookingPortal() {
         {loading ? (
           <div className="px-6 py-8 space-y-3">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 bg-slate-700/40 rounded-xl animate-pulse" />
+              <div key={i} className="h-12 bg-[var(--bg-surface-hover)] rounded-xl animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-5xl mb-3">📭</div>
-            <p className="text-[var(--text-muted)] font-medium">
+            <p className="text-[var(--text-main)] font-medium">
               {bookings.length === 0 ? 'No bookings recorded yet' : 'No bookings match your filter criteria'}
             </p>
-            <p className="text-[var(--text-faint)] text-sm mt-1">
+            <p className="text-[var(--text-muted)] text-sm mt-1">
               {bookings.length === 0
                 ? 'Click "New Booking Request" above to dispatch your first booking'
                 : 'Try changing the service category or search term'}
             </p>
             {bookings.length === 0 && (
               <Link href="/booking-portal/new"
-                className="mt-5 inline-block bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black font-bold text-sm px-6 py-3 rounded-xl shadow-lg shadow-amber-500/20 transition-all">
+                className="mt-5 inline-block bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black font-bold text-sm px-6 py-3 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.02] transition-all">
                 Create First Booking →
               </Link>
             )}
@@ -517,7 +517,7 @@ export default function BookingPortal() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-amber-500/20 text-amber-300/70 text-[11px] font-mono uppercase tracking-wider bg-[var(--bg-surface-hover)]">
+                <tr className="border-b border-amber-500/20 text-amber-300/70 text-[11px] font-mono uppercase tracking-wider bg-[var(--bg-main)]">
                   <th className="text-left px-6 py-3.5">Ref #</th>
                   <th className="text-left px-6 py-3.5">Service Category</th>
                   <th className="text-left px-6 py-3.5">Requestor & Contact</th>
@@ -551,12 +551,12 @@ export default function BookingPortal() {
                         <div>
                           <p className="text-[var(--text-main)] text-xs font-medium">{b.requestorName ?? '—'}</p>
                           {b.requestorEmail && (
-                            <p className="text-[var(--text-faint)] text-[11px] font-mono">{b.requestorEmail}</p>
+                            <p className="text-[var(--text-muted)] text-[11px] font-mono">{b.requestorEmail}</p>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 max-w-xs">
-                        <p className="text-[var(--text-muted)] text-xs truncate">{route}</p>
+                        <p className="text-[var(--text-main)] text-xs truncate">{route}</p>
                       </td>
                       <td className="px-6 py-4 text-[var(--text-muted)] text-xs font-mono">
                         {b.startDate
@@ -683,8 +683,8 @@ function OutsourceBookingModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--bg-surface-hover)] backdrop-blur-sm">
-      <div className="bg-[var(--bg-surface-hover)] border border-cyan-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-xs text-[var(--text-main)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 ">
+      <div className="bg-[var(--bg-main)] border border-cyan-500/30 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-sm text-xs text-[var(--text-main)]">
         <div className="flex items-start justify-between border-b border-[var(--border-subtle)] pb-3">
           <div>
             <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
@@ -704,7 +704,7 @@ function OutsourceBookingModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block font-semibold text-[var(--text-muted)] mb-1">Pickup Location *</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pickup Location *</label>
             <input
               type="text"
               value={pickupLocation}
@@ -713,7 +713,7 @@ function OutsourceBookingModal({
             />
           </div>
           <div>
-            <label className="block font-semibold text-[var(--text-muted)] mb-1">Dropoff Location *</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Dropoff Location *</label>
             <input
               type="text"
               value={dropoffLocation}
@@ -725,7 +725,7 @@ function OutsourceBookingModal({
 
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block font-semibold text-[var(--text-muted)] mb-1">Pickup Time</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pickup Time</label>
             <input
               type="time"
               value={pickupTime}
@@ -734,7 +734,7 @@ function OutsourceBookingModal({
             />
           </div>
           <div>
-            <label className="block font-semibold text-[var(--text-muted)] mb-1">Pax Capacity</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Pax Capacity</label>
             <input
               type="number"
               min={1}
@@ -745,7 +745,7 @@ function OutsourceBookingModal({
             />
           </div>
           <div>
-            <label className="block font-semibold text-[var(--text-muted)] mb-1">Vehicle Class</label>
+            <label className="block font-semibold text-[var(--text-main)] mb-1">Vehicle Class</label>
             <input
               type="text"
               value={vehicleTypeRequired}
@@ -756,7 +756,7 @@ function OutsourceBookingModal({
         </div>
 
         <div>
-          <label className="block font-semibold text-[var(--text-muted)] mb-1">
+          <label className="block font-semibold text-[var(--text-main)] mb-1">
             {isLimo ? 'VIP Chauffeur & Flight / Meet-and-Greet Protocol' : 'Special Dispatch Instructions'}
           </label>
           <textarea
@@ -771,7 +771,7 @@ function OutsourceBookingModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] font-semibold"
+            className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold"
           >
             Cancel
           </button>

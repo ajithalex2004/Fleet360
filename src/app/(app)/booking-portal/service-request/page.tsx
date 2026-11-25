@@ -15,9 +15,14 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, Copy, Loader2, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Copy, FileText, Gauge, Loader2, MapPin, Send } from 'lucide-react';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { TICKET_PRIORITIES, type FormFieldDef, type TicketPriority } from '@/types/service-tickets';
+import { formatSlaHours, priorityLabel } from '@/lib/service-tickets/priority-tiers';
+import {
+  FormPanel, FormSection, FormField, FormAlert, FormFooter, ReadOnlyValue, CheckboxField,
+  TextInput, SelectInput, TextAreaInput, PrimaryButton, SecondaryButton,
+} from '@/components/ui/form-kit';
 
 interface TypeConfig {
   name: string;
@@ -32,6 +37,8 @@ interface TypeConfig {
   defaultSlaHours: number;
   approvalRequired: boolean;
   approvalEmergencyBypass: boolean;
+  /** Field Service catalogue types: priority and SLA set in the Service Catalog & SLA master. */
+  catalogSla?: { responseHours: number | null; onSiteHours: number; resolutionHours: number | null } | null;
 }
 
 interface Created {
@@ -47,9 +54,6 @@ const PRIORITY_HINT: Record<TicketPriority, string> = {
   High: 'Affecting work',
   Critical: 'Safety risk or major outage',
 };
-
-const field = 'w-full rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-3.5 py-2.5 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:outline-none focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-500/20';
-const label = 'block text-xs font-semibold text-[var(--text-muted)] mb-1.5';
 
 function slaText(h?: number) {
   if (!h) return '';
@@ -100,8 +104,9 @@ function ServiceRequestForm() {
         if (!byCat.has(key)) byCat.set(key, { name: t.categoryName || 'Other requests', items: [] });
         byCat.get(key)!.items.push([k, t]);
       });
-    // Field Service (FM_) categories first: that's what most employees come here for.
-    return [...byCat.entries()].sort(([a], [b]) => Number(b.startsWith('FM_')) - Number(a.startsWith('FM_')));
+    // Field Service categories (FSM_ catalogue, FM_ facilities) first: that's what most employees come here for.
+    const isFsm = (k: string) => k.startsWith('FSM_') || k.startsWith('FM_');
+    return [...byCat.entries()].sort(([a], [b]) => Number(isFsm(b)) - Number(isFsm(a)));
   }, [types]);
 
   // Deep link: /booking-portal/service-request?type=FM_HVAC
@@ -120,7 +125,8 @@ function ServiceRequestForm() {
 
   const t = typeKey ? types[typeKey] : null;
   const fields = typeKey ? fieldsByType[typeKey] ?? [] : [];
-  const sla = t ? (t.slaByPriority?.[priority] ?? t.defaultSlaHours) : undefined;
+  const catalogSla = t?.catalogSla ?? null;
+  const sla = t ? (catalogSla?.resolutionHours ?? t.slaByPriority?.[priority] ?? t.defaultSlaHours) : undefined;
   const awaitsApproval = !!t?.approvalRequired && !(t.approvalEmergencyBypass && (priority === 'High' || priority === 'Critical'));
 
   const submit = async (e: React.FormEvent) => {
@@ -168,8 +174,8 @@ function ServiceRequestForm() {
       <div className="max-w-xl mx-auto py-10 text-center space-y-5">
         <CheckCircle2 className="w-14 h-14 text-emerald-400 mx-auto" />
         <h1 className="text-2xl font-extrabold text-[var(--text-main)]">Request submitted</h1>
-        <p className="text-[var(--text-muted)]">
-          Reference <strong className="font-mono text-cyan-300">{created.readableId ?? '—'}</strong>
+        <p className="text-[var(--text-main)]">
+          Reference <strong className="font-mono text-blue-500">{created.readableId ?? '—'}</strong>
           {created.status === 'Awaiting Approval' ? ' is waiting for approval.' : ' is with the service desk.'}
         </p>
         {created.slaTargetHours ? (
@@ -177,16 +183,16 @@ function ServiceRequestForm() {
         ) : null}
         {trackUrl && (
           <div className="flex items-center gap-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-2 text-left">
-            <code className="flex-1 truncate text-xs text-[var(--text-muted)] px-2">{trackUrl}</code>
+            <code className="flex-1 truncate text-xs text-[var(--text-main)] px-2">{trackUrl}</code>
             <button type="button" onClick={() => { void navigator.clipboard.writeText(trackUrl); setCopied(true); }}
-              className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-white/15 px-3 py-1.5 text-xs font-semibold text-[var(--text-main)]">
+              className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--text-main)]">
               <Copy className="w-3.5 h-3.5" /> {copied ? 'Copied' : 'Copy tracking link'}
             </button>
           </div>
         )}
         <div className="flex justify-center gap-3 pt-2">
-          <Link href="/booking-portal/my-bookings" className="rounded-xl border border-[var(--border-subtle)] px-5 py-2.5 text-sm font-semibold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">View my requests</Link>
-          <button type="button" onClick={reset} className="rounded-xl bg-cyan-600 hover:bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white">Raise another</button>
+          <Link href="/booking-portal/my-bookings" className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] px-5 py-2 text-xs font-semibold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">View my requests</Link>
+          <button type="button" onClick={reset} className="rounded-lg bg-blue-600 hover:bg-blue-500 px-5 py-2 text-xs font-bold text-white shadow-sm">Raise another</button>
         </div>
       </div>
     );
@@ -196,68 +202,77 @@ function ServiceRequestForm() {
   if (t) {
     const Icon = getServiceIcon(t.iconName);
     return (
-      <form onSubmit={submit} className="max-w-3xl mx-auto space-y-6">
-        <button type="button" onClick={() => setTypeKey('')} className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">
-          <ArrowLeft className="w-4 h-4" /> All request types
+      <form onSubmit={submit} className="max-w-4xl mx-auto space-y-4">
+        <button type="button" onClick={() => setTypeKey('')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]">
+          <ArrowLeft className="w-3.5 h-3.5" /> All request types
         </button>
-        <div className="flex items-start gap-4">
-          <span className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400"><Icon className="w-6 h-6" /></span>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">{t.categoryName}</p>
-            <h1 className="text-2xl font-extrabold text-[var(--text-main)]">{t.name}</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">{t.description}</p>
-          </div>
-        </div>
 
-        <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 space-y-5">
-          <div>
-            <label className={label} htmlFor="sr-title">Short summary</label>
-            <input id="sr-title" className={field} value={title} maxLength={140} onChange={(e) => setTitle(e.target.value)}
-              placeholder={`e.g. ${t.name} — ${String(custom.area ?? 'meeting room 12.04')}`} />
-          </div>
+        <FormPanel
+          title={t.name}
+          subtitle={[t.categoryName, t.description].filter(Boolean).join(' · ')}
+          icon={Icon}
+          accent="blue"
+        >
+          {error && <FormAlert>{error}</FormAlert>}
+
+          <FormSection title="Request details" icon={FileText} columns={2}>
+            <FormField label="Short summary" htmlFor="sr-title" span="full" hint="Leave empty to use the service type name">
+              <TextInput id="sr-title" value={title} maxLength={140} onChange={(e) => setTitle(e.target.value)}
+                placeholder={`e.g. ${t.name} — ${String(custom.area ?? 'meeting room 12.04')}`} />
+            </FormField>
+            <FormField label="Details" htmlFor="sr-desc" span="full">
+              <TextAreaInput id="sr-desc" rows={4} value={description} onChange={(e) => setDescription(e.target.value)}
+                placeholder="What's wrong, since when, anything the team should know" />
+            </FormField>
+          </FormSection>
 
           {fields.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormSection title="Location & additional details" icon={MapPin} columns={2}>
               {fields.map((f) => (
                 <DynamicField key={f.key} def={f} value={custom[f.key]} onChange={(v) => setCustom((c) => ({ ...c, [f.key]: v }))} />
               ))}
-            </div>
+            </FormSection>
           )}
 
-          <div>
-            <label className={label} htmlFor="sr-desc">Details</label>
-            <textarea id="sr-desc" className={`${field} min-h-28`} value={description} onChange={(e) => setDescription(e.target.value)}
-              placeholder="What's wrong, since when, anything the team should know" />
-          </div>
+          <FormSection title="Priority & SLA" icon={Gauge} columns={catalogSla ? 4 : 1}>
+            {catalogSla ? (
+              <>
+                <ReadOnlyValue label="Priority" value={priorityLabel(t.defaultPriority)}
+                  tone={t.defaultPriority === 'Critical' ? 'rose' : t.defaultPriority === 'High' ? 'amber' : t.defaultPriority === 'Medium' ? 'blue' : 'emerald'} />
+                <ReadOnlyValue label="SLA response" value={formatSlaHours(catalogSla.responseHours)} />
+                <ReadOnlyValue label="SLA on-site arrival" value={formatSlaHours(catalogSla.onSiteHours)} />
+                <ReadOnlyValue label="SLA resolution" value={formatSlaHours(catalogSla.resolutionHours)} />
+              </>
+            ) : (
+              <fieldset>
+                <legend className="sr-only">Priority</legend>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {TICKET_PRIORITIES.map((p) => (
+                    <label key={p} className={`cursor-pointer rounded-lg border px-3 py-2 text-xs transition-colors ${
+                      priority === p ? 'border-blue-500 bg-blue-500/10 text-[var(--text-main)]' : 'border-[var(--border-subtle)] bg-[var(--bg-main)] text-[var(--text-main)] hover:border-[var(--border-strong)]'}`}>
+                      <input type="radio" name="priority" value={p} checked={priority === p} onChange={() => setPriority(p)} className="sr-only" />
+                      <span className="block font-bold">{p}</span>
+                      <span className="block text-[10px] text-[var(--text-muted)]">{PRIORITY_HINT[p]}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {(sla || awaitsApproval) && (
+              <div className="md:col-span-full flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-[var(--text-muted)]">
+                {sla && !catalogSla ? <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Target: within {slaText(sla)}</span> : null}
+                {catalogSla && <span>Priority and SLA are set for this service type in the Service Catalog &amp; SLA master.</span>}
+                {awaitsApproval && <span className="font-semibold text-amber-600">Needs approval before work starts</span>}
+              </div>
+            )}
+          </FormSection>
 
-          <fieldset>
-            <legend className={label}>Priority</legend>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {TICKET_PRIORITIES.map((p) => (
-                <label key={p} className={`cursor-pointer rounded-xl border px-3 py-2.5 text-sm transition-colors ${
-                  priority === p ? 'border-cyan-400/70 bg-cyan-500/10 text-[var(--text-main)]' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-white/25'}`}>
-                  <input type="radio" name="priority" value={p} checked={priority === p} onChange={() => setPriority(p)} className="sr-only" />
-                  <span className="block font-bold">{p}</span>
-                  <span className="block text-[11px] text-[var(--text-muted)]">{PRIORITY_HINT[p]}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--text-muted)]">
-            {sla ? <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Target: within {slaText(sla)}</span> : null}
-            {awaitsApproval && <span className="text-amber-300">Needs approval before work starts</span>}
-          </div>
-        </div>
-
-        {error && <p role="alert" className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm text-rose-300">{error}</p>}
-
-        <div className="flex justify-end">
-          <button type="submit" disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 disabled:opacity-60">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Submit request
-          </button>
-        </div>
+          <FormFooter secondary={<SecondaryButton icon={ArrowLeft} onClick={() => setTypeKey('')}>Back</SecondaryButton>}>
+            <PrimaryButton type="submit" icon={submitting ? Loader2 : Send} busy={submitting}>
+              {submitting ? 'Submitting…' : 'Submit request'}
+            </PrimaryButton>
+          </FormFooter>
+        </FormPanel>
       </form>
     );
   }
@@ -273,7 +288,7 @@ function ServiceRequestForm() {
       {loadError && <p role="alert" className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm text-rose-300">{loadError}</p>}
 
       {!loadError && groups.length === 0 && (
-        <p className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 text-[var(--text-muted)]">
+        <p className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 text-[var(--text-main)]">
           No service requests are set up yet. An administrator can add them in Service Configuration,
           for example by installing the Field Service Management catalogue.
         </p>
@@ -287,9 +302,9 @@ function ServiceRequestForm() {
               const Icon = getServiceIcon(cfg.iconName);
               return (
                 <button key={key} type="button" onClick={() => choose(key)}
-                  className="group text-left rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 p-5 transition-all hover:shadow-xl hover:shadow-cyan-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
-                  <span className="w-10 h-10 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 mb-3"><Icon className="w-5 h-5" /></span>
-                  <span className="block font-bold text-[var(--text-main)] group-hover:text-cyan-300">{cfg.name}</span>
+                  className="group text-left rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-blue-500/60 p-5 transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                  <span className="w-10 h-10 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-blue-500 mb-3"><Icon className="w-5 h-5" /></span>
+                  <span className="block font-bold text-[var(--text-main)] group-hover:text-blue-500">{cfg.name}</span>
                   <span className="block text-xs text-[var(--text-muted)] mt-1 leading-relaxed">{cfg.description}</span>
                 </button>
               );
@@ -311,31 +326,28 @@ export default function ServiceRequestPage() {
 
 function DynamicField({ def, value, onChange }: { def: FormFieldDef; value: unknown; onChange: (v: unknown) => void }) {
   const id = `sr-${def.key}`;
-  const req = def.required ? <span className="text-rose-400"> *</span> : null;
   if (def.type === 'checkbox') {
     return (
-      <label htmlFor={id} className="flex items-center gap-2 text-sm text-[var(--text-muted)] sm:col-span-2">
-        <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-cyan-500" />
-        {def.label}
-      </label>
+      <div className="md:col-span-full">
+        <CheckboxField label={def.required ? `${def.label} *` : def.label} checked={!!value} onChange={(v) => onChange(v)} />
+      </div>
     );
   }
   return (
-    <div className={def.type === 'textarea' ? 'sm:col-span-2' : ''}>
-      <label htmlFor={id} className={label}>{def.label}{req}</label>
+    <FormField label={def.label} required={def.required} htmlFor={id} span={def.type === 'textarea' ? 'full' : undefined}>
       {def.type === 'select' ? (
-        <select id={id} className={field} required={def.required} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+        <SelectInput id={id} required={def.required} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           <option value="">Select…</option>
           {def.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </SelectInput>
       ) : def.type === 'textarea' ? (
-        <textarea id={id} className={field} required={def.required} value={String(value ?? '')} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />
+        <TextAreaInput id={id} required={def.required} value={String(value ?? '')} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input id={id} className={field} required={def.required} placeholder={def.placeholder}
+        <TextInput id={id} required={def.required} placeholder={def.placeholder}
           type={def.type === 'number' ? 'number' : def.type === 'date' ? 'date' : def.type === 'datetime' ? 'datetime-local' : 'text'}
           min={def.min} max={def.max} value={String(value ?? '')}
           onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />
       )}
-    </div>
+    </FormField>
   );
 }

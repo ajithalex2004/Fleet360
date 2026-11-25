@@ -175,7 +175,7 @@ export default function MyBookings() {
           <p className="text-[var(--text-muted)]">Your service requests and transport bookings in one place</p>
         </div>
         <Link href="/booking-portal/new">
-          <button className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-medium text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all">
+          <button className="rounded-lg bg-blue-600 hover:bg-blue-500 px-6 py-2.5 text-xs font-bold text-white shadow-sm transition-colors">
             + New Booking
           </button>
         </Link>
@@ -187,19 +187,19 @@ export default function MyBookings() {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Total Bookings</p>
           <p className="text-3xl font-bold text-[var(--text-main)]">{bookings.length}</p>
         </div>
-        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Pending/Active</p>
           <p className="text-3xl font-bold text-amber-400">{groupedBookings.active.length}</p>
         </div>
-        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Completed</p>
           <p className="text-3xl font-bold text-emerald-400">{groupedBookings.completed.length}</p>
         </div>
-        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Rejected</p>
           <p className="text-3xl font-bold text-red-400">{groupedBookings.rejected.length}</p>
         </div>
@@ -211,10 +211,10 @@ export default function MyBookings() {
           <h2 className="text-2xl font-bold text-[var(--text-main)]">Active Bookings</h2>
           <div className="space-y-4">
             {groupedBookings.active.map((booking) => (
-              <div key={booking.id} className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+              <div key={booking.id} className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
                 <div
                   onClick={() => setExpandedId(expandedId === booking.id ? '' : booking.id)}
-                  className="p-6 cursor-pointer hover:bg-[var(--bg-surface-hover)] transition-colors"
+                  className="p-6 cursor-pointer hover:bg-[var(--bg-main)] transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
@@ -282,7 +282,7 @@ export default function MyBookings() {
           <h2 className="text-2xl font-bold text-[var(--text-main)]">Completed Bookings</h2>
           <div className="space-y-2">
             {groupedBookings.completed.map((booking) => (
-              <div key={booking.id} className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center justify-between">
+              <div key={booking.id} className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span className="text-2xl">✓</span>
                   <div>
@@ -325,7 +325,7 @@ export default function MyBookings() {
           <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2">No Bookings Yet</h2>
           <p className="text-[var(--text-muted)] mb-6">Start by creating your first transport booking</p>
           <Link href="/booking-portal/new">
-            <button className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-3 text-sm font-medium text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all">
+            <button className="rounded-lg bg-blue-600 hover:bg-blue-500 px-8 py-2.5 text-xs font-bold text-white shadow-sm transition-colors">
               Create New Booking
             </button>
           </Link>

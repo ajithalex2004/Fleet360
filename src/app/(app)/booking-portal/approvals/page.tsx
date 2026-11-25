@@ -205,7 +205,7 @@ export default function MultiLevelApprovalsPage() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] pb-3">
-        <span className="flex items-center gap-1 text-[10px] text-[var(--text-faint)] uppercase font-bold tracking-wider mr-1">
+        <span className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider mr-1">
           <Filter className="w-3 h-3" />
           Filter:
         </span>
@@ -214,7 +214,7 @@ export default function MultiLevelApprovalsPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'ALL'
               ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/25'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
           }`}
         >
           All Pending ({stats.totalPending})
@@ -225,7 +225,7 @@ export default function MultiLevelApprovalsPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'TIER_1'
               ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
           }`}
         >
           Tier 1: Line Manager ({stats.tier1Count})
@@ -236,7 +236,7 @@ export default function MultiLevelApprovalsPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'TIER_2'
               ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/25'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
           }`}
         >
           Tier 2: Dept Head &gt;AED 1k ({stats.tier2Count})
@@ -247,7 +247,7 @@ export default function MultiLevelApprovalsPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'TIER_3'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
           }`}
         >
           Tier 3: Fleet Dispatch ({stats.tier3Count})
@@ -258,7 +258,7 @@ export default function MultiLevelApprovalsPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'RESOLVED'
               ? ACTIVE_TOGGLE
-              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
           }`}
         >
           Completed / History
@@ -272,10 +272,10 @@ export default function MultiLevelApprovalsPage() {
           <p className="text-[var(--text-muted)] text-sm">Evaluating policy compliance & loading approval queues…</p>
         </div>
       ) : filteredBookings.length === 0 ? (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-12 text-center">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-12 text-center">
           <p className="text-3xl mb-2">🎉</p>
           <p className="text-[var(--text-main)] font-semibold">No Pending Requests in this Queue</p>
-          <p className="text-[var(--text-faint)] text-xs mt-1">All bookings in this tier have been processed</p>
+          <p className="text-[var(--text-muted)] text-xs mt-1">All bookings in this tier have been processed</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -287,7 +287,7 @@ export default function MultiLevelApprovalsPage() {
             return (
               <div
                 key={b.id}
-                className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 hover:border-[var(--border-subtle)] transition-all space-y-4"
+                className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 hover:border-[var(--border-strong)] transition-all space-y-4"
               >
                 {/* Header & Core Metadata */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
@@ -298,7 +298,7 @@ export default function MultiLevelApprovalsPage() {
                         <span className="font-mono font-bold text-[var(--text-main)] text-base">
                           {b.bookingRef || b.id.slice(0, 8)}
                         </span>
-                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[var(--bg-surface-hover)] ${svc.color}`}>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[var(--bg-main)] ${svc.color}`}>
                           {svc.label}
                         </span>
                         {b.policyEvaluation.isAutoApproved && (
@@ -308,11 +308,11 @@ export default function MultiLevelApprovalsPage() {
                         )}
                       </div>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                        Requested by <strong className="text-[var(--text-muted)]">{b.requestorName || 'Employee'}</strong> (
+                        Requested by <strong className="text-[var(--text-main)]">{b.requestorName || 'Employee'}</strong> (
                         {b.requestorEmail || 'N/A'})
                       </p>
                       {b.createdAt && (
-                        <p className="text-[10px] text-[var(--text-faint)] mt-0.5 flex items-center gap-1">
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           Submitted {formatRelativeTime(b.createdAt)}
                         </p>
@@ -328,13 +328,13 @@ export default function MultiLevelApprovalsPage() {
                     </div>
                     <p className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 sm:justify-end">
                       <Building2 className="w-3 h-3" />
-                      Cost Center: <strong className="text-[var(--text-muted)]">{b.financials.costCenter}</strong>
+                      Cost Center: <strong className="text-[var(--text-main)]">{b.financials.costCenter}</strong>
                     </p>
                   </div>
                 </div>
 
                 {/* Multi-Tier Approval Stepper */}
-                <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
                   {/* Step 1: Line Manager */}
                   <div className="flex items-center gap-2 text-xs">
                     <div
@@ -343,7 +343,7 @@ export default function MultiLevelApprovalsPage() {
                           ? 'bg-emerald-500 text-white'
                           : currentTier === 'TIER_1_PENDING'
                           ? 'bg-purple-600 text-white animate-pulse'
-                          : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
+                          : 'bg-[var(--bg-main)] text-[var(--text-muted)]'
                       }`}
                     >
                       1
@@ -358,7 +358,7 @@ export default function MultiLevelApprovalsPage() {
                           : 'Pending Sign-Off ⏳'}
                       </p>
                       {findTierApproval(b, 1) && (
-                        <p className="text-[10px] text-[var(--text-faint)] flex items-center gap-1">
+                        <p className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
                           <UserCheck className="w-3 h-3 text-emerald-500" />
                           {findTierApproval(b, 1)!.approverName} · {formatRelativeTime(findTierApproval(b, 1)!.timestamp)}
                         </p>
@@ -366,7 +366,7 @@ export default function MultiLevelApprovalsPage() {
                     </div>
                   </div>
 
-                  <ChevronRight className="hidden md:block w-4 h-4 text-[var(--text-faint)]" />
+                  <ChevronRight className="hidden md:block w-4 h-4 text-[var(--text-muted)]" />
 
                   {/* Step 2: Department Head */}
                   <div className="flex items-center gap-2 text-xs">
@@ -377,8 +377,8 @@ export default function MultiLevelApprovalsPage() {
                           : currentTier === 'TIER_2_PENDING'
                           ? 'bg-amber-600 text-white animate-pulse'
                           : !b.policyEvaluation.requiresTier2
-                          ? 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
-                          : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
+                          ? 'bg-[var(--bg-main)] text-[var(--text-muted)]'
+                          : 'bg-[var(--bg-main)] text-[var(--text-muted)]'
                       }`}
                     >
                       2
@@ -393,7 +393,7 @@ export default function MultiLevelApprovalsPage() {
                           : 'Pending VP Sign-Off ⏳'}
                       </p>
                       {findTierApproval(b, 2) && (
-                        <p className="text-[10px] text-[var(--text-faint)] flex items-center gap-1">
+                        <p className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
                           <UserCheck className="w-3 h-3 text-emerald-500" />
                           {findTierApproval(b, 2)!.approverName} · {formatRelativeTime(findTierApproval(b, 2)!.timestamp)}
                         </p>
@@ -401,7 +401,7 @@ export default function MultiLevelApprovalsPage() {
                     </div>
                   </div>
 
-                  <ChevronRight className="hidden md:block w-4 h-4 text-[var(--text-faint)]" />
+                  <ChevronRight className="hidden md:block w-4 h-4 text-[var(--text-muted)]" />
 
                   {/* Step 3: Fleet Operations */}
                   <div className="flex items-center gap-2 text-xs">
@@ -411,7 +411,7 @@ export default function MultiLevelApprovalsPage() {
                           ? 'bg-emerald-500 text-white'
                           : currentTier === 'TIER_3_PENDING'
                           ? 'bg-blue-600 text-white animate-pulse'
-                          : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
+                          : 'bg-[var(--bg-main)] text-[var(--text-muted)]'
                       }`}
                     >
                       3

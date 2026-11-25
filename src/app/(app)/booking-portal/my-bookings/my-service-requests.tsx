@@ -30,7 +30,7 @@ const STATUS_STYLE: Record<string, string> = {
   Escalated: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
   Resolved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   Completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  Closed: 'bg-slate-500/15 text-[var(--text-muted)] border-slate-500/30',
+  Closed: 'bg-slate-500/15 text-[var(--text-main)] border-slate-500/30',
   Rejected: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 };
 const DONE = new Set(['Resolved', 'Completed', 'Closed', 'Rejected']);
@@ -86,13 +86,13 @@ export function MyServiceRequests() {
       {error && <p role="alert" className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm text-rose-300">{error}</p>}
 
       {tickets === null ? (
-        <div className="h-20 rounded-2xl bg-[var(--bg-surface-hover)] animate-pulse" />
+        <div className="h-20 rounded-2xl bg-[var(--bg-main)] animate-pulse" />
       ) : tickets.length === 0 && !error ? (
-        <p className="rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] p-6 text-sm text-[var(--text-muted)]">
+        <p className="rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] p-6 text-sm text-[var(--text-muted)]">
           You haven&apos;t raised any service requests yet.
         </p>
       ) : (
-        <ul className="divide-y divide-white/5 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]">
+        <ul className="divide-y divide-[var(--border-subtle)] rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
           {tickets.map((t) => {
             const sla = slaState(t);
             const where = [t.customFields?.building, t.customFields?.area].filter(Boolean).join(' · ');
@@ -110,7 +110,7 @@ export function MyServiceRequests() {
                 <span className={`self-start sm:self-auto text-[11px] font-semibold px-2.5 py-1 rounded-full border ${STATUS_STYLE[t.status] ?? STATUS_STYLE.Closed}`}>{t.status}</span>
                 {t.customFields?.trackingToken && (
                   <a href={`/track-ticket/${t.customFields.trackingToken}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                    className="inline-flex items-center gap-1 text-xs text-[var(--text-main)] hover:text-[var(--text-main)]">
                     Track <ExternalLink className="w-3 h-3" />
                   </a>
                 )}

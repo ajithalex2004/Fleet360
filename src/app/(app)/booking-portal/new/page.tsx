@@ -1,5 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
+import { formInputCls } from '@/components/ui/form-kit';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -13,9 +14,7 @@ import {
   FileCheck,
   Clock,
   Sparkles,
-  CalendarPlus,
 } from 'lucide-react';
-import { PageHeader, TabStrip } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
@@ -28,7 +27,6 @@ import { RecurringSchedulePicker } from '@/components/booking/RecurringScheduleP
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
-import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-cyan-400') {
   switch (type) {
@@ -682,12 +680,9 @@ function buildPayload(serviceType: ServiceType, form: FormData) {
 // Form field renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const inputCls =
-  'w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl px-4 py-2.5 text-[var(--input-text)] text-sm ' +
-  'placeholder-[var(--text-faint)] focus:outline-none focus:border-[var(--border-active)] focus:ring-1 focus:ring-blue-500/30 ' +
-  'transition-all';
+const inputCls = formInputCls;
 
-const labelCls = 'block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5';
+const labelCls = 'block text-xs font-semibold text-[var(--text-main)] mb-1.5';
 
 function FieldRenderer({
   field,
@@ -707,7 +702,7 @@ function FieldRenderer({
           aria-checked={!!value}
           onClick={() => onChange(field.key, !value)}
           className={`relative mt-0.5 flex-shrink-0 w-10 h-6 rounded-full transition-colors ${
-            value ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/30' : 'bg-slate-400 dark:bg-slate-500'
+            value ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/30' : 'bg-[var(--bg-main)]'
           }`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
@@ -816,9 +811,9 @@ function FormSection({
   }
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/30 rounded-xl overflow-hidden shadow-sm transition-all">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/30 rounded-2xl overflow-hidden shadow-sm transition-all">
       {/* Section header */}
-      <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
             {getSectionVectorIcon(section.title)}
@@ -999,15 +994,18 @@ function NewBookingInner() {
   const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
 
   return (
-    <div className="space-y-6 text-[var(--text-main)]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-[var(--text-main)] transition-colors duration-150">
 
       {/* ── Page header ── */}
-      <PageHeader
-        title="New Booking Intake"
-        subtitle="Multi-modal booking & freight dispatch console across all transport domains"
-        icon={CalendarPlus}
-        accent="cyan"
-        actions={
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">
+            New Booking Intake
+          </h1>
+          <p className="text-[var(--text-muted)] dark:text-[var(--text-muted)] text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+        </div>
+
+        {/* ── Progress stepper ── */}
         <div className="flex items-center gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 shadow-sm">
           {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
             const n = (i + 1) as 1 | 2 | 3;
@@ -1027,15 +1025,14 @@ function NewBookingInner() {
                 </div>
                 {i < 2 && (
                   <div className={`w-6 h-0.5 rounded-full transition-all ${
-                    step > n ? 'bg-emerald-500' : 'bg-[var(--border-strong)]'
+                    step > n ? 'bg-emerald-500' : 'bg-black/10 dark:bg-[var(--bg-surface-hover)]'
                   }`} />
                 )}
               </React.Fragment>
             );
           })}
         </div>
-        }
-      />
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════
           Step 1 — Service Type Selection
@@ -1052,11 +1049,11 @@ function NewBookingInner() {
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
-                className="group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-xl p-6 text-left hover:shadow-md transition-all duration-200 active:scale-100 flex flex-col justify-between space-y-4 shadow-sm"
+                className="group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-400/60 rounded-2xl p-6 text-left hover:shadow-sm hover:shadow-cyan-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-sm "
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
                       {getServiceVectorIcon(opt.type, 'w-6 h-6 text-cyan-400')}
                     </div>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-full tracking-wider">
@@ -1095,23 +1092,38 @@ function NewBookingInner() {
       ══════════════════════════════════════════════════════════════ */}
       {step === 2 && card && (
         <div className="space-y-8">
-          {/* Service tabs — shared TabStrip, same as other modules */}
-          <TabStrip
-            label="Service type"
-            tabs={visibleCards.map(opt => ({ id: opt.type, label: opt.title }))}
-            activeId={serviceType}
-            onChange={(id) => {
-              setServiceType(id as ServiceType);
-              setForm(EMPTY_FORM);
-            }}
-          />
+          {/* Top Centered Frosted Glass Capsule Navigation Pills */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-x-auto max-w-full">
+              {visibleCards.map((opt) => {
+                const isActive = serviceType === opt.type;
+                return (
+                  <button
+                    key={opt.type}
+                    type="button"
+                    onClick={() => {
+                      setServiceType(opt.type as ServiceType);
+                      setForm(EMPTY_FORM);
+                    }}
+                    className={`px-6 py-2.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-main)]'
+                    }`}
+                  >
+                    {opt.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* ── LEFT COLUMN (Inputs & Vehicle Selection Grid) ── */}
               <div className="lg:col-span-8 space-y-6">
                 {/* 1. Pickup Origin & Destination Card */}
-                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 space-y-4 shadow-sm">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4 shadow-sm ">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">Pickup & Destination</h3>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
@@ -1122,7 +1134,7 @@ function NewBookingInner() {
                   <div className="space-y-3">
                     <div className="relative flex items-center">
                       <div className="flex-1">
-                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                        <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">
                           Pickup Origin
                         </label>
                         <input
@@ -1130,7 +1142,7 @@ function NewBookingInner() {
                           value={(form.origin as string) || ''}
                           onChange={(e) => onChange('origin', e.target.value)}
                           placeholder="Enter pickup address (e.g. Dubai Airport Terminal 3)"
-                          className={inputCls}
+                          className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                         />
                       </div>
                       <button
@@ -1149,7 +1161,7 @@ function NewBookingInner() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">
                         Destination
                       </label>
                       <input
@@ -1157,14 +1169,14 @@ function NewBookingInner() {
                         value={(form.destination as string) || ''}
                         onChange={(e) => onChange('destination', e.target.value)}
                         placeholder="Enter destination address (e.g. Burj Al Arab, Jumeirah)"
-                        className={inputCls}
+                        className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Flight Tracking / Consignment Manifest Ref Card */}
-                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 space-y-3 shadow-sm">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-3 shadow-sm ">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">
                       {serviceType === 'EXECUTIVE'
@@ -1186,13 +1198,13 @@ function NewBookingInner() {
                           ? 'Enter Flight Number (e.g. EK202 from JFK) for automatic delay tracking'
                           : 'Enter Manifest or Reference Number (e.g. MAN-2026-DXB)'
                       }
-                      className={inputCls}
+                      className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                     />
                   </div>
                 </div>
 
                 {/* 3. Luxury Vehicle Selection Grid */}
-                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 space-y-4 shadow-sm">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4 shadow-sm ">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-[var(--text-main)] tracking-wide">Luxury Vehicle Selection</h3>
@@ -1241,8 +1253,8 @@ function NewBookingInner() {
                           }}
                           className={`p-4 rounded-xl text-left border transition-all flex flex-col justify-between space-y-3 ${
                             isSelected
-                              ? 'bg-cyan-500/15 border-cyan-400 shadow-lg shadow-cyan-500/25 scale-[1.02]'
-                              : 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] hover:border-cyan-400/40 text-[var(--text-muted)]'
+                              ? 'bg-blue-500/10 border-blue-500 text-[var(--text-main)] shadow-sm ring-1 ring-blue-500/30'
+                              : 'bg-[var(--bg-main)] border-[var(--border-subtle)] hover:border-blue-500/40 text-[var(--text-main)]'
                           }`}
                         >
                           <div className="flex items-start justify-between">
@@ -1256,7 +1268,7 @@ function NewBookingInner() {
                             <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{veh.desc}</p>
                           </div>
                           <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between items-center text-xs font-mono">
-                            <span className="text-[var(--text-faint)]">From</span>
+                            <span className="text-[var(--text-muted)]">From</span>
                             <span className="text-cyan-400 font-bold">AED {veh.fare}</span>
                           </div>
                         </button>
@@ -1425,7 +1437,7 @@ function NewBookingInner() {
 
               {/* ── RIGHT COLUMN (Pixel-Perfect Modern Obsidian Glass Order Summary) ── */}
               <div className="lg:col-span-4 sticky top-20 space-y-4">
-                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-sm space-y-5">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 shadow-sm space-y-5">
                   {/* Summary Header */}
                   <div className="border-b border-[var(--border-subtle)] pb-3">
                     <h3 className="text-base font-bold text-[var(--text-main)]">Order Summary</h3>
@@ -1433,35 +1445,35 @@ function NewBookingInner() {
 
                   {/* Summary Details */}
                   <div className="space-y-3 text-xs">
-                    <div className="flex justify-between text-[var(--text-muted)]">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Trip Details</span>
-                      <strong className="text-[var(--text-main)] font-bold">13:00 – 17:30</strong>
+                      <strong className="text-[var(--text-main)] font-mono font-bold">13:00 – 17:30</strong>
                     </div>
                     {form.destination && (
-                      <div className="flex justify-between text-[var(--text-muted)]">
+                      <div className="flex justify-between text-[var(--text-main)]">
                         <span>Destination</span>
                         <strong className="text-[var(--text-main)] font-bold truncate max-w-[160px]">{form.destination as string}</strong>
                       </div>
                     )}
-                    <div className="flex justify-between text-[var(--text-muted)]">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Pickup Summary</span>
                       <span className="text-[var(--text-main)] font-bold">Confirmed VIP</span>
                     </div>
                   </div>
 
                   {/* Itemized Pricing */}
-                  <div className="border-t border-b border-[var(--border-subtle)] py-3 space-y-2 text-xs">
-                    <div className="flex justify-between text-[var(--text-muted)]">
+                  <div className="border-t border-b border-amber-500/20 py-3 space-y-2 text-xs font-mono">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>Base Fare</span>
                       <span className="text-[var(--text-main)] font-bold">AED {Number(form.fareSubtotal) || 450}</span>
                     </div>
                     {Number(form.salikTollsAed) > 0 && (
-                      <div className="flex justify-between text-[var(--text-muted)]">
+                      <div className="flex justify-between text-[var(--text-main)]">
                         <span>Surcharges (Toll/Salik)</span>
                         <span className="text-[var(--text-main)] font-bold">AED {Number(form.salikTollsAed)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-[var(--text-muted)]">
+                    <div className="flex justify-between text-[var(--text-main)]">
                       <span>5% UAE VAT</span>
                       <span className="text-[var(--text-main)] font-bold">
                         AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 450) * 0.05)}
@@ -1469,7 +1481,7 @@ function NewBookingInner() {
                     </div>
                     <div className="pt-2 flex justify-between items-baseline">
                       <span className="text-sm font-bold text-[var(--text-main)]">Total (Incl. VAT)</span>
-                      <span className="text-2xl font-extrabold text-cyan-400">
+                      <span className="text-2xl font-extrabold text-cyan-400 font-mono">
                         AED{' '}
                         {Number(form.totalFareAed) ||
                           Math.round((Number(form.fareSubtotal) || 450) * 1.05 + (Number(form.salikTollsAed) || 0))}
@@ -1479,7 +1491,7 @@ function NewBookingInner() {
 
                   {/* Corporate Cost Center Pill */}
                   <div className="flex items-center justify-center">
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold shadow-md shadow-cyan-500/10">
                       ✓ Corporate Cost Center ({(form.costCenter as string) || 'CC-EXEC-1001'})
                     </span>
                   </div>
@@ -1489,11 +1501,11 @@ function NewBookingInner() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
                     >
                       {loading ? (
                         <span className="flex items-center gap-2">
-                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span className="w-4 h-4 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin" />
                           Processing…
                         </span>
                       ) : (
@@ -1505,7 +1517,7 @@ function NewBookingInner() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className={`${BACK_BUTTON} w-full mt-3`}
+                        className="w-full mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
                       >
                         ← Back to Categories
                       </button>
@@ -1531,13 +1543,13 @@ function NewBookingInner() {
           </div>
 
           {/* Booking reference card */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 space-y-5 shadow-sm">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5 shadow-sm shadow-cyan-500/10">
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
               <div>
                 <p className="text-xs text-cyan-300 uppercase tracking-wider mb-1 font-semibold">Booking Reference</p>
                 <p className="text-3xl font-mono font-bold text-cyan-400">{bookingRef}</p>
               </div>
-              <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-3 text-3xl shadow-inner">{meta.icon}</div>
+              <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-3 text-3xl ">{meta.icon}</div>
             </div>
 
             {/* Key details */}
@@ -1597,7 +1609,7 @@ function NewBookingInner() {
 
             {/* Service-specific notes */}
             {meta.confirmNote && (
-              <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-3 text-[var(--text-muted)] text-xs leading-relaxed">
+              <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl px-4 py-3 text-[var(--text-main)] text-xs leading-relaxed">
                 {meta.confirmNote}{' '}
                 {serviceType === 'LOGISTICS' && (
                   <a href="/logistics/dispatch" className="underline text-amber-400 hover:text-amber-300">
@@ -1619,13 +1631,13 @@ function NewBookingInner() {
           <div className="flex gap-4">
             <button
               onClick={() => router.push('/booking-portal')}
-              className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors"
+              className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 px-6 py-3.5 text-sm font-bold text-black shadow-lg shadow-amber-500/20 hover:scale-[1.01] transition-all"
             >
               View All Bookings →
             </button>
             <button
               onClick={resetForm}
-              className="flex-1 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] px-6 py-3.5 text-sm font-medium text-[var(--text-muted)] transition-all border border-[var(--border-subtle)]"
+              className="flex-1 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] px-6 py-3.5 text-sm font-medium text-[var(--text-main)] transition-all border border-[var(--border-subtle)]"
             >
               + Create Another Booking
             </button>

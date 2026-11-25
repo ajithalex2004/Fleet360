@@ -163,6 +163,8 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   reports: m('reports'),
   powerbi: m('reports'),
   'service-tickets': m('service-tickets'),
+  // FSM Service Catalog & SLA master: module users read, tenant admins edit.
+  'service-tickets/catalog': { read: m('service-tickets'), write: TENANT_ADMIN },
   'service-requests': m('service-tickets'),
   customers: m('customer-mgmt'),
   'customer-hierarchy': m('customer-mgmt'),

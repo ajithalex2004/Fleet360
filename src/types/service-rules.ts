@@ -36,6 +36,8 @@ export interface SlaRules {
   responseSlaMinutes: number | null;
   resolutionSlaHours: number | null;
   escalationSlaHours: number | null;
+  /** Field Service: hours until a technician must be on site. Optional. */
+  onSiteArrivalHours?: number | null;
   businessHoursOnly: boolean;
   businessHoursStart: string;  // "08:00"
   businessHoursEnd: string;    // "18:00"
@@ -48,6 +50,7 @@ export const DEFAULT_SLA_RULES: SlaRules = {
   responseSlaMinutes: 60,
   resolutionSlaHours: 24,
   escalationSlaHours: 8,
+  onSiteArrivalHours: null,
   businessHoursOnly: false,
   businessHoursStart: '08:00',
   businessHoursEnd: '18:00',
@@ -86,7 +89,7 @@ export const VEHICLE_CLASSES = [
 ] as const;
 export const VEHICLE_USAGES = [
   'Lease', 'Rent-a-Car', 'Staff Transport', 'School Bus',
-  'Logistics', 'Ambulance', 'Limousine', 'Internal',
+  'Logistics', 'Ambulance', 'Limousine', 'Internal', 'Service Delivery',
 ] as const;
 export interface VehicleRules {
   /** When true, requests of this service must reference a vehicle. Used

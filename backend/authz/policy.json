@@ -1193,6 +1193,16 @@
    }
   },
   {
+   "prefix": "service-tickets/catalog",
+   "read": {
+    "kind": "module",
+    "module": "service-tickets"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
    "prefix": "setup",
    "read": {
     "kind": "external"
@@ -1891,6 +1901,13 @@
   {
    "template": "tenants/[id]/branding/logo",
    "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/fsm-catalog",
+   "methods": {
+    "GET": "admin",
     "POST": "admin"
    }
   },

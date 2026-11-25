@@ -18,6 +18,7 @@ import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
   Rows3, Filter, X, ArrowUpDown, CheckSquare, Square, GripVertical, RotateCcw,
 } from 'lucide-react';
+import './smart-data-grid-light.css';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,13 @@ const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
   amber:   { bg: 'bg-amber-500/15',   text: 'text-amber-300'   },
   rose:    { bg: 'bg-rose-500/15',    text: 'text-rose-300'    },
   slate:   { bg: 'bg-slate-500/15',   text: 'text-slate-400'   },
+};
+
+/** Literal class names so Tailwind generates them (a template-built
+ *  `md:grid-cols-${n}` is invisible to the class scanner). */
+const KPI_COLS: Record<number, string> = {
+  1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6',
 };
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -493,10 +501,10 @@ export default function SmartDataGrid<T>({
   };
 
   return (
-    <div ref={gridRef} className={`space-y-4 ${className}`}>
+    <div ref={gridRef} className={`sdg space-y-4 ${className}`}>
       {/* KPI tiles */}
       {kpis && kpis.length > 0 && (
-        <div className={`grid gap-3 grid-cols-2 md:grid-cols-${Math.min(6, kpis.length)}`}>
+        <div className={`grid gap-3 grid-cols-2 ${KPI_COLS[Math.min(6, kpis.length)] ?? 'md:grid-cols-6'}`}>
           {kpis.map((k, i) => {
             const a = KPI_ACCENTS[k.accent ?? 'default'];
             const Icon = k.icon;

@@ -10,7 +10,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 
 | Area (`/api/…`) | Routes | Reads (GET) | Writes (POST/PUT/PATCH/DELETE) |
 |---|---:|---|---|
-| `admin` | 104 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
+| `admin` | 105 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
 | `agents` | 11 | module `agents` | module `agents` |
 | `agents/anomalies` | 1 | module `finance` | module `finance` |
 | `agents/preventive-maintenance` | 3 | module `maintenance` | module `maintenance` |
@@ -93,6 +93,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `service` | 0 | module `maintenance` | module `maintenance` |
 | `service-requests` | 2 | module `service-tickets` | module `service-tickets` |
 | `service-tickets` | 14 | module `service-tickets` | module `service-tickets` |
+| `service-tickets/catalog` | 1 | module `service-tickets` | tenant-admin |
 | `setup` | 1 | external | external |
 | `shipper-portal` | 9 | external | external |
 | `stripe` | 1 | external | external |
