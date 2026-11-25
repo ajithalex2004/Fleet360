@@ -61,7 +61,7 @@ describe('approval level conditions', () => {
 
   it('offers the request types the modules store', () => {
     const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
-    const portal = readFileSync('src/app/booking-portal/new/page.tsx', 'utf8');
+    const portal = readFileSync('src/app/(app)/booking-portal/new/page.tsx', 'utf8');
     const block = admin.slice(admin.indexOf("'BOOKING.BOOKING_APPROVAL': {"), admin.indexOf('const requestTypeFor'));
     const values = [...block.matchAll(/opts\(\[([^\]]+)\]/g)].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((v) => v[1]));
     expect(values.length).toBe(18);

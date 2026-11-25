@@ -30,7 +30,7 @@ const STATUS_STYLE: Record<string, string> = {
   Escalated: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
   Resolved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   Completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  Closed: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
+  Closed: 'bg-slate-500/15 text-[var(--text-main)] border-slate-500/30',
   Rejected: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 };
 const DONE = new Set(['Resolved', 'Completed', 'Closed', 'Rejected']);
@@ -43,7 +43,7 @@ function slaState(t: Ticket): { text: string; tone: string } | null {
   if (!Number.isFinite(left)) return null;
   if (left < 0) return { text: 'Past target time', tone: 'text-rose-300' };
   const text = left < 1 ? `${Math.max(1, Math.round(left * 60))} min left` : left < 48 ? `${Math.round(left)} h left` : `${Math.round(left / 24)} days left`;
-  return { text, tone: left < t.slaTargetHours * 0.25 ? 'text-amber-300' : 'text-slate-400' };
+  return { text, tone: left < t.slaTargetHours * 0.25 ? 'text-amber-300' : 'text-[var(--text-muted)]' };
 }
 
 export function MyServiceRequests() {
@@ -76,9 +76,9 @@ export function MyServiceRequests() {
   return (
     <section aria-labelledby="my-sr-title" className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 id="my-sr-title" className="text-xl font-bold text-white flex items-center gap-2">
+        <h2 id="my-sr-title" className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
           <Wrench className="w-5 h-5 text-cyan-400" /> Service requests
-          {tickets && <span className="text-xs font-semibold text-slate-400">{open} open · {tickets.length} total</span>}
+          {tickets && <span className="text-xs font-semibold text-[var(--text-muted)]">{open} open · {tickets.length} total</span>}
         </h2>
         <Link href="/booking-portal/service-request" className="text-sm font-semibold text-cyan-300 hover:text-cyan-200">+ New request</Link>
       </div>
@@ -86,21 +86,21 @@ export function MyServiceRequests() {
       {error && <p role="alert" className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm text-rose-300">{error}</p>}
 
       {tickets === null ? (
-        <div className="h-20 rounded-2xl bg-slate-800/40 animate-pulse" />
+        <div className="h-20 rounded-2xl bg-[var(--bg-main)] animate-pulse" />
       ) : tickets.length === 0 && !error ? (
-        <p className="rounded-2xl bg-slate-800/40 border border-white/10 p-6 text-sm text-slate-400">
+        <p className="rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] p-6 text-sm text-[var(--text-muted)]">
           You haven&apos;t raised any service requests yet.
         </p>
       ) : (
-        <ul className="divide-y divide-white/5 rounded-2xl bg-slate-800/40 border border-white/10">
+        <ul className="divide-y divide-[var(--border-subtle)] rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)]">
           {tickets.map((t) => {
             const sla = slaState(t);
             const where = [t.customFields?.building, t.customFields?.area].filter(Boolean).join(' · ');
             return (
               <li key={t.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{t.title}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-sm font-semibold text-[var(--text-main)] truncate">{t.title}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
                     <span className="font-mono text-cyan-300/90">{t.readableId ?? t.id.slice(0, 8)}</span>
                     {' · '}{names[t.ticketType] ?? t.ticketType}{where ? ` · ${where}` : ''}
                     {' · '}{new Date(t.createdAt).toLocaleDateString()}
@@ -110,7 +110,7 @@ export function MyServiceRequests() {
                 <span className={`self-start sm:self-auto text-[11px] font-semibold px-2.5 py-1 rounded-full border ${STATUS_STYLE[t.status] ?? STATUS_STYLE.Closed}`}>{t.status}</span>
                 {t.customFields?.trackingToken && (
                   <a href={`/track-ticket/${t.customFields.trackingToken}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-slate-300 hover:text-white">
+                    className="inline-flex items-center gap-1 text-xs text-[var(--text-main)] hover:text-[var(--text-main)]">
                     Track <ExternalLink className="w-3 h-3" />
                   </a>
                 )}
