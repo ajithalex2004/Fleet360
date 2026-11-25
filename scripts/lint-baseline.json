@@ -304,9 +304,6 @@
     "src/app/(app)/service-tickets/csat/page.tsx": {
       "@typescript-eslint/no-unused-vars": 3
     },
-    "src/app/(app)/service-tickets/simulator/page.tsx": {
-      "@typescript-eslint/no-unused-vars": 8
-    },
     "src/app/(app)/service-tickets/sla/page.tsx": {
       "@typescript-eslint/no-unused-vars": 2
     },
