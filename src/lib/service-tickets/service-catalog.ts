@@ -23,13 +23,16 @@ import { ensureRootScope } from '@/lib/service-config/scopes-schema';
 import { loadRulesForChain, saveRules, seedRulesIfAbsent } from '@/lib/service-config/rules-schema';
 import { FM_LOCATION_FIELDS, FACILITIES_CATALOGUE } from '@/lib/service-config/facilities-template';
 import {
-  DEFAULT_APPROVAL_RULES, DEFAULT_SLA_RULES, DEFAULT_TICKETING_RULES, DEFAULT_VEHICLE_RULES,
-  type SlaRules, type TicketingRules,
+  DEFAULT_APPROVAL_RULES, DEFAULT_SLA_RULES, DEFAULT_TICKETING_RULES, DEFAULT_VEHICLE_RULES, VEHICLE_USAGES,
+  type ApprovalRules, type RuleCategory, type SlaRules, type TicketingRules, type VehicleRules,
 } from '@/types/service-rules';
 import type { TicketPriority } from '@/types/service-tickets';
 import { PRIORITY_TIERS } from './priority-tiers';
 
 export const CATALOG_CATEGORY_PREFIX = 'FSM_';
+
+/** Vehicle usage a Field Service type gets unless the master sets another. */
+export const FSM_DEFAULT_VEHICLE_USAGE = 'Service Delivery';
 
 // ── Priority tiers ─────────────────────────────────────────────────────────────
 
@@ -53,6 +56,9 @@ export interface CatalogType {
   prefix: string;
   sortOrder: number;
   sla: CatalogSla;
+  /** New requests start in Awaiting Approval (no emergency bypass). */
+  approvalRequired: boolean;
+  vehicleUsage: string;
 }
 
 export interface CatalogCategory {
@@ -167,6 +173,29 @@ export function parsePriority(v: unknown): TicketPriority {
   return tier.priority;
 }
 
+function firstUsage(v: unknown): string | null {
+  return Array.isArray(v) && typeof v[0] === 'string' && v[0].trim() ? v[0] : null;
+}
+
+/** Approval Workflow Required: accepts true/false or "Yes"/"No". Defaults to No. */
+export function parseApprovalRequired(v: unknown): boolean {
+  if (v === undefined || v === null || v === '') return false;
+  if (typeof v === 'boolean') return v;
+  const t = String(v).trim().toLowerCase();
+  if (t === 'yes' || t === 'true') return true;
+  if (t === 'no' || t === 'false') return false;
+  throw new CatalogError('Approval workflow required must be Yes or No.');
+}
+
+/** Vehicle usage: one of VEHICLE_USAGES; defaults to Service Delivery. */
+export function parseVehicleUsage(v: unknown): string {
+  const t = String(v ?? '').trim();
+  if (!t) return FSM_DEFAULT_VEHICLE_USAGE;
+  const hit = (VEHICLE_USAGES as readonly string[]).find((u) => u.toLowerCase() === t.toLowerCase());
+  if (!hit) throw new CatalogError(`Vehicle usage must be one of: ${VEHICLE_USAGES.join(', ')}.`);
+  return hit;
+}
+
 function cleanName(v: unknown, what: string): string {
   const s = String(v ?? '').trim().replace(/\s+/g, ' ');
   if (!s) throw new CatalogError(`${what} is required.`);
@@ -249,7 +278,7 @@ function slaRules(base: SlaRules, sla: CatalogSla): SlaRules {
   };
 }
 
-async function activeRootRules<T>(typeId: string, category: 'sla' | 'ticketing', rootScopeId: string): Promise<T | null> {
+async function activeRootRules<T>(typeId: string, category: RuleCategory, rootScopeId: string): Promise<T | null> {
   const hit = await loadRulesForChain<T>(typeId, category, [rootScopeId]);
   return hit?.rules ?? null;
 }
@@ -295,6 +324,7 @@ export async function listServiceCatalog(tenantId: string): Promise<CatalogCateg
   const types = await prisma.$queryRawUnsafe<Array<{
     id: string; key: string; name: string; category_id: string; default_priority: string;
     description: string | null; sort_order: number; sla: Record<string, unknown> | null; ticketing: Record<string, unknown> | null;
+    approval: Record<string, unknown> | null; vehicle: Record<string, unknown> | null;
   }>>(
     `SELECT st.id::text, st.key, st.name, st.category_id::text, st.default_priority, st.description, st.sort_order,
             (SELECT r.rules FROM service_rules r
@@ -302,7 +332,13 @@ export async function listServiceCatalog(tenantId: string): Promise<CatalogCateg
               ORDER BY r.effective_from DESC LIMIT 1) AS sla,
             (SELECT r.rules FROM service_rules r
               WHERE r.service_type_id = st.id AND r.category = 'ticketing' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
-              ORDER BY r.effective_from DESC LIMIT 1) AS ticketing
+              ORDER BY r.effective_from DESC LIMIT 1) AS ticketing,
+            (SELECT r.rules FROM service_rules r
+              WHERE r.service_type_id = st.id AND r.category = 'approval' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+              ORDER BY r.effective_from DESC LIMIT 1) AS approval,
+            (SELECT r.rules FROM service_rules r
+              WHERE r.service_type_id = st.id AND r.category = 'vehicle' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+              ORDER BY r.effective_from DESC LIMIT 1) AS vehicle
        FROM service_types st
       WHERE st.tenant_id = $1 AND st.deleted_at IS NULL
         AND st.category_id = ANY($3::uuid[])
@@ -323,6 +359,8 @@ export async function listServiceCatalog(tenantId: string): Promise<CatalogCateg
         onSiteHours: num(sla.onSiteArrivalHours),
         resolutionHours: num(sla.resolutionSlaHours),
       },
+      approvalRequired: r.approval?.approvalRequired === true,
+      vehicleUsage: firstUsage(r.vehicle?.vehicleUsage) ?? FSM_DEFAULT_VEHICLE_USAGE,
     };
     const list = byCat.get(r.category_id) ?? [];
     list.push(entry);
@@ -395,23 +433,60 @@ export async function deleteCategory(tenantId: string, id: string): Promise<{ na
 
 // ── Write: types ───────────────────────────────────────────────────────────────
 
-interface TypeInput { categoryId?: unknown; name?: unknown; priority?: unknown; trigger?: unknown; sla?: unknown }
+interface TypeInput {
+  categoryId?: unknown; name?: unknown; priority?: unknown; trigger?: unknown; sla?: unknown;
+  approvalRequired?: unknown; vehicleUsage?: unknown;
+}
 
-async function writeTypeRules(typeId: string, prefix: string, sla: CatalogSla, rootScopeId: string, by: string | null, seedOnly: boolean) {
+interface TypeSettings { sla: CatalogSla; approvalRequired: boolean; vehicleUsage: string }
+
+function approvalRules(base: ApprovalRules, approvalRequired: boolean): ApprovalRules {
+  // "Yes" means every request waits for approval: the High/Critical emergency
+  // bypass would otherwise skip it for urgent types.
+  return { ...base, approvalRequired, emergencyBypassEnabled: !approvalRequired };
+}
+
+function vehicleRules(base: VehicleRules, vehicleUsage: string): VehicleRules {
+  return { ...base, vehicleRequired: false, vehicleUsage: [vehicleUsage] };
+}
+
+async function writeTypeRules(typeId: string, prefix: string, settings: TypeSettings, rootScopeId: string, by: string | null, seedOnly: boolean) {
+  const { sla } = settings;
   const baseSla = (await activeRootRules<SlaRules>(typeId, 'sla', rootScopeId)) ?? DEFAULT_SLA_RULES;
   const sl = slaRules({ ...DEFAULT_SLA_RULES, ...baseSla }, sla);
   const tk = ticketingRules(prefix, sla.resolutionHours!);
   if (seedOnly) {
     await seedRulesIfAbsent(typeId, 'sla', sl, rootScopeId);
     await seedRulesIfAbsent(typeId, 'ticketing', tk, rootScopeId);
-    await seedRulesIfAbsent(typeId, 'approval', { ...DEFAULT_APPROVAL_RULES, approvalRequired: false, emergencyBypassEnabled: true }, rootScopeId);
-    await seedRulesIfAbsent(typeId, 'vehicle', { ...DEFAULT_VEHICLE_RULES, vehicleRequired: false }, rootScopeId);
+    await seedRulesIfAbsent(typeId, 'approval', approvalRules(DEFAULT_APPROVAL_RULES, settings.approvalRequired), rootScopeId);
+    await seedRulesIfAbsent(typeId, 'vehicle', vehicleRules(DEFAULT_VEHICLE_RULES, settings.vehicleUsage), rootScopeId);
     await seedRulesIfAbsent(typeId, 'formFields', { fields: [...FM_LOCATION_FIELDS] }, rootScopeId);
     return;
   }
   const baseTk = (await activeRootRules<TicketingRules>(typeId, 'ticketing', rootScopeId)) ?? DEFAULT_TICKETING_RULES;
+  const baseAp = (await activeRootRules<ApprovalRules>(typeId, 'approval', rootScopeId)) ?? DEFAULT_APPROVAL_RULES;
+  const baseVh = (await activeRootRules<VehicleRules>(typeId, 'vehicle', rootScopeId)) ?? DEFAULT_VEHICLE_RULES;
   await saveRules(typeId, 'sla', sl, by, rootScopeId);
   await saveRules(typeId, 'ticketing', { ...DEFAULT_TICKETING_RULES, ...baseTk, ...tk, ticketPrefix: baseTk.ticketPrefix || prefix }, by, rootScopeId);
+  await saveRules(typeId, 'approval', approvalRules({ ...DEFAULT_APPROVAL_RULES, ...baseAp }, settings.approvalRequired), by, rootScopeId);
+  await saveRules(typeId, 'vehicle', vehicleRules({ ...DEFAULT_VEHICLE_RULES, ...baseVh }, settings.vehicleUsage), by, rootScopeId);
+  await syncApprovalEngine(typeId, settings.approvalRequired);
+}
+
+/** Keep the module mapping's approval flag in step (shown in Admin > Service configuration). */
+async function syncApprovalEngine(typeId: string, approvalRequired: boolean) {
+  await prisma.$executeRawUnsafe(
+    `UPDATE service_module_mapping SET approval_engine_enabled = $2 WHERE service_type_id = $1::uuid`,
+    typeId, approvalRequired,
+  );
+}
+
+function parseTypeSettings(input: TypeInput): TypeSettings {
+  return {
+    sla: parseSla(input.sla),
+    approvalRequired: parseApprovalRequired(input.approvalRequired),
+    vehicleUsage: parseVehicleUsage(input.vehicleUsage),
+  };
 }
 
 async function insertMapping(typeId: string) {
@@ -430,7 +505,7 @@ export async function createType(tenantId: string, input: TypeInput, by: string 
   const category = await getCategoryRow(tenantId, String(input.categoryId ?? ''));
   const name = cleanName(input.name, 'Service type name');
   const priority = parsePriority(input.priority);
-  const sla = parseSla(input.sla);
+  const settings = parseTypeSettings(input);
   const rootScopeId = await ensureRootScope(tenantId);
   const key = await uniqueKey(tenantId, 'service_types', slugKey(CATALOG_CATEGORY_PREFIX, name));
   const prefix = await allocatePrefix(tenantId, name);
@@ -445,7 +520,8 @@ export async function createType(tenantId: string, input: TypeInput, by: string 
     tenantId, category.id, key, name, cleanText(input.trigger), priority, Number(next),
   );
   await insertMapping(row.id);
-  await writeTypeRules(row.id, prefix, sla, rootScopeId, by, true);
+  await writeTypeRules(row.id, prefix, settings, rootScopeId, by, true);
+  await syncApprovalEngine(row.id, settings.approvalRequired);
   return row.id;
 }
 
@@ -453,7 +529,7 @@ export async function updateType(tenantId: string, id: string, input: TypeInput,
   const existing = await getTypeRow(tenantId, id);
   const name = cleanName(input.name, 'Service type name');
   const priority = parsePriority(input.priority);
-  const sla = parseSla(input.sla);
+  const settings = parseTypeSettings(input);
   const categoryId = input.categoryId ? (await getCategoryRow(tenantId, String(input.categoryId))).id : existing.category_id;
   const rootScopeId = await ensureRootScope(tenantId);
   await prisma.$executeRawUnsafe(
@@ -464,7 +540,7 @@ export async function updateType(tenantId: string, id: string, input: TypeInput,
   );
   const tk = await activeRootRules<TicketingRules>(id, 'ticketing', rootScopeId);
   const prefix = tk?.ticketPrefix || await allocatePrefix(tenantId, name);
-  await writeTypeRules(id, prefix, sla, rootScopeId, by, false);
+  await writeTypeRules(id, prefix, settings, rootScopeId, by, false);
 }
 
 /** Soft delete. Existing requests of this type are untouched. */
@@ -519,9 +595,11 @@ export async function installStandardCatalog(tenantId: string): Promise<{ catego
       );
       if (!type || type.deleted) continue;
       await insertMapping(type.id);
-      await writeTypeRules(type.id, st.prefix,
-        { responseHours: st.response, onSiteHours: st.onSite, resolutionHours: st.resolution },
-        rootScopeId, null, true);
+      await writeTypeRules(type.id, st.prefix, {
+        sla: { responseHours: st.response, onSiteHours: st.onSite, resolutionHours: st.resolution },
+        approvalRequired: false,
+        vehicleUsage: FSM_DEFAULT_VEHICLE_USAGE,
+      }, rootScopeId, null, true);
     }
   }
 

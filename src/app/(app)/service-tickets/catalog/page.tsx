@@ -18,11 +18,15 @@ import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile } from '@/components/ui/SmartDataGrid';
 import { PRIORITY_TIERS, formatSlaHours, priorityLabel } from '@/lib/service-tickets/priority-tiers';
 import type { TicketPriority } from '@/types/service-tickets';
+import { VEHICLE_USAGES } from '@/types/service-rules';
+
+const DEFAULT_VEHICLE_USAGE = 'Service Delivery';
 
 interface CatalogSla { responseHours: number | null; onSiteHours: number | null; resolutionHours: number | null }
 interface CatalogType {
   id: string; key: string; name: string; categoryId: string; priority: TicketPriority;
   trigger: string | null; prefix: string; sortOrder: number; sla: CatalogSla;
+  approvalRequired: boolean; vehicleUsage: string;
 }
 interface CatalogCategory { id: string; key: string; name: string; description: string | null; sortOrder: number; types: CatalogType[] }
 interface CatalogResponse {
@@ -164,6 +168,21 @@ export default function ServiceCatalogPage() {
       key: 'resolution', header: 'SLA resolution', align: 'right', filter: false,
       accessor: (r) => r.sla.resolutionHours,
       render: (r) => <span className="text-sm tabular-nums text-slate-200 whitespace-nowrap">{formatSlaHours(r.sla.resolutionHours)}</span>,
+    },
+    {
+      key: 'approval', header: 'Approval workflow', filter: 'select', selectOptions: ['Yes', 'No'], align: 'center',
+      accessor: (r) => (r.approvalRequired ? 'Yes' : 'No'),
+      render: (r) => (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${
+          r.approvalRequired ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+        }`}>
+          {r.approvalRequired ? 'Yes' : 'No'}
+        </span>
+      ),
+    },
+    {
+      key: 'vehicleUsage', header: 'Vehicle usage', filter: 'select', accessor: (r) => r.vehicleUsage,
+      render: (r) => <span className="text-xs text-slate-300 whitespace-nowrap">{r.vehicleUsage}</span>,
     },
     {
       key: 'trigger', header: 'Trigger', accessor: (r) => r.trigger ?? '',
@@ -421,13 +440,18 @@ function TypeDialog({ initial, categories, defaultCategoryId, busy, onSave, onCa
   categories: CatalogCategory[];
   defaultCategoryId: string;
   busy: boolean;
-  onSave: (v: { categoryId: string; name: string; priority: TicketPriority; trigger: string; sla: CatalogSla }) => void;
+  onSave: (v: {
+    categoryId: string; name: string; priority: TicketPriority; trigger: string; sla: CatalogSla;
+    approvalRequired: boolean; vehicleUsage: string;
+  }) => void;
   onCancel: () => void;
 }) {
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? defaultCategoryId);
   const [name, setName] = useState(initial?.name ?? '');
   const [priority, setPriority] = useState<TicketPriority>(initial?.priority ?? 'Medium');
   const [trigger, setTrigger] = useState(initial?.trigger ?? '');
+  const [approvalRequired, setApprovalRequired] = useState<boolean>(initial?.approvalRequired ?? false);
+  const [vehicleUsage, setVehicleUsage] = useState(initial?.vehicleUsage ?? DEFAULT_VEHICLE_USAGE);
   const [response, setResponse] = useState(String(initial?.sla.responseHours ?? ''));
   const [onSite, setOnSite] = useState(String(initial?.sla.onSiteHours ?? ''));
   const [resolution, setResolution] = useState(String(initial?.sla.resolutionHours ?? ''));
@@ -437,7 +461,10 @@ function TypeDialog({ initial, categories, defaultCategoryId, busy, onSave, onCa
     <Dialog title={initial ? 'Edit service type' : 'Add service type'} onCancel={onCancel}>
       <form className="space-y-4" onSubmit={(e) => {
         e.preventDefault();
-        onSave({ categoryId, name, priority, trigger, sla: { responseHours: toNum(response), onSiteHours: toNum(onSite), resolutionHours: toNum(resolution) } });
+        onSave({
+          categoryId, name, priority, trigger, approvalRequired, vehicleUsage,
+          sla: { responseHours: toNum(response), onSiteHours: toNum(onSite), resolutionHours: toNum(resolution) },
+        });
       }}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Label text="Service category">
@@ -466,6 +493,22 @@ function TypeDialog({ initial, categories, defaultCategoryId, busy, onSave, onCa
           </Label>
         </div>
         <p className="text-[11px] text-slate-500 -mt-2">Hours; use 0.25 for 15 minutes. Applies to new requests only.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Label text="Approval workflow required">
+            <select className={inputCls} value={approvalRequired ? 'Yes' : 'No'} onChange={(e) => setApprovalRequired(e.target.value === 'Yes')}>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </Label>
+          <Label text="Vehicle usage">
+            <select className={inputCls} value={vehicleUsage} onChange={(e) => setVehicleUsage(e.target.value)}>
+              {VEHICLE_USAGES.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </Label>
+        </div>
+        {approvalRequired && (
+          <p className="text-[11px] text-amber-300/90 -mt-2">New requests of this type start in Awaiting Approval, including P1 and P2.</p>
+        )}
         <Label text="Trigger">
           <input className={inputCls} value={trigger} onChange={(e) => setTrigger(e.target.value)} maxLength={300}
             placeholder="e.g. Customer Support Ticket / Fault Report" />

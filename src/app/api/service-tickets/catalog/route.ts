@@ -12,8 +12,9 @@ export const dynamic = 'force-dynamic';
  *   { action: 'createCategory', name, description? }
  *   { action: 'updateCategory', id, name, description? }
  *   { action: 'deleteCategory', id }                     (soft delete, with its types)
- *   { action: 'createType', categoryId, name, priority, trigger?, sla: { responseHours, onSiteHours, resolutionHours } }
- *   { action: 'updateType', id, categoryId?, name, priority, trigger?, sla }
+ *   { action: 'createType', categoryId, name, priority, trigger?, sla: { responseHours, onSiteHours, resolutionHours },
+ *     approvalRequired?: boolean | 'Yes' | 'No' (default No), vehicleUsage?: string (default 'Service Delivery') }
+ *   { action: 'updateType', id, categoryId?, name, priority, trigger?, sla, approvalRequired?, vehicleUsage? }
  *   { action: 'deleteType', id }                         (soft delete)
  *   { action: 'installStandard' }                        (standard catalogue; archives Facilities)
  * Existing requests keep their service type whatever happens here.

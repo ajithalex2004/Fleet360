@@ -6,6 +6,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }));
 
 import {
   STANDARD_CATALOG, parseSla, parsePriority, CatalogError,
+  parseApprovalRequired, parseVehicleUsage, FSM_DEFAULT_VEHICLE_USAGE,
 } from '@/lib/service-tickets/service-catalog';
 import { TICKET_TYPE_KEY_RE } from '@/types/service-tickets';
 import { formatSlaHours, priorityLabel } from '@/lib/service-tickets/priority-tiers';
@@ -71,6 +72,21 @@ describe('catalogue validation', () => {
     expect(() => parseSla({ responseHours: 0, onSiteHours: 4, resolutionHours: 8 })).toThrow('Response time');
     expect(() => parseSla({ responseHours: 8, onSiteHours: 4, resolutionHours: 2 })).toThrow('shorter than the response');
     expect(() => parseSla({ responseHours: 1, onSiteHours: 9000, resolutionHours: 9000 })).toThrow('8760');
+  });
+
+  it('reads Approval Workflow Required as Yes/No, defaulting to No', () => {
+    expect(parseApprovalRequired(undefined)).toBe(false);
+    expect(parseApprovalRequired('Yes')).toBe(true);
+    expect(parseApprovalRequired('no')).toBe(false);
+    expect(parseApprovalRequired(true)).toBe(true);
+    expect(() => parseApprovalRequired('maybe')).toThrow(CatalogError);
+  });
+
+  it('defaults Vehicle Usage to Service Delivery and only accepts known usages', () => {
+    expect(FSM_DEFAULT_VEHICLE_USAGE).toBe('Service Delivery');
+    expect(parseVehicleUsage(undefined)).toBe('Service Delivery');
+    expect(parseVehicleUsage('logistics')).toBe('Logistics');
+    expect(() => parseVehicleUsage('Spaceship')).toThrow('Vehicle usage must be one of');
   });
 
   it('formats SLA hours for display', () => {
