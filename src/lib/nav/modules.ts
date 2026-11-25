@@ -64,6 +64,7 @@ import {
   Network,
   FolderTree,
   Sliders,
+  ListTree,
   FileSearch,
   Sparkles,
   MessageCircle,
@@ -497,6 +498,7 @@ export const MODULES: ModuleDef[] = [
     icon: Headphones,
     subPages: [
       { label: 'Service Tickets', href: '/service-tickets', icon: LayoutDashboard },
+      { label: 'Service Catalog & SLA', href: '/service-tickets/catalog', icon: ListTree },
       { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
       { label: 'CSAT Analytics', href: '/service-tickets/csat', icon: Star },
       { label: 'WhatsApp console', href: '/admin/whatsapp', icon: MessageCircle, navKey: 'whatsapp' },

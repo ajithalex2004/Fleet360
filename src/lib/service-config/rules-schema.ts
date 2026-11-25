@@ -81,8 +81,12 @@ export async function saveRules(
   updatedBy: string | null,
   scopeId: string,
 ): Promise<void> {
-  await prisma.$transaction([
-    prisma.$executeRawUnsafe(
+  // Interactive form: the prisma wrapper (src/lib/prisma.ts) turns raw calls
+  // into plain promises that run immediately, which the array form of
+  // $transaction rejects after both statements have already run — the save
+  // landed but the caller saw an error, and the two writes were not atomic.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
       `UPDATE service_rules
          SET effective_to = NOW()
        WHERE service_type_id = $1::uuid
@@ -90,15 +94,15 @@ export async function saveRules(
          AND scope_id = $3::uuid
          AND effective_to IS NULL`,
       serviceTypeId, category, scopeId,
-    ),
-    prisma.$executeRawUnsafe(
+    );
+    await tx.$executeRawUnsafe(
       `INSERT INTO service_rules
          (service_type_id, category, scope_id, rules, effective_from, effective_to,
           updated_at, updated_by)
        VALUES ($1::uuid, $2, $3::uuid, $4::jsonb, NOW(), NULL, NOW(), $5)`,
       serviceTypeId, category, scopeId, JSON.stringify(rules), updatedBy,
-    ),
-  ]);
+    );
+  });
 }
 
 /** A historical row — used by the admin History panel and rollback flow. */

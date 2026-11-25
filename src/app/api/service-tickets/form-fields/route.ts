@@ -26,7 +26,7 @@ import {
   resolveTicketFormFieldsBatch,
 } from '@/lib/service-config/resolvers';
 import { loadServiceConfig } from '@/lib/service-config/load';
-import { listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
+import { listArchivedTicketTypeNames, listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
 import { listDepartments } from '@/lib/service-tickets/departments';
 import {
   type TicketType, type TicketPriority, type FormFieldDef,
@@ -59,6 +59,9 @@ interface ServiceTypeConfig {
   // Awaiting Approval" hint without hitting another endpoint.
   approvalRequired: boolean;
   approvalEmergencyBypass: boolean;
+  /** Field Service catalogue types: the SLA timers set in the Service
+   *  Catalog & SLA master (priority is fixed for these). Null otherwise. */
+  catalogSla: { responseHours: number | null; onSiteHours: number; resolutionHours: number | null } | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -73,9 +76,10 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const [catalogue, departments] = await Promise.all([
+    const [catalogue, departments, archivedTypeNames] = await Promise.all([
       listEnabledTicketTypes(tenantId),
       listDepartments(tenantId),
+      listArchivedTicketTypeNames(tenantId),
     ]);
     const types: TicketType[] = catalogue.map((e) => e.key);
     const categoryOf = new Map(catalogue.map((e) => [e.key, e]));
@@ -108,6 +112,13 @@ export async function GET(req: NextRequest) {
         prefix: cfg.rules.ticketing.ticketPrefix || '',
         approvalRequired: !!cfg.rules.approval.approvalRequired,
         approvalEmergencyBypass: !!cfg.rules.approval.emergencyBypassEnabled,
+        catalogSla: typeof cfg.rules.sla?.onSiteArrivalHours === 'number'
+          ? {
+              responseHours: cfg.rules.sla.responseSlaMinutes != null ? cfg.rules.sla.responseSlaMinutes / 60 : null,
+              onSiteHours: cfg.rules.sla.onSiteArrivalHours,
+              resolutionHours: cfg.rules.sla.resolutionSlaHours ?? null,
+            }
+          : null,
       };
       return [t, value] as const;
     }));
@@ -119,6 +130,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true, formFields, typeConfig,
+      // Labels for existing tickets whose type has since been deleted.
+      archivedTypeNames,
       departments: departments.map(({ key, label, shortLabel, description, tone, isSystem }) =>
         ({ key, label, shortLabel, description, tone, isSystem })),
     });

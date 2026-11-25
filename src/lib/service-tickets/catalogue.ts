@@ -74,3 +74,20 @@ export async function isEnabledTicketType(tenantId: string, key: string): Promis
   const enabled = await listEnabledTicketTypes(tenantId);
   return enabled.some((e) => e.key === key);
 }
+
+/**
+ * Names of the tenant's deleted ticket types, for labelling existing tickets
+ * whose type was later removed (e.g. the Facilities catalogue archived by the
+ * Service Catalog & SLA master). Never offered for new tickets.
+ */
+export async function listArchivedTicketTypeNames(tenantId: string): Promise<Record<string, string>> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ key: string; name: string }>>(
+    `SELECT t.key, t.name
+       FROM service_types t
+       JOIN service_module_mapping m ON m.service_type_id = t.id
+      WHERE t.tenant_id = $1 AND t.deleted_at IS NOT NULL
+        AND m.linked_module = 'SERVICE_TICKETING'`,
+    tenantId,
+  ).catch(() => [] as Array<{ key: string; name: string }>);
+  return Object.fromEntries(rows.map((r) => [r.key, r.name]));
+}

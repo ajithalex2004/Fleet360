@@ -220,8 +220,22 @@ export async function POST(req: NextRequest) {
         }, { status: 403 });
       }
 
+      // Field Service catalogue types (Service Catalog & SLA master) carry an
+      // on-site arrival SLA. Their priority is set in the master, not by the
+      // requester, and the SLA timers are recorded on the request.
+      const slaRules = cfg.rules.sla;
+      const catalogSla = typeof slaRules?.onSiteArrivalHours === 'number'
+        ? {
+            responseHours: slaRules.responseSlaMinutes != null ? slaRules.responseSlaMinutes / 60 : null,
+            onSiteHours: slaRules.onSiteArrivalHours,
+            resolutionHours: slaRules.resolutionSlaHours ?? null,
+          }
+        : null;
+
       // Default priority lives on the service_types row.
-      const priority: TicketPriority = isTicketPriority(body.priority) ? body.priority : cfg.type.defaultPriority;
+      const priority: TicketPriority = catalogSla
+        ? cfg.type.defaultPriority
+        : isTicketPriority(body.priority) ? body.priority : cfg.type.defaultPriority;
 
       // Vehicle requirement check.
       if (cfg.rules.vehicle.vehicleRequired && !body.vehicleId) {
@@ -255,6 +269,12 @@ export async function POST(req: NextRequest) {
       }
       if (!customFields.trackingToken) {
         customFields.trackingToken = crypto.randomUUID().replace(/-/g, '');
+      }
+      if (catalogSla) {
+        // Server-set: the SLA committed when the request was raised.
+        customFields.sla = catalogSla;
+      } else {
+        delete customFields.sla;
       }
       const resolvedFormFields = cfg.rules.formFields.fields ?? [];
       for (const f of resolvedFormFields) {

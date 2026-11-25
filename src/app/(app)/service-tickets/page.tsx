@@ -17,13 +17,14 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment, TicketDepartmentDef, TicketPriority } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
+import { formatSlaHours, priorityLabel } from '@/lib/service-tickets/priority-tiers';
 import { createMaintenanceRequest } from '@/services/mockData';
 import { ContextDrawer360 } from './components/context-drawer-360';
 import { ForwardTicketModal } from './components/forward-ticket-modal';
@@ -54,6 +55,8 @@ interface ServiceTypeConfig {
   prefix: string;
   approvalRequired: boolean;
   approvalEmergencyBypass: boolean;
+  /** Field Service catalogue types: SLA timers from the Service Catalog & SLA master. */
+  catalogSla?: { responseHours: number | null; onSiteHours: number; resolutionHours: number | null } | null;
 }
 type TypeConfigByType = Partial<Record<TicketType, ServiceTypeConfig>>;
 
@@ -139,6 +142,8 @@ export default function ServiceTicketsHome() {
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
   const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
   const [typeConfigByType, setTypeConfigByType] = useState<TypeConfigByType>({});
+  /** Names of deleted types, so older tickets keep a readable label. */
+  const [archivedTypeNames, setArchivedTypeNames] = useState<Record<string, string>>({});
   const [departments, setDepartments] = useState<TicketDepartmentDef[]>(TICKET_DEPARTMENTS);
   const [vehicles, setVehicles]       = useState<VehiclePickerOption[]>([]);
   const [tickets, setTickets]         = useState<ServiceTicket[]>([]);
@@ -173,7 +178,7 @@ export default function ServiceTicketsHome() {
       setUserId(me.userId);
 
       // Each response renders as soon as it lands — a slow vehicle list must
-      // not hold back the ticket types (and with them the New ticket button).
+      // not hold back the ticket types (and with them the New Request button).
       const loadMatrix = fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`).then(async (res) => {
         if (!res.ok) return;
         const data = await res.json();
@@ -185,12 +190,13 @@ export default function ServiceTicketsHome() {
         if (!res.ok) {
           // Without the type catalogue the create form has nothing to offer —
           // say so instead of leaving "New ticket" silently disabled.
-          setError('Ticket types could not be loaded, so new tickets cannot be raised right now. Try Refresh.');
+          setError('Service types could not be loaded, so new requests cannot be raised right now. Try Refresh.');
           return;
         }
         const data = await res.json();
         setFormFieldsByType(data.formFields ?? {});
         setTypeConfigByType(data.typeConfig ?? {});
+        setArchivedTypeNames(data.archivedTypeNames ?? {});
         if (Array.isArray(data.departments) && data.departments.length > 0) setDepartments(data.departments);
       });
       const loadVehicles = fetch(`/api/vehicles`).then(async (res) => {
@@ -425,7 +431,7 @@ export default function ServiceTicketsHome() {
       },
       {
         key: 'type', header: 'Type', filter: 'select',
-        accessor: (t) => typeConfigByType[t.ticketType]?.name ?? t.ticketType,
+        accessor: (t) => typeConfigByType[t.ticketType]?.name ?? archivedTypeNames[t.ticketType] ?? t.ticketType,
         render: (t) => {
           const cfg = typeConfigByType[t.ticketType];
           const Icon = getServiceIcon(cfg?.iconName);
@@ -435,7 +441,7 @@ export default function ServiceTicketsHome() {
               <span className={`w-6 h-6 rounded-md ${TONE_BG[tone]} inline-flex items-center justify-center shrink-0`}>
                 <Icon className="w-3.5 h-3.5" />
               </span>
-              {cfg?.name ?? t.ticketType}
+              {cfg?.name ?? archivedTypeNames[t.ticketType] ?? t.ticketType}
             </span>
           );
         },
@@ -517,7 +523,7 @@ export default function ServiceTicketsHome() {
         render: (t) => <RowActions ticket={t} actions={rowActions.current} />,
       },
     ];
-  }, [typeConfigByType, departments]);
+  }, [typeConfigByType, archivedTypeNames, departments]);
 
   const kpis = useMemo<KpiTile[]>(() => {
     const open = tickets.filter(t => !['Resolved', 'Completed', 'Closed', 'Rejected'].includes(t.status));
@@ -545,7 +551,7 @@ export default function ServiceTicketsHome() {
     <div className="space-y-6 max-w-7xl">
       <PageHeader
         title="Field Service Management"
-        subtitle={`Central operations triage hopper · ${enabledTypes.length ? `${enabledTypes.length} ticket types` : 'loading ticket types'} · 1-click recovery · replacement fleet swaps`}
+        subtitle={`Central operations triage hopper · ${enabledTypes.length ? `${enabledTypes.length} service types` : 'loading service types'} · 1-click recovery · replacement fleet swaps`}
         icon={Headphones}
         accent="violet"
         actions={
@@ -557,6 +563,12 @@ export default function ServiceTicketsHome() {
               <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> SLA Control Tower
             </Link>
             <Link
+              href="/service-tickets/catalog"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-violet-500/30 px-3.5 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-950/40 hover:border-violet-500/60 transition-all shadow-sm"
+            >
+              <ListTree className="w-3.5 h-3.5 text-violet-400" /> Service Catalog &amp; SLA
+            </Link>
+            <Link
               href="/service-tickets/csat"
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-amber-500/30 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 hover:border-amber-500/60 transition-all shadow-sm"
             >
@@ -564,9 +576,9 @@ export default function ServiceTicketsHome() {
             </Link>
             <button onClick={() => setShowForm(s => !s)}
               disabled={enabledTypes.length === 0}
-              title={enabledTypes.length === 0 ? (loading ? 'Loading ticket types…' : 'No ticket types are enabled for this tenant') : undefined}
+              title={enabledTypes.length === 0 ? (loading ? 'Loading service types…' : 'No service types are enabled for this tenant') : undefined}
               className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/30">
-              <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : loading && enabledTypes.length === 0 ? 'Loading…' : 'New ticket'}
+              <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : loading && enabledTypes.length === 0 ? 'Loading…' : 'New Request'}
             </button>
           </div>
         }
@@ -644,7 +656,7 @@ export default function ServiceTicketsHome() {
         emptyMessage={
           activeType !== 'ALL' || activeDepartment !== 'ALL'
             ? 'No tickets match these filters.'
-            : 'No tickets yet — use “New ticket” to raise the first one.'
+            : 'No requests yet — use “New Request” to raise the first one.'
         }
         initialSort={{ key: 'created', dir: 'desc' }}
         kpis={kpis}
@@ -847,7 +859,7 @@ function NewTicketForm({
   const [ticketType, setTicketType] = useState<TicketType>(enabledTypes[0] ?? 'MAINTENANCE');
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
-  const [priority, setPriority]     = useState<TicketPriority>('Medium');
+  const [category, setCategory]     = useState('');
   const [vehicleId, setVehicleId]   = useState('');
   const [dueDate, setDueDate]       = useState('');
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
@@ -867,8 +879,23 @@ function NewTicketForm({
       const g = c.categoryName || 'Other';
       groups.set(g, [...(groups.get(g) ?? []), t]);
     }
-    return [...groups.entries()];
+    // Field Service catalogue categories (Service Catalog & SLA master) first.
+    const isFsm = (types: TicketType[]) => (typeConfigByType[types[0]]?.categoryKey ?? '').startsWith('FSM_');
+    return [...groups.entries()].sort((a, b) => Number(isFsm(b[1])) - Number(isFsm(a[1])));
   }, [enabledTypes, typeConfigByType]);
+
+  // Category first, then a service type within it.
+  const categoryTypes = useMemo(
+    () => typeGroups.find(([g]) => g === category)?.[1] ?? [],
+    [typeGroups, category],
+  );
+  useEffect(() => {
+    if (typeGroups.length === 0) return;
+    if (!typeGroups.some(([g]) => g === category)) setCategory(typeGroups[0][0]);
+  }, [typeGroups, category]);
+  useEffect(() => {
+    if (categoryTypes.length && !categoryTypes.includes(ticketType)) setTicketType(categoryTypes[0]);
+  }, [categoryTypes, ticketType]);
 
   const tc = typeConfigByType[ticketType];
   const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? [];
@@ -876,7 +903,10 @@ function NewTicketForm({
   const autoCreatesMR           = !!tc?.autoCreatesMaintenanceRequest;
   const resolvedDefaultPriority = tc?.defaultPriority ?? 'Medium';
   const longLabel               = tc?.longLabel ?? ticketType;
-  const defaultSlaHours         = tc?.defaultSlaHours ?? 24;
+  const catalogSla              = tc?.catalogSla ?? null;
+  // Priority is configured per service type in the master, not chosen here.
+  const priority: TicketPriority = resolvedDefaultPriority;
+  const resolutionHours         = catalogSla?.resolutionHours ?? tc?.slaByPriority?.[priority] ?? tc?.defaultSlaHours ?? null;
   const willAwaitApproval =
     !!tc?.approvalRequired
     && !(tc.approvalEmergencyBypass && (priority === 'High' || priority === 'Critical'));
@@ -885,13 +915,6 @@ function NewTicketForm({
   // types have different field schemas, so values don't carry across.
   useEffect(() => {
     setCustomFields({});
-  }, [ticketType]);
-
-  // When the type's defaultPriority differs from current selection AND the
-  // user hasn't started typing, snap to it. We only do this on type change.
-  useEffect(() => {
-    setPriority(resolvedDefaultPriority);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketType]);
 
   const setField = (key: string, value: unknown) => {
@@ -930,7 +953,7 @@ function NewTicketForm({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setErr(data?.error ?? 'Failed to create ticket'); return; }
+      if (!res.ok) { setErr(data?.error ?? 'Failed to create the request'); return; }
       onCreated(data.ticket as ServiceTicket);
     } finally {
       setSubmitting(false);
@@ -941,7 +964,7 @@ function NewTicketForm({
     <form onSubmit={submit}
       className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 space-y-4 shadow-lg shadow-violet-500/10">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">Create new ticket</h3>
+        <h3 className="text-base font-semibold text-white">New request</h3>
         <button type="button" onClick={onCancel}
           className="text-xs text-slate-400 hover:text-white">Cancel</button>
       </div>
@@ -950,30 +973,51 @@ function NewTicketForm({
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-xs">{err}</div>
       )}
 
-      {/* Type chooser */}
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Type</label>
-        <select value={ticketType} onChange={e => setTicketType(e.target.value as TicketType)}
-          className="w-full md:w-96 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-          {typeGroups.map(([group, types]) => (
-            <optgroup key={group} label={group}>
-              {types.map(t => <option key={t} value={t}>{typeConfigByType[t]!.name}</option>)}
-            </optgroup>
-          ))}
-        </select>
-        <p className="text-[11px] text-slate-500">
-          Default SLA: <strong className="text-white">{defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
-          {autoCreatesMR && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
-        </p>
-        {/* Approval-gate hint — derived server-side from the resolved
-            approval rules. */}
-        {willAwaitApproval && (
-          <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            This ticket will start in <strong className="text-amber-200">Awaiting Approval</strong>.
-          </p>
-        )}
+      {/* Service category → service type */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Service category</label>
+          <select value={category} onChange={e => setCategory(e.target.value)} aria-label="Service category"
+            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+            {typeGroups.map(([group, types]) => (
+              <option key={group} value={group}>{group} ({types.length})</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Service type</label>
+          <select value={ticketType} onChange={e => setTicketType(e.target.value as TicketType)} aria-label="Service type"
+            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+            {categoryTypes.map(t => <option key={t} value={t}>{typeConfigByType[t]!.name}</option>)}
+          </select>
+        </div>
       </div>
+
+      {/* Priority and SLA — set per service type in the Service Catalog & SLA master */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2" aria-label="Priority and SLA">
+        {[
+          { label: 'Priority', value: priorityLabel(priority) },
+          { label: 'SLA response', value: catalogSla ? formatSlaHours(catalogSla.responseHours) : '—' },
+          { label: 'SLA on-site arrival', value: catalogSla ? formatSlaHours(catalogSla.onSiteHours) : '—' },
+          { label: 'SLA resolution', value: formatSlaHours(resolutionHours) },
+        ].map(x => (
+          <div key={x.label} className="rounded-lg border border-white/10 bg-slate-800/60 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-slate-400">{x.label}</div>
+            <div className="text-sm font-semibold text-white">{x.value}</div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-slate-500 -mt-2">
+        Priority and SLA come from the Service Catalog &amp; SLA master.
+        {autoCreatesMR && <span className="ml-2 text-blue-300">Auto-creates a Maintenance Request on Acknowledge.</span>}
+      </p>
+      {/* Approval-gate hint — derived server-side from the resolved approval rules. */}
+      {willAwaitApproval && (
+        <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" />
+          This request will start in <strong className="text-amber-200">Awaiting Approval</strong>.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1 md:col-span-2">
@@ -986,13 +1030,6 @@ function NewTicketForm({
           <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Description</label>
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Priority</label>
-          <select value={priority} onChange={e => setPriority(e.target.value as TicketPriority)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
-            {TICKET_PRIORITIES.map(p => <option key={p}>{p}</option>)}
-          </select>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Due date</label>
@@ -1044,7 +1081,7 @@ function NewTicketForm({
           className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         <button type="submit" disabled={submitting}
           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all">
-          <Plus className="w-4 h-4" /> {submitting ? 'Creating…' : 'Create ticket'}
+          <Plus className="w-4 h-4" /> {submitting ? 'Submitting…' : 'Submit request'}
         </button>
       </div>
     </form>
