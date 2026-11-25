@@ -1,0 +1,41 @@
+/* SmartDataGrid — light theme.
+ *
+ * The grid is styled dark-first with translucent slate panels
+ * (bg-slate-900/50 etc.). The global light-contrast sheet only lifts dark
+ * panels that carry light text, so in light mode these panels render as flat
+ * grey with unreadable labels. These rules, scoped to the grid root (.sdg) and
+ * to containers that opt in with the same class, map the dark palette onto a
+ * light one. Dark mode is untouched. `.sdg.sdg` doubles the class so these
+ * rules outrank the global light-contrast panel rules. */
+
+/* Panels → white / near-white */
+html.light .sdg.sdg:is([class*="bg-slate-900/"], [class*="bg-slate-950/"]),
+html.light .sdg.sdg :is([class*="bg-slate-900/"], [class*="bg-slate-950/"], [class~="bg-slate-900"], [class~="bg-slate-950"]) {
+  background-color: #ffffff;
+}
+html.light .sdg.sdg thead tr,
+html.light .sdg.sdg tr[class*="bg-slate-950/"] {
+  background-color: #f8fafc;
+}
+html.light .sdg.sdg tbody tr:nth-child(even) { background-color: #fcfcfd; }
+html.light .sdg.sdg tbody tr:hover { background-color: #f5f3ff; }
+/* Slate-tinted chips and badges (ids, triage, source, SLA age, skeletons) */
+html.light .sdg.sdg :is([class*="bg-slate-400/"], [class*="bg-slate-500/"], [class*="bg-slate-600/"], [class*="bg-slate-700/"], [class*="bg-slate-800/"], [class~="bg-slate-700"], [class~="bg-slate-800"]) {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+/* Hairlines */
+html.light .sdg.sdg:is([class*="border-white/"]),
+html.light .sdg.sdg [class*="border-white/"] {
+  border-color: #e2e8f0;
+}
+
+/* Text */
+html.light .sdg.sdg :is([class~="text-white"], [class~="text-slate-100"], [class~="text-slate-200"], [class~="text-slate-300"]):not([class*="bg-violet-6"], [class*="bg-blue-6"], [class*="bg-rose-6"], [class*="bg-emerald-6"]) {
+  color: #1e293b;
+}
+html.light .sdg.sdg [class~="text-slate-400"] { color: #475569; }
+html.light .sdg.sdg [class~="text-slate-500"] { color: #64748b; }
+html.light .sdg.sdg :is(input, select)::placeholder { color: #94a3b8; }
