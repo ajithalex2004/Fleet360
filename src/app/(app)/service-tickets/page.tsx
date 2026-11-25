@@ -671,6 +671,16 @@ export default function ServiceTicketsHome() {
       <ContextDrawer360
         ticketId={drawerTicketId}
         ticket={drawerTicket}
+        headerMeta={drawerTicket ? (() => {
+          const dept = drawerTicket.assignedDepartment || 'OPERATIONS_TRIAGE';
+          const b = departmentBadge(dept, departments.find(d => d.key === dept));
+          return (
+            <>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${STATUS_BADGE[drawerTicket.status] ?? STATUS_BADGE.Pending}`}>{drawerTicket.status}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${b.bg} ${b.text} ${b.border}`}>{b.label}</span>
+            </>
+          );
+        })() : null}
         isVehicleTicket={!!drawerTicket && (!!typeConfigByType[drawerTicket.ticketType]?.vehicleRequired || !!drawerTicket.vehicleId)}
         onClose={() => setDrawerTicketId(null)}
         onForward={() => {

@@ -45,12 +45,15 @@ interface ContextDrawer360Props {
   isVehicleTicket?: boolean;
   /** Opens the Forward-to-department flow (required for Triage tickets). */
   onForward?: () => void;
+  /** Status / department badges shown under the title. Supplied by the list
+   *  page so they match the grid and update when the ticket moves. */
+  headerMeta?: React.ReactNode;
 }
 
 const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
 
 export function ContextDrawer360({
-  ticketId, onClose, onStatusChange, ticket = null, isVehicleTicket = true, onForward,
+  ticketId, onClose, onStatusChange, ticket = null, isVehicleTicket = true, onForward, headerMeta,
 }: ContextDrawer360Props) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TicketContext360Data | null>(null);
@@ -146,13 +149,16 @@ export function ContextDrawer360({
       <div className="w-full max-w-xl bg-slate-950 border-l border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
-              {data?.ticket?.readableId || 'Ticket 360'}
-            </span>
-            <span className="text-xs font-semibold text-white truncate max-w-[260px]">
-              {data?.ticket?.title || 'Loading Context...'}
-            </span>
+          <div className="min-w-0 flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                {data?.ticket?.readableId || 'Ticket 360'}
+              </span>
+              <span className="text-xs font-semibold text-white truncate max-w-[260px]">
+                {data?.ticket?.title || 'Loading Context...'}
+              </span>
+            </div>
+            {headerMeta && <div className="flex flex-wrap items-center gap-1.5">{headerMeta}</div>}
           </div>
 
           <div className="flex items-center gap-1.5">
