@@ -15,10 +15,11 @@
  * disabled types from the type tabs and the create form.
  */
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star, Send, Inbox, ExternalLink } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, MessageSquare, Star, Send, Inbox, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment, TicketDepartmentDef, TicketPriority } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
@@ -150,10 +151,6 @@ export default function ServiceTicketsHome() {
   const [drawerTicketId, setDrawerTicketId]     = useState<string | null>(null);
   const [forwardingTicket, setForwardingTicket] = useState<ServiceTicket | null>(null);
 
-  // Bulk select
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy]       = useState(false);
-
   /** Enabled types as a sorted list of (type, config) pairs. Sourced from
    *  typeConfigByType (Service Configuration Engine), filtered through
    *  accessMap. Sort order also lives on the type record. */
@@ -175,28 +172,30 @@ export default function ServiceTicketsHome() {
       setTenantId(me.tenantId);
       setUserId(me.userId);
 
-      const [matrixRes, ticketsRes, fieldsRes, vehiclesRes] = await Promise.all([
-        fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`),
-        fetch(`/api/service-tickets`),
-        fetch(`/api/service-tickets/form-fields`),
-        fetch(`/api/vehicles`),
-      ]);
-
-      if (matrixRes.ok) {
-        const data = await matrixRes.json();
-        const map = new Map<TicketType, TenantTicketTypeAccess>(
+      // Each response renders as soon as it lands — a slow vehicle list must
+      // not hold back the ticket types (and with them the New ticket button).
+      const loadMatrix = fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`).then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        setAccessMap(new Map<TicketType, TenantTicketTypeAccess>(
           (data.matrix as TenantTicketTypeAccess[]).map(r => [r.ticketType, r])
-        );
-        setAccessMap(map);
-      }
-      if (fieldsRes.ok) {
-        const data = await fieldsRes.json();
+        ));
+      });
+      const loadFields = fetch(`/api/service-tickets/form-fields`).then(async (res) => {
+        if (!res.ok) {
+          // Without the type catalogue the create form has nothing to offer —
+          // say so instead of leaving "New ticket" silently disabled.
+          setError('Ticket types could not be loaded, so new tickets cannot be raised right now. Try Refresh.');
+          return;
+        }
+        const data = await res.json();
         setFormFieldsByType(data.formFields ?? {});
         setTypeConfigByType(data.typeConfig ?? {});
         if (Array.isArray(data.departments) && data.departments.length > 0) setDepartments(data.departments);
-      }
-      if (vehiclesRes.ok) {
-        const data: Array<VehiclePickerOption & { status?: string | null }> = await vehiclesRes.json();
+      });
+      const loadVehicles = fetch(`/api/vehicles`).then(async (res) => {
+        if (!res.ok) return;
+        const data: Array<VehiclePickerOption & { status?: string | null }> = await res.json();
         const list = Array.isArray(data) ? data : [];
         const EXCLUDED_STATUSES = new Set(['DECOMMISSIONED', 'SOLD', 'INACTIVE']);
         setVehicles(
@@ -207,14 +206,17 @@ export default function ServiceTicketsHome() {
               make: v.make, model: v.model,
             }))
         );
-      }
-      if (ticketsRes.ok) {
-        const data = await ticketsRes.json();
+      }).catch(() => { /* vehicle picker stays empty */ });
+      const loadTickets = fetch(`/api/service-tickets`).then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? 'Failed to load tickets');
+        }
+        const data = await res.json();
         setTickets(data.tickets ?? []);
-      } else {
-        const body = await ticketsRes.json().catch(() => ({}));
-        throw new Error(body?.error ?? 'Failed to load tickets');
-      }
+      });
+
+      await Promise.all([loadMatrix, loadFields, loadVehicles, loadTickets]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -341,14 +343,17 @@ export default function ServiceTicketsHome() {
   };
 
   // ── Bulk ─────────────────────────────────────────────────────────────
-  const toggleSelected = (id: string) => {
-    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  };
-  const clearSelection = () => setSelectedIds(new Set());
-
-  const handleBulk = async (newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated') => {
-    if (selectedIds.size === 0 || bulkBusy) return;
-    const targets = tickets.filter(t => selectedIds.has(t.id));
+  const handleBulk = async (
+    newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated',
+    selection: ServiceTicket[],
+  ) => {
+    // Triage tickets must be forwarded to a department before they can be actioned.
+    const targets = selection.filter(t => (t.assignedDepartment || 'OPERATIONS_TRIAGE') !== 'OPERATIONS_TRIAGE');
+    const skipped = selection.length - targets.length;
+    if (targets.length === 0) {
+      alert('The selected tickets are still in Operations Triage — forward them to a department first.');
+      return;
+    }
 
     let assignee: string | null = null;
     if (newStatus === 'Assigned' || newStatus === 'Escalated') {
@@ -358,53 +363,184 @@ export default function ServiceTicketsHome() {
       if (!/.+@.+\..+/.test(trimmed)) { alert('Please enter a valid email.'); return; }
       assignee = trimmed;
     }
-    if (!window.confirm(`Apply "${newStatus}"${assignee ? ` (${assignee})` : ''} to ${targets.length} tickets?`)) return;
+    if (!window.confirm(`Apply "${newStatus}"${assignee ? ` (${assignee})` : ''} to ${targets.length} tickets?${skipped ? ` ${skipped} triage ticket(s) will be skipped.` : ''}`)) return;
 
-    setBulkBusy(true);
-    try {
-      const updates = await Promise.all(targets.map(async t => {
-        let mrId: string | null = null;
-        let note: string | undefined =
-          assignee ? `Bulk ${newStatus.toLowerCase()} to ${assignee}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}` : `Bulk ${newStatus.toLowerCase()}`;
+    const updates = await Promise.all(targets.map(async t => {
+      let mrId: string | null = null;
+      let note: string | undefined =
+        assignee ? `Bulk ${newStatus.toLowerCase()} to ${assignee}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}` : `Bulk ${newStatus.toLowerCase()}`;
 
-        const autoCreatesMR = !!typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest;
-        if (autoCreatesMR && newStatus === 'Acknowledged' && t.vehicleId) {
-          try {
-            const mr = await createMaintenanceRequest({
-              vehicleId: t.vehicleId,
-              driverId: t.relatedDriverId ?? t.requestorId,
-              requestDate: new Date(t.createdAt).toISOString(),
-              description: t.description ?? t.title,
-              estimatedCost: 0,
-            });
-            mrId = mr?.id ?? null;
-            if (mrId) note = `${note} · linked MR ${mrId}`;
-          } catch { /* swallow per-row failure; continue with PATCH */ }
-        }
+      const autoCreatesMR = !!typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest;
+      if (autoCreatesMR && newStatus === 'Acknowledged' && t.vehicleId) {
+        try {
+          const mr = await createMaintenanceRequest({
+            vehicleId: t.vehicleId,
+            driverId: t.relatedDriverId ?? t.requestorId,
+            requestDate: new Date(t.createdAt).toISOString(),
+            description: t.description ?? t.title,
+            estimatedCost: 0,
+          });
+          mrId = mr?.id ?? null;
+          if (mrId) note = `${note} · linked MR ${mrId}`;
+        } catch { /* swallow per-row failure; continue with PATCH */ }
+      }
 
-        return patch(t.id, {
-          status: newStatus,
-          ...(assignee ? { assignedTo: assignee } : {}),
-          ...(mrId ? { maintenanceRequestId: mrId } : {}),
-          history: withHistory(t, newStatus, userId ?? 'user', note),
-        });
-      }));
-      const ok = updates.filter(Boolean) as ServiceTicket[];
-      const okIds = new Set(ok.map(u => u.id));
-      setTickets(prev => prev.map(t => okIds.has(t.id) ? ok.find(u => u.id === t.id)! : t));
-      clearSelection();
-      alert(`${ok.length}/${targets.length} tickets updated.`);
-    } finally {
-      setBulkBusy(false);
-    }
+      return patch(t.id, {
+        status: newStatus,
+        ...(assignee ? { assignedTo: assignee } : {}),
+        ...(mrId ? { maintenanceRequestId: mrId } : {}),
+        history: withHistory(t, newStatus, userId ?? 'user', note),
+      });
+    }));
+    const ok = updates.filter(Boolean) as ServiceTicket[];
+    const byId = new Map(ok.map(u => [u.id, u]));
+    setTickets(prev => prev.map(t => byId.get(t.id) ?? t));
+    alert(`${ok.length}/${targets.length} tickets updated.`);
   };
+  const handleBulkRef = useRef(handleBulk);
+  handleBulkRef.current = handleBulk;
+
+  // ── Smart data grid: columns, KPIs, bulk actions ─────────────────────
+  // Row-action handlers change every render; the memoised columns call them
+  // through a ref so the grid's column state isn't reset on each render.
+  const rowActions = useRef({ handleStatusChange, openForward: setForwardingTicket, open360: setDrawerTicketId });
+  rowActions.current = { handleStatusChange, openForward: setForwardingTicket, open360: setDrawerTicketId };
+
+  const columns = useMemo<SmartDataGridColumn<ServiceTicket>[]>(() => {
+    const deptOf = (t: ServiceTicket) => departments.find(d => d.key === (t.assignedDepartment || 'OPERATIONS_TRIAGE'));
+    return [
+      {
+        key: 'id', header: 'Ticket',
+        accessor: (t) => t.readableId ?? t.id.slice(0, 12),
+        render: (t) => (
+          <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded whitespace-nowrap" title={t.id}>
+            {t.readableId ?? t.id.slice(0, 12)}
+          </span>
+        ),
+      },
+      {
+        key: 'type', header: 'Type', filter: 'select',
+        accessor: (t) => typeConfigByType[t.ticketType]?.name ?? t.ticketType,
+        render: (t) => {
+          const cfg = typeConfigByType[t.ticketType];
+          const Icon = getServiceIcon(cfg?.iconName);
+          const tone = cfg?.tone ?? 'violet';
+          return (
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${TONE_FG[tone]}`}>
+              <span className={`w-6 h-6 rounded-md ${TONE_BG[tone]} inline-flex items-center justify-center shrink-0`}>
+                <Icon className="w-3.5 h-3.5" />
+              </span>
+              {cfg?.name ?? t.ticketType}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'title', header: 'Title',
+        accessor: (t) => t.title,
+        render: (t) => (
+          <div className="min-w-[180px] max-w-[280px]">
+            <div className="text-sm font-semibold text-white truncate" title={t.title}>{t.title}</div>
+            {t.description && <div className="text-[11px] text-slate-500 truncate" title={t.description}>{t.description}</div>}
+          </div>
+        ),
+      },
+      {
+        key: 'department', header: 'Department', filter: 'select',
+        accessor: (t) => deptOf(t)?.label ?? (t.assignedDepartment || 'OPERATIONS_TRIAGE'),
+        render: (t) => {
+          const b = departmentBadge(t.assignedDepartment || 'OPERATIONS_TRIAGE', deptOf(t));
+          return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${b.bg} ${b.text} ${b.border}`}>{b.label}</span>;
+        },
+      },
+      {
+        key: 'status', header: 'Status', filter: 'select',
+        accessor: (t) => t.status,
+        render: (t) => (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${STATUS_BADGE[t.status] ?? STATUS_BADGE.Pending}`}>{t.status}</span>
+        ),
+      },
+      {
+        key: 'priority', header: 'Priority', filter: 'select', selectOptions: [...TICKET_PRIORITIES],
+        accessor: (t) => t.priority,
+        render: (t) => <span className={`text-xs font-medium ${PRIORITY_FG[t.priority] ?? ''}`}>{t.priority}</span>,
+      },
+      {
+        key: 'sla', header: 'SLA age', filter: false, align: 'center',
+        accessor: (t) => pendingAge(t)?.hours ?? null,
+        render: (t) => {
+          const age = pendingAge(t);
+          if (!age) return <span className="text-slate-600 text-xs">—</span>;
+          return (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border tabular-nums inline-flex items-center gap-1 ${
+              age.tone === 'breach' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+              : age.tone === 'warn' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+              : 'bg-slate-500/20 text-slate-400 border-slate-500/40'
+            }`} title={age.targetHours ? `SLA target ${age.targetHours}h` : 'Pending'}>
+              <Clock className="w-2.5 h-2.5" /> {ageLabel(age.hours)}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'source', header: 'Source', filter: 'select',
+        accessor: (t) => (SOURCE_BADGES[t.source || 'WEB'] ?? SOURCE_BADGES.WEB).label,
+        render: (t) => {
+          const s = SOURCE_BADGES[t.source || 'WEB'] ?? SOURCE_BADGES.WEB;
+          return <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.cls}`}>{s.label}</span>;
+        },
+      },
+      {
+        key: 'vehicle', header: 'Vehicle',
+        accessor: (t) => t.vehicleId ?? '',
+        render: (t) => t.vehicleId
+          ? <span className="text-slate-300 font-mono text-[11px]"><VehicleRef id={t.vehicleId} /></span>
+          : <span className="text-slate-600 text-xs">—</span>,
+      },
+      {
+        key: 'assignee', header: 'Assignee',
+        accessor: (t) => t.assignedTo ?? '',
+        render: (t) => <span className="text-xs text-slate-300 truncate max-w-[160px] inline-block" title={t.assignedTo ?? ''}>{t.assignedTo || '—'}</span>,
+      },
+      {
+        key: 'created', header: 'Created', filter: false,
+        accessor: (t) => t.createdAt,
+        render: (t) => <span className="text-xs text-slate-400 whitespace-nowrap tabular-nums">{String(t.createdAt).replace('T', ' ').slice(0, 16)}</span>,
+      },
+      {
+        key: 'actions', header: 'Actions', sortable: false, filter: false,
+        render: (t) => <RowActions ticket={t} actions={rowActions.current} />,
+      },
+    ];
+  }, [typeConfigByType, departments]);
+
+  const kpis = useMemo<KpiTile[]>(() => {
+    const open = tickets.filter(t => !['Resolved', 'Completed', 'Closed', 'Rejected'].includes(t.status));
+    return [
+      { label: 'Open tickets', value: open.length, sub: `${tickets.length} total`, accent: 'violet', icon: Headphones },
+      { label: 'Triage hopper', value: countByDept.OPERATIONS_TRIAGE ?? 0, sub: 'awaiting routing', accent: 'amber', icon: Inbox },
+      { label: 'Awaiting approval', value: tickets.filter(t => t.status === 'Awaiting Approval').length, accent: 'sky', icon: Clock },
+      { label: 'SLA breached', value: tickets.filter(t => pendingAge(t)?.tone === 'breach').length, sub: 'pending past target', accent: 'rose', icon: AlertCircle },
+      { label: 'Critical / High open', value: open.filter(t => t.priority === 'Critical' || t.priority === 'High').length, accent: 'rose', icon: AlertCircle },
+    ];
+  }, [tickets, countByDept]);
+
+  // Bulk actions only apply to tickets a department owns — triage tickets
+  // must be forwarded first (same rule as the per-row actions).
+  const bulkActions = useMemo<BulkAction<ServiceTicket>[]>(() => (
+    (['Acknowledged', 'Assigned', 'Escalated', 'Resolved'] as const).map((status) => ({
+      key: status,
+      label: { Acknowledged: 'Acknowledge', Assigned: 'Assign', Escalated: 'Escalate', Resolved: 'Resolve' }[status],
+      run: (rows: ServiceTicket[]) => handleBulkRef.current(status, rows),
+    }))
+  ), []);
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-7xl">
       <PageHeader
         title="Field Service Management"
-        subtitle={`Central operations triage hopper · ${enabledTypes.length || 7} ticket types · 1-click recovery · replacement fleet swaps`}
+        subtitle={`Central operations triage hopper · ${enabledTypes.length ? `${enabledTypes.length} ticket types` : 'loading ticket types'} · 1-click recovery · replacement fleet swaps`}
         icon={Headphones}
         accent="violet"
         actions={
@@ -429,8 +565,9 @@ export default function ServiceTicketsHome() {
             </Link>
             <button onClick={() => setShowForm(s => !s)}
               disabled={enabledTypes.length === 0}
+              title={enabledTypes.length === 0 ? (loading ? 'Loading ticket types…' : 'No ticket types are enabled for this tenant') : undefined}
               className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/30">
-              <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : 'New ticket'}
+              <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : loading && enabledTypes.length === 0 ? 'Loading…' : 'New ticket'}
             </button>
           </div>
         }
@@ -442,85 +579,44 @@ export default function ServiceTicketsHome() {
         </div>
       )}
 
-      {/* Operations Department Filter */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Inbox className="w-3.5 h-3.5 text-violet-400" /> Operations Department Filter
-          </span>
-          {countByDept.OPERATIONS_TRIAGE > 0 && (
-            <button
-              onClick={() => setActiveDepartment('OPERATIONS_TRIAGE')}
-              className="text-xs font-semibold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 px-2.5 py-1 rounded-full flex items-center gap-2 transition-colors cursor-pointer"
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>{countByDept.OPERATIONS_TRIAGE} tickets pending triage</span>
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-1.5 bg-slate-900/60 border border-white/10 rounded-2xl p-1.5">
+      {/* Filters — department + type dropdowns */}
+      <div className="sdg flex flex-wrap items-end gap-3 bg-slate-900/60 border border-white/10 rounded-2xl px-4 py-3">
+        <FilterSelect
+          label="Department"
+          icon={Inbox}
+          value={activeDepartment}
+          onChange={(v) => setActiveDepartment(v as TicketDepartment | 'ALL')}
+          options={[
+            { value: 'ALL', label: `All departments (${countByDept.ALL ?? 0})` },
+            ...departments.map((d) => ({ value: d.key, label: `${d.label} (${countByDept[d.key] ?? 0})` })),
+          ]}
+        />
+        <FilterSelect
+          label="Ticket type"
+          value={activeType}
+          onChange={(v) => setActiveType(v as TicketType | 'ALL')}
+          options={[
+            { value: 'ALL', label: `All types (${countByType.ALL ?? 0})` },
+            ...enabledTypes.map(({ type, cfg }) => ({ value: type, label: `${cfg.name} (${countByType[type] ?? 0})` })),
+          ]}
+        />
+        {(activeDepartment !== 'ALL' || activeType !== 'ALL') && (
           <button
-            onClick={() => setActiveDepartment('ALL')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeDepartment === 'ALL'
-                ? 'bg-violet-600/30 text-violet-200 border border-violet-500/40 font-semibold'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            onClick={() => { setActiveDepartment('ALL'); setActiveType('ALL'); }}
+            className="text-xs text-slate-400 hover:text-white underline underline-offset-2 pb-2"
           >
-            All Departments
-            <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
-              {countByDept.ALL}
-            </span>
+            Reset filters
           </button>
-          {departments.map((dept) => {
-            const active = activeDepartment === dept.key;
-            const count = countByDept[dept.key] ?? 0;
-            const isTriage = dept.key === 'OPERATIONS_TRIAGE';
-            return (
-              <button
-                key={dept.key}
-                onClick={() => setActiveDepartment(dept.key)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  active
-                    ? isTriage
-                      ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50 font-bold'
-                      : 'bg-white/15 text-white border border-white/30 font-bold'
-                    : isTriage && count > 0
-                      ? 'text-amber-300/90 bg-amber-500/10 hover:bg-amber-500/20'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {dept.label}
-                <span
-                  className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full ${
-                    isTriage && count > 0
-                      ? 'bg-amber-500/40 text-amber-200 font-bold'
-                      : active
-                        ? 'bg-black/30'
-                        : 'bg-slate-700/60'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Type tabs */}
-      <div className="flex flex-wrap gap-1.5 bg-slate-900/40 border border-white/10 rounded-2xl p-1.5">
-        <TabBtn active={activeType === 'ALL'} onClick={() => setActiveType('ALL')}
-          label="All Types" count={countByType.ALL} tone="violet" />
-        {enabledTypes.map(({ type, cfg }) => (
-          <TabBtn key={type}
-            active={activeType === type}
-            onClick={() => setActiveType(type)}
-            label={cfg.name}
-            count={countByType[type] ?? 0}
-            tone={cfg.tone}
-            Icon={getServiceIcon(cfg.iconName)} />
-        ))}
+        )}
+        {countByDept.OPERATIONS_TRIAGE > 0 && (
+          <button
+            onClick={() => setActiveDepartment('OPERATIONS_TRIAGE')}
+            className="ml-auto text-xs font-semibold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 px-2.5 py-1 rounded-full flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>{countByDept.OPERATIONS_TRIAGE} tickets pending triage</span>
+          </button>
+        )}
       </div>
 
       {/* Create form */}
@@ -538,54 +634,33 @@ export default function ServiceTicketsHome() {
         />
       )}
 
-      {/* Bulk toolbar */}
-      {selectedIds.size > 0 && (
-        <div className="sticky top-2 z-30 flex items-center gap-2 flex-wrap rounded-xl bg-violet-600/15 border border-violet-500/40 backdrop-blur-md px-4 py-2.5 shadow-lg shadow-violet-500/20">
-          <span className="text-sm font-semibold text-white">{selectedIds.size} selected</span>
-          <span className="ml-auto" />
-          <BulkBtn label="✓ Acknowledge" onClick={() => handleBulk('Acknowledged')} disabled={bulkBusy} cls="bg-blue-600 hover:bg-blue-500" />
-          <BulkBtn label="→ Assign"      onClick={() => handleBulk('Assigned')}      disabled={bulkBusy} cls="bg-violet-600 hover:bg-violet-500" />
-          <BulkBtn label="↑ Escalate"    onClick={() => handleBulk('Escalated')}     disabled={bulkBusy} cls="bg-rose-600 hover:bg-rose-500" />
-          <BulkBtn label="✓ Resolve"     onClick={() => handleBulk('Resolved')}      disabled={bulkBusy} cls="bg-emerald-600 hover:bg-emerald-500" />
-          <BulkBtn label="Clear"         onClick={clearSelection}                     disabled={bulkBusy} cls="bg-slate-700 hover:bg-slate-600" />
-        </div>
-      )}
-
-      {/* List */}
-      {loading ? (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="bg-slate-900 rounded-lg p-4 border border-white/10 animate-pulse h-56" />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl py-16 text-center">
-          <Headphones className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No tickets {activeType !== 'ALL' && `of type ${typeConfigByType[activeType]?.name ?? activeType}`} yet.</p>
-          <button onClick={() => setShowForm(true)}
-            disabled={enabledTypes.length === 0}
-            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-sm">
-            <Plus className="w-4 h-4" /> Create the first one
-          </button>
-        </div>
-      ) : (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map(t => (
-            <TicketCard
-              key={t.id}
-              ticket={t}
-              formFields={formFieldsByType[t.ticketType]}
-              typeConfig={typeConfigByType[t.ticketType]}
-              departmentDef={departments.find(d => d.key === (t.assignedDepartment || 'OPERATIONS_TRIAGE'))}
-              selected={selectedIds.has(t.id)}
-              onToggleSelect={() => toggleSelected(t.id)}
-              onStatusChange={(status) => handleStatusChange(t, status)}
-              onOpen360={() => setDrawerTicketId(t.id)}
-              onForward={() => setForwardingTicket(t)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Smart data grid */}
+      <SmartDataGrid<ServiceTicket>
+        rows={filtered}
+        columns={columns}
+        getRowId={(t) => t.id}
+        onRowClick={(t) => setDrawerTicketId(t.id)}
+        selectedId={drawerTicketId}
+        loading={loading}
+        emptyMessage={
+          activeType !== 'ALL' || activeDepartment !== 'ALL'
+            ? 'No tickets match these filters.'
+            : 'No tickets yet — use “New ticket” to raise the first one.'
+        }
+        initialSort={{ key: 'created', dir: 'desc' }}
+        kpis={kpis}
+        bulkActions={bulkActions}
+        toolbar={{
+          title: 'Field service tickets',
+          exportName: 'field-service-tickets',
+          actions: (
+            <button onClick={() => void load()}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10">
+              Refresh
+            </button>
+          ),
+        }}
+      />
 
       {/* Slide-Over Context 360 Drawer */}
       <ContextDrawer360
@@ -622,32 +697,75 @@ export default function ServiceTicketsHome() {
 // Components
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TabBtn({ active, onClick, label, count, tone, Icon }: {
-  active: boolean; onClick: () => void; label: string; count: number; tone: string;
-  Icon?: React.ComponentType<{ className?: string }>;
+function FilterSelect({ label, value, onChange, options, icon: Icon }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <button onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-        active
-          ? `${TONE_BG[tone]} ${TONE_FG[tone]} ring-1 ring-current/30`
-          : 'text-slate-400 hover:text-white hover:bg-white/5'
-      }`}>
-      {Icon && <Icon className="w-3.5 h-3.5" />}
-      {label}
-      <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full ${
-        active ? 'bg-black/30' : 'bg-slate-700/60'
-      }`}>{count}</span>
-    </button>
+    <label className="flex flex-col gap-1 min-w-[220px]">
+      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1.5">
+        {Icon && <Icon className="w-3.5 h-3.5 text-violet-400" />} {label}
+      </span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
   );
 }
 
-function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: () => void; disabled?: boolean; cls: string }) {
+type StatusTarget = 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected';
+
+/** Compact per-row actions for the grid. Clicks never bubble to the row
+ *  (a row click opens the 360 drawer). */
+function RowActions({ ticket, actions }: {
+  ticket: ServiceTicket;
+  actions: {
+    handleStatusChange: (t: ServiceTicket, s: StatusTarget) => void;
+    openForward: (t: ServiceTicket) => void;
+    open360: (id: string) => void;
+  };
+}) {
+  const dept = ticket.assignedDepartment || 'OPERATIONS_TRIAGE';
+  // Operations Triage may route (Forward) but not action a ticket.
+  const canProgress = dept !== 'OPERATIONS_TRIAGE';
+  const awaitingApproval = ticket.status === 'Awaiting Approval';
+  const go = (s: StatusTarget) => (e: React.MouseEvent) => { e.stopPropagation(); actions.handleStatusChange(ticket, s); };
+  const btn = 'text-[11px] px-2 py-1 rounded-md font-semibold whitespace-nowrap';
   return (
-    <button onClick={onClick} disabled={disabled}
-      className={`text-xs px-3 py-1.5 rounded-lg disabled:opacity-50 text-white font-semibold ${cls}`}>
-      {label}
-    </button>
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <Link href={`/service-tickets/${ticket.id}`} title="Ticket details & cost ledger"
+        className={`${btn} bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1`}>
+        <ExternalLink className="w-3 h-3" /> Details
+      </Link>
+      <button onClick={(e) => { e.stopPropagation(); actions.openForward(ticket); }} title="Forward to a department"
+        className={`${btn} bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 inline-flex items-center gap-1`}>
+        <Send className="w-3 h-3" /> Forward
+      </button>
+      {awaitingApproval && (
+        <>
+          <button onClick={go('Pending')} className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}>Approve</button>
+          <button onClick={go('Rejected')} className={`${btn} bg-rose-600 hover:bg-rose-500 text-white`}>Reject</button>
+        </>
+      )}
+      {canProgress && ticket.status === 'Pending' && (
+        <button onClick={go('Acknowledged')} className={`${btn} bg-blue-600 hover:bg-blue-500 text-white`}>Acknowledge</button>
+      )}
+      {canProgress && (ticket.status === 'Pending' || ticket.status === 'Acknowledged') && (
+        <>
+          <button onClick={go('Assigned')} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>Assign</button>
+          <button onClick={go('Escalated')} className={`${btn} bg-rose-600 hover:bg-rose-500 text-white`}>Escalate</button>
+        </>
+      )}
+      {canProgress && ['Acknowledged', 'Assigned', 'Escalated', 'In Progress'].includes(ticket.status) && (
+        <button onClick={go('Resolved')} className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white inline-flex items-center gap-0.5`}>
+          Resolve <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -684,264 +802,14 @@ const DEPT_TONE_STYLE: Record<string, { bg: string; text: string; border: string
   gold:    { bg: 'bg-yellow-500/20',  text: 'text-yellow-300',  border: 'border-yellow-500/40' },
 };
 
-function TicketCard({ ticket, formFields, typeConfig, departmentDef, selected, onToggleSelect, onStatusChange, onOpen360, onForward }: {
-  ticket: ServiceTicket;
-  formFields?: FormFieldDef[];
-  typeConfig?: ServiceTypeConfig;
-  departmentDef?: TicketDepartmentDef;
-  selected: boolean;
-  onToggleSelect: () => void;
-  onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
-  onOpen360?: () => void;
-  onForward?: () => void;
-}) {
-  const Icon = getServiceIcon(typeConfig?.iconName);
-  const tone = typeConfig?.tone ?? 'violet';
-  const typeLabel = typeConfig?.name ?? ticket.ticketType;
-  const age = pendingAge(ticket);
-  const isHigh = ticket.priority === 'High' || ticket.priority === 'Critical';
-  const awaitingApproval = ticket.status === 'Awaiting Approval';
-
-  const dept = ticket.assignedDepartment || 'OPERATIONS_TRIAGE';
-  // Built-in departments keep their colours; renamed or tenant-defined ones
-  // use the configured label and tone.
-  const builtInBadge = DEPT_BADGE_STYLE[dept as keyof typeof DEPT_BADGE_STYLE];
-  const deptBadge = departmentDef && (!builtInBadge || !departmentDef.isSystem || departmentDef.shortLabel !== builtInBadge.label)
-    ? { ...(builtInBadge ?? DEPT_TONE_STYLE[departmentDef.tone] ?? DEPT_TONE_STYLE.slate), label: departmentDef.shortLabel || departmentDef.label }
-    : builtInBadge || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
-  // Operations Triage is the generic landing hopper — it has authority to
-  // route a ticket to the owning department (Forward) but not to action it
-  // (Acknowledge/Assign/Escalate/Resolve). Those unlock once a specialist
-  // department actually owns the ticket.
-  const canProgress = dept !== 'OPERATIONS_TRIAGE';
-  const source = ticket.source || 'WEB';
-  const sourceBadge = SOURCE_BADGES[source] || SOURCE_BADGES.WEB;
-
-  // Surface fields marked `preview: true` from the resolved per-type schema
-  // as a small strip below the description. Schema sourced from the parent
-  // which loaded it via /api/service-tickets/form-fields.
-  const fieldDefs = formFields ?? [];
-  const previewFields = fieldDefs.filter(f => f.preview);
-  const customFields = ticket.customFields ?? {};
-  const renderPreviewValue = (f: typeof previewFields[number], v: unknown): string | null => {
-    if (v === undefined || v === null || v === '') return null;
-    if (f.type === 'select') {
-      const opt = f.options?.find(o => o.value === v);
-      return opt?.label ?? String(v);
-    }
-    if (f.type === 'date' || f.type === 'datetime') {
-      const s = String(v);
-      return s.includes('T') ? s.replace('T', ' ').slice(0, 16) : s;
-    }
-    if (f.type === 'checkbox') return v ? 'Yes' : null;
-    return String(v);
-  };
-
-  return (
-    <div className={`bg-slate-900 rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${
-      isHigh ? 'border-rose-400/40 ring-1 ring-rose-500/10' : 'border-white/10'
-    } ${selected ? 'ring-2 ring-violet-500/60' : ''}`}>
-      {/* Hover/selected checkbox */}
-      <label
-        className={`absolute top-2 left-2 z-30 cursor-pointer transition-opacity ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-        onClick={e => e.stopPropagation()}
-        title="Select for bulk action">
-        <input type="checkbox" checked={selected} onChange={onToggleSelect}
-          className="w-4 h-4 accent-violet-500 rounded" />
-      </label>
-
-      <div className="relative z-10 flex-1">
-        {/* ID row */}
-        <div className="flex justify-between items-start mb-3 gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded" title={ticket.id}>
-              {ticket.readableId ?? ticket.id.slice(0, 12)}
-            </span>
-            <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${deptBadge.bg} ${deptBadge.text} ${deptBadge.border}`}>
-              {deptBadge.label}
-            </span>
-            {source !== 'WEB' && (
-              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${sourceBadge.cls}`}>
-                {sourceBadge.label}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {age && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border tabular-nums inline-flex items-center gap-1 ${
-                age.tone === 'breach' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
-                : age.tone === 'warn' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-slate-500/20 text-slate-400 border-slate-500/40'
-              }`} title={
-                age.targetHours
-                  ? age.tone === 'breach' ? `SLA breach — exceeded ${age.targetHours}h target`
-                    : age.tone === 'warn' ? `SLA warn — past 50% of ${age.targetHours}h target`
-                    : `Pending — within SLA (${age.targetHours}h target)`
-                  : age.tone === 'breach' ? 'SLA breach — pending >72h'
-                    : age.tone === 'warn' ? 'SLA warn — pending >24h'
-                    : 'Pending'
-              }>
-                <Clock className="w-2.5 h-2.5" /> {ageLabel(age.hours)}
-              </span>
-            )}
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_BADGE[ticket.status] ?? STATUS_BADGE.Pending}`}>
-              {ticket.status}
-            </span>
-          </div>
-        </div>
-
-        {/* Type + Title */}
-        <div className="flex items-center gap-2 mb-2">
-          <div className={`w-7 h-7 rounded-lg ${TONE_BG[tone]} flex items-center justify-center shrink-0`}>
-            <Icon className={`w-3.5 h-3.5 ${TONE_FG[tone]}`} strokeWidth={2} />
-          </div>
-          <span className={`text-[10px] uppercase tracking-wider font-semibold ${TONE_FG[tone]}`}>
-            {typeLabel}
-          </span>
-        </div>
-        <h4 className="text-sm font-bold text-white mb-1 line-clamp-1" title={ticket.title}>{ticket.title}</h4>
-        {ticket.description && (
-          <p className="text-xs text-slate-500 mb-3 line-clamp-2 h-8">{ticket.description}</p>
-        )}
-
-        {/* Per-type preview fields — chips for badges, plain rows for text */}
-        {previewFields.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            {previewFields.map(f => {
-              const display = renderPreviewValue(f, customFields[f.key]);
-              if (!display) return null;
-              if (f.display === 'badge') {
-                return (
-                  <span key={f.key}
-                    className={`text-[10px] px-2 py-0.5 rounded-full border ${TONE_BG[tone]} ${TONE_FG[tone]} border-current/30`}
-                    title={f.label}>
-                    {display}
-                  </span>
-                );
-              }
-              return (
-                <span key={f.key} className="text-[10px] text-slate-400" title={f.label}>
-                  <span className="text-slate-500">{f.label}:</span> <span className="text-slate-300">{display}</span>
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Details */}
-        <div className="space-y-1.5 text-xs border-t border-white/5 pt-3">
-          {ticket.vehicleId && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">Vehicle:</span>
-              <span className="text-slate-300 font-mono text-[10px] truncate max-w-[120px]"><VehicleRef id={ticket.vehicleId} /></span>
-            </div>
-          )}
-          {ticket.dueDate && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">Due:</span>
-              <span className="text-slate-300">{ticket.dueDate.split('T')[0]}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-center pt-1">
-            <span className="text-slate-500">Priority:</span>
-            <span className={`font-medium ${PRIORITY_FG[ticket.priority]}`}>{ticket.priority}</span>
-          </div>
-          {ticket.assignedTo && (
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-slate-500">Assignee:</span>
-              <span className="text-slate-300 truncate max-w-[120px]" title={ticket.assignedTo}>{ticket.assignedTo}</span>
-            </div>
-          )}
-          {ticket.maintenanceRequestId && (
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-slate-500">Linked MR:</span>
-              <span className="text-blue-300 inline-flex items-center gap-0.5 font-mono text-[10px]" title={ticket.maintenanceRequestId}>
-                <ArrowUpRight className="w-2.5 h-2.5" />
-                {ticket.maintenanceRequestId.slice(0, 12)}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-4">
-        {onOpen360 && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen360();
-            }}
-            className="text-[11px] px-2 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 font-semibold inline-flex items-center gap-1 transition-colors"
-            title="Open Vehicle, Driver, Lease & Incident 360 Drawer"
-          >
-            🔍 360 Context
-          </button>
-        )}
-        <Link
-          href={`/service-tickets/${ticket.id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold inline-flex items-center gap-1 transition-colors"
-          title="Open Ticket Details & Cost Ledger page"
-        >
-          <ExternalLink className="w-3 h-3 text-slate-400" /> Details
-        </Link>
-        {onForward && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onForward();
-            }}
-            className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 font-semibold inline-flex items-center gap-1 transition-colors"
-            title="Forward ticket to Workshop, Recovery, Safety, Customer Service, or Cleaning"
-          >
-            <Send className="w-3 h-3" /> Forward
-          </button>
-        )}
-        {awaitingApproval && (
-          <>
-            <button onClick={() => onStatusChange('Pending')}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold inline-flex items-center gap-1">
-              ✓ Approve
-            </button>
-            <button onClick={() => onStatusChange('Rejected')}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold inline-flex items-center gap-1">
-              ✕ Reject
-            </button>
-          </>
-        )}
-        {canProgress && ticket.status === 'Pending' && (
-          <button onClick={() => onStatusChange('Acknowledged')}
-            className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold inline-flex items-center gap-1">
-            ✓ Acknowledge
-          </button>
-        )}
-        {canProgress && (ticket.status === 'Pending' || ticket.status === 'Acknowledged') && (
-          <>
-            <button onClick={() => onStatusChange('Assigned')}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-semibold">
-              → Assign
-            </button>
-            <button onClick={() => onStatusChange('Escalated')}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold">
-              ↑ Escalate
-            </button>
-          </>
-        )}
-        {canProgress && ['Acknowledged', 'Assigned', 'Escalated', 'In Progress'].includes(ticket.status) && (
-          <button onClick={() => onStatusChange('Resolved')}
-            className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold ml-auto inline-flex items-center gap-1">
-            ✓ Resolve <ChevronRight className="w-3 h-3" />
-          </button>
-        )}
-        {!canProgress && !awaitingApproval && (
-          <span className="text-[11px] text-slate-500 italic">
-            Route to a department to unlock next actions
-          </span>
-        )}
-      </div>
-    </div>
-  );
+/** Department badge — built-in departments keep their colours; renamed or
+ *  tenant-defined ones use the configured label and tone. */
+function departmentBadge(dept: string, def?: TicketDepartmentDef) {
+  const builtIn = DEPT_BADGE_STYLE[dept as keyof typeof DEPT_BADGE_STYLE];
+  if (def && (!builtIn || !def.isSystem || def.shortLabel !== builtIn.label)) {
+    return { ...(builtIn ?? DEPT_TONE_STYLE[def.tone] ?? DEPT_TONE_STYLE.slate), label: def.shortLabel || def.label };
+  }
+  return builtIn || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
 }
 
 // ── Create form ──────────────────────────────────────────────────────────────
@@ -974,6 +842,18 @@ function NewTicketForm({
   // delivered by /api/service-tickets/form-fields. Single source of truth
   // for everything the create form needs. Fallback values cover the brief
   // window before the parent's mount fetch completes.
+  /** Enabled types grouped by service category for the type dropdown. */
+  const typeGroups = useMemo(() => {
+    const groups = new Map<string, TicketType[]>();
+    for (const t of enabledTypes) {
+      const c = typeConfigByType[t];
+      if (!c) continue;
+      const g = c.categoryName || 'Other';
+      groups.set(g, [...(groups.get(g) ?? []), t]);
+    }
+    return [...groups.entries()];
+  }, [enabledTypes, typeConfigByType]);
+
   const tc = typeConfigByType[ticketType];
   const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? [];
   const vehicleRequired         = !!tc?.vehicleRequired;
@@ -1057,24 +937,14 @@ function NewTicketForm({
       {/* Type chooser */}
       <div className="space-y-1">
         <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Type</label>
-        <div className="flex flex-wrap gap-2">
-          {enabledTypes.map((t: TicketType) => {
-            const c = typeConfigByType[t];
-            if (!c) return null;
-            const Icon = getServiceIcon(c.iconName);
-            const active = t === ticketType;
-            return (
-              <button type="button" key={t} onClick={() => setTicketType(t)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  active
-                    ? `${TONE_BG[c.tone]} ${TONE_FG[c.tone]} border-current/40`
-                    : 'bg-slate-800/50 text-slate-400 border-white/10 hover:border-white/30'
-                }`}>
-                <Icon className="w-3.5 h-3.5" /> {c.name}
-              </button>
-            );
-          })}
-        </div>
+        <select value={ticketType} onChange={e => setTicketType(e.target.value as TicketType)}
+          className="w-full md:w-96 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+          {typeGroups.map(([group, types]) => (
+            <optgroup key={group} label={group}>
+              {types.map(t => <option key={t} value={t}>{typeConfigByType[t]!.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
         <p className="text-[11px] text-slate-500">
           Default SLA: <strong className="text-white">{defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
           {autoCreatesMR && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
