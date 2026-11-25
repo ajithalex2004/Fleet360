@@ -11,7 +11,12 @@ const Arrow = () => (
   </svg>
 );
 
-const HEADLINE = ['Your', 'whole', 'fleet,', 'thinking', 'as', 'one.'];
+// Hero headline: one array per line; words in HEADLINE_EMPHASIS get the accent.
+const HEADLINE: string[][] = [
+  ['Connect', 'your', 'fleet.'],
+  ['Transform', 'it', 'into', 'AI-driven', 'Smart', 'Mobility'],
+];
+const HEADLINE_EMPHASIS = new Set(['Smart', 'Mobility']);
 
 const MODULES = [
   'Fleet & assets', 'Port drayage', 'PCS gate tokens', 'Leasing', 'Rent-a-car', 'Bus operations',
@@ -88,12 +93,19 @@ export function EditorialHero({ snapshot }: { snapshot: HomepageSnapshot }) {
             AI-orchestrated fleet intelligence · UAE &amp; GCC
           </p>
           <h1 id="hero-title" className={s.head}>
-            {HEADLINE.map((w, i) => (
-              <Fragment key={i}>
-                <span className={s.word} style={{ '--i': i } as React.CSSProperties}>
-                  {w === 'thinking' ? <em>{w}</em> : w}
-                </span>{i < HEADLINE.length - 1 ? ' ' : null}
-              </Fragment>
+            {HEADLINE.map((line, l) => (
+              <span key={l} className={s.heroLine}>
+                {line.map((w, i) => {
+                  const n = HEADLINE.slice(0, l).reduce((a, x) => a + x.length, 0) + i;
+                  return (
+                    <Fragment key={i}>
+                      <span className={s.word} style={{ '--i': n } as React.CSSProperties}>
+                        {HEADLINE_EMPHASIS.has(w) ? <em>{w}</em> : w}
+                      </span>{i < line.length - 1 ? ' ' : null}
+                    </Fragment>
+                  );
+                })}
+              </span>
             ))}
           </h1>
           <p className={`${s.lede} ${s.enter}`} style={{ '--d': '520ms' } as React.CSSProperties}>

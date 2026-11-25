@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'Fleet360 — Your whole fleet, thinking as one.';
+export const alt = 'Fleet360 — Connect your fleet. Transform it into AI-driven Smart Mobility.';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -16,9 +16,9 @@ export default function OpengraphImage() {
           <div style={{ display: 'flex', fontSize: 22, letterSpacing: 4, color: '#5c5a55' }}>AI-ORCHESTRATED FLEET INTELLIGENCE · UAE & GCC</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', fontSize: 96, fontWeight: 700, lineHeight: 1.02, letterSpacing: -2 }}>
-          <span>Your whole fleet,</span>
-          <span style={{ display: 'flex' }}>
-            <span style={{ color: '#c2410c', fontStyle: 'italic' }}>thinking</span>&nbsp;as one.
+          <span>Connect your fleet.</span>
+          <span style={{ display: 'flex', fontSize: 64, marginTop: 12 }}>
+            Transform it into AI-driven&nbsp;<span style={{ color: '#c2410c', fontStyle: 'italic' }}>Smart Mobility</span>
           </span>
         </div>
         <div style={{ display: 'flex', fontSize: 28, color: '#5c5a55' }}>

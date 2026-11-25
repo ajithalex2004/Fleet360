@@ -91,7 +91,10 @@
 .heroCopy { position: relative; z-index: 3; }
 .kicker { display: flex; gap: 12px; align-items: center; }
 .kicker::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-.hero h1 { font-size: var(--h1); margin: 28px 0 30px; }
+.hero h1 { font-size: clamp(40px, 4.5vw, 66px); margin: 28px 0 30px; }
+/* Two-line headline: the second line is longer, so it steps down a size. */
+.heroLine { display: block; }
+.heroLine + .heroLine { margin-top: .12em; font-size: .78em; }
 .word { display: inline-block; animation: rise .9s calc(120ms + var(--i) * 60ms) var(--ease) both; }
 .enter { animation: rise .8s var(--d, 0ms) var(--ease) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(.45em); } }

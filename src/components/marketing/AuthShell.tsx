@@ -33,7 +33,7 @@ export default function AuthShell({
       <main className={styles.main}>
         <aside className={styles.aside} aria-hidden="true">
           <p className={styles.kicker}>AI-orchestrated fleet intelligence · UAE &amp; GCC</p>
-          <p className={styles.display}>Your whole fleet, <em>thinking</em> as one.</p>
+          <p className={styles.display}>Connect your fleet. <span className={styles.displaySub}>Transform it into AI-driven <em>Smart Mobility</em></span></p>
           <p className={styles.asideLede}>
             Vehicles, drivers, bookings and maintenance on one live map, orchestrated by governed AI agents.
           </p>
