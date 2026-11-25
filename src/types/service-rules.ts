@@ -89,7 +89,7 @@ export const VEHICLE_CLASSES = [
 ] as const;
 export const VEHICLE_USAGES = [
   'Lease', 'Rent-a-Car', 'Staff Transport', 'School Bus',
-  'Logistics', 'Ambulance', 'Limousine', 'Internal',
+  'Logistics', 'Ambulance', 'Limousine', 'Internal', 'Service Delivery',
 ] as const;
 export interface VehicleRules {
   /** When true, requests of this service must reference a vehicle. Used
