@@ -400,6 +400,11 @@ export default function ServiceTicketsHome() {
   const handleBulkRef = useRef(handleBulk);
   handleBulkRef.current = handleBulk;
 
+  const drawerTicket = useMemo(
+    () => (drawerTicketId ? tickets.find(t => t.id === drawerTicketId) ?? null : null),
+    [tickets, drawerTicketId],
+  );
+
   // ── Smart data grid: columns, KPIs, bulk actions ─────────────────────
   // Row-action handlers change every render; the memoised columns call them
   // through a ref so the grid's column state isn't reset on each render.
@@ -665,11 +670,18 @@ export default function ServiceTicketsHome() {
       {/* Slide-Over Context 360 Drawer */}
       <ContextDrawer360
         ticketId={drawerTicketId}
+        ticket={drawerTicket}
+        isVehicleTicket={!!drawerTicket && (!!typeConfigByType[drawerTicket.ticketType]?.vehicleRequired || !!drawerTicket.vehicleId)}
         onClose={() => setDrawerTicketId(null)}
+        onForward={() => {
+          if (drawerTicket) {
+            setForwardingTicket(drawerTicket);
+            setDrawerTicketId(null);
+          }
+        }}
         onStatusChange={(newStatus) => {
-          const target = tickets.find(x => x.id === drawerTicketId);
-          if (target) {
-            handleStatusChange(target, newStatus);
+          if (drawerTicket) {
+            handleStatusChange(drawerTicket, newStatus);
             setDrawerTicketId(null);
           }
         }}

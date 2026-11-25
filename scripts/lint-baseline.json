@@ -1354,18 +1354,18 @@
     "src/app/portal/[tenantSlug]/leasing/page.tsx": {
       "@typescript-eslint/no-explicit-any": 4
     },
-    "src/app/service-tickets/[id]/page.tsx": {
+    "src/app/(app)/service-tickets/[id]/page.tsx": {
       "@typescript-eslint/no-unused-vars": 9,
       "@typescript-eslint/no-explicit-any": 2
     },
-    "src/app/service-tickets/components/context-drawer-360.tsx": {
+    "src/app/(app)/service-tickets/components/context-drawer-360.tsx": {
       "@typescript-eslint/no-unused-vars": 4
     },
-    "src/app/service-tickets/components/cost-ledger-card.tsx": {
+    "src/app/(app)/service-tickets/components/cost-ledger-card.tsx": {
       "@typescript-eslint/no-unused-vars": 8,
       "@typescript-eslint/no-explicit-any": 2
     },
-    "src/app/service-tickets/components/forward-ticket-modal.tsx": {
+    "src/app/(app)/service-tickets/components/forward-ticket-modal.tsx": {
       "@typescript-eslint/no-explicit-any": 2
     },
     "src/app/shipper-portal/page.tsx": {
