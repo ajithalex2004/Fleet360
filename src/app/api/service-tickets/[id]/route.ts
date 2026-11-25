@@ -162,7 +162,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
       // P0 Governance: Operations Triage can route a ticket (Forward) but has
       // no authority to action it. Mirrors the client-side gate in
-      // src/app/service-tickets/page.tsx (canProgress) — enforced here too so
+      // src/app/(app)/service-tickets/page.tsx (canProgress) — enforced here too so
       // a direct API call can't bypass the button-level UI restriction.
       const PROGRESSION_STATUSES = ['Acknowledged', 'Assigned', 'Escalated', 'Resolved'];
       if (PROGRESSION_STATUSES.includes(body.status as string)) {

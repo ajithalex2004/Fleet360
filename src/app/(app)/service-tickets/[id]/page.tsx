@@ -276,8 +276,9 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
       {/* Embedded 360 Context Drawer */}
       <ContextDrawer360
         ticketId={showDrawer360 ? ticket.id : null}
+        ticket={ticket}
+        isVehicleTicket={!!ticket.vehicleId}
         onClose={() => setShowDrawer360(false)}
-        onStatusChange={fetchTicket}
       />
     </div>
   );

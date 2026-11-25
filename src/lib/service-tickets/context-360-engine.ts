@@ -200,27 +200,31 @@ export async function fetchTicketContext360(
         make: v.make,
         model: v.model,
         year: v.year ? Number(v.year) : null,
-        status: v.status || 'ACTIVE',
-        fuelLevel: v.fuelLevel ?? 82.5,
-        odometerReading: v.odometerReading ? Number(v.odometerReading) : 48210,
-        vehicleUsage: v.vehicleUsage || 'COMMERCIAL_FLEET',
-        vin: v.vin || 'WV1ZZZ2KZCX129038',
-        mulkiyaExpiry: '2026-11-30', // Mulkiya standard
-        locationAddress: 'Al Quoz Industrial 3, Dubai, UAE (Live GPS)',
+        // Only real registry values — missing data stays null so the drawer
+        // shows "—" rather than plausible-looking placeholders.
+        status: v.status ?? null,
+        fuelLevel: v.fuelLevel ?? null,
+        odometerReading: v.odometerReading != null ? Number(v.odometerReading) : null,
+        vehicleUsage: v.vehicleUsage ?? null,
+        vin: v.vin ?? null,
+        mulkiyaExpiry: null, // not held on the vehicle record
+        locationAddress: null, // no live GPS feed wired into this view
       };
     }
   }
 
-  // 3. Fetch Driver Context
+  // 3. Driver / requester context — what the ticket itself knows. Contact
+  // details are only shown when the ticket carries them (e.g. WhatsApp intake).
   let driverData: TicketContext360Data['driver'] = null;
   const driverSearchId = ticketRow.related_driver_id || ticketRow.requestor_id;
   if (driverSearchId) {
+    const phone = ticketRow.custom_fields?.fromNumber;
     driverData = {
       id: driverSearchId,
-      name: ticketRow.requestor_name || 'Assigned Fleet Driver',
-      phone: (ticketRow.custom_fields?.fromNumber as string) || '+971 50 123 4567',
-      email: 'driver.ops@smartmobility.ae',
-      licenseExpiry: '2027-04-15',
+      name: ticketRow.requestor_name ?? null,
+      phone: typeof phone === 'string' && phone.trim() ? phone : null,
+      email: null,
+      licenseExpiry: null,
     };
   }
 
@@ -246,25 +250,17 @@ export async function fetchTicketContext360(
 
     if (booking) {
       contractData = {
-        bookingRef: booking.bookingRef || 'LSE-2026-0891',
-        serviceType: booking.serviceType || 'LEASING',
-        status: booking.status || 'ACTIVE',
+        bookingRef: booking.bookingRef ?? null,
+        serviceType: booking.serviceType ?? null,
+        status: booking.status ?? null,
         startDate: booking.startDate ? booking.startDate.toISOString() : null,
         endDate: booking.endDate ? booking.endDate.toISOString() : null,
-        customerName: booking.requestorName || 'Transcorp Logistics LLC',
-        customerEmail: booking.requestorEmail || 'logistics@transcorp.ae',
-      };
-    } else {
-      contractData = {
-        bookingRef: 'LSE-2026-0891',
-        serviceType: 'CORPORATE_LEASING',
-        status: 'ACTIVE',
-        startDate: '2026-01-01',
-        endDate: '2026-12-31',
-        customerName: 'Transcorp Logistics LLC',
-        customerEmail: 'fleet.manager@transcorp.ae',
+        customerName: booking.requestorName ?? null,
+        customerEmail: booking.requestorEmail ?? null,
       };
     }
+    // No active booking → no contract. (Previously a sample lease was
+    // returned here, which read as a real customer.)
   }
 
   // 5. Fetch 90-Day Ticket History for this Vehicle
