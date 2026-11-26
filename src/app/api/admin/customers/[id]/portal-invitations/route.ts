@@ -25,7 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getPublicOrigin } from '@/lib/public-origin';
 import {
-  createPortalUser, listPortalUsersByCustomer,
+  createPortalUser, listPortalUsersByCustomer, findPortalUserByEmail, isFsmPortalRole,
 } from '@/lib/shipper-portal/portal-users-store';
 import {
   createInvitation, sendInvitationEmail,
@@ -76,6 +76,15 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
     // probably means to resend rather than create a duplicate identity.
     const existing = (await listPortalUsersByCustomer(tenantId, customerId))
       .find(u => u.email.toLowerCase() === email);
+
+    // The table is shared with the FSM Customer Portal; the Shipper list above
+    // leaves those accounts out, so look the email up directly.
+    const sameEmail = existing ? null : await findPortalUserByEmail(email, tenantId);
+    if (sameEmail && isFsmPortalRole(sameEmail.role)) {
+      return NextResponse.json({
+        error: 'That email already has a Field Service portal account. Use a different email for the Shipper portal.',
+      }, { status: 409 });
+    }
 
     let portalUser;
     if (existing) {
