@@ -11,7 +11,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, PlusCircle, Activity, History, Boxes, LogOut, Wrench, Truck, Loader2,
+  LayoutDashboard, PlusCircle, Activity, History, Boxes, LogOut, Wrench, Truck, Loader2, PackageOpen,
 } from 'lucide-react';
 import { ModuleSubNav, type ModuleTab } from '@/components/ui/module-subnav';
 import type { CustomerPortal, PortalRole, TransportCategory } from '@/lib/customer-portal/catalog';
@@ -93,7 +93,10 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
   const role = me.user.roles[section];
   const S = SECTION[section];
-  const tabs = role === 'VIEWER' ? S.tabs.filter((t) => t.href !== S.newHref) : S.tabs;
+  const categoryTabs: ModuleTab[] = section === 'TRANSPORT' && me.transportCategories.some((c) => c.category === 'LOGISTICS')
+    ? [{ href: '/customer-portal/transport/shipments', label: 'Shipments', icon: PackageOpen }]
+    : [];
+  const tabs = [...S.tabs, ...categoryTabs].filter((t) => role !== 'VIEWER' || t.href !== S.newHref);
 
   return (
     <PortalContext.Provider value={me}>

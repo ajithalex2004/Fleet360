@@ -133,7 +133,7 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
         expiresAt: invitation.expiresAt,
         // Raw token is returned ONLY here, ONLY to the operator that created
         // it, so they can copy the link if email fails. Never echoed elsewhere.
-        setupUrl: `${baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(invitation.rawToken)}`,
+        setupUrl: `${baseUrl.replace(/\/$/, '')}/customer-portal/setup?token=${encodeURIComponent(invitation.rawToken)}`,
       },
       emailSent: emailResult.ok,
       emailError: emailResult.ok ? null : (emailResult as { reason: string }).reason,

@@ -111,6 +111,15 @@ const nextConfig: NextConfig = {
       { source: "/carrier-portal/logistics/invite/:token", destination: "/carrier-portal/invite/:token", permanent: false },
       { source: "/carrier-portal/logistics/offer/:token", destination: "/carrier-portal/offer/:token", permanent: false },
       { source: "/driver/feedback", destination: "/driver-feedback", permanent: false },
+      // The Shipper portal is now the Logistics category of the Customer Portal
+      // (same accounts; its APIs under /api/shipper-portal stay and serve both).
+      // Query strings (e.g. an invite ?token=) are carried over.
+      { source: "/shipper-portal/shipments/new", destination: "/customer-portal/transport/new?category=LOGISTICS", permanent: false },
+      { source: "/shipper-portal/shipments/:id", destination: "/customer-portal/transport/shipments/:id", permanent: false },
+      { source: "/shipper-portal/shipments", destination: "/customer-portal/transport/shipments", permanent: false },
+      { source: "/shipper-portal/login", destination: "/customer-portal/login", permanent: false },
+      { source: "/shipper-portal/setup", destination: "/customer-portal/setup", permanent: false },
+      { source: "/shipper-portal", destination: "/customer-portal/transport", permanent: false },
     ];
   },
 

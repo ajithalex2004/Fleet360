@@ -7,9 +7,9 @@
  * problems field by field.
  */
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Truck, Send, Loader2 } from 'lucide-react';
+import { Truck, Send, Loader2, Calculator } from 'lucide-react';
 import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, PrimaryButton, SecondaryButton, TextAreaInput,
 } from '@/components/ui/form-kit';
@@ -96,6 +96,7 @@ function NewTransportRequest() {
           )}
           <DynamicRequestForm form={loaded.form} values={values} errors={errors}
             onChange={(k, v) => { setValues((p) => ({ ...p, [k]: v })); setErrors((e) => { const n = { ...e }; delete n[k]; return n; }); }} />
+          {loaded.category.category === 'LOGISTICS' && <LogisticsQuote values={values} />}
           <FormSection title="Note to the operations team" columns={1}>
             <FormField label="Anything else we should know" hint="Optional">
               <TextAreaInput value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
@@ -107,6 +108,60 @@ function NewTransportRequest() {
         </FormPanel>
       )}
     </div>
+  );
+}
+
+interface RateQuote {
+  matched: boolean; estimate?: boolean; reason?: string | null;
+  contractNo?: string | null; currency: string; total: number;
+}
+
+/**
+ * Logistics only: the rate for this lane from the Logistics rate engine, as
+ * the Shipper portal showed it — a contract rate, an indicative estimate, or
+ * "priced on review". It does not book: the operations team confirms the rate
+ * when they review the request.
+ */
+function LogisticsQuote({ values }: { values: RequestValues }) {
+  const origin = String(values.origin ?? '').trim();
+  const destination = String(values.destination ?? '').trim();
+  const vehicle = String(values.vehicleCategory ?? '');
+  const date = String(values.startDate ?? '');
+  const weight = Number(values.weight ?? 0);
+  const [quote, setQuote] = useState<RateQuote | null>(null);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!origin || !destination) { setQuote(null); setLoading(false); return; }
+    setLoading(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/shipper-portal/rates/quote', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origin, destination, vehicleType: vehicle || null, shipmentDate: date || null,
+            totalWeightKg: weight > 0 ? weight : null,
+          }),
+        });
+        setQuote(res.ok ? await res.json() : null);
+      } catch { setQuote(null); } finally { setLoading(false); }
+    }, 600);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [origin, destination, vehicle, date, weight]);
+
+  if (!origin || !destination) return null;
+  const contract = quote?.matched === true && quote.estimate !== true;
+  const estimate = quote && !contract && quote.total > 0;
+  const money = (q: RateQuote) => `${q.currency} ${Number(q.total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    <FormSection title="Rate" icon={Calculator} columns={1}>
+      {loading ? <p className="text-[var(--text-muted)] inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking the rate for this lane…</p>
+        : contract ? <p><span className="text-sm font-bold">{money(quote!)}</span> <span className="text-[var(--text-muted)]">contract rate{quote!.contractNo ? ` (${quote!.contractNo})` : ''}. Our team confirms it when they review your request.</span></p>
+        : estimate ? <p><span className="text-sm font-bold">{money(quote!)}</span> <span className="text-[var(--text-muted)]">indicative estimate — there is no contract for this lane. Our team prices your load on review.</span></p>
+        : <p className="text-[var(--text-muted)]">Our team will price this load when they review your request.</p>}
+    </FormSection>
   );
 }
 
