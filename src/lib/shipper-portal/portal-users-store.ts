@@ -36,6 +36,10 @@ export interface PortalUser {
   role: PortalRole;
   /** The account's Transport portal role (null: no Transport access). */
   transportRole: 'ADMIN' | 'REQUESTER' | 'VIEWER' | null;
+  /** The account itself is active (not deactivated by staff). */
+  accountActive: boolean;
+  /** The customer has the Transport portal with the Logistics category. */
+  logisticsEnabled: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +91,8 @@ function rowToApi(r: Row): PortalUser {
     isActive: r.is_active && transportRoleOf(r.transport_role) !== null && r.logistics_enabled,
     role: r.transport_role === 'ADMIN' ? 'SHIPPER_ADMIN' : 'SHIPPER_USER',
     transportRole: transportRoleOf(r.transport_role),
+    accountActive: r.is_active,
+    logisticsEnabled: r.logistics_enabled,
     lastLoginAt: r.last_login_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -170,6 +176,13 @@ export async function createPortalUser(args: {
                                THEN customer_portal_access.categories
                                ELSE customer_portal_access.categories || ARRAY['LOGISTICS']::text[] END`,
       args.tenantId, args.customerId, args.invitedByUserId ?? 'shipper-portal-invite',
+    );
+    // The Customer Portal shows Logistics only if the tenant offers it (Transport
+    // catalogue); a tenant that has switched it off keeps it off.
+    await tx.$executeRawUnsafe(
+      `INSERT INTO tenant_transport_categories (tenant_id, category, enabled, updated_by)
+       VALUES ($1, 'LOGISTICS', TRUE, $2) ON CONFLICT (tenant_id, category) DO NOTHING`,
+      args.tenantId, args.invitedByUserId ?? 'shipper-portal-invite',
     );
     return tx.$queryRawUnsafe<Row[]>(
       `SELECT ${SELECT} FROM ${FROM} WHERE u.id = $1::uuid AND u.tenant_id = $2`, id, args.tenantId,

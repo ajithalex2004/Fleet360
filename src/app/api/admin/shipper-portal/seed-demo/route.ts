@@ -75,7 +75,7 @@ async function handlePOST(req: NextRequest) {
       tenantId, portalUserId: portalUser.id, invitedByUserId: userId,
     });
     const baseUrl = getPublicOrigin(req);
-    const setupUrl = `${baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(invitation.rawToken)}`;
+    const setupUrl = `${baseUrl.replace(/\/$/, '')}/customer-portal/setup?token=${encodeURIComponent(invitation.rawToken)}`;
 
     // 3. Create a few shipments at varying statuses.
     const statuses = ['PENDING', 'ACKNOWLEDGED', 'DISPATCHED', 'ENROUTE_DELIVERY', 'DELIVERED'];

@@ -23,6 +23,8 @@ import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getPortalUserById } from './portal-users-store';
+import { readCustomerPortalSession } from '@/lib/customer-portal/session';
+import { getPortalUserById as getCustomerPortalAccount } from '@/lib/customer-portal/users';
 
 const COOKIE_NAME = 'shipper-portal-session';
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -153,7 +155,20 @@ export interface PortalRequestContext {
 export async function requireShipperPortal(
   req: NextRequest,
 ): Promise<PortalRequestContext | NextResponse> {
-  const session = readSessionFromRequest(req);
+  // The Customer Portal's Logistics pages use these APIs too: its session is
+  // accepted when there is no Shipper session, with the same account checks
+  // below plus the Customer Portal's session-version revocation.
+  let session: Pick<PortalSessionPayload, 'userId' | 'customerId' | 'tenantId'> | null = readSessionFromRequest(req);
+  if (!session) {
+    const cp = readCustomerPortalSession(req);
+    if (cp) {
+      const account = await getCustomerPortalAccount(cp.tenantId, cp.userId);
+      if (!account || account.sessionVersion !== cp.sv || account.customerId !== cp.customerId) {
+        return NextResponse.json({ error: 'Session no longer valid' }, { status: 401 });
+      }
+      session = { userId: cp.userId, customerId: cp.customerId, tenantId: cp.tenantId };
+    }
+  }
   if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
@@ -162,7 +177,11 @@ export async function requireShipperPortal(
     return NextResponse.json({ error: 'User no longer exists' }, { status: 401 });
   }
   if (!user.isActive) {
-    return NextResponse.json({ error: 'Account has been deactivated' }, { status: 403 });
+    // isActive also requires Transport access with the Logistics category.
+    const error = !user.accountActive ? 'Account has been deactivated'
+      : !user.transportRole ? 'You do not have access to Logistics'
+      : 'Logistics is not enabled for your company';
+    return NextResponse.json({ error }, { status: 403 });
   }
   // Belt-and-braces: the cookie's customerId must match the DB row's
   // customerId. Prevents a stale cookie from a re-assigned account.

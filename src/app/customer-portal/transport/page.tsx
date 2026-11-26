@@ -11,6 +11,11 @@ import { usePortal } from '../portal-shell';
 import { fetchTransportRequests, fmtService, isOpen, STATUS_LABEL, STATUS_TONE, type TransportRequest } from './transport-shared';
 
 const COMMON_MENU = ['New request', 'Active requests', 'History'];
+/** Category pages that exist in the Customer Portal so far; the rest are still to come. */
+const MENU_HREF: Record<string, string> = {
+  Shipments: '/customer-portal/transport/shipments',
+  'Proof of delivery': '/customer-portal/transport/shipments',
+};
 
 export default function TransportDashboard() {
   const me = usePortal();
@@ -63,11 +68,16 @@ export default function TransportDashboard() {
                   className="inline-flex items-center px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] text-[11px] font-semibold hover:bg-[var(--bg-surface-hover)]">
                   Requests
                 </Link>
-                {c.menu.filter((m) => !COMMON_MENU.includes(m)).map((m) => (
+                {c.menu.filter((m) => !COMMON_MENU.includes(m)).map((m) => (MENU_HREF[m] ? (
+                  <Link key={m} href={MENU_HREF[m]}
+                    className="inline-flex items-center px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] text-[11px] font-semibold hover:bg-[var(--bg-surface-hover)]">
+                    {m}
+                  </Link>
+                ) : (
                   <span key={m} title="Coming soon" className="inline-flex items-center px-2.5 py-1 rounded-lg border border-dashed border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
                     {m} · soon
                   </span>
-                ))}
+                )))}
               </div>
             </div>
           ))}

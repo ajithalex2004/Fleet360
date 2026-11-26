@@ -1182,7 +1182,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     variables: [
       { name: 'recipientName', description: 'Invited person', sample: 'Omar Hassan', fallback: { en: 'Customer', ar: 'عميلنا العزيز' } },
       { name: 'customerName', description: 'Customer company', sample: 'Gulf Trading LLC' },
-      { name: 'setupUrl', description: 'Account setup link', sample: 'https://app.example/shipper-portal/setup?token=…' },
+      { name: 'setupUrl', description: 'Account setup link', sample: 'https://app.example/customer-portal/setup?token=…' },
       { name: 'expiresOn', description: 'Link expiry date', sample: '7 October 2026' },
     ],
     defaults: {

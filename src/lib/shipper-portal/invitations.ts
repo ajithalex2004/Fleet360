@@ -4,7 +4,7 @@
  *   1. Operator invites a portal user
  *        → createInvitation() generates random token, stores SHA-256 hash
  *        → sendInvitationEmail() emails the raw token in a setup link
- *   2. Shipper clicks link → /shipper-portal/setup?token=<raw>
+ *   2. Shipper clicks link → /customer-portal/setup?token=<raw> (the Customer Portal)
  *   3. setup page calls acceptInvitation(rawToken, newPassword)
  *        → validates hash, checks expiry, sets password, marks accepted
  *
@@ -160,7 +160,7 @@ export async function sendInvitationEmail(args: {
   baseUrl: string;
   expiresAt: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const link = `${args.baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
+  const link = `${args.baseUrl.replace(/\/$/, '')}/customer-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
   const context = await tenantEmailContext(args.tenantId);
   const email = await renderEmail({
     tenantId: args.tenantId, key: 'shipper.portal_invitation', context,
