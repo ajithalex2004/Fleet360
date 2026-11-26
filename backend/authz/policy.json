@@ -614,6 +614,15 @@
    }
   },
   {
+   "prefix": "customer-portal",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
    "prefix": "customers",
    "read": {
     "kind": "module",
@@ -622,6 +631,26 @@
    "write": {
     "kind": "module",
     "module": "customer-mgmt"
+   }
+  },
+  {
+   "prefix": "customers/portal-access",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "customers/portal-users",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "tenant-admin"
    }
   },
   {

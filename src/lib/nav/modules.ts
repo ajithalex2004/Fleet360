@@ -65,6 +65,7 @@ import {
   FolderTree,
   Sliders,
   ListTree,
+  KeyRound,
   FileSearch,
   Sparkles,
   MessageCircle,
@@ -711,6 +712,7 @@ export const MODULES: ModuleDef[] = [
     subPages: [
       { label: 'Customers',       href: '/customer-mgmt',           icon: Users },
       { label: 'Hierarchy setup', href: '/customer-mgmt/hierarchy', icon: Network },
+      { label: 'Customer Portal access', href: '/customer-mgmt/portal-access', icon: KeyRound },
     ],
   },
 
