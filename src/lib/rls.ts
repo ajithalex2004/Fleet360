@@ -24,6 +24,7 @@
 import { cpus } from 'node:os';
 
 import type { PrismaClient } from '@prisma/client';
+import * as rlsScope from '@/lib/rls-scope';
 import { activeRlsScope, runWithRlsScope, type RlsScope } from '@/lib/rls-scope';
 
 /**
@@ -102,10 +103,17 @@ export async function enforceRequestSessionRevocation(
       await setTenantGuc(tx, txTenantId, 'withTenantRls:revocationGuardRestore');
     }
     if (Array.isArray(rows) && rows[0]?.revoked === true) {
-      // Self-heal Redis asynchronously so Edge middleware rejects immediately too.
-      void import('@/lib/auth/durable-session-revocation')
-        .then((m) => m.scheduleRevocationRedisSync())
-        .catch(() => {});
+      // Self-heal Redis asynchronously outside this failing transaction's RLS/tx
+      // AsyncLocalStorage scope so the retry opens a clean platform connection.
+      const triggerSelfHeal = async () => {
+        const m = await import('@/lib/auth/durable-session-revocation');
+        m.scheduleRevocationRedisSync();
+      };
+      const detached =
+        typeof rlsScope.runOutsideRlsScope === 'function'
+          ? rlsScope.runOutsideRlsScope(triggerSelfHeal)
+          : triggerSelfHeal();
+      void detached.catch(() => {});
       throw new SessionRevokedError();
     }
   } catch (err) {

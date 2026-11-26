@@ -994,4 +994,56 @@ describe('Track C — Adversarial Review Regression Hardening (BLOCKER-1..3, HIG
       expect(preceding).toContain('runWithRlsScope({ tenantId, mode: \'tenant\', tx }');
     }
   });
+
+  it('LOW-ALS-DETACH: background Redis self-heal & outbox timers detach from caller AsyncLocalStorage RLS/tx scope', async () => {
+    const {
+      activeRlsScope,
+      activeTransactionClient,
+      runWithActiveTx,
+      runWithRlsScope,
+    } = await import('@/lib/rls-scope');
+    const durableSource = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'lib', 'auth', 'durable-session-revocation.ts'),
+      'utf8',
+    );
+    const rlsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'lib', 'rls.ts'), 'utf8');
+    expect(durableSource).toContain('detachRlsScope(() => rehydrateRevocationsToRedis(');
+    expect(durableSource).toContain('detachRlsScope(() => markRevocationTokensSynced(');
+    expect(rlsSource).toContain('rlsScope.runOutsideRlsScope');
+
+    // Runtime verification: timer scheduled via scheduleRevocationRedisSync from inside
+    // an active RLS + tx scope executes its DB/Redis hydration completely outside both ALS stores.
+    vi.useFakeTimers();
+    const origEnv = process.env.NODE_ENV;
+    vi.stubEnv('NODE_ENV', 'production');
+    let observedRlsScope: unknown = 'NOT_CALLED';
+    let observedTx: unknown = 'NOT_CALLED';
+    const origSet = state.kv.set.bind(state.kv);
+    state.kv.clear();
+    const kvSetSpy = vi.spyOn(state.kv, 'set').mockImplementation((key, value) => {
+      if (key === REVOCATION_HYDRATED_KEY) {
+        observedRlsScope = activeRlsScope();
+        observedTx = activeTransactionClient();
+      }
+      return origSet(key, value);
+    });
+    const dummyTx = { __dummy: true } as never;
+    try {
+      await runWithActiveTx(dummyTx, () =>
+        runWithRlsScope({ tenantId: TENANT_A, mode: 'tenant', tx: dummyTx }, async () => {
+          expect(activeRlsScope()?.tenantId).toBe(TENANT_A);
+          expect(activeTransactionClient()).toBe(dummyTx);
+          durable.scheduleRevocationRedisSync();
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(state.kv.get(REVOCATION_HYDRATED_KEY)).toBe('1');
+      expect(observedRlsScope).toBeUndefined();
+      expect(observedTx).toBeUndefined();
+    } finally {
+      kvSetSpy.mockRestore();
+      vi.stubEnv('NODE_ENV', origEnv ?? 'test');
+      vi.useRealTimers();
+    }
+  });
 });

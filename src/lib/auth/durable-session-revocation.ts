@@ -29,10 +29,17 @@
 
 import { prisma } from '@/lib/prisma';
 import { SessionRevokedError, withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import * as rlsScope from '@/lib/rls-scope';
 import { getRedis } from '@/lib/upstash';
 import * as sessionBlocklist from '@/lib/session-blocklist';
 import { clearRevocationCache, revocationKeys } from '@/lib/auth/revocation-check';
 import { verifySession, type VerifiedSession } from '@/lib/tenant-session';
+
+function detachRlsScope<T>(fn: () => Promise<T>): Promise<T> {
+  return typeof rlsScope.runOutsideRlsScope === 'function'
+    ? rlsScope.runOutsideRlsScope(fn)
+    : fn();
+}
 
 export { SessionRevokedError };
 
@@ -354,7 +361,7 @@ export async function isSessionRevokedInPostgres(params: {
       void Promise.all(jobs)
         .then((results) => {
           const synced = results.filter((k): k is string => typeof k === 'string');
-          if (synced.length > 0) return markRevocationTokensSynced(synced);
+          if (synced.length > 0) return detachRlsScope(() => markRevocationTokensSynced(synced));
         })
         .catch(() => {});
       return { revoked: true, source: 'token', expiresAtMs: check.expiresAtMs };
@@ -607,6 +614,11 @@ export async function rehydrateRevocationsToRedis(
       }
     }
 
+    if (hydratedSentinelSet && retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+
     return { tokensMirrored, scopesMirrored, hydratedSentinelSet };
   })();
 
@@ -618,41 +630,40 @@ export async function rehydrateRevocationsToRedis(
   }
 }
 
-let retryScheduled = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Schedule an immediate bounded retry to drain unsynced PostgreSQL revocations
  * into Redis after a transient Redis write failure.
  */
 export function scheduleRevocationRedisSync(): void {
-  if (retryScheduled || process.env.NODE_ENV === 'test') return;
-  retryScheduled = true;
+  if (retryTimer || inFlightRehydrate || process.env.NODE_ENV === 'test') return;
   const delays = [1_500, 5_000, 15_000];
 
   const attempt = (idx: number) => {
     const timer = setTimeout(() => {
-      void rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: true })
+      if (retryTimer === timer) retryTimer = null;
+      void detachRlsScope(() => rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: true }))
         .then((res) => {
-          if (res.hydratedSentinelSet) {
-            retryScheduled = false;
-          } else if (idx + 1 < delays.length) {
+          if (!res.hydratedSentinelSet && idx + 1 < delays.length) {
             attempt(idx + 1);
-          } else {
-            retryScheduled = false;
           }
         })
         .catch(() => {
           if (idx + 1 < delays.length) {
             attempt(idx + 1);
-          } else {
-            retryScheduled = false;
           }
         });
     }, delays[idx]);
+    retryTimer = timer;
     (timer as { unref?: () => void }).unref?.();
   };
 
-  attempt(0);
+  // Start the timer outside any caller AsyncLocalStorage RLS/tx context so
+  // background self-heal writes never inherit a closing request transaction.
+  void detachRlsScope(async () => {
+    attempt(0);
+  });
 }
 
 let syncLoopStarted = false;
@@ -666,7 +677,7 @@ export function startRevocationSyncLoop(): void {
   syncLoopStarted = true;
 
   // Immediate startup hydration so Redis is warm before traffic lands.
-  void rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: false })
+  void detachRlsScope(() => rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: false }))
     .then((res) => {
       if (res.hydratedSentinelSet) {
         console.log(
@@ -679,7 +690,7 @@ export function startRevocationSyncLoop(): void {
     });
 
   const interval = setInterval(() => {
-    void rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: true }).catch(() => {});
+    void detachRlsScope(() => rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: true })).catch(() => {});
   }, SYNC_LOOP_INTERVAL_MS);
   (interval as { unref?: () => void }).unref?.();
 }
