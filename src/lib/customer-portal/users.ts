@@ -21,8 +21,9 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
+import { offeredCategories } from '@/lib/transport-catalog/store';
 import {
-  CUSTOMER_PORTALS, isCustomerPortal, isPortalRole, parsePortalRoleMap,
+  CUSTOMER_PORTALS, TRANSPORT_CATEGORY_LABEL, isCustomerPortal, isPortalRole, parsePortalRoleMap,
   type CustomerPortal, type PortalRole, type PortalRoleMap, type TransportCategory,
 } from './catalog';
 
@@ -212,6 +213,22 @@ export async function setCustomerPortalAccess(
       `SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, customerId, tenantId,
     );
     if (!c) throw new PortalUserError('Customer not found.', 404);
+    if (enabled && portal === 'TRANSPORT' && categories) {
+      // Only categories the tenant offers (Transport catalogue) can be given;
+      // ones the customer already has stay even if no longer offered.
+      const offered = new Set(await offeredCategories(tenantId, tx));
+      const [cur] = await tx.$queryRawUnsafe<Array<{ categories: string[] }>>(
+        `SELECT categories FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'TRANSPORT'`,
+        tenantId, customerId,
+      );
+      const had = new Set(cur?.categories ?? []);
+      const notOffered = categories.filter((k) => !offered.has(k) && !had.has(k));
+      if (notOffered.length) {
+        throw new PortalUserError(
+          `Not offered by your Transport catalogue: ${notOffered.map((k) => TRANSPORT_CATEGORY_LABEL[k]).join(', ')}.`,
+        );
+      }
+    }
     if (enabled) {
       const cats = portal === 'TRANSPORT' ? (categories ?? null) : [];
       await tx.$executeRawUnsafe(

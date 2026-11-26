@@ -713,6 +713,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Customers',       href: '/customer-mgmt',           icon: Users },
       { label: 'Hierarchy setup', href: '/customer-mgmt/hierarchy', icon: Network },
       { label: 'Customer Portal access', href: '/customer-mgmt/portal-access', icon: KeyRound },
+      { label: 'Transport Services catalogue', href: '/customer-mgmt/transport-catalog', icon: Truck },
     ],
   },
 
