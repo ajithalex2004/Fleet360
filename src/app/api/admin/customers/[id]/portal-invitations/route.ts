@@ -25,7 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getPublicOrigin } from '@/lib/public-origin';
 import {
-  createPortalUser, listPortalUsersByCustomer, findPortalUserByEmail, isFsmPortalRole,
+  createPortalUser, listPortalUsersByCustomer,
 } from '@/lib/shipper-portal/portal-users-store';
 import {
   createInvitation, sendInvitationEmail,
@@ -77,15 +77,8 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
     const existing = (await listPortalUsersByCustomer(tenantId, customerId))
       .find(u => u.email.toLowerCase() === email);
 
-    // The table is shared with the FSM Customer Portal; the Shipper list above
-    // leaves those accounts out, so look the email up directly.
-    const sameEmail = existing ? null : await findPortalUserByEmail(email, tenantId);
-    if (sameEmail && isFsmPortalRole(sameEmail.role)) {
-      return NextResponse.json({
-        error: 'That email already has a Field Service portal account. Use a different email for the Shipper portal.',
-      }, { status: 409 });
-    }
-
+    // An account of this customer without Transport access (e.g. a Field
+    // Services user) is given it by createPortalUser — one account per person.
     let portalUser;
     if (existing) {
       portalUser = existing;
@@ -96,6 +89,7 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
           fullName: body.fullName,
           phone: body.phone,
           role: body.role ?? 'SHIPPER_USER',
+          invitedByUserId: userId,
         });
       } catch (e: unknown) {
         const err = e as { code?: string };

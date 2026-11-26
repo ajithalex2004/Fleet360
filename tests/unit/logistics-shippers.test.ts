@@ -28,6 +28,7 @@ suite('shipper onboarding (PostgreSQL)', () => {
     const x = (sql: string, ...a: unknown[]) => prisma.$executeRawUnsafe(sql, ...a);
     for (const t of [A, B]) {
       await x(`DELETE FROM customer_portal_invitations WHERE tenant_id = $1`, t);
+      await x(`DELETE FROM customer_portal_user_roles WHERE tenant_id = $1`, t);
       await x(`DELETE FROM customer_portal_users WHERE tenant_id = $1`, t);
       await x(`DELETE FROM logistics_shipping_requests WHERE tenant_id = $1`, t);
       await x(`DELETE FROM logistics_customer_marketplace_settings WHERE tenant_id = $1`, t);
@@ -43,6 +44,10 @@ suite('shipper onboarding (PostgreSQL)', () => {
     await x(`INSERT INTO customer_portal_users (id, tenant_id, customer_id, email, password_hash, is_active)
              VALUES ('aaaaaaaa-0000-4000-8000-000000000001', $1, 'cust-gulf', 'a@gulf.test', 'hash', true),
                     ('aaaaaaaa-0000-4000-8000-000000000002', $1, 'cust-gulf', 'b@gulf.test', NULL, true)`, A);
+    // Shipper portal users hold a Transport portal role (customer_portal_user_roles).
+    await x(`INSERT INTO customer_portal_user_roles (tenant_id, portal_user_id, portal, role)
+             VALUES ($1, 'aaaaaaaa-0000-4000-8000-000000000001', 'TRANSPORT', 'REQUESTER'),
+                    ($1, 'aaaaaaaa-0000-4000-8000-000000000002', 'TRANSPORT', 'REQUESTER')`, A);
     await x(`INSERT INTO customer_portal_invitations (tenant_id, portal_user_id, token_hash, expires_at, invited_by_user_id)
              VALUES ($1, 'aaaaaaaa-0000-4000-8000-000000000002', 'tok', NOW() + INTERVAL '3 days', 'admin')`, A);
     // Tenant B: its own shipper.

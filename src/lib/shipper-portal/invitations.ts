@@ -78,9 +78,9 @@ export async function resolveInvitation(rawToken: string): Promise<InvitationRow
     `SELECT id::text, tenant_id, portal_user_id::text, expires_at::text, accepted_at::text
        FROM customer_portal_invitations
       WHERE token_hash = $1
-        AND NOT EXISTS (SELECT 1 FROM customer_portal_users u
-                         WHERE u.id = customer_portal_invitations.portal_user_id
-                           AND left(u.role, 4) = 'FSM_')
+        AND EXISTS (SELECT 1 FROM customer_portal_user_roles r
+                     WHERE r.portal_user_id = customer_portal_invitations.portal_user_id
+                       AND r.portal = 'TRANSPORT')
       LIMIT 1`,
     tokenHash,
   )));
@@ -119,11 +119,11 @@ export async function acceptInvitation(
           WHERE token_hash = $1
             AND accepted_at IS NULL
             AND expires_at > NOW()
-            -- Invitations are shared with the FSM Customer Portal; its
-            -- invite links can't be redeemed here.
-            AND NOT EXISTS (SELECT 1 FROM customer_portal_users u
-                             WHERE u.id = customer_portal_invitations.portal_user_id
-                               AND left(u.role, 4) = 'FSM_')
+            -- Accounts are shared with the FSM Customer Portal; only an
+            -- account with Transport access can redeem a link here.
+            AND EXISTS (SELECT 1 FROM customer_portal_user_roles r
+                         WHERE r.portal_user_id = customer_portal_invitations.portal_user_id
+                           AND r.portal = 'TRANSPORT')
           RETURNING portal_user_id::text, tenant_id`,
         tokenHash,
     );

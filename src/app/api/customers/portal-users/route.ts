@@ -3,12 +3,17 @@ export const dynamic = 'force-dynamic';
 /**
  * Customer onboarding — the customer's portal users.
  *
- * GET   /api/customers/portal-users?customerId=…          the customer's portal users
- * POST  /api/customers/portal-users                        invite (or re-invite) a user
- *   Body: { customerId, email, fullName?, mobile?, role: 'ADMIN' | 'REQUESTER' | 'VIEWER' }
- *   Returns a single-use setup link (valid 7 days) for the user to set a password.
- * PATCH /api/customers/portal-users                        Body: { id, isActive?, role? }
- *   Deactivate / reactivate or change role; ends the user's open sessions.
+ * One account per person; a role per portal (FSM, TRANSPORT).
+ *
+ * GET   /api/customers/portal-users?customerId=…          the customer's accounts with their portal roles
+ * POST  /api/customers/portal-users                        invite a user, or give an existing account more portals
+ *   Body: { customerId, email, fullName?, mobile?, roles: { FSM?: role, TRANSPORT?: role } }
+ *   (role: 'ADMIN' | 'REQUESTER' | 'VIEWER'; the older { role } means an FSM role)
+ *   Returns a single-use setup link (valid 7 days) unless the account already
+ *   has a password, in which case the new access works with that password.
+ * PATCH /api/customers/portal-users                        Body: { id, isActive?, roles? }
+ *   roles: { FSM?: role | null, TRANSPORT?: role | null } (null removes the portal).
+ *   Deactivate / reactivate or change roles; ends the user's open sessions.
  * Writes: TENANT_ADMIN / SUPER_ADMIN only; audited. The setup link is never logged.
  */
 
@@ -19,7 +24,7 @@ import { withAuditedAction } from '@/lib/audited-action';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import {
-  PortalUserError, invitePortalUser, listPortalUsers, updatePortalUser,
+  PortalUserError, inviteCustomerUser, listCustomerAccounts, updateCustomerUser, type PortalAccount,
 } from '@/lib/customer-portal/users';
 
 export const runtime = 'nodejs';
@@ -27,6 +32,11 @@ export const runtime = 'nodejs';
 function appOrigin(req: NextRequest): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
   return (configured || req.nextUrl.origin).replace(/\/+$/, '');
+}
+
+function rolesText(a: PortalAccount): string {
+  const parts = Object.entries(a.roles).map(([p, r]) => `${p} ${r}`);
+  return parts.length ? parts.join(', ') : 'no portal';
 }
 
 export async function GET(req: NextRequest) {
@@ -37,7 +47,7 @@ export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get('customerId') ?? '';
   if (!customerId) return NextResponse.json({ ok: false, error: 'customerId is required' }, { status: 400 });
   try {
-    const users = await listPortalUsers(auth.tenantId, customerId);
+    const users = await listCustomerAccounts(auth.tenantId, customerId);
     return NextResponse.json({ ok: true, users, canEdit: requireAdmin(auth).ok });
   } catch (err) {
     captureException(err, { context: 'customers.portal-users.list' });
@@ -57,14 +67,17 @@ async function handlePOST(req: NextRequest) {
   const customerId = String(body.customerId ?? '');
   if (!customerId) return NextResponse.json({ ok: false, error: 'customerId is required' }, { status: 400 });
   try {
-    const { user, rawToken, expiresAt } = await invitePortalUser(auth.tenantId, customerId, body, auth.userId);
+    const { account, rawToken, expiresAt, setupPortal } = await inviteCustomerUser(auth.tenantId, customerId, body, auth.userId);
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalUser',
-      entityId: user.id, entityName: user.email, action: 'CREATE',
-      details: `Invited ${user.email} (${user.role}) to the Customer Portal for customer ${customerId}`,
+      entityId: account.id, entityName: account.email, action: 'CREATE',
+      details: `Invited ${account.email} (${rolesText(account)}) to the Customer Portal for customer ${customerId}`,
     });
-    const setupUrl = `${appOrigin(req)}/customer-portal/setup?token=${encodeURIComponent(rawToken)}`;
-    return NextResponse.json({ ok: true, user, setupUrl, expiresAt }, { status: 201 });
+    // FSM users finish setup in the Customer Portal; Transport-only users in
+    // the Shipper portal (the Transport portal's Logistics category).
+    const setupPath = setupPortal === 'FSM' ? '/customer-portal/setup' : '/shipper-portal/setup';
+    const setupUrl = rawToken ? `${appOrigin(req)}${setupPath}?token=${encodeURIComponent(rawToken)}` : null;
+    return NextResponse.json({ ok: true, user: account, setupUrl, expiresAt }, { status: 201 });
   } catch (err) {
     if (err instanceof PortalUserError) return NextResponse.json({ ok: false, error: err.message }, { status: err.status });
     captureException(err, { context: 'customers.portal-users.invite' });
@@ -84,11 +97,13 @@ async function handlePATCH(req: NextRequest) {
   const id = String(body.id ?? '');
   if (!id) return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 });
   try {
-    const user = await updatePortalUser(auth.tenantId, id, { isActive: body.isActive, role: body.role });
+    const user = await updateCustomerUser(
+      auth.tenantId, id, { isActive: body.isActive, roles: body.roles, role: body.role }, auth.userId,
+    );
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalUser',
       entityId: user.id, entityName: user.email, action: 'UPDATE',
-      details: `Customer Portal user ${user.email}: ${user.isActive ? 'active' : 'deactivated'}, role ${user.role}`,
+      details: `Customer Portal user ${user.email}: ${user.isActive ? 'active' : 'deactivated'}, ${rolesText(user)}`,
     });
     return NextResponse.json({ ok: true, user });
   } catch (err) {

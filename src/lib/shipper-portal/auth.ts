@@ -139,6 +139,8 @@ export interface PortalRequestContext {
     email: string;
     fullName: string | null;
     role: 'SHIPPER_USER' | 'SHIPPER_ADMIN';
+    /** Transport portal role; VIEWER may look but not submit requests. */
+    transportRole: 'ADMIN' | 'REQUESTER' | 'VIEWER' | null;
     isActive: boolean;
   };
 }
@@ -176,6 +178,7 @@ export async function requireShipperPortal(
       email: user.email,
       fullName: user.fullName,
       role: user.role,
+      transportRole: user.transportRole,
       isActive: user.isActive,
     },
   };

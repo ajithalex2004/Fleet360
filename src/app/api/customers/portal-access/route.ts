@@ -4,8 +4,11 @@ export const dynamic = 'force-dynamic';
  * Customer onboarding — which Customer Portals a customer gets.
  *
  * GET /api/customers/portal-access
- *   Every customer with its enabled portals (FSM, TRANSPORT) and portal user counts.
- * PUT /api/customers/portal-access   Body: { customerId, portal: 'FSM' | 'TRANSPORT', enabled }
+ *   Every customer with its enabled portals (FSM, TRANSPORT), its Transport
+ *   categories and portal user counts.
+ * PUT /api/customers/portal-access
+ *   Body: { customerId, portal: 'FSM' | 'TRANSPORT', enabled, categories? }
+ *   categories (TRANSPORT only): the Transport categories the customer may use.
  *   TENANT_ADMIN / SUPER_ADMIN only; audited.
  */
 
@@ -18,6 +21,7 @@ import { captureException } from '@/lib/sentry';
 import {
   PortalUserError, isCustomerPortal, listCustomerPortalSummaries, setCustomerPortalAccess,
 } from '@/lib/customer-portal/users';
+import { parseTransportCategories, TRANSPORT_CATEGORY_LABEL } from '@/lib/customer-portal/catalog';
 
 export const runtime = 'nodejs';
 
@@ -48,12 +52,20 @@ async function handlePUT(req: NextRequest) {
   if (!customerId || !isCustomerPortal(body.portal) || typeof body.enabled !== 'boolean') {
     return NextResponse.json({ ok: false, error: 'customerId, portal (FSM | TRANSPORT) and enabled are required' }, { status: 400 });
   }
+  const categories = body.categories === undefined ? undefined : parseTransportCategories(body.categories);
+  if (categories === null || (categories && body.portal !== 'TRANSPORT')) {
+    return NextResponse.json(
+      { ok: false, error: 'categories must be a list of Transport categories (Transport portal only)' }, { status: 400 },
+    );
+  }
   try {
-    await setCustomerPortalAccess(auth.tenantId, customerId, body.portal, body.enabled, auth.userId);
+    await setCustomerPortalAccess(auth.tenantId, customerId, body.portal, body.enabled, auth.userId, categories);
+    const catText = categories
+      ? ` (categories: ${categories.map((c) => TRANSPORT_CATEGORY_LABEL[c]).join(', ') || 'none'})` : '';
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalAccess',
       entityId: customerId, entityName: body.portal, action: 'UPDATE',
-      details: `${body.enabled ? 'Enabled' : 'Disabled'} the ${body.portal} Customer Portal for customer ${customerId}`,
+      details: `${body.enabled ? 'Enabled' : 'Disabled'} the ${body.portal} Customer Portal for customer ${customerId}${catText}`,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {
