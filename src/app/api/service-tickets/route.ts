@@ -21,6 +21,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { nextReadableId } from '@/lib/service-tickets/schema';
+import { resolveHistoryActors } from '@/lib/service-tickets/history-actors';
+import {
+  CustomerContextError, getCustomer, getCustomerAsset, getCustomerSite,
+  isEntitlementType, isRequestChannel, nextServiceRequestNumber,
+} from '@/lib/service-tickets/customer-context';
 import { TICKET_TYPE_KEY_RE, isTicketPriority, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
 import { loadServiceConfig } from '@/lib/service-config/load';
@@ -58,7 +63,23 @@ interface Row {
   custom_fields: unknown;
   created_at: string;
   updated_at: string;
+  // Field Service request fields (migration 20261126100000). Read through
+  // to_jsonb(...) so the list keeps working before that migration runs.
+  customer_id?: string | null;
+  customer_site_id?: string | null;
+  asset_id?: string | null;
+  request_channel?: string | null;
+  service_needed_at?: string | null;
+  entitlement_type?: string | null;
 }
+
+const FSM_REQUEST_COLS = `
+  to_jsonb(service_tickets) ->> 'customer_id'       AS customer_id,
+  to_jsonb(service_tickets) ->> 'customer_site_id'  AS customer_site_id,
+  to_jsonb(service_tickets) ->> 'asset_id'          AS asset_id,
+  to_jsonb(service_tickets) ->> 'request_channel'   AS request_channel,
+  to_jsonb(service_tickets) ->> 'service_needed_at' AS service_needed_at,
+  to_jsonb(service_tickets) ->> 'entitlement_type'  AS entitlement_type`;
 
 function rowToApi(r: Row, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
@@ -90,6 +111,12 @@ function rowToApi(r: Row, matrix?: SlaMatrix) {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     slaTargetHours: matrix ? pickSlaHours(matrix, priority) : undefined,
+    customerId: r.customer_id ?? null,
+    customerSiteId: r.customer_site_id ?? null,
+    assetId: r.asset_id ?? null,
+    requestChannel: r.request_channel ?? null,
+    serviceNeededAt: r.service_needed_at ?? null,
+    entitlementType: r.entitlement_type ?? null,
   };
 }
 
@@ -148,7 +175,7 @@ export async function GET(req: NextRequest) {
         SELECT id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
                vehicle_id, related_driver_id, title, description, priority, status,
                due_date::text, assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
-               created_at::text, updated_at::text
+               created_at::text, updated_at::text, ${FSM_REQUEST_COLS}
         FROM service_tickets
         WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC
@@ -163,7 +190,8 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         ok: true,
-        tickets: rows.map(r => rowToApi(r, matrices.get(r.ticket_type as TicketType))),
+        // Lifecycle: resolve who made each change (history actor ids → names).
+        tickets: await resolveHistoryActors(tx, rows.map(r => rowToApi(r, matrices.get(r.ticket_type as TicketType)))),
       });
   });
 }
@@ -187,6 +215,9 @@ export async function POST(req: NextRequest) {
         priority?: string; vehicleId?: string; relatedDriverId?: string;
         dueDate?: string; requestorName?: string;
         customFields?: Record<string, unknown>;
+        // Field Service request (revamped Service Request form)
+        customerId?: string; customerSiteId?: string; assetId?: string;
+        requestChannel?: string; serviceNeededAt?: string; entitlementType?: string;
       };
       try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
@@ -290,10 +321,72 @@ export async function POST(req: NextRequest) {
       const { status: initialStatus, source: statusSource } =
         await resolveTicketInitialStatus(tenantId, ticketType, priority);
 
+      // Field Service request context: customer → entity/site → asset, all in
+      // this tenant and consistent with each other.
+      let fsm: null | {
+        customer: Awaited<ReturnType<typeof getCustomer>>;
+        siteId: string | null; assetId: string | null;
+        channel: string; serviceNeededAt: string | null; entitlement: string | null;
+      } = null;
+      if (body.customerId) {
+        try {
+          const customer = await getCustomer(tx, tenantId, String(body.customerId));
+          let siteId: string | null = null;
+          if (body.customerSiteId) {
+            const site = await getCustomerSite(tx, tenantId, String(body.customerSiteId));
+            if (site.customerId !== customer.id) {
+              return NextResponse.json({ ok: false, error: 'That entity / site belongs to another customer.' }, { status: 400 });
+            }
+            siteId = site.id;
+            Object.assign(customFields, {
+              siteName: site.name, siteAddress: site.address ?? undefined,
+              contactPerson: site.contactPerson ?? undefined, contactMobile: site.contactMobile ?? undefined,
+            });
+          }
+          let assetId: string | null = null;
+          if (body.assetId) {
+            const asset = await getCustomerAsset(tx, tenantId, String(body.assetId));
+            if (asset.customerId !== customer.id || (siteId && asset.customerSiteId && asset.customerSiteId !== siteId)) {
+              return NextResponse.json({ ok: false, error: 'That asset is not registered at this customer / site.' }, { status: 400 });
+            }
+            assetId = asset.id;
+            Object.assign(customFields, {
+              assetNo: asset.assetNo, assetName: asset.name,
+              serialNumber: asset.serialNumber ?? asset.tagId ?? undefined,
+            });
+          }
+          let serviceNeededAt: string | null = null;
+          if (body.serviceNeededAt) {
+            const t = new Date(String(body.serviceNeededAt));
+            if (Number.isNaN(t.getTime())) {
+              return NextResponse.json({ ok: false, error: 'Service needed date & time is not valid.' }, { status: 400 });
+            }
+            serviceNeededAt = t.toISOString();
+          }
+          if (body.entitlementType && !isEntitlementType(body.entitlementType)) {
+            return NextResponse.json({ ok: false, error: 'Unknown entitlement / billing type.' }, { status: 400 });
+          }
+          fsm = {
+            customer, siteId, assetId, serviceNeededAt,
+            channel: isRequestChannel(body.requestChannel) ? body.requestChannel : 'CUSTOMER_PORTAL',
+            entitlement: body.entitlementType ? String(body.entitlementType) : null,
+          };
+          Object.assign(customFields, { customerName: customer.name, customerCode: customer.code });
+        } catch (err) {
+          if (err instanceof CustomerContextError) {
+            return NextResponse.json({ ok: false, error: err.message }, { status: err.status });
+          }
+          throw err;
+        }
+      }
+
       try {
-        // Prefix lives on the resolved ticketing rules.
+        // FSM requests with a customer are numbered FSM-SR-<customer code>-YYXXXX
+        // (one yearly series per tenant); other tickets keep the type prefix.
         const resolvedPrefix = (cfg.rules.ticketing.ticketPrefix?.trim()) || 'GEN';
-        const readableId = await nextReadableId(tenantId, ticketType, resolvedPrefix);
+        const readableId = fsm
+          ? await nextServiceRequestNumber(tx, tenantId, fsm.customer.code)
+          : await nextReadableId(tenantId, ticketType, resolvedPrefix);
         const nowIso = new Date().toISOString();
 
         const initialHistory = [{
@@ -321,8 +414,24 @@ export async function POST(req: NextRequest) {
           JSON.stringify(initialHistory), JSON.stringify(customFields),
         );
 
-        const ticket = inserted[0];
+        let ticket = inserted[0];
         if (!ticket) throw new Error('Insert returned no row');
+
+        if (fsm) {
+          const [withFsm] = await tx.$queryRawUnsafe<Row[]>(
+            `UPDATE service_tickets
+                SET customer_id = $3, customer_site_id = $4::uuid, asset_id = $5::uuid,
+                    request_channel = $6, service_needed_at = $7::timestamptz, entitlement_type = $8
+              WHERE id = $1::uuid AND tenant_id = $2
+              RETURNING id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
+                        vehicle_id, related_driver_id, title, description, priority, status,
+                        due_date::text, assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
+                        created_at::text, updated_at::text, ${FSM_REQUEST_COLS}`,
+            ticket.id, tenantId, fsm.customer.id, fsm.siteId, fsm.assetId,
+            fsm.channel, fsm.serviceNeededAt, fsm.entitlement,
+          );
+          if (withFsm) ticket = withFsm;
+        }
 
         void logAudit({
           tenantId,
@@ -337,7 +446,8 @@ export async function POST(req: NextRequest) {
 
         // Enrich response with the resolved SLA target — single-type lookup.
         const matrices = await resolveTicketSlaMatrixBatch(tenantId, [ticketType]);
-        return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrices.get(ticketType)) }, { status: 201 });
+        const [created] = await resolveHistoryActors(tx, [rowToApi(ticket, matrices.get(ticketType))]);
+        return NextResponse.json({ ok: true, ticket: created }, { status: 201 });
         } catch (err) {
         captureException(err, { context: 'service-tickets.create', tags: { tenantId, ticketType } });
         return NextResponse.json({ ok: false, error: 'Failed to create ticket' }, { status: 500 });

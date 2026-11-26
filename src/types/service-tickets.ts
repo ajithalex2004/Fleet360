@@ -181,6 +181,8 @@ export interface TicketHistoryEntry {
   status: string;
   date: string;          // ISO
   actor?: string;
+  /** Display name for `actor` (resolved by the API when actor is a user id). */
+  actorName?: string;
   note?: string;
 }
 
@@ -191,6 +193,9 @@ export interface TicketAttachment {
   fileName: string;
   url: string;
   uploadedAt: string;
+  size?: number;
+  mimeType?: string;
+  uploadedBy?: string | null;
 }
 
 /** Comment — Phase 1B+ ships the comments engine. */
@@ -259,6 +264,18 @@ export interface ServiceTicket {
   history?: TicketHistoryEntry[];
   attachments?: TicketAttachment[];
   comments?: TicketComment[];
+
+  /** Display name of the assignee (resolved by the API). */
+  assignedToName?: string | null;
+  // Field Service request (revamped Service Request form)
+  customerId?: string | null;
+  customerSiteId?: string | null;
+  assetId?: string | null;
+  /** CUSTOMER_PORTAL | WHATSAPP | EMAIL | IOT */
+  requestChannel?: string | null;
+  serviceNeededAt?: string | null;
+  /** AMC | WARRANTY | SLA_CONTRACT | CHARGEABLE | GOODWILL */
+  entitlementType?: string | null;
 }
 
 /** Per-tenant access toggle row. */

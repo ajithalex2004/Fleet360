@@ -20,6 +20,10 @@
  *                                          file_url (trade license, VAT
  *                                          certificate, …); staff of that
  *                                          tenant, or a platform admin
+ *   service-tickets/{tenantId}/{ticketId}/…  photo on a service request: the
+ *                                          service_tickets row lists this URL
+ *                                          in its attachments; staff of that
+ *                                          tenant only, images only
  *
  * Any other prefix is refused. Staff callers are identified by the identity
  * headers middleware sets from a verified session; leasing-portal callers by
@@ -44,7 +48,8 @@ export type FileAccessDecision =
         | 'leasing-document'
         | 'rental-handover'
         | 'rental-document'
-        | 'tenant-attachment';
+        | 'tenant-attachment'
+        | 'service-request-photo';
       imageOnly: boolean;
     }
   | { allowed: false; reason: string };
@@ -289,6 +294,26 @@ export async function authorizeFileAccess(
     return rows.length > 0
       ? { allowed: true, category: 'tenant-attachment', imageOnly: false }
       : deny('no tenant attachment with this file');
+  }
+
+  if (root === 'service-tickets' && segments.length >= 4) {
+    if (caller.kind !== 'staff') return deny('service request photos are staff-only');
+    const ownerTenant = segments[1];
+    const ticketId = segments[2];
+    if (ownerTenant !== caller.tenantId) return deny('service request photo of another tenant');
+    const url = `${UPLOAD_URL_PREFIX}${key}`;
+    const rows = await withTenantRls(prisma, ownerTenant, (tx) =>
+      tx.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT id::text FROM service_tickets
+          WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL
+            AND EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(attachments, '[]'::jsonb)) a WHERE a->>'url' = $3)
+          LIMIT 1`,
+        ticketId, ownerTenant, url,
+      ),
+    ).catch(() => []);
+    return rows.length > 0
+      ? { allowed: true, category: 'service-request-photo', imageOnly: true }
+      : deny('no service request with this photo');
   }
 
   return deny('unknown storage prefix');
