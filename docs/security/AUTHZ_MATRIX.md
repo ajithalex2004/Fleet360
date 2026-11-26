@@ -40,6 +40,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `customers` | 4 | module `customer-mgmt` | module `customer-mgmt` |
 | `customers/portal-access` | 1 | module `customer-mgmt` | tenant-admin |
 | `customers/portal-users` | 1 | module `customer-mgmt` | tenant-admin |
+| `customers/transport-catalog` | 1 | module `customer-mgmt` | tenant-admin |
 | `debug` | 1 | platform | platform |
 | `dispatch` | 12 | module `dispatch` | module `dispatch` |
 | `dispatch/ambulance-calls` | 0 | module `incidents` | module `incidents` |

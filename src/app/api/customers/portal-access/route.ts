@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
  *
  * GET /api/customers/portal-access
  *   Every customer with its enabled portals (FSM, TRANSPORT), its Transport
- *   categories and portal user counts.
+ *   categories and portal user counts, plus the categories the tenant offers
+ *   (Transport catalogue) — only those can be newly given to a customer.
  * PUT /api/customers/portal-access
  *   Body: { customerId, portal: 'FSM' | 'TRANSPORT', enabled, categories? }
  *   categories (TRANSPORT only): the Transport categories the customer may use.
@@ -22,6 +23,7 @@ import {
   PortalUserError, isCustomerPortal, listCustomerPortalSummaries, setCustomerPortalAccess,
 } from '@/lib/customer-portal/users';
 import { parseTransportCategories, TRANSPORT_CATEGORY_LABEL } from '@/lib/customer-portal/catalog';
+import { offeredCategories } from '@/lib/transport-catalog/store';
 
 export const runtime = 'nodejs';
 
@@ -31,8 +33,8 @@ export async function GET(req: NextRequest) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   try {
-    const customers = await listCustomerPortalSummaries(auth.tenantId);
-    return NextResponse.json({ ok: true, customers, canEdit: requireAdmin(auth).ok });
+    const [customers, offered] = await Promise.all([listCustomerPortalSummaries(auth.tenantId), offeredCategories(auth.tenantId)]);
+    return NextResponse.json({ ok: true, customers, offeredCategories: offered, canEdit: requireAdmin(auth).ok });
   } catch (err) {
     captureException(err, { context: 'customers.portal-access.list' });
     return NextResponse.json({ ok: false, error: 'Failed to load portal access' }, { status: 500 });

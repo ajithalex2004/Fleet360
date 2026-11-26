@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { KeyRound, Users, Mail, Copy, X, UserPlus, Check, Truck, Save } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn } from '@/components/ui/SmartDataGrid';
@@ -48,12 +49,13 @@ export default function CustomerPortalAccessPage() {
   const [err, setErr] = useState<string | null>(null);
   const [managing, setManaging] = useState<CustomerRow | null>(null);
   const [pickingCategories, setPickingCategories] = useState<CustomerRow | null>(null);
+  const [offered, setOffered] = useState<TransportCategory[]>([]);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/customers/portal-access', { cache: 'no-store' });
     const d = await res.json().catch(() => null);
     if (!res.ok || !d?.ok) { setErr(d?.error ?? 'Could not load customers'); return; }
-    setRows(d.customers); setCanEdit(!!d.canEdit);
+    setRows(d.customers); setCanEdit(!!d.canEdit); setOffered(d.offeredCategories ?? []);
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -126,14 +128,18 @@ export default function CustomerPortalAccessPage() {
       />
       {managing && <UsersPanel customer={managing} canEdit={canEdit} onClose={() => { setManaging(null); void load(); }} />}
       {pickingCategories && (
-        <CategoriesDialog customer={pickingCategories} onClose={() => setPickingCategories(null)}
+        <CategoriesDialog customer={pickingCategories} offered={offered} onClose={() => setPickingCategories(null)}
           onSaved={() => { setPickingCategories(null); void load(); }} />
       )}
     </div>
   );
 }
 
-function CategoriesDialog({ customer, onClose, onSaved }: { customer: CustomerRow; onClose: () => void; onSaved: () => void }) {
+function CategoriesDialog({ customer, offered, onClose, onSaved }: {
+  customer: CustomerRow; offered: TransportCategory[]; onClose: () => void; onSaved: () => void;
+}) {
+  // Categories the tenant offers, plus any the customer already has that are no longer offered.
+  const choices = TRANSPORT_CATEGORIES.filter((k) => offered.includes(k) || customer.transportCategories.includes(k));
   const [picked, setPicked] = useState<TransportCategory[]>(customer.transportCategories);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -153,12 +159,19 @@ function CategoriesDialog({ customer, onClose, onSaved }: { customer: CustomerRo
         <FormPanel title={`Transport Services — ${customer.name}`} subtitle="The vehicle request types this customer can use" icon={Truck}
           actions={<SecondaryButton icon={X} onClick={onClose}>Close</SecondaryButton>}>
           {err && <FormAlert>{err}</FormAlert>}
+          {choices.length === 0 && (
+            <FormAlert tone="warning">
+              Your Transport catalogue offers no categories yet. Turn them on in{' '}
+              <Link href="/customer-mgmt/transport-catalog" className="underline">Transport Services catalogue</Link>.
+            </FormAlert>
+          )}
           <FormSection title="Categories" icon={Truck} columns={2}>
-            {TRANSPORT_CATEGORIES.map((k) => (
+            {choices.map((k) => (
               <label key={k} className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs cursor-pointer hover:bg-[var(--bg-surface-hover)]">
                 <input type="checkbox" checked={picked.includes(k)} onChange={() => flip(k)} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
                 <span className="font-semibold">{TRANSPORT_CATEGORY_LABEL[k]}</span>
                 {k === 'LOGISTICS' && <span className="text-[10px] text-[var(--text-muted)]">Shipper portal</span>}
+                {!offered.includes(k) && <span className="text-[10px] font-semibold text-amber-600">No longer offered</span>}
               </label>
             ))}
           </FormSection>

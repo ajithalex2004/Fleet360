@@ -654,6 +654,16 @@
    }
   },
   {
+   "prefix": "customers/transport-catalog",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
    "prefix": "debug",
    "read": {
     "kind": "platform"
