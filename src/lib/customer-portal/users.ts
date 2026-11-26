@@ -6,6 +6,12 @@
  * only its SHA-256 hash is stored). Login does not know the tenant yet, so
  * the email lookup runs platform-wide (as the RAC portal does); everything
  * else runs under the tenant's RLS.
+ *
+ * customer_portal_users is shared with the Shipper (SHIPPER_*) and RAC
+ * (RAC_B2B_*) portals, so FSM users are stored with FSM_-prefixed roles and
+ * every query here is limited to those rows. The API and UI keep the short
+ * names (ADMIN / REQUESTER / VIEWER). Contact numbers use the shared `phone`
+ * column.
  */
 
 import crypto from 'crypto';
@@ -19,6 +25,15 @@ export type CustomerPortal = 'FSM' | 'TRANSPORT';
 export const CUSTOMER_PORTALS: CustomerPortal[] = ['FSM', 'TRANSPORT'];
 
 export function isPortalRole(v: unknown): v is PortalRole { return PORTAL_ROLES.includes(v as PortalRole); }
+
+/** Stored role value for an FSM portal role. */
+export const fsmDbRole = (r: PortalRole) => `FSM_${r}`;
+/** SQL condition limiting customer_portal_users rows to FSM portal users. */
+const fsmRows = (alias = '') => `${alias}role IN ('FSM_ADMIN', 'FSM_REQUESTER', 'FSM_VIEWER')`;
+function fromDbRole(raw: string): PortalRole | null {
+  const r = raw.startsWith('FSM_') ? raw.slice(4) : '';
+  return isPortalRole(r) ? r : null;
+}
 export function isCustomerPortal(v: unknown): v is CustomerPortal { return CUSTOMER_PORTALS.includes(v as CustomerPortal); }
 
 export interface PortalUser {
@@ -42,13 +57,13 @@ interface UserRow {
   last_login_at: string | null; created_at: string;
 }
 
-const USER_COLS = `id::text, tenant_id, customer_id, email, full_name, mobile, role, is_active, session_version,
+const USER_COLS = `id::text, tenant_id, customer_id, email, full_name, phone AS mobile, role, is_active, session_version,
   password_hash, last_login_at::text, created_at::text`;
 
 function toUser(r: UserRow): PortalUser {
   return {
     id: r.id, tenantId: r.tenant_id, customerId: r.customer_id, email: r.email, fullName: r.full_name,
-    mobile: r.mobile, role: (isPortalRole(r.role) ? r.role : 'VIEWER'), isActive: r.is_active,
+    mobile: r.mobile, role: fromDbRole(r.role) ?? 'VIEWER', isActive: r.is_active && fromDbRole(r.role) !== null,
     sessionVersion: Number(r.session_version ?? 1), hasPassword: !!r.password_hash,
     lastLoginAt: r.last_login_at, createdAt: r.created_at,
   };
@@ -64,7 +79,7 @@ export async function getPortalUserById(tenantId: string, id: string): Promise<P
   const rows = await withTenantRls(prisma, tenantId, (tx) =>
     tx.$queryRawUnsafe<UserRow[]>(
       `SELECT ${USER_COLS} FROM customer_portal_users
-        WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL AND ${fsmRows()}`,
       id, tenantId,
     ),
   ).catch(() => [] as UserRow[]);
@@ -77,7 +92,8 @@ export async function findActivePortalUsersByEmail(email: string): Promise<Array
     withPlatformAdmin(prisma, (tx) =>
       tx.$queryRawUnsafe<UserRow[]>(
         `SELECT ${USER_COLS} FROM customer_portal_users
-          WHERE lower(email) = lower($1) AND is_active AND deleted_at IS NULL AND password_hash IS NOT NULL`,
+          WHERE lower(email) = lower($1) AND is_active AND deleted_at IS NULL AND password_hash IS NOT NULL
+            AND ${fsmRows()}`,
         email,
       ),
     ),
@@ -131,10 +147,10 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
                 WHERE a.tenant_id = c.tenant_id AND a.customer_id = c.id) AS portals,
               (SELECT COUNT(*)::int FROM customer_portal_users u
                 WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
-                  AND u.is_active AND u.password_hash IS NOT NULL) AS active_users,
+                  AND u.is_active AND u.password_hash IS NOT NULL AND ${fsmRows('u.')}) AS active_users,
               (SELECT COUNT(*)::int FROM customer_portal_users u
                 WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
-                  AND u.is_active AND u.password_hash IS NULL) AS invited_users
+                  AND u.is_active AND u.password_hash IS NULL AND ${fsmRows('u.')}) AS invited_users
          FROM customers c
         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
         ORDER BY c.name_en`,
@@ -174,7 +190,7 @@ export async function listPortalUsers(tenantId: string, customerId: string): Pro
   const rows = await withTenantRls(prisma, tenantId, (tx) =>
     tx.$queryRawUnsafe<UserRow[]>(
       `SELECT ${USER_COLS} FROM customer_portal_users
-        WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL ORDER BY created_at`,
+        WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL AND ${fsmRows()} ORDER BY created_at`,
       tenantId, customerId,
     ),
   );
@@ -211,18 +227,22 @@ export async function invitePortalUser(
     if (existing && existing.customer_id !== customerId) {
       throw new PortalUserError('That email already has portal access for another customer.', 409);
     }
+    if (existing && fromDbRole(existing.role) === null) {
+      // One account per email per tenant: the person already uses the Shipper portal.
+      throw new PortalUserError('That email already has a Shipper portal account. Use a different email for the Field Service portal.', 409);
+    }
     const [row] = existing
       ? await tx.$queryRawUnsafe<UserRow[]>(
           `UPDATE customer_portal_users
-              SET full_name = COALESCE($3, full_name), mobile = COALESCE($4, mobile), role = $5,
+              SET full_name = COALESCE($3, full_name), phone = COALESCE($4, phone), role = $5,
                   is_active = TRUE, updated_at = NOW()
-            WHERE id::text = $1 AND tenant_id = $2 RETURNING ${USER_COLS}`,
-          existing.id, tenantId, fullName, mobile, role,
+            WHERE id::text = $1 AND tenant_id = $2 AND ${fsmRows()} RETURNING ${USER_COLS}`,
+          existing.id, tenantId, fullName, mobile, fsmDbRole(role),
         )
       : await tx.$queryRawUnsafe<UserRow[]>(
-          `INSERT INTO customer_portal_users (tenant_id, customer_id, email, full_name, mobile, role, invited_by_user_id)
+          `INSERT INTO customer_portal_users (tenant_id, customer_id, email, full_name, phone, role, invited_by_user_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${USER_COLS}`,
-          tenantId, customerId, email, fullName, mobile, role, invitedBy,
+          tenantId, customerId, email, fullName, mobile, fsmDbRole(role), invitedBy,
         );
     await tx.$executeRawUnsafe(
       `INSERT INTO customer_portal_invitations (tenant_id, portal_user_id, token_hash, expires_at, invited_by_user_id)
@@ -245,9 +265,9 @@ export async function updatePortalUser(
       `UPDATE customer_portal_users
           SET role = COALESCE($3, role), is_active = COALESCE($4, is_active),
               session_version = session_version + 1, updated_at = NOW()
-        WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL
+        WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL AND ${fsmRows()}
         RETURNING ${USER_COLS}`,
-      id, tenantId, role, isActive,
+      id, tenantId, role ? fsmDbRole(role) : null, isActive,
     ),
   );
   if (!row) throw new PortalUserError('Portal user not found.', 404);
@@ -269,7 +289,7 @@ export async function resolvePortalInvitation(rawToken: string): Promise<{ email
            JOIN customer_portal_users u ON u.id = i.portal_user_id AND u.tenant_id = i.tenant_id
            LEFT JOIN customers c ON c.id = u.customer_id AND c.tenant_id = u.tenant_id
           WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > NOW()
-            AND u.is_active AND u.deleted_at IS NULL
+            AND u.is_active AND u.deleted_at IS NULL AND ${fsmRows('u.')}
           LIMIT 1`,
         hashToken(rawToken),
       ),
@@ -285,16 +305,18 @@ export async function acceptPortalInvitation(rawToken: string, passwordHash: str
   return runOutsideRlsScope(() =>
     withPlatformAdmin(prisma, async (tx) => {
       const [inv] = await tx.$queryRawUnsafe<Array<{ id: string; tenant_id: string; portal_user_id: string }>>(
-        `SELECT id::text, tenant_id, portal_user_id::text FROM customer_portal_invitations
-          WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > NOW()
-          LIMIT 1 FOR UPDATE`,
+        `SELECT i.id::text, i.tenant_id, i.portal_user_id::text FROM customer_portal_invitations i
+          WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > NOW()
+            AND EXISTS (SELECT 1 FROM customer_portal_users u
+                         WHERE u.id = i.portal_user_id AND u.tenant_id = i.tenant_id AND ${fsmRows('u.')})
+          LIMIT 1 FOR UPDATE OF i`,
         hashToken(rawToken),
       );
       if (!inv) return null;
       const [row] = await tx.$queryRawUnsafe<UserRow[]>(
         `UPDATE customer_portal_users
             SET password_hash = $1, session_version = session_version + 1, updated_at = NOW()
-          WHERE id::text = $2 AND tenant_id = $3 AND is_active AND deleted_at IS NULL
+          WHERE id::text = $2 AND tenant_id = $3 AND is_active AND deleted_at IS NULL AND ${fsmRows()}
           RETURNING ${USER_COLS}`,
         passwordHash, inv.portal_user_id, inv.tenant_id,
       );

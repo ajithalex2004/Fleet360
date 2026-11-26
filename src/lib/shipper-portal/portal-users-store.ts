@@ -50,6 +50,11 @@ const SELECT = `id::text, tenant_id, customer_id, email, full_name, phone,
   password_hash, is_active, role,
   last_login_at::text, created_at::text, updated_at::text`;
 
+/** Rows owned by the FSM Customer Portal (see src/lib/customer-portal/users.ts). */
+export function isFsmPortalRole(role: string | null | undefined): boolean {
+  return typeof role === 'string' && role.startsWith('FSM_');
+}
+
 function rowToApi(r: Row): PortalUser {
   return {
     id: r.id,
@@ -59,7 +64,9 @@ function rowToApi(r: Row): PortalUser {
     fullName: r.full_name,
     phone: r.phone,
     hasPassword: !!r.password_hash,
-    isActive: r.is_active,
+    // customer_portal_users is shared with the FSM Customer Portal (FSM_* roles);
+    // those accounts can never sign in here.
+    isActive: r.is_active && !isFsmPortalRole(r.role),
     role: (r.role as PortalRole) ?? 'SHIPPER_USER',
     lastLoginAt: r.last_login_at,
     createdAt: r.created_at,
@@ -182,6 +189,7 @@ export async function listPortalUsersByCustomer(
   const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
       `SELECT ${SELECT} FROM customer_portal_users
         WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL
+          AND left(role, 4) <> 'FSM_'
         ORDER BY created_at DESC`,
       tenantId, customerId,
   ));
