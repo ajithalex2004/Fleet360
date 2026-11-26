@@ -739,7 +739,7 @@ export default function AllocationsPage() {
 
             {/* Section 1: Vehicle Selection (Dropdown) */}
             <div>
-              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5" /> 1. Select Vehicle
               </p>
               <div>
@@ -772,7 +772,7 @@ export default function AllocationsPage() {
 
             {/* Section 2: Hierarchy Allocation (Region --> Department --> Unit) */}
             <div>
-              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" /> 2. Allocated Organizational Hierarchy
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -855,7 +855,7 @@ export default function AllocationsPage() {
 
             {/* Section 3: Dates & Details */}
             <div>
-              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" /> 3. Schedule & Authorization
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -937,7 +937,7 @@ export default function AllocationsPage() {
                 Allocated To: <strong className="text-[var(--text-main)]">{returningAlloc.allocatedToName}</strong>
               </div>
               <div className="text-[var(--text-muted)]">
-                Mileage at Outgoing: <strong className="font-mono text-orange-400">{Number(returningAlloc.mileageAtAllocation || 0).toLocaleString()} km</strong>
+                Mileage at Outgoing: <strong className="font-mono text-blue-400">{Number(returningAlloc.mileageAtAllocation || 0).toLocaleString()} km</strong>
               </div>
             </div>
 

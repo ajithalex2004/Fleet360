@@ -285,7 +285,7 @@ export default function VehicleTypesPage() {
 
             {/* Basic Info */}
             <div>
-              <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Basic Information</h3>
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4">Basic Information</h3>
 
               {/* ── Smart Detection Banner ── */}
               {detectedInfo && !detectedDismissed && (() => {
@@ -422,7 +422,7 @@ export default function VehicleTypesPage() {
                 <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                   Vehicle Class
                   {form.vehicleGroup && !autoFilledFields.has('vehicleClass') && (
-                    <span className="text-orange-400/60 normal-case font-normal">
+                    <span className="text-blue-400/60 normal-case font-normal">
                       ({GROUP_CLASS_MAP[form.vehicleGroup]?.length ?? 0} for {form.vehicleGroup.replace(/_/g, ' ')})
                     </span>
                   )}
@@ -482,7 +482,7 @@ export default function VehicleTypesPage() {
 
             {/* Cost Parameters */}
             <div>
-              <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4">
                 Cost Parameters
                 {(autoFilledFields.has('costPerKm') || autoFilledFields.has('idleFuelConsumption') || autoFilledFields.has('co2EmissionFactor')) && (
                   <span className="ml-3 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full font-medium normal-case">
@@ -528,7 +528,7 @@ export default function VehicleTypesPage() {
               </FormField>
               <div className="flex flex-col justify-center">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-orange-500' : 'bg-[var(--bg-surface-hover)]'}`}
+                  <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-blue-500' : 'bg-[var(--bg-surface-hover)]'}`}
                     onClick={() => f('isActive', !form.isActive)}>
                     <div className={`w-5 h-5 bg-white rounded-full m-0.5 transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-0'}`} />
                   </div>

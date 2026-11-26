@@ -747,7 +747,7 @@ export default function TransfersPage() {
             {/* Vehicle Selection with Autopopulate */}
             <div className="bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Car className="w-4 h-4" /> Select Fleet Vehicle *
                 </label>
                 {selectedVehicleObj && (
@@ -808,7 +808,7 @@ export default function TransfersPage() {
 
             {/* Branch Routing */}
             <div>
-              <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" /> Transfer Route & Date
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -868,7 +868,7 @@ export default function TransfersPage() {
 
             {/* Personnel (Requested By & Approved By with Employee ID) */}
             <div>
-              <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5" /> Operations Personnel
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -916,7 +916,7 @@ export default function TransfersPage() {
 
             {/* Transfer Reason */}
             <div>
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
                 <Tag className="w-3.5 h-3.5" /> Transfer Reason *
               </label>
 
@@ -953,7 +953,7 @@ export default function TransfersPage() {
 
             {/* Vehicle Condition at Dispatch */}
             <div>
-              <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
                 <Gauge className="w-3.5 h-3.5" /> Dispatch Condition Telemetry
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

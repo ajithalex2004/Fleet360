@@ -981,7 +981,7 @@ export default function DriverProfilesPage() {
 
                 {/* Section A: Driver Classification & Category */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4">
-                  <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                     <Truck className="w-4 h-4" /> Driver Category &amp; Classification *
                   </h3>
 
@@ -1087,7 +1087,7 @@ export default function DriverProfilesPage() {
 
                 {/* Section B: Personal Details */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4">
-                  <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                     <User className="w-4 h-4" /> Personal Information
                   </h3>
 
@@ -1296,9 +1296,9 @@ export default function DriverProfilesPage() {
                 </div>
 
                 {/* Section C: User Credentials & Mobile App Sign In */}
-                <div className="bg-gradient-to-br from-indigo-950/30 to-purple-950/20 border border-indigo-500/30 rounded-xl p-5 space-y-4">
+                <div className="bg-gradient-to-br from-blue-950/30 to-blue-950/20 border border-blue-500/30 rounded-xl p-5 space-y-4">
                   <div>
-                    <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                       <Lock className="w-4 h-4" /> Driver App Password &amp; User Profile Mapping
                     </h3>
                     <p className="text-xs text-[var(--text-muted)] mt-1">
@@ -1387,7 +1387,7 @@ export default function DriverProfilesPage() {
               <div className="space-y-6">
 
                 {/* License Upload & AI Auto-Populate Banner */}
-                <div className="bg-gradient-to-r from-cyan-950/40 via-teal-950/30 to-indigo-950/40 border border-cyan-500/30 rounded-2xl p-5 shadow-sm">
+                <div className="bg-gradient-to-r from-cyan-950/40 via-blue-950/30 to-blue-950/40 border border-cyan-500/30 rounded-2xl p-5 shadow-sm">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-bold text-cyan-300 flex items-center gap-2">
@@ -1419,7 +1419,7 @@ export default function DriverProfilesPage() {
                 {/* Driving License Details */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                       <CreditCard className="w-4 h-4" /> Driving License Details *
                     </h4>
                     <span className="text-[11px] text-[var(--text-faint)]">Required for active compliance</span>
@@ -1458,7 +1458,7 @@ export default function DriverProfilesPage() {
                 {/* Emirates ID */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                       <FileText className="w-4 h-4" /> Emirates ID
                     </h4>
                     <label className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:underline cursor-pointer">
@@ -1499,7 +1499,7 @@ export default function DriverProfilesPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] flex items-center gap-1.5">
                         <FileCheck className="w-4 h-4" /> Additional Documents &amp; Permits
                       </h4>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">

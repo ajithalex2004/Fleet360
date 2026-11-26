@@ -1607,7 +1607,7 @@ export default function VehiclesPage() {
             <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] space-y-2.5">
               <div>
                 <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-violet-400" />
+                  <Smartphone className="w-3.5 h-3.5 text-blue-400" />
                   Send to Driver Smartphone
                 </h4>
                 <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
@@ -1620,7 +1620,7 @@ export default function VehiclesPage() {
                   href={`/driver-app?vehicle=${encodeURIComponent(mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate || mobileTrackingModalVehicle.vehicleCode || '')}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex-1 py-2 px-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
+                  className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   Open Driver App
@@ -2256,7 +2256,7 @@ export default function VehiclesPage() {
           <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
             {(['basic', 'fleet', 'documents'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
-                className={`px-6 py-3 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                className={`px-6 py-3 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-blue-500 text-blue-500' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                 {t === 'basic' ? '📋 Basic Details' : t === 'fleet' ? '🚗 Fleet Assignment' : '📄 Documents & Permits'}
               </button>
             ))}
@@ -2264,7 +2264,7 @@ export default function VehiclesPage() {
 
           {/* Modal Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs">{error}</div>}
+            {error && <FormAlert>{error}</FormAlert>}
 
             {/* TAB: Basic Details */}
             {tab === 'basic' && (
@@ -2273,7 +2273,7 @@ export default function VehiclesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                   <div className="md:col-span-2 space-y-4">
                     <div>
-                      <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-2">Vehicle Identification</h3>
+                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-2">Vehicle Identification</h3>
                       <p className="text-xs text-[var(--text-muted)]">
                         Enter vehicle identifiers manually or upload a Mulkiya / Registration card on the right for instant AI autofill.
                       </p>
@@ -2377,13 +2377,13 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Right Corner: Mulkiya / Registration Copy Attachment Card */}
-                  <div className="bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-[var(--bg-surface-hover)] border-2 border-dashed border-orange-500/30 hover:border-orange-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between h-full">
+                  <div className="bg-gradient-to-br from-blue-500/10 via-amber-500/5 to-[var(--bg-surface-hover)] border-2 border-dashed border-blue-500/30 hover:border-blue-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between h-full">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5" /> Attach Mulkiya
                         </span>
-                        <span className="text-[10px] font-semibold bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
+                        <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
                           AI Autofill
                         </span>
                       </div>
@@ -2421,7 +2421,7 @@ export default function VehiclesPage() {
                       {form.mulkiyaFileName ? (
                         <div className="p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 overflow-hidden">
-                            <FileText className="w-4 h-4 text-orange-400 shrink-0" />
+                            <FileText className="w-4 h-4 text-blue-400 shrink-0" />
                             <span className="text-xs font-medium text-[var(--text-main)] truncate font-mono">
                               {form.mulkiyaFileName}
                             </span>
@@ -2430,7 +2430,7 @@ export default function VehiclesPage() {
                             type="button"
                             onClick={() => mulkiyaInputRef.current?.click()}
                             disabled={mulkiyaScanning}
-                            className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 shrink-0"
+                            className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 shrink-0"
                           >
                             Replace
                           </button>
@@ -2440,11 +2440,11 @@ export default function VehiclesPage() {
                           type="button"
                           onClick={() => mulkiyaInputRef.current?.click()}
                           disabled={mulkiyaScanning}
-                          className="w-full py-3 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-400 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2"
+                          className="w-full py-3 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-400 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2"
                         >
                           {mulkiyaScanning ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                               <span>Reading Mulkiya with AI…</span>
                             </>
                           ) : (
@@ -2460,7 +2460,7 @@ export default function VehiclesPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Registration & Number Plate</h3>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4">Registration & Number Plate</h3>
                   <div className="grid grid-cols-4 gap-4">
                     <FormField label="Emirate">
                       <SelectInput value={form.emirate ?? 'DUBAI'} onChange={e => f('emirate', e.target.value)}>
@@ -2501,7 +2501,7 @@ export default function VehiclesPage() {
                 </FormSection>
 
                 <div>
-                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Acquisition & Initial Odometer</h3>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4">Acquisition & Initial Odometer</h3>
                   <div className="grid grid-cols-4 gap-4">
                     <FormField label="Acquisition Type">
                       <SelectInput value={form.acquisitionType ?? 'PURCHASE'} onChange={e => f('acquisitionType', e.target.value)}>
@@ -2555,7 +2555,7 @@ export default function VehiclesPage() {
 
 
                 <div>
-                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4 flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5" /> Organizational Hierarchy (Region → Department → Unit)
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2624,7 +2624,7 @@ export default function VehiclesPage() {
                 </FormSection>
 
                 <div>
-                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4 flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5" /> Driver & Operational Zone
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2673,7 +2673,7 @@ export default function VehiclesPage() {
                   {/* Primary Section: Vehicle Registration & Insurance */}
                   <div className="space-y-3">
                     <div>
-                      <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Vehicle Registration & Insurance</h3>
+                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)]">Vehicle Registration & Insurance</h3>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         Primary mandatory registration (Mulkiya) and comprehensive insurance policy documentation.
                       </p>
@@ -2689,7 +2689,7 @@ export default function VehiclesPage() {
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <FileCheck className="w-4 h-4 text-orange-400 shrink-0" />
+                                <FileCheck className="w-4 h-4 text-blue-400 shrink-0" />
                                 <span className="font-bold text-xs sm:text-sm text-[var(--text-main)] tracking-tight">
                                   {doc.name}
                                 </span>
@@ -2748,9 +2748,9 @@ export default function VehiclesPage() {
                                         {doc.fileName || 'Attach File (AI Read)'}
                                       </span>
                                       {isScanning ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400 shrink-0" />
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
                                       ) : (
-                                        <Upload className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                                        <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                       )}
                                     </div>
                                   </label>
@@ -2767,7 +2767,7 @@ export default function VehiclesPage() {
                   <div className="space-y-3 pt-5 border-t border-[var(--border-subtle)]">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Additional Documents and Permits</h3>
+                        <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)]">Additional Documents and Permits</h3>
                         <p className="text-xs text-[var(--text-muted)] mt-0.5">
                           Attach custom authority permits, civil defense certificates, commercial transport permits, or GPS certifications.
                         </p>
@@ -2775,7 +2775,7 @@ export default function VehiclesPage() {
                       <button
                         type="button"
                         onClick={addCustomDocument}
-                        className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+                        className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
                       >
                         <Plus className="w-3.5 h-3.5" /> Add Document
                       </button>
@@ -2787,7 +2787,7 @@ export default function VehiclesPage() {
                         <button
                           type="button"
                           onClick={addCustomDocument}
-                          className="inline-flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 font-semibold"
+                          className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-semibold"
                         >
                           <Plus className="w-3.5 h-3.5" /> Add Document / Permit
                         </button>
@@ -2803,7 +2803,7 @@ export default function VehiclesPage() {
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <FileCheck className="w-4 h-4 text-orange-400 shrink-0" />
+                                  <FileCheck className="w-4 h-4 text-blue-400 shrink-0" />
                                   <TextInput
                                     type="text"
                                     value={doc.name}
@@ -2872,9 +2872,9 @@ export default function VehiclesPage() {
                                           {doc.fileName || 'Attach File (AI Read)'}
                                         </span>
                                         {isScanning ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400 shrink-0" />
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
                                         ) : (
-                                          <Upload className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                                          <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                         )}
                                       </div>
                                     </label>
@@ -2903,11 +2903,10 @@ export default function VehiclesPage() {
             </div>
             <div className="flex items-center gap-3">
               {error && <span className="text-xs text-rose-400 font-semibold bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/30 max-w-xs truncate">{error}</span>}
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
-              <button onClick={handleSave} disabled={saving}
-                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm">
+              <SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>
+              <PrimaryButton onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : editing ? 'Update Vehicle' : 'Add Vehicle'}
-              </button>
+              </PrimaryButton>
             </div>
           </div>
         </FormModal>

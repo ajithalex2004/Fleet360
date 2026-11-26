@@ -306,7 +306,7 @@ export default function LifecyclePage() {
 
             {/* Stage Transition */}
             <div>
-              <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Stage Transition</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-4">Stage Transition</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="From Stage">
                   <TextInput
@@ -329,7 +329,7 @@ export default function LifecyclePage() {
                 <div className="mt-3 flex items-center gap-2 text-sm">
                   <span className="text-[var(--text-faint)] text-xs">Preview:</span>
                   {formData.fromStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.fromStage}</span>}
-                  {formData.fromStage && formData.toStage && <span className="text-orange-400">→</span>}
+                  {formData.fromStage && formData.toStage && <span className="text-blue-400">→</span>}
                   {formData.toStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.toStage}</span>}
                 </div>
               )}
