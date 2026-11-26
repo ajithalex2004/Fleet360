@@ -67,16 +67,14 @@ async function handlePOST(req: NextRequest) {
   const customerId = String(body.customerId ?? '');
   if (!customerId) return NextResponse.json({ ok: false, error: 'customerId is required' }, { status: 400 });
   try {
-    const { account, rawToken, expiresAt, setupPortal } = await inviteCustomerUser(auth.tenantId, customerId, body, auth.userId);
+    const { account, rawToken, expiresAt } = await inviteCustomerUser(auth.tenantId, customerId, body, auth.userId);
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalUser',
       entityId: account.id, entityName: account.email, action: 'CREATE',
       details: `Invited ${account.email} (${rolesText(account)}) to the Customer Portal for customer ${customerId}`,
     });
-    // FSM users finish setup in the Customer Portal; Transport-only users in
-    // the Shipper portal (the Transport portal's Logistics category).
-    const setupPath = setupPortal === 'FSM' ? '/customer-portal/setup' : '/shipper-portal/setup';
-    const setupUrl = rawToken ? `${appOrigin(req)}${setupPath}?token=${encodeURIComponent(rawToken)}` : null;
+    // Every portal user (Field Services and Transport) finishes setup in the Customer Portal.
+    const setupUrl = rawToken ? `${appOrigin(req)}/customer-portal/setup?token=${encodeURIComponent(rawToken)}` : null;
     return NextResponse.json({ ok: true, user: account, setupUrl, expiresAt }, { status: 201 });
   } catch (err) {
     if (err instanceof PortalUserError) return NextResponse.json({ ok: false, error: err.message }, { status: err.status });

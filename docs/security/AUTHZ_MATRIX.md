@@ -24,7 +24,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `assets/ble/ingest` | 1 | external | external |
 | `auth` | 16 | self | self |
 | `billing` | 4 | tenant-admin | tenant-admin |
-| `booking-portal` | 4 | module `booking-portal` | module `booking-portal` |
+| `booking-portal` | 5 | module `booking-portal` | module `booking-portal` |
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |
 | `branch-staff` | 1 | self | self |
 | `branding` | 1 | external | external |
@@ -36,7 +36,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `cron` | 2 | external | external |
 | `customer` | 3 | self | self |
 | `customer-hierarchy` | 2 | module `customer-mgmt` | module `customer-mgmt` |
-| `customer-portal` | 11 | external | external |
+| `customer-portal` | 14 | external | external |
 | `customers` | 4 | module `customer-mgmt` | module `customer-mgmt` |
 | `customers/portal-access` | 1 | module `customer-mgmt` | tenant-admin |
 | `customers/portal-users` | 1 | module `customer-mgmt` | tenant-admin |

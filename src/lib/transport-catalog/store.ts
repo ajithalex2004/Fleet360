@@ -105,3 +105,23 @@ export async function updateTenantCategory(
   });
   return toTenantCategory(def, rows.get(category));
 }
+
+/**
+ * The Transport categories a customer can request: given to the customer in
+ * onboarding (customer_portal_access.categories) and still offered by the
+ * tenant. Empty when the customer has no Transport portal.
+ */
+export async function customerTransportCategories(tenantId: string, customerId: string): Promise<TenantCategory[]> {
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const [access] = await tx.$queryRawUnsafe<Array<{ categories: string[] }>>(
+      `SELECT categories FROM customer_portal_access
+        WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'TRANSPORT'`,
+      tenantId, customerId,
+    );
+    if (!access) return [];
+    const rows = await rowsFor(tx, tenantId);
+    return TRANSPORT_CATEGORIES
+      .filter((c) => access.categories.includes(c) && rows.get(c)?.enabled)
+      .map((c) => toTenantCategory(CATEGORY_DEFINITIONS[c], rows.get(c)));
+  });
+}

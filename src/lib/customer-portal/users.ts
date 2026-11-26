@@ -13,8 +13,9 @@
  * not know the tenant yet, so the email lookup runs platform-wide (as the RAC
  * portal does); everything else runs under the tenant's RLS.
  *
- * The FSM portal functions below (getPortalUserById, login lookup, invite
- * acceptance) only see accounts that hold an FSM role.
+ * Sign-in, the session check and invite acceptance work for an account with
+ * a role in any portal; each portal's routes then require a role there
+ * (requireCustomerPortal in ./session.ts).
  */
 
 import crypto from 'crypto';
@@ -33,7 +34,7 @@ export {
 } from './catalog';
 
 
-/** An account as the FSM portal sees it (role = its FSM role). */
+/** A signed-in account with its role in each portal it may use. */
 export interface PortalUser {
   id: string;
   tenantId: string;
@@ -41,7 +42,7 @@ export interface PortalUser {
   email: string;
   fullName: string | null;
   mobile: string | null;
-  role: PortalRole;
+  roles: Partial<Record<CustomerPortal, PortalRole>>;
   isActive: boolean;
   sessionVersion: number;
   hasPassword: boolean;
@@ -62,18 +63,14 @@ export interface PortalAccount {
   roles: Partial<Record<CustomerPortal, PortalRole>>;
 }
 
-interface UserRow {
+interface AccountRow {
   id: string; tenant_id: string; customer_id: string; email: string; full_name: string | null; mobile: string | null;
-  role: string; is_active: boolean; session_version: number; password_hash?: string | null;
-  last_login_at: string | null; created_at: string;
+  is_active: boolean; session_version: number; password_hash?: string | null;
+  last_login_at: string | null; created_at: string; roles: Record<string, string> | null;
 }
-interface AccountRow extends Omit<UserRow, 'role'> { roles: Record<string, string> | null }
 
-/** FSM accounts: the account joined to its FSM role. */
-const FSM_FROM = `customer_portal_users u
-  JOIN customer_portal_user_roles r ON r.portal_user_id = u.id AND r.portal = 'FSM'`;
-const USER_COLS = `u.id::text, u.tenant_id, u.customer_id, u.email, u.full_name, u.phone AS mobile, r.role,
-  u.is_active, u.session_version, u.password_hash, u.last_login_at::text, u.created_at::text`;
+/** The account holds a role in at least one portal. */
+const HAS_ROLE = `EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id)`;
 const ACCOUNT_COLS = `u.id::text, u.tenant_id, u.customer_id, u.email, u.full_name, u.phone AS mobile,
   u.is_active, u.session_version, u.password_hash, u.last_login_at::text, u.created_at::text,
   (SELECT jsonb_object_agg(r.portal, r.role) FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id) AS roles`;
@@ -81,20 +78,25 @@ const ACCOUNT_COLS = `u.id::text, u.tenant_id, u.customer_id, u.email, u.full_na
 /** Stored in the legacy, unread role column of new accounts (it is NOT NULL). */
 const LEGACY_ROLE_VALUE = 'CUSTOMER_PORTAL';
 
-function toUser(r: UserRow): PortalUser {
+function rolesOf(r: AccountRow): Partial<Record<CustomerPortal, PortalRole>> {
+  const roles: Partial<Record<CustomerPortal, PortalRole>> = {};
+  for (const [p, role] of Object.entries(r.roles ?? {})) {
+    if (isCustomerPortal(p) && isPortalRole(role)) roles[p] = role;
+  }
+  return roles;
+}
+
+function toUser(r: AccountRow): PortalUser {
   return {
     id: r.id, tenantId: r.tenant_id, customerId: r.customer_id, email: r.email, fullName: r.full_name,
-    mobile: r.mobile, role: isPortalRole(r.role) ? r.role : 'VIEWER', isActive: r.is_active,
+    mobile: r.mobile, roles: rolesOf(r), isActive: r.is_active,
     sessionVersion: Number(r.session_version ?? 1), hasPassword: !!r.password_hash,
     lastLoginAt: r.last_login_at, createdAt: r.created_at,
   };
 }
 
 function toAccount(r: AccountRow): PortalAccount {
-  const roles: PortalAccount['roles'] = {};
-  for (const [p, role] of Object.entries(r.roles ?? {})) {
-    if (isCustomerPortal(p) && isPortalRole(role)) roles[p] = role;
-  }
+  const roles = rolesOf(r);
   return {
     id: r.id, email: r.email, fullName: r.full_name, mobile: r.mobile, isActive: r.is_active,
     hasPassword: !!r.password_hash, lastLoginAt: r.last_login_at, createdAt: r.created_at, roles,
@@ -105,26 +107,27 @@ export class PortalUserError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-// ── FSM portal reads ───────────────────────────────────────────────────────
+// ── Signed-in account ──────────────────────────────────────────────────────
 
 export async function getPortalUserById(tenantId: string, id: string): Promise<PortalUser | null> {
   const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<UserRow[]>(
-      `SELECT ${USER_COLS} FROM ${FSM_FROM}
+    tx.$queryRawUnsafe<AccountRow[]>(
+      `SELECT ${ACCOUNT_COLS} FROM customer_portal_users u
         WHERE u.id::text = $1 AND u.tenant_id = $2 AND u.deleted_at IS NULL`,
       id, tenantId,
     ),
-  ).catch(() => [] as UserRow[]);
+  ).catch(() => [] as AccountRow[]);
   return rows[0] ? toUser(rows[0]) : null;
 }
 
-/** Active FSM accounts with this email across tenants, with their password hashes (login only). */
+/** Active accounts with a portal role and this email, across tenants, with password hashes (login only). */
 export async function findActivePortalUsersByEmail(email: string): Promise<Array<PortalUser & { passwordHash: string }>> {
   const rows = await runOutsideRlsScope(() =>
     withPlatformAdmin(prisma, (tx) =>
-      tx.$queryRawUnsafe<UserRow[]>(
-        `SELECT ${USER_COLS} FROM ${FSM_FROM}
-          WHERE lower(u.email) = lower($1) AND u.is_active AND u.deleted_at IS NULL AND u.password_hash IS NOT NULL`,
+      tx.$queryRawUnsafe<AccountRow[]>(
+        `SELECT ${ACCOUNT_COLS} FROM customer_portal_users u
+          WHERE lower(u.email) = lower($1) AND u.is_active AND u.deleted_at IS NULL AND u.password_hash IS NOT NULL
+            AND ${HAS_ROLE}`,
         email,
       ),
     ),
@@ -310,8 +313,6 @@ export interface InviteResult {
   /** Null when the account already has a password: the new access works with it. */
   rawToken: string | null;
   expiresAt: string | null;
-  /** Where the setup link should land: FSM portal if granted, else Transport (Shipper). */
-  setupPortal: CustomerPortal;
 }
 
 /**
@@ -384,7 +385,7 @@ export async function inviteCustomerUser(
     const account = await accountById(tx, tenantId, userId);
     if (!account) throw new PortalUserError('Portal user not found.', 404);
     const result = toAccount(account);
-    return { account: result, rawToken, expiresAt, setupPortal: result.roles.FSM ? 'FSM' : 'TRANSPORT' };
+    return { account: result, rawToken, expiresAt };
   });
 }
 
@@ -416,11 +417,11 @@ export async function updateCustomerUser(
   });
 }
 
-// ── Invitations (password setup, FSM portal) ───────────────────────────────
+// ── Invitations (password setup) ───────────────────────────────────────────
 
 function hashToken(raw: string) { return crypto.createHash('sha256').update(raw).digest('hex'); }
 
-/** The invited FSM user for a valid, unused, unexpired token (for the setup page). */
+/** The invited account for a valid, unused, unexpired token (for the setup page). */
 export async function resolvePortalInvitation(rawToken: string): Promise<{ email: string; fullName: string | null; customerName: string } | null> {
   if (!rawToken || rawToken.length > 200) return null;
   const rows = await runOutsideRlsScope(() =>
@@ -429,10 +430,9 @@ export async function resolvePortalInvitation(rawToken: string): Promise<{ email
         `SELECT u.email, u.full_name, c.name_en
            FROM customer_portal_invitations i
            JOIN customer_portal_users u ON u.id = i.portal_user_id AND u.tenant_id = i.tenant_id
-           JOIN customer_portal_user_roles r ON r.portal_user_id = u.id AND r.portal = 'FSM'
            LEFT JOIN customers c ON c.id = u.customer_id AND c.tenant_id = u.tenant_id
           WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > NOW()
-            AND u.is_active AND u.deleted_at IS NULL
+            AND u.is_active AND u.deleted_at IS NULL AND ${HAS_ROLE}
           LIMIT 1`,
         hashToken(rawToken),
       ),
@@ -451,7 +451,7 @@ export async function acceptPortalInvitation(rawToken: string, passwordHash: str
         `SELECT i.id::text, i.tenant_id, i.portal_user_id::text FROM customer_portal_invitations i
           WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > NOW()
             AND EXISTS (SELECT 1 FROM customer_portal_user_roles r
-                         WHERE r.portal_user_id = i.portal_user_id AND r.tenant_id = i.tenant_id AND r.portal = 'FSM')
+                         WHERE r.portal_user_id = i.portal_user_id AND r.tenant_id = i.tenant_id)
           LIMIT 1 FOR UPDATE OF i`,
         hashToken(rawToken),
       );
@@ -473,8 +473,8 @@ export async function acceptPortalInvitation(rawToken: string, passwordHash: str
           WHERE portal_user_id::text = $1 AND tenant_id = $2 AND accepted_at IS NULL`,
         inv.portal_user_id, inv.tenant_id,
       );
-      const [row] = await tx.$queryRawUnsafe<UserRow[]>(
-        `SELECT ${USER_COLS} FROM ${FSM_FROM} WHERE u.id::text = $1 AND u.tenant_id = $2`,
+      const [row] = await tx.$queryRawUnsafe<AccountRow[]>(
+        `SELECT ${ACCOUNT_COLS} FROM customer_portal_users u WHERE u.id::text = $1 AND u.tenant_id = $2`,
         inv.portal_user_id, inv.tenant_id,
       );
       return row ? toUser(row) : null;

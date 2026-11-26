@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { hashPassword, verifyPassword, MAX_PASSWORD_LENGTH } from '@/lib/password-policy';
 import { findActivePortalUsersByEmail, markPortalUserLoggedIn, portalsForCustomer } from '@/lib/customer-portal/users';
-import { buildCustomerPortalCookie, signCustomerPortalSession } from '@/lib/customer-portal/session';
+import { buildCustomerPortalCookie, openablePortals, signCustomerPortalSession } from '@/lib/customer-portal/session';
 import { limitCustomerPortalAuth } from '@/lib/customer-portal/rate-limit';
 
 const GENERIC = 'Invalid email or password';
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     const user = matched[0];
-    const portals = await portalsForCustomer(user.tenantId, user.customerId);
+    const portals = openablePortals(user.roles, await portalsForCustomer(user.tenantId, user.customerId));
     if (portals.length === 0) {
       return NextResponse.json({ ok: false, error: 'No portal is enabled for your company yet' }, { status: 403 });
     }

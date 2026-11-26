@@ -41,13 +41,13 @@ export default function CustomerPortalNewRequest() {
     photosUrl: (id) => `/api/customer-portal/fsm/requests/${id}/attachments`,
     addSiteUrl: () => '/api/customer-portal/fsm/sites',
     addAssetUrl: () => '/api/customer-portal/fsm/assets',
-    canAddSite: me.user.role === 'ADMIN',
-    canAddAsset: me.user.role === 'ADMIN',
+    canAddSite: me.user.roles.FSM === 'ADMIN',
+    canAddAsset: me.user.roles.FSM === 'ADMIN',
     channels: types.channels,
     entitlements: types.entitlements,
   } : null), [types, me]);
 
-  if (me?.user.role === 'VIEWER') {
+  if (me?.user.roles.FSM === 'VIEWER') {
     return <FormAlert tone="info">Your role can view requests but not raise them. Ask your company admin for Requester access.</FormAlert>;
   }
   if (err) return <FormAlert>{err}</FormAlert>;

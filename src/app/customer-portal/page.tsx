@@ -54,7 +54,7 @@ export default function CustomerPortalDashboard() {
       </div>
 
       <Panel title="Active requests" subtitle={me ? `Open requests for ${me.customer.name}` : undefined} icon={Activity} accent="blue"
-        actions={me?.user.role !== 'VIEWER' ? (
+        actions={me?.user.roles.FSM !== 'VIEWER' ? (
           <Link href="/customer-portal/new-request" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500">
             <PlusCircle className="w-4 h-4" /> New request
           </Link>
