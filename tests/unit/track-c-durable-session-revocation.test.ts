@@ -810,8 +810,9 @@ describe('Track C — Adversarial Review Regression Hardening (BLOCKER-1..3, HIG
       expect(state.kv.get(REVOCATION_HYDRATED_KEY)).toBe('1');
       expect(await verifySession(tok)).not.toBeNull();
 
-      // Unconfigured Redis on Railway production -> fails closed even if 'disabled' sentinel is set
+      // Unconfigured Redis on Railway production (either env var name) -> fails closed even if 'disabled' sentinel is set
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'production');
+      vi.stubEnv('RAILWAY_ENVIRONMENT', '');
       vi.stubEnv('UPSTASH_REDIS_REST_URL', 'disabled');
       vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
       state.redisEnabled = false;
@@ -819,21 +820,36 @@ describe('Track C — Adversarial Review Regression Hardening (BLOCKER-1..3, HIG
       expect(await isSessionRevoked(tok)).toBe(true);
       expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(true);
 
-      // Isolated CI next-start (no Railway prod env, blank or explicit 'disabled' Upstash sentinel) -> delegates cleanly to Postgres
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', '');
+      vi.stubEnv('RAILWAY_ENVIRONMENT', 'production');
+      clearRevocationCache();
+      expect(await isSessionRevoked(tok)).toBe(true);
+      expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(true);
+
+      // Non-Railway production with completely unset Upstash vars (not CI, not 'disabled') -> FAILS CLOSED
+      vi.stubEnv('RAILWAY_ENVIRONMENT', '');
+      vi.stubEnv('CI', '');
       vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
       vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+      clearRevocationCache();
+      expect(await isSessionRevoked(tok)).toBe(true);
+      expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(true);
+
+      // Isolated CI next-start (CI=true with empty Upstash vars, OR explicit 'disabled' sentinel) -> delegates cleanly to Postgres
+      vi.stubEnv('CI', 'true');
       clearRevocationCache();
       expect(await isSessionRevoked(tok)).toBe(false);
       expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(false);
 
+      vi.stubEnv('CI', '');
       vi.stubEnv('UPSTASH_REDIS_REST_URL', 'disabled');
       vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
       clearRevocationCache();
       expect(await isSessionRevoked(tok)).toBe(false);
       expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(false);
 
-      // Partial / mismatched Upstash config outside Railway prod -> still fails closed
+      // Partial / mismatched Upstash config (even in CI) -> still fails closed
+      vi.stubEnv('CI', 'true');
       vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://real-redis.upstash.io');
       vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
       clearRevocationCache();
@@ -964,5 +980,18 @@ describe('Track C — Adversarial Review Regression Hardening (BLOCKER-1..3, HIG
     }));
     expect(okRes.status).toBe(200);
     expect(state.revokedTokens.has(`sid:${impSid}`)).toBe(true);
+  });
+
+  it('PRISMA-DEADLOCK-GUARD: bare-prisma revocation checks run strictly inside runWithActiveTx + runWithRlsScope (no tx recursion)', () => {
+    const prismaSource = fs.readFileSync(path.join(process.cwd(), 'src', 'lib', 'prisma.ts'), 'utf8');
+    const matches = [...prismaSource.matchAll(/enforceRequestSessionRevocation/g)];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+    for (const m of matches) {
+      const idx = m.index ?? 0;
+      const preceding = prismaSource.slice(Math.max(0, idx - 350), idx);
+      // Must be preceded by runWithActiveTx + runWithRlsScope inside the same transaction callback
+      expect(preceding).toContain('runWithActiveTx(tx,');
+      expect(preceding).toContain('runWithRlsScope({ tenantId, mode: \'tenant\', tx }');
+    }
   });
 });

@@ -115,7 +115,12 @@ function unavailable(why: unknown): boolean {
 function mustRequireRedisInProduction(): boolean {
   if (process.env.NODE_ENV !== 'production') return false;
   if (process.env.REQUIRE_REDIS_REVOCATION === 'true') return true;
-  if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return true;
+  if (
+    process.env.RAILWAY_ENVIRONMENT_NAME === 'production' ||
+    process.env.RAILWAY_ENVIRONMENT === 'production'
+  ) {
+    return true;
+  }
   const rawUrl = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? '';
   const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? '';
   // Isolated CI / Playwright explicitly disables Upstash via the 'disabled'
@@ -125,11 +130,12 @@ function mustRequireRedisInProduction(): boolean {
   if (rawUrl.toLowerCase() === 'disabled' && rawToken.toLowerCase() === 'disabled') {
     return false;
   }
-  // Partial / malformed Upstash config must fail closed rather than degrade silently.
-  if (Boolean(rawUrl) || Boolean(rawToken)) {
-    return true;
+  if (process.env.CI === 'true' && !rawUrl && !rawToken) {
+    return false;
   }
-  return false;
+  // Non-Railway production runtimes with missing or partial Upstash config
+  // fail closed rather than degrading silently.
+  return true;
 }
 
 /**

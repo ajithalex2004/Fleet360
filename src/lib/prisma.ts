@@ -795,11 +795,15 @@ const prismaClientSingleton = () => {
           // so retrying executes the write at most once.
           await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
           // Enforce durable session revocation on bare-prisma routes too (Track C).
-          const { enforceRequestSessionRevocation } = await import('@/lib/rls');
-          await enforceRequestSessionRevocation(tx as never, tenantId);
-          phase.markExecuting();
+          // Must run INSIDE runWithActiveTx + runWithRlsScope so tx.$queryRawUnsafe
+          // binds to this tx instead of re-entering the raw wrapper recursively.
           const res = await runWithActiveTx(tx, () =>
-            runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => operation(tx)),
+            runWithRlsScope({ tenantId, mode: 'tenant', tx }, async () => {
+              const { enforceRequestSessionRevocation } = await import('@/lib/rls');
+              await enforceRequestSessionRevocation(tx as never, tenantId);
+              phase.markExecuting();
+              return operation(tx);
+            }),
           );
           phase.markCommitting();
           return res;
@@ -950,13 +954,15 @@ const prismaClientSingleton = () => {
             }
             return originalTransaction(async (tx) => {
               await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-              const { enforceRequestSessionRevocation } = await import('@/lib/rls');
-              await enforceRequestSessionRevocation(tx as never, tenantId);
-              phase.markExecuting();
+              // Must run INSIDE runWithActiveTx + runWithRlsScope so tx.$queryRawUnsafe
+              // binds to this tx instead of re-entering this raw wrapper recursively.
               const res = await runWithActiveTx(tx, () =>
-                runWithRlsScope({ tenantId, mode: 'tenant', tx }, () =>
-                  originalRawMethods[method].call(tx, ...args),
-                ),
+                runWithRlsScope({ tenantId, mode: 'tenant', tx }, async () => {
+                  const { enforceRequestSessionRevocation } = await import('@/lib/rls');
+                  await enforceRequestSessionRevocation(tx as never, tenantId);
+                  phase.markExecuting();
+                  return originalRawMethods[method].call(tx, ...args);
+                }),
               );
               phase.markCommitting();
               return res;
