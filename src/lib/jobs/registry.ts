@@ -17,7 +17,6 @@
 
 import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import type { NextRequest } from 'next/server';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
 
 // ── Job definition ────────────────────────────────────────────────────────────
 

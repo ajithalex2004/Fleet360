@@ -112,14 +112,29 @@ function unavailable(why: unknown): boolean {
   return true;
 }
 
+function mustRequireRedisInProduction(): boolean {
+  if (process.env.NODE_ENV !== 'production') return false;
+  if (process.env.REQUIRE_REDIS_REVOCATION === 'true') return true;
+  if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return true;
+  // Partial / malformed Upstash config must fail closed rather than degrade silently.
+  if (
+    Boolean(process.env.UPSTASH_REDIS_REST_URL?.trim()) ||
+    Boolean(process.env.UPSTASH_REDIS_REST_TOKEN?.trim())
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Returns true if the token or its shared `sid` has been explicitly revoked in
- * Redis. In production, any Redis read error or timeout fails closed (true).
+ * Redis. In production, any Redis read error, timeout, missing hydration
+ * sentinel, or missing/broken Redis config on Railway production fails closed.
  */
 export async function isSessionRevoked(token: string, sid?: string | null): Promise<boolean> {
   const redis = getRedis();
   if (!redis) {
-    if (process.env.NODE_ENV === 'production') {
+    if (mustRequireRedisInProduction()) {
       return unavailable('Redis not configured in production');
     }
     return false;
