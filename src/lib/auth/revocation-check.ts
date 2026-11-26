@@ -60,12 +60,15 @@ async function notBeforeFor(userId: string, tenantId: string, now: number): Prom
 
   const redis = getRedis();
   if (!redis) {
+    const rawUrl = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? '';
+    const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? '';
+    const explicitlyDisabled =
+      rawUrl.toLowerCase() === 'disabled' && rawToken.toLowerCase() === 'disabled';
     const requireRedis =
       process.env.NODE_ENV === 'production' &&
       (process.env.REQUIRE_REDIS_REVOCATION === 'true' ||
         process.env.RAILWAY_ENVIRONMENT_NAME === 'production' ||
-        Boolean(process.env.UPSTASH_REDIS_REST_URL?.trim()) ||
-        Boolean(process.env.UPSTASH_REDIS_REST_TOKEN?.trim()));
+        (!explicitlyDisabled && (Boolean(rawUrl) || Boolean(rawToken))));
     if (requireRedis) {
       return unavailable(hit, now, 'Redis not configured in production');
     }

@@ -810,20 +810,35 @@ describe('Track C — Adversarial Review Regression Hardening (BLOCKER-1..3, HIG
       expect(state.kv.get(REVOCATION_HYDRATED_KEY)).toBe('1');
       expect(await verifySession(tok)).not.toBeNull();
 
-      // Unconfigured Redis on Railway production -> fails closed on both blocklist and bulk check
+      // Unconfigured Redis on Railway production -> fails closed even if 'disabled' sentinel is set
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'production');
+      vi.stubEnv('UPSTASH_REDIS_REST_URL', 'disabled');
+      vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
       state.redisEnabled = false;
       clearRevocationCache();
       expect(await isSessionRevoked(tok)).toBe(true);
       expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(true);
 
-      // Isolated CI next-start (no Railway prod env, no Upstash env) -> delegates cleanly to Postgres
+      // Isolated CI next-start (no Railway prod env, blank or explicit 'disabled' Upstash sentinel) -> delegates cleanly to Postgres
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', '');
       vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
       vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
       clearRevocationCache();
       expect(await isSessionRevoked(tok)).toBe(false);
       expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(false);
+
+      vi.stubEnv('UPSTASH_REDIS_REST_URL', 'disabled');
+      vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
+      clearRevocationCache();
+      expect(await isSessionRevoked(tok)).toBe(false);
+      expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(false);
+
+      // Partial / mismatched Upstash config outside Railway prod -> still fails closed
+      vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://real-redis.upstash.io');
+      vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'disabled');
+      clearRevocationCache();
+      expect(await isSessionRevoked(tok)).toBe(true);
+      expect(await isRevokedSince(USER_A, TENANT_A, Date.now())).toBe(true);
     } finally {
       errSpy.mockRestore();
     }

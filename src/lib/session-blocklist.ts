@@ -116,11 +116,17 @@ function mustRequireRedisInProduction(): boolean {
   if (process.env.NODE_ENV !== 'production') return false;
   if (process.env.REQUIRE_REDIS_REVOCATION === 'true') return true;
   if (process.env.RAILWAY_ENVIRONMENT_NAME === 'production') return true;
+  const rawUrl = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? '';
+  const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? '';
+  // Isolated CI / Playwright explicitly disables Upstash via the 'disabled'
+  // sentinel (allowed in src/lib/env.ts) while Postgres durable guards remain
+  // active. Railway production & REQUIRE_REDIS_REVOCATION=true above still
+  // fail closed unconditionally regardless of sentinel values.
+  if (rawUrl.toLowerCase() === 'disabled' && rawToken.toLowerCase() === 'disabled') {
+    return false;
+  }
   // Partial / malformed Upstash config must fail closed rather than degrade silently.
-  if (
-    Boolean(process.env.UPSTASH_REDIS_REST_URL?.trim()) ||
-    Boolean(process.env.UPSTASH_REDIS_REST_TOKEN?.trim())
-  ) {
+  if (Boolean(rawUrl) || Boolean(rawToken)) {
     return true;
   }
   return false;
