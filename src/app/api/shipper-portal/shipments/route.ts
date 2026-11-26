@@ -175,6 +175,9 @@ interface IncomingBody {
 export async function POST(req: NextRequest) {
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
+  if (auth.user.transportRole === 'VIEWER') {
+    return NextResponse.json({ error: 'Your role can view shipments but not submit requests' }, { status: 403 });
+  }
 
   let body: IncomingBody;
   try { body = (await req.json()) as IncomingBody; }

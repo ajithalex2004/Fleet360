@@ -5,6 +5,13 @@
  * lazy-init schema doesn't require a Prisma migration). All queries are
  * tenant-scoped — there is no path to read or write a portal user across
  * tenant boundaries.
+ *
+ * Accounts are shared with the FSM Customer Portal (one account per person
+ * per tenant, src/lib/customer-portal/users.ts). An account may use this
+ * portal when it holds a TRANSPORT role (customer_portal_user_roles) and its
+ * customer has the Transport portal with the LOGISTICS category
+ * (customer_portal_access). ADMIN maps to SHIPPER_ADMIN, the other roles to
+ * SHIPPER_USER; VIEWER cannot submit shipping requests.
  */
 
 import { prisma } from '@/lib/prisma';
@@ -24,8 +31,11 @@ export interface PortalUser {
   phone: string | null;
   /** True once an invitation has been accepted and a password set. */
   hasPassword: boolean;
+  /** Account active, holds a Transport role, and the customer has Logistics. */
   isActive: boolean;
   role: PortalRole;
+  /** The account's Transport portal role (null: no Transport access). */
+  transportRole: 'ADMIN' | 'REQUESTER' | 'VIEWER' | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -40,19 +50,29 @@ interface Row {
   phone: string | null;
   password_hash: string | null;
   is_active: boolean;
-  role: string;
+  transport_role: string | null;
+  logistics_enabled: boolean;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const SELECT = `id::text, tenant_id, customer_id, email, full_name, phone,
-  password_hash, is_active, role,
-  last_login_at::text, created_at::text, updated_at::text`;
+/** The account (u) with its Transport role (r, may be missing). */
+const FROM = `customer_portal_users u
+  LEFT JOIN customer_portal_user_roles r ON r.portal_user_id = u.id AND r.portal = 'TRANSPORT'`;
 
-/** Rows owned by the FSM Customer Portal (see src/lib/customer-portal/users.ts). */
-export function isFsmPortalRole(role: string | null | undefined): boolean {
-  return typeof role === 'string' && role.startsWith('FSM_');
+const SELECT = `u.id::text, u.tenant_id, u.customer_id, u.email, u.full_name, u.phone,
+  u.password_hash, u.is_active, r.role AS transport_role,
+  EXISTS (SELECT 1 FROM customer_portal_access a
+           WHERE a.tenant_id = u.tenant_id AND a.customer_id = u.customer_id
+             AND a.portal = 'TRANSPORT' AND 'LOGISTICS' = ANY (a.categories)) AS logistics_enabled,
+  u.last_login_at::text, u.created_at::text, u.updated_at::text`;
+
+/** Stored in the legacy, unread role column of new accounts (it is NOT NULL). */
+const LEGACY_ROLE_VALUE = 'CUSTOMER_PORTAL';
+
+function transportRoleOf(v: string | null): PortalUser['transportRole'] {
+  return v === 'ADMIN' || v === 'REQUESTER' || v === 'VIEWER' ? v : null;
 }
 
 function rowToApi(r: Row): PortalUser {
@@ -64,10 +84,9 @@ function rowToApi(r: Row): PortalUser {
     fullName: r.full_name,
     phone: r.phone,
     hasPassword: !!r.password_hash,
-    // customer_portal_users is shared with the FSM Customer Portal (FSM_* roles);
-    // those accounts can never sign in here.
-    isActive: r.is_active && !isFsmPortalRole(r.role),
-    role: (r.role as PortalRole) ?? 'SHIPPER_USER',
+    isActive: r.is_active && transportRoleOf(r.transport_role) !== null && r.logistics_enabled,
+    role: r.transport_role === 'ADMIN' ? 'SHIPPER_ADMIN' : 'SHIPPER_USER',
+    transportRole: transportRoleOf(r.transport_role),
     lastLoginAt: r.last_login_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -94,6 +113,12 @@ function acrossTenants<T>(fn: (tx: TxClient) => Promise<T>): Promise<T> {
 
 // ── CRUD ───────────────────────────────────────────────────────────────────
 
+/**
+ * Creates the account with a Transport role (SHIPPER_ADMIN -> ADMIN, else
+ * REQUESTER), or gives an existing account of the same customer that role.
+ * Inviting a shipper also turns on the customer's Transport portal with the
+ * Logistics category, so the account can sign in here.
+ */
 export async function createPortalUser(args: {
   tenantId: string;
   customerId: string;
@@ -101,27 +126,63 @@ export async function createPortalUser(args: {
   fullName?: string | null;
   phone?: string | null;
   role?: PortalRole;
+  invitedByUserId?: string | null;
 }): Promise<PortalUser> {
-  const rows = await inTenant(args.tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
-      `INSERT INTO customer_portal_users
-         (tenant_id, customer_id, email, full_name, phone, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING ${SELECT}`,
-      args.tenantId,
-      args.customerId,
-      args.email.toLowerCase().trim(),
-      args.fullName?.trim() ?? null,
-      args.phone?.trim() ?? null,
-      args.role ?? 'SHIPPER_USER',
-  ));
+  const transportRole = args.role === 'SHIPPER_ADMIN' ? 'ADMIN' : 'REQUESTER';
+  const rows = await inTenant(args.tenantId, async (tx) => {
+    const [existing] = await tx.$queryRawUnsafe<Array<{ id: string; customer_id: string }>>(
+      `SELECT id::text, customer_id FROM customer_portal_users
+        WHERE tenant_id = $1 AND lower(email) = lower($2) AND deleted_at IS NULL LIMIT 1`,
+      args.tenantId, args.email.trim(),
+    );
+    if (existing && existing.customer_id !== args.customerId) {
+      // Same signal callers already handle for a duplicate email.
+      throw Object.assign(new Error('Portal account belongs to another customer'), { code: '23505' });
+    }
+    let id = existing?.id;
+    if (!id) {
+      const [created] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO customer_portal_users
+           (tenant_id, customer_id, email, full_name, phone, role, invited_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id::text`,
+        args.tenantId,
+        args.customerId,
+        args.email.toLowerCase().trim(),
+        args.fullName?.trim() ?? null,
+        args.phone?.trim() ?? null,
+        LEGACY_ROLE_VALUE,
+        args.invitedByUserId ?? null,
+      );
+      id = created.id;
+    }
+    await tx.$executeRawUnsafe(
+      `INSERT INTO customer_portal_user_roles (tenant_id, portal_user_id, portal, role, granted_by_user_id)
+       VALUES ($1, $2::uuid, 'TRANSPORT', $3, $4)
+       ON CONFLICT (portal_user_id, portal) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()`,
+      args.tenantId, id, transportRole, args.invitedByUserId ?? null,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO customer_portal_access (tenant_id, customer_id, portal, enabled_by, categories)
+       VALUES ($1, $2, 'TRANSPORT', $3, ARRAY['LOGISTICS']::text[])
+       ON CONFLICT (tenant_id, customer_id, portal) DO UPDATE
+         SET categories = CASE WHEN 'LOGISTICS' = ANY (customer_portal_access.categories)
+                               THEN customer_portal_access.categories
+                               ELSE customer_portal_access.categories || ARRAY['LOGISTICS']::text[] END`,
+      args.tenantId, args.customerId, args.invitedByUserId ?? 'shipper-portal-invite',
+    );
+    return tx.$queryRawUnsafe<Row[]>(
+      `SELECT ${SELECT} FROM ${FROM} WHERE u.id = $1::uuid AND u.tenant_id = $2`, id, args.tenantId,
+    );
+  });
   if (!rows[0]) throw new Error('createPortalUser returned no row');
   return rowToApi(rows[0]);
 }
 
 export async function getPortalUserById(tenantId: string, id: string): Promise<PortalUser | null> {
   const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE u.id = $1::uuid AND u.tenant_id = $2 AND u.deleted_at IS NULL
         LIMIT 1`,
       id, tenantId,
   ));
@@ -134,18 +195,18 @@ export async function getPortalUserById(tenantId: string, id: string): Promise<P
 export async function findPortalUserByEmail(email: string, tenantId?: string): Promise<PortalUser | null> {
   if (tenantId) {
     const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE lower(email) = lower($1) AND tenant_id = $2 AND deleted_at IS NULL
-        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE lower(u.email) = lower($1) AND u.tenant_id = $2 AND u.deleted_at IS NULL
+        ORDER BY (u.password_hash IS NOT NULL AND u.is_active = TRUE) DESC, u.created_at DESC
         LIMIT 1`,
       email.trim(), tenantId,
     ));
     return rows[0] ? rowToApi(rows[0]) : null;
   }
   const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE lower(email) = lower($1) AND deleted_at IS NULL
-        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE lower(u.email) = lower($1) AND u.deleted_at IS NULL
+        ORDER BY (u.password_hash IS NOT NULL AND u.is_active = TRUE AND r.role IS NOT NULL) DESC, u.created_at DESC
         LIMIT 1`,
       email.trim(),
   ));
@@ -162,9 +223,9 @@ export async function _findUserWithHashByEmail(
 ): Promise<(PortalUser & { passwordHash: string | null }) | null> {
   if (tenantId) {
     const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE lower(email) = lower($1) AND tenant_id = $2 AND deleted_at IS NULL
-        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE lower(u.email) = lower($1) AND u.tenant_id = $2 AND u.deleted_at IS NULL
+        ORDER BY (u.password_hash IS NOT NULL AND u.is_active = TRUE) DESC, u.created_at DESC
         LIMIT 1`,
       email.trim(), tenantId,
     ));
@@ -172,9 +233,9 @@ export async function _findUserWithHashByEmail(
     return { ...rowToApi(rows[0]), passwordHash: rows[0].password_hash };
   }
   const rows = await acrossTenants((tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE lower(email) = lower($1) AND deleted_at IS NULL
-        ORDER BY (password_hash IS NOT NULL AND is_active = TRUE) DESC, created_at DESC
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE lower(u.email) = lower($1) AND u.deleted_at IS NULL
+        ORDER BY (u.password_hash IS NOT NULL AND u.is_active = TRUE AND r.role IS NOT NULL) DESC, u.created_at DESC
         LIMIT 1`,
       email.trim(),
   ));
@@ -187,10 +248,10 @@ export async function listPortalUsersByCustomer(
   customerId: string,
 ): Promise<PortalUser[]> {
   const rows = await inTenant(tenantId, (tx) => tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${SELECT} FROM customer_portal_users
-        WHERE tenant_id = $1 AND customer_id = $2 AND deleted_at IS NULL
-          AND left(role, 4) <> 'FSM_'
-        ORDER BY created_at DESC`,
+      `SELECT ${SELECT} FROM ${FROM}
+        WHERE u.tenant_id = $1 AND u.customer_id = $2 AND u.deleted_at IS NULL
+          AND r.role IS NOT NULL
+        ORDER BY u.created_at DESC`,
       tenantId, customerId,
   ));
   return rows.map(rowToApi);

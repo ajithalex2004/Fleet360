@@ -57,24 +57,24 @@ export async function GET(req: NextRequest) {
            c.portal_tracking_level,
            (
              SELECT COUNT(*)::bigint FROM customer_portal_users u
-              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND left(u.role, 4) <> 'FSM_'
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id AND r.portal = 'TRANSPORT')
                 AND u.deleted_at IS NULL AND u.is_active = TRUE
                 AND u.password_hash IS NOT NULL
            ) AS active_users,
            (
              SELECT COUNT(*)::bigint FROM customer_portal_users u
-              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND left(u.role, 4) <> 'FSM_'
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id AND r.portal = 'TRANSPORT')
                 AND u.deleted_at IS NULL AND u.password_hash IS NULL
            ) AS pending_users,
            (
              SELECT COUNT(*)::bigint FROM customer_portal_invitations i
               JOIN customer_portal_users u ON u.id = i.portal_user_id
-              WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id AND left(u.role, 4) <> 'FSM_'
+              WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id AND r.portal = 'TRANSPORT')
                 AND i.accepted_at IS NULL AND i.expires_at > NOW()
            ) AS pending_invitations,
            (
              SELECT MAX(u.last_login_at)::text FROM customer_portal_users u
-              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND left(u.role, 4) <> 'FSM_'
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id AND r.portal = 'TRANSPORT')
                 AND u.deleted_at IS NULL
            ) AS last_login_at
          FROM customers c

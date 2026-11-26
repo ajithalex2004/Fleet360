@@ -8775,11 +8775,13 @@ const SHIPPER_SELECT = `
          c.portal_tracking_level                AS "trackingLevel",
          (SELECT COUNT(*) FROM customer_portal_users u
            WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
-             AND u.is_active AND u.password_hash IS NOT NULL)::int                     AS "activePortalUsers",
+             AND u.is_active AND u.password_hash IS NOT NULL
+             AND EXISTS (SELECT 1 FROM customer_portal_user_roles pr WHERE pr.portal_user_id = u.id AND pr.portal = 'TRANSPORT'))::int AS "activePortalUsers",
          (SELECT COUNT(*) FROM customer_portal_invitations i
             JOIN customer_portal_users u ON u.id = i.portal_user_id
            WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id
-             AND i.accepted_at IS NULL AND i.expires_at > NOW())::int                  AS "pendingPortalUsers",
+             AND i.accepted_at IS NULL AND i.expires_at > NOW()
+             AND EXISTS (SELECT 1 FROM customer_portal_user_roles pr WHERE pr.portal_user_id = u.id AND pr.portal = 'TRANSPORT'))::int AS "pendingPortalUsers",
          (SELECT COUNT(*) FROM logistics_shipment_orders o
            WHERE o.tenant_id = c.tenant_id AND o.cargo_owner_customer_id = c.id
              AND o.deleted_at IS NULL)::int                                            AS "shipmentOrderCount",
@@ -8793,7 +8795,8 @@ const IS_SHIPPER = `(
   EXISTS (SELECT 1 FROM logistics_customer_marketplace_settings s WHERE s.tenant_id = c.tenant_id AND s.customer_id = c.id)
   OR EXISTS (SELECT 1 FROM logistics_shipping_requests r WHERE r.tenant_id = c.tenant_id AND r.shipper_id = c.id AND r.deleted_at IS NULL)
   OR EXISTS (SELECT 1 FROM logistics_shipment_orders o WHERE o.tenant_id = c.tenant_id AND o.cargo_owner_customer_id = c.id AND o.deleted_at IS NULL)
-  OR EXISTS (SELECT 1 FROM customer_portal_users u WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL)
+  OR EXISTS (SELECT 1 FROM customer_portal_users u WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
+               AND EXISTS (SELECT 1 FROM customer_portal_user_roles pr WHERE pr.portal_user_id = u.id AND pr.portal = 'TRANSPORT'))
 )`;
 
 type ShipperRow = Omit<ShipperOnboardingRecord, 'portalEnabled'>;
