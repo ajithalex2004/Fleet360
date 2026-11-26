@@ -42,6 +42,7 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/shipper-portal': 'shipper-portal-session cookie (requireShipperPortal)',
   '/leasing-portal': 'leasing-portal-session cookie (requireLeasingPortal)',
   '/rac-portal': 'rac-portal-session cookie (requireRacPortal)',
+  '/customer-portal': 'customer-portal-session cookie (portal-shell loads /api/customer-portal/me; pages hold no data)',
   '/carrier-portal/': 'carrier invite token',
 
   // APIs
@@ -74,6 +75,7 @@ const PUBLIC_ROUTE_AUTH: Record<string, string> = {
   '/api/shipper-portal/': 'shipper-portal-session cookie (requireShipperPortal)',
   '/api/leasing-portal/': 'leasing-portal-session cookie (requireLeasingPortal)',
   '/api/rac-portal/': 'rac-portal-session cookie (requireRacPortal / requireRacPortalRole)',
+  '/api/customer-portal/': 'customer-portal-session cookie (requireCustomerPortal, role + portal checks); auth/login + auth/setup are rate-limited pre-auth',
   '/api/carrier-portal/': 'carrier invite token',
   '/api/public/partner-driver/': 'per-trip SHA-256 hashed driver capability token (withPartnerTokenTenant)',
   '/api/driver-app/': 'driver-app device session (verified in middleware) / WebAuthn',
