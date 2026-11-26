@@ -91,6 +91,8 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'driver-app': EXTERNAL,
   'leasing-portal': EXTERNAL,
   'rac-portal': EXTERNAL,
+  // Customer Portal (FSM / Transport): own session; requireCustomerPortal() guards every route.
+  'customer-portal': EXTERNAL,
   'carrier-portal': EXTERNAL,
   'shipper-portal': EXTERNAL,
   public: EXTERNAL,
@@ -167,6 +169,9 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'service-tickets/catalog': { read: m('service-tickets'), write: TENANT_ADMIN },
   'service-requests': m('service-tickets'),
   customers: m('customer-mgmt'),
+  // Customer Portal onboarding: module users read, tenant admins grant access and invite users.
+  'customers/portal-access': { read: m('customer-mgmt'), write: TENANT_ADMIN },
+  'customers/portal-users': { read: m('customer-mgmt'), write: TENANT_ADMIN },
   'customer-hierarchy': m('customer-mgmt'),
   kyc: m('customer-mgmt'),
   'booking-portal': m('booking-portal'),

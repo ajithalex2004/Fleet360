@@ -242,6 +242,7 @@ export async function listCustomerAssets(
   const rows = await tx.$queryRawUnsafe<AssetRow[]>(
     `SELECT ${ASSET_COLS} FROM asset_registry
       WHERE tenant_id = $1 AND customer_id = $2 AND COALESCE(is_active, TRUE)
+        AND COALESCE(asset_type, '') <> 'CONSUMABLE'
         AND ($3::text IS NULL OR customer_site_id::text = $3)
       ORDER BY asset_no`,
     tenantId, customerId, siteId ?? null,
@@ -287,3 +288,88 @@ export async function createCustomerAsset(
   );
   return toAsset(row);
 }
+
+// ── Inventory (spare parts held at a customer site) ────────────────────────
+
+export interface CustomerInventoryItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  description: string | null;
+  customerSiteId: string | null;
+  quantity: number;
+  reorderAt: number;
+  unit: string | null;
+}
+
+export async function listCustomerInventory(tx: TxClient, tenantId: string, customerId: string): Promise<CustomerInventoryItem[]> {
+  const rows = await tx.$queryRawUnsafe<Array<{
+    id: string; asset_no: string; name: string; description: string | null; customer_site_id: string | null;
+    current_stock: string | number | null; reorder_threshold: string | number | null; unit_of_measure: string | null;
+  }>>(
+    `SELECT id::text, asset_no, name, description, customer_site_id::text, current_stock, reorder_threshold, unit_of_measure
+       FROM asset_registry
+      WHERE tenant_id = $1 AND customer_id = $2 AND COALESCE(is_active, TRUE) AND asset_type = 'CONSUMABLE'
+      ORDER BY name`,
+    tenantId, customerId,
+  );
+  return rows.map((r) => ({
+    id: r.id, itemNo: r.asset_no, name: r.name, description: r.description, customerSiteId: r.customer_site_id,
+    quantity: Number(r.current_stock ?? 0), reorderAt: Number(r.reorder_threshold ?? 0), unit: r.unit_of_measure,
+  }));
+}
+
+export async function createCustomerInventoryItem(
+  tx: TxClient, tenantId: string, customerId: string, input: Record<string, unknown>,
+): Promise<CustomerInventoryItem> {
+  await getCustomer(tx, tenantId, customerId);
+  const name = text(input.name, 120);
+  if (!name) throw new CustomerContextError('Item name is required.');
+  const quantity = Number(input.quantity ?? 0);
+  const reorderAt = Number(input.reorderAt ?? 0);
+  if (!Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(reorderAt) || reorderAt < 0) {
+    throw new CustomerContextError('Quantity and reorder level must be zero or more.');
+  }
+  const siteId = text(input.customerSiteId, 40);
+  if (siteId) {
+    const site = await getCustomerSite(tx, tenantId, siteId);
+    if (site.customerId !== customerId) throw new CustomerContextError('That site belongs to another customer.');
+  }
+  const [{ n }] = await tx.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT COUNT(*)::int + 1 AS n FROM asset_registry WHERE tenant_id = $1 AND asset_no LIKE 'CI-%'`, tenantId,
+  );
+  const [row] = await tx.$queryRawUnsafe<Array<{ id: string; asset_no: string }>>(
+    `INSERT INTO asset_registry
+       (tenant_id, asset_no, name, description, domain, asset_type, unit_of_measure, current_stock,
+        reorder_threshold, customer_id, customer_site_id, status)
+     VALUES ($1, $2, $3, $4, 'CUSTOMER', 'CONSUMABLE', $5, $6, $7, $8, $9::uuid, 'IN_STOCK')
+     RETURNING id::text, asset_no`,
+    tenantId, `CI-${String(n).padStart(5, '0')}`, name, text(input.description, 300), text(input.unit, 20) ?? 'UNIT',
+    quantity, reorderAt, customerId, siteId,
+  );
+  return {
+    id: row.id, itemNo: row.asset_no, name, description: text(input.description, 300), customerSiteId: siteId,
+    quantity, reorderAt, unit: text(input.unit, 20) ?? 'UNIT',
+  };
+}
+
+// ── Assigned technician (for the customer's request view) ──────────────────
+
+export interface TechnicianContact { name: string; email: string | null; mobile: string | null }
+
+/** assigned_to holds a staff user id, an email, or a name; return what we can show. */
+export async function resolveTechnician(tx: TxClient, assignedTo: string | null): Promise<TechnicianContact | null> {
+  const v = (assignedTo ?? '').trim();
+  if (!v) return null;
+  const [u] = await tx.$queryRawUnsafe<Array<{ firstName: string | null; lastName: string | null; username: string | null; email: string | null; mobileNumber: string | null }>>(
+    `SELECT "firstName", "lastName", username, email, "mobileNumber" FROM "User"
+      WHERE id = $1 OR lower(email) = lower($1) LIMIT 1`,
+    v,
+  ).catch(() => []);
+  if (!u) return { name: v.includes('@') ? v.split('@')[0] : v, email: v.includes('@') ? v : null, mobile: null };
+  return {
+    name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || v,
+    email: u.email, mobile: u.mobileNumber,
+  };
+}
+

@@ -101,6 +101,10 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   '/api/leasing-portal/',
   '/rac-portal',
   '/api/rac-portal/',
+  // Customer Portal — separate auth domain (customer-portal-session cookie);
+  // requireCustomerPortal() guards every protected endpoint.
+  '/customer-portal',
+  '/api/customer-portal/',
   // Carrier portal — token-authed (invite link), no operator session.
   '/carrier-portal/',
   '/api/carrier-portal/',

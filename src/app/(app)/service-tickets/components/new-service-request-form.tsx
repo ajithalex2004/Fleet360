@@ -63,6 +63,33 @@ interface Asset {
 }
 interface Option { value: string; label: string }
 
+/** Where the form reads and writes. Defaults to the staff APIs; the Customer Portal passes its own. */
+export interface RequestFormApi {
+  /** Customer list + channel / entitlement options; null when the customer is fixed (portal). */
+  customersUrl: string | null;
+  contextUrl: (customerId: string) => string;
+  createUrl: string;
+  photosUrl: (ticketId: string) => string;
+  addSiteUrl: (customerId: string) => string;
+  addAssetUrl: (customerId: string) => string;
+  canAddSite: boolean;
+  canAddAsset: boolean;
+  /** Used when customersUrl is null. */
+  channels?: Option[];
+  entitlements?: Option[];
+}
+
+export const STAFF_REQUEST_API: RequestFormApi = {
+  customersUrl: '/api/service-tickets/customers',
+  contextUrl: (id) => `/api/service-tickets/customers/${id}/context`,
+  createUrl: '/api/service-tickets',
+  photosUrl: (id) => `/api/service-tickets/${id}/attachments`,
+  addSiteUrl: (id) => `/api/service-tickets/customers/${id}/sites`,
+  addAssetUrl: (id) => `/api/service-tickets/customers/${id}/assets`,
+  canAddSite: true,
+  canAddAsset: true,
+};
+
 const fmtNow = (d: Date) =>
   d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -75,13 +102,14 @@ function localInput(d: Date) {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function NewServiceRequestForm({
-  enabledTypes, formFieldsByType, typeConfigByType, vehicles, fixedCustomerId, onCreated, onCancel,
+  enabledTypes, formFieldsByType, typeConfigByType, vehicles, fixedCustomerId, onCreated, onCancel, api = STAFF_REQUEST_API,
 }: {
   enabledTypes: TicketType[];
   formFieldsByType: Partial<Record<TicketType, FormFieldDef[]>>;
   typeConfigByType: Partial<Record<TicketType, RequestTypeConfig>>;
   vehicles: RequestVehicleOption[];
   fixedCustomerId?: string;
+  api?: RequestFormApi;
   onCreated: (t: ServiceTicket) => void;
   onCancel: () => void;
 }) {
@@ -123,28 +151,34 @@ export function NewServiceRequestForm({
   }, []);
 
   useEffect(() => {
+    if (!api.customersUrl) {
+      setChannels(api.channels ?? []);
+      setEntitlements(api.entitlements ?? []);
+      return;
+    }
     void (async () => {
-      const res = await fetch('/api/service-tickets/customers');
+      const res = await fetch(api.customersUrl!);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) { setErr(data?.error ?? 'Could not load customers.'); return; }
       setCustomers(data.customers ?? []);
       setChannels(data.channels ?? []);
       setEntitlements(data.entitlements ?? []);
     })();
-  }, []);
+  }, [api]);
 
   const loadContext = async (id: string, keep?: { siteId?: string; assetId?: string }) => {
     setCustomer(null); setSites([]); setAssets([]); setNextRequestNo(null);
     if (!keep) { setSiteId(''); setAssetId(''); }
     if (!id) return;
-    const res = await fetch(`/api/service-tickets/customers/${id}/context`);
+    const res = await fetch(api.contextUrl(id));
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.ok) { setErr(data?.error ?? 'Could not load the customer.'); return; }
     setCustomer(data.customer); setSites(data.sites ?? []); setAssets(data.assets ?? []); setNextRequestNo(data.nextRequestNo);
     if (keep?.siteId) setSiteId(keep.siteId);
     if (keep?.assetId) setAssetId(keep.assetId);
   };
-  useEffect(() => { void loadContext(customerId); }, [customerId]); // loadContext only reads setters
+  // Reload only when the customer changes (loadContext reads the stable api config and setters).
+  useEffect(() => { void loadContext(customerId); }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Types: category first, then a type within it ──
   const typeGroups = useMemo(() => {
@@ -206,7 +240,7 @@ export function NewServiceRequestForm({
     setSubmitting(true);
     try {
       const neededAt = serviceNeededAt ? new Date(serviceNeededAt).toISOString() : undefined;
-      const res = await fetch('/api/service-tickets', {
+      const res = await fetch(api.createUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +266,7 @@ export function NewServiceRequestForm({
       if (photos.length) {
         const fd = new FormData();
         photos.forEach((p) => fd.append('file', p));
-        const up = await fetch(`/api/service-tickets/${ticket.id}/attachments`, { method: 'POST', body: fd });
+        const up = await fetch(api.photosUrl(ticket.id), { method: 'POST', body: fd });
         const upData = await up.json().catch(() => null);
         if (up.ok && upData?.attachments) {
           ticket = { ...ticket, attachments: [...(ticket.attachments ?? []), ...upData.attachments] } as ServiceTicket;
@@ -287,6 +321,9 @@ export function NewServiceRequestForm({
             <SelectInput value={customerId} disabled={!!fixedCustomerId} onChange={(e) => setCustomerId(e.target.value)} aria-label="Customer">
               <option value="">— Select a customer —</option>
               {customers.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+              {fixedCustomerId && customer && !customers.some((c) => c.id === customer.id) && (
+                <option value={customer.id}>{customer.name} ({customer.code})</option>
+              )}
             </SelectInput>
           </FormField>
           <FormField label="Entity / site" required={isFsmType}
@@ -296,7 +333,7 @@ export function NewServiceRequestForm({
                 <option value="">— Select entity / site —</option>
                 {sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.city ? ` · ${s.city}` : ''}</option>)}
               </SelectInput>
-              <SecondaryButton icon={Plus} disabled={!customerId} onClick={() => setAddingSite(true)} title="Add entity / site">Add</SecondaryButton>
+              {api.canAddSite && <SecondaryButton icon={Plus} disabled={!customerId} onClick={() => setAddingSite(true)} title="Add entity / site">Add</SecondaryButton>}
             </div>
           </FormField>
           <FormField label="Site address">
@@ -343,7 +380,7 @@ export function NewServiceRequestForm({
                 <option value="">— Select asset / equipment —</option>
                 {siteAssets.map((a) => <option key={a.id} value={a.id}>{a.assetNo} · {a.name}</option>)}
               </SelectInput>
-              <SecondaryButton icon={Plus} disabled={!customerId} onClick={() => setAddingAsset(true)} title="Register equipment">Add</SecondaryButton>
+              {api.canAddAsset && <SecondaryButton icon={Plus} disabled={!customerId} onClick={() => setAddingAsset(true)} title="Register equipment">Add</SecondaryButton>}
             </div>
           </FormField>
           <FormField label="S.No / Tag ID">
@@ -416,11 +453,11 @@ export function NewServiceRequestForm({
       </FormPanel>
 
       {addingSite && customerId && (
-        <AddSiteDialog customerId={customerId} onClose={() => setAddingSite(false)}
+        <AddSiteDialog url={api.addSiteUrl(customerId)} onClose={() => setAddingSite(false)}
           onSaved={(s) => { setAddingSite(false); void loadContext(customerId, { siteId: s.id }); }} />
       )}
       {addingAsset && customerId && (
-        <AddAssetDialog customerId={customerId} sites={sites} defaultSiteId={siteId} onClose={() => setAddingAsset(false)}
+        <AddAssetDialog url={api.addAssetUrl(customerId)} sites={sites} defaultSiteId={siteId} onClose={() => setAddingAsset(false)}
           onSaved={(a) => { setAddingAsset(false); void loadContext(customerId, { siteId: a.customerSiteId ?? siteId, assetId: a.id }); }} />
       )}
     </form>
@@ -446,7 +483,7 @@ function Dialog({ title, icon: Icon, onClose, children }: { title: string; icon:
   );
 }
 
-function AddSiteDialog({ customerId, onClose, onSaved }: { customerId: string; onClose: () => void; onSaved: (s: Site) => void }) {
+function AddSiteDialog({ url, onClose, onSaved }: { url: string; onClose: () => void; onSaved: (s: Site) => void }) {
   const [f, setF] = useState({ name: '', address: '', city: '', contactPerson: '', contactMobile: '', latitude: '', longitude: '' });
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -458,7 +495,7 @@ function AddSiteDialog({ customerId, onClose, onSaved }: { customerId: string; o
     if (!f.name.trim()) { setErr('Entity / site name is required.'); return; }
     setBusy(true);
     try {
-      const res = await fetch(`/api/service-tickets/customers/${customerId}/sites`, {
+      const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...f, latitude: f.latitude || null, longitude: f.longitude || null }),
       });
@@ -495,8 +532,8 @@ function AddSiteDialog({ customerId, onClose, onSaved }: { customerId: string; o
   );
 }
 
-function AddAssetDialog({ customerId, sites, defaultSiteId, onClose, onSaved }: {
-  customerId: string; sites: Site[]; defaultSiteId: string; onClose: () => void; onSaved: (a: Asset) => void;
+function AddAssetDialog({ url, sites, defaultSiteId, onClose, onSaved }: {
+  url: string; sites: Site[]; defaultSiteId: string; onClose: () => void; onSaved: (a: Asset) => void;
 }) {
   const [f, setF] = useState({ name: '', customerSiteId: defaultSiteId, serialNumber: '', tagId: '', manufacturer: '', model: '', description: '' });
   const [busy, setBusy] = useState(false);
@@ -508,8 +545,8 @@ function AddAssetDialog({ customerId, sites, defaultSiteId, onClose, onSaved }: 
     if (!f.name.trim()) { setErr('Asset / equipment name is required.'); return; }
     setBusy(true);
     try {
-      const res = await fetch(`/api/service-tickets/customers/${customerId}/assets`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f),
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, kind: 'EQUIPMENT' }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.asset) { setErr(data?.error ?? 'Could not register the equipment'); return; }
