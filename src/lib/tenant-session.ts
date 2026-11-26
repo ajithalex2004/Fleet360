@@ -154,6 +154,8 @@ export interface SessionPayload {
   dataResidency?: string;
   /** Effective permissions (src/lib/authz/permission-claim.ts). */
   perms?: PermissionClaim;
+  /** Shared session identifier (UUIDv4), paired with Go backend JWT `jti` for atomic single-device logout. */
+  sid?: string;
   /** Issued at (ms): a revocation invalidates sessions issued before it. */
   iat?: number;
   exp: number;
@@ -168,6 +170,8 @@ export interface VerifiedSession {
   dataResidency?: string;
   /** Effective permissions from the signed claim; null when the session carries none. */
   permissions: string[] | null;
+  /** Shared session identifier (UUIDv4); absent only on legacy pre-Track-C tokens. */
+  sid?: string;
   /** When the session was issued (ms). */
   issuedAt: number;
   /** When the session expires (ms). */
@@ -195,12 +199,17 @@ export async function signSession(payload: {
    * the authorization policy treats a session without them as holding none.
    */
   permissions?: readonly string[];
+  /** Explicit shared session ID (UUIDv4). Defaults to a newly minted UUIDv4. */
+  sid?: string;
   /** Override TTL in ms (default 24 h). Impersonation uses a shorter TTL. */
   ttlMs?: number;
 }): Promise<string> {
-  const { ttlMs, permissions, ...rest } = payload;
+  const { ttlMs, permissions, sid, ...rest } = payload;
+  const resolvedSid =
+    typeof sid === 'string' && sid.trim() ? sid.trim() : globalThis.crypto.randomUUID();
   const fullPayload: SessionPayload = {
     ...rest,
+    sid: resolvedSid,
     ...(permissions ? { perms: encodePermissionClaim(permissions) } : {}),
     iat: Date.now(),
     exp: Date.now() + (ttlMs ?? TOKEN_TTL_MS),
@@ -243,10 +252,12 @@ export async function verifySession(
     }
 
     const issuedAt = typeof payload.iat === 'number' ? payload.iat : payload.exp - TOKEN_TTL_MS;
+    const sessionSid =
+      typeof payload.sid === 'string' && payload.sid.trim() ? payload.sid.trim() : undefined;
 
     if (!options?.skipRevocationCheck) {
-      // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
-      if (await isSessionRevoked(token)) {
+      // Check revocation blocklist (Redis-backed; checks both token hash and shared sid).
+      if (await isSessionRevoked(token, sessionSid)) {
         return null;
       }
 
@@ -266,6 +277,7 @@ export async function verifySession(
       role:          payload.role,
       ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),
       ...(payload.dataResidency  ? { dataResidency:  payload.dataResidency  } : {}),
+      ...(sessionSid             ? { sid:            sessionSid             } : {}),
       // null: signed without a claim, or against another catalogue version.
       permissions:   decodePermissionClaim(payload.perms),
       issuedAt,

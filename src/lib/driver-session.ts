@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { verifySession } from '@/lib/tenant-session';
+import { verifySessionDurable } from '@/lib/auth/durable-session-revocation';
 
 interface HasCookies {
   cookies: {
@@ -44,7 +44,7 @@ export async function getDriverTenantContext(
 
   for (const token of [bearerToken, driverToken, adminToken]) {
     if (!token) continue;
-    const session = await verifySession(token).catch(() => null);
+    const session = await verifySessionDurable(token).catch(() => null);
     if (session) {
       return {
         userId: session.userId,

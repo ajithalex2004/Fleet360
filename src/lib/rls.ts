@@ -27,6 +27,101 @@ import type { PrismaClient } from '@prisma/client';
 import { activeRlsScope, runWithRlsScope, type RlsScope } from '@/lib/rls-scope';
 
 /**
+ * Raised when an active HTTP request carries a session (`x-session-id` /
+ * `x-session-iat` injected by Edge middleware) that has been durably revoked
+ * in PostgreSQL (`revoked_session_tokens` or `session_revocations`), closing
+ * the window between a Redis write miss/flush and background rehydration
+ * across every protected Node.js route that enters `withTenantRls`.
+ */
+export class SessionRevokedError extends Error {
+  readonly status = 401;
+  constructor(message = 'Session has been revoked') {
+    super(message);
+    this.name = 'SessionRevokedError';
+  }
+}
+
+async function readRequestHeadersIfAvailable(): Promise<Headers | null> {
+  try {
+    const mod = await import('next/headers');
+    if (typeof mod.headers !== 'function') return null;
+    const h = await mod.headers();
+    return h && typeof h.get === 'function' ? (h as unknown as Headers) : null;
+  } catch {
+    // Expected outside a Next.js HTTP request context (cron, CLI scripts, unit tests).
+    return null;
+  }
+}
+
+export async function enforceRequestSessionRevocation(
+  tx: TxClient,
+  txTenantId: string,
+): Promise<void> {
+  const hdrs = await readRequestHeadersIfAvailable();
+  if (!hdrs) return;
+
+  const sid = hdrs.get('x-session-id')?.trim();
+  const userId = hdrs.get('x-user-id')?.trim();
+  const sessionTenantId = hdrs.get('x-tenant-id')?.trim();
+  if (!sid || !userId || !sessionTenantId || userId === 'system:cron') return;
+  if (/[^a-zA-Z0-9_-]/.test(sessionTenantId)) return;
+
+  const rawIat = hdrs.get('x-session-iat');
+  const parsedIat = rawIat ? Number(rawIat) : NaN;
+  // Fail-closed: if x-session-iat is missing/invalid, treat issuedAt as epoch 0
+  // so any active session_revocations row rejects the session.
+  const issuedAtMs = Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0;
+
+  const needsTempTenantScope = txTenantId !== sessionTenantId && txTenantId !== '*';
+  try {
+    if (needsTempTenantScope) {
+      await setTenantGuc(tx, sessionTenantId, 'withTenantRls:revocationGuard');
+    }
+    const rows = await tx.$queryRawUnsafe<Array<{ revoked?: boolean }>>(
+      `SELECT (
+         EXISTS (
+           SELECT 1 FROM public.revoked_session_tokens
+            WHERE token_key = $1
+              AND tenant_id = $2
+              AND expires_at > now()
+         )
+         OR EXISTS (
+           SELECT 1 FROM public.session_revocations
+            WHERE not_before > $4::timestamptz
+              AND ((user_id = $3 AND tenant_id IS NULL)
+                OR (user_id IS NULL AND tenant_id = $2)
+                OR (user_id = $3 AND tenant_id = $2))
+         )
+       ) AS revoked`,
+      `sid:${sid}`,
+      sessionTenantId,
+      userId,
+      new Date(issuedAtMs),
+    );
+    if (needsTempTenantScope) {
+      await setTenantGuc(tx, txTenantId, 'withTenantRls:revocationGuardRestore');
+    }
+    if (Array.isArray(rows) && rows[0]?.revoked === true) {
+      // Self-heal Redis asynchronously so Edge middleware rejects immediately too.
+      void import('@/lib/auth/durable-session-revocation')
+        .then((m) => m.scheduleRevocationRedisSync())
+        .catch(() => {});
+      throw new SessionRevokedError();
+    }
+  } catch (err) {
+    if (err instanceof SessionRevokedError) throw err;
+    if (needsTempTenantScope) {
+      await setTenantGuc(tx, txTenantId, 'withTenantRls:revocationGuardRestore').catch(() => {});
+    }
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[rls:revocationGuard] durable session check failed (failing closed in production):', err);
+      throw new SessionRevokedError('Session verification unavailable');
+    }
+    console.warn('[rls:revocationGuard] durable session check failed (allowing outside production):', err);
+  }
+}
+
+/**
  * The transaction client the wrappers hand to their callbacks.
  *
  * Exported because handlers need to type their own callbacks against it.
@@ -77,7 +172,7 @@ async function runScoped<T>(
   mode: RlsScope['mode'],
   who: string,
   fn: (tx: TxClient) => Promise<T>,
-  txOptions: { timeout: number; maxWait: number },
+  txOptions: { timeout: number; maxWait: number; skipSessionRevocationGuard?: boolean },
 ): Promise<T> {
   const outer = activeRlsScope();
   if (outer?.tx) {
@@ -103,9 +198,12 @@ async function runScoped<T>(
       // set_config returns the new value — use that as the source of truth.
       // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
       await setTenantGuc(tx, tenantId, who);
+      if (!txOptions.skipSessionRevocationGuard) {
+        await enforceRequestSessionRevocation(tx, tenantId);
+      }
       return fn(tx);
     });
-  }, txOptions);
+  }, { timeout: txOptions.timeout, maxWait: txOptions.maxWait });
 }
 
 // ── withTenantRls ────────────────────────────────────────────────────────────
@@ -125,7 +223,7 @@ export async function withTenantRls<T>(
   prisma: PrismaClient,
   tenantId: string,
   fn: (tx: TxClient) => Promise<T>,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; skipSessionRevocationGuard?: boolean } = {},
 ): Promise<T> {
   if (!tenantId || typeof tenantId !== 'string' || !String(tenantId).trim()) {
     throw new Error('withTenantRls: tenantId is required');
@@ -136,6 +234,7 @@ export async function withTenantRls<T>(
   return runScoped(prisma, tenantId, 'tenant', 'withTenantRls', fn, {
     timeout: opts.timeoutMs ?? 30_000,
     maxWait: 5_000,
+    skipSessionRevocationGuard: opts.skipSessionRevocationGuard,
   });
 }
 
@@ -165,13 +264,14 @@ export async function withTenantRls<T>(
 export async function withPlatformAdmin<T>(
   prisma: PrismaClient,
   fn: (tx: TxClient) => Promise<T>,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; skipSessionRevocationGuard?: boolean } = {},
 ): Promise<T> {
   // Default 60s — Prisma's built-in 5s is too tight for multi-pass FK deletes
   // (161 tables) and bulk creates (hundreds of rows).
   return runScoped(prisma, '*', 'platform', 'withPlatformAdmin', fn, {
     timeout: opts.timeoutMs ?? 60_000,
     maxWait: 10_000,
+    skipSessionRevocationGuard: opts.skipSessionRevocationGuard,
   });
 }
 

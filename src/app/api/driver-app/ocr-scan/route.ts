@@ -43,6 +43,9 @@ function parseDataUri(input: string): { mimeType: string; base64Data: string } |
   return null;
 }
 
+import { bearerToken } from '@/lib/secure-compare';
+import { isSessionRevokedInPostgres } from '@/lib/auth/durable-session-revocation';
+
 function cleanJsonResponse(raw: string): Record<string, unknown> | null {
   try {
     let cleaned = raw.trim();
@@ -58,13 +61,34 @@ function cleanJsonResponse(raw: string): Record<string, unknown> | null {
 }
 
 export async function POST(req: NextRequest) {
-  // Signed-in callers only (a driver token from the APK, or a verified
-  // session): this spends the platform's Gemini / OpenAI keys per call and
-  // used to answer anyone.
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  const driverCtx = authz.ok ? null : await getDriverTenantContext(req);
-  if (!authz.ok && !driverCtx) {
+  // Signed-in callers only (a durably verified driver token from the APK, or a
+  // durably verified session): this spends the platform's Gemini / OpenAI keys.
+  const hasSuppliedToken = Boolean(
+    bearerToken(req.headers) ||
+      req.cookies.get('xl-driver-session')?.value ||
+      req.cookies.get('xl-session')?.value,
+  );
+  const driverCtx = await getDriverTenantContext(req);
+  if (hasSuppliedToken && !driverCtx) {
     return NextResponse.json({ error: 'Sign in to scan documents.' }, { status: 401 });
+  }
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!driverCtx) {
+    if (!authz.ok || !authz.userId) {
+      return NextResponse.json({ error: 'Sign in to scan documents.' }, { status: 401 });
+    }
+    const sid = req.headers.get('x-session-id')?.trim() || undefined;
+    const rawIat = req.headers.get('x-session-iat');
+    const parsedIat = rawIat ? Number(rawIat) : NaN;
+    const rev = await isSessionRevokedInPostgres({
+      sid,
+      userId: authz.userId,
+      tenantId: authz.tenantId,
+      issuedAtMs: Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0,
+    });
+    if (rev.revoked) {
+      return NextResponse.json({ error: 'Sign in to scan documents.' }, { status: 401 });
+    }
   }
 
   try {

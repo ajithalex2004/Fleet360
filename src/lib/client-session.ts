@@ -44,6 +44,33 @@ export function clearClientSession() {
 }
 
 export function requestServerLogout(url = '/api/auth/logout') {
+  let backendToken: string | null = null;
+  try {
+    backendToken = localStorage.getItem('xl_backend_token');
+  } catch {
+    /* ignore storage access failures */
+  }
+
+  // When a Go backend JWT is stored in localStorage, prefer keepalive fetch so
+  // we can attach `Authorization: Bearer <token>` and revoke any standalone or
+  // pre-switch Go token atomically alongside HttpOnly cookies.
+  if (backendToken) {
+    try {
+      void fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        keepalive: true,
+        headers: {
+          Authorization: `Bearer ${backendToken}`,
+        },
+      }).catch(() => undefined);
+      return;
+    } catch {
+      /* fall back to sendBeacon */
+    }
+  }
+
   try {
     if (navigator.sendBeacon) {
       const sent = navigator.sendBeacon(url, new Blob([], { type: 'application/json' }));

@@ -237,8 +237,9 @@ export default function UserSwitcher() {
 
   const signOut = () => {
     setOpen(false);
-    clearClientSession();
+    // Read xl_backend_token for server revocation BEFORE clearing localStorage.
     requestServerLogout();
+    clearClientSession();
     window.location.assign('/login');
   };
 

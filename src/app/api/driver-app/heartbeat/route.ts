@@ -50,6 +50,32 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  // Durable session revocation check on operator/driver session cookie or x-session-id
+  // (Authorization: Bearer here carries a carrier device token, not a session token).
+  const rawSessionCookie =
+    req.cookies.get('xl-driver-session')?.value || req.cookies.get('xl-session')?.value;
+  if (rawSessionCookie) {
+    const { verifySessionDurable } = await import('@/lib/auth/durable-session-revocation');
+    const sess = await verifySessionDurable(rawSessionCookie);
+    if (!sess) {
+      return NextResponse.json({ error: 'Session revoked' }, { status: 401 });
+    }
+  } else if (authz.userId) {
+    const { isSessionRevokedInPostgres } = await import('@/lib/auth/durable-session-revocation');
+    const sid = req.headers.get('x-session-id')?.trim() || undefined;
+    const rawIat = req.headers.get('x-session-iat');
+    const parsedIat = rawIat ? Number(rawIat) : NaN;
+    const rev = await isSessionRevokedInPostgres({
+      sid,
+      userId: authz.userId,
+      tenantId,
+      issuedAtMs: Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0,
+    });
+    if (rev.revoked) {
+      return NextResponse.json({ error: 'Session revoked' }, { status: 401 });
+    }
+  }
+
   let body: HeartbeatBody;
   try { body = (await req.json()) as HeartbeatBody; }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

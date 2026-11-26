@@ -63,7 +63,10 @@ export async function revokeSessions(scope: RevocationScope): Promise<void> {
     try {
       await redis.set(mirrorKey(userId, tenantId), notBefore.getTime(), { ex: MIRROR_TTL_SECONDS });
     } catch (err) {
-      console.error('[revocation] Redis mirror write failed; the edge check will miss this revocation:', err);
+      console.error('[revocation] Redis mirror write failed; scheduling outbox rehydration:', err);
+      void import('@/lib/auth/durable-session-revocation')
+        .then((m) => m.scheduleRevocationRedisSync())
+        .catch(() => {});
     }
   } else {
     console.warn('[revocation] Redis not configured: revocation reaches the Go backend only; Next.js sessions stay valid until they expire');

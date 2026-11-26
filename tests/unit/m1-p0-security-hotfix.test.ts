@@ -601,9 +601,19 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
       expect(body.revoked).toBe(true);
-      expect(body.revocationMode).toBe('redis');
-      expect(mockRedis.set).toHaveBeenCalledTimes(1);
-      expect(mockRedis.set.mock.calls[0][0]).toMatch(/^blocklist:sess:[a-f0-9]{64}$/);
+      expect(body.durable).toBe(true);
+      expect(body.redisMirrored).toBe(true);
+      expect(body.revocationMode).toBe('postgres+redis');
+      // Durable Postgres write persists both sid:<uuid> and tok:<sha256>
+      const pgInserts = mockPrisma.$executeRawUnsafe.mock.calls.filter(([sql]) =>
+        String(sql).includes('INSERT INTO public.revoked_session_tokens'),
+      );
+      expect(pgInserts.length).toBe(2);
+      // Upstash Redis mirrors both blocklist:sess:<sha256> and blocklist:sid:<uuid>
+      expect(mockRedis.set).toHaveBeenCalledTimes(2);
+      const redisKeys = mockRedis.set.mock.calls.map(([k]) => String(k));
+      expect(redisKeys.some((k) => /^blocklist:sess:[a-f0-9]{64}$/.test(k))).toBe(true);
+      expect(redisKeys.some((k) => /^blocklist:sid:[0-9a-f-]{36}$/i.test(k))).toBe(true);
 
       // Proves the stolen/extracted token is rejected after logout!
       expect(await verifySession(token)).toBeNull();
@@ -651,39 +661,71 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
     expect(await verifySession(token)).not.toBeNull();
   });
 
-  it('fails honestly (503, ok:false, revoked:false) on logout during Redis outage while protected production requests fail closed', async () => {
+  it('fails honestly (503, ok:false, revoked:false) when durable PostgreSQL revocation fails, and degrades to durable Postgres during a Redis outage', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const token = await mintTokenWithMod4(0);
-    mockRedis.set.mockRejectedValueOnce(new Error('Upstash ECONNREFUSED'));
-    mockRedis.get.mockRejectedValueOnce(new Error('Upstash ECONNREFUSED'));
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     try {
-      const req = new NextRequest('https://fleet360.example.com/api/auth/logout', {
+      // Case A: PostgreSQL durable write fails → HTTP 503 fail-honest, cookies still cleared
+      mockPrisma.$executeRawUnsafe.mockRejectedValueOnce(new Error('PG connection refused'));
+      const pgFailReq = new NextRequest('https://fleet360.example.com/api/auth/logout', {
         method: 'POST',
         headers: {
           origin: 'https://fleet360.example.com',
           cookie: `xl-session=${token}`,
         },
       });
-      const res = await logoutPOST(req);
-      const body = await res.json();
+      const pgFailRes = await logoutPOST(pgFailReq);
+      const pgFailBody = await pgFailRes.json();
 
-      expect(res.status).toBe(503);
-      expect(body.ok).toBe(false);
-      expect(body.revoked).toBe(false);
-      expect(body.cookiesCleared).toBe(true);
+      expect(pgFailRes.status).toBe(503);
+      expect(pgFailBody.ok).toBe(false);
+      expect(pgFailBody.revoked).toBe(false);
+      expect(pgFailBody.durable).toBe(false);
+      expect(pgFailBody.cookiesCleared).toBe(true);
       expect(errSpy).toHaveBeenCalled();
-      expect(res.headers.get('set-cookie')).toContain('xl-session=;');
+      expect(pgFailRes.headers.get('set-cookie')).toContain('xl-session=;');
+
+      // Case B: PostgreSQL succeeds during a Redis outage → HTTP 200 durable:true, redisMirrored:false,
+      // and protected production requests fail closed while Redis remains unreachable.
+      mockRedis.set.mockRejectedValue(new Error('Upstash ECONNREFUSED'));
+      mockRedis.get.mockRejectedValue(new Error('Upstash ECONNREFUSED'));
+      mockRedis.mget.mockRejectedValue(new Error('Upstash ECONNREFUSED'));
+      const redisDownReq = new NextRequest('https://fleet360.example.com/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          origin: 'https://fleet360.example.com',
+          cookie: `xl-session=${token}`,
+        },
+      });
+      const redisDownRes = await logoutPOST(redisDownReq);
+      const redisDownBody = await redisDownRes.json();
+
+      expect(redisDownRes.status).toBe(200);
+      expect(redisDownBody.ok).toBe(true);
+      expect(redisDownBody.revoked).toBe(true);
+      expect(redisDownBody.durable).toBe(true);
+      expect(redisDownBody.redisMirrored).toBe(false);
+      expect(redisDownBody.revocationMode).toBe('postgres');
+      expect(warnSpy).toHaveBeenCalled();
 
       // While Redis remains unavailable in production, verifySession fails closed (null)
       expect(await verifySession(token)).toBeNull();
     } finally {
+      mockRedis.set.mockImplementation(async (key: string, val: string) => {
+        mockRedis._kv.set(key, val);
+        return 'OK';
+      });
+      mockRedis.get.mockImplementation(async (key: string) => mockRedis._kv.get(key) ?? null);
+      mockRedis.mget.mockImplementation(async (...keys: string[]) => keys.map((k) => mockRedis._kv.get(k) ?? null));
       errSpy.mockRestore();
+      warnSpy.mockRestore();
     }
   });
 
-  it('revokes tokens in Redis on DELETE /api/auth/session, enforces CSRF same-origin, and fails honestly on Redis error', async () => {
+  it('revokes tokens in Postgres + Redis on DELETE /api/auth/session, enforces CSRF same-origin, and fails honestly on DB error', async () => {
     const token = await mintTokenWithMod4(3);
 
     // Cross-site blocked
@@ -697,7 +739,7 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
     expect(csrfRes.status).toBe(403);
     expect(mockRedis.set).not.toHaveBeenCalled();
 
-    // Same-origin revokes in Redis
+    // Same-origin revokes in Postgres + Redis
     const okRes = await sessionDELETE(new NextRequest('https://fleet360.example.com/api/auth/session', {
       method: 'DELETE',
       headers: {
@@ -709,7 +751,8 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
     expect(okRes.status).toBe(200);
     expect(okBody.ok).toBe(true);
     expect(okBody.revoked).toBe(true);
-    expect(mockRedis.set).toHaveBeenCalledTimes(1);
+    expect(okBody.durable).toBe(true);
+    expect(mockRedis.set).toHaveBeenCalledTimes(2);
     expect(await verifySession(token)).toBeNull();
   });
 
@@ -728,7 +771,8 @@ describe('M1-P0-3: Logout revocation, CSRF protection, and fail-honest Redis han
     });
     const res = await logoutPOST(req);
     expect(res.status).toBe(200);
-    expect(mockRedis.set).toHaveBeenCalledTimes(3);
+    // 3 tokens × 2 keys each (blocklist:sess:<sha256> + blocklist:sid:<uuid>)
+    expect(mockRedis.set).toHaveBeenCalledTimes(6);
     const setCookie = res.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain('xl-impersonator-session=;');
     expect(await verifySession(staffToken)).toBeNull();

@@ -1,6 +1,6 @@
 import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import type { NextRequest } from 'next/server';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { getVerifiedRequestSessionDurable } from '@/lib/auth/durable-session-revocation';
 
 type JobAuthorization =
   | { ok: true; tenantId: string | null }
@@ -27,7 +27,7 @@ export async function authorizeJobRequest(
     }
     return { ok: true, tenantId: options.global ? null : requestedTenant || null };
   }
-  const session = await getVerifiedRequestSession(request);
+  const session = await getVerifiedRequestSessionDurable(request);
   if (!session) return { ok: false, status: 401, error: 'Valid session or scheduler credential required' };
   const allowed = options.global ? ['SUPER_ADMIN'] : ['SUPER_ADMIN', 'TENANT_ADMIN'];
   if (!allowed.includes(session.role)) return { ok: false, status: 403, error: 'Job permission required' };

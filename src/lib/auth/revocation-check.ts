@@ -59,7 +59,12 @@ async function notBeforeFor(userId: string, tenantId: string, now: number): Prom
   if (hit && now - hit.fetchedAt < REVOCATION_RECHECK_MS) return hit.notBefore;
 
   const redis = getRedis();
-  if (!redis) return 0;
+  if (!redis) {
+    if (process.env.NODE_ENV === 'production') {
+      return unavailable(hit, now, 'Redis not configured in production');
+    }
+    return 0;
+  }
   try {
     const lookup = redis.mget<(string | number | null)[]>(...revocationKeys(userId, tenantId));
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));

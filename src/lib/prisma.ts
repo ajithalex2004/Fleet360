@@ -794,6 +794,9 @@ const prismaClientSingleton = () => {
           // Neon socket (57P01/ConnectionReset) fails here BEFORE operation runs,
           // so retrying executes the write at most once.
           await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+          // Enforce durable session revocation on bare-prisma routes too (Track C).
+          const { enforceRequestSessionRevocation } = await import('@/lib/rls');
+          await enforceRequestSessionRevocation(tx as never, tenantId);
           phase.markExecuting();
           const res = await runWithActiveTx(tx, () =>
             runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => operation(tx)),
@@ -947,6 +950,8 @@ const prismaClientSingleton = () => {
             }
             return originalTransaction(async (tx) => {
               await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+              const { enforceRequestSessionRevocation } = await import('@/lib/rls');
+              await enforceRequestSessionRevocation(tx as never, tenantId);
               phase.markExecuting();
               const res = await runWithActiveTx(tx, () =>
                 runWithRlsScope({ tenantId, mode: 'tenant', tx }, () =>

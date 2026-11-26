@@ -358,11 +358,17 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     clearCache(); clearPersistedSnapshot();  // force fresh fetch for the new user
     localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, tenantId }));
     try {
-      await fetch('/api/auth/session', {
+      const res = await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, tenantId }),
       });
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { backendToken?: unknown } | null;
+        if (typeof data?.backendToken === 'string' && data.backendToken) {
+          localStorage.setItem('xl_backend_token', data.backendToken);
+        }
+      }
     } catch (err) {
       console.warn('[PermissionContext] Cookie session sync failed, using localStorage fallback', err);
     }
