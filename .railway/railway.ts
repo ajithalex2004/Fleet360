@@ -12,16 +12,11 @@ function preserveKeys(keys: readonly string[]): Record<string, VariableValue> {
 }
 
 const APP_SHARED_ENV_KEYS = [
-  "ALLOWED_ORIGINS",
   "CRON_SECRET",
   "DATABASE_URL",
   "DB_CONNECT_RETRIES",
   "DB_CONNECT_TIMEOUT_MS",
-  "DB_CONN_MAX_IDLE_SECONDS",
-  "DB_CONN_MAX_LIFETIME_SECONDS",
   "DB_KEEPALIVE_INTERVAL_MS",
-  "DB_MAX_IDLE_CONNS",
-  "DB_MAX_OPEN_CONNS",
   "DB_OPERATION_RETRIES",
   "DEPLOYMENT_HEALTH_SECRET",
   "FLEET360_ENABLE_LOCAL_MIRROR",
@@ -29,11 +24,8 @@ const APP_SHARED_ENV_KEYS = [
   "GEMINI_API_KEY",
   "GOOGLE_MAPS_API_KEY",
   "GO_BACKEND_URL",
-  "GO_ENV",
   "JWT_SECRET",
   "LOGISTICS_GO_PROXY_ENABLED",
-  "LOG_FORMAT",
-  "LOG_LEVEL",
   "MAPBOX_TOKEN",
   "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_BASE_URL",
@@ -51,7 +43,6 @@ const APP_SHARED_ENV_KEYS = [
   "S3_REGION",
   "S3_SECRET_KEY",
   "SESSION_SECRET",
-  "SETUP_SECRET",
   "SSO_ENCRYPTION_KEY",
   "STORAGE_BACKEND",
   "THESYS_API_KEY",
@@ -80,7 +71,7 @@ const APP_STAGING_ONLY_ENV_KEYS = [
   "MOCK_NOTIFICATIONS",
 ] as const;
 
-const BACKEND_SHARED_ENV_KEYS = [
+const BACKEND_PRESERVED_ENV_KEYS = [
   "DATABASE_URL",
   "JWT_SECRET",
   "PORT",
@@ -98,6 +89,23 @@ export default defineRailway((ctx) => {
   const appEnvKeys = isProduction
     ? [...APP_SHARED_ENV_KEYS, ...APP_PRODUCTION_ONLY_ENV_KEYS]
     : [...APP_SHARED_ENV_KEYS, ...APP_STAGING_ONLY_ENV_KEYS];
+
+  // Explicit non-secret operational configuration owned by the Go backend
+  // (relocated from fleet360-app, with production-safe defaults and fail-closed
+  // Phase 0 cross-tenant isolation startup enforcement).
+  const backendOperationalEnv: Record<string, string> = {
+    ALLOWED_ORIGINS: isProduction
+      ? "https://fleet360-app-production.up.railway.app"
+      : "https://fleet360-app-staging.up.railway.app",
+    DB_CONN_MAX_IDLE_SECONDS: "60",
+    DB_CONN_MAX_LIFETIME_SECONDS: "300",
+    DB_MAX_IDLE_CONNS: "5",
+    DB_MAX_OPEN_CONNS: "10",
+    GO_ENV: "production",
+    LOG_FORMAT: "json",
+    LOG_LEVEL: "info",
+    PHASE0_REQUIRE_SMOKE: "1",
+  };
 
   const fleet360App = service("fleet360-app", {
     source: github("ajithalex2004/Fleet360", {
@@ -137,7 +145,10 @@ export default defineRailway((ctx) => {
       healthcheckTimeout: 100,
     },
     replicas: { [region]: 1 },
-    env: preserveKeys(BACKEND_SHARED_ENV_KEYS),
+    env: {
+      ...preserveKeys(BACKEND_PRESERVED_ENV_KEYS),
+      ...backendOperationalEnv,
+    },
   });
 
   return project("fleet360-railway", {
