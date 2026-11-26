@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/customers/transport-catalog
  *   Body: { category, values } — checks a sample request against the tenant's
  *   form, as a submission will be checked (used by the form preview).
- * Writes: TENANT_ADMIN / SUPER_ADMIN only; PUT is audited.
+ * Writes: TENANT_ADMIN / SUPER_ADMIN only; PUT and POST go through withAuditedAction.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -72,7 +72,7 @@ async function handlePUT(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const auth = authorizeServiceConfig(req);
@@ -93,3 +93,4 @@ export async function POST(req: NextRequest) {
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
 export const PUT = withAuditedAction(handlePUT);
+export const POST = withAuditedAction(handlePOST);
