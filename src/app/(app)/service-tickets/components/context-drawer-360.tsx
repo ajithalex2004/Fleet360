@@ -52,6 +52,13 @@ interface ContextDrawer360Props {
 
 const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
 
+const CHANNEL_LABEL: Record<string, string> = {
+  CUSTOMER_PORTAL: 'Customer Portal', WHATSAPP: 'WhatsApp Agent', EMAIL: 'Email', IOT: 'IoT',
+};
+const ENTITLEMENT_LABEL: Record<string, string> = {
+  AMC: 'AMC', WARRANTY: 'Under Warranty', SLA_CONTRACT: 'Service Contract / SLA', CHARGEABLE: 'Chargeable', GOODWILL: 'Goodwill',
+};
+
 export function ContextDrawer360({
   ticketId, onClose, onStatusChange, ticket = null, isVehicleTicket = true, onForward, headerMeta,
 }: ContextDrawer360Props) {
@@ -361,6 +368,74 @@ export function ContextDrawer360({
                   {data.ticket.description && (
                     <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-800/60 leading-relaxed">{data.ticket.description}</p>
                   )}
+                </div>
+              )}
+
+              {/* Customer & service details — Field Service requests with a customer */}
+              {ticket?.customerId && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-cyan-400 font-semibold border-b border-slate-800 pb-2">
+                    <User className="w-4 h-4" />
+                    <span>Customer &amp; service</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                    {([
+                      ['Customer', [ticket.customFields?.customerName, ticket.customFields?.customerCode ? `(${String(ticket.customFields.customerCode)})` : ''].filter(Boolean).join(' ')],
+                      ['Entity / site', ticket.customFields?.siteName],
+                      ['Contact person', ticket.customFields?.contactPerson],
+                      ['Mobile', ticket.customFields?.contactMobile],
+                      ['Asset / equipment', [ticket.customFields?.assetNo, ticket.customFields?.assetName].filter(Boolean).join(' · ')],
+                      ['S.No / Tag ID', ticket.customFields?.serialNumber],
+                      ['Channel', CHANNEL_LABEL[ticket.requestChannel ?? ''] ?? ticket.requestChannel],
+                      ['Service needed at', ticket.serviceNeededAt ? new Date(ticket.serviceNeededAt).toLocaleString() : null],
+                      ['Entitlement / billing', ENTITLEMENT_LABEL[ticket.entitlementType ?? ''] ?? ticket.entitlementType],
+                    ] as Array<[string, unknown]>).map(([label, value]) => (
+                      <div key={label}>
+                        <span className="text-slate-500 block">{label}</span>
+                        <strong className="text-white">{dash(value)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  {(ticket.attachments ?? []).some((a) => a.type === 'PHOTO') && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800/60">
+                      {(ticket.attachments ?? []).filter((a) => a.type === 'PHOTO').map((a) => (
+                        <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                          className="block w-16 h-16 rounded-lg overflow-hidden border border-slate-700" title={a.fileName}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={a.url} alt={a.fileName} className="w-full h-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Request lifecycle — every stage with its time and who made the change */}
+              {ticket && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="flex items-center gap-2 text-cyan-400 font-semibold"><Clock className="w-4 h-4" /> Request lifecycle</span>
+                    <span className="text-[10px] text-slate-500">{ticket.history?.length ?? 0} stage(s)</span>
+                  </div>
+                  {ticket.assignedToName && (
+                    <div className="text-[11px] rounded-lg bg-slate-950/60 border border-slate-800 px-3 py-2">
+                      <span className="text-slate-500">Assigned technician </span>
+                      <strong className="text-white">{ticket.assignedToName}</strong>
+                    </div>
+                  )}
+                  <ol className="relative space-y-3 pl-4 border-l border-slate-700/70">
+                    {(ticket.history ?? []).map((h, i) => (
+                      <li key={i} className="relative text-[11px]">
+                        <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-slate-900" />
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                          <strong className="text-white">{h.status}</strong>
+                          <span className="text-slate-500 tabular-nums">{h.date ? new Date(h.date).toLocaleString() : '—'}</span>
+                        </div>
+                        <div className="text-slate-400">by {h.actorName ?? h.actor ?? 'System'}</div>
+                        {h.note && <div className="text-slate-500">{h.note}</div>}
+                      </li>
+                    ))}
+                  </ol>
                 </div>
               )}
 

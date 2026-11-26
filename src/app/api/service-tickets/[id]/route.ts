@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveHistoryActors } from '@/lib/service-tickets/history-actors';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { isTicketPriority, type TicketType, type TicketPriority } from '@/types/service-tickets';
@@ -100,7 +101,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const row = await loadTicket(tenantId, id);
   if (!row) return NextResponse.json({ ok: false, error: 'Ticket not found' }, { status: 404 });
   const matrix = await matrixFor(tenantId, row.ticket_type);
-  return NextResponse.json({ ok: true, ticket: rowToApi(row, matrix) });
+  const [ticket] = await withTenantRls(prisma, tenantId, (tx) => resolveHistoryActors(tx, [rowToApi(row, matrix)]));
+  return NextResponse.json({ ok: true, ticket });
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
