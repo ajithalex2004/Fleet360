@@ -11,6 +11,7 @@ import {
 } from '@/app/(app)/service-tickets/components/new-service-request-form';
 import type { FormFieldDef, TicketType } from '@/types/service-tickets';
 import { usePortal } from '../portal-shell';
+import { canRaiseRequests } from '@/lib/customer-portal/catalog';
 
 interface TypesResponse {
   typeConfig: Record<string, RequestTypeConfig>;
@@ -47,7 +48,7 @@ export default function CustomerPortalNewRequest() {
     entitlements: types.entitlements,
   } : null), [types, me]);
 
-  if (me?.user.roles.FSM === 'VIEWER') {
+  if (me && !canRaiseRequests(me.user.roles.FSM)) {
     return <FormAlert tone="info">Your role can view requests but not raise them. Ask your company admin for Requester access.</FormAlert>;
   }
   if (err) return <FormAlert>{err}</FormAlert>;

@@ -175,7 +175,8 @@ interface IncomingBody {
 export async function POST(req: NextRequest) {
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
-  if (auth.user.transportRole === 'VIEWER') {
+  // Finance and Viewer roles look but do not submit (Admin / Requester do).
+  if (auth.user.transportRole === 'VIEWER' || auth.user.transportRole === 'FINANCE') {
     return NextResponse.json({ error: 'Your role can view shipments but not submit requests' }, { status: 403 });
   }
 

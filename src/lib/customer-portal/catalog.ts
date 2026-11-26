@@ -7,8 +7,22 @@
  * Each account has one role per portal (customer_portal_user_roles).
  */
 
-export type PortalRole = 'ADMIN' | 'REQUESTER' | 'VIEWER';
-export const PORTAL_ROLES: PortalRole[] = ['ADMIN', 'REQUESTER', 'VIEWER'];
+/**
+ * ADMIN      raises requests, manages the company's sites, assets and team
+ * REQUESTER  raises and tracks requests
+ * FINANCE    views everything, signs agreements and pays invoices; cannot raise requests
+ * VIEWER     views only
+ */
+export type PortalRole = 'ADMIN' | 'REQUESTER' | 'FINANCE' | 'VIEWER';
+export const PORTAL_ROLES: PortalRole[] = ['ADMIN', 'REQUESTER', 'FINANCE', 'VIEWER'];
+
+export const ROLE_LABEL: Record<PortalRole, string> = {
+  ADMIN: 'Admin', REQUESTER: 'Requester', FINANCE: 'Finance', VIEWER: 'Viewer',
+};
+
+/** Roles that may raise (and cancel) requests. */
+export const REQUEST_ROLES: PortalRole[] = ['ADMIN', 'REQUESTER'];
+export const canRaiseRequests = (role: PortalRole | null | undefined): boolean => !!role && REQUEST_ROLES.includes(role);
 
 export type CustomerPortal = 'FSM' | 'TRANSPORT';
 export const CUSTOMER_PORTALS: CustomerPortal[] = ['FSM', 'TRANSPORT'];

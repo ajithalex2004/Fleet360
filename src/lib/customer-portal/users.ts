@@ -397,13 +397,17 @@ export async function inviteCustomerUser(
  */
 export async function updateCustomerUser(
   tenantId: string, id: string, patch: { isActive?: unknown; roles?: unknown; role?: unknown }, by: string,
+  /** When set, only an account of this customer can be changed (customer-admin Team page). */
+  onlyCustomerId?: string,
 ): Promise<PortalAccount> {
   const roles = rolesFromInput(patch);
   if (!roles) throw new PortalUserError('Unknown portal or role.');
   const isActive = typeof patch.isActive === 'boolean' ? patch.isActive : null;
   return withTenantRls(prisma, tenantId, async (tx) => {
     const current = await accountById(tx, tenantId, id);
-    if (!current) throw new PortalUserError('Portal user not found.', 404);
+    if (!current || (onlyCustomerId && current.customer_id !== onlyCustomerId)) {
+      throw new PortalUserError('Portal user not found.', 404);
+    }
     await applyRoles(tx, tenantId, current.id, current.roles, roles, by);
     await tx.$executeRawUnsafe(
       `UPDATE customer_portal_users

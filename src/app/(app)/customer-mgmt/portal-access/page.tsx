@@ -19,7 +19,7 @@ import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, TextInput, SelectInput, PrimaryButton, SecondaryButton,
 } from '@/components/ui/form-kit';
 import {
-  PORTAL_LABEL, TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL,
+  PORTAL_LABEL, PORTAL_ROLES, ROLE_LABEL, TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL,
   type CustomerPortal, type PortalRole, type TransportCategory,
 } from '@/lib/customer-portal/catalog';
 
@@ -32,7 +32,7 @@ interface PortalAccount {
   lastLoginAt: string | null; roles: Partial<Record<CustomerPortal, PortalRole>>;
 }
 
-const ROLE_HELP = 'Admin: requests plus the company\'s sites, assets and users · Requester: raise and track requests · Viewer: track only';
+const ROLE_HELP = 'Admin: requests plus the company\'s sites, assets and users · Requester: raise and track requests · Finance: agreements and invoices, no requests · Viewer: track only';
 const PORTALS: CustomerPortal[] = ['FSM', 'TRANSPORT'];
 
 interface SendResult { ok?: boolean; error?: string; setupUrl?: string | null; expiresAt?: string; user?: { email: string } }
@@ -189,7 +189,7 @@ function RoleSelect({ value, onChange, disabled, label }: { value: PortalRole | 
     <SelectInput value={value ?? ''} disabled={disabled} aria-label={label} className="!w-32"
       onChange={(e) => onChange((e.target.value || null) as PortalRole | null)}>
       <option value="">No access</option>
-      <option value="ADMIN">Admin</option><option value="REQUESTER">Requester</option><option value="VIEWER">Viewer</option>
+      {PORTAL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
     </SelectInput>
   );
 }
