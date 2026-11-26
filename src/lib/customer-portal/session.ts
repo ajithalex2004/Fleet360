@@ -97,9 +97,18 @@ function refuse(status: number, error: string, clear = false): NextResponse {
   return res;
 }
 
+/** Portals a signed-in account can open: enabled for its company and holding a role there. */
+export function openablePortals(
+  roles: Partial<Record<CustomerPortal, PortalRole>>, companyPortals: CustomerPortal[],
+): CustomerPortal[] {
+  return companyPortals.filter((p) => !!roles[p]);
+}
+
 /**
  * Guard for portal API routes. `portal` is the portal the route belongs to;
- * `roles` (optional) restricts writes, e.g. ['ADMIN'] for managing sites.
+ * the account needs a role there. `roles` (optional) restricts writes, e.g.
+ * ['ADMIN'] for managing sites. The context's `user.role` is the account's
+ * role in that portal.
  */
 export async function requireCustomerPortal(
   req: NextRequest,
@@ -114,10 +123,12 @@ export async function requireCustomerPortal(
   if (!(await customerHasPortal(s.tenantId, s.customerId, opts.portal))) {
     return refuse(403, 'This portal is not enabled for your company');
   }
-  if (opts.roles && !opts.roles.includes(user.role)) return refuse(403, 'Your role cannot do this');
+  const role = user.roles[opts.portal];
+  if (!role) return refuse(403, 'You do not have access to this portal');
+  if (opts.roles && !opts.roles.includes(role)) return refuse(403, 'Your role cannot do this');
   return {
     tenantId: s.tenantId,
     customerId: s.customerId,
-    user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+    user: { id: user.id, email: user.email, fullName: user.fullName, role },
   };
 }
