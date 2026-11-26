@@ -9,6 +9,7 @@ import { KpiCard, StatGrid, Panel } from '@/components/ui/page-theme';
 import { FormAlert } from '@/components/ui/form-kit';
 import { usePortal } from '../portal-shell';
 import { fetchTransportRequests, fmtService, isOpen, STATUS_LABEL, STATUS_TONE, type TransportRequest } from './transport-shared';
+import { canRaiseRequests } from '@/lib/customer-portal/catalog';
 
 const COMMON_MENU = ['New request', 'Active requests', 'History'];
 /** Category pages that exist in the Customer Portal so far; the rest are still to come. */
@@ -34,7 +35,7 @@ export default function TransportDashboard() {
     };
   }, [rows]);
 
-  const canRequest = me?.user.roles.TRANSPORT !== 'VIEWER';
+  const canRequest = canRaiseRequests(me?.user.roles.TRANSPORT);
   const cats = me?.transportCategories ?? [];
   const recent = (rows ?? []).filter((r) => isOpen(r.status)).slice(0, 6);
 

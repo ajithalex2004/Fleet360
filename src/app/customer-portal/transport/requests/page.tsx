@@ -8,6 +8,7 @@ import { Activity, Phone, UserRound, Car, Loader2, XCircle, Link2 } from 'lucide
 import { Panel } from '@/components/ui/page-theme';
 import { FormAlert, SecondaryButton } from '@/components/ui/form-kit';
 import { usePortal } from '../../portal-shell';
+import { canRaiseRequests } from '@/lib/customer-portal/catalog';
 import {
   fetchTransportRequests, fmtDateTime, fmtService, isOpen, MODULE_LABEL, STAGES, STATUS_LABEL, STATUS_TONE,
   type TransportRequest,
@@ -60,7 +61,7 @@ function RequestDetail({ r, onChanged }: { r: TransportRequest; onChanged: (r: T
   const [err, setErr] = useState<string | null>(null);
   const stage = STAGES.indexOf(r.status);
   const ended = r.status === 'REJECTED' || r.status === 'CANCELLED';
-  const canCancel = me?.user.roles.TRANSPORT !== 'VIEWER' && (r.status === 'PENDING_APPROVAL' || r.status === 'SUBMITTED');
+  const canCancel = canRaiseRequests(me?.user.roles.TRANSPORT) && (r.status === 'PENDING_APPROVAL' || r.status === 'SUBMITTED');
 
   const cancel = async () => {
     if (!window.confirm(`Cancel request ${r.requestNo}?`)) return;

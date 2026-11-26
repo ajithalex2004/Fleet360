@@ -12,7 +12,7 @@
 
 import crypto from 'crypto';
 import { NextResponse, type NextRequest } from 'next/server';
-import { getPortalUserById, customerHasPortal, type PortalRole, type CustomerPortal } from './users';
+import { getPortalUserById, customerHasPortal, portalsForCustomer, type PortalRole, type CustomerPortal } from './users';
 
 const COOKIE_NAME = 'customer-portal-session';
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -130,5 +130,37 @@ export async function requireCustomerPortal(
     tenantId: s.tenantId,
     customerId: s.customerId,
     user: { id: user.id, email: user.email, fullName: user.fullName, role },
+  };
+}
+
+export interface CompanyAdminContext {
+  tenantId: string;
+  customerId: string;
+  user: { id: string; email: string; fullName: string | null };
+  /** Portals the company has. */
+  companyPortals: CustomerPortal[];
+  /** Of those, the portals this account is an Admin in: the only ones it may grant. */
+  adminPortals: CustomerPortal[];
+}
+
+/**
+ * Guard for the customer's own Team page: a signed-in account that is an
+ * Admin in at least one of its company's portals. Same session checks as
+ * requireCustomerPortal (active, session version, company).
+ */
+export async function requireCompanyAdmin(req: NextRequest): Promise<CompanyAdminContext | NextResponse> {
+  const s = readCustomerPortalSession(req);
+  if (!s) return refuse(401, 'Not signed in');
+  const user = await getPortalUserById(s.tenantId, s.userId);
+  if (!user || !user.isActive) return refuse(401, 'Your account is not active', true);
+  if (user.customerId !== s.customerId) return refuse(401, 'Session no longer valid', true);
+  if (user.sessionVersion !== s.sv) return refuse(401, 'Your session has ended. Sign in again.', true);
+  const companyPortals = await portalsForCustomer(s.tenantId, s.customerId);
+  const adminPortals = companyPortals.filter((p) => user.roles[p] === 'ADMIN');
+  if (adminPortals.length === 0) return refuse(403, 'Only your company admin can manage users');
+  return {
+    tenantId: s.tenantId, customerId: s.customerId,
+    user: { id: user.id, email: user.email, fullName: user.fullName },
+    companyPortals, adminPortals,
   };
 }

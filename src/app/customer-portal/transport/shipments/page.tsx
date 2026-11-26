@@ -15,6 +15,7 @@ import { Panel } from '@/components/ui/page-theme';
 import { FormAlert } from '@/components/ui/form-kit';
 import { usePortal } from '../../portal-shell';
 import { fmtDateTime } from '../transport-shared';
+import { canRaiseRequests } from '@/lib/customer-portal/catalog';
 import {
   fmtMoney, shipmentStatusLabel, shipmentStatusTone, type ShipmentListItem, type ShippingRequestItem,
 } from './shipments-shared';
@@ -48,7 +49,7 @@ export default function CustomerShipmentsPage() {
     { key: 'rate', header: 'Rate', align: 'right', filter: false, accessor: (s) => s.customerRateAmount ?? 0, render: (s) => <span className="text-xs tabular-nums">{fmtMoney(s.customerRateAmount, s.currency)}</span> },
   ], []);
 
-  const canBook = me?.user.roles.TRANSPORT !== 'VIEWER';
+  const canBook = canRaiseRequests(me?.user.roles.TRANSPORT);
 
   return (
     <div className="space-y-4">

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/form-kit';
 import { DynamicRequestForm } from '@/components/forms/DynamicRequestForm';
 import type { RequestFormDef, RequestValues } from '@/lib/transport-catalog/form-schema';
-import type { TransportCategory } from '@/lib/customer-portal/catalog';
+import { canRaiseRequests, type TransportCategory } from '@/lib/customer-portal/catalog';
 import { usePortal } from '../../portal-shell';
 
 interface LoadedForm {
@@ -47,7 +47,7 @@ function NewTransportRequest() {
     })();
   }, [category]);
 
-  if (me?.user.roles.TRANSPORT === 'VIEWER') {
+  if (me && !canRaiseRequests(me.user.roles.TRANSPORT)) {
     return <FormAlert tone="info">Your role can view requests but not raise them. Ask your company admin for Requester access.</FormAlert>;
   }
   const cats = me?.transportCategories ?? [];

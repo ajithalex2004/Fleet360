@@ -35,7 +35,7 @@ export interface PortalUser {
   isActive: boolean;
   role: PortalRole;
   /** The account's Transport portal role (null: no Transport access). */
-  transportRole: 'ADMIN' | 'REQUESTER' | 'VIEWER' | null;
+  transportRole: 'ADMIN' | 'REQUESTER' | 'FINANCE' | 'VIEWER' | null;
   /** The account itself is active (not deactivated by staff). */
   accountActive: boolean;
   /** The customer has the Transport portal with the Logistics category. */
@@ -76,7 +76,7 @@ const SELECT = `u.id::text, u.tenant_id, u.customer_id, u.email, u.full_name, u.
 const LEGACY_ROLE_VALUE = 'CUSTOMER_PORTAL';
 
 function transportRoleOf(v: string | null): PortalUser['transportRole'] {
-  return v === 'ADMIN' || v === 'REQUESTER' || v === 'VIEWER' ? v : null;
+  return v === 'ADMIN' || v === 'REQUESTER' || v === 'FINANCE' || v === 'VIEWER' ? v : null;
 }
 
 function rowToApi(r: Row): PortalUser {

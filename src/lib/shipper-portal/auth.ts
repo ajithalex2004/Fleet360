@@ -142,7 +142,7 @@ export interface PortalRequestContext {
     fullName: string | null;
     role: 'SHIPPER_USER' | 'SHIPPER_ADMIN';
     /** Transport portal role; VIEWER may look but not submit requests. */
-    transportRole: 'ADMIN' | 'REQUESTER' | 'VIEWER' | null;
+    transportRole: 'ADMIN' | 'REQUESTER' | 'FINANCE' | 'VIEWER' | null;
     isActive: boolean;
   };
 }
