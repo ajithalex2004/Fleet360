@@ -39,6 +39,8 @@ import {
 } from 'lucide-react';
 
 
+import { FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 export interface VehicleLifecycleEvent {
   id: string;
   vehicleId: string;
@@ -1395,327 +1397,259 @@ export default function VehiclesPage() {
 
       {/* Quick Odometer Update Modal */}
       {odometerModalVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <div className="flex items-center gap-2">
-                <Gauge className="w-5 h-5 text-orange-500" />
-                <h3 className="text-sm font-bold text-[var(--text-main)]">Update Vehicle Odometer</h3>
-              </div>
-              <button onClick={() => setOdometerModalVehicle(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
+        <FormModal
+          onClose={() => setOdometerModalVehicle(null)}
+          title="Update Vehicle Odometer"
+          icon={Gauge}
+          accent="amber"
+          size="sm"
+        >
+          <div className="bg-[var(--bg-surface-hover)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs space-y-1">
+            <div className="font-semibold text-[var(--text-main)]">
+              {odometerModalVehicle.make} {odometerModalVehicle.model} ({odometerModalVehicle.vehicleCode || 'No Code'})
             </div>
-            
-            <div className="bg-[var(--bg-surface-hover)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs space-y-1">
-              <div className="font-semibold text-[var(--text-main)]">
-                {odometerModalVehicle.make} {odometerModalVehicle.model} ({odometerModalVehicle.vehicleCode || 'No Code'})
-              </div>
-              <div className="text-[var(--text-muted)] font-mono">
-                Plate: {odometerModalVehicle.plateNumber || odometerModalVehicle.licensePlate || 'N/A'} • Current: {odometerModalVehicle.odometerReading?.toLocaleString() ?? 0} km
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">New Odometer Reading (km)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={0}
-                  value={newOdometerValue}
-                  onChange={e => setNewOdometerValue(e.target.value)}
-                  className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl pl-4 pr-12 py-2.5 text-sm font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-                  placeholder="Enter current km..."
-                  autoFocus
-                />
-                <span className="absolute right-3.5 top-3 text-xs font-semibold text-[var(--text-muted)] font-mono">KM</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setOdometerModalVehicle(null)}
-                className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleQuickOdometerSave}
-                disabled={updatingOdometer}
-                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2 shadow-sm"
-              >
-                {updatingOdometer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                {updatingOdometer ? 'Saving…' : 'Save Odometer'}
-              </button>
+            <div className="text-[var(--text-muted)] font-mono">
+              Plate: {odometerModalVehicle.plateNumber || odometerModalVehicle.licensePlate || 'N/A'} • Current: {odometerModalVehicle.odometerReading?.toLocaleString() ?? 0} km
             </div>
           </div>
-        </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">New Odometer Reading (km)</label>
+            <div className="relative">
+              <TextInput
+                type="number"
+                min={0}
+                value={newOdometerValue}
+                onChange={e => setNewOdometerValue(e.target.value)} className="w-full pl-4 pr-12 font-mono"
+                placeholder="Enter current km..."
+                autoFocus
+              />
+              <span className="absolute right-3.5 top-3 text-xs font-semibold text-[var(--text-muted)] font-mono">KM</span>
+            </div>
+          </div>
+
+          <FormFooter secondary={<SecondaryButton onClick={() => setOdometerModalVehicle(null)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleQuickOdometerSave} disabled={updatingOdometer}>{updatingOdometer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              {updatingOdometer ? 'Saving…' : 'Save Odometer'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
 
       {/* Hardware Device Pairing Modal */}
       {pairModalVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                  <Cpu className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[var(--text-main)]">
-                    {pairModalVehicle.deviceId ? 'Edit Hardware Pairing' : 'Pair Hardware Telematics Device'}
-                  </h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    Bind GPS Tracker IMEI &amp; SIM card to this vehicle
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setPairModalVehicle(null)} 
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Vehicle preview */}
-            <div className="bg-[var(--bg-surface-hover)] p-3 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between text-xs">
-              <div>
-                <span className="font-bold text-[var(--text-main)] block">
-                  {pairModalVehicle.make} {pairModalVehicle.model} ({pairModalVehicle.yearOfManufacture || pairModalVehicle.year || '—'})
-                </span>
-                <span className="text-[var(--text-muted)] font-mono">
-                  Plate: {pairModalVehicle.plateNumber || pairModalVehicle.licensePlate || 'N/A'} • Code: {pairModalVehicle.vehicleCode || '—'}
-                </span>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                pairModalVehicle.deviceId 
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' 
-                  : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
-              }`}>
-                {pairModalVehicle.deviceId ? 'CURRENTLY PAIRED' : 'UNPAIRED'}
+        <FormModal
+          onClose={() => setPairModalVehicle(null)}
+          title={pairModalVehicle.deviceId ? 'Edit Hardware Pairing' : 'Pair Hardware Telematics Device'}
+          subtitle="Bind GPS Tracker IMEI &amp; SIM card to this vehicle"
+          icon={Cpu}
+          accent="cyan"
+          size="sm"
+        >
+          {/* Vehicle preview */}
+          <div className="bg-[var(--bg-surface-hover)] p-3 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between text-xs">
+            <div>
+              <span className="font-bold text-[var(--text-main)] block">
+                {pairModalVehicle.make} {pairModalVehicle.model} ({pairModalVehicle.yearOfManufacture || pairModalVehicle.year || '—'})
+              </span>
+              <span className="text-[var(--text-muted)] font-mono">
+                Plate: {pairModalVehicle.plateNumber || pairModalVehicle.licensePlate || 'N/A'} • Code: {pairModalVehicle.vehicleCode || '—'}
               </span>
             </div>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+              pairModalVehicle.deviceId 
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' 
+                : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)]'
+            }`}>
+              {pairModalVehicle.deviceId ? 'CURRENTLY PAIRED' : 'UNPAIRED'}
+            </span>
+          </div>
 
-            {pairingError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
-                {pairingError}
-              </div>
-            )}
+          {pairingError && <FormAlert>{pairingError}</FormAlert>}
 
-            <form onSubmit={handleSavePairing} className="space-y-3">
+          <form onSubmit={handleSavePairing} className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+                Device Hardware IMEI / Tracker ID <span className="text-rose-400">*</span>
+              </label>
+              <TextInput
+                type="text"
+                placeholder="e.g. 864201047281920"
+                value={pairImei}
+                onChange={e => setPairImei(e.target.value)} className="w-full font-mono"
+                autoFocus
+              />
+              <p className="text-[10px] text-[var(--text-faint)] mt-1">
+                15-digit IMEI found on the physical GPS device sticker or packaging.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+                SIM Card Phone Number / ICCID <span className="text-[var(--text-faint)] font-normal">(Optional)</span>
+              </label>
+              <TextInput
+                type="text"
+                placeholder="e.g. +971501234567"
+                value={pairSim}
+                onChange={e => setPairSim(e.target.value)} className="w-full font-mono"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
               <div>
-                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1">
-                  Device Hardware IMEI / Tracker ID <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 864201047281920"
-                  value={pairImei}
-                  onChange={e => setPairImei(e.target.value)}
-                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-sm font-mono text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
-                  autoFocus
-                />
-                <p className="text-[10px] text-[var(--text-faint)] mt-1">
-                  15-digit IMEI found on the physical GPS device sticker or packaging.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1">
-                  SIM Card Phone Number / ICCID <span className="text-[var(--text-faint)] font-normal">(Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. +971501234567"
-                  value={pairSim}
-                  onChange={e => setPairSim(e.target.value)}
-                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-sm font-mono text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <div>
-                  {pairModalVehicle.deviceId && (
-                    <button
-                      type="button"
-                      onClick={() => handleUnpairDevice(pairModalVehicle)}
-                      disabled={savingPairing}
-                      className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 transition"
-                    >
-                      Unpair Device
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
+                {pairModalVehicle.deviceId && (
                   <button
                     type="button"
-                    onClick={() => setPairModalVehicle(null)}
+                    onClick={() => handleUnpairDevice(pairModalVehicle)}
                     disabled={savingPairing}
-                    className="px-3.5 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
+                    className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 transition"
                   >
-                    Cancel
+                    Unpair Device
                   </button>
-                  <button
-                    type="submit"
-                    disabled={savingPairing}
-                    className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 font-bold text-xs rounded-xl shadow hover:opacity-90 transition disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    {savingPairing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                    {savingPairing ? 'Saving…' : 'Save Pairing'}
-                  </button>
-                </div>
+                )}
               </div>
-            </form>
-          </div>
-        </div>
+
+              <FormFooter secondary={<SecondaryButton type="button" onClick={() => setPairModalVehicle(null)} disabled={savingPairing}>Cancel</SecondaryButton>}>
+                <PrimaryButton type="submit" disabled={savingPairing}>{savingPairing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  {savingPairing ? 'Saving…' : 'Save Pairing'}</PrimaryButton>
+              </FormFooter>
+            </div>
+          </form>
+        </FormModal>
       )}
 
       {/* Mobile Tracking Provision Modal */}
       {mobileTrackingModalVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[var(--text-main)]">Driver Mobile GPS Tracking</h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">Track vehicle location &amp; ground speed in absence of hardware GPS</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
+        <FormModal
+          onClose={() => {
                   stopBrowserTracking();
                   setMobileTrackingModalVehicle(null);
                 }}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Vehicle Card */}
-            <div className="bg-[var(--bg-surface-hover)] p-3.5 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between">
-              <div>
-                <div className="font-bold text-[var(--text-main)] text-sm">
-                  {mobileTrackingModalVehicle.make} {mobileTrackingModalVehicle.model}
-                </div>
-                <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">
-                  Plate: {mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate || 'N/A'} • Code: {mobileTrackingModalVehicle.vehicleCode || 'No Code'}
-                </div>
+          title="Driver Mobile GPS Tracking"
+          subtitle="Track vehicle location &amp; ground speed in absence of hardware GPS"
+          icon={Smartphone}
+          accent="emerald"
+        >
+          {/* Vehicle Card */}
+          <div className="bg-[var(--bg-surface-hover)] p-3.5 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between">
+            <div>
+              <div className="font-bold text-[var(--text-main)] text-sm">
+                {mobileTrackingModalVehicle.make} {mobileTrackingModalVehicle.model}
               </div>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                NO HARDWARE DEVICE
-              </span>
-            </div>
-
-            {/* Tracking Provision Options */}
-            <div className="space-y-3">
-              {/* Option 1: Live Browser GPS Streaming */}
-              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/15 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Radio className="w-3.5 h-3.5 text-cyan-400" />
-                      Stream Live GPS from this Device
-                    </h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Transmit live GPS &amp; ground speed directly to Fleet Telematics.
-                    </p>
-                  </div>
-                  {isTrackingInBrowser && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      TRANSMITTING
-                    </span>
-                  )}
-                </div>
-
-                {isTrackingInBrowser && (
-                  <div className="p-3 rounded-lg bg-slate-900/80 border border-white/5 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-sans">Ground Speed</span>
-                      <span className="font-mono text-2xl font-black text-cyan-400">
-                        {browserTrackingSpeed.toFixed(1)} <span className="text-xs font-normal text-slate-400">km/h</span>
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] text-slate-400 block font-sans">Interval</span>
-                      <span className="text-xs font-mono text-emerald-400">Every 4s</span>
-                    </div>
-                  </div>
-                )}
-
-                {!isTrackingInBrowser ? (
-                  <button
-                    type="button"
-                    onClick={() => startBrowserTracking(mobileTrackingModalVehicle)}
-                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition active:scale-[0.98]"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    Turn On Mobile Tracking Now
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={stopBrowserTracking}
-                    className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 transition active:scale-[0.98]"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-white" />
-                    Stop Mobile Tracking
-                  </button>
-                )}
+              <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">
+                Plate: {mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate || 'N/A'} • Code: {mobileTrackingModalVehicle.vehicleCode || 'No Code'}
               </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              NO HARDWARE DEVICE
+            </span>
+          </div>
 
-              {/* Option 2: Driver Mobile App Link */}
-              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] space-y-2.5">
+          {/* Tracking Provision Options */}
+          <div className="space-y-3">
+            {/* Option 1: Live Browser GPS Streaming */}
+            <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/15 space-y-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5 text-violet-400" />
-                    Send to Driver Smartphone
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-cyan-400" />
+                    Stream Live GPS from this Device
                   </h4>
-                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                    Driver can log in using Plate Number <strong>{mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate}</strong> or tap the direct link.
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Transmit live GPS &amp; ground speed directly to Fleet Telematics.
                   </p>
                 </div>
+                {isTrackingInBrowser && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    TRANSMITTING
+                  </span>
+                )}
+              </div>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <a
-                    href={`/driver-app?vehicle=${encodeURIComponent(mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate || mobileTrackingModalVehicle.vehicleCode || '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex-1 py-2 px-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Open Driver App
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => copyDriverTrackingLink(mobileTrackingModalVehicle)}
-                    className="py-2 px-3 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-xl text-xs font-medium flex items-center gap-1.5 transition"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    {copiedVehicleId === mobileTrackingModalVehicle.id ? 'Copied Link!' : 'Copy Link'}
-                  </button>
+              {isTrackingInBrowser && (
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-sans">Ground Speed</span>
+                    <span className="font-mono text-2xl font-black text-cyan-400">
+                      {browserTrackingSpeed.toFixed(1)} <span className="text-xs font-normal text-slate-400">km/h</span>
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-sans">Interval</span>
+                    <span className="text-xs font-mono text-emerald-400">Every 4s</span>
+                  </div>
                 </div>
+              )}
+
+              {!isTrackingInBrowser ? (
+                <button
+                  type="button"
+                  onClick={() => startBrowserTracking(mobileTrackingModalVehicle)}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition active:scale-[0.98]"
+                >
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  Turn On Mobile Tracking Now
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={stopBrowserTracking}
+                  className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 transition active:scale-[0.98]"
+                >
+                  <Square className="w-3.5 h-3.5 fill-white" />
+                  Stop Mobile Tracking
+                </button>
+              )}
+            </div>
+
+            {/* Option 2: Driver Mobile App Link */}
+            <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] space-y-2.5">
+              <div>
+                <h4 className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-violet-400" />
+                  Send to Driver Smartphone
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Driver can log in using Plate Number <strong>{mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate}</strong> or tap the direct link.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <a
+                  href={`/driver-app?vehicle=${encodeURIComponent(mobileTrackingModalVehicle.plateNumber || mobileTrackingModalVehicle.licensePlate || mobileTrackingModalVehicle.vehicleCode || '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 py-2 px-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Driver App
+                </a>
+                <button
+                  type="button"
+                  onClick={() => copyDriverTrackingLink(mobileTrackingModalVehicle)}
+                  className="py-2 px-3 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-xl text-xs font-medium flex items-center gap-1.5 transition"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copiedVehicleId === mobileTrackingModalVehicle.id ? 'Copied Link!' : 'Copy Link'}
+                </button>
               </div>
             </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  stopBrowserTracking();
-                  setMobileTrackingModalVehicle(null);
-                }}
-                className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-              >
-                Close
-              </button>
-            </div>
           </div>
-        </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                stopBrowserTracking();
+                setMobileTrackingModalVehicle(null);
+              }}
+              className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </FormModal>
       )}
 
       {/* Slide-Over Inspector Drawer for Vehicle */}
@@ -2312,494 +2246,555 @@ export default function VehiclesPage() {
 
       {/* Add / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl">
-            {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0">
-              <div>
-                <h2 className="text-lg font-semibold text-[var(--text-main)]">{editing ? `Edit Vehicle — ${editing.vehicleCode || editing.make}` : 'Add New Vehicle'}</h2>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">Fill in vehicle identity, Mulkiya copy, and regulatory permits</p>
-              </div>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
-            </div>
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title={editing ? `Edit Vehicle — ${editing.vehicleCode || editing.make}` : 'Add New Vehicle'}
+          subtitle="Fill in vehicle identity, Mulkiya copy, and regulatory permits"
+          size="xl"
+        >
+          {/* Tabs */}
+          <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
+            {(['basic', 'fleet', 'documents'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-6 py-3 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                {t === 'basic' ? '📋 Basic Details' : t === 'fleet' ? '🚗 Fleet Assignment' : '📄 Documents & Permits'}
+              </button>
+            ))}
+          </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
-              {(['basic', 'fleet', 'documents'] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)}
-                  className={`px-6 py-3 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
-                  {t === 'basic' ? '📋 Basic Details' : t === 'fleet' ? '🚗 Fleet Assignment' : '📄 Documents & Permits'}
-                </button>
-              ))}
-            </div>
+          {/* Modal Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs">{error}</div>}
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs">{error}</div>}
-
-              {/* TAB: Basic Details */}
-              {tab === 'basic' && (
-                <div className="space-y-6">
-                  {/* Top Header with Mulkiya Upload on the Right Corner */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                    <div className="md:col-span-2 space-y-4">
-                      <div>
-                        <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-2">Vehicle Identification</h3>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          Enter vehicle identifiers manually or upload a Mulkiya / Registration card on the right for instant AI autofill.
-                        </p>
-                      </div>
-
-                      {/* Detected Info Notification */}
-                      {detectedInfo && !detectedDismissed && (
-                        <div className="bg-gradient-to-r from-blue-600/15 to-cyan-600/15 border border-blue-500/30 rounded-xl p-3.5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className="text-blue-400 text-base">🤖</span>
-                                <span className="text-xs font-bold text-blue-300">Smart Vehicle Identification</span>
-                              </div>
-                              <div className="grid grid-cols-3 gap-2 mt-2">
-                                <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
-                                  <div className="text-[10px] text-[var(--text-muted)]">Segment</div>
-                                  <div className="text-xs font-bold text-[var(--text-main)]">
-                                    {VEHICLE_SEGMENTS.find(s => s.value === detectedInfo.segment)?.label ?? detectedInfo.segment}
-                                  </div>
-                                </div>
-                                <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
-                                  <div className="text-[10px] text-[var(--text-muted)]">Class</div>
-                                  <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
-                                </div>
-                                <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
-                                  <div className="text-[10px] text-[var(--text-muted)]">Suggested Type</div>
-                                  <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.suggestedType}</div>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <button type="button" onClick={applyDetection}
-                                className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shadow-sm">
-                                ✓ Apply
-                              </button>
-                              <button type="button" onClick={() => setDetectedDismissed(true)}
-                                className="px-3 py-1 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs rounded-lg transition-colors whitespace-nowrap">
-                                Dismiss
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Code</label>
-                          <input 
-                            value={form.vehicleCode ?? ''} 
-                            onChange={e => f('vehicleCode', e.target.value.toUpperCase())}
-                            placeholder="e.g. FLEET-101 or DXB-042"
-                            className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" 
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">VIN / Chassis No. <span className="text-rose-400">*</span></label>
-                          <input 
-                            value={form.chassisNo ?? form.vin ?? ''} 
-                            onChange={e => { f('chassisNo', e.target.value.toUpperCase()); f('vin', e.target.value.toUpperCase()); }}
-                            placeholder="17-character VIN"
-                            className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono uppercase focus:outline-none focus:border-orange-500/50" 
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Make <span className="text-rose-400">*</span></label>
-                          <input
-                            list="makes-list"
-                            value={form.make ?? ''}
-                            onChange={e => f('make', e.target.value)}
-                            placeholder="e.g. Toyota"
-                            className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
-                          <datalist id="makes-list">
-                            {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
-                          </datalist>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Model <span className="text-rose-400">*</span></label>
-                          <input
-                            list="models-list"
-                            value={form.model ?? ''}
-                            onChange={e => f('model', e.target.value)}
-                            placeholder="e.g. Camry"
-                            className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
-                          <datalist id="models-list">
-                            {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
-                          </datalist>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Model Year</label>
-                          <input
-                            type="number"
-                            min={1970}
-                            max={new Date().getFullYear() + 2}
-                            value={form.yearOfManufacture || form.year || ''}
-                            onChange={e => {
-                              const y = parseInt(e.target.value, 10);
-                              f('year', y);
-                              f('yearOfManufacture', y);
-                            }}
-                            placeholder="e.g. 2024"
-                            className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                        </div>
-                      </div>
+            {/* TAB: Basic Details */}
+            {tab === 'basic' && (
+              <div className="space-y-6">
+                {/* Top Header with Mulkiya Upload on the Right Corner */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                  <div className="md:col-span-2 space-y-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-2">Vehicle Identification</h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Enter vehicle identifiers manually or upload a Mulkiya / Registration card on the right for instant AI autofill.
+                      </p>
                     </div>
 
-                    {/* Right Corner: Mulkiya / Registration Copy Attachment Card */}
-                    <div className="bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-[var(--bg-surface-hover)] border-2 border-dashed border-orange-500/30 hover:border-orange-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between h-full">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" /> Attach Mulkiya
-                          </span>
-                          <span className="text-[10px] font-semibold bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
-                            AI Autofill
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                          Upload UAE Registration card (Mulkiya) copy. AI will automatically scan and autofill plate, chassis, make, model & dates.
-                        </p>
-                      </div>
-
-                      {mulkiyaScanSuccess && (
-                        <div className="my-2 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                          <span className="leading-tight">{mulkiyaScanSuccess}</span>
-                        </div>
-                      )}
-
-                      {mulkiyaScanError && (
-                        <div className="my-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                          <span className="leading-tight">{mulkiyaScanError}</span>
-                        </div>
-                      )}
-
-                      <div className="mt-3">
-                        <input
-                          ref={mulkiyaInputRef}
-                          type="file"
-                          accept="image/*,application/pdf"
-                          className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (file) handleMulkiyaUpload(file);
-                          }}
-                        />
-
-                        {form.mulkiyaFileName ? (
-                          <div className="p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <FileText className="w-4 h-4 text-orange-400 shrink-0" />
-                              <span className="text-xs font-medium text-[var(--text-main)] truncate font-mono">
-                                {form.mulkiyaFileName}
-                              </span>
+                    {/* Detected Info Notification */}
+                    {detectedInfo && !detectedDismissed && (
+                      <div className="bg-gradient-to-r from-blue-600/15 to-cyan-600/15 border border-blue-500/30 rounded-xl p-3.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-blue-400 text-base">🤖</span>
+                              <span className="text-xs font-bold text-blue-300">Smart Vehicle Identification</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => mulkiyaInputRef.current?.click()}
-                              disabled={mulkiyaScanning}
-                              className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 shrink-0"
-                            >
-                              Replace
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)]">Segment</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">
+                                  {VEHICLE_SEGMENTS.find(s => s.value === detectedInfo.segment)?.label ?? detectedInfo.segment}
+                                </div>
+                              </div>
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)]">Class</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
+                              </div>
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-2.5 py-1.5 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)]">Suggested Type</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.suggestedType}</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <button type="button" onClick={applyDetection}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shadow-sm">
+                              ✓ Apply
+                            </button>
+                            <button type="button" onClick={() => setDetectedDismissed(true)}
+                              className="px-3 py-1 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs rounded-lg transition-colors whitespace-nowrap">
+                              Dismiss
                             </button>
                           </div>
-                        ) : (
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Vehicle Code">
+                        <TextInput 
+                          value={form.vehicleCode ?? ''} 
+                          onChange={e => f('vehicleCode', e.target.value.toUpperCase())}
+                          placeholder="e.g. FLEET-101 or DXB-042" 
+                        />
+                      </FormField>
+                      <FormField label="VIN / Chassis No." required>
+                        <TextInput 
+                          value={form.chassisNo ?? form.vin ?? ''} 
+                          onChange={e => { f('chassisNo', e.target.value.toUpperCase()); f('vin', e.target.value.toUpperCase()); }}
+                          placeholder="17-character VIN" 
+                        />
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Make <span className="text-rose-400">*</span></label>
+                        <TextInput
+                          list="makes-list"
+                          value={form.make ?? ''}
+                          onChange={e => f('make', e.target.value)}
+                          placeholder="e.g. Toyota" className="w-full" />
+                        <datalist id="makes-list">
+                          {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Model <span className="text-rose-400">*</span></label>
+                        <TextInput
+                          list="models-list"
+                          value={form.model ?? ''}
+                          onChange={e => f('model', e.target.value)}
+                          placeholder="e.g. Camry" className="w-full" />
+                        <datalist id="models-list">
+                          {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Model Year</label>
+                        <TextInput
+                          type="number"
+                          min={1970}
+                          max={new Date().getFullYear() + 2}
+                          value={form.yearOfManufacture || form.year || ''}
+                          onChange={e => {
+                            const y = parseInt(e.target.value, 10);
+                            f('year', y);
+                            f('yearOfManufacture', y);
+                          }}
+                          placeholder="e.g. 2024" className="w-full font-mono" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Corner: Mulkiya / Registration Copy Attachment Card */}
+                  <div className="bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-[var(--bg-surface-hover)] border-2 border-dashed border-orange-500/30 hover:border-orange-500/60 transition-all rounded-2xl p-4 flex flex-col justify-between h-full">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" /> Attach Mulkiya
+                        </span>
+                        <span className="text-[10px] font-semibold bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
+                          AI Autofill
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                        Upload UAE Registration card (Mulkiya) copy. AI will automatically scan and autofill plate, chassis, make, model & dates.
+                      </p>
+                    </div>
+
+                    {mulkiyaScanSuccess && (
+                      <div className="my-2 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        <span className="leading-tight">{mulkiyaScanSuccess}</span>
+                      </div>
+                    )}
+
+                    {mulkiyaScanError && (
+                      <div className="my-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                        <span className="leading-tight">{mulkiyaScanError}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-3">
+                      <input
+                        ref={mulkiyaInputRef}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleMulkiyaUpload(file);
+                        }}
+                      />
+
+                      {form.mulkiyaFileName ? (
+                        <div className="p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText className="w-4 h-4 text-orange-400 shrink-0" />
+                            <span className="text-xs font-medium text-[var(--text-main)] truncate font-mono">
+                              {form.mulkiyaFileName}
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={() => mulkiyaInputRef.current?.click()}
                             disabled={mulkiyaScanning}
-                            className="w-full py-3 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-400 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2"
+                            className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 shrink-0"
                           >
-                            {mulkiyaScanning ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
-                                <span>Reading Mulkiya with AI…</span>
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="w-4 h-4" />
-                                <span>Upload Mulkiya / Registration</span>
-                              </>
-                            )}
+                            Replace
                           </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Registration & Number Plate</h3>
-                    <div className="grid grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Emirate</label>
-                        <select value={form.emirate ?? 'DUBAI'} onChange={e => f('emirate', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {EMIRATES.map(em => <option key={em} value={em}>{em.replace(/_/g, ' ')}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Code</label>
-                        <input value={form.plateCode ?? ''} onChange={e => f('plateCode', e.target.value.toUpperCase())}
-                          placeholder="e.g. A, B, 1"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono uppercase focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Number</label>
-                        <input value={form.plateNumber ?? form.licensePlate ?? ''} onChange={e => { f('plateNumber', e.target.value); f('licensePlate', e.target.value); }}
-                          placeholder="e.g. 12345"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Category</label>
-                        <select value={form.plateCategory ?? 'PRIVATE'} onChange={e => f('plateCategory', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {PLATE_CATS.map(pc => <option key={pc} value={pc}>{pc}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Classification & Commercial Status</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Segment</label>
-                        <select value={form.category ?? ''} onChange={e => f('category', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          <option value="">— Select Segment —</option>
-                          {VEHICLE_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Color</label>
-                        <input value={form.color ?? ''} onChange={e => f('color', e.target.value)} placeholder="e.g. White"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Status</label>
-                        <select value={form.status ?? 'AVAILABLE'} onChange={e => f('status', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Acquisition & Initial Odometer</h3>
-                    <div className="grid grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Acquisition Type</label>
-                        <select value={form.acquisitionType ?? 'PURCHASE'} onChange={e => f('acquisitionType', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {ACQUISITION_TYPES.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1"><Calendar className="w-3 h-3" />Purchase Date</label>
-                        <input type="date" value={form.purchaseDate ? form.purchaseDate.slice(0, 10) : ''}
-                          onChange={e => f('purchaseDate', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Purchase Price (AED)</label>
-                        <input type="number" min={0} value={form.purchasePrice ?? 0}
-                          onChange={e => f('purchasePrice', Number(e.target.value))}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1"><Gauge className="w-3 h-3" />Odometer (km)</label>
-                        <input type="number" min={0} value={form.odometerReading ?? 0}
-                          onChange={e => f('odometerReading', Number(e.target.value))}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => mulkiyaInputRef.current?.click()}
+                          disabled={mulkiyaScanning}
+                          className="w-full py-3 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-400 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2"
+                        >
+                          {mulkiyaScanning ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
+                              <span>Reading Mulkiya with AI…</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              <span>Upload Mulkiya / Registration</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
 
-              {/* TAB: Fleet Assignment */}
-              {tab === 'fleet' && (
+                <div>
+                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Registration & Number Plate</h3>
+                  <div className="grid grid-cols-4 gap-4">
+                    <FormField label="Emirate">
+                      <SelectInput value={form.emirate ?? 'DUBAI'} onChange={e => f('emirate', e.target.value)}>
+                        {EMIRATES.map(em => <option key={em} value={em}>{em.replace(/_/g, ' ')}</option>)}
+                      </SelectInput>
+                    </FormField>
+                    <FormField label="Plate Code">
+                      <TextInput value={form.plateCode ?? ''} onChange={e => f('plateCode', e.target.value.toUpperCase())}
+                        placeholder="e.g. A, B, 1" />
+                    </FormField>
+                    <FormField label="Plate Number">
+                      <TextInput value={form.plateNumber ?? form.licensePlate ?? ''} onChange={e => { f('plateNumber', e.target.value); f('licensePlate', e.target.value); }}
+                        placeholder="e.g. 12345" />
+                    </FormField>
+                    <FormField label="Plate Category">
+                      <SelectInput value={form.plateCategory ?? 'PRIVATE'} onChange={e => f('plateCategory', e.target.value)}>
+                        {PLATE_CATS.map(pc => <option key={pc} value={pc}>{pc}</option>)}
+                      </SelectInput>
+                    </FormField>
+                  </div>
+                </div>
+
+                <FormSection title="Classification & Commercial Status" columns={3}>
+                  <FormField label="Vehicle Segment">
+                    <SelectInput value={form.category ?? ''} onChange={e => f('category', e.target.value)}>
+                      <option value="">— Select Segment —</option>
+                      {VEHICLE_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>)}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Color">
+                    <TextInput value={form.color ?? ''} onChange={e => f('color', e.target.value)} placeholder="e.g. White" />
+                  </FormField>
+                  <FormField label="Status">
+                    <SelectInput value={form.status ?? 'AVAILABLE'} onChange={e => f('status', e.target.value)}>
+                      {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </SelectInput>
+                  </FormField>
+                </FormSection>
+
+                <div>
+                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Acquisition & Initial Odometer</h3>
+                  <div className="grid grid-cols-4 gap-4">
+                    <FormField label="Acquisition Type">
+                      <SelectInput value={form.acquisitionType ?? 'PURCHASE'} onChange={e => f('acquisitionType', e.target.value)}>
+                        {ACQUISITION_TYPES.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+                      </SelectInput>
+                    </FormField>
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1"><Calendar className="w-3 h-3" />Purchase Date</label>
+                      <TextInput type="date" value={form.purchaseDate ? form.purchaseDate.slice(0, 10) : ''}
+                        onChange={e => f('purchaseDate', e.target.value)} className="w-full" />
+                    </div>
+                    <FormField label="Purchase Price (AED)">
+                      <TextInput type="number" min={0} value={form.purchasePrice ?? 0}
+                        onChange={e => f('purchasePrice', Number(e.target.value))} />
+                    </FormField>
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1"><Gauge className="w-3 h-3" />Odometer (km)</label>
+                      <TextInput type="number" min={0} value={form.odometerReading ?? 0}
+                        onChange={e => f('odometerReading', Number(e.target.value))} className="w-full font-mono" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Fleet Assignment */}
+            {tab === 'fleet' && (
+              <div className="space-y-6">
+                <FormSection title="Fleet Configuration" columns={2}>
+                  <FormField label="Vehicle Type">
+                    <SelectInput value={form.vehicleTypeId ?? ''} onChange={e => f('vehicleTypeId', e.target.value)}>
+                      <option value="">— Select Type —</option>
+                      {vehicleTypes.map(vt => <option key={vt.id} value={vt.id}>{vt.name} ({vt.code})</option>)}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Vehicle Usage">
+                    <SelectInput value={form.vehicleUsage ?? 'RENTAL'} onChange={e => f('vehicleUsage', e.target.value)}>
+                      {USAGES.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Lifecycle Stage">
+                    <SelectInput value={form.lifecycleStage ?? 'ACTIVE'} onChange={e => f('lifecycleStage', e.target.value)}>
+                      {LIFECYCLE_STAGES.map(l => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Branch / Location">
+                    <TextInput value={form.branchName ?? ''} onChange={e => f('branchName', e.target.value)}
+                      placeholder="e.g. Dubai Airport" />
+                  </FormField>
+                </FormSection>
+
+
+                <div>
+                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" /> Organizational Hierarchy (Region → Department → Unit)
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Region</label>
+                      <SearchableSelect
+                        value={form.regionId ?? ''}
+                        onChange={val => handleVehicleRegionChange(val)}
+                        placeholder="— Select Region —"
+                        searchPlaceholder="Search region..."
+                        accent="amber"
+                        isClearable
+                        options={hierarchyRegions.map(r => ({
+                          value: r.id,
+                          label: r.name,
+                          sublabel: r.code ? `Code: ${r.code}` : undefined,
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Department</label>
+                      <SearchableSelect
+                        value={form.departmentId ?? ''}
+                        onChange={val => handleVehicleDeptChange(val)}
+                        disabled={!form.regionId}
+                        placeholder={!form.regionId ? "Select Region First" : "— Select Department —"}
+                        searchPlaceholder="Search department..."
+                        accent="amber"
+                        isClearable
+                        options={vehicleDepts.map(d => ({
+                          value: d.id,
+                          label: d.name,
+                          sublabel: d.code ? `Code: ${d.code}` : undefined,
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Unit / Section</label>
+                      <SearchableSelect
+                        value={form.unitId ?? ''}
+                        onChange={val => handleVehicleUnitChange(val)}
+                        disabled={!form.departmentId}
+                        placeholder={!form.departmentId ? "Select Department First" : "— Select Unit / Section —"}
+                        searchPlaceholder="Search unit..."
+                        accent="amber"
+                        isClearable
+                        options={vehicleUnits.map(u => ({
+                          value: u.id,
+                          label: u.name,
+                          sublabel: u.code ? `Code: ${u.code}` : undefined,
+                        }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <FormSection title="Telematics & Hardware" columns={2}>
+                  <FormField label="Device ID / IMEI">
+                    <TextInput value={form.deviceId ?? ''} onChange={e => f('deviceId', e.target.value)}
+                      placeholder="GPS/telematics device ID" />
+                  </FormField>
+                  <FormField label="SIM Card No.">
+                    <TextInput value={form.simCardNo ?? ''} onChange={e => f('simCardNo', e.target.value)}
+                      placeholder="SIM number" />
+                  </FormField>
+                </FormSection>
+
+                <div>
+                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5" /> Driver & Operational Zone
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Assigned Driver</label>
+                      <SearchableSelect
+                        value={form.assignedDriverId ?? ''}
+                        onChange={val => f('assignedDriverId', val)}
+                        placeholder="— Unassigned / Customer Rented —"
+                        searchPlaceholder="Search driver..."
+                        accent="amber"
+                        isClearable
+                        options={driverList.map(dr => ({
+                          value: dr.id,
+                          label: dr.name,
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Operational Zone</label>
+                      <SearchableSelect
+                        value={form.zoneId ?? ''}
+                        onChange={val => f('zoneId', val)}
+                        placeholder="All UAE Zones"
+                        searchPlaceholder="Search zone..."
+                        accent="amber"
+                        isClearable
+                        options={zones.map(z => ({
+                          value: z.id,
+                          label: z.name,
+                        }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Documents & Permits */}
+            {tab === 'documents' && (() => {
+              const coreDocs = (form.documents || []).filter(d => d.id === 'mulkiya-doc' || d.id === 'insurance-doc' || d.documentType === 'REGISTRATION' || d.documentType === 'INSURANCE');
+              const additionalDocs = (form.documents || []).filter(d => d.id !== 'mulkiya-doc' && d.id !== 'insurance-doc' && d.documentType !== 'REGISTRATION' && d.documentType !== 'INSURANCE');
+
+              return (
                 <div className="space-y-6">
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Fleet Configuration</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Type</label>
-                        <select value={form.vehicleTypeId ?? ''} onChange={e => f('vehicleTypeId', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          <option value="">— Select Type —</option>
-                          {vehicleTypes.map(vt => <option key={vt.id} value={vt.id}>{vt.name} ({vt.code})</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Usage</label>
-                        <select value={form.vehicleUsage ?? 'RENTAL'} onChange={e => f('vehicleUsage', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {USAGES.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Lifecycle Stage</label>
-                        <select value={form.lifecycleStage ?? 'ACTIVE'} onChange={e => f('lifecycleStage', e.target.value)}
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
-                          {LIFECYCLE_STAGES.map(l => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Branch / Location</label>
-                        <input value={form.branchName ?? ''} onChange={e => f('branchName', e.target.value)}
-                          placeholder="e.g. Dubai Airport"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
-                      </div>
+                  {/* Primary Section: Vehicle Registration & Insurance */}
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Vehicle Registration & Insurance</h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                        Primary mandatory registration (Mulkiya) and comprehensive insurance policy documentation.
+                      </p>
                     </div>
-                  </div>
 
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> Organizational Hierarchy (Region → Department → Unit)
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Region</label>
-                        <SearchableSelect
-                          value={form.regionId ?? ''}
-                          onChange={val => handleVehicleRegionChange(val)}
-                          placeholder="— Select Region —"
-                          searchPlaceholder="Search region..."
-                          accent="amber"
-                          isClearable
-                          options={hierarchyRegions.map(r => ({
-                            value: r.id,
-                            label: r.name,
-                            sublabel: r.code ? `Code: ${r.code}` : undefined,
-                          }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Department</label>
-                        <SearchableSelect
-                          value={form.departmentId ?? ''}
-                          onChange={val => handleVehicleDeptChange(val)}
-                          disabled={!form.regionId}
-                          placeholder={!form.regionId ? "Select Region First" : "— Select Department —"}
-                          searchPlaceholder="Search department..."
-                          accent="amber"
-                          isClearable
-                          options={vehicleDepts.map(d => ({
-                            value: d.id,
-                            label: d.name,
-                            sublabel: d.code ? `Code: ${d.code}` : undefined,
-                          }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Unit / Section</label>
-                        <SearchableSelect
-                          value={form.unitId ?? ''}
-                          onChange={val => handleVehicleUnitChange(val)}
-                          disabled={!form.departmentId}
-                          placeholder={!form.departmentId ? "Select Department First" : "— Select Unit / Section —"}
-                          searchPlaceholder="Search unit..."
-                          accent="amber"
-                          isClearable
-                          options={vehicleUnits.map(u => ({
-                            value: u.id,
-                            label: u.name,
-                            sublabel: u.code ? `Code: ${u.code}` : undefined,
-                          }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Telematics & Hardware</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Device ID / IMEI</label>
-                        <input value={form.deviceId ?? ''} onChange={e => f('deviceId', e.target.value)}
-                          placeholder="GPS/telematics device ID"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">SIM Card No.</label>
-                        <input value={form.simCardNo ?? ''} onChange={e => f('simCardNo', e.target.value)}
-                          placeholder="SIM number"
-                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                      <UserCheck className="w-3.5 h-3.5" /> Driver & Operational Zone
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Assigned Driver</label>
-                        <SearchableSelect
-                          value={form.assignedDriverId ?? ''}
-                          onChange={val => f('assignedDriverId', val)}
-                          placeholder="— Unassigned / Customer Rented —"
-                          searchPlaceholder="Search driver..."
-                          accent="amber"
-                          isClearable
-                          options={driverList.map(dr => ({
-                            value: dr.id,
-                            label: dr.name,
-                          }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Operational Zone</label>
-                        <SearchableSelect
-                          value={form.zoneId ?? ''}
-                          onChange={val => f('zoneId', val)}
-                          placeholder="All UAE Zones"
-                          searchPlaceholder="Search zone..."
-                          accent="amber"
-                          isClearable
-                          options={zones.map(z => ({
-                            value: z.id,
-                            label: z.name,
-                          }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: Documents & Permits */}
-              {tab === 'documents' && (() => {
-                const coreDocs = (form.documents || []).filter(d => d.id === 'mulkiya-doc' || d.id === 'insurance-doc' || d.documentType === 'REGISTRATION' || d.documentType === 'INSURANCE');
-                const additionalDocs = (form.documents || []).filter(d => d.id !== 'mulkiya-doc' && d.id !== 'insurance-doc' && d.documentType !== 'REGISTRATION' && d.documentType !== 'INSURANCE');
-
-                return (
-                  <div className="space-y-6">
-                    {/* Primary Section: Vehicle Registration & Insurance */}
                     <div className="space-y-3">
+                      {coreDocs.map((doc) => {
+                        const isScanning = scanningDocId === doc.id;
+                        return (
+                          <div 
+                            key={doc.id}
+                            className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 space-y-3"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <FileCheck className="w-4 h-4 text-orange-400 shrink-0" />
+                                <span className="font-bold text-xs sm:text-sm text-[var(--text-main)] tracking-tight">
+                                  {doc.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {doc.autofilled && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3" /> AI Autofilled ({Math.round((doc.confidence || 0.85) * 100)}%)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                              <FormField label="Document / Certificate No.">
+                                <TextInput
+                                  type="text"
+                                  value={doc.documentNumber}
+                                  onChange={e => updateDocField(doc.id, 'documentNumber', e.target.value)}
+                                  placeholder={doc.documentType === 'REGISTRATION' ? "e.g. 12345678" : "e.g. POL-98234"}
+                                />
+                              </FormField>
+
+                              <FormField label="Issuing Authority">
+                                <TextInput
+                                  type="text"
+                                  value={doc.issuingAuthority ?? ''}
+                                  onChange={e => updateDocField(doc.id, 'issuingAuthority', e.target.value)}
+                                  placeholder="e.g. RTA, Abu Dhabi Police, Oman ROP"
+                                />
+                              </FormField>
+
+                              <FormField label="Expiry Date">
+                                <TextInput
+                                  type="date"
+                                  value={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ''}
+                                  onChange={e => updateDocField(doc.id, 'expiryDate', e.target.value)}
+                                />
+                              </FormField>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">Attachment File</label>
+                                <div className="flex items-center gap-2">
+                                  <label className="flex-1 cursor-pointer">
+                                    <input
+                                      type="file"
+                                      accept="image/*,application/pdf"
+                                      className="hidden"
+                                      onChange={e => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleDocumentFileUpload(doc.id, file);
+                                      }}
+                                    />
+                                    <div className="w-full px-3 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl text-xs flex items-center justify-between text-[var(--text-main)] transition-colors">
+                                      <span className="truncate max-w-[140px] font-mono text-[11px]">
+                                        {doc.fileName || 'Attach File (AI Read)'}
+                                      </span>
+                                      {isScanning ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400 shrink-0" />
+                                      ) : (
+                                        <Upload className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                                      )}
+                                    </div>
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Additional Section: Additional Documents and Permits */}
+                  <div className="space-y-3 pt-5 border-t border-[var(--border-subtle)]">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Vehicle Registration & Insurance</h3>
+                        <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Additional Documents and Permits</h3>
                         <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                          Primary mandatory registration (Mulkiya) and comprehensive insurance policy documentation.
+                          Attach custom authority permits, civil defense certificates, commercial transport permits, or GPS certifications.
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={addCustomDocument}
+                        className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Document
+                      </button>
+                    </div>
 
+                    {additionalDocs.length === 0 ? (
+                      <div className="p-6 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] text-center space-y-2">
+                        <p className="text-xs text-[var(--text-muted)]">No additional documents or permits added.</p>
+                        <button
+                          type="button"
+                          onClick={addCustomDocument}
+                          className="inline-flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 font-semibold"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Document / Permit
+                        </button>
+                      </div>
+                    ) : (
                       <div className="space-y-3">
-                        {coreDocs.map((doc) => {
+                        {additionalDocs.map((doc) => {
                           const isScanning = scanningDocId === doc.id;
                           return (
                             <div 
@@ -2809,9 +2804,12 @@ export default function VehiclesPage() {
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                   <FileCheck className="w-4 h-4 text-orange-400 shrink-0" />
-                                  <span className="font-bold text-xs sm:text-sm text-[var(--text-main)] tracking-tight">
-                                    {doc.name}
-                                  </span>
+                                  <TextInput
+                                    type="text"
+                                    value={doc.name}
+                                    onChange={e => updateDocField(doc.id, 'name', e.target.value)}
+                                    placeholder="Document / Permit Name (e.g. Authority Permit, Civil Defense, GPS Certificate)" className="w-full max-w-md"
+                                  />
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   {doc.autofilled && (
@@ -2819,44 +2817,45 @@ export default function VehiclesPage() {
                                       <Sparkles className="w-3 h-3" /> AI Autofilled ({Math.round((doc.confidence || 0.85) * 100)}%)
                                     </span>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeDocument(doc.id)}
+                                    className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded hover:bg-rose-500/10 transition-colors"
+                                  >
+                                    Remove
+                                  </button>
                                 </div>
                               </div>
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-                                <div>
-                                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Document / Certificate No.</label>
-                                  <input
+                                <FormField label="Document / Certificate No.">
+                                  <TextInput
                                     type="text"
                                     value={doc.documentNumber}
                                     onChange={e => updateDocField(doc.id, 'documentNumber', e.target.value)}
-                                    placeholder={doc.documentType === 'REGISTRATION' ? "e.g. 12345678" : "e.g. POL-98234"}
-                                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
+                                    placeholder="e.g. POL-98234 or CR-2024"
                                   />
-                                </div>
+                                </FormField>
 
-                                <div>
-                                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Issuing Authority</label>
-                                  <input
+                                <FormField label="Issuing Authority">
+                                  <TextInput
                                     type="text"
                                     value={doc.issuingAuthority ?? ''}
                                     onChange={e => updateDocField(doc.id, 'issuingAuthority', e.target.value)}
-                                    placeholder="e.g. RTA, Abu Dhabi Police, Oman ROP"
-                                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
+                                    placeholder="e.g. Civil Defense, Municipality, SIRA"
                                   />
-                                </div>
+                                </FormField>
 
-                                <div>
-                                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Expiry Date</label>
-                                  <input
+                                <FormField label="Expiry Date">
+                                  <TextInput
                                     type="date"
                                     value={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ''}
                                     onChange={e => updateDocField(doc.id, 'expiryDate', e.target.value)}
-                                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
                                   />
-                                </div>
+                                </FormField>
 
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Attachment File</label>
+                                  <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">Attachment File</label>
                                   <div className="flex items-center gap-2">
                                     <label className="flex-1 cursor-pointer">
                                       <input
@@ -2886,164 +2885,32 @@ export default function VehiclesPage() {
                           );
                         })}
                       </div>
-                    </div>
-
-                    {/* Additional Section: Additional Documents and Permits */}
-                    <div className="space-y-3 pt-5 border-t border-[var(--border-subtle)]">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider">Additional Documents and Permits</h3>
-                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                            Attach custom authority permits, civil defense certificates, commercial transport permits, or GPS certifications.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={addCustomDocument}
-                          className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Add Document
-                        </button>
-                      </div>
-
-                      {additionalDocs.length === 0 ? (
-                        <div className="p-6 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] text-center space-y-2">
-                          <p className="text-xs text-[var(--text-muted)]">No additional documents or permits added.</p>
-                          <button
-                            type="button"
-                            onClick={addCustomDocument}
-                            className="inline-flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 font-semibold"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> Add Document / Permit
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {additionalDocs.map((doc) => {
-                            const isScanning = scanningDocId === doc.id;
-                            return (
-                              <div 
-                                key={doc.id}
-                                className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 space-y-3"
-                              >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <FileCheck className="w-4 h-4 text-orange-400 shrink-0" />
-                                    <input
-                                      type="text"
-                                      value={doc.name}
-                                      onChange={e => updateDocField(doc.id, 'name', e.target.value)}
-                                      placeholder="Document / Permit Name (e.g. Authority Permit, Civil Defense, GPS Certificate)"
-                                      className="w-full max-w-md bg-[var(--bg-surface)] font-bold text-xs sm:text-sm text-[var(--text-main)] px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] focus:outline-none focus:border-orange-500"
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {doc.autofilled && (
-                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                                        <Sparkles className="w-3 h-3" /> AI Autofilled ({Math.round((doc.confidence || 0.85) * 100)}%)
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => removeDocument(doc.id)}
-                                      className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded hover:bg-rose-500/10 transition-colors"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-                                  <div>
-                                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Document / Certificate No.</label>
-                                    <input
-                                      type="text"
-                                      value={doc.documentNumber}
-                                      onChange={e => updateDocField(doc.id, 'documentNumber', e.target.value)}
-                                      placeholder="e.g. POL-98234 or CR-2024"
-                                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Issuing Authority</label>
-                                    <input
-                                      type="text"
-                                      value={doc.issuingAuthority ?? ''}
-                                      onChange={e => updateDocField(doc.id, 'issuingAuthority', e.target.value)}
-                                      placeholder="e.g. Civil Defense, Municipality, SIRA"
-                                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Expiry Date</label>
-                                    <input
-                                      type="date"
-                                      value={doc.expiryDate ? doc.expiryDate.slice(0, 10) : ''}
-                                      onChange={e => updateDocField(doc.id, 'expiryDate', e.target.value)}
-                                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1">Attachment File</label>
-                                    <div className="flex items-center gap-2">
-                                      <label className="flex-1 cursor-pointer">
-                                        <input
-                                          type="file"
-                                          accept="image/*,application/pdf"
-                                          className="hidden"
-                                          onChange={e => {
-                                            const file = e.target.files?.[0];
-                                            if (file) handleDocumentFileUpload(doc.id, file);
-                                          }}
-                                        />
-                                        <div className="w-full px-3 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl text-xs flex items-center justify-between text-[var(--text-main)] transition-colors">
-                                          <span className="truncate max-w-[140px] font-mono text-[11px]">
-                                            {doc.fileName || 'Attach File (AI Read)'}
-                                          </span>
-                                          {isScanning ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400 shrink-0" />
-                                          ) : (
-                                            <Upload className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                                          )}
-                                        </div>
-                                      </label>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
+          </div>
 
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0 bg-[var(--bg-surface)]">
-              <div className="flex gap-2">
-                {(['basic', 'fleet', 'documents'] as const).filter(t => t !== tab).map(t => (
-                  <button key={t} onClick={() => setTab(t)} className="px-3.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface-hover)] rounded-lg transition-colors">
-                    {t === 'basic' ? '← Basic Details' : t === 'fleet' ? '→ Fleet Assignment' : '→ Documents & Permits'}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-3">
-                {error && <span className="text-xs text-rose-400 font-semibold bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/30 max-w-xs truncate">{error}</span>}
-                <button onClick={() => setShowModal(false)} className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
-                <button onClick={handleSave} disabled={saving}
-                  className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm">
-                  {saving ? 'Saving…' : editing ? 'Update Vehicle' : 'Add Vehicle'}
+          {/* Modal Footer */}
+          <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0 bg-[var(--bg-surface)]">
+            <div className="flex gap-2">
+              {(['basic', 'fleet', 'documents'] as const).filter(t => t !== tab).map(t => (
+                <button key={t} onClick={() => setTab(t)} className="px-3.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface-hover)] rounded-lg transition-colors">
+                  {t === 'basic' ? '← Basic Details' : t === 'fleet' ? '→ Fleet Assignment' : '→ Documents & Permits'}
                 </button>
-              </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              {error && <span className="text-xs text-rose-400 font-semibold bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/30 max-w-xs truncate">{error}</span>}
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
+              <button onClick={handleSave} disabled={saving}
+                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm">
+                {saving ? 'Saving…' : editing ? 'Update Vehicle' : 'Add Vehicle'}
+              </button>
             </div>
           </div>
-        </div>
+        </FormModal>
       )}
     </div>
   );

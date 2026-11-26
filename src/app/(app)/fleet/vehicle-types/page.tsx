@@ -5,6 +5,8 @@ import {
   type VehicleKnowledge,
 } from '@/lib/vehicle-knowledge-base';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface VehicleType {
   id: string;
   code: string;
@@ -273,306 +275,273 @@ export default function VehicleTypesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-center justify-between sticky top-0 bg-[var(--bg-surface)] z-10">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">{editing ? 'Edit Vehicle Type' : 'Create New Vehicle Type'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
-            </div>
-            <div className="p-6 space-y-6">
-              {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>}
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title={editing ? 'Edit Vehicle Type' : 'Create New Vehicle Type'}
+          size="xl"
+        >
+          <div className="space-y-5">
+            {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>}
 
-              {/* Basic Info */}
-              <div>
-                <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Basic Information</h3>
+            {/* Basic Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Basic Information</h3>
 
-                {/* ── Smart Detection Banner ── */}
-                {detectedInfo && !detectedDismissed && (() => {
-                  const seg = detectedInfo.segment;
-                  const ft  = detectedInfo.fuelType ?? form.fuelType ?? 'PETROL';
-                  const computed = getSegmentDefaults(seg, ft);
-                  return (
-                    <div className="mb-5 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-xl p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-base">🤖</span>
-                            <span className="text-sm font-semibold text-blue-300">Smart Detection — Vehicle Identified</span>
-                            <span className="ml-auto text-xs text-blue-400/70 bg-blue-500/10 px-2 py-0.5 rounded-full">Auto-fill available</span>
-                          </div>
-                          {/* Row 1: Classification */}
-                          <div className="grid grid-cols-4 gap-2 mb-2">
-                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Group</div>
-                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.group.replace(/_/g, ' ')}</div>
-                            </div>
-                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Class</div>
-                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
-                            </div>
-                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Fuel Type</div>
-                              <div className="text-sm font-semibold text-[var(--text-main)]">{ft}</div>
-                            </div>
-                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Passengers</div>
-                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.numPassengers ?? '—'}</div>
-                            </div>
-                          </div>
-                          {/* Row 2: Cost parameters */}
-                          {computed && (
-                            <div className="grid grid-cols-4 gap-2">
-                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Cost / KM</div>
-                                <div className="text-sm font-semibold text-amber-300">AED {computed.costPerKm.toFixed(3)}</div>
-                              </div>
-                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Idle Fuel (L/hr)</div>
-                                <div className="text-sm font-semibold text-amber-300">{computed.idleFuelConsumption}</div>
-                              </div>
-                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-[var(--text-faint)] mb-0.5">CO₂ (g/km)</div>
-                                <div className={`text-sm font-semibold ${computed.co2EmissionFactor === 0 ? 'text-green-400' : 'text-amber-300'}`}>
-                                  {computed.co2EmissionFactor === 0 ? '0 ✓ Electric' : computed.co2EmissionFactor}
-                                </div>
-                              </div>
-                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Efficiency (km/L)</div>
-                                <div className="text-sm font-semibold text-amber-300">{computed.fuelEfficiencyKml || '—'}</div>
-                              </div>
-                            </div>
-                          )}
+              {/* ── Smart Detection Banner ── */}
+              {detectedInfo && !detectedDismissed && (() => {
+                const seg = detectedInfo.segment;
+                const ft  = detectedInfo.fuelType ?? form.fuelType ?? 'PETROL';
+                const computed = getSegmentDefaults(seg, ft);
+                return (
+                  <div className="mb-5 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-base">🤖</span>
+                          <span className="text-sm font-semibold text-blue-300">Smart Detection — Vehicle Identified</span>
+                          <span className="ml-auto text-xs text-blue-400/70 bg-blue-500/10 px-2 py-0.5 rounded-full">Auto-fill available</span>
                         </div>
-                        <div className="flex flex-col gap-2 ml-2">
-                          <button type="button" onClick={applyDetection}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap">
-                            ✓ Apply All
-                          </button>
-                          <button type="button" onClick={() => setDetectedDismissed(true)}
-                            className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs rounded-lg transition-colors whitespace-nowrap">
-                            Dismiss
-                          </button>
+                        {/* Row 1: Classification */}
+                        <div className="grid grid-cols-4 gap-2 mb-2">
+                          <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                            <div className="text-xs text-[var(--text-faint)] mb-0.5">Group</div>
+                            <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.group.replace(/_/g, ' ')}</div>
+                          </div>
+                          <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                            <div className="text-xs text-[var(--text-faint)] mb-0.5">Class</div>
+                            <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
+                          </div>
+                          <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                            <div className="text-xs text-[var(--text-faint)] mb-0.5">Fuel Type</div>
+                            <div className="text-sm font-semibold text-[var(--text-main)]">{ft}</div>
+                          </div>
+                          <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                            <div className="text-xs text-[var(--text-faint)] mb-0.5">Passengers</div>
+                            <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.numPassengers ?? '—'}</div>
+                          </div>
                         </div>
+                        {/* Row 2: Cost parameters */}
+                        {computed && (
+                          <div className="grid grid-cols-4 gap-2">
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Cost / KM</div>
+                              <div className="text-sm font-semibold text-amber-300">AED {computed.costPerKm.toFixed(3)}</div>
+                            </div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Idle Fuel (L/hr)</div>
+                              <div className="text-sm font-semibold text-amber-300">{computed.idleFuelConsumption}</div>
+                            </div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">CO₂ (g/km)</div>
+                              <div className={`text-sm font-semibold ${computed.co2EmissionFactor === 0 ? 'text-green-400' : 'text-amber-300'}`}>
+                                {computed.co2EmissionFactor === 0 ? '0 ✓ Electric' : computed.co2EmissionFactor}
+                              </div>
+                            </div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Efficiency (km/L)</div>
+                              <div className="text-sm font-semibold text-amber-300">{computed.fuelEfficiencyKml || '—'}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 ml-2">
+                        <button type="button" onClick={applyDetection}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap">
+                          ✓ Apply All
+                        </button>
+                        <button type="button" onClick={() => setDetectedDismissed(true)}
+                          className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs rounded-lg transition-colors whitespace-nowrap">
+                          Dismiss
+                        </button>
                       </div>
                     </div>
-                  );
-                })()}
+                  </div>
+                );
+              })()}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Code <span className="text-red-400">*</span></label>
-                    <input value={form.code ?? ''} onChange={e => f('code', e.target.value.toUpperCase())}
-                      placeholder="e.g. SEDAN-ECO"
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:border-orange-500/50" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Name <span className="text-red-400">*</span></label>
-                    <input value={form.name ?? ''} onChange={e => f('name', e.target.value)}
-                      placeholder="e.g. Economy Sedan"
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Make
-                      <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
-                    </label>
-                    <input
-                      list="vt-makes-list"
-                      value={form.make ?? ''}
-                      onChange={e => f('make', e.target.value)}
-                      placeholder="e.g. Toyota"
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
-                    <datalist id="vt-makes-list">
-                      {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Model
-                      <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
-                    </label>
-                    <input
-                      list="vt-models-list"
-                      value={form.model ?? ''}
-                      onChange={e => f('model', e.target.value)}
-                      placeholder="e.g. Fortuner"
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
-                    <datalist id="vt-models-list">
-                      {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
-                    </datalist>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Description</label>
-                    <textarea value={form.description ?? ''} onChange={e => f('description', e.target.value)} rows={2}
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Code" required>
+                  <TextInput value={form.code ?? ''} onChange={e => f('code', e.target.value.toUpperCase())}
+                    placeholder="e.g. SEDAN-ECO" />
+                </FormField>
+                <FormField label="Name" required>
+                  <TextInput value={form.name ?? ''} onChange={e => f('name', e.target.value)}
+                    placeholder="e.g. Economy Sedan" />
+                </FormField>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Make
+                    <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
+                  </label>
+                  <TextInput
+                    list="vt-makes-list"
+                    value={form.make ?? ''}
+                    onChange={e => f('make', e.target.value)}
+                    placeholder="e.g. Toyota" className="w-full" />
+                  <datalist id="vt-makes-list">
+                    {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
+                  </datalist>
                 </div>
-              </div>
-
-              {/* Classification */}
-              <div>
-                <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Classification</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Vehicle Group
-                      {autoFilledFields.has('vehicleGroup') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <select
-                      value={form.vehicleGroup ?? 'PASSENGER'}
-                      onChange={e => {
-                        const grp = e.target.value;
-                        const firstClass = GROUP_CLASS_MAP[grp]?.[0] ?? '';
-                        setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleGroup'); s.delete('vehicleClass'); return s; });
-                        setForm(p => ({ ...p, vehicleGroup: grp, vehicleClass: firstClass }));
-                      }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('vehicleGroup') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
-                      {VEHICLE_GROUPS.map(g => <option key={g} value={g}>{g.replace(/_/g, ' ')}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Vehicle Class
-                      {form.vehicleGroup && !autoFilledFields.has('vehicleClass') && (
-                        <span className="text-orange-400/60 normal-case font-normal">
-                          ({GROUP_CLASS_MAP[form.vehicleGroup]?.length ?? 0} for {form.vehicleGroup.replace(/_/g, ' ')})
-                        </span>
-                      )}
-                      {autoFilledFields.has('vehicleClass') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <select value={form.vehicleClass ?? ''}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleClass'); return s; }); f('vehicleClass', e.target.value); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('vehicleClass') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
-                      {(GROUP_CLASS_MAP[form.vehicleGroup ?? ''] ?? ALL_VEHICLE_CLASSES).map(c => (
-                        <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Transmission Type</label>
-                    <select value={form.transmissionType ?? 'AUTOMATIC'} onChange={e => f('transmissionType', e.target.value)}
-                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50">
-                      {TRANSMISSIONS.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Fuel Type
-                      {autoFilledFields.has('fuelType') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled · CO₂ recalculates on change</span>}
-                    </label>
-                    <select value={form.fuelType ?? 'PETROL'}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelType'); return s; }); f('fuelType', e.target.value); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('fuelType') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
-                      {FUEL_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5">Model
+                    <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
+                  </label>
+                  <TextInput
+                    list="vt-models-list"
+                    value={form.model ?? ''}
+                    onChange={e => f('model', e.target.value)}
+                    placeholder="e.g. Fortuner" className="w-full" />
+                  <datalist id="vt-models-list">
+                    {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
+                  </datalist>
                 </div>
+                <FormField label="Description" span={2}>
+                  <TextAreaInput value={form.description ?? ''} onChange={e => f('description', e.target.value)} rows={2} />
+                </FormField>
               </div>
+            </div>
 
-              {/* Specs */}
+            {/* Classification */}
+            <FormSection title="Classification" columns={2}>
               <div>
-                <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Technical Specifications</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Passengers
-                      {autoFilledFields.has('numPassengers') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" value={form.numPassengers ?? 5}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('numPassengers'); return s; }); f('numPassengers', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('numPassengers') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Max Speed (km/h)
-                      {autoFilledFields.has('maxSpeedKmh') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" value={form.maxSpeedKmh ?? 0}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('maxSpeedKmh'); return s; }); f('maxSpeedKmh', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('maxSpeedKmh') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Fuel Efficiency (km/L)
-                      {autoFilledFields.has('fuelEfficiencyKml') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" step="0.1" value={form.fuelEfficiencyKml ?? 0}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelEfficiencyKml'); return s; }); f('fuelEfficiencyKml', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('fuelEfficiencyKml') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                  </div>
-                </div>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Vehicle Group
+                  {autoFilledFields.has('vehicleGroup') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                </label>
+                <SelectInput
+                  value={form.vehicleGroup ?? 'PASSENGER'}
+                  onChange={e => {
+                    const grp = e.target.value;
+                    const firstClass = GROUP_CLASS_MAP[grp]?.[0] ?? '';
+                    setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleGroup'); s.delete('vehicleClass'); return s; });
+                    setForm(p => ({ ...p, vehicleGroup: grp, vehicleClass: firstClass }));
+                  }} className={autoFilledFields.has('vehicleGroup') ? '!border-blue-500/60' : ''}>
+                  {VEHICLE_GROUPS.map(g => <option key={g} value={g}>{g.replace(/_/g, ' ')}</option>)}
+                </SelectInput>
               </div>
-
-              {/* Cost Parameters */}
               <div>
-                <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">
-                  Cost Parameters
-                  {(autoFilledFields.has('costPerKm') || autoFilledFields.has('idleFuelConsumption') || autoFilledFields.has('co2EmissionFactor')) && (
-                    <span className="ml-3 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full font-medium normal-case">
-                      ✓ Populated from segment benchmarks · Fuel Type change recalculates CO₂
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Vehicle Class
+                  {form.vehicleGroup && !autoFilledFields.has('vehicleClass') && (
+                    <span className="text-orange-400/60 normal-case font-normal">
+                      ({GROUP_CLASS_MAP[form.vehicleGroup]?.length ?? 0} for {form.vehicleGroup.replace(/_/g, ' ')})
                     </span>
                   )}
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Cost per KM (AED)
-                      {autoFilledFields.has('costPerKm') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" step="0.001" value={form.costPerKm ?? 0}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('costPerKm'); return s; }); f('costPerKm', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('costPerKm') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      Idle Fuel Consumption (L/hr)
-                      {autoFilledFields.has('idleFuelConsumption') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" step="0.1" value={form.idleFuelConsumption ?? 0}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('idleFuelConsumption'); return s; }); f('idleFuelConsumption', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('idleFuelConsumption') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
-                      CO₂ Emission Factor (g/km)
-                      {autoFilledFields.has('co2EmissionFactor') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
-                    </label>
-                    <input type="number" step="1" value={form.co2EmissionFactor ?? 0}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('co2EmissionFactor'); return s; }); f('co2EmissionFactor', Number(e.target.value)); }}
-                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('co2EmissionFactor') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
-                    {autoFilledFields.has('co2EmissionFactor') && (
-                      <p className="mt-1 text-xs text-[var(--text-faint)]">Adjusted for {form.fuelType} · Changes automatically if Fuel Type changes</p>
-                    )}
-                  </div>
-                </div>
+                  {autoFilledFields.has('vehicleClass') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                </label>
+                <SelectInput value={form.vehicleClass ?? ''}
+                  onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleClass'); return s; }); f('vehicleClass', e.target.value); }} className={autoFilledFields.has('vehicleClass') ? '!border-blue-500/60' : ''}>
+                  {(GROUP_CLASS_MAP[form.vehicleGroup ?? ''] ?? ALL_VEHICLE_CLASSES).map(c => (
+                    <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
+                  ))}
+                </SelectInput>
               </div>
+              <FormField label="Transmission Type">
+                <SelectInput value={form.transmissionType ?? 'AUTOMATIC'} onChange={e => f('transmissionType', e.target.value)}>
+                  {TRANSMISSIONS.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                </SelectInput>
+              </FormField>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Fuel Type
+                  {autoFilledFields.has('fuelType') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled · CO₂ recalculates on change</span>}
+                </label>
+                <SelectInput value={form.fuelType ?? 'PETROL'}
+                  onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelType'); return s; }); f('fuelType', e.target.value); }} className={autoFilledFields.has('fuelType') ? '!border-blue-500/60' : ''}>
+                  {FUEL_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
+                </SelectInput>
+              </div>
+            </FormSection>
 
-              {/* Notes & Status */}
-              <div className="grid grid-cols-2 gap-4">
+            {/* Specs */}
+            <FormSection title="Technical Specifications" columns={3}>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Passengers
+                  {autoFilledFields.has('numPassengers') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                </label>
+                <TextInput type="number" value={form.numPassengers ?? 5}
+                  onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('numPassengers'); return s; }); f('numPassengers', Number(e.target.value)); }} className={autoFilledFields.has('numPassengers') ? '!border-blue-500/60' : ''} />
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Max Speed (km/h)
+                  {autoFilledFields.has('maxSpeedKmh') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                </label>
+                <TextInput type="number" value={form.maxSpeedKmh ?? 0}
+                  onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('maxSpeedKmh'); return s; }); f('maxSpeedKmh', Number(e.target.value)); }} className={autoFilledFields.has('maxSpeedKmh') ? '!border-blue-500/60' : ''} />
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                  Fuel Efficiency (km/L)
+                  {autoFilledFields.has('fuelEfficiencyKml') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                </label>
+                <TextInput type="number" step="0.1" value={form.fuelEfficiencyKml ?? 0}
+                  onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelEfficiencyKml'); return s; }); f('fuelEfficiencyKml', Number(e.target.value)); }} className={autoFilledFields.has('fuelEfficiencyKml') ? '!border-blue-500/60' : ''} />
+              </div>
+            </FormSection>
+
+            {/* Cost Parameters */}
+            <div>
+              <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">
+                Cost Parameters
+                {(autoFilledFields.has('costPerKm') || autoFilledFields.has('idleFuelConsumption') || autoFilledFields.has('co2EmissionFactor')) && (
+                  <span className="ml-3 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full font-medium normal-case">
+                    ✓ Populated from segment benchmarks · Fuel Type change recalculates CO₂
+                  </span>
+                )}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs text-[var(--text-muted)] mb-1.5">Notes</label>
-                  <textarea value={form.notes ?? ''} onChange={e => f('notes', e.target.value)} rows={3}
-                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
-                </div>
-                <div className="flex flex-col justify-center">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-orange-500' : 'bg-[var(--bg-surface-hover)]'}`}
-                      onClick={() => f('isActive', !form.isActive)}>
-                      <div className={`w-5 h-5 bg-white rounded-full m-0.5 transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-0'}`} />
-                    </div>
-                    <span className="text-sm text-[var(--text-muted)]">Active</span>
+                  <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                    Cost per KM (AED)
+                    {autoFilledFields.has('costPerKm') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                   </label>
+                  <TextInput type="number" step="0.001" value={form.costPerKm ?? 0}
+                    onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('costPerKm'); return s; }); f('costPerKm', Number(e.target.value)); }} className={autoFilledFields.has('costPerKm') ? '!border-blue-500/60' : ''} />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                    Idle Fuel Consumption (L/hr)
+                    {autoFilledFields.has('idleFuelConsumption') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                  </label>
+                  <TextInput type="number" step="0.1" value={form.idleFuelConsumption ?? 0}
+                    onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('idleFuelConsumption'); return s; }); f('idleFuelConsumption', Number(e.target.value)); }} className={autoFilledFields.has('idleFuelConsumption') ? '!border-blue-500/60' : ''} />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
+                    CO₂ Emission Factor (g/km)
+                    {autoFilledFields.has('co2EmissionFactor') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
+                  </label>
+                  <TextInput type="number" step="1" value={form.co2EmissionFactor ?? 0}
+                    onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('co2EmissionFactor'); return s; }); f('co2EmissionFactor', Number(e.target.value)); }} className={autoFilledFields.has('co2EmissionFactor') ? '!border-blue-500/60' : ''} />
+                  {autoFilledFields.has('co2EmissionFactor') && (
+                    <p className="mt-1 text-xs text-[var(--text-faint)]">Adjusted for {form.fuelType} · Changes automatically if Fuel Type changes</p>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-3 sticky bottom-0 bg-[var(--bg-surface)]">
-              <button onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
-              <button onClick={handleSave} disabled={saving}
-                className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-opacity">
-                {saving ? 'Saving…' : editing ? 'Update' : 'Create'}
-              </button>
+            {/* Notes & Status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Notes">
+                <TextAreaInput value={form.notes ?? ''} onChange={e => f('notes', e.target.value)} rows={3} />
+              </FormField>
+              <div className="flex flex-col justify-center">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-orange-500' : 'bg-[var(--bg-surface-hover)]'}`}
+                    onClick={() => f('isActive', !form.isActive)}>
+                    <div className={`w-5 h-5 bg-white rounded-full m-0.5 transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <span className="text-sm text-[var(--text-muted)]">Active</span>
+                </label>
+              </div>
             </div>
           </div>
-        </div>
+
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : editing ? 'Update' : 'Create'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

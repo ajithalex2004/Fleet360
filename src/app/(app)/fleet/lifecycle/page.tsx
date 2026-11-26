@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
+import { FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface LifecycleEvent {
   id: string;
   vehicleId: string;
@@ -122,7 +124,6 @@ export default function LifecyclePage() {
   };
 
   const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
@@ -141,11 +142,7 @@ export default function LifecyclePage() {
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm mb-4">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Filter Bar */}
       <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
@@ -262,179 +259,132 @@ export default function LifecyclePage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">Log Lifecycle Event</h2>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
-            </div>
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="Log Lifecycle Event"
+          size="lg"
+        >
+          {/* Modal Body */}
+          <div className="px-6 py-5 space-y-6">
+            {formError && <FormAlert>{formError}</FormAlert>}
 
-            {/* Modal Body */}
-            <div className="px-6 py-5 space-y-6">
-              {formError && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">
-                  {formError}
+            {/* Core Details */}
+            <FormSection title="Event Details" columns={2}>
+              <FormField label="Vehicle ID" required>
+                <TextInput
+                  type="text"
+                  value={formData.vehicleId}
+                  onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))}
+                  placeholder="e.g. VH-001"
+                />
+              </FormField>
+              <FormField label="Event Type">
+                <SelectInput
+                  value={formData.eventType}
+                  onChange={e => setFormData(f => ({ ...f, eventType: e.target.value }))}
+                >
+                  {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                </SelectInput>
+              </FormField>
+              <FormField label="Event Date" required>
+                <TextInput
+                  type="date"
+                  value={formData.eventDate}
+                  onChange={e => setFormData(f => ({ ...f, eventDate: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Cost (AED)">
+                <TextInput
+                  type="number"
+                  value={formData.cost}
+                  onChange={e => setFormData(f => ({ ...f, cost: Number(e.target.value) }))}
+                  min={0}
+                  step={0.01}
+                />
+              </FormField>
+            </FormSection>
+
+            {/* Stage Transition */}
+            <div>
+              <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Stage Transition</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField label="From Stage">
+                  <TextInput
+                    type="text"
+                    value={formData.fromStage}
+                    onChange={e => setFormData(f => ({ ...f, fromStage: e.target.value }))}
+                    placeholder="e.g. ACTIVE"
+                  />
+                </FormField>
+                <FormField label="To Stage">
+                  <TextInput
+                    type="text"
+                    value={formData.toStage}
+                    onChange={e => setFormData(f => ({ ...f, toStage: e.target.value }))}
+                    placeholder="e.g. MAINTENANCE"
+                  />
+                </FormField>
+              </div>
+              {(formData.fromStage || formData.toStage) && (
+                <div className="mt-3 flex items-center gap-2 text-sm">
+                  <span className="text-[var(--text-faint)] text-xs">Preview:</span>
+                  {formData.fromStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.fromStage}</span>}
+                  {formData.fromStage && formData.toStage && <span className="text-orange-400">→</span>}
+                  {formData.toStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.toStage}</span>}
                 </div>
               )}
-
-              {/* Core Details */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Event Details</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Vehicle ID *</label>
-                    <input
-                      type="text"
-                      value={formData.vehicleId}
-                      onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. VH-001"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Event Type</label>
-                    <select
-                      value={formData.eventType}
-                      onChange={e => setFormData(f => ({ ...f, eventType: e.target.value }))}
-                      className={inputCls}
-                    >
-                      {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Event Date *</label>
-                    <input
-                      type="date"
-                      value={formData.eventDate}
-                      onChange={e => setFormData(f => ({ ...f, eventDate: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Cost (AED)</label>
-                    <input
-                      type="number"
-                      value={formData.cost}
-                      onChange={e => setFormData(f => ({ ...f, cost: Number(e.target.value) }))}
-                      className={inputCls}
-                      min={0}
-                      step={0.01}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Stage Transition */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Stage Transition</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>From Stage</label>
-                    <input
-                      type="text"
-                      value={formData.fromStage}
-                      onChange={e => setFormData(f => ({ ...f, fromStage: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. ACTIVE"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>To Stage</label>
-                    <input
-                      type="text"
-                      value={formData.toStage}
-                      onChange={e => setFormData(f => ({ ...f, toStage: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. MAINTENANCE"
-                    />
-                  </div>
-                </div>
-                {(formData.fromStage || formData.toStage) && (
-                  <div className="mt-3 flex items-center gap-2 text-sm">
-                    <span className="text-[var(--text-faint)] text-xs">Preview:</span>
-                    {formData.fromStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.fromStage}</span>}
-                    {formData.fromStage && formData.toStage && <span className="text-orange-400">→</span>}
-                    {formData.toStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.toStage}</span>}
-                  </div>
-                )}
-              </div>
-
-              {/* Reference & People */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Reference & Personnel</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Reference No.</label>
-                    <input
-                      type="text"
-                      value={formData.referenceNo}
-                      onChange={e => setFormData(f => ({ ...f, referenceNo: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Reference or document number"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Performed By</label>
-                    <input
-                      type="text"
-                      value={formData.performedBy}
-                      onChange={e => setFormData(f => ({ ...f, performedBy: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Name or department"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Description & Notes */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Additional Info</p>
-                <div className="space-y-4">
-                  <div>
-                    <label className={labelCls}>Description</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
-                      className={`${inputCls} resize-none h-20`}
-                      placeholder="Describe the lifecycle event..."
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Notes</label>
-                    <textarea
-                      value={formData.notes}
-                      onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
-                      className={`${inputCls} resize-none h-16`}
-                      placeholder="Additional notes..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-xs text-amber-400">
-                Lifecycle events are immutable once logged. Please review all details before saving.
-              </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all"
-              >
-                {saving ? 'Logging...' : 'Log Event'}
-              </button>
+            {/* Reference & People */}
+            <FormSection title="Reference & Personnel" columns={2}>
+              <FormField label="Reference No.">
+                <TextInput
+                  type="text"
+                  value={formData.referenceNo}
+                  onChange={e => setFormData(f => ({ ...f, referenceNo: e.target.value }))}
+                  placeholder="Reference or document number"
+                />
+              </FormField>
+              <FormField label="Performed By">
+                <TextInput
+                  type="text"
+                  value={formData.performedBy}
+                  onChange={e => setFormData(f => ({ ...f, performedBy: e.target.value }))}
+                  placeholder="Name or department"
+                />
+              </FormField>
+            </FormSection>
+
+            {/* Description & Notes */}
+            <FormSection title="Additional Info" columns={1}>
+              <FormField label="Description">
+                <TextAreaInput
+                  value={formData.description}
+                  onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
+                  className={`${inputCls} resize-none h-20`}
+                  placeholder="Describe the lifecycle event..."
+                />
+              </FormField>
+              <FormField label="Notes">
+                <TextAreaInput
+                  value={formData.notes}
+                  onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
+                  className={`${inputCls} resize-none h-16`}
+                  placeholder="Additional notes..."
+                />
+              </FormField>
+            </FormSection>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-xs text-amber-400">
+              Lifecycle events are immutable once logged. Please review all details before saving.
             </div>
           </div>
-        </div>
+
+          {/* Modal Footer */}
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Logging...' : 'Log Event'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

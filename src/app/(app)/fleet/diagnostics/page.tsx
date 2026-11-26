@@ -10,18 +10,15 @@ import {
   CheckCircle2,
   Cpu,
   Gauge,
-  HelpCircle,
   Play,
   RefreshCw,
   Search,
   ShieldCheck,
   Thermometer,
-  Wrench,
-  Zap,
   Radio,
-  Sliders,
 } from 'lucide-react';
 
+import { FormField, SelectInput } from '@/components/ui/form-kit';
 interface DtcFaultItem {
   code: string;
   subsystem: string;
@@ -297,34 +294,30 @@ export default function FleetDiagnosticsPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-[11px] text-[var(--text-muted)] mb-1">Target Vehicle</label>
-            <select
+          <FormField label="Target Vehicle">
+            <SelectInput
               value={simVehicleId}
               onChange={(e) => setSimVehicleId(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
             >
               {data?.vehicles.map((v) => (
                 <option key={v.vehicleId} value={v.vehicleId}>
                   {v.vehicleCode} · {v.licensePlate} ({v.makeModel})
                 </option>
               ))}
-            </select>
-          </div>
+            </SelectInput>
+          </FormField>
 
-          <div>
-            <label className="block text-[11px] text-[var(--text-muted)] mb-1">Simulate Fault Scenario</label>
-            <select
+          <FormField label="Simulate Fault Scenario">
+            <SelectInput
               value={simFaultPreset}
               onChange={(e) => setSimFaultPreset(e.target.value as any)}
-              className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
             >
               <option value="OVERHEAT">P0217 - Engine Coolant Overheat (118°C)</option>
               <option value="OIL_LOSS">P0524 - Critical Oil Pressure Loss (115 kPa)</option>
               <option value="MISFIRE">P0300 - Random Multiple Cylinder Misfire</option>
               <option value="HEALTHY">Clear Faults (Optimal Operation)</option>
-            </select>
-          </div>
+            </SelectInput>
+          </FormField>
 
           <div className="flex items-end">
             <button

@@ -39,6 +39,8 @@ import type { BatchJobSummary } from '@/lib/agents/document-intelligence/pipelin
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 import { REVIEW_FIELD_LABELS, reviewFieldsFrom, stagedRecordKind, type ReviewFields, type StagedRecordKind } from '@/lib/agents/document-intelligence/review-fields';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 /** What the Approve button says for documents that create a record. */
 const APPROVE_LABEL: Record<StagedRecordKind, string> = {
   PAYABLE: 'Approve & create payable',
@@ -1419,65 +1421,45 @@ export default function DocumentIntelligencePage() {
 
       {/* Human Reviewer Feedback Modal */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Edit3 className="w-5 h-5 text-cyan-400" />
-              Human Reviewer Correction
-            </h3>
-            <p className="text-xs text-slate-400">
-              Submit a corrected value for this field. Your feedback will refine future model extraction accuracy.
-            </p>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1">Field Name</label>
-                <input
+        <FormModal
+          onClose={() => setShowFeedbackModal(false)}
+          title="Human Reviewer Correction"
+          subtitle="Submit a corrected value for this field. Your feedback will refine future model extraction accuracy."
+          icon={Edit3}
+          accent="cyan"
+          size="sm"
+        >
+          <div className="space-y-5">
+            <FormSection title="Correction" columns={1}>
+              <FormField label="Field Name">
+                <TextInput
                   type="text"
                   value={feedbackField}
                   onChange={(e) => setFeedbackField(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200"
                 />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Predicted Value</label>
-                <input
+              </FormField>
+              <FormField label="Predicted Value">
+                <TextInput
                   type="text"
                   value={predictedVal}
                   readOnly
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-400"
                 />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Corrected Value</label>
-                <input
+              </FormField>
+              <FormField label="Corrected Value">
+                <TextInput
                   type="text"
                   value={correctedVal}
                   onChange={(e) => setCorrectedVal(e.target.value)}
                   placeholder="Enter correct field value..."
-                  className="w-full bg-slate-950 border border-cyan-500/50 rounded-lg p-2.5 text-white"
                 />
-              </div>
-            </div>
+              </FormField>
+            </FormSection>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowFeedbackModal(false)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={feedbackSubmitting || !correctedVal.trim()}
-                onClick={handleSaveCorrection}
-                className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium transition flex items-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                Submit Feedback
-              </button>
-            </div>
+            <FormFooter secondary={<SecondaryButton onClick={() => setShowFeedbackModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton disabled={feedbackSubmitting || !correctedVal.trim()} onClick={handleSaveCorrection} icon={Send}>Submit Feedback</PrimaryButton>
+            </FormFooter>
           </div>
-        </div>
+        </FormModal>
       )}
     </div>
   );

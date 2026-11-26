@@ -33,6 +33,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface PartnerRow {
   id: string;
   legalName: string;
@@ -771,7 +773,7 @@ export default function EnterprisePartnerDirectoryPage() {
                 <Clock className="w-3.5 h-3.5 text-cyan-500" />
                 <span>Preferred-Tier Exclusive Lead Window (Mins)</span>
               </label>
-              <input
+              <TextInput
                 type="number"
                 min={0}
                 max={1440}
@@ -781,8 +783,7 @@ export default function EnterprisePartnerDirectoryPage() {
                     ...prev,
                     preferredExclusiveWindowMinutes: Number(e.target.value) || 0,
                   }))
-                }
-                className="w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                } className="w-full font-mono"
               />
               <p className="text-[10px] text-slate-400">
                 During this window after RFQ publication, non-preferred partners are held back from viewing or quoting.
@@ -1417,114 +1418,92 @@ function CreateRateCardModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-xs">
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-          <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              Create Versioned Contract Rate Card
-            </h3>
-            <p className="text-[11px] text-slate-400">
-              Generates a cryptographic SHA-256 commercial snapshot for 3-way reconciliation
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Transport Partner *</label>
-            <select
+    <FormModal
+      onClose={onClose}
+      title="Create Versioned Contract Rate Card"
+      subtitle="Generates a cryptographic SHA-256 commercial snapshot for 3-way reconciliation"
+      icon={FileSpreadsheet}
+      size="lg"
+    >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormSection title="Agreement" columns={1}>
+          <FormField label="Transport Partner" required>
+            <SelectInput
               required
               value={partnerId}
               onChange={(e) => setPartnerId(e.target.value)}
-              className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
             >
               {partners.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.legalName} ({p.partnerCode})
                 </option>
               ))}
-            </select>
-          </div>
+            </SelectInput>
+          </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Agreement Title *</label>
-              <input
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Agreement Title" required>
+              <TextInput
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Q4 Staff Shuttle Tariff v2"
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Service Domain *</label>
-              <select
+            </FormField>
+            <FormField label="Service Domain" required>
+              <SelectInput
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               >
                 <option value="PASSENGER_TRANSPORT">Passenger Transport (Bus)</option>
                 <option value="LIMOUSINE">Executive Limousine</option>
                 <option value="FREIGHT">Freight & Logistics</option>
                 <option value="RECOVERY">Vehicle Recovery</option>
-              </select>
-            </div>
+              </SelectInput>
+            </FormField>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Vehicle Category</label>
-              <input
+          </FormSection>
+
+          <FormSection title="Route" columns={3}>
+            <FormField label="Vehicle Category">
+              <TextInput
                 type="text"
                 value={vehicleType}
                 onChange={(e) => setVehicleType(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Origin Zone</label>
-              <input
+            </FormField>
+            <FormField label="Origin Zone">
+              <TextInput
                 type="text"
                 value={originZone}
                 onChange={(e) => setOriginZone(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Destination Zone</label>
-              <input
+            </FormField>
+            <FormField label="Destination Zone">
+              <TextInput
                 type="text"
                 value={destinationZone}
                 onChange={(e) => setDestinationZone(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               />
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Base Rate *</label>
-              <input
+          <FormSection title="Pricing" columns={3}>
+            <FormField label="Base Rate" required>
+              <TextInput
                 type="number"
                 step="0.01"
                 required
                 value={rateAmount}
                 onChange={(e) => setRateAmount(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 font-mono font-bold text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Currency</label>
-              <select
+            </FormField>
+            <FormField label="Currency">
+              <SelectInput
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 font-mono text-slate-900 dark:text-white"
               >
                 <option value="AED">AED (UAE Dirham)</option>
                 <option value="USD">USD (US Dollar)</option>
@@ -1532,79 +1511,59 @@ function CreateRateCardModal({
                 <option value="OMR">OMR (Omani Rial)</option>
                 <option value="QAR">QAR (Qatari Riyal)</option>
                 <option value="EUR">EUR (Euro)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Pricing Unit</label>
-              <select
+              </SelectInput>
+            </FormField>
+            <FormField label="Pricing Unit">
+              <SelectInput
                 value={unitType}
                 onChange={(e) => setUnitType(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 text-slate-900 dark:text-white"
               >
                 <option value="PER_TRIP">PER_TRIP</option>
                 <option value="PER_HOUR">PER_HOUR</option>
                 <option value="PER_KM">PER_KM</option>
                 <option value="PER_DAY">PER_DAY</option>
-              </select>
-            </div>
-          </div>
+              </SelectInput>
+            </FormField>
+          </FormSection>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Free Wait (Mins)</label>
-              <input
+          <FormSection title="Waiting, cancellation & fuel" columns={4}>
+            <FormField label="Free Wait (Mins)">
+              <TextInput
                 type="number"
                 value={freeWaitingMinutes}
                 onChange={(e) => setFreeWaitingMinutes(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 font-mono text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Wait Fee (AED/hr)</label>
-              <input
+            </FormField>
+            <FormField label="Wait Fee (AED/hr)">
+              <TextInput
                 type="number"
                 value={waitingFeePerHour}
                 onChange={(e) => setWaitingFeePerHour(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 font-mono text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Cancel Penalty (%)</label>
-              <input
+            </FormField>
+            <FormField label="Cancel Penalty (%)">
+              <TextInput
                 type="number"
                 value={cancellationFeePct}
                 onChange={(e) => setCancellationFeePct(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 font-mono text-slate-900 dark:text-white"
               />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Fuel Index (%)</label>
-              <input
+            </FormField>
+            <FormField label="Fuel Index (%)">
+              <TextInput
                 type="number"
                 step="0.5"
                 min="0"
                 max="50"
                 value={fuelSurchargePct}
                 onChange={(e) => setFuelSurchargePct(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 font-mono text-cyan-600 dark:text-cyan-400 font-bold"
               />
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition disabled:opacity-50"
-            >
-              {submitting ? 'Creating...' : 'Create & Freeze Snapshot'}
-            </button>
-          </div>
+          <FormFooter secondary={<SecondaryButton type="button" onClick={onClose}>Cancel</SecondaryButton>}>
+            <PrimaryButton type="submit" disabled={submitting}>{submitting ? 'Creating...' : 'Create & Freeze Snapshot'}</PrimaryButton>
+          </FormFooter>
         </form>
-      </div>
-    </div>
+    </FormModal>
   );
 }

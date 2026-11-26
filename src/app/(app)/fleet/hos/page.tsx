@@ -1,10 +1,12 @@
 'use client';
-import { AlertTriangle, CheckCircle2, ShieldAlert, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ShieldAlert, Users } from 'lucide-react';
 import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { shortId } from '@/lib/ui/display-id';
 
+import { FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DutyStatus = 'DRIVING' | 'ON_DUTY' | 'OFF_DUTY' | 'SLEEPER_BERTH';
 type ViolationType = 'DAILY_DRIVING' | 'DAILY_ON_DUTY' | 'WEEKLY_DRIVING' | 'WEEKLY_ON_DUTY' | 'REST_BREAK';
@@ -152,39 +154,29 @@ function LogEntryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
-          <h3 className="text-[var(--text-main)] font-semibold text-lg">Log Duty Status Entry</h3>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
-        </div>
-        <form onSubmit={save} className="p-6 space-y-4">
-          {err && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm">{err}</div>}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">Driver ID *</label>
-              <input
+    <FormModal onClose={onClose} title="Log Duty Status Entry" icon={Clock} size="sm">
+      <form onSubmit={save} className="space-y-5">
+        {err && <FormAlert>{err}</FormAlert>}
+        <FormSection title="Duty entry" columns={1}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Driver ID" required>
+              <TextInput
                 value={form.driver_id}
                 onChange={e => setForm(f => ({ ...f, driver_id: e.target.value }))}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
                 placeholder="UUID or code"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">Driver Name</label>
-              <input
+            </FormField>
+            <FormField label="Driver Name">
+              <TextInput
                 value={form.driver_name}
                 onChange={e => setForm(f => ({ ...f, driver_name: e.target.value }))}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
                 placeholder="Display name"
               />
-            </div>
+            </FormField>
           </div>
 
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Duty Status *</label>
+          <FormField label="Duty Status" required>
             <div className="grid grid-cols-2 gap-2">
               {(Object.keys(STATUS_META) as DutyStatus[]).map(s => {
                 const m = STATUS_META[s];
@@ -204,69 +196,48 @@ function LogEntryModal({
                 );
               })}
             </div>
-          </div>
+          </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">Started At *</label>
-              <input
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Started At" required>
+              <TextInput
                 type="datetime-local"
                 value={form.started_at}
                 onChange={e => setForm(f => ({ ...f, started_at: e.target.value }))}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle Code</label>
-              <input
+            </FormField>
+            <FormField label="Vehicle Code">
+              <TextInput
                 value={form.vehicle_code}
                 onChange={e => setForm(f => ({ ...f, vehicle_code: e.target.value }))}
-                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
                 placeholder="e.g. VEH-001"
               />
-            </div>
+            </FormField>
           </div>
 
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Location</label>
-            <input
+          <FormField label="Location">
+            <TextInput
               value={form.location}
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
               placeholder="e.g. Dubai Logistics City"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
-            <textarea
+          <FormField label="Notes">
+            <TextAreaInput
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={2}
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50 resize-none"
             />
-          </div>
+          </FormField>
+        </FormSection>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:border-[var(--border-strong)] hover:text-[var(--text-main)] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white text-sm font-medium hover:shadow-lg hover:shadow-orange-500/20 transition-all disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Log Entry'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <FormFooter secondary={<SecondaryButton type="button" onClick={onClose}>Cancel</SecondaryButton>}>
+          <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Log Entry'}</PrimaryButton>
+        </FormFooter>
+      </form>
+    </FormModal>
   );
 }
 
@@ -293,42 +264,35 @@ function CloseLogModal({ log, onClose, onSaved }: { log: HosLog; onClose: () => 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-sm shadow-2xl">
-        <div className="p-6 border-b border-[var(--border-subtle)]">
-          <h3 className="text-[var(--text-main)] font-semibold">Close Duty Entry</h3>
-          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mt-2 ${meta.bg} ${meta.border} border ${meta.color}`}>
-            {meta.icon} {meta.label} · Started {fmtTime(log.startedAt)}
-          </div>
-        </div>
-        <form onSubmit={save} className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Ended At</label>
-            <input
+    <FormModal
+      onClose={onClose}
+      title="Close Duty Entry"
+      subtitle={`${meta.label} · Started ${fmtTime(log.startedAt)}`}
+      icon={Clock}
+      size="sm"
+    >
+      <form onSubmit={save} className="space-y-5">
+        <FormSection title="Close entry" columns={1}>
+          <FormField label="Ended At">
+            <TextInput
               type="datetime-local"
               value={endedAt}
               onChange={e => setEndedAt(e.target.value)}
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
-            <textarea
+          </FormField>
+          <FormField label="Notes">
+            <TextAreaInput
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-orange-500/50 resize-none"
             />
-          </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:text-[var(--text-main)] transition-all">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white text-sm font-medium disabled:opacity-50">
-              {saving ? 'Saving…' : 'Close Entry'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </FormField>
+        </FormSection>
+        <FormFooter secondary={<SecondaryButton type="button" onClick={onClose}>Cancel</SecondaryButton>}>
+          <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Close Entry'}</PrimaryButton>
+        </FormFooter>
+      </form>
+    </FormModal>
   );
 }
 
@@ -510,9 +474,7 @@ export default function HosDashboard() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Fleet KPI Strip */}
       <StatGrid cols={4}>

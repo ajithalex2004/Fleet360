@@ -17,6 +17,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
+import { FormAlert, FormField, FormFooter, PrimaryButton, SecondaryButton, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface Allocation {
   id: string;
   vehicleId: string;
@@ -421,8 +423,6 @@ export default function AllocationsPage() {
   const isOverdue = (alloc: Allocation) =>
     alloc.status === 'ACTIVE' && !!alloc.expectedReturnDate && new Date(alloc.expectedReturnDate) < new Date();
 
-  const inputCls =
-    'bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2.5 text-[var(--text-main)] text-xs focus:border-orange-500 focus:outline-none w-full transition-colors';
   const labelCls = 'block text-xs font-semibold text-[var(--text-muted)] mb-1';
 
   return (
@@ -455,12 +455,7 @@ export default function AllocationsPage() {
       </StatGrid>
 
       {/* Error Banner */}
-      {error && (
-        <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Filter Bar */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 flex flex-wrap gap-3 items-center">
@@ -731,325 +726,249 @@ export default function AllocationsPage() {
 
       {/* New Allocation Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20">
-                  <Layers className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-[var(--text-main)]">New Fleet Allocation</h2>
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    Allocate vehicle to Region, Department & Unit hierarchy
-                  </p>
-                </div>
+        <FormModal
+          onClose={() => setShowCreateModal(false)}
+          title="New Fleet Allocation"
+          subtitle="Allocate vehicle to Region, Department & Unit hierarchy"
+          icon={Layers}
+          accent="amber"
+          size="lg"
+        >
+          <div className="space-y-5">
+            {formError && <FormAlert>{formError}</FormAlert>}
+
+            {/* Section 1: Vehicle Selection (Dropdown) */}
+            <div>
+              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Car className="w-3.5 h-3.5" /> 1. Select Vehicle
+              </p>
+              <div>
+                <label className={labelCls}>
+                  Vehicle ID / Plate Number <span className="text-rose-400">*</span>
+                </label>
+                <SearchableSelect
+                  value={formData.vehicleId}
+                  onChange={val => handleVehicleChange(val)}
+                  placeholder="— Select Vehicle from Fleet Master —"
+                  searchPlaceholder="Type plate, make, model..."
+                  accent="amber"
+                  isClearable
+                  options={vehicles.map(v => {
+                    const plate = v.plateNumber || v.licensePlate || v.vehicleCode || "No Plate";
+                    const details = [v.make, v.model, v.year].filter(Boolean).join(" ");
+                    return {
+                      value: v.id,
+                      label: `${plate}${details ? ` • ${details}` : ""}`,
+                      sublabel: v.odometerReading ? `Odometer: ${v.odometerReading.toLocaleString()} km` : undefined,
+                      badge: v.status || "UNKNOWN",
+                    };
+                  })}
+                />
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  Select the target vehicle to assign. Its current odometer reading will be automatically populated.
+                </p>
               </div>
-              <button 
-                onClick={() => setShowCreateModal(false)} 
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none"
-              >
-                ×
-              </button>
             </div>
 
-            <div className="px-6 py-5 space-y-6">
-              {formError && (
-                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              {/* Section 1: Vehicle Selection (Dropdown) */}
-              <div>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Car className="w-3.5 h-3.5" /> 1. Select Vehicle
-                </p>
+            {/* Section 2: Hierarchy Allocation (Region --> Department --> Unit) */}
+            <div>
+              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5" /> 2. Allocated Organizational Hierarchy
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Region Dropdown */}
                 <div>
                   <label className={labelCls}>
-                    Vehicle ID / Plate Number <span className="text-rose-400">*</span>
+                    Region <span className="text-rose-400">*</span>
                   </label>
                   <SearchableSelect
-                    value={formData.vehicleId}
-                    onChange={val => handleVehicleChange(val)}
-                    placeholder="— Select Vehicle from Fleet Master —"
-                    searchPlaceholder="Type plate, make, model..."
+                    value={formData.regionId}
+                    onChange={val => handleRegionChange(val)}
+                    placeholder="— Select Region —"
+                    searchPlaceholder="Search region..."
                     accent="amber"
                     isClearable
-                    options={vehicles.map(v => {
-                      const plate = v.plateNumber || v.licensePlate || v.vehicleCode || "No Plate";
-                      const details = [v.make, v.model, v.year].filter(Boolean).join(" ");
-                      return {
-                        value: v.id,
-                        label: `${plate}${details ? ` • ${details}` : ""}`,
-                        sublabel: v.odometerReading ? `Odometer: ${v.odometerReading.toLocaleString()} km` : undefined,
-                        badge: v.status || "UNKNOWN",
-                      };
-                    })}
+                    options={regions.map(r => ({
+                      value: r.id,
+                      label: r.name,
+                      sublabel: r.code ? `Code: ${r.code}` : undefined,
+                    }))}
                   />
-                  <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                    Select the target vehicle to assign. Its current odometer reading will be automatically populated.
-                  </p>
-                </div>
-              </div>
-
-              {/* Section 2: Hierarchy Allocation (Region --> Department --> Unit) */}
-              <div>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5" /> 2. Allocated Organizational Hierarchy
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Region Dropdown */}
-                  <div>
-                    <label className={labelCls}>
-                      Region <span className="text-rose-400">*</span>
-                    </label>
-                    <SearchableSelect
-                      value={formData.regionId}
-                      onChange={val => handleRegionChange(val)}
-                      placeholder="— Select Region —"
-                      searchPlaceholder="Search region..."
-                      accent="amber"
-                      isClearable
-                      options={regions.map(r => ({
-                        value: r.id,
-                        label: r.name,
-                        sublabel: r.code ? `Code: ${r.code}` : undefined,
-                      }))}
-                    />
-                  </div>
-
-                  {/* Department Dropdown */}
-                  <div>
-                    <label className={labelCls}>
-                      Department <span className="text-rose-400">*</span>
-                    </label>
-                    <SearchableSelect
-                      value={formData.departmentId}
-                      onChange={val => handleDepartmentChange(val)}
-                      disabled={!formData.regionId || loadingDepts}
-                      placeholder={!formData.regionId ? "Select Region First" : loadingDepts ? "Loading Departments..." : "— Select Department —"}
-                      searchPlaceholder="Search department..."
-                      accent="amber"
-                      isClearable
-                      options={departments.map(d => ({
-                        value: d.id,
-                        label: d.name,
-                        sublabel: d.code ? `Code: ${d.code}` : undefined,
-                      }))}
-                    />
-                  </div>
-
-                  {/* Unit / Section Dropdown */}
-                  <div>
-                    <label className={labelCls}>
-                      Unit / Section <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
-                    </label>
-                    <SearchableSelect
-                      value={formData.unitId}
-                      onChange={val => handleUnitChange(val)}
-                      disabled={!formData.departmentId || loadingUnits}
-                      placeholder={!formData.departmentId ? "Select Department First" : loadingUnits ? "Loading Units..." : "— Select Unit / Section —"}
-                      searchPlaceholder="Search unit..."
-                      accent="amber"
-                      isClearable
-                      options={units.map(u => ({
-                        value: u.id,
-                        label: u.name,
-                        sublabel: u.code ? `Code: ${u.code}` : undefined,
-                      }))}
-                    />
-                  </div>
                 </div>
 
-                {/* Optional Custom Custodian / Team Label */}
-                <div className="mt-3">
+                {/* Department Dropdown */}
+                <div>
                   <label className={labelCls}>
-                    Specific Team / Project Custodian Name <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
+                    Department <span className="text-rose-400">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={formData.allocatedToName}
-                    onChange={e => setFormData(f => ({ ...f, allocatedToName: e.target.value }))}
-                    className={inputCls}
-                    placeholder="Defaults to: Region > Department > Unit"
+                  <SearchableSelect
+                    value={formData.departmentId}
+                    onChange={val => handleDepartmentChange(val)}
+                    disabled={!formData.regionId || loadingDepts}
+                    placeholder={!formData.regionId ? "Select Region First" : loadingDepts ? "Loading Departments..." : "— Select Department —"}
+                    searchPlaceholder="Search department..."
+                    accent="amber"
+                    isClearable
+                    options={departments.map(d => ({
+                      value: d.id,
+                      label: d.name,
+                      sublabel: d.code ? `Code: ${d.code}` : undefined,
+                    }))}
+                  />
+                </div>
+
+                {/* Unit / Section Dropdown */}
+                <div>
+                  <label className={labelCls}>
+                    Unit / Section <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
+                  </label>
+                  <SearchableSelect
+                    value={formData.unitId}
+                    onChange={val => handleUnitChange(val)}
+                    disabled={!formData.departmentId || loadingUnits}
+                    placeholder={!formData.departmentId ? "Select Department First" : loadingUnits ? "Loading Units..." : "— Select Unit / Section —"}
+                    searchPlaceholder="Search unit..."
+                    accent="amber"
+                    isClearable
+                    options={units.map(u => ({
+                      value: u.id,
+                      label: u.name,
+                      sublabel: u.code ? `Code: ${u.code}` : undefined,
+                    }))}
                   />
                 </div>
               </div>
 
-              {/* Section 3: Dates & Details */}
-              <div>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> 3. Schedule & Authorization
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Allocation Date *</label>
-                    <input
-                      type="date"
-                      value={formData.allocationDate}
-                      onChange={e => setFormData(f => ({ ...f, allocationDate: e.target.value }))}
-                      className={inputCls}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Expected Return Date</label>
-                    <input
-                      type="date"
-                      value={formData.expectedReturnDate}
-                      onChange={e => setFormData(f => ({ ...f, expectedReturnDate: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Purpose of Allocation</label>
-                    <input
-                      type="text"
-                      value={formData.purpose}
-                      onChange={e => setFormData(f => ({ ...f, purpose: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. VIP Protocol, Site Inspection, Cargo Transport"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Authorized By</label>
-                    <input
-                      type="text"
-                      value={formData.authorizedBy}
-                      onChange={e => setFormData(f => ({ ...f, authorizedBy: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. Operations Manager"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Mileage at Allocation (km)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formData.mileageAtAllocation}
-                      onChange={e => setFormData(f => ({ ...f, mileageAtAllocation: Number(e.target.value) }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Internal Notes</label>
-                    <input
-                      type="text"
-                      value={formData.notes}
-                      onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Additional remarks or conditions"
-                    />
-                  </div>
-                </div>
+              {/* Optional Custom Custodian / Team Label */}
+              <div className="mt-3">
+                <label className={labelCls}>
+                  Specific Team / Project Custodian Name <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
+                </label>
+                <TextInput
+                  type="text"
+                  value={formData.allocatedToName}
+                  onChange={e => setFormData(f => ({ ...f, allocatedToName: e.target.value }))}
+                  placeholder="Defaults to: Region > Department > Unit"
+                />
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                disabled={saving}
-                className="px-4 py-2 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-xs font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveAllocation}
-                disabled={saving}
-                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-orange-500/20"
-              >
-                {saving ? 'Creating Allocation...' : 'Confirm Allocation'}
-              </button>
+            {/* Section 3: Dates & Details */}
+            <div>
+              <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" /> 3. Schedule & Authorization
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <FormField label="Allocation Date" required>
+                  <TextInput
+                    type="date"
+                    value={formData.allocationDate}
+                    onChange={e => setFormData(f => ({ ...f, allocationDate: e.target.value }))}
+                    required
+                  />
+                </FormField>
+                <FormField label="Expected Return Date">
+                  <TextInput
+                    type="date"
+                    value={formData.expectedReturnDate}
+                    onChange={e => setFormData(f => ({ ...f, expectedReturnDate: e.target.value }))}
+                  />
+                </FormField>
+                <FormField label="Purpose of Allocation">
+                  <TextInput
+                    type="text"
+                    value={formData.purpose}
+                    onChange={e => setFormData(f => ({ ...f, purpose: e.target.value }))}
+                    placeholder="e.g. VIP Protocol, Site Inspection, Cargo Transport"
+                  />
+                </FormField>
+                <FormField label="Authorized By">
+                  <TextInput
+                    type="text"
+                    value={formData.authorizedBy}
+                    onChange={e => setFormData(f => ({ ...f, authorizedBy: e.target.value }))}
+                    placeholder="e.g. Operations Manager"
+                  />
+                </FormField>
+                <FormField label="Mileage at Allocation (km)">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    value={formData.mileageAtAllocation}
+                    onChange={e => setFormData(f => ({ ...f, mileageAtAllocation: Number(e.target.value) }))}
+                  />
+                </FormField>
+                <FormField label="Internal Notes">
+                  <TextInput
+                    type="text"
+                    value={formData.notes}
+                    onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
+                    placeholder="Additional remarks or conditions"
+                  />
+                </FormField>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* Modal Footer */}
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowCreateModal(false)} disabled={saving}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSaveAllocation} disabled={saving}>{saving ? 'Creating Allocation...' : 'Confirm Allocation'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
 
       {/* Process Return Modal */}
       {showReturnModal && returningAlloc && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <div className="flex items-center gap-2">
-                <CornerDownLeft className="w-5 h-5 text-emerald-400" />
-                <h2 className="text-base font-bold text-[var(--text-main)]">Process Vehicle Return</h2>
-              </div>
-              <button 
-                onClick={() => setShowReturnModal(false)} 
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              {returnError && (
-                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{returnError}</span>
-                </div>
-              )}
+        <FormModal
+          onClose={() => setShowReturnModal(false)}
+          title="Process Vehicle Return"
+          icon={CornerDownLeft}
+          accent="emerald"
+          size="sm"
+        >
+          <div className="space-y-5">
+            {returnError && <FormAlert>{returnError}</FormAlert>}
 
-              <div className="p-3 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs space-y-1">
-                <div className="font-bold text-[var(--text-main)]">
-                  {returningAlloc.plateNumber || returningAlloc.licensePlate || returningAlloc.vehicleCode}
-                </div>
-                <div className="text-[var(--text-muted)]">
-                  Allocated To: <strong className="text-[var(--text-main)]">{returningAlloc.allocatedToName}</strong>
-                </div>
-                <div className="text-[var(--text-muted)]">
-                  Mileage at Outgoing: <strong className="font-mono text-orange-400">{Number(returningAlloc.mileageAtAllocation || 0).toLocaleString()} km</strong>
-                </div>
+            <div className="p-3 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs space-y-1">
+              <div className="font-bold text-[var(--text-main)]">
+                {returningAlloc.plateNumber || returningAlloc.licensePlate || returningAlloc.vehicleCode}
               </div>
-
-              <div>
-                <label className={labelCls}>Actual Return Date *</label>
-                <input
-                  type="date"
-                  value={returnData.actualReturnDate}
-                  onChange={e => setReturnData(d => ({ ...d, actualReturnDate: e.target.value }))}
-                  className={inputCls}
-                  required
-                />
+              <div className="text-[var(--text-muted)]">
+                Allocated To: <strong className="text-[var(--text-main)]">{returningAlloc.allocatedToName}</strong>
               </div>
-
-              <div>
-                <label className={labelCls}>Mileage at Return (km) *</label>
-                <input
-                  type="number"
-                  min={returningAlloc.mileageAtAllocation || 0}
-                  value={returnData.mileageAtReturn}
-                  onChange={e => setReturnData(d => ({ ...d, mileageAtReturn: Number(e.target.value) }))}
-                  className={inputCls}
-                  required
-                />
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Vehicle odometer reading in Fleet Master will be updated to this value upon return.
-                </p>
+              <div className="text-[var(--text-muted)]">
+                Mileage at Outgoing: <strong className="font-mono text-orange-400">{Number(returningAlloc.mileageAtAllocation || 0).toLocaleString()} km</strong>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                onClick={() => setShowReturnModal(false)}
-                disabled={returnSaving}
-                className="px-4 py-2 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-xs font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReturn}
-                disabled={returnSaving}
-                className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-emerald-500/20"
-              >
-                {returnSaving ? 'Processing Return...' : 'Confirm Return'}
-              </button>
+            <FormField label="Actual Return Date" required>
+              <TextInput
+                type="date"
+                value={returnData.actualReturnDate}
+                onChange={e => setReturnData(d => ({ ...d, actualReturnDate: e.target.value }))}
+                required
+              />
+            </FormField>
+
+            <div>
+              <label className={labelCls}>Mileage at Return (km) *</label>
+              <TextInput
+                type="number"
+                min={returningAlloc.mileageAtAllocation || 0}
+                value={returnData.mileageAtReturn}
+                onChange={e => setReturnData(d => ({ ...d, mileageAtReturn: Number(e.target.value) }))}
+                required
+              />
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                Vehicle odometer reading in Fleet Master will be updated to this value upon return.
+              </p>
             </div>
           </div>
-        </div>
+
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowReturnModal(false)} disabled={returnSaving}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleReturn} disabled={returnSaving}>{returnSaving ? 'Processing Return...' : 'Confirm Return'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

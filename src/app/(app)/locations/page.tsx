@@ -15,13 +15,15 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { MapPin, Plus, Edit, Trash2, X } from 'lucide-react';
+import { MapPin, Plus, Edit, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import {
   PLACE_TYPES, PLACE_SHAPES, PLACE_TYPE_LABELS, PLACE_TYPE_GROUPS,
   isPlaceType, type PlaceType, type PlaceShape,
 } from '@/lib/places/types';
 
+import { CheckboxField, FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface Place {
   id: string;
   name: string;
@@ -280,85 +282,69 @@ function LocationsPageInner() {
 
       {/* Edit / New modal */}
       {edit && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <form onSubmit={submit} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 w-full max-w-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-[var(--text-main)]">{edit.id ? 'Edit location' : 'Add location'}</h3>
-              <button type="button" onClick={() => setEdit(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs text-[var(--text-muted)]">
-                Name*
-                <input required value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })}
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
-              </label>
-              <label className="text-xs text-[var(--text-muted)]">
-                Code
-                <input value={edit.code} onChange={e => setEdit({ ...edit, code: e.target.value })} placeholder="GAR-DUB-01"
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
-              </label>
-              <label className="text-xs text-[var(--text-muted)]">
-                Type*
-                <select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value as PlaceType })}
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
+        <FormModal
+          onClose={() => setEdit(null)}
+          title={edit.id ? 'Edit location' : 'Add location'}
+          icon={MapPin}
+          size="lg"
+        >
+          <form onSubmit={submit} className="space-y-5">
+            <FormSection title="Location details" columns={2}>
+              <FormField label="Name" required>
+                <TextInput required value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} />
+              </FormField>
+              <FormField label="Code">
+                <TextInput value={edit.code} onChange={e => setEdit({ ...edit, code: e.target.value })} placeholder="GAR-DUB-01" className="font-mono" />
+              </FormField>
+              <FormField label="Type" required>
+                <SelectInput value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value as PlaceType })}>
                   {PLACE_TYPES.map(t => <option key={t} value={t}>{PLACE_TYPE_LABELS[t]}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-[var(--text-muted)]">
-                Shape*
-                <select value={edit.shape} onChange={e => setEdit({ ...edit, shape: e.target.value as PlaceShape })}
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
+                </SelectInput>
+              </FormField>
+              <FormField label="Shape" required>
+                <SelectInput value={edit.shape} onChange={e => setEdit({ ...edit, shape: e.target.value as PlaceShape })}>
                   {PLACE_SHAPES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-[var(--text-muted)]">
-                Center latitude
-                <input value={edit.centerLat} onChange={e => setEdit({ ...edit, centerLat: e.target.value })} placeholder="25.276"
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
-              </label>
-              <label className="text-xs text-[var(--text-muted)]">
-                Center longitude
-                <input value={edit.centerLng} onChange={e => setEdit({ ...edit, centerLng: e.target.value })} placeholder="55.296"
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
-              </label>
+                </SelectInput>
+              </FormField>
+            </FormSection>
+
+            <FormSection title="Geometry" columns={2}>
+              <FormField label="Center latitude">
+                <TextInput value={edit.centerLat} onChange={e => setEdit({ ...edit, centerLat: e.target.value })} placeholder="25.276" className="font-mono" />
+              </FormField>
+              <FormField label="Center longitude">
+                <TextInput value={edit.centerLng} onChange={e => setEdit({ ...edit, centerLng: e.target.value })} placeholder="55.296" className="font-mono" />
+              </FormField>
               {edit.shape === 'CIRCLE' && (
-                <label className="text-xs text-[var(--text-muted)] col-span-2">
-                  Radius (metres)*
-                  <input value={edit.radiusM} onChange={e => setEdit({ ...edit, radiusM: e.target.value })} placeholder="200"
-                    className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
-                </label>
+                <FormField label="Radius" qualifier="(metres)" required span="full">
+                  <TextInput value={edit.radiusM} onChange={e => setEdit({ ...edit, radiusM: e.target.value })} placeholder="200" className="font-mono" />
+                </FormField>
               )}
-              <label className="text-xs text-[var(--text-muted)] col-span-2">
-                Address
-                <input value={edit.address} onChange={e => setEdit({ ...edit, address: e.target.value })} placeholder="Sheikh Zayed Road, Dubai"
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
-              </label>
-              <label className="text-xs text-[var(--text-muted)] col-span-2">
-                Description
-                <textarea value={edit.description} onChange={e => setEdit({ ...edit, description: e.target.value })} rows={2}
-                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
-              </label>
-              <label className="text-xs text-[var(--text-muted)] col-span-2 flex items-center gap-2">
-                <input type="checkbox" checked={edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />
-                Active
-              </label>
-            </div>
-            {edit.shape === 'POLYGON' && (
-              <div className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2">
-                Polygon geometry can&apos;t be drawn from this form yet — Phase 2 wires the map-drawing tool.
-                Create it via bus-ops geofences for now, or import via the API.
-              </div>
-            )}
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setEdit(null)}
-                className="px-4 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
-              <button type="submit" disabled={saving}
-                className="px-4 py-2 rounded-lg text-sm bg-cyan-600 hover:bg-cyan-500 text-[var(--text-main)] font-semibold disabled:opacity-50">
-                {saving ? 'Saving…' : (edit.id ? 'Save' : 'Create')}
-              </button>
-            </div>
+              {edit.shape === 'POLYGON' && (
+                <div className="md:col-span-full">
+                  <FormAlert tone="warning">
+                    Polygon geometry can&apos;t be drawn from this form yet — Phase 2 wires the map-drawing tool.
+                    Create it via bus-ops geofences for now, or import via the API.
+                  </FormAlert>
+                </div>
+              )}
+            </FormSection>
+
+            <FormSection title="Additional details" columns={1}>
+              <FormField label="Address">
+                <TextInput value={edit.address} onChange={e => setEdit({ ...edit, address: e.target.value })} placeholder="Sheikh Zayed Road, Dubai" />
+              </FormField>
+              <FormField label="Description">
+                <TextAreaInput value={edit.description} onChange={e => setEdit({ ...edit, description: e.target.value })} rows={2} />
+              </FormField>
+              <CheckboxField label="Active" checked={edit.active} onChange={v => setEdit({ ...edit, active: v })} />
+            </FormSection>
+
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setEdit(null)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : (edit.id ? 'Save' : 'Create')}</PrimaryButton>
+            </FormFooter>
           </form>
-        </div>
+        </FormModal>
       )}
     </div>
   );
