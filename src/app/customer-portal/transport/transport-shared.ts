@@ -54,7 +54,14 @@ export const STATUS_TONE: Record<TransportStatus, string> = {
 
 export const isOpen = (s: TransportStatus) => ['PENDING_APPROVAL', 'SUBMITTED', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'].includes(s);
 
-export const MODULE_LABEL: Record<string, string> = { LOGISTICS: 'Logistics shipping request' };
+export const MODULE_LABEL: Record<string, string> = {
+  LOGISTICS: 'Logistics shipping request',
+  RENTAL: 'Rental inquiry',
+  STAFF_TRANSPORT: 'Bus Ops transport request',
+};
+
+/** Categories whose requests go to a module of their own. */
+export const ROUTED_CATEGORIES = ['LOGISTICS', 'RAC', 'STAFF_TRANSPORT'];
 
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
