@@ -6,7 +6,10 @@
  * (src/lib/transport-catalog) before anything is saved. When the category
  * needs approval the request waits in PENDING_APPROVAL; otherwise it is
  * SUBMITTED straight away and, for categories with a module handler, routed
- * there (Logistics → a shipping request in the Logistics review inbox).
+ * there: Logistics → a shipping request (Logistics review inbox), Rent-a-Car →
+ * a Rental inquiry, Staff Transport → a Bus Ops transport request (when the
+ * passenger is already in Bus Ops). Staff can send a request again later
+ * (action `send`), e.g. once the passenger has been added.
  * Staff move requests through their stages in Booking Portal → Customer
  * requests; every change is added to `lifecycle`, which the customer sees.
  */
@@ -18,6 +21,7 @@ import { getCustomer } from '@/lib/service-tickets/customer-context';
 import { customerTransportCategories, getTenantCategory } from '@/lib/transport-catalog/store';
 import { validateRequestValues, type RequestValues } from '@/lib/transport-catalog/form-schema';
 import { createShippingRequest } from '@/lib/logistics/domain';
+import { nextRentalSerial } from '@/lib/rental/locks';
 
 export type TransportRequestStatus =
   | 'PENDING_APPROVAL' | 'SUBMITTED' | 'CONFIRMED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
@@ -146,9 +150,113 @@ async function routeLogistics(tx: TxClient, tenantId: string, req: Row, actorId:
   return { module: 'LOGISTICS', id: created.id, ref: created.requestNo };
 }
 
+/**
+ * Rent-a-Car form → Rental inquiry (RIQ-YYYYMM-NNNN, source CUSTOMER_PORTAL),
+ * for the rental desk to quote and turn into a booking. A booking itself needs
+ * a rate quote and a card pre-authorisation, which the desk arranges.
+ */
+async function routeRental(tx: TxClient, tenantId: string, req: Row) {
+  const v = req.form_values ?? {};
+  const [cust] = await tx.$queryRawUnsafe<Array<{ name_en: string | null }>>(
+    `SELECT name_en FROM customers WHERE id = $1 AND tenant_id = $2`, req.customer_id, tenantId,
+  );
+  const ym = new Date().toISOString().slice(0, 7).replace('-', '');
+  const inquiryNo = await nextRentalSerial(tx, {
+    tenantId, series: `RIQ-${ym}`, prefix: `RIQ-${ym}-`, table: 'rental_inquiries', column: 'inquiry_no', padWidth: 4,
+  });
+  const pickup = str(v.startDate);
+  const ret = str(v.endDate);
+  const days = pickup && ret ? Math.max(1, Math.ceil((Date.parse(ret) - Date.parse(pickup)) / 86_400_000)) : null;
+  const returnTo = v.sameReturnLoc === true ? 'same as pickup' : str(v.destination);
+  const notes = [
+    `Customer Portal request ${req.request_no}${cust?.name_en ? ` from ${cust.name_en.replace(/\.$/, '')}` : ''}.`,
+    str(v.pickupTime) && `Pickup time ${str(v.pickupTime)}.`,
+    ret && `Return ${ret}${str(v.returnTime) ? ` ${str(v.returnTime)}` : ''}${returnTo ? `, ${returnTo}` : ''}.`,
+    str(v.transmission) && `Transmission: ${str(v.transmission)}.`,
+    str(v.fuelType) && `Fuel: ${str(v.fuelType)}.`,
+    v.additionalDriver === true && 'Additional driver requested.',
+    str(v.licenseNo) && `Licence ${str(v.licenseNo)}${str(v.licenseExpiry) ? ` (expires ${str(v.licenseExpiry)})` : ''}.`,
+    str(v.notes), str(req.customer_note),
+  ].filter(Boolean).join(' ').slice(0, 2000);
+  const [row] = await tx.$queryRawUnsafe<Array<{ id: string; inquiry_no: string }>>(
+    // id given explicitly: not every database's rental_inquiries has a default for it.
+    `INSERT INTO rental_inquiries (id, inquiry_no, customer_name, email, phone, vehicle_type, pickup_location, pickup_date,
+                                   return_date, rental_days, status, source, notes, tenant_id)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, 'NEW', 'CUSTOMER_PORTAL', $10, $11)
+     RETURNING id::text, inquiry_no`,
+    inquiryNo,
+    [str(v.requestorName), cust?.name_en ? `(${cust.name_en})` : null].filter(Boolean).join(' ') || cust?.name_en || 'Customer',
+    str(v.requestorEmail), str(v.phone) ?? 'not provided', str(v.vehicleCategory), str(v.origin),
+    pickup, ret, days, notes, tenantId,
+  );
+  return { module: 'RENTAL', id: row.id, ref: row.inquiry_no };
+}
+
+/**
+ * Staff Transport form → Bus Ops transport request (REQ-NNNNN), for the
+ * passenger it is for. The passenger must already be in Bus Ops (a staff
+ * member with this employee ID or email); otherwise the request stays with
+ * staff here, and `strict` explains why (used by the Send action).
+ */
+async function routeStaffTransport(tx: TxClient, tenantId: string, req: Row, strict: boolean) {
+  const v = req.form_values ?? {};
+  const employeeId = str(v.employeeId);
+  const email = str(v.requestorEmail)?.toLowerCase() ?? null;
+  const date = str(v.startDate);
+  const staff = (employeeId || email) ? await tx.staffMember.findFirst({
+    where: {
+      tenantId, deletedAt: null,
+      OR: [
+        ...(employeeId ? [{ employeeId }] : []),
+        ...(email ? [{ email: { equals: email, mode: 'insensitive' as const } }] : []),
+      ],
+    },
+    select: { id: true },
+  }) : null;
+  if (!staff || !date) {
+    if (!strict) return null;
+    throw new TransportRequestError(
+      !date ? 'The request has no service start date.'
+        : `No Bus Ops passenger has employee ID ${employeeId ?? '—'} or email ${email ?? '—'}. Add them in Bus Ops, then send again.`,
+      409,
+    );
+  }
+  const [{ max }] = await tx.$queryRawUnsafe<Array<{ max: number | null }>>(
+    `SELECT MAX(NULLIF(regexp_replace(request_no, '^REQ-', ''), '')::int) AS max
+       FROM staff_transport_requests WHERE tenant_id = $1 AND request_no ~ '^REQ-[0-9]+$'`,
+    tenantId,
+  );
+  const requestNo = `REQ-${String((max ?? 0) + 1).padStart(5, '0')}`;
+  const notes = [
+    `Customer Portal request ${req.request_no}.`,
+    str(v.workDays) && `Days: ${str(v.workDays)}.`,
+    str(v.returnTime) && `Return ${str(v.returnTime)}.`,
+    str(v.shiftType) && `Shift: ${str(v.shiftType)}.`,
+    str(v.endDate) && `Until ${str(v.endDate)}.`,
+    str(v.accessibilityNeeds) && str(v.accessibilityNeeds) !== 'None' && `Needs: ${str(v.accessibilityNeeds)}.`,
+    str(v.genderPreference) && str(v.genderPreference) !== 'No Preference' && `Driver: ${str(v.genderPreference)}.`,
+    str(v.notes), str(req.customer_note),
+  ].filter(Boolean).join(' ').slice(0, 2000);
+  const created = await tx.staffTransportRequest.create({
+    data: {
+      tenantId, requestNo, staffMemberId: staff.id,
+      // A dated registration with an end date is temporary; otherwise a standing route.
+      requestType: str(v.endDate) ? 'TEMPORARY' : 'NEW_ROUTE',
+      tripDate: new Date(`${date}T${str(v.pickupTime) ?? '00:00'}:00+04:00`),
+      pickupLocation: str(v.origin), dropLocation: str(v.destination),
+      reason: 'Customer Portal request', status: 'PENDING', notes,
+    },
+    select: { id: true, requestNo: true },
+  });
+  return { module: 'STAFF_TRANSPORT', id: created.id, ref: created.requestNo };
+}
+
 /** Sends a request to its category's module, when one is set up. Returns null when staff handle it here. */
-async function routeToModule(tx: TxClient, tenantId: string, req: Row, actorId: string | null) {
+async function routeToModule(tx: TxClient, tenantId: string, req: Row, actorId: string | null, strict = false) {
   if (req.category === 'LOGISTICS') return routeLogistics(tx, tenantId, req, actorId);
+  if (req.category === 'RAC') return routeRental(tx, tenantId, req);
+  if (req.category === 'STAFF_TRANSPORT') return routeStaffTransport(tx, tenantId, req, strict);
+  if (strict) throw new TransportRequestError('This service has no module to send to yet; handle it here.', 409);
   return null;
 }
 
@@ -252,6 +360,8 @@ export async function cancelCustomerTransportRequest(
 // ── Staff side ─────────────────────────────────────────────────────────────
 
 export type StaffAction = 'approve' | 'reject' | 'confirm' | 'assign' | 'start' | 'complete' | 'cancel';
+/** Not a stage change: sends a request that was not routed to its module. */
+const SEND_FROM: TransportRequestStatus[] = ['SUBMITTED', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'];
 
 /** Allowed moves: action → [from statuses, to status]. */
 const TRANSITIONS: Record<StaffAction, [TransportRequestStatus[], TransportRequestStatus]> = {
@@ -264,6 +374,17 @@ const TRANSITIONS: Record<StaffAction, [TransportRequestStatus[], TransportReque
   cancel: [['PENDING_APPROVAL', 'SUBMITTED', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'], 'CANCELLED'],
 };
 export const STAFF_ACTIONS = Object.keys(TRANSITIONS) as StaffAction[];
+
+async function sendToModule(tx: TxClient, tenantId: string, cur: Row, staff: { id: string; name: string }): Promise<Row> {
+  if (cur.routed_module) throw new TransportRequestError(`Already sent (${cur.routed_record_ref ?? cur.routed_module}).`, 409);
+  if (!SEND_FROM.includes(cur.status)) {
+    throw new TransportRequestError(`Cannot send a request that is ${cur.status.replace(/_/g, ' ').toLowerCase()}.`, 409);
+  }
+  const routed = await routeToModule(tx, tenantId, cur, staff.id, true);
+  if (!routed) throw new TransportRequestError('This service has no module to send to yet; handle it here.', 409);
+  await saveRouting(tx, tenantId, cur.id, routed);
+  return { ...cur, routed_module: routed.module, routed_record_ref: routed.ref };
+}
 
 async function applyStatus(
   tx: TxClient, tenantId: string, cur: Row, to: TransportRequestStatus, by: string,
@@ -313,8 +434,8 @@ export async function staffTransportAction(
   input: { driverName?: unknown; driverPhone?: unknown; vehicle?: unknown; note?: unknown; staffNote?: unknown },
   staff: { id: string; name: string },
 ): Promise<StaffTransportRequest> {
-  if (!STAFF_ACTIONS.includes(action as StaffAction)) throw new TransportRequestError('Unknown action.');
-  const [from, to] = TRANSITIONS[action as StaffAction];
+  if (action !== 'send' && !STAFF_ACTIONS.includes(action as StaffAction)) throw new TransportRequestError('Unknown action.');
+  const [from, to] = action === 'send' ? [SEND_FROM, null] : TRANSITIONS[action as StaffAction];
   const driverName = str(input.driverName)?.slice(0, 120) ?? null;
   const driverPhone = str(input.driverPhone)?.slice(0, 40) ?? null;
   const vehicle = str(input.vehicle)?.slice(0, 120) ?? null;
@@ -330,6 +451,13 @@ export async function staffTransportAction(
     if (!cur) throw new TransportRequestError('Request not found.', 404);
     if (!from.includes(cur.status)) {
       throw new TransportRequestError(`Cannot ${action} a request that is ${cur.status.replace(/_/g, ' ').toLowerCase()}.`, 409);
+    }
+    if (to === null) {
+      const sent = await sendToModule(tx, tenantId, cur, staff);
+      const [n] = await tx.$queryRawUnsafe<Array<{ name_en: string | null; customer_code: string | null }>>(
+        `SELECT name_en, customer_code FROM customers WHERE id = $1 AND tenant_id = $2`, sent.customer_id, tenantId,
+      );
+      return toStaff({ ...sent, customer_name: n?.name_en ?? null, customer_code: n?.customer_code ?? null });
     }
     let row = await applyStatus(tx, tenantId, cur, to, staff.name, {
       driverName, driverPhone, vehicle, note, staffNote: str(input.staffNote)?.slice(0, 1000) ?? null,

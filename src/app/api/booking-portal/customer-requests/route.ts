@@ -6,9 +6,11 @@ export const dynamic = 'force-dynamic';
  *
  * GET   ?status=active|PENDING_APPROVAL|…&category=RAC   the tenant's requests
  * PATCH { id, action, driverName?, driverPhone?, vehicle?, note?, staffNote? }
- *   action: approve | reject | confirm | assign | start | complete | cancel.
+ *   action: approve | reject | confirm | assign | start | complete | cancel | send.
  *   `note` is shown to the customer in the stage history; `staffNote` is not.
- *   Approving a Logistics request also creates its shipping request.
+ *   Approving sends the request to its module (Logistics shipping request,
+ *   Rental inquiry, Bus Ops transport request); `send` retries one that was
+ *   not sent, e.g. once the Staff Transport passenger is in Bus Ops.
  * Access: booking-portal module (policy matrix); changes are audited.
  */
 

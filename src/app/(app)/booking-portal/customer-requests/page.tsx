@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Inbox, X, CheckCircle2, XCircle, UserCheck, Play, Flag, Ban, Link2 } from 'lucide-react';
+import { Inbox, X, CheckCircle2, XCircle, UserCheck, Play, Flag, Ban, Link2, Send } from 'lucide-react';
 import SmartDataGrid, { type SmartDataGridColumn } from '@/components/ui/SmartDataGrid';
 import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, TextInput, TextAreaInput, SelectInput, PrimaryButton, SecondaryButton,
@@ -18,12 +18,12 @@ import { TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL } from '@/lib/customer-p
 import { CATEGORY_DEFINITIONS } from '@/lib/transport-catalog/default-forms';
 import { allFields } from '@/lib/transport-catalog/form-schema';
 import {
-  fmtDateTime, fmtService, MODULE_LABEL, STATUS_LABEL, STATUS_TONE, type TransportRequest, type TransportStatus,
+  fmtDateTime, fmtService, MODULE_LABEL, ROUTED_CATEGORIES, STATUS_LABEL, STATUS_TONE, type TransportRequest, type TransportStatus,
 } from '@/app/customer-portal/transport/transport-shared';
 
 interface StaffRequest extends TransportRequest { customerId: string; customerName: string | null; customerCode: string | null; staffNote: string | null }
 
-type Action = 'approve' | 'reject' | 'confirm' | 'assign' | 'start' | 'complete' | 'cancel';
+type Action = 'approve' | 'reject' | 'confirm' | 'assign' | 'start' | 'complete' | 'cancel' | 'send';
 const ACTIONS: Record<TransportStatus, Action[]> = {
   PENDING_APPROVAL: ['approve', 'reject', 'cancel'],
   SUBMITTED: ['confirm', 'assign', 'reject', 'cancel'],
@@ -36,7 +36,9 @@ const ACTION_UI: Record<Action, { label: string; icon: typeof CheckCircle2 }> = 
   approve: { label: 'Approve', icon: CheckCircle2 }, reject: { label: 'Reject', icon: XCircle },
   confirm: { label: 'Confirm', icon: CheckCircle2 }, assign: { label: 'Assign driver', icon: UserCheck },
   start: { label: 'Start trip', icon: Play }, complete: { label: 'Complete', icon: Flag }, cancel: { label: 'Cancel', icon: Ban },
+  send: { label: 'Send to module', icon: Send },
 };
+const SENDABLE: TransportStatus[] = ['SUBMITTED', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'];
 const STATUS_FILTERS = [
   { value: 'active', label: 'Open' }, { value: 'PENDING_APPROVAL', label: 'Awaiting approval' },
   { value: 'COMPLETED', label: 'Completed' }, { value: '', label: 'All' },
@@ -126,7 +128,8 @@ function RequestDrawer({ r, onClose, onChanged }: { r: StaffRequest; onClose: ()
     } finally { setBusy(null); }
   };
 
-  const actions = ACTIONS[r.status];
+  const canSend = !r.routed && ROUTED_CATEGORIES.includes(r.category) && SENDABLE.includes(r.status);
+  const actions: Action[] = [...ACTIONS[r.status], ...(canSend ? ['send' as const] : [])];
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
 
   return (
@@ -138,6 +141,7 @@ function RequestDrawer({ r, onClose, onChanged }: { r: StaffRequest; onClose: ()
           <div className="flex flex-wrap items-center gap-2">
             <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>{STATUS_LABEL[r.status]}</span>
             {r.routed && <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]"><Link2 className="w-3 h-3" /> {MODULE_LABEL[r.routed.module] ?? r.routed.module} {r.routed.ref}</span>}
+            {canSend && <span className="text-[11px] font-semibold text-amber-600">Not sent to its module yet</span>}
           </div>
 
           <FormSection title="Request" columns={2}>
