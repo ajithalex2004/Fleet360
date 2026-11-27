@@ -16,6 +16,8 @@ const COMMON_MENU = ['New request', 'Active requests', 'History'];
 const MENU_HREF: Record<string, string> = {
   Shipments: '/customer-portal/transport/shipments',
   'Proof of delivery': '/customer-portal/transport/shipments',
+  Agreements: '/customer-portal/transport/rentals?view=agreements',
+  Invoices: '/customer-portal/transport/rentals?view=invoices',
 };
 
 export default function TransportDashboard() {

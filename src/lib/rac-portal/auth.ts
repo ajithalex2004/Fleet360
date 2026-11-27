@@ -9,6 +9,16 @@ import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getRacPortalUserById, type RacPortalRole } from './portal-users-store';
+import { readCustomerPortalSession } from '@/lib/customer-portal/session';
+import { getPortalUserById as getCustomerPortalAccount } from '@/lib/customer-portal/users';
+import { rentalCustomerIdFor } from '@/lib/customer-portal/rental-links';
+import { customerTransportCategories } from '@/lib/transport-catalog/store';
+import type { PortalRole } from '@/lib/customer-portal/catalog';
+
+/** Customer Portal Transport role → Rental-car portal role. */
+const RAC_ROLE_FOR: Record<PortalRole, RacPortalRole> = {
+  ADMIN: 'RAC_B2B_ADMIN', REQUESTER: 'RAC_B2B_BOOKER', FINANCE: 'RAC_B2B_FINANCE', VIEWER: 'RAC_B2B_VIEWER',
+};
 
 export type { RacPortalRole };
 
@@ -137,6 +147,47 @@ export interface RacPortalRequestContext {
     isActive: boolean;
     sessionVersion: number;
   };
+  /**
+   * Set when the caller signed in to the Customer Portal (Rent-a-Car pages):
+   * userId is the Customer Portal account, customerId its linked rental customer.
+   */
+  via?: 'customer-portal';
+}
+
+/**
+ * The Customer Portal's Rent-a-Car pages use these APIs too. Its session is
+ * accepted when there is no Rental-car session and the account has a
+ * Transport role, its company has the Rent-a-Car category, and the company is
+ * linked to a rental customer (customer_rental_links), which becomes
+ * customerId so every rental query stays scoped as before.
+ */
+async function fromCustomerPortal(req: NextRequest): Promise<RacPortalRequestContext | NextResponse | null> {
+  const cp = readCustomerPortalSession(req);
+  if (!cp) return null;
+  const account = await getCustomerPortalAccount(cp.tenantId, cp.userId);
+  if (!account || !account.isActive || account.customerId !== cp.customerId || account.sessionVersion !== cp.sv) {
+    return NextResponse.json({ error: 'Session no longer valid' }, { status: 401 });
+  }
+  const role = account.roles.TRANSPORT;
+  if (!role) return NextResponse.json({ error: 'You do not have access to Rent-a-Car' }, { status: 403 });
+  const cats = await customerTransportCategories(cp.tenantId, cp.customerId);
+  if (!cats.some((c) => c.category === 'RAC')) {
+    return NextResponse.json({ error: 'Rent-a-Car is not enabled for your company' }, { status: 403 });
+  }
+  const rentalCustomerId = await rentalCustomerIdFor(cp.tenantId, cp.customerId);
+  if (!rentalCustomerId) {
+    return NextResponse.json({ error: 'Your company is not linked to a rental account yet. Contact your service provider.' }, { status: 403 });
+  }
+  return {
+    userId: account.id,
+    customerId: rentalCustomerId,
+    tenantId: cp.tenantId,
+    user: {
+      id: account.id, email: account.email, fullName: account.fullName,
+      role: RAC_ROLE_FOR[role], isActive: true, sessionVersion: account.sessionVersion,
+    },
+    via: 'customer-portal',
+  };
 }
 
 export async function requireRacPortal(
@@ -144,6 +195,8 @@ export async function requireRacPortal(
 ): Promise<RacPortalRequestContext | NextResponse> {
   const session = readRacSessionFromRequest(req);
   if (!session) {
+    const viaPortal = await fromCustomerPortal(req);
+    if (viaPortal) return viaPortal;
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
   const user = await getRacPortalUserById(session.tenantId, session.userId);
