@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 /* ─────────────────────────────────────────────────────────────
    Types
@@ -30,6 +30,7 @@ const EMAIL_FIELDS: ChannelField[] = [
     group: 'Provider', type: 'select',
     options: [
       { value: 'none',      label: 'none — Disabled' },
+      { value: 'resend',    label: 'Resend (API — Recommended)' },
       { value: 'smtp',      label: 'SMTP (Custom Server)' },
       { value: 'sendgrid',  label: 'SendGrid' },
       { value: 'mailgun',   label: 'Mailgun' },
@@ -37,9 +38,9 @@ const EMAIL_FIELDS: ChannelField[] = [
       { value: 'postmark',  label: 'Postmark' },
     ],
   },
-  { key: 'email_from_name',    group: 'Provider', label: 'From Name',        description: 'Sender display name (e.g., Al Arais School)',    type: 'text',  placeholder: 'Al Arais School' },
-  { key: 'email_from_address', group: 'Provider', label: 'From Email',       description: 'For Microsoft 365 / Exchange SMTP, this must match your SMTP Username exactly (sender verification is enforced).',  type: 'email', placeholder: 'noreply@school.ae' },
-  { key: 'email_reply_to',     group: 'Provider', label: 'Reply-To Address', description: 'Where replies should go',                         type: 'email', placeholder: 'support@school.ae' },
+  { key: 'email_from_name',    group: 'Provider', label: 'From Name',        description: 'Sender display name (e.g., Fleet360)',          type: 'text',  placeholder: 'Fleet360' },
+  { key: 'email_from_address', group: 'Provider', label: 'From Email',       description: 'Verified sender address (Resend domain email, or SMTP username for Microsoft 365 / Exchange).',  type: 'email', placeholder: 'noreply@yourdomain.com' },
+  { key: 'email_reply_to',     group: 'Provider', label: 'Reply-To Address', description: 'Where replies should go',                         type: 'email', placeholder: 'support@yourdomain.com' },
   /* SMTP */
   { key: 'smtp_host',      group: 'SMTP', label: 'SMTP Host',     description: 'SMTP server hostname (for SMTP provider)',    type: 'text',     placeholder: 'smtp.gmail.com' },
   { key: 'smtp_port',      group: 'SMTP', label: 'SMTP Port',     description: 'SMTP port (587 for TLS, 465 for SSL)',        type: 'number',   min: 1, max: 65535 },
@@ -54,7 +55,7 @@ const EMAIL_FIELDS: ChannelField[] = [
     ],
   },
   /* API */
-  { key: 'email_api_key',    group: 'API Keys', label: 'API Key',     description: 'API key for SendGrid / Mailgun / SES / Postmark', type: 'password', placeholder: '••••••••' },
+  { key: 'email_api_key',    group: 'API Keys', label: 'API Key',     description: 'API key for Resend (re_...) / SendGrid / Mailgun / SES / Postmark', type: 'password', placeholder: 're_••••••••' },
   { key: 'email_api_region', group: 'API Keys', label: 'API Region',  description: 'Region for AWS SES (e.g., us-east-1)',           type: 'text',     placeholder: 'us-east-1' },
   /* Limits */
   { key: 'email_daily_limit', group: 'Delivery', label: 'Daily Send Limit', description: 'Max emails per day (0 = unlimited)',          type: 'number', min: 0, unit: 'emails / day' },
@@ -127,9 +128,27 @@ function TestBtn({ channelKey, settings, onColor }: {
 }) {
   const [state, setState]   = useState<'idle' | 'running' | 'ok' | 'fail'>('idle');
   const [errMsg, setErrMsg] = useState('');
+  const [testTo, setTestTo] = useState('');
+  const [sentRecipient, setSentRecipient] = useState('');
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  const effectiveRecipient =
+    testTo.trim() ||
+    (settings['email_reply_to'] || '').trim() ||
+    (settings['email_from_address'] || '').trim() ||
+    (settings['smtp_username'] || '').trim();
 
   const run = async () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    const targetRecipient = effectiveRecipient;
     setErrMsg('');
+    setSentRecipient(targetRecipient);
     setState('running');
     try {
       const res = await fetch('/api/admin/test-channel', {
@@ -138,8 +157,7 @@ function TestBtn({ channelKey, settings, onColor }: {
         body: JSON.stringify({
           channel:  channelKey,
           settings,
-          // For email: send the test to the "from" address so you receive it
-          toEmail: settings['email_from_address'] || settings['smtp_username'] || undefined,
+          toEmail: channelKey === 'email' ? (targetRecipient || undefined) : undefined,
         }),
       });
       const data = await res.json();
@@ -153,29 +171,40 @@ function TestBtn({ channelKey, settings, onColor }: {
       setErrMsg(e instanceof Error ? e.message : 'Network error');
       setState('fail');
     }
-    setTimeout(() => { setState('idle'); setErrMsg(''); }, 6000);
+    resetTimerRef.current = setTimeout(() => { setState('idle'); setErrMsg(''); }, 6000);
   };
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      <button onClick={run} disabled={state === 'running'}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all disabled:opacity-60 ${
-          state === 'ok'      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
-          state === 'fail'    ? 'bg-red-500/20 border-red-500/30 text-red-300' :
-          state === 'running' ? 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)]' :
-                                `${onColor} border-transparent text-[var(--text-main)] hover:opacity-90`
-        }`}>
-        {state === 'running' ? <><span className="animate-spin inline-block">⟳</span> Sending…</> :
-         state === 'ok'      ? <>✓ Email Delivered!</> :
-         state === 'fail'    ? <>✕ Failed</> :
-         channelKey === 'email' ? <>📧 Send Test Email</> :
-                                  <>📱 Send Test SMS</>}
-      </button>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        {channelKey === 'email' && (
+          <input
+            type="email"
+            value={testTo}
+            onChange={e => setTestTo(e.target.value)}
+            placeholder="Test recipient email (optional)"
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-[var(--text-faint)] w-52"
+          />
+        )}
+        <button onClick={run} disabled={state === 'running'}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all disabled:opacity-60 ${
+            state === 'ok'      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
+            state === 'fail'    ? 'bg-red-500/20 border-red-500/30 text-red-300' :
+            state === 'running' ? 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)]' :
+                                  `${onColor} border-transparent text-[var(--text-main)] hover:opacity-90`
+          }`}>
+          {state === 'running' ? <><span className="animate-spin inline-block">⟳</span> Sending…</> :
+           state === 'ok'      ? (channelKey === 'email' ? <>✓ Email Delivered!</> : <>✓ SMS Verified!</>) :
+           state === 'fail'    ? <>✕ Failed</> :
+           channelKey === 'email' ? <>📧 Send Test Email</> :
+                                    <>📱 Send Test SMS</>}
+        </button>
+      </div>
       {state === 'fail' && errMsg && (
-        <p className="text-xs text-red-400 max-w-xs leading-snug">{errMsg}</p>
+        <p className="text-xs text-red-400 max-w-xs leading-snug text-right">{errMsg}</p>
       )}
-      {state === 'ok' && (
-        <p className="text-xs text-emerald-400">Check your inbox at {settings['email_from_address'] || settings['smtp_username']}</p>
+      {state === 'ok' && channelKey === 'email' && sentRecipient && (
+        <p className="text-xs text-emerald-400">Check your inbox at {sentRecipient}</p>
       )}
     </div>
   );
@@ -351,6 +380,18 @@ function ChannelCard({
           </span>
         </div>
       </div>
+
+      {/* Resend quick setup banner */}
+      {channelKey === 'email' && provider === 'resend' && (
+        <div className="mx-6 mt-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-xs text-[var(--text-muted)] leading-relaxed">
+          <strong className="text-[var(--text-main)]">Resend HTTPS API setup:</strong> Set{' '}
+          <span className="font-mono text-[var(--text-main)]">From Email</span> to an address on your verified Resend domain
+          (or <span className="font-mono text-[var(--text-main)]">onboarding@resend.dev</span> for testing to your Resend account email),
+          paste your <span className="font-mono text-[var(--text-main)]">re_…</span> key under{' '}
+          <strong className="text-[var(--text-main)]">API Keys → API Key</strong>, save, and enter your inbox in the test recipient box below.
+          SMTP fields are ignored when Resend API is active.
+        </div>
+      )}
 
       {/* Field groups */}
       <div className="divide-y divide-white/5">
@@ -1176,13 +1217,16 @@ export default function NotificationChannelsPage() {
     if (keysToClear.length > 0) {
       payload.clearSecrets = keysToClear;
     }
+    setError('');
     try {
       const res = await fetch('/api/admin/platform-settings', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error(typeof data?.error === 'string' && data.error.trim() ? data.error : 'Failed to save — please try again');
+      }
       if (data.configuredSecrets) {
         setConfiguredSecrets(data.configuredSecrets);
       }
@@ -1203,7 +1247,9 @@ export default function NotificationChannelsPage() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch { setError('Failed to save — please try again'); }
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Failed to save — please try again');
+    }
     finally { setSaving(false); }
   };
 

@@ -329,6 +329,39 @@ export function canReuseStoredSmsAuthToken(
 }
 
 /**
+ * Allows reusing the stored `email_api_key` in `/api/admin/test-channel` ONLY when
+ * the request targets the exact saved `email_provider` (prevents exfiltrating a
+ * saved provider key by switching providers during a channel test).
+ */
+export function canReuseStoredEmailApiKey(
+  stored: Record<string, string>,
+  candidateProvider: string,
+): { ok: true; apiKey: string } | { ok: false; error: string } {
+  const storedKey = (stored['email_api_key'] ?? '').trim();
+  if (!storedKey) {
+    return { ok: false, error: 'Email API Key is required.' };
+  }
+
+  const savedProvider = (stored['email_provider'] ?? '').trim().toLowerCase();
+  const candProvider = (candidateProvider ?? '').trim().toLowerCase();
+  if (
+    !savedProvider ||
+    savedProvider === 'none' ||
+    !candProvider ||
+    candProvider === 'none' ||
+    candProvider !== savedProvider
+  ) {
+    return {
+      ok: false,
+      error:
+        'Stored email API key can only be reused with the saved email provider. Re-enter the API key to test a new provider.',
+    };
+  }
+
+  return { ok: true, apiKey: storedKey };
+}
+
+/**
  * Scrubs any known secret values (raw, URL-encoded, and base64-encoded) and
  * URL-embedded tokens from log/error strings.
  */
