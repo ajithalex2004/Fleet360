@@ -47,7 +47,7 @@ const serverSchema = z.object({
   DATABASE_URL_UAE: z.string().url().optional(),
   DATABASE_URL_US:  z.string().url().optional(),
 
-  // Email — at least SMTP_HOST OR SENDGRID_API_KEY required for prod email.
+  // Email — at least SMTP_HOST, RESEND_API_KEY, or SENDGRID_API_KEY (or DB platform_settings) for prod email.
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_SECURE: z.string().optional(),
@@ -55,6 +55,7 @@ const serverSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
   SENDGRID_API_KEY: z.string().optional(),
 
   // WhatsApp / Twilio

@@ -15,14 +15,21 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { smtpTlsOptions } from '@/lib/smtp-tls';
 import {
+  canReuseStoredEmailApiKey,
   canReuseStoredSmtpPassword,
   canReuseStoredSmsAuthToken,
   redactPlatformSettingSecrets,
 } from '@/lib/platform-settings-secrets';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+const RESEND_API_ENDPOINT = 'https://api.resend.com/emails';
 
 const STORED_CHANNEL_KEYS = [
+  'email_provider',
+  'email_api_key',
+  'email_from_name',
+  'email_from_address',
+  'email_reply_to',
   'smtp_host',
   'smtp_port',
   'smtp_username',
@@ -31,6 +38,19 @@ const STORED_CHANNEL_KEYS = [
   'sms_account_sid',
   'sms_auth_token',
 ] as const;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHeaderValue(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').trim();
+}
 
 async function loadStoredChannelSettings(): Promise<Record<string, string>> {
   try {
@@ -114,40 +134,169 @@ async function testEmail(
   settings: Record<string, string>,
   toEmail?: string,
 ): Promise<NextResponse> {
-  const provider  = settings['email_provider'] ?? 'none';
-  const fromName  = settings['email_from_name']    || 'Fleet360';
-  // For SMTP, the authenticated sender MUST be the SMTP username (Exchange/O365 enforces this).
-  // Fall back to email_from_address only for non-SMTP providers.
-  const smtpUser  = settings['smtp_username'] || '';
-  const fromAddr  = provider === 'smtp'
-    ? (smtpUser || settings['email_from_address'] || '')
-    : (settings['email_from_address'] || smtpUser || '');
-  const recipient = toEmail || fromAddr;
+  const provider  = (settings['email_provider'] ?? 'none').trim().toLowerCase();
+  const fromName  = sanitizeHeaderValue(settings['email_from_name'] || 'Fleet360') || 'Fleet360';
+  const smtpHost  = (settings['smtp_host'] ?? '').trim().toLowerCase();
+  const smtpUser  = (settings['smtp_username'] || '').trim();
+  const configuredFrom = (settings['email_from_address'] || '').trim();
+  // Exchange / Microsoft 365 requires the authenticated SMTP username as sender;
+  // standard SMTP relays (Resend, SES, Postmark, Mailgun, etc.) use non-email
+  // usernames such as "resend" and require the verified email_from_address.
+  const isExchangeHost =
+    smtpHost.includes('office365') || smtpHost.includes('outlook.com') || smtpHost.includes('exchange');
+  const fromAddr = provider === 'smtp'
+    ? (isExchangeHost ? (smtpUser || configuredFrom) : (configuredFrom || smtpUser))
+    : (configuredFrom || smtpUser);
+  const recipient = (toEmail || '').trim() || fromAddr;
 
   if (!recipient) {
     return NextResponse.json(
-      { error: 'No recipient address. Fill in the "From Email" field or provide a toEmail.' },
+      { error: 'No recipient address. Fill in the "From Email" or test recipient field.' },
       { status: 400, headers: NO_STORE_HEADERS },
     );
   }
 
   if (provider === 'none') {
     return NextResponse.json(
-      { error: 'Email provider is set to "none". Select SMTP or another provider first.' },
+      { error: 'Email provider is set to "none". Select Resend, SMTP, or another provider first.' },
       { status: 400, headers: NO_STORE_HEADERS },
     );
+  }
+
+  if (provider === 'resend') {
+    return await testResend(settings, fromName, configuredFrom, recipient);
   }
 
   if (provider === 'smtp') {
     return await testSmtp(settings, fromName, fromAddr, recipient);
   }
 
-  // For API-based providers (SendGrid, Mailgun, etc.) we can't test without
-  // their SDK — return a helpful message.
+  // For other API-based providers (SendGrid, Mailgun, etc.) we can't test without
+  // their transport — return a helpful message.
   return NextResponse.json(
-    { error: `Live testing for "${provider}" is not yet implemented. Use SMTP to verify connectivity.` },
+    { error: `Live testing for "${provider}" is not yet implemented. Use Resend (API) or SMTP to verify connectivity.` },
     { status: 400, headers: NO_STORE_HEADERS },
   );
+}
+
+async function testResend(
+  settings: Record<string, string>,
+  fromName: string,
+  fromAddr: string,
+  recipient: string,
+): Promise<NextResponse> {
+  const cleanFrom = sanitizeHeaderValue(fromAddr);
+  if (!cleanFrom || !cleanFrom.includes('@')) {
+    return NextResponse.json(
+      { error: 'A valid "From Email" on your verified Resend domain (or onboarding@resend.dev) is required.' },
+      { status: 400, headers: NO_STORE_HEADERS },
+    );
+  }
+
+  const suppliedKey = (settings['email_api_key'] ?? '').trim();
+  let apiKey = suppliedKey;
+  if (!apiKey) {
+    const stored = await loadStoredChannelSettings();
+    const reuse = canReuseStoredEmailApiKey(stored, 'resend');
+    if (!reuse.ok) {
+      return NextResponse.json({ error: reuse.error }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+    apiKey = reuse.apiKey;
+  }
+
+  const cleanName = fromName.replace(/"/g, '');
+  const fromHeader = cleanName ? `"${cleanName}" <${cleanFrom}>` : cleanFrom;
+  const replyTo = sanitizeHeaderValue(settings['email_reply_to'] || '');
+
+  try {
+    const res = await fetch(RESEND_API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Fleet360/1.0',
+      },
+      body: JSON.stringify({
+        from: fromHeader,
+        to: [recipient],
+        subject: '✅ Fleet360 — Resend API Test Successful',
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <body style="font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px;margin:0;">
+            <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:12px;padding:32px;border:1px solid rgba(255,255,255,0.1);">
+              <h2 style="color:#22c55e;margin-top:0;font-size:20px;">✅ Resend API Verified</h2>
+              <p style="color:#94a3b8;">Your Fleet360 Resend HTTPS email configuration is working correctly.</p>
+              <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:8px 4px;color:#64748b;font-size:12px;width:120px;">Provider</td>
+                  <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">Resend HTTPS API</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:8px 4px;color:#64748b;font-size:12px;">From</td>
+                  <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">${escapeHtml(cleanFrom)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 4px;color:#64748b;font-size:12px;">Sent to</td>
+                  <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;">${escapeHtml(recipient)}</td>
+                </tr>
+              </table>
+              <hr style="border-color:rgba(255,255,255,0.1);margin:24px 0;"/>
+              <p style="color:#475569;font-size:11px;margin:0;">
+                Fleet360 Platform — Notification Settings Test<br/>
+                Sent at ${new Date().toUTCString()}
+              </p>
+            </div>
+          </body>
+          </html>
+        `,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      const rawText = await res.text().catch(() => '');
+      let providerMsg = rawText.slice(0, 300);
+      try {
+        const parsed = JSON.parse(rawText) as { message?: string; error?: string };
+        if (typeof parsed.message === 'string' && parsed.message.trim()) {
+          providerMsg = parsed.message.trim();
+        } else if (typeof parsed.error === 'string' && parsed.error.trim()) {
+          providerMsg = parsed.error.trim();
+        }
+      } catch {
+        // non-JSON upstream error body
+      }
+      const safeMsg = redactPlatformSettingSecrets(providerMsg, [apiKey]);
+      console.error('[test-channel/resend]', res.status, safeMsg);
+      let friendly = `Resend API error (${res.status}): ${safeMsg || 'Request rejected.'}`;
+      if (res.status === 401) {
+        friendly = 'Resend authentication failed (401). Check that your API key (re_...) is valid and has Sending access.';
+      } else if (res.status === 403 || res.status === 422) {
+        friendly = `Resend rejected the sender or recipient (${res.status}): ${safeMsg}. Ensure your "From Email" domain is verified in Resend.`;
+      }
+      return NextResponse.json({ error: friendly }, { status: 502, headers: NO_STORE_HEADERS });
+    }
+
+    const data = (await res.json().catch(() => null)) as { id?: unknown } | null;
+    return NextResponse.json(
+      {
+        ok: true,
+        message: `Test email delivered via Resend to ${recipient}`,
+        messageId: typeof data?.id === 'string' ? data.id : undefined,
+      },
+      { headers: NO_STORE_HEADERS },
+    );
+  } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const safeMsg = redactPlatformSettingSecrets(rawMsg, [apiKey]);
+    console.error('[test-channel/resend]', safeMsg);
+    return NextResponse.json(
+      { error: `Resend request failed: ${safeMsg}` },
+      { status: 502, headers: NO_STORE_HEADERS },
+    );
+  }
 }
 
 async function testSmtp(
