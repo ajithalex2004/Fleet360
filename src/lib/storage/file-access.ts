@@ -24,6 +24,16 @@
  *                                          service_tickets row lists this URL
  *                                          in its attachments; staff of that
  *                                          tenant only, images only
+ *   booking-portal/{tenantId}/{domain}/{docType}/…  booking intake attachment
+ *                                          (logistics commercial docs or
+ *                                          school-bus student photo / parent ID);
+ *                                          staff of that tenant only, images only
+ *                                          for `student-photo`
+ *   customer-portal/{tenantId}/{customerId}/{domain}/{docType}/…
+ *                                          Customer Portal Transport request
+ *                                          attachment; readable by that customer's
+ *                                          portal users and staff of that tenant,
+ *                                          images only for `student-photo`
  *
  * Any other prefix is refused. Staff callers are identified by the identity
  * headers middleware sets from a verified session; leasing-portal callers by
@@ -38,6 +48,7 @@ import { UPLOAD_URL_PREFIX } from '@/lib/storage';
 export type FileCaller =
   | { kind: 'staff'; tenantId: string; userId: string; isPlatformAdmin?: boolean }
   | { kind: 'leasing-portal'; tenantId: string; lesseeId: string }
+  | { kind: 'customer-portal'; tenantId: string; customerId: string; userId: string }
   | { kind: 'anonymous' };
 
 export type FileAccessDecision =
@@ -49,7 +60,9 @@ export type FileAccessDecision =
         | 'rental-handover'
         | 'rental-document'
         | 'tenant-attachment'
-        | 'service-request-photo';
+        | 'service-request-photo'
+        | 'booking-portal-attachment'
+        | 'customer-portal-attachment';
       imageOnly: boolean;
     }
   | { allowed: false; reason: string };
@@ -148,6 +161,10 @@ export async function authorizeFileAccess(
 
       if (caller.kind === 'staff') {
         return { allowed: true, category: 'leasing-document', imageOnly: false };
+      }
+
+      if (caller.kind !== 'leasing-portal') {
+        return deny('lease documents require staff or leasing portal session');
       }
 
       // Leasing portal: the lessee's own record, or a contract they hold.
@@ -314,6 +331,59 @@ export async function authorizeFileAccess(
     return rows.length > 0
       ? { allowed: true, category: 'service-request-photo', imageOnly: true }
       : deny('no service request with this photo');
+  }
+
+  if (root === 'booking-portal' && segments.length >= 5) {
+    if (caller.kind !== 'staff') return deny('booking portal attachments are staff-only');
+    const ownerTenant = segments[1];
+    const domain = segments[2];
+    const docType = segments[3];
+    if (ownerTenant !== caller.tenantId && !caller.isPlatformAdmin) {
+      return deny('booking portal attachment of another tenant');
+    }
+    if (domain !== 'logistics' && domain !== 'school-bus') {
+      return deny('unknown booking portal attachment domain');
+    }
+    return {
+      allowed: true,
+      category: 'booking-portal-attachment',
+      imageOnly: docType === 'student-photo',
+    };
+  }
+
+  if (root === 'customer-portal' && segments.length >= 6) {
+    const ownerTenant = segments[1];
+    const ownerCustomer = segments[2];
+    const domain = segments[3];
+    const docType = segments[4];
+
+    if (domain !== 'logistics' && domain !== 'school-bus') {
+      return deny('unknown customer portal attachment domain');
+    }
+
+    if (caller.kind === 'staff') {
+      if (ownerTenant !== caller.tenantId && !caller.isPlatformAdmin) {
+        return deny('customer portal attachment of another tenant');
+      }
+      return {
+        allowed: true,
+        category: 'customer-portal-attachment',
+        imageOnly: docType === 'student-photo',
+      };
+    }
+
+    if (caller.kind === 'customer-portal') {
+      if (ownerTenant !== caller.tenantId || ownerCustomer !== caller.customerId) {
+        return deny('customer portal attachment of another customer');
+      }
+      return {
+        allowed: true,
+        category: 'customer-portal-attachment',
+        imageOnly: docType === 'student-photo',
+      };
+    }
+
+    return deny('customer portal attachments require staff or customer portal session');
   }
 
   return deny('unknown storage prefix');

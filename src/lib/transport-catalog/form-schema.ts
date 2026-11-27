@@ -18,7 +18,9 @@ export type RequestFieldType =
 /** Show the field only when another field has a value (data form of the old showIf functions). */
 export type ShowIf =
   | { field: string; truthy: boolean }
-  | { field: string; equals: string };
+  | { field: string; equals: string }
+  | { field: string; notEquals: string }
+  | { field: string; in: string[] };
 
 export interface RequestFieldDef {
   key: string;
@@ -100,7 +102,12 @@ export function isVisible(field: RequestFieldDef, values: RequestValues): boolea
   if (!c) return true;
   const v = values[c.field];
   if ('truthy' in c) return !!v === c.truthy;
-  return String(v ?? '') === c.equals;
+  if ('equals' in c) return String(v ?? '') === c.equals;
+  if ('notEquals' in c) {
+    const s = String(v ?? '').trim();
+    return s.length > 0 && s !== c.notEquals;
+  }
+  return c.in.includes(String(v ?? ''));
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -138,7 +145,15 @@ export function validateRequestValues(form: RequestFormDef, raw: unknown): Valid
   for (const f of fields) {
     if (!isVisible(f, view)) continue;
     const v = input[f.key];
-    if (f.type === 'toggle') { values[f.key] = view[f.key] as boolean; continue; }
+    if (f.type === 'toggle') {
+      const checked = view[f.key] as boolean;
+      if (f.required && !checked) {
+        errors[f.key] = `${f.label} must be accepted`;
+      } else {
+        values[f.key] = checked;
+      }
+      continue;
+    }
     const text = v === undefined || v === null ? '' : String(v).trim();
     if (!text) {
       if (f.required) errors[f.key] = `${f.label} is required`;

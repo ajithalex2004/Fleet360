@@ -4,6 +4,12 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { MyServiceRequests } from './my-service-requests';
 
+interface BookingAttachment {
+  url: string;
+  originalName: string;
+  label?: string;
+}
+
 interface UserBooking {
   id: string;
   bookingRef: string;
@@ -15,6 +21,24 @@ interface UserBooking {
   rawStatus: string;
   createdDate: string;
   notes: string;
+  attachments: BookingAttachment[];
+}
+
+function extractBookingAttachments(rawNotes: unknown): BookingAttachment[] {
+  if (typeof rawNotes !== 'string' || !rawNotes.trim().startsWith('{')) return [];
+  try {
+    const parsed = JSON.parse(rawNotes) as { attachments?: unknown };
+    if (!Array.isArray(parsed.attachments)) return [];
+    return parsed.attachments
+      .filter((a): a is BookingAttachment => !!a && typeof a === 'object' && typeof (a as BookingAttachment).url === 'string')
+      .map((a) => ({
+        url: a.url,
+        originalName: typeof a.originalName === 'string' ? a.originalName : 'Attachment',
+        label: typeof a.label === 'string' ? a.label : undefined,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 function normalizeStatus(raw: string): UserBooking['status'] {
@@ -50,6 +74,11 @@ function formatBookingNotes(rawNotes: unknown): string {
     }
     if (parsed.costCenter) {
       parts.push(`Cost Center: ${String(parsed.costCenter)}`);
+    } else if (parsed.renterAccountType === 'PERSONAL') {
+      parts.push('Personal / Walk-in');
+    }
+    if (Array.isArray(parsed.attachments) && parsed.attachments.length > 0) {
+      parts.push(`Attachments: ${parsed.attachments.length} file(s)`);
     }
     if (parsed.specialInstructions || parsed.rawNotes) {
       parts.push(String(parsed.specialInstructions ?? parsed.rawNotes));
@@ -95,6 +124,7 @@ export default function MyBookings() {
             rawStatus,
             createdDate: String(r.createdDate ?? r.createdAt ?? r.created_at ?? new Date().toISOString()),
             notes: formatBookingNotes(r.notes),
+            attachments: extractBookingAttachments(r.notes),
           };
         });
         setBookings(normalized);
@@ -266,6 +296,27 @@ export default function MyBookings() {
                       <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
                         <p className="text-sm text-[var(--text-muted)] mb-2">Notes</p>
                         <p className="text-[var(--text-main)]">{booking.notes}</p>
+                      </div>
+                    )}
+                    {booking.attachments.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                        <p className="text-sm text-[var(--text-muted)] mb-2">
+                          Attached Documents ({booking.attachments.length})
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {booking.attachments.map((att, idx) => (
+                            <a
+                              key={`${att.url}-${idx}`}
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-main)] border border-[var(--border-subtle)] hover:border-blue-500/40 text-xs font-medium text-[var(--text-main)] transition-colors"
+                            >
+                              <span>📎</span>
+                              <span>{att.label ? `${att.label}: ${att.originalName}` : att.originalName}</span>
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

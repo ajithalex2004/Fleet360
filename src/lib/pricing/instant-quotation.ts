@@ -6,6 +6,9 @@ export interface QuotationRequest {
   salikTollsAed?: number;
   leaseDurationMonths?: number;
   paxCount?: number;
+  rentalDays?: number;
+  quantity?: number;
+  addOnsAed?: number;
 }
 
 export interface QuotationResponse {
@@ -36,13 +39,15 @@ export const SERVICE_BASE_RATES: Record<string, { base: number; perKm: number; t
   'EXECUTIVE_Stretch Limousine': { base: 450, perKm: 8.0, threshold: 1500 },
   'EXECUTIVE_DEFAULT': { base: 150, perKm: 4.0, threshold: 750 },
 
-  // Rent-a-Car
+  // Rent-a-Car (daily rates)
   'RENTAL_Economy': { base: 90, perKm: 0.8, threshold: 500 },
   'RENTAL_Compact': { base: 110, perKm: 0.9, threshold: 550 },
   'RENTAL_Mid-Size': { base: 140, perKm: 1.0, threshold: 650 },
   'RENTAL_Full-Size': { base: 180, perKm: 1.2, threshold: 800 },
   'RENTAL_SUV': { base: 220, perKm: 1.3, threshold: 900 },
   'RENTAL_4x4': { base: 280, perKm: 1.6, threshold: 1200 },
+  'RENTAL_Van': { base: 240, perKm: 1.3, threshold: 1000 },
+  'RENTAL_Pickup Truck': { base: 230, perKm: 1.4, threshold: 1000 },
   'RENTAL_DEFAULT': { base: 120, perKm: 1.0, threshold: 600 },
 
   // Logistics & Freight
@@ -54,15 +59,28 @@ export const SERVICE_BASE_RATES: Record<string, { base: number; perKm: number; t
   'LOGISTICS_DEFAULT': { base: 250, perKm: 4.5, threshold: 1200 },
 
   // Staff Transport
+  'STAFF_TRANSPORT_Scheduled Shuttle Pass': { base: 200, perKm: 0.0, threshold: 300 },
   'STAFF_TRANSPORT_14-Seat Minibus': { base: 200, perKm: 3.5, threshold: 1000 },
   'STAFF_TRANSPORT_30-Seat Coaster': { base: 350, perKm: 5.0, threshold: 1500 },
   'STAFF_TRANSPORT_50-Seat Luxury Coach': { base: 600, perKm: 7.5, threshold: 2500 },
-  'STAFF_TRANSPORT_DEFAULT': { base: 300, perKm: 4.5, threshold: 1200 },
+  'STAFF_TRANSPORT_DEFAULT': { base: 200, perKm: 0.0, threshold: 300 },
 
-  // School Bus
+  // School Bus (monthly plans)
+  'SCHOOL_BUS_Two-Way Full Service': { base: 450, perKm: 0.0, threshold: 800 },
+  'SCHOOL_BUS_Morning Pickup Only': { base: 280, perKm: 0.0, threshold: 800 },
+  'SCHOOL_BUS_Afternoon Drop-off Only': { base: 280, perKm: 0.0, threshold: 800 },
+  'SCHOOL_BUS_After-School Activity Bus': { base: 320, perKm: 0.0, threshold: 800 },
   'SCHOOL_BUS_DEFAULT': { base: 450, perKm: 0.0, threshold: 800 },
 
-  // Leasing
+  // Leasing (estimated monthly rate per vehicle)
+  'LEASING_Compact Sedan': { base: 1650, perKm: 0.0, threshold: 5000 },
+  'LEASING_Mid-Size Sedan': { base: 2100, perKm: 0.0, threshold: 5000 },
+  'LEASING_SUV': { base: 2950, perKm: 0.0, threshold: 6000 },
+  'LEASING_Van (7-seater)': { base: 2700, perKm: 0.0, threshold: 6000 },
+  'LEASING_Mini-Bus': { base: 4800, perKm: 0.0, threshold: 10000 },
+  'LEASING_Bus': { base: 8500, perKm: 0.0, threshold: 15000 },
+  'LEASING_Pickup Truck': { base: 2600, perKm: 0.0, threshold: 6000 },
+  'LEASING_Mixed Fleet': { base: 2500, perKm: 0.0, threshold: 10000 },
   'LEASING_DEFAULT': { base: 2200, perKm: 0.0, threshold: 5000 },
 };
 
@@ -71,6 +89,9 @@ export function calculateInstantQuotation(params: QuotationRequest): QuotationRe
   const category = params.vehicleCategory || '';
   const dist = Math.max(0, params.distanceKm || 0);
   const tolls = Math.max(0, params.salikTollsAed || 0);
+  const rentalDays = params.rentalDays && params.rentalDays > 0 ? params.rentalDays : 1;
+  const quantity = params.quantity && params.quantity > 0 ? params.quantity : 1;
+  const addOns = Math.max(0, params.addOnsAed || 0);
 
   const lookupKey = `${service}_${category}`;
   const rateConfig =
@@ -78,9 +99,14 @@ export function calculateInstantQuotation(params: QuotationRequest): QuotationRe
     SERVICE_BASE_RATES[`${service}_DEFAULT`] ||
     { base: 100, perKm: 2.0, threshold: 1000 };
 
-  const baseFare = rateConfig.base;
+  const baseFare =
+    service === 'RENTAL' && params.rentalDays
+      ? Math.round(rateConfig.base * rentalDays * 100) / 100
+      : service === 'LEASING' && params.quantity
+      ? Math.round(rateConfig.base * quantity * 100) / 100
+      : rateConfig.base;
   const distanceCharge = Math.round(dist * rateConfig.perKm * 100) / 100;
-  const subtotal = Math.round((baseFare + distanceCharge + tolls) * 100) / 100;
+  const subtotal = Math.round((baseFare + distanceCharge + tolls + addOns) * 100) / 100;
   const vatRate = 5.0; // UAE FTA standard VAT
   const vatAmount = Math.round(subtotal * 0.05 * 100) / 100;
   const totalFare = Math.round((subtotal + vatAmount) * 100) / 100;

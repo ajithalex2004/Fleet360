@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, FileText, CheckCircle2, RefreshCw, PenTool, Upload, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, FileText, CheckCircle2, RefreshCw, PenTool, Sparkles } from 'lucide-react';
 import {
   UaePassProfile,
   OcrScanResult,
@@ -25,7 +25,6 @@ interface DigitalKycUaePassProps {
 
 export function DigitalKycUaePass({
   requestorName = '',
-  requestorEmail = '',
   onKycVerified,
 }: DigitalKycUaePassProps) {
   const [uaePassProfile, setUaePassProfile] = useState<UaePassProfile | null>(null);
@@ -142,11 +141,13 @@ export function DigitalKycUaePass({
     setSignatureHash(hash);
   };
 
-  // Sync with parent form
+  // Sync with parent form ONLY after an actual KYC / OCR / signature action
   useEffect(() => {
+    if (!uaePassProfile && !ocrData && !hasSignature) return;
+
     const eid = uaePassProfile?.emiratesId || (ocrData?.docType === 'EMIRATES_ID' ? ocrData.docNumber : '');
-    const dlNo = ocrData?.docType === 'DRIVING_LICENSE' ? ocrData.docNumber : 'DXB-DL-8839201';
-    const dlExp = ocrData?.docType === 'DRIVING_LICENSE' ? ocrData.expiryDate : '2030-12-31';
+    const dlNo = ocrData?.docType === 'DRIVING_LICENSE' ? ocrData.docNumber : undefined;
+    const dlExp = ocrData?.docType === 'DRIVING_LICENSE' ? ocrData.expiryDate : undefined;
 
     let sigDataUrl = '';
     if (canvasRef.current && hasSignature) {
@@ -155,7 +156,7 @@ export function DigitalKycUaePass({
 
     onKycVerified({
       uaePassVerified: !!uaePassProfile,
-      emiratesId: eid || '784-1988-1234567-1',
+      emiratesId: eid,
       drivingLicenseNo: dlNo,
       licenseExpiry: dlExp,
       signatureHash: signatureHash || undefined,

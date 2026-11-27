@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Inbox, X, CheckCircle2, XCircle, UserCheck, Play, Flag, Ban, Link2, Send } from 'lucide-react';
+import { Inbox, X, CheckCircle2, XCircle, UserCheck, Play, Flag, Ban, Link2, Send, Paperclip, ExternalLink } from 'lucide-react';
 import SmartDataGrid, { type SmartDataGridColumn } from '@/components/ui/SmartDataGrid';
 import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, TextInput, TextAreaInput, SelectInput, PrimaryButton, SecondaryButton,
@@ -153,6 +153,32 @@ function RequestDrawer({ r, onClose, onChanged }: { r: StaffRequest; onClose: ()
             ))}
             {r.customerNote && <p className="md:col-span-full text-xs text-[var(--text-muted)]">Customer note: {r.customerNote}</p>}
           </FormSection>
+
+          {r.attachments && r.attachments.length > 0 && (
+            <FormSection title={`Attached Documents (${r.attachments.length})`} icon={Paperclip} columns={2}>
+              {r.attachments.map((att) => (
+                <a
+                  key={att.key}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-blue-500/40 px-3 py-2 text-xs transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {att.docType === 'student-photo' && att.mimeType.startsWith('image/') && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={att.url} alt={att.label} className="w-9 h-9 rounded object-cover border border-[var(--border-subtle)] flex-shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{att.label}</p>
+                      <p className="text-[10px] text-[var(--text-muted)] truncate">{att.originalName}</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                </a>
+              ))}
+            </FormSection>
+          )}
 
           {actions.length > 0 && (
             <FormSection title="Next step" columns={2}>

@@ -4,7 +4,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity, Phone, UserRound, Car, Loader2, XCircle, Link2 } from 'lucide-react';
+import { Activity, Phone, UserRound, Car, Loader2, XCircle, Link2, Paperclip, ExternalLink } from 'lucide-react';
 import { Panel } from '@/components/ui/page-theme';
 import { FormAlert, SecondaryButton } from '@/components/ui/form-kit';
 import { usePortal } from '../../portal-shell';
@@ -134,6 +134,37 @@ function RequestDetail({ r, onChanged }: { r: TransportRequest; onChanged: (r: T
             ) : <p className="text-[var(--text-muted)]">Not assigned yet.</p>}
           </div>
         </div>
+
+        {r.attachments && r.attachments.length > 0 && (
+          <div className="border-t border-[var(--border-subtle)] pt-3 space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <Paperclip className="w-3.5 h-3.5" /> Attached Documents ({r.attachments.length})
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {r.attachments.map((att) => (
+                <a
+                  key={att.key}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-blue-500/40 px-3 py-2 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {att.docType === 'student-photo' && att.mimeType.startsWith('image/') && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={att.url} alt={att.label} className="w-8 h-8 rounded object-cover border border-[var(--border-subtle)] flex-shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{att.label}</p>
+                      <p className="text-[10px] text-[var(--text-muted)] truncate">{att.originalName}</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {r.customerNote && <p className="text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-3">Your note: {r.customerNote}</p>}
         {canCancel && (

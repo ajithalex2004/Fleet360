@@ -113,4 +113,56 @@ describe('validateRequestValues', () => {
     expect(validateRequestValues(lease, { quantity: -2 }).errors).toHaveProperty('quantity');
     expect(validateRequestValues(lease, { quantity: 'many' }).errors).toHaveProperty('quantity');
   });
+
+  it('supports notEquals and in showIf conditions and required compliance toggles', () => {
+    const costCenter = allFields(RAC).find((f) => f.key === 'costCenter')!;
+    expect(isVisible(costCenter, { renterAccountType: 'Personal / Walk-in (B2C)' })).toBe(false);
+    expect(isVisible(costCenter, { renterAccountType: 'Corporate Account (B2B)' })).toBe(true);
+
+    const idp = allFields(RAC).find((f) => f.key === 'idpRequired')!;
+    expect(isVisible(idp, {})).toBe(false);
+    expect(isVisible(idp, { licenseCountry: 'United Arab Emirates' })).toBe(false);
+    expect(isVisible(idp, { licenseCountry: 'United Kingdom' })).toBe(true);
+
+    const exec = CATEGORY_DEFINITIONS.EXECUTIVE.form;
+    const flightNo = allFields(exec).find((f) => f.key === 'flightNo')!;
+    expect(isVisible(flightNo, { tripType: 'City Transfer' })).toBe(false);
+    expect(isVisible(flightNo, { tripType: 'Airport Transfer (Arrival)' })).toBe(true);
+
+    const charterHours = allFields(exec).find((f) => f.key === 'charterHours')!;
+    expect(isVisible(charterHours, { tripType: 'City Transfer' })).toBe(false);
+    expect(isVisible(charterHours, { tripType: 'Road Show' })).toBe(true);
+
+    const school = CATEGORY_DEFINITIONS.SCHOOL_BUS.form;
+    const missingConsent = validateRequestValues(school, {
+      vehicleCategory: 'Two-Way Full Service',
+      requestorName: 'Amina',
+      requestorEmail: 'amina@example.test',
+      phone: '+971501234567',
+      relationship: 'Mother',
+      studentName: 'Zaid',
+      destination: 'GEMS Academy',
+      origin: 'Al Barsha Villa 12',
+      pickupTime: '06:45',
+      startDate: '2026-09-01',
+      busSafetyCodeAccepted: false,
+    });
+    expect(missingConsent.ok).toBe(false);
+    expect(missingConsent.errors).toHaveProperty('busSafetyCodeAccepted');
+
+    const withConsent = validateRequestValues(school, {
+      vehicleCategory: 'Two-Way Full Service',
+      requestorName: 'Amina',
+      requestorEmail: 'amina@example.test',
+      phone: '+971501234567',
+      relationship: 'Mother',
+      studentName: 'Zaid',
+      destination: 'GEMS Academy',
+      origin: 'Al Barsha Villa 12',
+      pickupTime: '06:45',
+      startDate: '2026-09-01',
+      busSafetyCodeAccepted: true,
+    });
+    expect(withConsent.ok).toBe(true);
+  });
 });

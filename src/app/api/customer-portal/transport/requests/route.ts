@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const request = await createTransportRequest({
       tenantId: ctx.tenantId, customerId: ctx.customerId,
       user: { id: ctx.user.id, name: ctx.user.fullName ?? ctx.user.email },
-      category: body?.category, values: body?.values, customerNote: body?.customerNote,
+      category: body?.category, values: body?.values, customerNote: body?.customerNote, attachments: body?.attachments,
     });
     return NextResponse.json({ ok: true, request }, { status: 201 });
   } catch (err) {
