@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { buildRevocationTokenKeys } from '@/lib/auth/durable-session-revocation';
 import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { busOpsCapability } from '@/lib/authz/bus-ops-routes';
 import { hasPermission } from '@/lib/permissions';
@@ -27,15 +28,32 @@ async function load(req: NextRequest): Promise<Result> {
   if (!auth.ok) return deny(auth.status, auth.error);
   const session = await getVerifiedRequestSession(req);
   if (!session || session.userId !== auth.userId || (session.tenantId !== auth.tenantId && session.role !== 'SUPER_ADMIN')) return deny(401, 'Valid session required');
+  const rawSessionCookie = (req.headers.get('cookie') ?? '')
+    .split(';')
+    .map((v) => v.trim())
+    .find((v) => v.startsWith('xl-session='))
+    ?.slice('xl-session='.length);
+  const tokenKeys = await buildRevocationTokenKeys(rawSessionCookie, session.sid);
   try {
     const loaded = await withPlatformAdmin(prisma, async tx => {
       const tenant = await tx.tenant.findUnique({ where: { id: auth.tenantId }, include: { modules: true } });
       const user = await tx.user.findUnique({ where: { id: session.userId }, select: { isActive: true, employeeId: true } });
       const revoked = await tx.$queryRawUnsafe<Array<{ revoked: boolean }>>(
-        `SELECT EXISTS (SELECT 1 FROM session_revocations WHERE not_before > $3::timestamptz
-         AND ((user_id = $1 AND tenant_id IS NULL) OR (tenant_id = $2 AND user_id IS NULL)
-           OR (user_id = $1 AND tenant_id = $2))) AS revoked`,
-        session.userId, auth.tenantId, new Date(session.issuedAt));
+        `SELECT (
+           EXISTS (SELECT 1 FROM session_revocations WHERE not_before > $3::timestamptz
+            AND ((user_id = $1 AND tenant_id IS NULL)
+              OR (tenant_id IN ($2, $5) AND user_id IS NULL)
+              OR (user_id = $1 AND tenant_id IN ($2, $5))))
+           OR (
+             cardinality($4::text[]) > 0 AND EXISTS (
+               SELECT 1 FROM public.revoked_session_tokens
+                WHERE token_key = ANY($4::text[])
+                  AND tenant_id = $5
+                  AND expires_at > now()
+             )
+           )
+         ) AS revoked`,
+        session.userId, auth.tenantId, new Date(session.issuedAt), tokenKeys, session.tenantId);
       const permissions = await resolveSessionPermissions(tx as never, session.userId, auth.tenantId);
       return { tenant, user, revoked: revoked[0]?.revoked !== false, permissions };
     });

@@ -19,7 +19,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { getVerifiedRequestSessionDurable } from '@/lib/auth/durable-session-revocation';
 import { resolvePushStaff } from '@/lib/push/auth';
 interface SubscribeBody {
   endpoint: string;
@@ -31,7 +31,7 @@ interface SubscribeBody {
 
 export async function POST(req: NextRequest) {
 
-  const session = await getVerifiedRequestSession(req);
+  const session = await getVerifiedRequestSessionDurable(req);
   if (!session) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   const { tenantId } = session;
 
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
 
-  const session = await getVerifiedRequestSession(req);
+  const session = await getVerifiedRequestSessionDurable(req);
   if (!session) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   const { tenantId } = session;
 

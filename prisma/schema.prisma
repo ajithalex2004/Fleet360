@@ -8068,6 +8068,26 @@ model SessionRevocation {
   @@schema("public")
 }
 
+/// Durable per-session / per-token revocation rows for single-device logout
+/// and Go backend JWT parity (Track C). See migration
+/// 20261126000000_revoked_session_tokens and
+/// src/lib/auth/durable-session-revocation.ts.
+model RevokedSessionToken {
+  tokenKey      String    @id @map("token_key")
+  userId        String    @map("user_id")
+  tenantId      String    @map("tenant_id")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime  @default(now()) @map("revoked_at") @db.Timestamptz(6)
+  reason        String
+  redisSyncedAt DateTime? @map("redis_synced_at") @db.Timestamptz(6)
+
+  @@index([tenantId], map: "idx_revoked_session_tokens_tenant_id")
+  @@index([expiresAt], map: "idx_revoked_session_tokens_expires_at")
+  @@index([userId, tenantId], map: "idx_revoked_session_tokens_user_tenant")
+  @@map("revoked_session_tokens")
+  @@schema("public")
+}
+
 /// Staff passkey (WebAuthn). Retired with the passkey step-up; the table is
 /// kept so existing rows are not dropped. Nothing reads or writes it.
 model StaffPasskey {

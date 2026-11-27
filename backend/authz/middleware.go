@@ -77,18 +77,19 @@ func writeDryRun(c *gin.Context, p *Policy, d Decision, m Mode) {
 
 // Action is one privileged request, for the audit log.
 type Action struct {
-	TenantID  string
-	UserID    string
-	Role      string
-	Method    string
-	Path      string // as requested (/api/v1/…)
-	Route     string // Gin route template
-	TargetID  string // first path parameter
-	Status    int
-	Decision  Decision
-	Mode      Mode
-	IP        string
-	UserAgent string
+	TenantID       string
+	UserID         string
+	Role           string
+	ImpersonatedBy string
+	Method         string
+	Path           string // as requested (/api/v1/…)
+	Route          string // Gin route template
+	TargetID       string // first path parameter
+	Status         int
+	Decision       Decision
+	Mode           Mode
+	IP             string
+	UserAgent      string
 }
 
 // Recorder writes privileged actions to the audit log.
@@ -185,6 +186,7 @@ func MiddlewareWith(p *Policy, mode func() Mode) gin.HandlerFunc {
 			}
 			a := Action{
 				TenantID: claims.TenantID, UserID: claims.Subject, Role: claims.Role,
+				ImpersonatedBy: claims.ImpersonatedBy,
 				Method: req.Method, Path: c.Request.URL.Path, Route: c.FullPath(),
 				Status: status, Decision: d, Mode: m, IP: c.ClientIP(), UserAgent: c.Request.UserAgent(),
 			}
@@ -243,6 +245,10 @@ func AuditRow(a Action) Row {
 	if route == "" {
 		route = a.Path
 	}
+	details := fmt.Sprintf("%s %s: %s (go backend)", strings.ToUpper(a.Method), a.Path, outcome)
+	if a.ImpersonatedBy != "" {
+		details += fmt.Sprintf(" (impersonated by %s)", a.ImpersonatedBy)
+	}
 	return Row{
 		TenantID:   a.TenantID,
 		EntityType: "AdminAction",
@@ -251,7 +257,7 @@ func AuditRow(a Action) Row {
 		UserID:     a.UserID,
 		UserRole:   a.Role,
 		Action:     action,
-		Details:    fmt.Sprintf("%s %s: %s (go backend)", strings.ToUpper(a.Method), a.Path, outcome),
+		Details:    details,
 		IP:         a.IP,
 		UserAgent:  truncate(a.UserAgent, 500),
 	}

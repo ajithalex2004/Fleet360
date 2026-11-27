@@ -35,6 +35,13 @@ export async function registerNode(): Promise<void> {
   } catch (err) {
     console.warn('[Startup] Job scheduler failed to start:', err);
   }
+
+  try {
+    const { startRevocationSyncLoop } = await import('@/lib/auth/durable-session-revocation');
+    startRevocationSyncLoop();
+  } catch (err) {
+    console.warn('[Startup] Revocation Redis sync loop failed to start:', err);
+  }
 }
 
 async function warmNeonConnection(): Promise<void> {

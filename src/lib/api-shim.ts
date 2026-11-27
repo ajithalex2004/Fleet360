@@ -69,59 +69,64 @@ export async function proxyToGoBackend(
     const headers = buildProxyHeaders(source);
 
     // Go's /api/v1/* surface sits behind Bearer-JWT auth (backend/auth/jwt.go).
-    // The browser reaches these paths with a plain fetch that carries no token,
-    // so mint a short-lived JWT from the identity the middleware already
-    // verified and injected (x-user-id / x-tenant-id / x-user-role) and attach
-    // it. Without this, Go rejects every proxied call with "missing or
-    // malformed Authorization header". Skip when a Bearer is already present
-    // (e.g. a backendFetch caller) or when there's no operator session on the
-    // request (carrier-portal / driver-app paths carry their own auth).
-    if (!headers.has('authorization')) {
-      const userId = source.get('x-user-id');
-      const tenantId = source.get('x-tenant-id');
-      if (userId && tenantId) {
-        // Middleware only injects identity from a verified session, and
-        // verifySession() rejects sessions without a role, so a missing role
-        // here means something upstream is wrong. Refuse rather than mint a
-        // backend token with a guessed (and previously admin) role.
-        const role = source.get('x-user-role');
-        if (!role) {
-          return {
-            proxied: true,
-            response: NextResponse.json(
-              { error: 'Unauthorized', message: 'Session has no role' },
-              { status: 401 },
-            ),
-          };
-        }
-        try {
-          const impersonatedBy = source.get('x-impersonated-by') ?? source.get('x-real-user-id') ?? undefined;
-          const token = await signJwtForBackend({
-            userId,
-            tenantId,
-            role,
-            permissions,
-            plan: source.get('x-tenant-plan'),
-            impersonatedBy,
-          });
-          headers.set('Authorization', `Bearer ${token}`);
-        } catch (err) {
-          // JWT_SECRET unset/too-short (or any other signing failure) is a
-          // deployment misconfiguration, not a per-request auth failure.
-          // Previously this only logged and fell through to fetch(upstream)
-          // below, forwarding an authenticated operator's request to Go with
-          // NO Authorization header at all — relying entirely on Go to
-          // reject it. Fail closed here instead: never forward a request
-          // that was supposed to carry proof of identity but doesn't.
-          console.error('[api-shim] backend JWT sign failed — refusing to forward unauthenticated:', err instanceof Error ? err.message : err);
-          return {
-            proxied: true,
-            response: NextResponse.json(
-              { error: 'Backend authentication unavailable' },
-              { status: 503 },
-            ),
-          };
-        }
+    // Whenever middleware verified an operator session (from xl-session cookie
+    // OR mobile/Capacitor `Authorization: Bearer <xl-session>`) and injected
+    // verified x-user-id / x-tenant-id / x-user-role headers, ALWAYS mint and
+    // overwrite Authorization with a fresh short-lived Go HS256 JWT. This keeps
+    // mobile Bearer xl-session callers working across all shimmed routes and
+    // prevents arbitrary client Authorization headers from reaching Go.
+    const userId = source.get('x-user-id');
+    const tenantId = source.get('x-tenant-id');
+    if (userId && tenantId) {
+      // Middleware only injects identity from a verified session, and
+      // verifySession() rejects sessions without a role, so a missing role
+      // here means something upstream is wrong. Refuse rather than mint a
+      // backend token with a guessed (and previously admin) role.
+      const role = source.get('x-user-role');
+      if (!role) {
+        return {
+          proxied: true,
+          response: NextResponse.json(
+            { error: 'Unauthorized', message: 'Session has no role' },
+            { status: 401 },
+          ),
+        };
+      }
+      try {
+        // Exclusively source impersonation identity from middleware-verified x-impersonated-by.
+        const impersonatedBy = source.get('x-impersonated-by')?.trim() || undefined;
+        const sid = source.get('x-session-id')?.trim() || undefined;
+        const rawIatMs = source.get('x-session-iat');
+        const parsedIatMs = rawIatMs ? Number(rawIatMs) : NaN;
+        const issuedAtMs =
+          Number.isFinite(parsedIatMs) && parsedIatMs > 0
+            ? Math.floor(parsedIatMs)
+            : undefined;
+        const token = await signJwtForBackend({
+          userId,
+          tenantId,
+          role,
+          permissions,
+          plan: source.get('x-tenant-plan'),
+          impersonatedBy,
+          sid,
+          issuedAtMs,
+          ttlSeconds: 300,
+        });
+        headers.set('Authorization', `Bearer ${token}`);
+      } catch (err) {
+        // JWT_SECRET unset/too-short (or any other signing failure) is a
+        // deployment misconfiguration, not a per-request auth failure.
+        // Fail closed here: never forward a request that was supposed to carry
+        // proof of identity without a valid Go JWT.
+        console.error('[api-shim] backend JWT sign failed — refusing to forward unauthenticated:', err instanceof Error ? err.message : err);
+        return {
+          proxied: true,
+          response: NextResponse.json(
+            { error: 'Backend authentication unavailable' },
+            { status: 503 },
+          ),
+        };
       }
     }
 

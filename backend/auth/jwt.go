@@ -28,6 +28,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,19 +60,23 @@ const (
 	CtxTenantID       = "auth.tenant_id"
 	CtxRoleCode       = "auth.role"
 	CtxImpersonatedBy = "auth.impersonated_by"
+	CtxSessionID      = "auth.session_id"
 )
 
 // Claims is the validated JWT payload. RegisteredClaims provides sub/iat/
 // exp/iss with the right shapes; TenantID + Role are our additions.
 type Claims struct {
-	TenantID       string `json:"tenant_id"`
-	Role           string `json:"role"`
+	TenantID string `json:"tenant_id"`
+	Role     string `json:"role"`
 	// Perms is the permission claim, decoded by package authz.
 	Perms json.RawMessage `json:"perms,omitempty"`
 	// Plan is the tenant's plan (TRIAL is read-only outside trial-free modules).
 	Plan string `json:"plan,omitempty"`
 	// ImpersonatedBy is the real user id if the token was issued under an impersonated session.
 	ImpersonatedBy string `json:"impersonated_by,omitempty"`
+	// IssuedAtMs carries millisecond-precision issued-at time (Track C) so same-second
+	// bulk revocations (`logout-all`, deactivation) invalidate pre-revocation JWTs.
+	IssuedAtMs int64 `json:"iat_ms,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -111,11 +117,17 @@ func secret() ([]byte, error) {
 	return []byte(raw), nil
 }
 
-// Issue mints a token. Used by tests and (optionally) by operator tools
-// that need to call the backend without a browser session. Never called
-// from request handlers — only the Next.js side issues tokens in normal
-// operation.
+// Issue mints a token without a session ID (jti). Used by tests and
+// (optionally) by operator tools that need to call the backend without a
+// browser session. Never called from request handlers — only the Next.js
+// side issues tokens in normal operation.
 func Issue(userID, tenantID, role string, ttl time.Duration) (string, error) {
+	return IssueWithID(userID, tenantID, role, "", ttl)
+}
+
+// IssueWithID mints a token carrying an explicit RFC 7519 jti (paired with
+// the Next.js session sid). Used by tests and operator tooling.
+func IssueWithID(userID, tenantID, role, jti string, ttl time.Duration) (string, error) {
 	if ttl <= 0 {
 		ttl = DefaultTTL
 	}
@@ -125,9 +137,11 @@ func Issue(userID, tenantID, role string, ttl time.Duration) (string, error) {
 	}
 	now := time.Now()
 	claims := &Claims{
-		TenantID: tenantID,
-		Role:     role,
+		TenantID:   tenantID,
+		Role:       role,
+		IssuedAtMs: now.UnixMilli(),
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        strings.TrimSpace(jti),
 			Issuer:    Issuer,
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -136,6 +150,17 @@ func Issue(userID, tenantID, role string, ttl time.Duration) (string, error) {
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return tok.SignedString(sec)
+}
+
+// TokenFingerprint computes the lowercase hex SHA-256 digest of a raw bearer
+// token, matching Next.js `tokenFingerprint()` (src/lib/session-blocklist.ts).
+func TokenFingerprint(rawToken string) string {
+	sum := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(sum[:])
+}
+
+func isProductionEnv() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("GO_ENV")), "production")
 }
 
 // ParseAndValidate decodes and verifies a token string. Returns a populated
@@ -197,14 +222,47 @@ func Middleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
 			return
 		}
-		if checker := currentRevocationChecker(); checker != nil {
+		checker := currentRevocationChecker()
+		if checker == nil && isProductionEnv() {
+			_ = c.Error(errors.New("auth: revocation checker is not configured in production (failing closed)"))
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
+			return
+		}
+		if checker != nil {
 			issuedAt := time.Time{}
-			if claims.IssuedAt != nil {
+			if claims.IssuedAtMs > 0 {
+				issuedAt = time.UnixMilli(claims.IssuedAtMs)
+				// Ensure sub-second precision marker even on exact .000 ms boundaries
+				// so RevokedSince uses millisecond comparison rather than whole-second truncation.
+				if issuedAt.Nanosecond() == 0 {
+					issuedAt = issuedAt.Add(time.Nanosecond)
+				}
+			} else if claims.IssuedAt != nil {
 				issuedAt = claims.IssuedAt.Time
 			}
-			revoked, rerr := checker.RevokedSince(c.Request.Context(), claims.Subject, claims.TenantID, issuedAt)
+			var (
+				revoked bool
+				rerr    error
+			)
+			if tokenChecker, ok := checker.(TokenRevocationChecker); ok {
+				revoked, rerr = tokenChecker.IsTokenRevoked(
+					c.Request.Context(),
+					claims.Subject,
+					claims.TenantID,
+					claims.ID,
+					TokenFingerprint(token),
+					issuedAt,
+				)
+			} else {
+				revoked, rerr = checker.RevokedSince(c.Request.Context(), claims.Subject, claims.TenantID, issuedAt)
+			}
 			if rerr != nil {
-				_ = c.Error(fmt.Errorf("auth: revocation check failed (allowing): %w", rerr))
+				if isProductionEnv() {
+					_ = c.Error(fmt.Errorf("auth: revocation check failed (failing closed in production): %w", rerr))
+					c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
+					return
+				}
+				_ = c.Error(fmt.Errorf("auth: revocation check failed (allowing outside production): %w", rerr))
 			}
 			if revoked {
 				c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
@@ -215,6 +273,9 @@ func Middleware() gin.HandlerFunc {
 		c.Set(CtxUserID, claims.Subject)
 		c.Set(CtxTenantID, claims.TenantID)
 		c.Set(CtxRoleCode, claims.Role)
+		if claims.ID != "" {
+			c.Set(CtxSessionID, claims.ID)
+		}
 		if claims.ImpersonatedBy != "" {
 			c.Set(CtxImpersonatedBy, claims.ImpersonatedBy)
 		}
@@ -298,4 +359,17 @@ func ClaimsFrom(c *gin.Context) *Claims {
 	}
 	claims, _ := v.(*Claims)
 	return claims
+}
+
+// SessionID returns the token's jti (shared Next.js sid) from the Gin context,
+// or empty string for legacy tokens without a jti claim.
+func SessionID(c *gin.Context) string {
+	v, ok := c.Get(CtxSessionID)
+	if !ok {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }

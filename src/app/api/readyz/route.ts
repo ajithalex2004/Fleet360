@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, ensureDbConnected } from '@/lib/prisma';
 import { withPlatformAdmin, type TxClient } from '@/lib/rls';
 import { schemaReport } from '@/lib/db/schema-registry';
+import { rehydrateRevocationsToRedis } from '@/lib/auth/durable-session-revocation';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,9 @@ export async function GET() {
       { status: 503 },
     );
   }
+
+  // 2b. Ensure Redis revocation mirror is hydrated before pod serves traffic.
+  await rehydrateRevocationsToRedis({ onlyUnsyncedIfHydrated: true }).catch(() => {});
 
   // 3. Optional Go backend version discovery: decoupled from readiness
   // (unreachability or degraded Go service does NOT cause 503)

@@ -31,7 +31,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, type TxClient } from '@/lib/rls';
 import { secretsEqual } from '@/lib/secure-compare';
 import { validatePassword, validatePasswordPolicy, DEFAULT_PASSWORD_POLICY } from '@/lib/password-policy';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { getVerifiedRequestSessionDurable } from '@/lib/auth/durable-session-revocation';
 import {
   BOOTSTRAP_ADVISORY_LOCK_KEY,
   getSetupRateLimiters,
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const session = await getVerifiedRequestSession(req);
+  const session = await getVerifiedRequestSessionDurable(req);
   if (!session || session.role !== 'SUPER_ADMIN') {
     await auditSetupAttempt(
       req,

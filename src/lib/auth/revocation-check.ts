@@ -59,7 +59,25 @@ async function notBeforeFor(userId: string, tenantId: string, now: number): Prom
   if (hit && now - hit.fetchedAt < REVOCATION_RECHECK_MS) return hit.notBefore;
 
   const redis = getRedis();
-  if (!redis) return 0;
+  if (!redis) {
+    const rawUrl = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? '';
+    const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? '';
+    const isRailwayProd =
+      process.env.RAILWAY_ENVIRONMENT_NAME === 'production' ||
+      process.env.RAILWAY_ENVIRONMENT === 'production';
+    const explicitlyDisabled =
+      rawUrl.toLowerCase() === 'disabled' && rawToken.toLowerCase() === 'disabled';
+    const ciUnconfigured = process.env.CI === 'true' && !rawUrl && !rawToken;
+    const requireRedis =
+      process.env.NODE_ENV === 'production' &&
+      (process.env.REQUIRE_REDIS_REVOCATION === 'true' ||
+        isRailwayProd ||
+        (!explicitlyDisabled && !ciUnconfigured));
+    if (requireRedis) {
+      return unavailable(hit, now, 'Redis not configured in production');
+    }
+    return 0;
+  }
   try {
     const lookup = redis.mget<(string | number | null)[]>(...revocationKeys(userId, tenantId));
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));

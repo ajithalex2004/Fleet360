@@ -72,6 +72,25 @@ func Readyz(c *gin.Context) {
 		overallOK = false
 	}
 
+	// ── Durable revocation schema check (Track C) ──────────────────────────
+	// In GO_ENV=production, auth.Middleware() fails closed (401) if the durable
+	// revocation tables do not exist yet, so /readyz MUST stay 503 until the
+	// migration has been applied (prevents zero-downtime rollout ordering hazards).
+	revSchemaOK := false
+	if dbOK {
+		var revSchemaErr error
+		revSchemaOK, revSchemaErr = checkRevocationSchema(c)
+		if revSchemaErr != nil {
+			log.Warn("readyz: revocation schema check failed", zap.Error(revSchemaErr))
+		}
+	}
+	checks["revocationSchema"] = gin.H{
+		"ready": revSchemaOK,
+	}
+	if !revSchemaOK {
+		overallOK = false
+	}
+
 	// ── Phase gate check ───────────────────────────────────────────────────
 	gateStatus, lastCheck, lastErr := phasegate.Snapshot()
 	gateOK := gateStatus == phasegate.StatusVerified || gateStatus == phasegate.StatusSkipped
@@ -152,6 +171,21 @@ func pingDB(c *gin.Context) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func checkRevocationSchema(c *gin.Context) (bool, error) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	var ready bool
+	err := database.DB.WithContext(ctx).Raw(`
+		SELECT (
+			to_regclass('public.revoked_session_tokens') IS NOT NULL
+			AND to_regclass('public.session_revocations') IS NOT NULL
+		)`).Scan(&ready).Error
+	if err != nil {
+		return false, err
+	}
+	return ready, nil
 }
 
 func isSkipEnvActive() bool {

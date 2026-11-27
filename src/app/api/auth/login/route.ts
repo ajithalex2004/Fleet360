@@ -387,8 +387,9 @@ export async function POST(request: NextRequest) {
       console.error('[auth/login] effective-role resolution failed; signing in with no permissions:', e);
     }
 
-    // 4. Sign session cookie (include role + residency so middleware can inject
-    //    x-user-role / x-data-residency without extra DB lookups per request)
+    // 4. Sign session cookie (include role + residency + shared sid so middleware can inject
+    //    x-user-role / x-data-residency / x-session-id and logout revokes all paired tokens atomically)
+    const sessionId = crypto.randomUUID();
     const plan = userTenant.tenant.plan ?? 'TRIAL';
     const residencyClaims = residencySessionClaim(userTenant.tenant.dataResidency);
     const token = await signSession({
@@ -397,6 +398,7 @@ export async function POST(request: NextRequest) {
       plan,
       role:     userTenant.role.code,
       permissions,
+      sid:      sessionId,
       // Residency claim from the tenant record, whatever the plan: middleware
       // refuses tenants whose region this deployment does not serve.
       ...residencyClaims,
@@ -421,6 +423,7 @@ export async function POST(request: NextRequest) {
           plan: 'DRIVER',
           role: 'DRIVER',
           permissions: [],
+          sid: sessionId,
           ttlMs: 24 * 60 * 60 * 1000,
           ...residencyClaims,
         });
@@ -430,13 +433,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 4b. Sign a JWT for the Go backend (Authorization: Bearer <token>).
-    // This is independent of the xl-session cookie above — that cookie is
-    // for the Next.js side (HMAC-signed JSON, ~Edge-runtime-friendly),
-    // while the JWT below is the standard HS256-signed format the Go
-    // backend validates via golang-jwt/jwt (backend/auth/jwt.go).
-    // Missing JWT_SECRET is non-fatal for login itself — the user can
-    // still use Next.js-side features that don't hit the Go backend. We
-    // log the failure but don't 500 the login.
+    // Paired via the same `sid` (`jti`) as `xl-session` so single-device logout
+    // durably invalidates both Next.js and Go tokens simultaneously.
     let backendToken: string | null = null;
     try {
       backendToken = await signJwtForBackend({
@@ -446,6 +444,7 @@ export async function POST(request: NextRequest) {
         // Go enforces the same permissions (backend/authz).
         permissions,
         plan,
+        sid:      sessionId,
       });
     } catch (err) {
       console.warn('[auth/login] backend JWT sign failed (Go-backend features unavailable):', err);

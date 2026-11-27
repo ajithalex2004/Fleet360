@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 /**
  * GET /api/auth/me
@@ -18,6 +19,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getBranding } from '@/lib/branding';
+import { bearerToken } from '@/lib/secure-compare';
+import { isSessionRevokedInPostgres } from '@/lib/auth/durable-session-revocation';
 
 import { tenantModulesFor } from '@/lib/module-policies';
 type PermRow   = { nav_key: string; enabled: boolean };
@@ -33,6 +36,32 @@ export async function GET(request: NextRequest) {
   if (!userId || !tenantId || !role) {
     return NextResponse.json(
       { error: 'Not authenticated' },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
+
+  // Authoritative PostgreSQL revocation check (Track C): catches sessions
+  // revoked during a Redis outage/flush and self-heals Redis on hit.
+  const sessionId = request.headers.get('x-session-id')?.trim() || undefined;
+  const rawIat = request.headers.get('x-session-iat');
+  const parsedIat = rawIat ? Number(rawIat) : NaN;
+  const issuedAtMs = Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0;
+  const rawToken =
+    bearerToken(request.headers) ||
+    request.cookies?.get('xl-session')?.value ||
+    request.cookies?.get('xl-driver-session')?.value ||
+    undefined;
+
+  const durableRevocation = await isSessionRevokedInPostgres({
+    rawToken,
+    sid: sessionId,
+    userId,
+    tenantId,
+    issuedAtMs,
+  });
+  if (durableRevocation.revoked) {
+    return NextResponse.json(
+      { error: 'Session revoked' },
       { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
     );
   }
@@ -87,6 +116,7 @@ export async function GET(request: NextRequest) {
     //    tx, so it is not covered by this scope — see note in the PR.
     getBranding(tenantId).catch(() => null),
     ]),
+    { skipSessionRevocationGuard: true },
   );
 
   return NextResponse.json(

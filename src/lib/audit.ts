@@ -99,8 +99,8 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
     // withPlatformAdmin specifically, not just "no scoping".
     await runOutsideRlsScope(() =>
       payload.tenantId
-        ? withTenantRls(prisma, payload.tenantId as string, (tx) => writeAuditRow(tx, payload))
-        : withPlatformAdmin(prisma, (tx) => writeAuditRow(tx, payload)),
+        ? withTenantRls(prisma, payload.tenantId as string, (tx) => writeAuditRow(tx, payload), { skipSessionRevocationGuard: true })
+        : withPlatformAdmin(prisma, (tx) => writeAuditRow(tx, payload), { skipSessionRevocationGuard: true }),
     );
   } catch (err) {
     // Never crash a caller — audit is best-effort

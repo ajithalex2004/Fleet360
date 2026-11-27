@@ -111,6 +111,13 @@ export function withAuditedAction<A extends unknown[], R extends Response>(
     try {
       res = await requestAudit.run(state, () => handler(...args));
     } catch (err) {
+      if (err instanceof Error && err.name === 'SessionRevokedError') {
+        await record(req, ctx, 401, false).catch((e) => console.error('[audit] privileged action not recorded:', e));
+        return Response.json(
+          { error: 'Unauthorized', message: err.message || 'Session has been revoked' },
+          { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+        ) as R;
+      }
       await record(req, ctx, null, true).catch((e) => console.error('[audit] privileged action not recorded:', e));
       throw err;
     }

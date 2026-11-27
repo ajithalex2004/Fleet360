@@ -101,7 +101,7 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
   // F37: Multi-Tenant Schema Drift, Unique Key Scoping & Validator Integrity
   // ───────────────────────────────────────────────────────────────────────────
   describe('F37: Schema Drift & Unique Key Scoping Stress Testing', () => {
-    it('evaluates and accounts for all 252 models in prisma/schema.prisma without drops', () => {
+    it('evaluates and accounts for all 253 models in prisma/schema.prisma without drops', () => {
       const schemaPath = path.join(root, 'prisma', 'schema.prisma');
       const schemaContent = fs.readFileSync(schemaPath, 'utf8');
 
@@ -109,11 +109,11 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
       const rawModelMatches = schemaContent.match(/^model\s+([A-Za-z0-9_]+)\s*\{/gm) || [];
       const rawModelNames = rawModelMatches.map(m => m.replace(/^model\s+/, '').replace(/\s*\{/, '').trim());
 
-      expect(rawModelNames.length).toBe(252);
+      expect(rawModelNames.length).toBe(253);
 
       // Parse using validator's parser
       const parsedModels = parseSchema();
-      expect(parsedModels.length).toBe(252);
+      expect(parsedModels.length).toBe(253);
 
       // Verify 1:1 name match
       const parsedNames = parsedModels.map((m: any) => m.name);
@@ -192,12 +192,12 @@ describe('Adversarial Stress Test Suite: Milestone M4 Reviewer 2 (F36 - F39)', (
       expect(CHILD_DEPENDENT_MODELS.size).toBe(41);
       expect(GLOBAL_PLATFORM_MODELS.size + CHILD_DEPENDENT_MODELS.size).toBe(54);
 
-      // 252 - 54 = 198 tenant-scoped models
+      // 253 - 54 = 199 tenant-scoped models
       const models = parseSchema();
       const tenantScoped = models.filter(
         (m: any) => !GLOBAL_PLATFORM_MODELS.has(m.name) && !CHILD_DEPENDENT_MODELS.has(m.name),
       );
-      expect(tenantScoped.length).toBe(198);
+      expect(tenantScoped.length).toBe(199);
 
       // Verify every single tenant-scoped model in schema.prisma has tenantId
       for (const m of tenantScoped) {

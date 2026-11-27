@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { verifySession } from '@/lib/tenant-session';
+import { isSessionRevokedInPostgres, verifySessionDurable } from '@/lib/auth/durable-session-revocation';
 import { tenantModulesFor } from '@/lib/module-policies';
 
 let lastDbUnavailableWarnAt = 0;
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
     const requestedUserId = searchParams.get('userId');
     const requestedTenantId = searchParams.get('tenantId');
     const token = req.cookies.get('xl-session')?.value;
-    const cookieSession = token ? await verifySession(token) : null;
+    const cookieSession = token ? await verifySessionDurable(token) : null;
 
     const userId = requestedUserId ?? req.headers.get('x-user-id') ?? cookieSession?.userId;
     const tenantId = requestedTenantId ?? req.headers.get('x-tenant-id') ?? cookieSession?.tenantId;
@@ -55,6 +56,23 @@ export async function GET(req: NextRequest) {
 
     if (!cookieSession && (!req.headers.get('x-user-id') || !req.headers.get('x-tenant-id'))) {
       return sessionResponse({ error: 'Valid session required' }, 401);
+    }
+
+    if (!cookieSession) {
+      const sid = req.headers.get('x-session-id')?.trim() || undefined;
+      const rawIat = req.headers.get('x-session-iat');
+      const parsedIat = rawIat ? Number(rawIat) : NaN;
+      const issuedAtMs = Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0;
+      const durableCheck = await isSessionRevokedInPostgres({
+        rawToken: token,
+        sid,
+        userId,
+        tenantId,
+        issuedAtMs,
+      });
+      if (durableCheck.revoked) {
+        return sessionResponse({ error: 'Valid session required' }, 401);
+      }
     }
 
     if (

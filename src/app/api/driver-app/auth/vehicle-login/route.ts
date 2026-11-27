@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { signSession, verifySession } from '@/lib/tenant-session';
+import { signSession } from '@/lib/tenant-session';
+import { bearerToken } from '@/lib/secure-compare';
+import { isSessionRevokedInPostgres, verifySessionDurable } from '@/lib/auth/durable-session-revocation';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getDriverTenantContext } from '@/lib/driver-session';
@@ -55,12 +57,36 @@ async function resolveCallerAuth(
   req: NextRequest,
   authz: ReturnType<typeof requireAuthorizedTenant>,
 ): Promise<CallerAuth> {
+  const hasSuppliedToken = Boolean(
+    bearerToken(req.headers) ||
+      req.cookies.get('xl-driver-session')?.value ||
+      req.cookies.get('xl-session')?.value,
+  );
   const driverCtx = await getDriverTenantContext(req);
   if (driverCtx?.userId && driverCtx?.tenantId) {
     return { ok: true, tenantId: driverCtx.tenantId, userId: driverCtx.userId };
   }
+  // Never fall back to Edge-injected headers when the caller supplied a token
+  // that failed durable verification (prevents resurrecting a revoked session
+  // after a Redis outage/flush!).
+  if (hasSuppliedToken) {
+    return { ok: false, status: 401 };
+  }
   if (!authz.ok || !authz.userId) {
     return { ok: false, status: authz.ok ? 401 : authz.status };
+  }
+  const sid = req.headers.get('x-session-id')?.trim() || undefined;
+  const rawIat = req.headers.get('x-session-iat');
+  const parsedIat = rawIat ? Number(rawIat) : NaN;
+  const issuedAtMs = Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0;
+  const rev = await isSessionRevokedInPostgres({
+    sid,
+    userId: authz.userId,
+    tenantId: authz.tenantId,
+    issuedAtMs,
+  });
+  if (rev.revoked) {
+    return { ok: false, status: 401 };
   }
   return { ok: true, tenantId: authz.tenantId, userId: authz.userId };
 }
@@ -522,7 +548,7 @@ export async function GET(req: NextRequest) {
       // Only trust xl-driver-vehicle-id cookie if xl-driver-session cookie matches the active caller
       const rawDriverCookie = req.cookies.get('xl-driver-session')?.value;
       const verifiedDriverCookie = rawDriverCookie
-        ? await verifySession(rawDriverCookie).catch(() => null)
+        ? await verifySessionDurable(rawDriverCookie).catch(() => null)
         : null;
       const isDriverCookieForCaller = Boolean(
         verifiedDriverCookie &&

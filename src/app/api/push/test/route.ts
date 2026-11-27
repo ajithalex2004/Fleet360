@@ -16,11 +16,11 @@ import { prisma } from '@/lib/prisma';
 import { sendPush } from '@/lib/push/server';
 
 import { stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { getVerifiedRequestSessionDurable } from '@/lib/auth/durable-session-revocation';
 import { resolvePushStaff } from '@/lib/push/auth';
 export async function POST(req: NextRequest) {
 
-  const session = await getVerifiedRequestSession(req);
+  const session = await getVerifiedRequestSessionDurable(req);
   if (!session) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   const { tenantId } = session;
 

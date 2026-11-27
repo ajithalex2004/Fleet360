@@ -20,6 +20,7 @@ export const IDENTITY_HEADERS: readonly string[] = [
   'x-role',            // legacy fallback read by resolveAuthorizedTenant()
   'x-tenant-plan',
   'x-impersonated-by',
+  'x-real-user-id',    // legacy impersonator header — never client-supplied
   'x-data-residency',
   'x-user-email',      // never set by middleware; read by audit fields only
   'x-user-name',       // never set by middleware; read by audit fields only
@@ -28,6 +29,11 @@ export const IDENTITY_HEADERS: readonly string[] = [
   // the client unchecked: middleware re-derives it for scheduler paths, and a
   // platform admin switches with ?tenantId=.
   'x-requested-tenant-id',
+  // Verified session identifier (`sid` / JWT `jti`) and issued-at timestamp (ms)
+  // injected exclusively by middleware so downstream Node.js guards and the
+  // Go proxy shim preserve exact revocation identity without client spoofing.
+  'x-session-id',
+  'x-session-iat',
 ];
 
 /** Returns a copy of `headers` with every identity header removed. */
@@ -48,6 +54,8 @@ export interface VerifiedIdentity {
   role?: string | null;
   impersonatedBy?: string | null;
   dataResidency?: string | null;
+  sid?: string | null;
+  issuedAt?: number | null;
 }
 
 /**
@@ -63,5 +71,9 @@ export function withVerifiedIdentity(headers: Headers, identity: VerifiedIdentit
   if (identity.role) out.set('x-user-role', identity.role);
   if (identity.impersonatedBy) out.set('x-impersonated-by', identity.impersonatedBy);
   if (identity.dataResidency) out.set('x-data-residency', identity.dataResidency);
+  if (identity.sid) out.set('x-session-id', identity.sid);
+  if (typeof identity.issuedAt === 'number' && Number.isFinite(identity.issuedAt)) {
+    out.set('x-session-iat', String(identity.issuedAt));
+  }
   return out;
 }

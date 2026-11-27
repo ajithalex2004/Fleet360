@@ -84,6 +84,39 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  // Enforce durable PostgreSQL session revocation (Track C) on supplied tokens
+  // or middleware-injected session identity before opening DVIR writes.
+  const { bearerToken } = await import('@/lib/secure-compare');
+  const { getDriverTenantContext } = await import('@/lib/driver-session');
+  const { isSessionRevokedInPostgres } = await import('@/lib/auth/durable-session-revocation');
+  const hasSuppliedToken = Boolean(
+    bearerToken(req.headers) ||
+      req.cookies.get('xl-driver-session')?.value ||
+      req.cookies.get('xl-session')?.value,
+  );
+  if (hasSuppliedToken) {
+    const durableDriver = await getDriverTenantContext(req);
+    if (!durableDriver) {
+      return NextResponse.json({ error: 'session required' }, { status: 401 });
+    }
+    if (durableDriver.tenantId !== tenantId) {
+      return NextResponse.json({ error: 'session does not match tenant' }, { status: 403 });
+    }
+  } else if (authz.userId) {
+    const sid = req.headers.get('x-session-id')?.trim() || undefined;
+    const rawIat = req.headers.get('x-session-iat');
+    const parsedIat = rawIat ? Number(rawIat) : NaN;
+    const rev = await isSessionRevokedInPostgres({
+      sid,
+      userId: authz.userId,
+      tenantId,
+      issuedAtMs: Number.isFinite(parsedIat) && parsedIat > 0 ? parsedIat : 0,
+    });
+    if (rev.revoked) {
+      return NextResponse.json({ error: 'session required' }, { status: 401 });
+    }
+  }
+
   return withTenantRls(prisma, tenantId, async (tx) => {
     const ctx = getTenantContextOrNull(req);
       if (!ctx) {

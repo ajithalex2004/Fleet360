@@ -31,7 +31,9 @@ const MIGRATED_COLUMNS: SchemaSpec = {
   // POST /api/jobs/run refuses to run a job it cannot claim.
   // departments (migration 20261027090000): Admin > Departments and the
   // membership columns below, read at every sign-in.
-  tables: ['job_runs', 'departments'],
+  // revoked_session_tokens & session_revocations (Track C): both Next.js and
+  // Go fail closed in production if the durable revocation tables are missing.
+  tables: ['job_runs', 'departments', 'revoked_session_tokens', 'session_revocations'],
   columns: [
     ['vehicles', 'year_of_manufacture'],
     ['vehicles', 'stop_mode_comm_frequency'],

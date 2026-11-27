@@ -17,7 +17,6 @@
 
 import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import type { NextRequest } from 'next/server';
-import { getVerifiedRequestSession } from '@/lib/tenant-session';
 
 // ── Job definition ────────────────────────────────────────────────────────────
 
@@ -275,8 +274,9 @@ export async function verifyJobAuthorization(
     };
   }
 
-  // 2. Operator Session Auth — Cryptographic verification of session cookie
-  const session = await getVerifiedRequestSession(request);
+  // 2. Operator Session Auth — Durable cryptographic verification of session cookie
+  const { getVerifiedRequestSessionDurable } = await import('@/lib/auth/durable-session-revocation');
+  const session = await getVerifiedRequestSessionDurable(request);
 
   // Unauthenticated requests carrying arbitrary forged headers are strictly rejected
   if (!session) {
