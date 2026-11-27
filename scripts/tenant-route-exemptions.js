@@ -978,6 +978,22 @@ const RULE_EXEMPTIONS = [
     test: 'tests/unit/customer-portal-session.test.ts',
   },
   {
+    file: 'src/app/api/customer-portal/transport/uploads/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Customer uploads Logistics or School Bus supporting documents for a Transport request (ADMIN / REQUESTER).',
+    authMechanism: 'Signed customer-portal-session HMAC cookie verified via requireCustomerPortal() with portal TRANSPORT and roles ADMIN/REQUESTER + magic-byte and size validation',
+    dataScope: 'Cloud storage objects strictly prefixed under customer-portal/{ctx.tenantId}/{ctx.customerId}/{domain}/{docType}/; reads authorized via /api/files + authorizeFileAccess',
+    owner: 'Customer Portal Engineering',
+    test: 'tests/unit/customer-portal-transport-uploads.test.ts',
+  },
+  {
+    file: 'src/app/api/customer-portal/transport/uploads/route.ts', method: 'DELETE', type: 'missing_auth',
+    reason: 'Customer removes a previously uploaded Transport request attachment owned by their own company (ADMIN / REQUESTER).',
+    authMechanism: 'Signed customer-portal-session HMAC cookie verified via requireCustomerPortal() with portal TRANSPORT and roles ADMIN/REQUESTER + normalized key prefix enforcement',
+    dataScope: 'Only storage keys strictly starting with customer-portal/{ctx.tenantId}/{ctx.customerId}/; cross-customer or cross-tenant keys rejected with 404',
+    owner: 'Customer Portal Engineering',
+    test: 'tests/unit/customer-portal-transport-uploads.test.ts',
+  },
+  {
     file: 'src/app/api/customer-portal/fsm/types/route.ts', method: 'GET', type: 'missing_auth',
     reason: 'Field Service request types a customer may raise.',
     authMechanism: 'Signed customer-portal-session HMAC cookie verified via requireCustomerPortal() (active user, session version, customer portal access, role)',
