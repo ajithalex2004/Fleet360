@@ -18,11 +18,14 @@
  */
 
 import { prisma } from './prisma';
+import * as rls from './rls';
+import * as rlsScope from './rls-scope';
 import { captureException } from './sentry';
 import { smtpTlsOptions } from './smtp-tls';
 import { redactPlatformSettingSecrets } from './platform-settings-secrets';
 
 export const RESEND_API_ENDPOINT = 'https://api.resend.com/emails';
+const PRINTABLE_ASCII_RE = /^[\x21-\x7e]+$/;
 
 export interface EmailSendResult {
   sent: boolean;
@@ -65,26 +68,84 @@ function sanitizeHeaderValue(value: string): string {
 
 function formatFromHeader(fromName: string | undefined, fromAddr: string): string {
   const cleanAddr = sanitizeHeaderValue(fromAddr);
-  const cleanName = sanitizeHeaderValue(fromName ?? '').replace(/"/g, '');
+  const cleanName = sanitizeHeaderValue(fromName ?? '').replace(/["\\]/g, '');
   if (!cleanName || cleanAddr.includes('<')) return cleanAddr;
   return `"${cleanName}" <${cleanAddr}>`;
+}
+
+type ResolvedEmailTransport =
+  | { kind: 'resend'; apiKey: string; fromName: string; fromAddr: string; replyTo: string }
+  | { kind: 'sendgrid' }
+  | { kind: 'smtp'; cfg: SmtpConfig }
+  | { kind: 'none'; reason: 'not_configured' | 'resend_not_configured' | 'smtp_not_configured'; transport?: 'resend' | 'smtp' };
+
+/**
+ * Single authoritative transport resolver shared by `isEmailTransportConfigured()`
+ * and `sendEmail()` so dunning/readiness gates and actual delivery never diverge.
+ *
+ * Precedence:
+ *  1. `platform_settings.email_provider === 'resend'` -> Resend API (DB key or RESEND_API_KEY env).
+ *  2. `email_provider` is `''` or `'none'` and `RESEND_API_KEY` env is set -> Resend API (env key ONLY; never reads another provider's DB `email_api_key`).
+ *  3. `email_provider` is `''`, `'none'`, or `'sendgrid'` and `SENDGRID_API_KEY` env is set -> legacy SendGrid REST API.
+ *  4. `email_provider` is `'smtp'` or `''` (legacy/unset) -> DB platform SMTP (`smtp_*` rows).
+ *  5. Otherwise (`email_provider === 'none'` with no env override, or unimplemented API provider) -> disabled / not configured (never falls through to leftover DB `smtp_*` rows).
+ */
+function resolveEmailTransport(platformCfg: PlatformEmailConfig | null): ResolvedEmailTransport {
+  const provider = platformCfg?.provider ?? '';
+  const envResendKey = (process.env.RESEND_API_KEY || '').trim();
+  const envFrom = (process.env.EMAIL_FROM || process.env.SMTP_FROM || '').trim();
+
+  if (provider === 'resend') {
+    const apiKey = (platformCfg?.apiKey || envResendKey).trim();
+    const fromAddr = (platformCfg?.fromAddr || envFrom).trim();
+    if (!apiKey || !fromAddr || !PRINTABLE_ASCII_RE.test(apiKey)) {
+      return { kind: 'none', reason: 'resend_not_configured', transport: 'resend' };
+    }
+    return {
+      kind: 'resend',
+      apiKey,
+      fromName: platformCfg?.fromName || 'Fleet360',
+      fromAddr,
+      replyTo: platformCfg?.replyTo || '',
+    };
+  }
+
+  if ((provider === '' || provider === 'none') && envResendKey) {
+    const fromAddr = (platformCfg?.fromAddr || envFrom).trim();
+    if (!fromAddr || !PRINTABLE_ASCII_RE.test(envResendKey)) {
+      return { kind: 'none', reason: 'resend_not_configured', transport: 'resend' };
+    }
+    return {
+      kind: 'resend',
+      apiKey: envResendKey,
+      fromName: platformCfg?.fromName || 'Fleet360',
+      fromAddr,
+      replyTo: platformCfg?.replyTo || '',
+    };
+  }
+
+  if ((provider === '' || provider === 'none' || provider === 'sendgrid') && process.env.SENDGRID_API_KEY) {
+    if (!envFrom) {
+      return { kind: 'none', reason: 'not_configured' };
+    }
+    return { kind: 'sendgrid' };
+  }
+
+  if (provider === 'smtp' || provider === '') {
+    if (platformCfg?.smtp) {
+      return { kind: 'smtp', cfg: platformCfg.smtp };
+    }
+    return { kind: 'none', reason: 'smtp_not_configured', transport: 'smtp' };
+  }
+
+  return { kind: 'none', reason: 'not_configured' };
 }
 
 /** Whether sendEmail has a real transport (not quarantined, Resend, SendGrid, or platform SMTP set up). */
 export async function isEmailTransportConfigured(): Promise<boolean> {
   if (process.env.DISABLE_OUTBOUND_NOTIFICATIONS === 'true' || process.env.MOCK_NOTIFICATIONS === 'true') return false;
   const platformCfg = await getPlatformEmailConfig();
-  if (platformCfg?.provider === 'resend') {
-    const apiKey = platformCfg.apiKey || process.env.RESEND_API_KEY?.trim() || '';
-    const fromAddr = platformCfg.fromAddr || process.env.EMAIL_FROM?.trim() || process.env.SMTP_FROM?.trim() || '';
-    return Boolean(apiKey && fromAddr);
-  }
-  if (platformCfg?.provider !== 'smtp' && process.env.RESEND_API_KEY?.trim()) {
-    const fromAddr = platformCfg?.fromAddr || process.env.EMAIL_FROM?.trim() || process.env.SMTP_FROM?.trim() || '';
-    if (fromAddr) return true;
-  }
-  if (process.env.SENDGRID_API_KEY) return Boolean(process.env.EMAIL_FROM ?? process.env.SMTP_FROM);
-  return Boolean(platformCfg?.smtp);
+  return resolveEmailTransport(platformCfg).kind !== 'none';
 }
 
 export interface EmailMessage {
@@ -125,12 +186,31 @@ let _emailCacheAt = 0;
 let _emailLoading: Promise<PlatformEmailConfig | null> | null = null;
 
 async function loadPlatformEmailConfigFromDb(): Promise<PlatformEmailConfig | null> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ key: string; value: string }>>(
-    `SELECT key, value FROM platform_settings
-     WHERE key IN ('email_provider', 'email_api_key', 'smtp_host', 'smtp_port',
-                    'smtp_username', 'smtp_password', 'smtp_encryption',
-                    'email_from_name', 'email_from_address', 'email_reply_to')`,
-  );
+  const querySettings = (db: { $queryRawUnsafe: typeof prisma.$queryRawUnsafe }) =>
+    db.$queryRawUnsafe<Array<{ key: string; value: string }>>(
+      `SELECT key, value FROM platform_settings
+       WHERE key IN ('email_provider', 'email_api_key', 'smtp_host', 'smtp_port',
+                      'smtp_username', 'smtp_password', 'smtp_encryption',
+                      'email_from_name', 'email_from_address', 'email_reply_to')`,
+    );
+
+  // Run outside any caller tenant RLS/tx scope so concurrent sends or aborted
+  // request transactions cannot contaminate or deadlock platform settings loads.
+  const exec = async () => {
+    if (
+      typeof rls.withPlatformAdmin === 'function' &&
+      typeof (prisma as unknown as { $transaction?: unknown }).$transaction === 'function'
+    ) {
+      return rls.withPlatformAdmin(prisma, (tx) => querySettings(tx as never), {
+        skipSessionRevocationGuard: true,
+      });
+    }
+    return querySettings(prisma);
+  };
+  const rows =
+    typeof rlsScope.runOutsideRlsScope === 'function'
+      ? await rlsScope.runOutsideRlsScope(exec)
+      : await exec();
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const s: Record<string, string> = {};
   for (const r of rows) s[r.key] = r.value ?? '';
@@ -188,7 +268,10 @@ export function invalidateSmtpCache(): void {
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 export async function sendEmail(msg: EmailMessage): Promise<EmailSendResult> {
-  const recipients = Array.isArray(msg.to) ? msg.to.filter(Boolean) : [msg.to].filter(Boolean);
+  const rawRecipients = Array.isArray(msg.to) ? msg.to : [msg.to];
+  const recipients = rawRecipients
+    .map((r) => (typeof r === 'string' ? sanitizeHeaderValue(r) : ''))
+    .filter(Boolean);
   if (recipients.length === 0) return { sent: false, reason: 'no_recipient' };
 
   if (
@@ -199,24 +282,22 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailSendResult> {
   }
 
   const platformCfg = await getPlatformEmailConfig();
+  const resolved = resolveEmailTransport(platformCfg);
 
-  // 1. Explicit platform Resend API provider
-  if (platformCfg?.provider === 'resend') {
-    return sendViaResend(msg, recipients, platformCfg);
+  if (resolved.kind === 'resend') {
+    return sendViaResend(msg, recipients, resolved);
   }
-
-  // 2. Environment RESEND_API_KEY fallback (unless admin explicitly chose SMTP)
-  if (platformCfg?.provider !== 'smtp' && process.env.RESEND_API_KEY?.trim()) {
-    return sendViaResend(msg, recipients, platformCfg);
-  }
-
-  // 3. SendGrid takes priority if explicitly configured (legacy)
-  if (process.env.SENDGRID_API_KEY) {
+  if (resolved.kind === 'sendgrid') {
     return sendViaSendGrid(msg, recipients);
   }
-
-  // 4. Otherwise use platform SMTP from platform_settings
-  return sendViaSmtp(msg, recipients, platformCfg?.smtp ?? null);
+  if (resolved.kind === 'smtp') {
+    return sendViaSmtp(msg, recipients, resolved.cfg);
+  }
+  return {
+    sent: false,
+    reason: resolved.reason,
+    ...(resolved.transport ? { transport: resolved.transport } : {}),
+  };
 }
 
 // ── Resend HTTPS API path ────────────────────────────────────────────────────
@@ -224,39 +305,33 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailSendResult> {
 async function sendViaResend(
   msg: EmailMessage,
   recipients: string[],
-  platformCfg: PlatformEmailConfig | null,
+  cfg: Extract<ResolvedEmailTransport, { kind: 'resend' }>,
 ): Promise<EmailSendResult> {
-  const apiKey = (platformCfg?.apiKey || process.env.RESEND_API_KEY || '').trim();
-  const defaultAddr = (
-    platformCfg?.fromAddr ||
-    process.env.EMAIL_FROM ||
-    process.env.SMTP_FROM ||
-    ''
-  ).trim();
+  const apiKey = cfg.apiKey;
   const fromHeader = msg.from
     ? sanitizeHeaderValue(msg.from)
-    : defaultAddr
-      ? formatFromHeader(platformCfg?.fromName, defaultAddr)
-      : '';
+    : formatFromHeader(cfg.fromName, cfg.fromAddr);
 
-  if (!apiKey || !fromHeader) {
+  if (!apiKey || !fromHeader || !PRINTABLE_ASCII_RE.test(apiKey)) {
     return { sent: false, reason: 'resend_not_configured', transport: 'resend' };
   }
 
-  const replyTo = sanitizeHeaderValue(msg.replyTo || platformCfg?.replyTo || '');
+  const cleanSubject = sanitizeHeaderValue(msg.subject || '');
+  const replyTo = sanitizeHeaderValue(msg.replyTo || cfg.replyTo || '');
   const payload: Record<string, unknown> = {
     from: fromHeader,
     to: recipients,
-    subject: msg.subject,
+    subject: cleanSubject,
     ...(msg.html ? { html: msg.html } : {}),
     ...(msg.text ? { text: msg.text } : {}),
-    ...(!msg.html && !msg.text ? { text: msg.subject } : {}),
+    ...(!msg.html && !msg.text ? { text: cleanSubject } : {}),
     ...(replyTo ? { reply_to: replyTo } : {}),
   };
 
   try {
     const res = await fetch(RESEND_API_ENDPOINT, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -277,13 +352,17 @@ async function sendViaResend(
     }
 
     const rawText = await res.text().catch(() => '');
-    const safeText = redactPlatformSettingSecrets(rawText.slice(0, 300), [apiKey]);
+    // Always redact BEFORE truncating so a secret straddling index 300 cannot leak.
+    const safeText = redactPlatformSettingSecrets(rawText, [apiKey]).slice(0, 300);
     const err = new Error(`Resend ${res.status}: ${safeText}`);
     console.error('[email] Resend send failed:', err.message);
     captureException(err, { context: 'email.send.resend', tags: { status: String(res.status) } });
-    // 4xx = Resend explicitly rejected before acceptance (safe to retry after fix).
-    // 5xx = server-side failure where acceptance is uncertain.
-    const errorClass = res.status >= 400 && res.status < 500 ? 'DEFINITE_FAILURE' : 'UNCERTAIN';
+    // 4xx (except proxy/timeout 408/499) = Resend explicitly rejected before acceptance.
+    // 408/499/5xx = uncertain whether upstream accepted the message.
+    const errorClass =
+      res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 499
+        ? 'DEFINITE_FAILURE'
+        : 'UNCERTAIN';
     return {
       sent: false,
       reason: 'resend_error',
@@ -294,7 +373,7 @@ async function sendViaResend(
     };
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : String(err);
-    const safeMsg = redactPlatformSettingSecrets(rawMsg, [apiKey]);
+    const safeMsg = redactPlatformSettingSecrets(rawMsg, [apiKey]).slice(0, 300);
     const safeErr = new Error(safeMsg);
     console.error('[email] Resend network error:', safeMsg);
     captureException(safeErr, { context: 'email.send.resend' });
@@ -389,7 +468,7 @@ async function sendViaSmtp(
     const info = await transporter.sendMail({
       from: fromAddr,
       to: recipients.join(', '),
-      subject: msg.subject,
+      subject: sanitizeHeaderValue(msg.subject || ''),
       text: msg.text,
       html: msg.html,
       ...(replyTo ? { replyTo } : {}),
@@ -397,7 +476,11 @@ async function sendViaSmtp(
     return { sent: true, transport: 'smtp', id: typeof info?.messageId === 'string' ? info.messageId : undefined };
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : String(err);
-    const safeMsg = redactPlatformSettingSecrets(rawMsg, [cfg.password, `${cfg.username}:${cfg.password}`]);
+    const safeMsg = redactPlatformSettingSecrets(rawMsg, [
+      cfg.password,
+      `${cfg.username}:${cfg.password}`,
+      `\0${cfg.username}\0${cfg.password}`,
+    ]);
     const e = new Error(safeMsg);
     console.error('[email] SMTP send failed:', safeMsg);
     captureException(e, { context: 'email.send.smtp' });

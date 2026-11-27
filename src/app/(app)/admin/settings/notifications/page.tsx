@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 /* ─────────────────────────────────────────────────────────────
    Types
@@ -129,12 +129,26 @@ function TestBtn({ channelKey, settings, onColor }: {
   const [state, setState]   = useState<'idle' | 'running' | 'ok' | 'fail'>('idle');
   const [errMsg, setErrMsg] = useState('');
   const [testTo, setTestTo] = useState('');
+  const [sentRecipient, setSentRecipient] = useState('');
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   const effectiveRecipient =
-    testTo.trim() || settings['email_reply_to'] || settings['email_from_address'] || settings['smtp_username'] || '';
+    testTo.trim() ||
+    (settings['email_reply_to'] || '').trim() ||
+    (settings['email_from_address'] || '').trim() ||
+    (settings['smtp_username'] || '').trim();
 
   const run = async () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    const targetRecipient = effectiveRecipient;
     setErrMsg('');
+    setSentRecipient(targetRecipient);
     setState('running');
     try {
       const res = await fetch('/api/admin/test-channel', {
@@ -143,7 +157,7 @@ function TestBtn({ channelKey, settings, onColor }: {
         body: JSON.stringify({
           channel:  channelKey,
           settings,
-          toEmail: channelKey === 'email' ? (effectiveRecipient || undefined) : undefined,
+          toEmail: channelKey === 'email' ? (targetRecipient || undefined) : undefined,
         }),
       });
       const data = await res.json();
@@ -157,7 +171,7 @@ function TestBtn({ channelKey, settings, onColor }: {
       setErrMsg(e instanceof Error ? e.message : 'Network error');
       setState('fail');
     }
-    setTimeout(() => { setState('idle'); setErrMsg(''); }, 6000);
+    resetTimerRef.current = setTimeout(() => { setState('idle'); setErrMsg(''); }, 6000);
   };
 
   return (
@@ -180,7 +194,7 @@ function TestBtn({ channelKey, settings, onColor }: {
                                   `${onColor} border-transparent text-[var(--text-main)] hover:opacity-90`
           }`}>
           {state === 'running' ? <><span className="animate-spin inline-block">⟳</span> Sending…</> :
-           state === 'ok'      ? <>✓ Email Delivered!</> :
+           state === 'ok'      ? (channelKey === 'email' ? <>✓ Email Delivered!</> : <>✓ SMS Verified!</>) :
            state === 'fail'    ? <>✕ Failed</> :
            channelKey === 'email' ? <>📧 Send Test Email</> :
                                     <>📱 Send Test SMS</>}
@@ -189,8 +203,8 @@ function TestBtn({ channelKey, settings, onColor }: {
       {state === 'fail' && errMsg && (
         <p className="text-xs text-red-400 max-w-xs leading-snug text-right">{errMsg}</p>
       )}
-      {state === 'ok' && (
-        <p className="text-xs text-emerald-400">Check your inbox at {effectiveRecipient}</p>
+      {state === 'ok' && channelKey === 'email' && sentRecipient && (
+        <p className="text-xs text-emerald-400">Check your inbox at {sentRecipient}</p>
       )}
     </div>
   );
@@ -1203,13 +1217,16 @@ export default function NotificationChannelsPage() {
     if (keysToClear.length > 0) {
       payload.clearSecrets = keysToClear;
     }
+    setError('');
     try {
       const res = await fetch('/api/admin/platform-settings', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error(typeof data?.error === 'string' && data.error.trim() ? data.error : 'Failed to save — please try again');
+      }
       if (data.configuredSecrets) {
         setConfiguredSecrets(data.configuredSecrets);
       }
@@ -1230,7 +1247,9 @@ export default function NotificationChannelsPage() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch { setError('Failed to save — please try again'); }
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Failed to save — please try again');
+    }
     finally { setSaving(false); }
   };
 

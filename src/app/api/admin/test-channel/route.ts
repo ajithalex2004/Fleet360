@@ -23,6 +23,14 @@ import {
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 const RESEND_API_ENDPOINT = 'https://api.resend.com/emails';
+const PRINTABLE_ASCII_RE = /^[\x21-\x7e]+$/;
+
+function formatFromHeader(fromName: string, fromAddr: string): string {
+  const cleanAddr = sanitizeHeaderValue(fromAddr);
+  const cleanName = sanitizeHeaderValue(fromName).replace(/["\\]/g, '');
+  if (!cleanName || cleanAddr.includes('<')) return cleanAddr;
+  return `"${cleanName}" <${cleanAddr}>`;
+}
 
 const STORED_CHANNEL_KEYS = [
   'email_provider',
@@ -147,7 +155,7 @@ async function testEmail(
   const fromAddr = provider === 'smtp'
     ? (isExchangeHost ? (smtpUser || configuredFrom) : (configuredFrom || smtpUser))
     : (configuredFrom || smtpUser);
-  const recipient = (toEmail || '').trim() || fromAddr;
+  const recipient = sanitizeHeaderValue(toEmail || '') || sanitizeHeaderValue(fromAddr);
 
   if (!recipient) {
     return NextResponse.json(
@@ -204,13 +212,20 @@ async function testResend(
     apiKey = reuse.apiKey;
   }
 
-  const cleanName = fromName.replace(/"/g, '');
-  const fromHeader = cleanName ? `"${cleanName}" <${cleanFrom}>` : cleanFrom;
+  if (!PRINTABLE_ASCII_RE.test(apiKey)) {
+    return NextResponse.json(
+      { error: 'Resend API Key contains invalid characters. Paste the raw re_... key without spaces or line breaks.' },
+      { status: 400, headers: NO_STORE_HEADERS },
+    );
+  }
+
+  const fromHeader = formatFromHeader(fromName, cleanFrom);
   const replyTo = sanitizeHeaderValue(settings['email_reply_to'] || '');
 
   try {
     const res = await fetch(RESEND_API_ENDPOINT, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -257,7 +272,7 @@ async function testResend(
 
     if (!res.ok) {
       const rawText = await res.text().catch(() => '');
-      let providerMsg = rawText.slice(0, 300);
+      let providerMsg = rawText;
       try {
         const parsed = JSON.parse(rawText) as { message?: string; error?: string };
         if (typeof parsed.message === 'string' && parsed.message.trim()) {
@@ -268,7 +283,8 @@ async function testResend(
       } catch {
         // non-JSON upstream error body
       }
-      const safeMsg = redactPlatformSettingSecrets(providerMsg, [apiKey]);
+      // Always redact BEFORE truncating so secrets spanning index 300 cannot leak.
+      const safeMsg = redactPlatformSettingSecrets(providerMsg, [apiKey]).slice(0, 300);
       console.error('[test-channel/resend]', res.status, safeMsg);
       let friendly = `Resend API error (${res.status}): ${safeMsg || 'Request rejected.'}`;
       if (res.status === 401) {
@@ -290,7 +306,7 @@ async function testResend(
     );
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : String(err);
-    const safeMsg = redactPlatformSettingSecrets(rawMsg, [apiKey]);
+    const safeMsg = redactPlatformSettingSecrets(rawMsg, [apiKey]).slice(0, 300);
     console.error('[test-channel/resend]', safeMsg);
     return NextResponse.json(
       { error: `Resend request failed: ${safeMsg}` },
@@ -352,7 +368,7 @@ async function testSmtp(
 
     // Send the actual test email
     const info = await transporter.sendMail({
-      from:    `"${fromName}" <${fromAddr}>`,
+      from:    formatFromHeader(fromName, fromAddr),
       to:      recipient,
       subject: '✅ Fleet360 — SMTP Test Successful',
       html: `
@@ -365,19 +381,19 @@ async function testSmtp(
             <table style="width:100%;border-collapse:collapse;margin:20px 0;">
               <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
                 <td style="padding:8px 4px;color:#64748b;font-size:12px;width:120px;">SMTP Host</td>
-                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">${host}:${port}</td>
+                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">${escapeHtml(host)}:${port}</td>
               </tr>
               <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
                 <td style="padding:8px 4px;color:#64748b;font-size:12px;">Username</td>
-                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">${username}</td>
+                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;font-family:monospace;">${escapeHtml(username)}</td>
               </tr>
               <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
                 <td style="padding:8px 4px;color:#64748b;font-size:12px;">Encryption</td>
-                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;">${encryption.toUpperCase()}</td>
+                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;">${escapeHtml(encryption.toUpperCase())}</td>
               </tr>
               <tr>
                 <td style="padding:8px 4px;color:#64748b;font-size:12px;">Sent to</td>
-                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;">${recipient}</td>
+                <td style="padding:8px 4px;color:#e2e8f0;font-size:12px;">${escapeHtml(recipient)}</td>
               </tr>
             </table>
             <hr style="border-color:rgba(255,255,255,0.1);margin:24px 0;"/>

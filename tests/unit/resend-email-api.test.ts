@@ -237,6 +237,107 @@ describe('Native Resend HTTPS Email API (src/lib/email.ts)', () => {
       transport: 'quarantined',
     });
   });
+
+  it('HIGH-1/2/3 + MEDIUM-4 + LOW-11/12: prevents cross-provider key leak, dunning gate divergence, disabled SMTP fallback, and boundary truncation leaks', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // HIGH-1: env RESEND_API_KEY + provider='none' + leftover SendGrid DB key -> MUST send env key, NEVER DB key
+    vi.stubEnv('RESEND_API_KEY', 're_env_only_key_12345');
+    vi.stubEnv('EMAIL_FROM', 'noreply@fleet360.ae');
+    setPlatformRows({
+      email_provider: 'none',
+      email_api_key: 'SG.leaked-sendgrid-secret-xyz',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 're_env_safe' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const resEnv = await sendEmail({ to: 'a@example.com', subject: 'Check' });
+    expect(resEnv.sent).toBe(true);
+    expect((fetchMock.mock.calls[0][1] as RequestInit & { headers: Record<string, string> }).headers.Authorization).toBe(
+      'Bearer re_env_only_key_12345',
+    );
+
+    // HIGH-1b: provider='sendgrid' with stored DB key + env RESEND_API_KEY -> does NOT leak to Resend
+    invalidateSmtpCache();
+    setPlatformRows({
+      email_provider: 'sendgrid',
+      email_api_key: 'SG.stored-key-never-resend',
+    });
+    expect(await isEmailTransportConfigured()).toBe(false);
+    const sgRes = await sendEmail({ to: 'a@example.com', subject: 'Check' });
+    expect(sgRes.sent).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // HIGH-2: env RESEND_API_KEY without From address + leftover smtp_* rows -> isEmailTransportConfigured & sendEmail agree (false)
+    invalidateSmtpCache();
+    vi.stubEnv('EMAIL_FROM', '');
+    vi.stubEnv('SMTP_FROM', '');
+    setPlatformRows({
+      email_provider: '',
+      smtp_host: 'smtp.example.com',
+      smtp_username: 'mailer@example.com',
+      smtp_password: 'smtp-password-1234',
+    });
+    expect(await isEmailTransportConfigured()).toBe(false);
+    const noFromRes = await sendEmail({ to: 'a@example.com', subject: 'Dunning' });
+    expect(noFromRes.sent).toBe(false);
+    expect(noFromRes.reason).toBe('resend_not_configured');
+
+    // HIGH-3: email_provider='none' + leftover smtp_* rows (no env keys) -> disabled, NEVER sends SMTP
+    invalidateSmtpCache();
+    vi.stubEnv('RESEND_API_KEY', '');
+    setPlatformRows({
+      email_provider: 'none',
+      smtp_host: 'smtp.example.com',
+      smtp_username: 'mailer@example.com',
+      smtp_password: 'smtp-password-1234',
+    });
+    expect(await isEmailTransportConfigured()).toBe(false);
+    const disabledRes = await sendEmail({ to: 'a@example.com', subject: 'ShouldNotSend' });
+    expect(disabledRes.sent).toBe(false);
+    expect(disabledRes.reason).toBe('not_configured');
+    expect(mockCreateTransport).not.toHaveBeenCalled();
+
+    // MEDIUM-4: secret straddling index 300 in upstream error is redacted BEFORE slicing + 408 is UNCERTAIN
+    invalidateSmtpCache();
+    const boundarySecret = 're_boundary_secret_9876543210abcdef';
+    setPlatformRows({
+      email_provider: 'resend',
+      email_api_key: boundarySecret,
+      email_from_address: 'noreply@fleet360.ae',
+    });
+    const padding = 'x'.repeat(280);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(`${padding}${boundarySecret} trailing`, { status: 408 })));
+    const r408 = await sendEmail({ to: 'a@example.com', subject: 'Timeout' });
+    expect(r408.sent).toBe(false);
+    expect(r408.errorClass).toBe('UNCERTAIN');
+    expect(r408.error).not.toContain('re_boundary');
+    expect(r408.error).toContain('[REDACTED_SECRET]');
+
+    // MEDIUM-4b: sendViaSmtp redacts base64 RFC 4616 AUTH PLAIN (\0user\0pass)
+    invalidateSmtpCache();
+    const smtpUser = 'mailer@example.com';
+    const smtpPass = 'SuperSecretSmtpPass!42';
+    const authPlainB64 = Buffer.from(`\0${smtpUser}\0${smtpPass}`, 'utf8').toString('base64');
+    setPlatformRows({
+      email_provider: 'smtp',
+      smtp_host: 'smtp.example.com',
+      smtp_port: '465',
+      smtp_encryption: 'ssl',
+      smtp_username: smtpUser,
+      smtp_password: smtpPass,
+    });
+    mockSendMail.mockRejectedValueOnce(new Error(`535 AUTH PLAIN ${authPlainB64} failed`));
+    const smtpErrRes = await sendEmail({ to: 'a@example.com', subject: 'Fail' });
+    expect(smtpErrRes.sent).toBe(false);
+    expect(smtpErrRes.error).not.toContain(authPlainB64);
+    expect(smtpErrRes.error).not.toContain(smtpPass);
+    expect(smtpErrRes.error).toContain('[REDACTED_SECRET]');
+
+    // LOW-12: canReuseStoredEmailApiKey rejects 'none'
+    expect(canReuseStoredEmailApiKey({ email_provider: 'none', email_api_key: 're_abc1234' }, 'none').ok).toBe(false);
+
+    errSpy.mockRestore();
+  });
 });
 
 describe('Admin POST /api/admin/test-channel (Resend API + Secret Binding + Non-Exchange SMTP)', () => {

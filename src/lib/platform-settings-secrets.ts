@@ -344,7 +344,13 @@ export function canReuseStoredEmailApiKey(
 
   const savedProvider = (stored['email_provider'] ?? '').trim().toLowerCase();
   const candProvider = (candidateProvider ?? '').trim().toLowerCase();
-  if (!savedProvider || !candProvider || candProvider !== savedProvider) {
+  if (
+    !savedProvider ||
+    savedProvider === 'none' ||
+    !candProvider ||
+    candProvider === 'none' ||
+    candProvider !== savedProvider
+  ) {
     return {
       ok: false,
       error:

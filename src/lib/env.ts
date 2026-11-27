@@ -179,7 +179,7 @@ export const isTest = env.NODE_ENV === 'test';
 
 /** Whether server-side email transport is configured. */
 export const hasEmailTransport = Boolean(
-  (env.SMTP_HOST && env.SMTP_USER) || env.SENDGRID_API_KEY,
+  (env.SMTP_HOST && env.SMTP_USER) || env.RESEND_API_KEY || env.SENDGRID_API_KEY,
 );
 
 /** Whether OpenAI is configured (for AI features). */
