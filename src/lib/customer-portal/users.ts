@@ -168,6 +168,8 @@ export async function portalsForCustomer(tenantId: string, customerId: string): 
 export interface CustomerPortalSummary {
   customerId: string; code: string | null; name: string; status: string | null;
   portals: CustomerPortal[]; transportCategories: TransportCategory[]; activeUsers: number; invitedUsers: number;
+  /** Linked Rental customer (Rent-a-Car), shown by name. */
+  rentalCustomer: { id: string; name: string } | null;
 }
 
 export async function listCustomerPortalSummaries(tenantId: string): Promise<CustomerPortalSummary[]> {
@@ -175,6 +177,7 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
     tx.$queryRawUnsafe<Array<{
       id: string; customer_code: string | null; name_en: string; status: string | null;
       portals: string[] | null; transport_categories: string[] | null; active_users: number; invited_users: number;
+      rental_customer_id: string | null; rental_customer_name: string | null;
     }>>(
       `SELECT c.id, c.customer_code, c.name_en, c.status,
               (SELECT array_agg(a.portal ORDER BY a.portal) FROM customer_portal_access a
@@ -188,8 +191,12 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
               (SELECT COUNT(*)::int FROM customer_portal_users u
                 WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
                   AND u.is_active AND u.password_hash IS NULL
-                  AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id)) AS invited_users
+                  AND EXISTS (SELECT 1 FROM customer_portal_user_roles r WHERE r.portal_user_id = u.id)) AS invited_users,
+              l.rental_customer_id,
+              (SELECT COALESCE(rc.company_name, rc.full_name) FROM rental_customers rc
+                WHERE rc.id::text = l.rental_customer_id AND rc.tenant_id::text = c.tenant_id) AS rental_customer_name
          FROM customers c
+         LEFT JOIN customer_rental_links l ON l.tenant_id = c.tenant_id AND l.customer_id = c.id
         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
         ORDER BY c.name_en`,
       tenantId,
@@ -200,6 +207,7 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
     portals: (r.portals ?? []).filter(isCustomerPortal),
     transportCategories: (r.transport_categories ?? []) as TransportCategory[],
     activeUsers: Number(r.active_users), invitedUsers: Number(r.invited_users),
+    rentalCustomer: r.rental_customer_id ? { id: r.rental_customer_id, name: r.rental_customer_name ?? r.rental_customer_id } : null,
   }));
 }
 

@@ -99,6 +99,9 @@ async function dispatchB2bOnboardingEmail(args: {
 export async function GET(req: NextRequest) {
   const ctx = await requireRacPortalRole(req, ALL_RAC_PORTAL_ROLES);
   if (ctx instanceof NextResponse) return ctx;
+  if (ctx.via === 'customer-portal') {
+    return NextResponse.json({ error: 'Manage your team on the Customer Portal Team page.' }, { status: 409 });
+  }
 
   try {
     const users = await listRacPortalUsersByCustomer(ctx.tenantId, ctx.customerId);
@@ -122,6 +125,9 @@ export async function POST(req: NextRequest) {
     'Corporate B2B Admin (RAC_B2B_ADMIN) role is required to invite team members.',
   );
   if (ctx instanceof NextResponse) return ctx;
+  if (ctx.via === 'customer-portal') {
+    return NextResponse.json({ error: 'Manage your team on the Customer Portal Team page.' }, { status: 409 });
+  }
 
   try {
     const rawBody = await req.json().catch(() => null);
@@ -235,6 +241,9 @@ export async function PATCH(req: NextRequest) {
     'Corporate B2B Admin (RAC_B2B_ADMIN) role is required to update team members.',
   );
   if (ctx instanceof NextResponse) return ctx;
+  if (ctx.via === 'customer-portal') {
+    return NextResponse.json({ error: 'Manage your team on the Customer Portal Team page.' }, { status: 409 });
+  }
 
   try {
     const rawBody = await req.json().catch(() => null);
@@ -340,6 +349,9 @@ export async function DELETE(req: NextRequest) {
     'Corporate B2B Admin (RAC_B2B_ADMIN) role is required to remove team members.',
   );
   if (ctx instanceof NextResponse) return ctx;
+  if (ctx.via === 'customer-portal') {
+    return NextResponse.json({ error: 'Manage your team on the Customer Portal Team page.' }, { status: 409 });
+  }
 
   try {
     const userId = req.nextUrl.searchParams.get('userId')?.trim() ?? '';

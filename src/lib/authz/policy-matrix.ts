@@ -173,6 +173,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'customers/portal-access': { read: m('customer-mgmt'), write: TENANT_ADMIN },
   'customers/portal-users': { read: m('customer-mgmt'), write: TENANT_ADMIN },
   'customers/transport-catalog': { read: m('customer-mgmt'), write: TENANT_ADMIN },
+  'customers/rental-links': { read: m('customer-mgmt'), write: TENANT_ADMIN },
   'customer-hierarchy': m('customer-mgmt'),
   kyc: m('customer-mgmt'),
   'booking-portal': m('booking-portal'),

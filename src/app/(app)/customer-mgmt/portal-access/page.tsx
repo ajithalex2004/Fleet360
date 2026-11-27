@@ -26,6 +26,7 @@ import {
 interface CustomerRow {
   customerId: string; code: string | null; name: string; status: string | null;
   portals: CustomerPortal[]; transportCategories: TransportCategory[]; activeUsers: number; invitedUsers: number;
+  rentalCustomer: { id: string; name: string } | null;
 }
 interface PortalAccount {
   id: string; email: string; fullName: string | null; mobile: string | null; isActive: boolean; hasPassword: boolean;
@@ -50,6 +51,7 @@ export default function CustomerPortalAccessPage() {
   const [managing, setManaging] = useState<CustomerRow | null>(null);
   const [pickingCategories, setPickingCategories] = useState<CustomerRow | null>(null);
   const [offered, setOffered] = useState<TransportCategory[]>([]);
+  const [linkingRental, setLinkingRental] = useState<CustomerRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/customers/portal-access', { cache: 'no-store' });
@@ -104,6 +106,12 @@ export default function CustomerPortalAccessPage() {
             {on && canEdit && (
               <button type="button" onClick={() => setPickingCategories(c)} className="text-[10px] font-semibold text-blue-600 hover:underline">Edit</button>
             )}
+            {on && c.transportCategories.includes('RAC') && (
+              <button type="button" disabled={!canEdit} onClick={() => setLinkingRental(c)}
+                className={`basis-full text-left text-[10px] font-semibold ${c.rentalCustomer ? 'text-[var(--text-muted)]' : 'text-amber-600'} ${canEdit ? 'hover:underline' : ''}`}>
+                {c.rentalCustomer ? `Rental customer: ${c.rentalCustomer.name}` : 'Link rental customer'}
+              </button>
+            )}
           </div>
         );
       },
@@ -127,6 +135,10 @@ export default function CustomerPortalAccessPage() {
         toolbar={{ title: 'Customers', exportName: 'customer-portal-access' }}
       />
       {managing && <UsersPanel customer={managing} canEdit={canEdit} onClose={() => { setManaging(null); void load(); }} />}
+      {linkingRental && (
+        <RentalLinkDialog customer={linkingRental} onClose={() => setLinkingRental(null)}
+          onSaved={() => { setLinkingRental(null); void load(); }} />
+      )}
       {pickingCategories && (
         <CategoriesDialog customer={pickingCategories} offered={offered} onClose={() => setPickingCategories(null)}
           onSaved={() => { setPickingCategories(null); void load(); }} />
@@ -178,6 +190,68 @@ function CategoriesDialog({ customer, offered, onClose, onSaved }: {
           <FormFooter secondary={<SecondaryButton onClick={onClose}>Cancel</SecondaryButton>}>
             <PrimaryButton icon={Save} busy={busy} onClick={() => void save()}>Save</PrimaryButton>
           </FormFooter>
+        </FormPanel>
+      </div>
+    </div>
+  );
+}
+
+interface RentalOption { id: string; name: string; companyName: string | null; tradeLicense: string | null; email: string | null; linkedCustomerId: string | null }
+
+/** Choose which Rental customer this customer is, so its rentals show in the Customer Portal. */
+function RentalLinkDialog({ customer, onClose, onSaved }: { customer: CustomerRow; onClose: () => void; onSaved: () => void }) {
+  const [q, setQ] = useState(customer.name);
+  const [options, setOptions] = useState<RentalOption[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/customers/rental-links?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+      const d = await res.json().catch(() => null);
+      if (res.ok && d?.ok) setOptions(d.options); else setErr(d?.error ?? 'Could not search rental customers');
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const save = async (rentalCustomerId: string | null) => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await send('/api/customers/rental-links', 'PUT', { customerId: customer.customerId, rentalCustomerId });
+      if (!r.ok) { setErr(r.data?.error ?? 'Could not save the link'); return; }
+      onSaved();
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={`Rental customer for ${customer.name}`}>
+      <div className="w-full max-w-xl">
+        <FormPanel title={`Rental customer — ${customer.name}`} subtitle="The Rental customer whose bookings, agreements and invoices this company sees in the Customer Portal" icon={Truck}
+          actions={<SecondaryButton icon={X} onClick={onClose}>Close</SecondaryButton>}>
+          {err && <FormAlert>{err}</FormAlert>}
+          {customer.rentalCustomer && <FormAlert tone="info">Linked to {customer.rentalCustomer.name}.</FormAlert>}
+          <FormField label="Search rental customers" hint="Company name, person, trade licence or email">
+            <TextInput value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+          </FormField>
+          <div className="divide-y divide-[var(--border-subtle)] max-h-80 overflow-y-auto">
+            {!options && <p className="py-2 text-[var(--text-muted)]">Searching…</p>}
+            {options?.length === 0 && <p className="py-2 text-[var(--text-muted)]">No rental customers match.</p>}
+            {options?.map((o) => {
+              const takenElsewhere = !!o.linkedCustomerId && o.linkedCustomerId !== customer.customerId;
+              const current = o.linkedCustomerId === customer.customerId;
+              return (
+                <div key={o.id} className="flex items-center justify-between gap-2 py-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">{o.companyName ?? o.name}</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{[o.companyName ? o.name : null, o.tradeLicense, o.email].filter(Boolean).join(' · ') || '—'}</p>
+                  </div>
+                  {current ? <span className="text-[11px] font-semibold text-emerald-600">Linked</span>
+                    : takenElsewhere ? <span className="text-[11px] text-[var(--text-muted)]">Linked to another customer</span>
+                    : <PrimaryButton busy={busy} onClick={() => void save(o.id)}>Link</PrimaryButton>}
+                </div>
+              );
+            })}
+          </div>
+          {customer.rentalCustomer && (
+            <FormFooter><SecondaryButton disabled={busy} onClick={() => void save(null)}>Remove link</SecondaryButton></FormFooter>
+          )}
         </FormPanel>
       </div>
     </div>
