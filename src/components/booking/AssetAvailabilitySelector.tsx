@@ -70,7 +70,7 @@ export function AssetAvailabilitySelector({
   return (
     <div className="space-y-4">
       {/* Header & Station Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-3.5 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3.5 shadow-xl">
         <div className="flex items-center gap-2">
           <Building2 className="w-4 h-4 text-cyan-400" />
           <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
@@ -82,7 +82,7 @@ export function AssetAvailabilitySelector({
           <select
             value={selectedDepot}
             onChange={(e) => handleDepotChange(e.target.value)}
-            className="bg-slate-950/80 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
+            className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
           >
             {STANDARD_DEPOTS.map((d) => (
               <option key={d.id} value={d.id}>
@@ -94,7 +94,7 @@ export function AssetAvailabilitySelector({
             type="button"
             onClick={fetchAvailability}
             title="Refresh availability"
-            className="p-1.5 text-cyan-400 hover:text-white border border-white/10 rounded-xl hover:bg-cyan-500/10 transition-colors"
+            className="p-1.5 text-cyan-400 hover:text-[var(--text-main)] border border-[var(--border-subtle)] rounded-xl hover:bg-cyan-500/10 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -127,15 +127,15 @@ export function AssetAvailabilitySelector({
               disabled={!cat.isAvailable}
               className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 isSelected
-                  ? 'bg-cyan-500/15 border-cyan-400 shadow-xl shadow-cyan-500/20 ring-1 ring-cyan-400/50 scale-[1.01]'
+                  ? 'bg-cyan-500/15 border-cyan-400 shadow-sm ring-1 ring-cyan-400/50 scale-[1.01]'
                   : cat.isAvailable
-                  ? 'bg-slate-900/60 backdrop-blur-xl border-white/10 hover:border-cyan-400/50 hover:bg-slate-900/90'
-                  : 'bg-slate-950/40 border-white/5 opacity-40 cursor-not-allowed'
+                  ? 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-cyan-400/50 hover:bg-[var(--bg-surface)]'
+                  : 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] opacity-40 cursor-not-allowed'
               }`}
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="text-sm font-bold text-white">
+                  <span className="text-sm font-bold text-[var(--text-main)]">
                     {cat.category}
                   </span>
 
@@ -157,13 +157,13 @@ export function AssetAvailabilitySelector({
                   )}
                 </div>
 
-                <p className="text-xs text-slate-400 line-clamp-1 mb-2">
+                <p className="text-xs text-[var(--text-muted)] line-clamp-1 mb-2">
                   {cat.sampleModels}
                 </p>
               </div>
 
               {/* Depot Station Inventory Footnote */}
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+              <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                 <span>At selected depot:</span>
                 <span className={`font-mono font-bold ${depotStock > 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
                   {depotStock} in station

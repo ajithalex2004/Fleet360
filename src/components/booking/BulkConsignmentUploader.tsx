@@ -86,12 +86,12 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
   };
 
   return (
-    <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-500/40 rounded-2xl p-5 space-y-5 backdrop-blur-xl shadow-xl shadow-amber-500/5 transition-all">
+    <div className="bg-[var(--bg-surface-hover)] border border-amber-500/20 hover:border-amber-500/40 rounded-2xl p-5 space-y-5 shadow-sm transition-all">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
         <div className="flex items-center gap-2">
           <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             B2B Bulk Consignment Excel / CSV Ingestion Engine
           </span>
         </div>
@@ -102,13 +102,13 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
 
       {/* Upload Dropzone & Sample Loader */}
       {!analysis && (
-        <div className="border-2 border-dashed border-amber-500/30 hover:border-amber-400/60 rounded-2xl p-6 text-center space-y-3 bg-zinc-950/60 transition-all">
+        <div className="border-2 border-dashed border-amber-500/30 hover:border-amber-400/60 rounded-2xl p-6 text-center space-y-3 bg-[var(--bg-surface-hover)] transition-all">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
             <UploadCloud className="w-6 h-6" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">Upload B2B Freight Manifest (.csv or .xlsx)</h4>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1">
+            <h4 className="text-sm font-bold text-[var(--text-main)]">Upload B2B Freight Manifest (.csv or .xlsx)</h4>
+            <p className="text-xs text-[var(--text-muted)] max-w-md mx-auto mt-1">
               Upload multi-store consignments. Fleet360 will automatically validate addresses, cluster regional
               corridors, and generate optimized vehicle sequences.
             </p>
@@ -123,7 +123,7 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
               type="button"
               onClick={handleLoadSampleManifest}
               disabled={loading}
-              className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 text-xs font-bold border border-amber-500/30 transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-amber-300 text-xs font-bold border border-amber-500/30 transition-all flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               Load 10-Store Retail Manifest Demo
@@ -137,43 +137,43 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
         <div className="space-y-4">
           {/* Top Metrics Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Consignments</span>
-              <span className="text-xl font-mono font-bold text-white block mt-0.5">
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold block">Consignments</span>
+              <span className="text-xl font-mono font-bold text-[var(--text-main)] block mt-0.5">
                 {analysis.validRowsCount} Drops
               </span>
               <span className="text-[10px] text-emerald-400">100% Validated</span>
             </div>
 
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Pallets & Weight</span>
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold block">Pallets & Weight</span>
               <span className="text-xl font-mono font-bold text-cyan-300 block mt-0.5">
                 {analysis.totalPallets} EPAL
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">
                 {(analysis.totalWeightKg / 1000).toFixed(1)} Tons Gross
               </span>
             </div>
 
-            <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Optimized Routes</span>
+            <div className="bg-[var(--bg-surface-hover)] border border-emerald-500/30 rounded-xl p-3">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold block">Optimized Routes</span>
               <span className="text-xl font-mono font-bold text-emerald-400 block mt-0.5">
                 {analysis.clusters.length} Dedicated Trucks
               </span>
               <span className="text-[10px] text-emerald-300">Auto-Clustered</span>
             </div>
 
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Estimated Freight</span>
-              <span className="text-xl font-mono font-bold text-white block mt-0.5">
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold block">Estimated Freight</span>
+              <span className="text-xl font-mono font-bold text-[var(--text-main)] block mt-0.5">
                 AED {analysis.summaryPricingAed.toLocaleString()}
               </span>
-              <span className="text-[10px] text-slate-400">All Corridors & Tolls</span>
+              <span className="text-[10px] text-[var(--text-muted)]">All Corridors & Tolls</span>
             </div>
           </div>
 
           {/* View Tab Toggle & Reset */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
             <div className="flex items-center gap-2 text-xs">
               <button
                 type="button"
@@ -181,7 +181,7 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
                   viewTab === 'CLUSTERS'
                     ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
-                    : 'text-slate-400 hover:text-white'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 🚚 Clustered Vehicle Routes ({analysis.clusters.length})
@@ -192,7 +192,7 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
                   viewTab === 'TABLE'
                     ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
-                    : 'text-slate-400 hover:text-white'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 📋 Raw Consignment Grid ({analysis.totalRows})
@@ -214,23 +214,23 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
               {analysis.clusters.map((cluster, idx) => (
                 <div
                   key={cluster.clusterId}
-                  className="bg-slate-950/90 border border-white/10 rounded-xl p-4 space-y-3 text-xs"
+                  className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3 text-xs"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold flex items-center justify-center text-[10px]">
                           {idx + 1}
                         </span>
-                        <h4 className="font-bold text-white text-sm">{cluster.corridorName}</h4>
+                        <h4 className="font-bold text-[var(--text-main)] text-sm">{cluster.corridorName}</h4>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono">
+                      <p className="text-[11px] text-[var(--text-muted)] font-mono">
                         Assigned Vehicle: <strong className="text-emerald-300">{cluster.vehicleRecommended}</strong>
                       </p>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-mono font-bold text-white block">
+                      <span className="text-xs font-mono font-bold text-[var(--text-main)] block">
                         AED {cluster.totalFreightFareAed.toLocaleString()}
                       </span>
                       <span className="text-[10px] text-emerald-400 flex items-center gap-1 justify-end">
@@ -241,22 +241,22 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
 
                   {/* Stops Sequence */}
                   <div className="space-y-1.5">
-                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">
+                    <span className="text-[10px] text-[var(--text-faint)] uppercase font-bold tracking-wider block">
                       Optimized TSP Delivery Sequence ({cluster.stopsSequence.length} Drops):
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                       {cluster.stopsSequence.map((stop) => (
                         <div
                           key={stop.stopNo}
-                          className="bg-slate-900 border border-white/5 rounded-lg p-2 space-y-0.5"
+                          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-2 space-y-0.5"
                         >
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="font-bold text-orange-400">Stop #{stop.stopNo}</span>
                             <span className="font-mono text-cyan-300">{stop.pallets} Pallets</span>
                           </div>
-                          <strong className="text-white block truncate text-xs">{stop.consigneeName}</strong>
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
-                            <Clock className="w-3 h-3 text-slate-500" /> {stop.timeWindow}
+                          <strong className="text-[var(--text-main)] block truncate text-xs">{stop.consigneeName}</strong>
+                          <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1 truncate">
+                            <Clock className="w-3 h-3 text-[var(--text-faint)]" /> {stop.timeWindow}
                           </span>
                         </div>
                       ))}
@@ -264,13 +264,13 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
                   </div>
 
                   {/* Load Factor Progress */}
-                  <div className="bg-slate-900/60 rounded-lg p-2 flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="bg-[var(--bg-surface)] rounded-lg p-2 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                     <span>
                       Truck Load Factor:{' '}
-                      <strong className="text-white font-mono">{cluster.capacityUtilizationPercent}% Full</strong> (
+                      <strong className="text-[var(--text-main)] font-mono">{cluster.capacityUtilizationPercent}% Full</strong> (
                       {cluster.totalPallets} / {cluster.vehicleMaxCapacityPallets} EPAL Pallets)
                     </span>
-                    <div className="w-32 bg-slate-800 rounded-full h-2 overflow-hidden border border-white/10">
+                    <div className="w-32 bg-[var(--bg-surface-hover)] rounded-full h-2 overflow-hidden border border-[var(--border-subtle)]">
                       <div
                         className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full"
                         style={{ width: `${cluster.capacityUtilizationPercent}%` }}
@@ -284,9 +284,9 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
 
           {/* TAB 2: RAW CONSIGNMENTS TABLE */}
           {viewTab === 'TABLE' && (
-            <div className="overflow-x-auto rounded-xl border border-white/10">
-              <table className="w-full text-left text-[11px] text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[9px] border-b border-white/10">
+            <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+              <table className="w-full text-left text-[11px] text-[var(--text-muted)]">
+                <thead className="bg-[var(--bg-surface-hover)] text-[var(--text-muted)] uppercase font-mono text-[9px] border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="p-2.5">Ref #</th>
                     <th className="p-2.5">Consignee</th>
@@ -297,20 +297,20 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
                     <th className="p-2.5">Receiver</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 bg-slate-900/80 font-mono">
+                <tbody className="divide-y divide-white/5 bg-[var(--bg-surface)] font-mono">
                   {analysis.clusters
                     .flatMap((c) => c.consignments)
                     .map((item) => (
-                      <tr key={item.consignmentRef} className="hover:bg-slate-800/50">
+                      <tr key={item.consignmentRef} className="hover:bg-[var(--bg-surface-hover)]">
                         <td className="p-2.5 font-bold text-orange-400">{item.consignmentRef}</td>
-                        <td className="p-2.5 text-white font-sans">{item.consigneeName}</td>
-                        <td className="p-2.5 text-slate-400 font-sans truncate max-w-[150px]">
+                        <td className="p-2.5 text-[var(--text-main)] font-sans">{item.consigneeName}</td>
+                        <td className="p-2.5 text-[var(--text-muted)] font-sans truncate max-w-[150px]">
                           {item.destinationAddress}
                         </td>
                         <td className="p-2.5 text-cyan-300">{item.palletCount}</td>
-                        <td className="p-2.5 text-slate-400">{item.grossWeightKg} kg</td>
+                        <td className="p-2.5 text-[var(--text-muted)]">{item.grossWeightKg} kg</td>
                         <td className="p-2.5 text-emerald-400 font-sans">{item.cargoCategory}</td>
-                        <td className="p-2.5 text-slate-400 font-sans">{item.receiverContactName}</td>
+                        <td className="p-2.5 text-[var(--text-muted)] font-sans">{item.receiverContactName}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -319,13 +319,13 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
           )}
 
           {/* Batch Seal & Dispatch Action */}
-          <div className="bg-slate-950 border border-white/10 rounded-xl p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400">
+          <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-[var(--text-muted)]">
               <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
                 <ShieldCheck className="w-4 h-4" />
                 <span>SHA-256 Batch Manifest Seal:</span>
               </div>
-              <span className="font-mono text-slate-500 text-[10px] break-all">
+              <span className="font-mono text-[var(--text-faint)] text-[10px] break-all">
                 {analysis.cryptographicBatchSeal.slice(0, 32)}…
               </span>
             </div>

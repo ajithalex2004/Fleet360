@@ -85,20 +85,20 @@ export function PassengerDriverChat({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full sm:w-96 bg-slate-900 border-l border-white/10 shadow-2xl z-50 flex flex-col justify-between">
+    <div className="fixed inset-y-0 right-0 w-full sm:w-96 bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] shadow-2xl z-50 flex flex-col justify-between">
       {/* ── Chat Header ── */}
-      <div className="p-4 bg-slate-950/80 border-b border-white/10 flex items-center justify-between">
+      <div className="p-4 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-bold text-white text-base">
             👤
           </div>
           <div>
-            <p className="text-sm font-bold text-white flex items-center gap-1.5">
+            <p className="text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5">
               {driverName}
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             </p>
-            <p className="text-[11px] text-slate-400">
-              {vehicleModel} · <span className="font-mono text-slate-300">{vehiclePlate}</span>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              {vehicleModel} · <span className="font-mono text-[var(--text-muted)]">{vehiclePlate}</span>
             </p>
           </div>
         </div>
@@ -113,7 +113,7 @@ export function PassengerDriverChat({
           </a>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-colors"
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-xl hover:bg-[var(--bg-surface-hover)] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -130,7 +130,7 @@ export function PassengerDriverChat({
             return (
               <div
                 key={m.id}
-                className="bg-slate-800/40 border border-white/5 rounded-xl p-2.5 text-[11px] text-slate-400 text-center leading-relaxed"
+                className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5 text-[11px] text-[var(--text-muted)] text-center leading-relaxed"
               >
                 <Shield className="w-3.5 h-3.5 text-violet-400 inline mr-1" />
                 {m.text}
@@ -144,7 +144,7 @@ export function PassengerDriverChat({
                 className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
                   isMe
                     ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-br-none'
-                    : 'bg-slate-800 text-slate-200 border border-white/10 rounded-bl-none'
+                    : 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-bl-none'
                 }`}
               >
                 {!isMe && (
@@ -152,7 +152,7 @@ export function PassengerDriverChat({
                 )}
                 <p>{m.text}</p>
               </div>
-              <span className="text-[9px] text-slate-500 mt-1 px-1">
+              <span className="text-[9px] text-[var(--text-faint)] mt-1 px-1">
                 {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -161,7 +161,7 @@ export function PassengerDriverChat({
       </div>
 
       {/* ── Quick Status Chips & Input Box ── */}
-      <div className="p-3 bg-slate-950/90 border-t border-white/10 space-y-2.5">
+      <div className="p-3 bg-[var(--bg-surface-hover)] border-t border-[var(--border-subtle)] space-y-2.5">
         {/* Quick Chips */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {PASSENGER_QUICK_CHIPS.map((chip, i) => (
@@ -169,7 +169,7 @@ export function PassengerDriverChat({
               key={i}
               type="button"
               onClick={() => handleSend(chip)}
-              className="flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-full bg-slate-800 hover:bg-violet-600/30 text-slate-300 hover:text-white border border-white/10 transition-colors"
+              className="flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--bg-surface-hover)] hover:bg-violet-600/30 text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)] transition-colors"
             >
               {chip}
             </button>
@@ -189,7 +189,7 @@ export function PassengerDriverChat({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Message chauffeur or dispatch…"
-            className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl px-3.5 py-2 text-xs text-[var(--input-text)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-violet-500/50"
           />
           <button
             type="submit"

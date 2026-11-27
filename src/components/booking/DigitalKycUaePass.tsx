@@ -165,12 +165,12 @@ export function DigitalKycUaePass({
   }, [uaePassProfile, ocrData, hasSignature, termsAccepted, signatureHash]);
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
       {/* ── Section Title ── */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Digital KYC, UAE Pass & Electronic Signatures (e-Sign)
           </span>
         </div>
@@ -186,7 +186,7 @@ export function DigitalKycUaePass({
             🇦🇪
           </div>
           <div>
-            <p className="text-sm font-bold text-white flex items-center gap-2">
+            <p className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
               UAE PASS Corporate Authentication
               {uaePassProfile && (
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
@@ -194,7 +194,7 @@ export function DigitalKycUaePass({
                 </span>
               )}
             </p>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-[var(--text-muted)]">
               {uaePassProfile
                 ? `Verified ID: ${uaePassProfile.emiratesId} · ${uaePassProfile.fullNameEn}`
                 : '1-click identity verification with official UAE National Digital ID'}
@@ -227,13 +227,13 @@ export function DigitalKycUaePass({
       </div>
 
       {/* ── 2. Document OCR Scanner ── */}
-      <div className="bg-slate-950/40 border border-white/5 rounded-2xl p-4 space-y-3">
+      <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-bold text-white flex items-center gap-1.5">
+          <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
             <FileText className="w-4 h-4 text-blue-400" />
             Document OCR Scanner (Emirates ID & Driving License)
           </p>
-          <span className="text-[10px] text-slate-400">Instant Field Extraction</span>
+          <span className="text-[10px] text-[var(--text-muted)]">Instant Field Extraction</span>
         </div>
 
         {/* Doc type selector tabs */}
@@ -246,7 +246,7 @@ export function DigitalKycUaePass({
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                 selectedDocType === doc && ocrData
                   ? 'bg-blue-600/30 border-blue-500 text-blue-300'
-                  : 'bg-slate-800/60 border-white/5 text-slate-400 hover:text-white'
+                  : 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               Scan {doc.replace('_', ' ')}
@@ -258,41 +258,41 @@ export function DigitalKycUaePass({
         {ocrData ? (
           <div className="bg-blue-950/30 border border-blue-500/30 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div>
-              <span className="text-[10px] text-slate-500 uppercase block">Doc Type</span>
-              <span className="font-semibold text-white">{ocrData.docType}</span>
+              <span className="text-[10px] text-[var(--text-faint)] uppercase block">Doc Type</span>
+              <span className="font-semibold text-[var(--text-main)]">{ocrData.docType}</span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-500 uppercase block">Number</span>
+              <span className="text-[10px] text-[var(--text-faint)] uppercase block">Number</span>
               <span className="font-mono font-bold text-blue-300">{ocrData.docNumber}</span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-500 uppercase block">Expiry Date</span>
+              <span className="text-[10px] text-[var(--text-faint)] uppercase block">Expiry Date</span>
               <span className="font-mono text-emerald-400">{ocrData.expiryDate}</span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-500 uppercase block">OCR Score</span>
-              <span className="font-mono text-slate-300">{(ocrData.confidenceScore * 100).toFixed(0)}% Match</span>
+              <span className="text-[10px] text-[var(--text-faint)] uppercase block">OCR Score</span>
+              <span className="font-mono text-[var(--text-muted)]">{(ocrData.confidenceScore * 100).toFixed(0)}% Match</span>
             </div>
           </div>
         ) : (
-          <div className="border border-dashed border-white/15 rounded-xl p-3 text-center text-xs text-slate-400">
+          <div className="border border-dashed border-[var(--border-subtle)] rounded-xl p-3 text-center text-xs text-[var(--text-muted)]">
             Click one of the document tabs above to run instant OCR extraction.
           </div>
         )}
       </div>
 
       {/* ── 3. Interactive e-Signature Pad ── */}
-      <div className="bg-slate-950/40 border border-white/5 rounded-2xl p-4 space-y-3">
+      <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <PenTool className="w-4 h-4 text-violet-400" />
-            <p className="text-xs font-bold text-white">Digital Handover e-Signature</p>
+            <p className="text-xs font-bold text-[var(--text-main)]">Digital Handover e-Signature</p>
           </div>
           {hasSignature && (
             <button
               type="button"
               onClick={clearSignature}
-              className="text-[11px] text-slate-400 hover:text-rose-400 transition-colors"
+              className="text-[11px] text-[var(--text-muted)] hover:text-rose-400 transition-colors"
             >
               Clear Signature ↺
             </button>
@@ -300,7 +300,7 @@ export function DigitalKycUaePass({
         </div>
 
         {/* Signature Canvas */}
-        <div className="relative border border-white/10 rounded-xl bg-slate-900 overflow-hidden">
+        <div className="relative border border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)] overflow-hidden">
           <canvas
             ref={canvasRef}
             width={500}
@@ -315,28 +315,28 @@ export function DigitalKycUaePass({
             className="w-full h-28 cursor-crosshair touch-none"
           />
           {!hasSignature && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-xs text-slate-600">
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-xs text-[var(--text-faint)]">
               ✍️ Sign with mouse or fingertip inside this box
             </div>
           )}
         </div>
 
         {/* Terms acceptance checkbox */}
-        <label className="flex items-start gap-2.5 text-xs text-slate-300 cursor-pointer pt-1">
+        <label className="flex items-start gap-2.5 text-xs text-[var(--text-muted)] cursor-pointer pt-1">
           <input
             type="checkbox"
             checked={termsAccepted}
             onChange={(e) => setTermsAccepted(e.target.checked)}
-            className="mt-0.5 rounded border-white/20 bg-slate-800 text-violet-600 focus:ring-0"
+            className="mt-0.5 rounded border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-violet-600 focus:ring-0"
           />
-          <span className="text-[11px] leading-relaxed text-slate-400">
+          <span className="text-[11px] leading-relaxed text-[var(--text-muted)]">
             I agree to the UAE FTA & RTA certified vehicle rental terms, insurance policy liability, and digital handover obligations.
           </span>
         </label>
 
         {/* Cryptographic SHA-256 seal stamp */}
         {signatureHash && (
-          <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+          <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[10px] text-[var(--text-faint)] font-mono">
             <span>SHA-256 Seal:</span>
             <span className="text-violet-400 truncate max-w-xs">{signatureHash}</span>
           </div>

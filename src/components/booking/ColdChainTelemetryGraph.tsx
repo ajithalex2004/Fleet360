@@ -141,22 +141,22 @@ export function ColdChainTelemetryGraph({
   const alertThresholdY = getY(profile.targetBand.alertThresholdC);
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
       {/* Top Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <div className="flex items-center gap-2">
           <ThermometerSnowflake className="w-4 h-4 text-cyan-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Live IoT Telematics & Continuous In-Transit Cold-Chain Graph
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[10px] text-slate-400">
+          <label className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
             <Layers className="w-3.5 h-3.5 text-cyan-400" />
             <select
               value={bandKey}
               onChange={(e) => handleBandChange(e.target.value)}
-              className="bg-slate-950 border border-white/15 rounded-lg px-2 py-1 text-[10px] text-white font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-2 py-1 text-[10px] text-[var(--text-main)] font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500"
             >
               {Object.entries(COLD_CHAIN_TARGET_BANDS).map(([key, band]) => (
                 <option key={key} value={key}>
@@ -174,8 +174,8 @@ export function ColdChainTelemetryGraph({
       {/* Real-Time Sensor Telemetry HUD */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Gauge 1: Current Temperature */}
-        <div className="bg-slate-950/80 border border-cyan-500/30 rounded-xl p-3.5 space-y-1">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+        <div className="bg-[var(--bg-surface-hover)] border border-cyan-500/30 rounded-xl p-3.5 space-y-1">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider block">
             Cargo Box Temp
           </span>
           <div className="flex items-baseline gap-1">
@@ -184,40 +184,40 @@ export function ColdChainTelemetryGraph({
             </span>
             <span className="text-[10px] text-emerald-400 font-bold">Stable</span>
           </div>
-          <span className="text-[10px] text-slate-500 block font-mono">
+          <span className="text-[10px] text-[var(--text-faint)] block font-mono">
             Target: {profile.targetBand.minTempC}°C to {profile.targetBand.maxTempC}°C
           </span>
         </div>
 
         {/* Gauge 2: Sensor Health */}
-        <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3.5 space-y-1">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-1">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider block">
             Wireless BLE Probe
           </span>
-          <div className="flex items-center gap-2 text-white text-xs font-bold pt-1">
+          <div className="flex items-center gap-2 text-[var(--text-main)] text-xs font-bold pt-1">
             <Wifi className="w-3.5 h-3.5 text-emerald-400" />
             <span>Signal: -62 dBm</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+          <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] font-mono">
             <Battery className="w-3.5 h-3.5 text-emerald-400" />
             <span>Battery: {profile.sensorBatteryPercent}%</span>
           </div>
         </div>
 
         {/* Gauge 3: Reefer Unit */}
-        <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3.5 space-y-1">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-1">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider block">
             ThermoKing Reefer
           </span>
           <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 pt-1">
             <Activity className="w-3.5 h-3.5 text-emerald-400" /> Compressor Cooling
           </span>
-          <span className="text-[10px] text-slate-400 block font-mono">Diesel Standby (Active)</span>
+          <span className="text-[10px] text-[var(--text-muted)] block font-mono">Diesel Standby (Active)</span>
         </div>
 
         {/* Gauge 4: Compliance Score */}
-        <div className="bg-slate-950/80 border border-white/10 rounded-xl p-3.5 space-y-1">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+        <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-1">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider block">
             GDP Quality Score
           </span>
           <span className="text-2xl font-mono font-bold text-emerald-400 block">
@@ -230,9 +230,9 @@ export function ColdChainTelemetryGraph({
       </div>
 
       {/* SVG Interactive In-Transit Temperature Curve */}
-      <div className="bg-slate-950/90 border border-white/10 rounded-xl p-4 space-y-2">
+      <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-bold text-slate-300 flex items-center gap-1.5">
+          <span className="font-bold text-[var(--text-muted)] flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-cyan-400" />
             Continuous In-Transit Temperature Curve (Last 72 Minutes)
           </span>
@@ -319,10 +319,10 @@ export function ColdChainTelemetryGraph({
 
         {/* Hovered / Selected Data Point Details */}
         {selectedPoint ? (
-          <div className="bg-slate-900 border border-cyan-500/30 rounded-lg p-2 flex items-center justify-between text-xs text-slate-300">
+          <div className="bg-[var(--bg-surface)] border border-cyan-500/30 rounded-lg p-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <strong className="text-white font-mono">{selectedPoint.formattedTime}</strong>
+              <Clock className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+              <strong className="text-[var(--text-main)] font-mono">{selectedPoint.formattedTime}</strong>
             </span>
             <span>
               Temp: <strong className="text-cyan-300 font-mono">{selectedPoint.temperatureC}°C</strong>
@@ -333,30 +333,30 @@ export function ColdChainTelemetryGraph({
               ) : (
                 <DoorClosed className="w-3.5 h-3.5 text-emerald-400" />
               )}
-              <strong className="text-white">{selectedPoint.doorStatus}</strong>
+              <strong className="text-[var(--text-main)]">{selectedPoint.doorStatus}</strong>
             </span>
             <span>
-              Humidity: <strong className="text-white font-mono">{selectedPoint.humidityPercent}%</strong>
+              Humidity: <strong className="text-[var(--text-main)] font-mono">{selectedPoint.humidityPercent}%</strong>
             </span>
           </div>
         ) : (
-          <p className="text-[10px] text-slate-500 text-center">
+          <p className="text-[10px] text-[var(--text-faint)] text-center">
             Tip: Click any node along the curve to view exact minute-by-minute telemetry.
           </p>
         )}
       </div>
 
       {/* Simulated Incident Testing Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 flex items-center gap-1">
+          <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             Live Simulator:
           </span>
           <button
             type="button"
             onClick={handleSimulateDoorOpen}
-            className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-1.5 transition-colors"
+            className="text-[11px] bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] px-3 py-1.5 rounded-xl border border-[var(--border-subtle)] flex items-center gap-1.5 transition-colors"
           >
             <DoorOpen className="w-3.5 h-3.5 text-orange-400" />
             Simulate Dock Door Open (+2.2°C)
@@ -393,14 +393,14 @@ export function ColdChainTelemetryGraph({
       ══════════════════════════════════════════════════════════════ */}
       {showCertificateModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/20 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl text-white">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-cyan-600 flex items-center justify-center text-white font-bold text-lg">
                   ❄️
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-[var(--text-main)]">
                     Good Distribution Practice (GDP) Cold-Chain Audit
                   </h3>
                   <p className="text-xs text-cyan-400 font-mono">Trip: {profile.tripReference}</p>
@@ -408,41 +408,41 @@ export function ColdChainTelemetryGraph({
               </div>
               <button
                 onClick={() => setShowCertificateModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm"
               >
                 ✕ Close
               </button>
             </div>
 
-            <div className="bg-slate-950 border border-white/15 rounded-xl p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3 border-b border-white/10 pb-3">
+            <div className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3 border-b border-[var(--border-subtle)] pb-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block font-bold">Vehicle / Reefer</span>
-                  <strong className="text-white block">{profile.vehiclePlate}</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">Sensor: {profile.sensorId}</span>
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block font-bold">Vehicle / Reefer</span>
+                  <strong className="text-[var(--text-main)] block">{profile.vehiclePlate}</strong>
+                  <span className="text-[10px] text-[var(--text-muted)] font-mono">Sensor: {profile.sensorId}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-500 uppercase block font-bold">Compliance Status</span>
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block font-bold">Compliance Status</span>
                   <span className="text-emerald-400 font-bold block text-sm">
                     {profile.gdpStatus} ({profile.complianceScorePercent}%)
                   </span>
-                  <span className="text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                  <span className="text-[10px] text-[var(--text-muted)] flex items-center justify-end gap-1">
                     <Building2 className="w-3 h-3" /> Dubai Foodwatch & MOHAP Certified
                   </span>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-slate-900/60 p-2.5 rounded-lg">
-                  <span className="text-[10px] text-slate-400 block">Average In-Transit</span>
+                <div className="bg-[var(--bg-surface)] p-2.5 rounded-lg">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Average In-Transit</span>
                   <strong className="text-cyan-300 font-mono text-sm">{profile.averageTempC}°C</strong>
                 </div>
-                <div className="bg-slate-900/60 p-2.5 rounded-lg">
-                  <span className="text-[10px] text-slate-400 block">Min Recorded</span>
+                <div className="bg-[var(--bg-surface)] p-2.5 rounded-lg">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Min Recorded</span>
                   <strong className="text-blue-300 font-mono text-sm">{profile.minTempC}°C</strong>
                 </div>
-                <div className="bg-slate-900/60 p-2.5 rounded-lg">
-                  <span className="text-[10px] text-slate-400 block">Max Recorded</span>
+                <div className="bg-[var(--bg-surface)] p-2.5 rounded-lg">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Max Recorded</span>
                   <strong className="text-orange-300 font-mono text-sm">{profile.maxTempC}°C</strong>
                 </div>
               </div>
@@ -455,7 +455,7 @@ export function ColdChainTelemetryGraph({
                   </span>
                   <span>Tamper-Proof Audit Record</span>
                 </div>
-                <p className="font-mono text-slate-400 break-all">{profile.certificateSeal}</p>
+                <p className="font-mono text-[var(--text-muted)] break-all">{profile.certificateSeal}</p>
               </div>
             </div>
 
@@ -464,14 +464,14 @@ export function ColdChainTelemetryGraph({
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold"
                 >
                   <Printer className="w-4 h-4" /> Print Certificate PDF
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadCertificate}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-main)] text-xs font-semibold"
                 >
                   <Download className="w-4 h-4" /> Download Certificate JSON
                 </button>
