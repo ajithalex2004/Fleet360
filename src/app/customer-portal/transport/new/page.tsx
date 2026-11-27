@@ -7,13 +7,18 @@
  * problems field by field.
  */
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Truck, Send, Loader2, Calculator } from 'lucide-react';
 import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, PrimaryButton, SecondaryButton, TextAreaInput,
 } from '@/components/ui/form-kit';
 import { DynamicRequestForm } from '@/components/forms/DynamicRequestForm';
+import {
+  BookingDocumentDropzone,
+  type UploadedBookingDocument,
+  type DocumentUploadSlot,
+} from '@/components/booking/BookingDocumentDropzone';
 import type { RequestFormDef, RequestValues } from '@/lib/transport-catalog/form-schema';
 import { canRaiseRequests, type TransportCategory } from '@/lib/customer-portal/catalog';
 import { usePortal } from '../../portal-shell';
@@ -31,13 +36,83 @@ function NewTransportRequest() {
   const category = params.get('category') as TransportCategory | null;
   const [loaded, setLoaded] = useState<LoadedForm | null>(null);
   const [values, setValues] = useState<RequestValues>({});
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedBookingDocument[]>([]);
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const logisticsUploadSlots = useMemo<DocumentUploadSlot[]>(
+    () => [
+      {
+        docType: 'commercial-invoice',
+        label: 'Commercial Invoice',
+        description: 'PDF, XLSX, DOCX, or Image (for shipper & customs valuation)',
+        accept: '.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.docx,.doc',
+        maxMb: 15,
+      },
+      {
+        docType: 'packing-list',
+        label: 'Packing List / Cargo Manifest',
+        description: 'PDF, XLSX, CSV, or Image (itemized pallet weights & dimensions)',
+        accept: '.pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.txt',
+        maxMb: 15,
+      },
+      {
+        docType: 'msds',
+        label: 'MSDS / Dangerous Goods Sheet',
+        description: 'Material Safety Data Sheet (required when Hazmat is declared)',
+        accept: '.pdf,.png,.jpg,.jpeg,.webp,.docx,.doc',
+        maxMb: 15,
+        highlighted: values.isHazmat === true,
+        highlightNote: 'Hazmat declared — attach official MSDS / SDS document for carrier safety clearance',
+      },
+      {
+        docType: 'customs-permit',
+        label: 'BOL Instructions / Customs Permit',
+        description: 'Bill of Lading instructions, POA, or GCC import/export permit',
+        accept: '.pdf,.png,.jpg,.jpeg,.webp,.docx,.doc',
+        maxMb: 15,
+        highlighted: values.customsClearance === true,
+        highlightNote: 'Customs brokerage enabled — attach commercial permit or clearance instructions',
+      },
+    ],
+    [values.isHazmat, values.customsClearance]
+  );
+
+  const schoolBusUploadSlots = useMemo<DocumentUploadSlot[]>(
+    () => [
+      {
+        docType: 'student-photo',
+        label: 'Student Passport-Style Photo',
+        description: 'JPG, PNG, or WebP — printed on RFID bus boarding card & driver roster',
+        accept: '.jpg,.jpeg,.png,.webp',
+        maxMb: 5,
+        imagePreview: true,
+        highlighted: true,
+      },
+      {
+        docType: 'parent-emirates-id',
+        label: 'Parent / Guardian Emirates ID Copy',
+        description: 'PDF, JPG, or PNG (front & back copy for RTA guardian verification)',
+        accept: '.pdf,.jpg,.jpeg,.png,.webp',
+        maxMb: 10,
+      },
+      {
+        docType: 'medical-certificate',
+        label: 'Medical / Allergy Action Plan',
+        description: 'Doctor note or EpiPen protocol shared confidentially with bus attendant',
+        accept: '.pdf,.jpg,.jpeg,.png,.webp',
+        maxMb: 10,
+        highlighted: values.epiPenOnBoard === true || !!String(values.medicalConditions ?? '').trim(),
+        highlightNote: 'Medical condition / EpiPen noted — attach emergency care plan for bus attendant',
+      },
+    ],
+    [values.epiPenOnBoard, values.medicalConditions]
+  );
+
   useEffect(() => {
-    setLoaded(null); setErrors({}); setErr(null);
+    setLoaded(null); setUploadedDocs([]); setErrors({}); setErr(null);
     if (!category) return;
     void (async () => {
       const res = await fetch(`/api/customer-portal/transport/forms/${category}`, { cache: 'no-store' });
@@ -58,7 +133,12 @@ function NewTransportRequest() {
     try {
       const res = await fetch('/api/customer-portal/transport/requests', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: loaded.category.category, values, customerNote: note }),
+        body: JSON.stringify({
+          category: loaded.category.category,
+          values,
+          customerNote: note,
+          attachments: uploadedDocs,
+        }),
       });
       const d = await res.json().catch(() => null);
       if (!res.ok || !d?.ok) {
@@ -96,6 +176,28 @@ function NewTransportRequest() {
           )}
           <DynamicRequestForm form={loaded.form} values={values} errors={errors}
             onChange={(k, v) => { setValues((p) => ({ ...p, [k]: v })); setErrors((e) => { const n = { ...e }; delete n[k]; return n; }); }} />
+          {loaded.category.category === 'LOGISTICS' && (
+            <BookingDocumentDropzone
+              domain="logistics"
+              title="Shipping & Compliance Documents"
+              subtitle="Attach commercial invoice, packing list, MSDS, or customs permits — stored privately in cloud storage"
+              slots={logisticsUploadSlots}
+              documents={uploadedDocs}
+              onChange={setUploadedDocs}
+              uploadEndpoint="/api/customer-portal/transport/uploads"
+            />
+          )}
+          {loaded.category.category === 'SCHOOL_BUS' && (
+            <BookingDocumentDropzone
+              domain="school-bus"
+              title="Student Photo & Guardian Verification Documents"
+              subtitle="Upload student photo for RFID boarding card, parent Emirates ID copy, and any medical action plan"
+              slots={schoolBusUploadSlots}
+              documents={uploadedDocs}
+              onChange={setUploadedDocs}
+              uploadEndpoint="/api/customer-portal/transport/uploads"
+            />
+          )}
           {loaded.category.category === 'LOGISTICS' && <LogisticsQuote values={values} />}
           <FormSection title="Note to the operations team" columns={1}>
             <FormField label="Anything else we should know" hint="Optional">

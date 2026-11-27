@@ -22,6 +22,7 @@ import { customerTransportCategories, getTenantCategory } from '@/lib/transport-
 import { validateRequestValues, type RequestValues } from '@/lib/transport-catalog/form-schema';
 import { createShippingRequest } from '@/lib/logistics/domain';
 import { nextRentalSerial } from '@/lib/rental/locks';
+import { normalizeStorageKey, UPLOAD_URL_PREFIX } from '@/lib/storage';
 
 export type TransportRequestStatus =
   | 'PENDING_APPROVAL' | 'SUBMITTED' | 'CONFIRMED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
@@ -29,6 +30,18 @@ export type TransportRequestStatus =
 export const ACTIVE_TRANSPORT_STATUSES: TransportRequestStatus[] = ['PENDING_APPROVAL', 'SUBMITTED', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'];
 
 export interface LifecycleEntry { status: TransportRequestStatus; at: string; by: string; note?: string }
+
+export interface TransportRequestAttachment {
+  url: string;
+  key: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  domain: 'logistics' | 'school-bus';
+  docType: string;
+  label: string;
+  uploadedAt?: string;
+}
 
 /** What the customer sees (no staff note). */
 export interface CustomerTransportRequest {
@@ -38,6 +51,7 @@ export interface CustomerTransportRequest {
   categoryTitle: string;
   status: TransportRequestStatus;
   values: RequestValues;
+  attachments: TransportRequestAttachment[];
   pickup: string | null;
   dropoff: string | null;
   serviceDate: string | null;
@@ -80,11 +94,64 @@ export class TransportRequestError extends Error {
   constructor(message: string, readonly status = 400, readonly fieldErrors?: Record<string, string>) { super(message); }
 }
 
+function sanitizeAttachments(
+  raw: unknown,
+  tenantId: string,
+  customerId: string,
+): TransportRequestAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const requiredPrefix = `customer-portal/${tenantId}/${customerId}/`;
+  const out: TransportRequestAttachment[] = [];
+  for (const item of raw.slice(0, 10)) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const safeKey = typeof rec.key === 'string' ? normalizeStorageKey(rec.key) : null;
+    if (!safeKey || !safeKey.startsWith(requiredPrefix)) continue;
+    const domain = rec.domain === 'logistics' || rec.domain === 'school-bus' ? rec.domain : null;
+    if (!domain) continue;
+    out.push({
+      url: `${UPLOAD_URL_PREFIX}${safeKey}`,
+      key: safeKey,
+      originalName: typeof rec.originalName === 'string' ? rec.originalName.slice(0, 200) : 'Document',
+      mimeType: typeof rec.mimeType === 'string' ? rec.mimeType.slice(0, 120) : 'application/octet-stream',
+      size: typeof rec.size === 'number' && Number.isFinite(rec.size) && rec.size >= 0 ? rec.size : 0,
+      domain,
+      docType: typeof rec.docType === 'string' ? rec.docType.slice(0, 64) : 'document',
+      label: typeof rec.label === 'string' ? rec.label.slice(0, 120) : 'Attachment',
+      uploadedAt: typeof rec.uploadedAt === 'string' ? rec.uploadedAt : undefined,
+    });
+  }
+  return out;
+}
+
+function splitFormValues(raw: Record<string, unknown> | null): {
+  values: RequestValues;
+  attachments: TransportRequestAttachment[];
+} {
+  if (!raw || typeof raw !== 'object') return { values: {}, attachments: [] };
+  const rawAttachments = (raw as { _attachments?: unknown })._attachments;
+  const attachments: TransportRequestAttachment[] = Array.isArray(rawAttachments)
+    ? (rawAttachments.filter(
+        (a): a is TransportRequestAttachment =>
+          !!a && typeof a === 'object' && typeof (a as TransportRequestAttachment).url === 'string',
+      ))
+    : [];
+  const values: RequestValues = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === '_attachments') continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      values[k] = v;
+    }
+  }
+  return { values, attachments };
+}
+
 function toCustomer(r: Row): CustomerTransportRequest {
   const category = (isTransportCategory(r.category) ? r.category : 'RAC') as TransportCategory;
+  const { values, attachments } = splitFormValues(r.form_values as Record<string, unknown> | null);
   return {
     id: r.id, requestNo: r.request_no, category, categoryTitle: TRANSPORT_CATEGORY_LABEL[category], status: r.status,
-    values: r.form_values ?? {}, pickup: r.pickup, dropoff: r.dropoff, serviceDate: r.service_date, serviceTime: r.service_time,
+    values, attachments, pickup: r.pickup, dropoff: r.dropoff, serviceDate: r.service_date, serviceTime: r.service_time,
     vehicleCategory: r.vehicle_category, requestedByName: r.requested_by_name,
     driver: r.assigned_driver_name ? { name: r.assigned_driver_name, phone: r.assigned_driver_phone } : null,
     vehicle: r.assigned_vehicle, routed: r.routed_module ? { module: r.routed_module, ref: r.routed_record_ref } : null,
@@ -125,7 +192,7 @@ async function nextRequestNo(tx: TxClient, tenantId: string, customerCode: strin
 
 /** Logistics form → Logistics shipping request (the operator's review inbox). */
 async function routeLogistics(tx: TxClient, tenantId: string, req: Row, actorId: string | null) {
-  const v = req.form_values ?? {};
+  const { values: v, attachments } = splitFormValues(req.form_values as Record<string, unknown> | null);
   const at = (d: unknown, t: unknown) => (str(d) ? `${str(d)}T${str(t) ?? '00:00'}:00+04:00` : null);
   const shipmentType = str(v.shipmentType)?.split(' ')[0] ?? null;
   const created = await createShippingRequest({
@@ -144,7 +211,12 @@ async function routeLogistics(tx: TxClient, tenantId: string, req: Row, actorId:
     goodsDescription: str(v.cargo),
     specialInstructions: str(v.notes),
     referenceNo: req.request_no,
-    metadata: { customerTransportRequestId: req.id, customerTransportRequestNo: req.request_no, formValues: v },
+    metadata: {
+      customerTransportRequestId: req.id,
+      customerTransportRequestNo: req.request_no,
+      formValues: v,
+      ...(attachments.length > 0 ? { attachments } : {}),
+    },
   }, tx);
   if (!created) throw new Error('Logistics did not return the shipping request');
   return { module: 'LOGISTICS', id: created.id, ref: created.requestNo };
@@ -272,7 +344,7 @@ async function saveRouting(tx: TxClient, tenantId: string, id: string, routed: {
 
 export async function createTransportRequest(args: {
   tenantId: string; customerId: string; user: { id: string; name: string };
-  category: unknown; values: unknown; customerNote?: unknown;
+  category: unknown; values: unknown; customerNote?: unknown; attachments?: unknown;
 }): Promise<CustomerTransportRequest> {
   const { tenantId, customerId, user } = args;
   if (!isTransportCategory(args.category)) throw new TransportRequestError('Unknown Transport category.');
@@ -284,6 +356,9 @@ export async function createTransportRequest(args: {
   const cat = await getTenantCategory(tenantId, category);
   const check = validateRequestValues(cat.effectiveForm, args.values);
   if (!check.ok) throw new TransportRequestError('Some answers need attention.', 400, check.errors);
+  const safeAttachments = sanitizeAttachments(args.attachments, tenantId, customerId);
+  const storedFormValues: Record<string, unknown> =
+    safeAttachments.length > 0 ? { ...check.values, _attachments: safeAttachments } : { ...check.values };
   const note = str(args.customerNote)?.slice(0, 1000) ?? null;
   const status: TransportRequestStatus = cat.approvalRequired ? 'PENDING_APPROVAL' : 'SUBMITTED';
   const s = summary(check.values);
@@ -298,7 +373,7 @@ export async function createTransportRequest(args: {
           vehicle_category, requested_by_user_id, requested_by_name, customer_note, lifecycle)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::date, $10, $11, $12, $13, $14, $15::jsonb)
        RETURNING ${COLS}`,
-      tenantId, customerId, requestNo, category, status, JSON.stringify(check.values), s.pickup, s.dropoff, s.serviceDate,
+      tenantId, customerId, requestNo, category, status, JSON.stringify(storedFormValues), s.pickup, s.dropoff, s.serviceDate,
       s.serviceTime, s.vehicleCategory, user.id, user.name, note, JSON.stringify(lifecycle),
     );
     if (status === 'SUBMITTED') {

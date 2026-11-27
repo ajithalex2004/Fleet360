@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MapPin, Navigation, Clock, ShieldAlert, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapPin, Navigation, Sparkles } from 'lucide-react';
 import { loadGoogleMaps } from '@/lib/google-maps-loader';
 
 export interface RouteStats {
@@ -24,6 +24,8 @@ interface InteractiveRoutePickerProps {
   originPlaceholder?: string;
   destinationPlaceholder?: string;
   showMap?: boolean;
+  hideDestination?: boolean;
+  destinationRequired?: boolean;
 }
 
 // ── UAE Common Landmarks Database (Fast Autocomplete & Fallback) ─────────────
@@ -100,6 +102,8 @@ export function InteractiveRoutePicker({
   originPlaceholder = 'Search landmark, street, building, or Makani number…',
   destinationPlaceholder = 'Search destination address, hotel, or terminal…',
   showMap = true,
+  hideDestination = false,
+  destinationRequired = true,
 }: InteractiveRoutePickerProps) {
   const originInputRef = useRef<HTMLInputElement>(null);
   const destInputRef = useRef<HTMLInputElement>(null);
@@ -249,18 +253,18 @@ export function InteractiveRoutePicker({
   return (
     <div className="space-y-4">
       {/* ── Input Grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${hideDestination ? '' : 'md:grid-cols-2'} gap-4`}>
         {/* Origin */}
         <div className="relative">
-          <label className="block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block animate-pulse" />
-              {originLabel} <span className="text-cyan-400">*</span>
+              <span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" />
+              {originLabel} <span className="text-cyan-500">*</span>
             </span>
-            {originCoords && <span className="text-[10px] text-cyan-300 font-mono">📍 GPS Synced</span>}
+            {originCoords && <span className="text-[10px] text-cyan-500 font-mono">📍 GPS Synced</span>}
           </label>
           <div className="relative">
-            <MapPin className="w-4 h-4 text-cyan-400 absolute left-3.5 top-3.5" />
+            <MapPin className="w-4 h-4 text-cyan-500 absolute left-3.5 top-3.5" />
             <input
               ref={originInputRef}
               type="text"
@@ -268,24 +272,24 @@ export function InteractiveRoutePicker({
               onChange={(e) => handleOriginType(e.target.value)}
               placeholder={originPlaceholder}
               required
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
+              className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/40 transition-all"
             />
           </div>
 
           {/* Fallback Autocomplete Suggestions */}
           {originSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
+            <div className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-xl overflow-hidden divide-y divide-[var(--border-subtle)]">
               {originSuggestions.map((item) => (
                 <button
                   key={item.name}
                   type="button"
                   onClick={() => selectOriginLandmark(item)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/15 transition-colors flex items-start gap-2.5 group"
+                  className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/10 transition-colors flex items-start gap-2.5 group"
                 >
-                  <MapPin className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 text-cyan-500 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
-                    <p className="text-[11px] text-slate-400">{item.area}</p>
+                    <p className="text-xs font-bold text-[var(--text-main)] group-hover:text-cyan-500">{item.name}</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{item.area}</p>
                   </div>
                 </button>
               ))}
@@ -294,93 +298,96 @@ export function InteractiveRoutePicker({
         </div>
 
         {/* Destination */}
-        <div className="relative">
-          <label className="block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-              {destinationLabel} <span className="text-cyan-400">*</span>
-            </span>
-            {destCoords && <span className="text-[10px] text-cyan-300 font-mono">🎯 GPS Synced</span>}
-          </label>
+        {!hideDestination && (
           <div className="relative">
-            <Navigation className="w-4 h-4 text-cyan-400 absolute left-3.5 top-3.5" />
-            <input
-              ref={destInputRef}
-              type="text"
-              value={destination}
-              onChange={(e) => handleDestType(e.target.value)}
-              placeholder={destinationPlaceholder}
-              required
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
-            />
-          </div>
-
-          {/* Fallback Autocomplete Suggestions */}
-          {destSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
-              {destSuggestions.map((item) => (
-                <button
-                  key={item.name}
-                  type="button"
-                  onClick={() => selectDestLandmark(item)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/15 transition-colors flex items-start gap-2.5 group"
-                >
-                  <Navigation className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
-                    <p className="text-[11px] text-slate-400">{item.area}</p>
-                  </div>
-                </button>
-              ))}
+            <label className="block text-xs font-semibold text-[var(--text-main)] mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                {destinationLabel}{' '}
+                {destinationRequired && <span className="text-cyan-500">*</span>}
+              </span>
+              {destCoords && <span className="text-[10px] text-cyan-500 font-mono">🎯 GPS Synced</span>}
+            </label>
+            <div className="relative">
+              <Navigation className="w-4 h-4 text-blue-500 absolute left-3.5 top-3.5" />
+              <input
+                ref={destInputRef}
+                type="text"
+                value={destination}
+                onChange={(e) => handleDestType(e.target.value)}
+                placeholder={destinationPlaceholder}
+                required={destinationRequired}
+                className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-4 py-3 text-[var(--text-main)] text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/40 transition-all"
+              />
             </div>
-          )}
-        </div>
+
+            {/* Fallback Autocomplete Suggestions */}
+            {destSuggestions.length > 0 && (
+              <div className="absolute z-30 left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-xl overflow-hidden divide-y divide-[var(--border-subtle)]">
+                {destSuggestions.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => selectDestLandmark(item)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/10 transition-colors flex items-start gap-2.5 group"
+                  >
+                    <Navigation className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-[var(--text-main)] group-hover:text-cyan-500">{item.name}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{item.area}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Real-time Route Calculation Widget ── */}
-      {stats && (
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl shadow-black/80">
-          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+      {!hideDestination && stats && (
+        <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3 border-b border-[var(--border-subtle)] pb-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-cyan-500" />
+              <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
                 Geospatial Route Intelligence
               </span>
             </div>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30 font-mono font-bold">
               ✓ Route Calculated
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Distance</p>
-              <p className="text-base font-extrabold text-cyan-400 font-mono">{stats.distanceKm} km</p>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Distance</p>
+              <p className="text-base font-extrabold text-cyan-600 dark:text-cyan-400 font-mono">{stats.distanceKm} km</p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Est. Duration</p>
-              <p className="text-base font-extrabold text-white font-mono">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Est. Duration</p>
+              <p className="text-base font-extrabold text-[var(--text-main)] font-mono">
                 {stats.durationMins >= 60
                   ? `${Math.floor(stats.durationMins / 60)}h ${stats.durationMins % 60}m`
                   : `${stats.durationMins} mins`}
               </p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Salik Gates</p>
-              <p className="text-base font-extrabold text-emerald-400 font-mono">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Salik Gates</p>
+              <p className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
                 {stats.salikTollsCount > 0 ? `${stats.salikTollsCount} Gates` : '0 Gates'}
               </p>
             </div>
-            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
-              <p className="text-[11px] text-slate-400 uppercase font-semibold">Toll Surcharges</p>
-              <p className="text-base font-extrabold text-cyan-400 font-mono">AED {stats.salikTollsAed}</p>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-2.5">
+              <p className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Toll Surcharges</p>
+              <p className="text-base font-extrabold text-cyan-600 dark:text-cyan-400 font-mono">AED {stats.salikTollsAed}</p>
             </div>
           </div>
         </div>
       )}
 
       {/* ── Interactive Visual Map Preview ── */}
-      {showMap && (
+      {!hideDestination && showMap && originCoords && destCoords && (
         <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">

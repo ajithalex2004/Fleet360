@@ -18,6 +18,7 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { normalizeStorageKey, readStoredFile } from '@/lib/storage';
 import { authorizeFileAccess, type FileCaller } from '@/lib/storage/file-access';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
+import { requireCustomerPortal } from '@/lib/customer-portal/session';
 import { logAudit } from '@/lib/audit';
 import { isSuperAdmin } from '@/lib/admin-access';
 
@@ -28,6 +29,12 @@ const CONTENT_TYPES: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.doc': 'application/msword',
+  '.xls': 'application/vnd.ms-excel',
+  '.csv': 'text/csv; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
 };
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
@@ -52,6 +59,12 @@ async function resolveCaller(
     const ctx = await requireLeasingPortal(req);
     if (!(ctx instanceof NextResponse)) {
       return { kind: 'leasing-portal', tenantId: ctx.tenantId, lesseeId: ctx.lesseeId };
+    }
+  }
+  if (req.cookies.get('customer-portal-session')) {
+    const ctx = await requireCustomerPortal(req, { portal: 'TRANSPORT' });
+    if (!(ctx instanceof NextResponse)) {
+      return { kind: 'customer-portal', tenantId: ctx.tenantId, customerId: ctx.customerId, userId: ctx.user.id };
     }
   }
   return { kind: 'anonymous' };
@@ -85,10 +98,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
       entityType: 'StoredFile',
       entityName: key,
       action: 'VIEW',
-      userId: caller.kind === 'staff' ? caller.userId : undefined,
+      userId: caller.kind === 'staff' || caller.kind === 'customer-portal' ? caller.userId : undefined,
       details: caller.kind === 'staff'
         ? `Opened ${decision.category} file ${key}`
-        : `Leasing portal (lessee ${caller.lesseeId}) opened ${decision.category} file ${key}`,
+        : caller.kind === 'customer-portal'
+          ? `Customer portal (customer ${caller.customerId}) opened ${decision.category} file ${key}`
+          : `Leasing portal (lessee ${caller.lesseeId}) opened ${decision.category} file ${key}`,
     });
   }
 

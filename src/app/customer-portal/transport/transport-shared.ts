@@ -5,6 +5,18 @@ import type { TransportCategory } from '@/lib/customer-portal/catalog';
 export type TransportStatus =
   | 'PENDING_APPROVAL' | 'SUBMITTED' | 'CONFIRMED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 
+export interface TransportRequestAttachment {
+  url: string;
+  key: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  domain: 'logistics' | 'school-bus';
+  docType: string;
+  label: string;
+  uploadedAt?: string;
+}
+
 export interface TransportRequest {
   id: string;
   requestNo: string;
@@ -12,6 +24,7 @@ export interface TransportRequest {
   categoryTitle: string;
   status: TransportStatus;
   values: Record<string, string | number | boolean>;
+  attachments?: TransportRequestAttachment[];
   pickup: string | null;
   dropoff: string | null;
   serviceDate: string | null;

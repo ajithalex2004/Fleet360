@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Calculator, CreditCard, Building2, AlertCircle, CheckCircle2, Receipt, ShieldCheck } from 'lucide-react';
+import { Building2, AlertCircle, Receipt, ShieldCheck } from 'lucide-react';
 import {
   calculateInstantQuotation,
   QuotationResponse,
@@ -22,6 +22,9 @@ interface InstantPricingCostCenterProps {
   vehicleCategory?: string;
   distanceKm?: number;
   salikTollsAed?: number;
+  rentalDays?: number;
+  quantity?: number;
+  addOnsAed?: number;
   costCenter?: string;
   projectCode?: string;
   billingMethod?: string;
@@ -49,6 +52,9 @@ export function InstantPricingCostCenter({
   vehicleCategory,
   distanceKm = 0,
   salikTollsAed = 0,
+  rentalDays,
+  quantity,
+  addOnsAed = 0,
   costCenter = 'CC-OPS-3003',
   projectCode = '',
   billingMethod = 'CORPORATE_ACCOUNT',
@@ -60,11 +66,18 @@ export function InstantPricingCostCenter({
   const [quotation, setQuotation] = useState<QuotationResponse | null>(null);
 
   useEffect(() => {
+    setSelectedCostCenter(costCenter);
+  }, [costCenter]);
+
+  useEffect(() => {
     const quote = calculateInstantQuotation({
       serviceType,
       vehicleCategory,
       distanceKm,
       salikTollsAed,
+      rentalDays,
+      quantity,
+      addOnsAed,
     });
     setQuotation(quote);
 
@@ -86,6 +99,9 @@ export function InstantPricingCostCenter({
     vehicleCategory,
     distanceKm,
     salikTollsAed,
+    rentalDays,
+    quantity,
+    addOnsAed,
     selectedCostCenter,
     selectedProjectCode,
     selectedBillingMethod,
@@ -97,66 +113,82 @@ export function InstantPricingCostCenter({
   const effectiveCap = currentCc?.budgetCap || quotation.budgetThresholdAed;
   const isOverBudget = quotation.totalFareAed > effectiveCap;
 
+  const baseLabel =
+    serviceType === 'RENTAL' && rentalDays
+      ? `Vehicle Rental (${rentalDays} ${rentalDays === 1 ? 'day' : 'days'})`
+      : serviceType === 'STAFF_TRANSPORT'
+      ? 'Shuttle Pass / Service Allocation'
+      : serviceType === 'LOGISTICS'
+      ? 'Base Freight & Dispatch Charge'
+      : 'Base Chauffeur & Dispatch Fee';
+
   return (
     <div className="space-y-4">
       {/* ── Live Itemized Fare Receipt Card ── */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/40 border border-violet-500/30 rounded-2xl p-5 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 shadow-sm">
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3 mb-4">
           <div className="flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-violet-400" />
-            <span className="text-xs font-bold text-white uppercase tracking-wider">
-              Instant Corporate Fare Estimation (UAE FTA Compliant)
+            <Receipt className="w-4 h-4 text-blue-500" />
+            <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
+              Instant Fare Estimation (UAE FTA Compliant)
             </span>
           </div>
-          <span className="text-xs text-violet-300 font-mono font-bold">
+          <span className="text-xs text-blue-600 dark:text-blue-300 font-mono font-bold">
             {quotation.currency}
           </span>
         </div>
 
         {/* Itemized lines */}
         <div className="space-y-2 text-xs">
-          <div className="flex justify-between text-slate-400">
-            <span>Base Service & Dispatch Fee</span>
-            <span className="font-mono text-white">AED {quotation.baseFareAed.toFixed(2)}</span>
+          <div className="flex justify-between text-[var(--text-muted)]">
+            <span>{baseLabel}</span>
+            <span className="font-mono font-semibold text-[var(--text-main)]">AED {quotation.baseFareAed.toFixed(2)}</span>
           </div>
 
+          {addOnsAed > 0 && (
+            <div className="flex justify-between text-[var(--text-muted)]">
+              <span>Protection & Selected Add-ons</span>
+              <span className="font-mono font-semibold text-[var(--text-main)]">AED {addOnsAed.toFixed(2)}</span>
+            </div>
+          )}
+
           {quotation.distanceChargeAed > 0 && (
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-[var(--text-muted)]">
               <span>
                 Distance Mileage ({quotation.rateCardBreakdown.appliedDistanceKm} km @ AED{' '}
                 {quotation.rateCardBreakdown.perKmRate.toFixed(2)}/km)
               </span>
-              <span className="font-mono text-white">AED {quotation.distanceChargeAed.toFixed(2)}</span>
+              <span className="font-mono font-semibold text-[var(--text-main)]">AED {quotation.distanceChargeAed.toFixed(2)}</span>
             </div>
           )}
 
           {quotation.salikTollsAed > 0 && (
-            <div className="flex justify-between text-amber-400/90">
+            <div className="flex justify-between text-amber-600 dark:text-amber-400">
               <span>UAE Salik & Darb Toll Pass-Through</span>
               <span className="font-mono font-medium">AED {quotation.salikTollsAed.toFixed(2)}</span>
             </div>
           )}
 
-          <div className="pt-2 border-t border-white/5 flex justify-between text-slate-300">
+          <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between text-[var(--text-main)]">
             <span>Subtotal (Net)</span>
-            <span className="font-mono font-semibold text-white">AED {quotation.subtotalAed.toFixed(2)}</span>
+            <span className="font-mono font-semibold">AED {quotation.subtotalAed.toFixed(2)}</span>
           </div>
 
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-[var(--text-muted)]">
             <span>UAE FTA VAT (5.0%)</span>
-            <span className="font-mono text-slate-300">AED {quotation.vatAmountAed.toFixed(2)}</span>
+            <span className="font-mono">AED {quotation.vatAmountAed.toFixed(2)}</span>
           </div>
 
           {/* Grand Total */}
-          <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+          <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
             <div>
-              <span className="text-sm font-bold text-white uppercase tracking-wider block">
-                Estimated Total Fare
+              <span className="text-sm font-bold text-[var(--text-main)] uppercase tracking-wider block">
+                Estimated Total
               </span>
-              <span className="text-[10px] text-slate-500">Includes all statutory fees & VAT</span>
+              <span className="text-[10px] text-[var(--text-muted)]">Includes all statutory fees & 5% VAT</span>
             </div>
             <div className="text-right">
-              <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200 font-mono">
+              <span className="text-2xl font-extrabold text-teal-600 dark:text-emerald-400 font-mono">
                 AED {quotation.totalFareAed.toFixed(2)}
               </span>
             </div>
@@ -165,10 +197,10 @@ export function InstantPricingCostCenter({
       </div>
 
       {/* ── Cost Center & Budget Allocation ── */}
-      <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3.5">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3.5 shadow-sm">
         <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <Building2 className="w-4 h-4 text-emerald-500" />
+          <span className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
             Corporate Cost Center & Billing Allocation
           </span>
         </div>
@@ -176,13 +208,13 @@ export function InstantPricingCostCenter({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Cost Center Dropdown */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              Department Cost Center <span className="text-red-400">*</span>
+            <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+              Department Cost Center <span className="text-red-500">*</span>
             </label>
             <select
               value={selectedCostCenter}
               onChange={(e) => setSelectedCostCenter(e.target.value)}
-              className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-main)] focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
             >
               {CORPORATE_COST_CENTERS.map((cc) => (
                 <option key={cc.code} value={cc.code}>
@@ -194,57 +226,57 @@ export function InstantPricingCostCenter({
 
           {/* Project / Client Billing Reference */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              Project / Client Code (Optional)
+            <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+              Project / PO Reference (Optional)
             </label>
             <input
               type="text"
               value={selectedProjectCode}
               onChange={(e) => setSelectedProjectCode(e.target.value)}
-              placeholder="e.g. PRJ-DXB-2026 or CLIENT-EMAAR"
-              className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              placeholder="e.g. PRJ-DXB-2026 or PO-4421"
+              className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
             />
           </div>
         </div>
 
         {/* Corporate Billing Method */}
         <div>
-          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-            Corporate Billing Method <span className="text-red-400">*</span>
+          <label className="block text-xs font-semibold text-[var(--text-main)] mb-1">
+            Billing Method <span className="text-red-500">*</span>
           </label>
           <select
             value={selectedBillingMethod}
             onChange={(e) => setSelectedBillingMethod(e.target.value)}
-            className="w-full bg-slate-800/80 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+            className="w-full bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2.5 text-xs text-[var(--text-main)] focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
           >
             {CORPORATE_BILLING_METHODS.map((bm) => (
               <option key={bm.id} value={bm.id}>
-                💳 {bm.label}
+                {bm.label}
               </option>
             ))}
           </select>
         </div>
 
         {/* Policy Compliance & Budget Cap Status */}
-        <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {isOverBudget ? (
-              <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
             ) : (
-              <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
             )}
-            <span className={`text-xs font-medium ${isOverBudget ? 'text-amber-300' : 'text-emerald-300'}`}>
+            <span className={`text-xs font-medium ${isOverBudget ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
               {isOverBudget
                 ? `Exceeds Department Policy Cap (AED ${effectiveCap}) · Level 2 Escalation Required`
-                : `Within Department Budget Policy (Cap: AED ${effectiveCap}) · Auto-Approved`}
+                : `Within Department Budget Policy (Cap: AED ${effectiveCap}) · Pre-Approved`}
             </span>
           </div>
 
           <span
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${
               isOverBudget
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
             }`}
           >
             {isOverBudget ? 'ESC-REQ' : 'PRE-APPROVED'}
